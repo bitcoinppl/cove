@@ -48,6 +48,24 @@ class KeychainAccessor(
             .edit()
             .remove(key)
             .commit()
+
+    override fun deleteAllWalletItems() {
+        val suffixes =
+            listOf(
+                "::wallet_mnemonic",
+                "::wallet_mnemonic_encryption_key_and_nonce",
+                "::wallet_xpub",
+                "::wallet_public_descriptor",
+                "::tap_signer_backup",
+                "::wallet_tap_signer_encryption_key_and_nonce_key_name",
+            )
+        val walletKeys = sharedPreferences.all.keys.filter { key -> suffixes.any(key::endsWith) }
+        val editor = sharedPreferences.edit()
+        walletKeys.forEach(editor::remove)
+        if (!editor.commit()) {
+            throw KeychainException.Delete()
+        }
+    }
 }
 
 private fun hasStrongBox(context: Context): Boolean =

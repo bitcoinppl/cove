@@ -362,7 +362,7 @@ impl WalletActor {
         tx_id: Txid,
     ) -> ActorResult<()> {
         let scan = TargetedTransactionScan::new(tx_id, self.scan_generation);
-        self.shutdown().await;
+        self.shutdown().await?;
 
         self.update_targeted_transaction_sync(Ok(SyncResponse::default()), scan).await
     }

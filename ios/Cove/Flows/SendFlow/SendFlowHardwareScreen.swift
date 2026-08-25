@@ -78,7 +78,7 @@ struct SendFlowHardwareScreen: View {
         }
 
         let amount = details.sendingAmount()
-        return manager.rust.convertAndDisplayFiat(amount: amount, prices: prices)
+        return manager.convertAndDisplayFiat(amount: amount, prices: prices)
     }
 
     private var presentationContext: SendFlowHardwarePresentationContext {
@@ -187,7 +187,7 @@ struct SendFlowHardwareScreen: View {
             HStack {
                 Button("Delete", systemImage: "trash", role: .destructive) {
                     do {
-                        try manager.rust.deleteUnsignedTransaction(txId: details.id())
+                        try manager.deleteUnsignedTransaction(txId: details.id())
                         app.popRoute()
                     } catch {
                         Log.error("Unable to delete transaction \(details.id()): \(error)")

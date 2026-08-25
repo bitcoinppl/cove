@@ -14,6 +14,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -24,7 +25,57 @@ import org.bitcoinppl.cove_core.tapcard.TapSigner
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.coroutines.cancellation.CancellationException
+
+internal const val WALLET_DELETION_WARNING_FALLBACK =
+    "Make sure you have a backup before deleting this wallet."
+private const val WALLET_MANAGER_CLOSE_RETRY_DELAY_MILLIS = 50L
+
+internal enum class WalletAddressTypeSwitchResult {
+    COMMITTED,
+    COMMITTED_WITH_RECOVERY_PENDING,
+}
+
+internal inline fun <T> walletManagerValueOr(
+    defaultValue: T,
+    onError: (WalletManagerException) -> Unit,
+    block: () -> T,
+): T =
+    try {
+        block()
+    } catch (e: WalletManagerException) {
+        onError(e)
+        defaultValue
+    }
+
+internal inline fun <T> walletLabelValueOr(
+    defaultValue: T,
+    onError: (Exception) -> Unit,
+    block: () -> T,
+): T =
+    try {
+        block()
+    } catch (e: WalletManagerException) {
+        onError(e)
+        defaultValue
+    } catch (e: LabelManagerException) {
+        onError(e)
+        defaultValue
+    }
+
+internal fun Throwable.isWalletManagerClosing(id: WalletId): Boolean =
+    (this as? WalletManagerException.WalletLifecycle)?.v1 ==
+        WalletLifecycleFailure.ManagerClosing(id)
+
+internal fun Throwable.isWalletManagerConstructionInProgress(id: WalletId): Boolean =
+    (this as? WalletManagerException.WalletLifecycle)?.v1 ==
+        WalletLifecycleFailure.ConstructionInProgress(id)
+
+internal fun Throwable.committedAddressTypeSwitchResult(
+    requestedType: WalletAddressType,
+): WalletAddressTypeSwitchResult? =
+    (this as? WalletManagerException.AddressTypeSwitchCommittedWithRecoveryPending)
+        ?.takeIf { it.addressType == requestedType }
+        ?.let { WalletAddressTypeSwitchResult.COMMITTED_WITH_RECOVERY_PENDING }
 
 private val WalletScanStatus.isActive: Boolean
     get() =
@@ -53,7 +104,6 @@ class WalletManager :
     private val tag = "WalletManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isClosed = AtomicBoolean(false)
 
     val id: WalletId
@@ -94,13 +144,17 @@ class WalletManager :
         private set
 
     fun hasRecoveryWords(): Boolean =
-        withRustOr(false) {
-            hasRecoveryWords()
+        walletManagerValueOr(false, { logError("Unable to check for recovery words", it) }) {
+            withRustOr(false) {
+                hasRecoveryWords()
+            }
         }
 
     fun hasXprvSecret(): Boolean =
-        withRustOr(false) {
-            hasXprvSecret()
+        walletManagerValueOr(false, { logError("Unable to check for an xprv secret", it) }) {
+            withRustOr(false) {
+                hasXprvSecret()
+            }
         }
 
     fun exposeXprv(): String =
@@ -193,11 +247,7 @@ class WalletManager :
         }
 
         private fun closeRust() {
-            try {
-                rust.shutdown()
-            } finally {
-                rust.close()
-            }
+            rust.close()
         }
 
         companion object {
@@ -210,11 +260,7 @@ class WalletManager :
                         .also { created = true }
                 } finally {
                     if (!created) {
-                        try {
-                            rust.shutdown()
-                        } finally {
-                            rust.close()
-                        }
+                        rust.close()
                     }
                 }
             }
@@ -253,13 +299,29 @@ class WalletManager :
             id: WalletId,
             rustDispatcher: CoroutineDispatcher = Dispatchers.IO,
         ): WalletManager {
-            val bootstrap =
-                withContext(NonCancellable + rustDispatcher) {
-                    val bootstrap = Bootstrap.create(id)
-                    android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
+            var pendingBootstrap: Bootstrap? = null
+            while (pendingBootstrap == null) {
+                currentCoroutineContext().ensureActive()
+                try {
+                    pendingBootstrap =
+                        withContext(NonCancellable + rustDispatcher) {
+                            val bootstrap = Bootstrap.create(id)
+                            android.util.Log.d(
+                                "WalletManager",
+                                "Initialized WalletManager for $id",
+                            )
 
-                    bootstrap
+                            bootstrap
+                        }
+                } catch (e: WalletManagerException) {
+                    if (!e.isWalletManagerClosing(id) && !e.isWalletManagerConstructionInProgress(id)) {
+                        throw e
+                    }
+
+                    delay(WALLET_MANAGER_CLOSE_RETRY_DELAY_MILLIS)
                 }
+            }
+            val bootstrap = checkNotNull(pendingBootstrap)
 
             var manager: WalletManager? = null
             var loaded = false
@@ -349,8 +411,8 @@ class WalletManager :
         block: suspend RustWalletManager.() -> T,
     ): T = rustGuard.withHandleOrSuspend(rust, defaultValue, block)
 
-    fun validateMetadata() {
-        withRustOr(Unit) {
+    suspend fun validateMetadata() {
+        withRustSuspend {
             validateMetadata()
         }
     }
@@ -422,25 +484,46 @@ class WalletManager :
         }
 
     fun hasLabels(): Boolean =
-        withRustOr(false) {
-            labelManager().use { it.hasLabels() }
+        walletLabelValueOr(false, { logError("Unable to check for wallet labels", it) }) {
+            withRustOr(false) {
+                labelManager().use { it.hasLabels() }
+            }
         }
 
-    suspend fun switchToDifferentWalletAddressType(type: WalletAddressType) {
+    internal suspend fun switchToDifferentWalletAddressType(
+        type: WalletAddressType,
+    ): WalletAddressTypeSwitchResult =
+        try {
+            withRustSuspend {
+                switchToDifferentWalletAddressType(type)
+            }
+            WalletAddressTypeSwitchResult.COMMITTED
+        } catch (e: WalletManagerException) {
+            val result = e.committedAddressTypeSwitchResult(type) ?: throw e
+            logError("Wallet address type switched with recovery pending", e)
+            result
+        }
+
+    suspend fun deleteWallet() {
         withRustSuspend {
-            switchToDifferentWalletAddressType(type)
-        }
-    }
-
-    fun deleteWallet() {
-        withRust {
             deleteWallet()
         }
     }
 
+    suspend fun retryDeleteWallet(attemptId: ShutdownAttemptId) {
+        withRustSuspend {
+            retryDeleteWallet(attemptId)
+        }
+    }
+
     fun deletionWarningMessage(): String =
-        withRustOr("") {
-            deletionWarningMessage()
+        walletManagerValueOr(
+            WALLET_DELETION_WARNING_FALLBACK,
+            { logError("Unable to load the wallet deletion warning", it) },
+        ) {
+            withRustOr(WALLET_DELETION_WARNING_FALLBACK) {
+                deletionWarningMessage()
+            }
         }
 
     fun requiredDeletionConfirmations(): UByte =
@@ -449,8 +532,10 @@ class WalletManager :
         }
 
     fun nonDefaultAccountNumber(): UInt? =
-        withRustOr(null) {
-            nonDefaultAccountNumber()
+        walletManagerValueOr(null, { logError("Unable to load the wallet account number", it) }) {
+            withRustOr(null) {
+                nonDefaultAccountNumber()
+            }
         }
 
     fun masterFingerprint(): String? =
@@ -483,14 +568,14 @@ class WalletManager :
             exportXpubForShare()
         }
 
-    fun setWalletType(walletType: WalletType) {
-        withRust {
+    suspend fun setWalletType(walletType: WalletType) {
+        withRustSuspend {
             setWalletType(walletType)
         }
     }
 
-    fun markWalletAsVerified() {
-        withRust {
+    suspend fun markWalletAsVerified() {
+        withRustSuspend {
             markWalletAsVerified()
         }
     }
@@ -658,7 +743,7 @@ class WalletManager :
     }
 
     fun importLabels(labels: Bip329Labels) {
-        LabelManager(id = id).use { it.importLabels(labels) }
+        labelManager().use { it.importLabels(labels) }
         AppManager.getInstance().reconcileAfterLabelImport(id)
     }
 
@@ -831,7 +916,6 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.WalletMetadataChanged -> {
                 walletMetadata = message.v1
-                persistWalletMetadata(message.v1)
             }
 
             is WalletManagerReconcileMessage.WalletScannerResponse -> {
@@ -925,8 +1009,12 @@ class WalletManager :
 
         logDebug("dispatch: $action")
         mainScope.launch(Dispatchers.IO) {
-            withRustOr(Unit) {
-                dispatch(action)
+            try {
+                withRustOr(Unit) {
+                    dispatch(action)
+                }
+            } catch (e: WalletManagerException) {
+                logError("Unable to dispatch wallet action $action", e)
             }
         }
     }
@@ -937,13 +1025,6 @@ class WalletManager :
             is Transaction.Unconfirmed -> v1.id()
         }
 
-    private fun persistWalletMetadata(metadata: WalletMetadata) {
-        ioScope.launch {
-            withRustOr(Unit) {
-                setWalletMetadata(metadata)
-            }
-        }
-    }
 
     private fun reconcileLoadStateWithLedgerState() {
         when (val current = loadState) {
@@ -968,8 +1049,6 @@ class WalletManager :
     override fun close() {
         rustGuard.closeOnce {
             logDebug("Closing WalletManager for $id")
-            rust.shutdown()
-            ioScope.cancel()
             mainScope.cancel()
             rust.close()
         }

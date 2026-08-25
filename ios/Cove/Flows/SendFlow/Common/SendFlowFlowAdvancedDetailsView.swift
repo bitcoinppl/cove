@@ -29,7 +29,7 @@ struct SendFlowAdvancedDetailsView: View {
             return "---"
         }
 
-        return manager.rust.convertAndDisplayFiat(amount: amount, prices: prices)
+        return manager.convertAndDisplayFiat(amount: amount, prices: prices)
     }
 
     func displayFiatOrBtcAmount(_ amount: Amount) -> String {
@@ -80,9 +80,7 @@ struct SendFlowAdvancedDetailsView: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .task {
-            splitOutput = try? await manager.rust.splitTransactionOutputs(
-                outputs: details.outputs()
-            )
+            splitOutput = try? await manager.splitTransactionOutputs(details.outputs())
         }
     }
 }

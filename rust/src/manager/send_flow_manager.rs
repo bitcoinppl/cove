@@ -726,7 +726,13 @@ impl RustSendFlowManager {
     }
 
     async fn get_wallet_balance(self: &Arc<Self>) {
-        let balance = self.wallet_manager.balance().await;
+        let balance = match self.wallet_manager.balance().await {
+            Ok(balance) => balance,
+            Err(error) => {
+                error!("failed to get wallet balance: {error}");
+                return;
+            }
+        };
         let unlocked_spendable_sats =
             self.wallet_manager.unlocked_spendable_balance().await.map(|amount| amount.as_sats());
         if let Err(error) = &unlocked_spendable_sats {

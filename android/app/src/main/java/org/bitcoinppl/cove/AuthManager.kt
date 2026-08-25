@@ -4,14 +4,46 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+
+internal class OwnerScopedCommand<T>(
+    private val ownerScope: CoroutineScope,
+) {
+    private val active = AtomicReference<Deferred<T>?>(null)
+
+    fun start(block: suspend () -> T): Deferred<T> {
+        while (true) {
+            val current = active.get()
+            if (current != null && !current.isCompleted) return current
+            if (current != null) {
+                active.compareAndSet(current, null)
+                continue
+            }
+
+            val candidate = ownerScope.async(start = CoroutineStart.LAZY) { block() }
+            if (active.compareAndSet(null, candidate)) {
+                candidate.invokeOnCompletion { active.compareAndSet(candidate, null) }
+                candidate.start()
+                return candidate
+            }
+
+            candidate.cancel()
+        }
+    }
+}
 
 enum class UnlockMode {
     MAIN,
@@ -20,15 +52,25 @@ enum class UnlockMode {
     LOCKED,
 }
 
+sealed interface WipePresentationState {
+    data object Idle : WipePresentationState
+    data object Running : WipePresentationState
+    data class ShutdownBlocked(val attemptId: ShutdownAttemptId) : WipePresentationState
+    data class Failed(val message: String) : WipePresentationState
+}
+
 /**
  * auth manager - manages authentication state
  * ported from iOS AuthManager.swift
  */
 @Stable
-class AuthManager private constructor() : AuthManagerReconciler {
+class AuthManager internal constructor(
+    private val wipeDispatcher: CoroutineDispatcher,
+) : AuthManagerReconciler {
     private val tag = "AuthManager"
 
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val wipeCommand = OwnerScopedCommand<UnlockMode>(mainScope)
 
     private var rust: RustAuthManager = RustAuthManager()
         private set
@@ -62,6 +104,9 @@ class AuthManager private constructor() : AuthManagerReconciler {
     var isDecoyPinEnabled by mutableStateOf<Boolean>(rust.isDecoyPinEnabled())
         private set
 
+    var wipePresentationState by mutableStateOf<WipePresentationState>(WipePresentationState.Idle)
+        private set
+
     val isAuthEnabled: Boolean
         get() = type != AuthType.NONE
 
@@ -89,6 +134,10 @@ class AuthManager private constructor() : AuthManagerReconciler {
         @Volatile
         private var instance: AuthManager? = null
 
+        // the singleton is the production composition boundary; tests inject this dependency through the constructor
+        @Suppress("InjectDispatcher")
+        private val productionWipeDispatcher: CoroutineDispatcher = Dispatchers.IO
+
         private fun requireBootstrapComplete(owner: String) {
             val step = bootstrapProgress()
             check(step == BootstrapStep.COMPLETE) {
@@ -100,7 +149,7 @@ class AuthManager private constructor() : AuthManagerReconciler {
             instance ?: synchronized(this) {
                 instance ?: run {
                     requireBootstrapComplete("AuthManager")
-                    AuthManager().also { instance = it }
+                    AuthManager(productionWipeDispatcher).also { instance = it }
                 }
             }
     }
@@ -198,65 +247,101 @@ class AuthManager private constructor() : AuthManagerReconciler {
      * handle PIN entry and return unlock mode
      * this is the main entry point for authentication
      */
-    fun handleAndReturnUnlockMode(pin: String): UnlockMode {
-        // check if PIN matches main wallet PIN
-        if (AuthPin().use { it.check(pin) }) {
-            if (Database().globalConfig().isInDecoyMode()) {
-                switchToMainMode()
+    suspend fun handleAndReturnUnlockMode(pin: String): UnlockMode =
+        when {
+            checkPin(pin) -> unlockWithMainPin()
+            checkDecoyPin(pin) -> unlockWithDecoyPin()
+            checkWipeDataPin(pin) -> {
+                startWipe(null).await()
             }
-
-            recordMainCredentialAuthentication()
-            unlock()
-            return UnlockMode.MAIN
+            else -> UnlockMode.LOCKED
         }
 
-        // check if the entered pin is the decoy pin, if so enter decoy mode
-        if (checkDecoyPin(pin)) {
-            // enter decoy mode if not already in decoy mode and reset app and router
-            if (Database().globalConfig().isInMainMode()) {
-                try {
-                    withRust {
-                        switchToDecoyMode()
-                    }
-                    resetAppAndSelectWallet()
-                } catch (e: Exception) {
-                    android.util.Log.e(tag, "failed to switch to decoy mode", e)
-                    return UnlockMode.LOCKED
-                }
-            }
-
-            unlock()
-            return UnlockMode.DECOY
+    private fun unlockWithMainPin(): UnlockMode {
+        if (Database().globalConfig().isInDecoyMode()) {
+            switchToMainMode()
         }
 
-        // check if the entered pin is a wipeDataPin
-        // if so wipe the data
-        if (checkWipeDataPin(pin)) {
-            App.isLoading = true
+        recordMainCredentialAuthentication()
+        unlock()
+        return UnlockMode.MAIN
+    }
+
+    private fun unlockWithDecoyPin(): UnlockMode {
+        // enter decoy mode if not already in decoy mode and reset app and router
+        if (Database().globalConfig().isInMainMode()) {
             try {
-                App.dangerousWipeAllData()
-
-                // reset auth manager
-                val oldRust = rust
-                rust = RustAuthManager()
-                rustGuard.markOpen()
-                rust.listenForUpdates(this)
-                oldRust.close()
-                unlock()
-
-                type = AuthType.NONE
-
-                // reset app manager
-                App.reset()
-
-                return UnlockMode.WIPE
+                withRust {
+                    switchToDecoyMode()
+                }
+                resetAppAndSelectWallet()
             } catch (e: Exception) {
-                android.util.Log.e(tag, "failed to wipe all data", e)
+                android.util.Log.e(tag, "failed to switch to decoy mode", e)
                 return UnlockMode.LOCKED
             }
         }
 
-        return UnlockMode.LOCKED
+        unlock()
+        return UnlockMode.DECOY
+    }
+
+    fun retryWipe(attemptId: ShutdownAttemptId) {
+        if (wipePresentationState == WipePresentationState.Running) return
+
+        startWipe(attemptId)
+    }
+
+    fun cancelWipe(attemptId: ShutdownAttemptId) {
+        App.cancelDangerousWipe(attemptId)
+        wipePresentationState = WipePresentationState.Idle
+    }
+
+    fun clearWipeFailure() {
+        wipePresentationState = WipePresentationState.Idle
+    }
+
+    private fun startWipe(attemptId: ShutdownAttemptId?): Deferred<UnlockMode> =
+        wipeCommand.start {
+            wipePresentationState = WipePresentationState.Running
+            finishWipe(attemptId)
+        }
+
+    private suspend fun finishWipe(attemptId: ShutdownAttemptId?): UnlockMode {
+        val result =
+            runCatching {
+                withContext(wipeDispatcher) {
+                    if (attemptId == null) {
+                        App.dangerousWipeAllData()
+                    } else {
+                        App.retryDangerousWipeAllData(attemptId)
+                    }
+                }
+            }
+
+        result.exceptionOrNull()?.let { error ->
+            val lifecycle = (error as? AppException.WalletLifecycle)?.v1
+            if (lifecycle is WalletLifecycleFailure.ShutdownBlocked) {
+                wipePresentationState = WipePresentationState.ShutdownBlocked(lifecycle.attemptId)
+            } else {
+                android.util.Log.e(tag, "failed to wipe all data", error)
+                wipePresentationState =
+                    WipePresentationState.Failed(error.message ?: "Unable to remove local data")
+            }
+
+            return UnlockMode.LOCKED
+        }
+
+        val oldRust = rust
+        rust = RustAuthManager()
+        rustGuard.markOpen()
+        rust.listenForUpdates(this)
+        oldRust.close()
+        unlock()
+        type = AuthType.NONE
+        wipePresentationState = WipePresentationState.Idle
+        App.reset()
+
+        return UnlockMode.WIPE
     }
 
     private fun recordMainCredentialAuthentication() {

@@ -7,11 +7,19 @@
 
 import SwiftUI
 
+@MainActor
+protocol SendFlowRouting: AnyObject {
+    func popRoute()
+    func loadAndReset(to route: Route)
+}
+
+extension AppManager: SendFlowRouting {}
+
 @Observable class SendFlowPresenter {
     typealias FocusField = SetAmountFocusField
 
     @ObservationIgnored
-    let app: AppManager
+    private let routing: SendFlowRouting
 
     @ObservationIgnored
     let manager: WalletManager
@@ -32,8 +40,23 @@ import SwiftUI
     var erroredFeeRate: Float?
 
     init(app: AppManager, manager: WalletManager) {
-        self.app = app
+        self.routing = app
         self.manager = manager
+    }
+
+    init(routing: SendFlowRouting, manager: WalletManager) {
+        self.routing = routing
+        self.manager = manager
+    }
+
+    @MainActor
+    func popRoute() {
+        routing.popRoute()
+    }
+
+    @MainActor
+    func loadAndReset(to route: Route) {
+        routing.loadAndReset(to: route)
     }
 
     enum SheetState: Equatable {

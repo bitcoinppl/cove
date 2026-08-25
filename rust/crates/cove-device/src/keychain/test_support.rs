@@ -31,6 +31,11 @@ impl KeychainAccess for MockKeychain {
     fn delete(&self, key: String) -> bool {
         self.0.lock().unwrap().remove(&key).is_some()
     }
+
+    fn delete_all_wallet_items(&self) -> Result<(), KeychainError> {
+        self.0.lock().unwrap().retain(|key, _| !is_wallet_item_key(key));
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -60,6 +65,11 @@ impl KeychainAccess for FailSecondSave {
 
     fn delete(&self, key: String) -> bool {
         self.0.lock().unwrap().0.remove(&key).is_some()
+    }
+
+    fn delete_all_wallet_items(&self) -> Result<(), KeychainError> {
+        self.0.lock().unwrap().0.retain(|key, _| !is_wallet_item_key(key));
+        Ok(())
     }
 }
 
@@ -94,6 +104,24 @@ impl KeychainAccess for FailingKeychain {
     fn delete(&self, key: String) -> bool {
         self.entries.lock().unwrap().remove(&key).is_some()
     }
+
+    fn delete_all_wallet_items(&self) -> Result<(), KeychainError> {
+        self.entries.lock().unwrap().retain(|key, _| !is_wallet_item_key(key));
+        Ok(())
+    }
+}
+
+fn is_wallet_item_key(key: &str) -> bool {
+    [
+        "::wallet_mnemonic",
+        "::wallet_mnemonic_encryption_key_and_nonce",
+        "::wallet_xpub",
+        "::wallet_public_descriptor",
+        "::tap_signer_backup",
+        "::wallet_tap_signer_encryption_key_and_nonce_key_name",
+    ]
+    .iter()
+    .any(|suffix| key.ends_with(suffix))
 }
 
 pub(crate) fn keychain(access: impl KeychainAccess) -> Keychain {

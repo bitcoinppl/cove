@@ -69,7 +69,7 @@ struct SendFlowCustomFeeRateView: View {
         }
 
         return
-            "≈ \(manager.rust.convertAndDisplayFiat(amount: Amount.fromSat(sats: UInt64(totalSats ?? 0)), prices: prices))"
+            "≈ \(manager.convertAndDisplayFiat(amount: Amount.fromSat(sats: UInt64(totalSats ?? 0)), prices: prices))"
     }
 
     var feeSpeed: FeeSpeed {

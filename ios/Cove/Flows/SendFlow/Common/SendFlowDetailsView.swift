@@ -30,7 +30,7 @@ struct SendFlowDetailsView: View {
             return "---"
         }
 
-        return manager.rust.convertAndDisplayFiat(amount: amount, prices: prices)
+        return manager.convertAndDisplayFiat(amount: amount, prices: prices)
     }
 
     func displayFiatOrBtcAmount(_ amount: Amount) -> String {

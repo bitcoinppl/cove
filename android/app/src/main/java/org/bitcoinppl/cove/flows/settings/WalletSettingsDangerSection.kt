@@ -19,6 +19,7 @@ import org.bitcoinppl.cove.views.MaterialDivider
 import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
+import org.bitcoinppl.cove_core.ShutdownAttemptId
 
 private const val SECOND_DELETION_CONFIRMATION_COUNT: UByte = 2u
 private const val FINAL_DELETION_CONFIRMATION_COUNT: UByte = 3u
@@ -164,6 +165,10 @@ internal sealed interface WalletDeletionDialog {
     data class Error(
         val message: String,
     ) : WalletDeletionDialog
+
+    data class ShutdownBlocked(
+        val attemptId: ShutdownAttemptId,
+    ) : WalletDeletionDialog
 }
 
 @Composable
@@ -171,6 +176,8 @@ internal fun WalletSettingsDeleteDialog(
     dialog: WalletDeletionDialog?,
     onDismiss: () -> Unit,
     onConfirm: (WalletDeletionFlow) -> Unit,
+    onRetry: (ShutdownAttemptId) -> Unit,
+    onCancelBlocked: (ShutdownAttemptId) -> Unit,
 ) {
     when (dialog) {
         null -> Unit
@@ -187,7 +194,35 @@ internal fun WalletSettingsDeleteDialog(
                 message = dialog.message,
                 onDismiss = onDismiss,
             )
+
+        is WalletDeletionDialog.ShutdownBlocked ->
+            WalletDeletionShutdownBlockedDialog(
+                onRetry = { onRetry(dialog.attemptId) },
+                onCancel = { onCancelBlocked(dialog.attemptId) },
+            )
     }
+}
+
+@Composable
+private fun WalletDeletionShutdownBlockedDialog(
+    onRetry: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("Wallet Shutdown Is Blocked") },
+        text = { Text("Cove could not stop all wallet work. Retry or cancel the deletion.") },
+        confirmButton = {
+            TextButton(onClick = onRetry) {
+                Text("Retry")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text("Cancel")
+            }
+        },
+    )
 }
 
 @Composable

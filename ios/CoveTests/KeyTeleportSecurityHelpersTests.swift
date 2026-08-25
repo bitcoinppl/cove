@@ -1,4 +1,5 @@
 @testable import Cove
+import Security
 import XCTest
 
 final class KeyTeleportSecurityHelpersTests: XCTestCase {
@@ -58,5 +59,42 @@ final class KeyTeleportSecurityHelpersTests: XCTestCase {
             KeyTeleportSendStartDecision.resolve(activeDirections: [.send]),
             .rejectActiveFlow
         )
+    }
+
+    func testKeychainEnumerationAcceptsOnlySuccessAndItemNotFound() {
+        let items = [[kSecAttrAccount as String: "wallet::wallet_mnemonic"]] as CFArray
+
+        guard case let .success(accounts) = classifyKeychainAccountEnumeration(
+            status: errSecSuccess,
+            result: items
+        ) else {
+            return XCTFail("success status must return the enumerated accounts")
+        }
+        XCTAssertEqual(accounts, ["wallet::wallet_mnemonic"])
+
+        guard case .itemNotFound = classifyKeychainAccountEnumeration(
+            status: errSecItemNotFound,
+            result: nil
+        ) else {
+            return XCTFail("item-not-found must be the only empty success")
+        }
+
+        guard case let .failure(status) = classifyKeychainAccountEnumeration(
+            status: errSecInteractionNotAllowed,
+            result: nil
+        ) else {
+            return XCTFail("keychain access errors must fail closed")
+        }
+        XCTAssertEqual(status, errSecInteractionNotAllowed)
+    }
+
+    func testWalletKeyDeletionRejectsEnumerationFailure() {
+        let accessor = KeychainAccessor {
+            .failure(errSecInteractionNotAllowed)
+        }
+
+        XCTAssertThrowsError(try accessor.deleteAllWalletItems()) { error in
+            XCTAssertEqual(error as? KeychainError, .Delete)
+        }
     }
 }

@@ -52,7 +52,7 @@ import kotlin.math.roundToInt
 @Composable
 fun NumberPadPinView(
     title: String = "Enter Pin",
-    isPinCorrect: (String) -> Boolean,
+    isPinCorrect: suspend (String) -> Boolean,
     showPin: Boolean = false,
     pinLength: Int = 6,
     backAction: (() -> Unit)? = null,

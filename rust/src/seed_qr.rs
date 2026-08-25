@@ -121,7 +121,7 @@ fn parse_str_into_word_indexes(qr: &str) -> Result<Vec<u16>, SeedQrError> {
 
     let mut indexes: Vec<u16> = Vec::with_capacity(qr.len() / 4);
 
-    for group in qr.as_bytes().chunks_exact(4) {
+    for group in qr.as_bytes().as_chunks::<4>().0 {
         let word_index = u16::from(group[0] - b'0') * 1000
             + u16::from(group[1] - b'0') * 100
             + u16::from(group[2] - b'0') * 10

@@ -1,25 +1,22 @@
 use crate::{
     app::{
-        FfiApp,
+        AppError, FfiApp,
         reconcile::{Update, Updater},
     },
     database::Database,
-    keychain::Keychain,
-    manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
     router::Route,
-    wallet::{
-        fingerprint::Fingerprint,
-        metadata::{WalletMetadata, WalletType},
-    },
+    wallet::metadata::{WalletMetadata, WalletType},
+    wallet_lifecycle::{ShutdownAttemptId, ShutdownDeadlineTier},
 };
+use act_zero::call;
 use cove_util::result_ext::ResultExt as _;
 use tap::TapFallible as _;
 use tracing::error;
 
-use super::{Error, Message, RustWalletManager};
+use super::{Error, RustWalletManager};
 
 impl RustWalletManager {
-    pub(crate) fn delete_wallet_internal(&self) -> Result<(), Error> {
+    pub(crate) async fn delete_wallet_internal(&self) -> Result<(), Error> {
         if !self.uses_persistent_storage() {
             return Err(Error::PreviewOperationUnavailable);
         }
@@ -27,19 +24,34 @@ impl RustWalletManager {
         let wallet_id = self.metadata.read().id.clone();
         tracing::debug!("deleting wallet {wallet_id}");
 
+        crate::app::delete_wallet_with_tier(wallet_id.clone(), ShutdownDeadlineTier::Initial, None)
+            .await
+            .map_err(wallet_deletion_error)?;
+
+        self.finish_delete_wallet(wallet_id)
+    }
+
+    pub(crate) async fn retry_delete_wallet_internal(
+        &self,
+        attempt_id: ShutdownAttemptId,
+    ) -> Result<(), Error> {
+        let wallet_id = self.metadata.read().id.clone();
+        crate::app::delete_wallet_with_tier(
+            wallet_id.clone(),
+            ShutdownDeadlineTier::Retry,
+            Some(attempt_id),
+        )
+        .await
+        .map_err(wallet_deletion_error)?;
+
+        self.finish_delete_wallet(wallet_id)
+    }
+
+    fn finish_delete_wallet(
+        &self,
+        wallet_id: crate::wallet::metadata::WalletId,
+    ) -> Result<(), Error> {
         let database = Database::global();
-        let keychain = Keychain::global();
-
-        // delete the wallet from the database
-        database.wallets.delete(&wallet_id)?;
-
-        // delete the secret key, xpub and public descriptor from the keychain
-        keychain.delete_wallet_items(&wallet_id);
-
-        // delete the wallet persisted bdk data
-        if let Err(error) = crate::wallet::delete_wallet_specific_data(&wallet_id) {
-            error!("Unable to delete wallet persisted bdk data and wallet data database: {error}");
-        }
 
         Updater::send_update(Update::ClearCachedWalletManager(wallet_id.clone()));
 
@@ -64,72 +76,36 @@ impl RustWalletManager {
 
         Ok(())
     }
-    pub(crate) fn set_wallet_type_internal(&self, wallet_type: WalletType) -> Result<(), Error> {
-        let before_metadata = self.metadata.read().clone();
-        let mut metadata = before_metadata.clone();
-        metadata.wallet_type = wallet_type;
 
-        if self.uses_persistent_storage() {
-            metadata = Database::global()
-                .wallets
-                .update_wallet_metadata(metadata.clone())
-                .map_err_debug(Error::SetWalletTypeError)?;
-        }
-
-        *self.metadata.write() = metadata.clone();
-        self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
-
-        if self.uses_persistent_storage() {
-            CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
-        }
+    pub(crate) async fn set_wallet_type_internal(
+        &self,
+        wallet_type: WalletType,
+    ) -> Result<(), Error> {
+        let result = call!(self.actor.set_wallet_type(wallet_type))
+            .await
+            .map_err(|_| Error::ActorNotFound)?;
+        result.map_err_str(Error::SetWalletTypeError)?;
 
         Ok(())
     }
-    pub(crate) fn validate_metadata_internal(&self) {
-        let before_metadata = self.metadata.read().clone();
-        if !before_metadata.name.trim().is_empty() {
-            return;
-        }
+    pub(crate) async fn validate_metadata_internal(&self) -> Result<(), Error> {
+        call!(self.actor.validate_metadata()).await.map_err(|_| Error::ActorNotFound)??;
 
-        let name = before_metadata
-            .master_fingerprint
-            .as_deref()
-            .map_or_else(|| "Unnamed Wallet".to_string(), Fingerprint::as_uppercase);
-        let mut metadata = before_metadata.clone();
-        metadata.name = name;
-
-        let metadata = if self.uses_persistent_storage() {
-            match Database::global().wallets.update_wallet_metadata(metadata.clone()) {
-                Ok(metadata) => metadata,
-                Err(error) => {
-                    error!("Unable to update wallet metadata: {error:?}");
-                    return;
-                }
-            }
-        } else {
-            metadata
-        };
-
-        *self.metadata.write() = metadata.clone();
-        self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
-        if self.uses_persistent_storage() {
-            CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
-        }
+        Ok(())
     }
-    pub(crate) fn mark_wallet_as_verified_internal(&self) -> Result<(), Error> {
-        let mut metadata = self.metadata.read().clone();
-        metadata.verified = true;
-
-        if self.uses_persistent_storage() {
-            Database::global().wallets.mark_wallet_as_verified(&metadata.id)?;
-        }
-
-        *self.metadata.write() = metadata.clone();
-        self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
+    pub(crate) async fn mark_wallet_as_verified_internal(&self) -> Result<(), Error> {
+        call!(self.actor.mark_wallet_as_verified()).await.map_err(|_| Error::ActorNotFound)??;
 
         Ok(())
     }
     pub(crate) fn wallet_metadata_internal(&self) -> WalletMetadata {
         self.metadata.read().clone()
+    }
+}
+
+fn wallet_deletion_error(error: AppError) -> Error {
+    match error {
+        AppError::WalletLifecycle(failure) => Error::WalletLifecycle(failure),
+        other => Error::DeleteWalletError(other.to_string()),
     }
 }

@@ -46,6 +46,51 @@ private struct WalletManagerBootstrap {
     let initialState: WalletInitialState
 }
 
+private enum WalletManagerAccessError: LocalizedError {
+    case closed
+
+    var errorDescription: String? {
+        "Wallet manager is closed"
+    }
+}
+
+enum WalletAddressTypeSwitchResult: Equatable {
+    case committed
+    case committedWithRecoveryPending
+}
+
+func walletManagerIsClosing(_ error: Error, walletId: WalletId) -> Bool {
+    guard case let WalletManagerError.WalletLifecycle(.managerClosing(closingId)) = error else {
+        return false
+    }
+
+    return closingId == walletId
+}
+
+func walletManagerConstructionIsInProgress(_ error: Error, walletId: WalletId) -> Bool {
+    guard case let WalletManagerError.WalletLifecycle(
+        .constructionInProgress(constructionId)
+    ) = error else {
+        return false
+    }
+
+    return constructionId == walletId
+}
+
+func committedAddressTypeSwitchResult(
+    _ error: Error,
+    requestedType: WalletAddressType
+) -> WalletAddressTypeSwitchResult? {
+    guard case let WalletManagerError.AddressTypeSwitchCommittedWithRecoveryPending(
+        addressType,
+        _
+    ) = error, addressType == requestedType else {
+        return nil
+    }
+
+    return .committedWithRecoveryPending
+}
+
 enum WalletManagerPreview {
     case only
 }
@@ -56,11 +101,14 @@ enum WalletManagerPreview {
 
     private let logger = Log(id: "WalletManager")
 
+    private struct RustState {
+        var rust: RustWalletManager? = nil
+        var isClosed = false
+    }
+
     let id: WalletId
     @ObservationIgnored
-    let rust: RustWalletManager
-    @ObservationIgnored
-    private let closeState = OSAllocatedUnfairLock(initialState: false)
+    private let rustState = OSAllocatedUnfairLock(initialState: RustState())
     @ObservationIgnored
     private let initialScanLifecycleChanged =
         OSAllocatedUnfairLock<InitialScanLifecycleChangedHandler?>(initialState: nil)
@@ -68,6 +116,10 @@ enum WalletManagerPreview {
     private var walletScanStarted = false
     @ObservationIgnored
     private weak var delegate: WalletManagerDelegate?
+
+    private var rust: RustWalletManager? {
+        rustState.withLock { $0.rust }
+    }
 
     var walletMetadata: WalletMetadata
     var ledgerState: WalletLedgerState
@@ -79,11 +131,32 @@ enum WalletManagerPreview {
     var unsignedTransactions: [UnsignedTransaction] = []
 
     func hasRecoveryWords() -> Bool {
-        rust.hasRecoveryWords()
+        withRustOr(false) { try $0.hasRecoveryWords() }
     }
 
     func hasXprvSecret() -> Bool {
-        rust.hasXprvSecret()
+        withRustOr(false) { try $0.hasXprvSecret() }
+    }
+
+    func switchToDifferentWalletAddressType(
+        _ addressType: WalletAddressType
+    ) async throws -> WalletAddressTypeSwitchResult {
+        do {
+            try await withRustAsync {
+                try await $0.switchToDifferentWalletAddressType(walletAddressType: addressType)
+            }
+            return .committed
+        } catch {
+            guard let result = committedAddressTypeSwitchResult(
+                error,
+                requestedType: addressType
+            ) else {
+                throw error
+            }
+
+            logger.error("Wallet address type switched with recovery pending: \(error)")
+            return result
+        }
     }
 
     var activeIncompleteInitialScan: Bool {
@@ -122,7 +195,6 @@ enum WalletManagerPreview {
         delegate: WalletManagerDelegate?
     ) {
         self.id = initialState.metadata.id
-        self.rust = rust
         self.loadState = initialState.loadState
         self.scanStatus = initialState.scanStatus
         self.ledgerState = initialState.ledgerState
@@ -132,6 +204,7 @@ enum WalletManagerPreview {
         walletMetadata = initialState.metadata
         unsignedTransactions = initialState.unsignedTransactions
 
+        rustState.withLock { $0.rust = rust }
         rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
@@ -144,17 +217,11 @@ enum WalletManagerPreview {
 
     @MainActor
     static func load(id: WalletId, delegate: WalletManagerDelegate? = AppManager.shared) async throws -> WalletManager {
-        let bootstrap = try await Task.detached(priority: .userInitiated) {
-            let rust = try RustWalletManager(id: id)
-            let initialState = rust.initialState()
-
-            return WalletManagerBootstrap(rust: rust, initialState: initialState)
-        }.value
+        let bootstrap = try await loadBootstrapAfterPreviousManagerCloses(id: id)
 
         do {
             try Task.checkCancellation()
         } catch {
-            bootstrap.rust.shutdown()
             throw error
         }
 
@@ -165,9 +232,31 @@ enum WalletManagerPreview {
         )
     }
 
+    private static func loadBootstrapAfterPreviousManagerCloses(
+        id: WalletId
+    ) async throws -> WalletManagerBootstrap {
+        while true {
+            do {
+                return try await Task.detached(priority: .userInitiated) {
+                    let rust = try RustWalletManager(id: id)
+                    let initialState = rust.initialState()
+
+                    return WalletManagerBootstrap(rust: rust, initialState: initialState)
+                }.value
+            } catch {
+                guard walletManagerIsClosing(error, walletId: id)
+                    || walletManagerConstructionIsInProgress(error, walletId: id)
+                else { throw error }
+                try await Task.sleep(for: .milliseconds(50))
+            }
+        }
+    }
+
     func close() {
-        guard markClosedIfNeeded() else { return }
-        rust.shutdown()
+        guard takeRustForClose() != nil else { return }
+
+        setInitialScanLifecycleChanged(nil)
+        logger.debug("Closed WalletManager for wallet \(id)")
     }
 
     func setInitialScanLifecycleChanged(_ notify: (() -> Void)?) {
@@ -181,12 +270,43 @@ enum WalletManagerPreview {
         handler?()
     }
 
-    private func markClosedIfNeeded() -> Bool {
-        closeState.withLock { isClosed in
-            guard !isClosed else { return false }
-            isClosed = true
-            return true
+    private func takeRustForClose() -> RustWalletManager? {
+        rustState.withLock { state in
+            guard !state.isClosed else { return nil }
+
+            state.isClosed = true
+            let rust = state.rust
+            state.rust = nil
+            return rust
         }
+    }
+
+    private func requireRust() throws -> RustWalletManager {
+        guard let rust else { throw WalletManagerAccessError.closed }
+        return rust
+    }
+
+    private func withRust<T>(_ body: (RustWalletManager) throws -> T) throws -> T {
+        try body(requireRust())
+    }
+
+    private func withRustOr<T>(
+        _ defaultValue: T,
+        _ body: (RustWalletManager) throws -> T
+    ) -> T {
+        guard let rust else { return defaultValue }
+        return (try? body(rust)) ?? defaultValue
+    }
+
+    private func withRustAsync<T>(
+        _ body: (RustWalletManager) async throws -> T
+    ) async throws -> T {
+        let rust = try requireRust()
+        return try await body(rust)
+    }
+
+    var canApplyReconcileMessages: Bool {
+        rust != nil
     }
 
     convenience init(xpub: String, delegate: WalletManagerDelegate? = AppManager.shared) throws {
@@ -241,12 +361,28 @@ enum WalletManagerPreview {
         walletMetadata.swiftColor
     }
 
-    func validateMetadata() {
-        rust.validateMetadata()
+    func deleteWallet() async throws {
+        try await withRustAsync { try await $0.deleteWallet() }
+    }
+
+    func retryDeleteWallet(attemptId: ShutdownAttemptId) async throws {
+        try await withRustAsync { try await $0.retryDeleteWallet(attemptId: attemptId) }
+    }
+
+    func setWalletType(_ walletType: WalletType) async throws {
+        try await withRustAsync { try await $0.setWalletType(walletType: walletType) }
+    }
+
+    func validateMetadata() async throws {
+        try await withRustAsync { try await $0.validateMetadata() }
+    }
+
+    func markWalletAsVerified() async throws {
+        try await withRustAsync { try await $0.markWalletAsVerified() }
     }
 
     func forceWalletScan() async {
-        await rust.forceWalletScan()
+        _ = try? await withRustAsync { try await $0.forceWalletScan() }
     }
 
     @MainActor
@@ -255,7 +391,7 @@ enum WalletManagerPreview {
         walletScanStarted = true
 
         do {
-            try await rust.startWalletScan()
+            try await withRustAsync { try await $0.startWalletScan() }
         } catch {
             walletScanStarted = false
             throw error
@@ -263,7 +399,99 @@ enum WalletManagerPreview {
     }
 
     func firstAddress() async throws -> AddressInfo {
-        try await rust.addressAt(index: 0)
+        try await withRustAsync { try await $0.addressAt(index: 0) }
+    }
+
+    func newCoinControlManager() async throws -> RustCoinControlManager {
+        try await withRustAsync { try await $0.newCoinControlManager() }
+    }
+
+    func newSendFlowManager() throws -> RustSendFlowManager {
+        try withRust { try $0.newSendFlowManager(balance: balance) }
+    }
+
+    func labelManager() throws -> LabelManager {
+        try withRust { $0.labelManager() }
+    }
+
+    func refreshTransactions() async throws {
+        try await withRustAsync { try await $0.getTransactions() }
+    }
+
+    func forceUpdateHeight() async throws {
+        _ = try await withRustAsync { try await $0.forceUpdateHeight() }
+    }
+
+    func exportLabelsForQr(density: QrDensity) async throws -> [String] {
+        try await withRustAsync { try await $0.exportLabelsForQr(density: density) }
+    }
+
+    func exportLabelsForShare() async throws -> LabelExportResult {
+        try await withRustAsync { try await $0.exportLabelsForShare() }
+    }
+
+    func exportXpubForQr(density: QrDensity) async throws -> [String] {
+        try await withRustAsync { try await $0.exportXpubForQr(density: density) }
+    }
+
+    func exportXpubForShare() async throws -> XpubExportResult {
+        try await withRustAsync { try await $0.exportXpubForShare() }
+    }
+
+    func exportTransactionsCsv() async throws -> TransactionExportResult {
+        try await withRustAsync { try await $0.exportTransactionsCsv() }
+    }
+
+    func deleteUnsignedTransaction(txId: TxId) throws {
+        try withRust { try $0.deleteUnsignedTransaction(txId: txId) }
+    }
+
+    func deletionWarningMessage() -> String {
+        withRustOr("This action cannot be undone.") { try $0.deletionWarningMessage() }
+    }
+
+    func masterFingerprint() -> String? {
+        withRustOr(nil) { $0.masterFingerprint() }
+    }
+
+    func nonDefaultAccountNumber() -> UInt32? {
+        withRustOr(nil) { try $0.nonDefaultAccountNumber() }
+    }
+
+    func requiredDeletionConfirmations() -> UInt8 {
+        withRustOr(1) { $0.requiredDeletionConfirmations() }
+    }
+
+    func exposeXprv() throws -> String {
+        try withRust { try $0.exposeXprv() }
+    }
+
+    func convertAndDisplayFiat(amount: Amount, prices: PriceResponse) -> String {
+        withRustOr("") { $0.convertAndDisplayFiat(amount: amount, prices: prices) }
+    }
+
+    func broadcastTransaction(_ transaction: BitcoinTransaction) async throws {
+        try await withRustAsync { try await $0.broadcastTransaction(signedTransaction: transaction) }
+    }
+
+    func initiatePayment(psbt: Psbt, payjoinEndpoint: String?) async throws {
+        try await withRustAsync {
+            try await $0.initiatePayment(psbt: psbt, payjoinEndpoint: payjoinEndpoint)
+        }
+    }
+
+    func finalizePsbt(_ psbt: Psbt) async throws -> BitcoinTransaction {
+        try await withRustAsync { try await $0.finalizePsbt(psbt: psbt) }
+    }
+
+    func splitTransactionOutputs(
+        _ outputs: [AddressAndAmount]
+    ) async throws -> SplitOutput {
+        try await withRustAsync { try await $0.splitTransactionOutputs(outputs: outputs) }
+    }
+
+    func wordValidator() throws -> WordValidator {
+        try withRust { try $0.wordValidator() }
     }
 
     func amountFmt(_ amount: Amount) -> String {
@@ -317,7 +545,9 @@ enum WalletManagerPreview {
     }
 
     func displayConfirmationCount(_ confirmations: UInt32) -> String {
-        rust.displayConfirmationCount(confirmations: confirmations)
+        withRustOr(String(confirmations)) {
+            $0.displayConfirmationCount(confirmations: confirmations)
+        }
     }
 
     func amountFmtUnit(_ amount: Amount) -> String {
@@ -331,7 +561,10 @@ enum WalletManagerPreview {
             return presentation
         }
 
-        let presentation = try await rust.transactionDetails(txId: txId)
+        let presentation = try await withRustAsync {
+            try await $0.transactionDetails(txId: txId)
+        }
+
         await MainActor.run {
             transactionDetailsPresentations[txId] = presentation
         }
@@ -340,7 +573,10 @@ enum WalletManagerPreview {
     }
 
     func refreshTransactionDetails(for txId: TxId) async throws -> TransactionDetailsPresentation {
-        let presentation = try await rust.transactionDetails(txId: txId)
+        let presentation = try await withRustAsync {
+            try await $0.transactionDetails(txId: txId)
+        }
+
         await MainActor.run {
             transactionDetailsPresentations[txId] = presentation
         }
@@ -349,7 +585,10 @@ enum WalletManagerPreview {
     }
 
     func transactionLockState(for txId: TxId) async throws -> TransactionLockState {
-        let state = try await rust.transactionLockState(txId: txId)
+        let state = try await withRustAsync {
+            try await $0.transactionLockState(txId: txId)
+        }
+
         await MainActor.run {
             transactionLockStates[txId] = state
         }
@@ -358,7 +597,10 @@ enum WalletManagerPreview {
     }
 
     func toggleTransactionLockState(for txId: TxId) async throws -> TransactionLockState {
-        let state = try await rust.toggleTransactionLockState(txId: txId)
+        let state = try await withRustAsync {
+            try await $0.toggleTransactionLockState(txId: txId)
+        }
+
         await MainActor.run {
             transactionLockStates[txId] = state
         }
@@ -368,7 +610,10 @@ enum WalletManagerPreview {
     }
 
     func unlockTransactionOutputs(for txId: TxId) async throws -> TransactionLockState {
-        let state = try await rust.unlockTransactionOutputs(txId: txId)
+        let state = try await withRustAsync {
+            try await $0.unlockTransactionOutputs(txId: txId)
+        }
+
         await MainActor.run {
             transactionLockStates[txId] = state
         }
@@ -384,7 +629,7 @@ enum WalletManagerPreview {
 
     @MainActor
     func importLabels(labels: Bip329Labels) throws {
-        try LabelManager(id: id).import(labels: labels)
+        try withRust { try $0.labelManager().import(labels: labels) }
         delegate?.reconcileAfterLabelsChanged(walletId: id)
     }
 
@@ -411,7 +656,7 @@ enum WalletManagerPreview {
                 }
             }
 
-            await rust.getTransactions()
+            _ = try? await withRustAsync { try await $0.getTransactions() }
         }
     }
 
@@ -439,7 +684,8 @@ enum WalletManagerPreview {
     }
 
     func updateWalletBalance() async {
-        let balance = await rust.balance()
+        guard let balance = try? await withRustAsync({ try await $0.balance() }) else { return }
+
         await MainActor.run {
             self.balance = balance
         }
@@ -466,7 +712,9 @@ enum WalletManagerPreview {
         switch message {
         case let .walletScanStatusChanged(status):
             scanStatus = status
-            balancePresentation = rust.balancePresentationForState(ledgerState: ledgerState)
+            balancePresentation = withRustOr(balancePresentation) {
+                $0.balancePresentationForState(ledgerState: ledgerState)
+            }
             if status.isActive {
                 switch loadState {
                 case .scanning:
@@ -485,7 +733,9 @@ enum WalletManagerPreview {
 
         case let .ledgerStateChanged(ledgerState):
             self.ledgerState = ledgerState
-            balancePresentation = rust.balancePresentationForState(ledgerState: ledgerState)
+            balancePresentation = withRustOr(balancePresentation) {
+                $0.balancePresentationForState(ledgerState: ledgerState)
+            }
             reconcileLoadStateWithLedgerState()
             notifyInitialScanLifecycleChanged()
 
@@ -536,7 +786,7 @@ enum WalletManagerPreview {
 
         case .unsignedTransactionsChanged:
             do {
-                unsignedTransactions = try rust.getUnsignedTransactions()
+                unsignedTransactions = try withRust { try $0.getUnsignedTransactions() }
             } catch {
                 logger.error(
                     "Unable to refresh unsigned transactions: \(error.localizedDescription)"
@@ -546,7 +796,7 @@ enum WalletManagerPreview {
 
         case let .walletMetadataChanged(metadata):
             withAnimation { walletMetadata = metadata }
-            setWalletMetadata(metadata)
+            recomputeLedgerStateForMetadataChange()
 
         case let .walletScannerResponse(scannerResponse):
             logger.debug("walletScannerResponse: \(scannerResponse)")
@@ -639,10 +889,17 @@ enum WalletManagerPreview {
         return .scanning(transactions)
     }
 
-    private func setWalletMetadata(_ metadata: WalletMetadata) {
-        rustBridge.async { [weak self] in
-            self?.rust.setWalletMetadata(metadata: metadata)
+    private func recomputeLedgerStateForMetadataChange() {
+        ledgerState = if walletMetadata.internal.performedFullScanAt == nil {
+            .initialScanIncomplete(scanStatus.isActive ? .active : .idle)
+        } else {
+            .complete
         }
+        balancePresentation = withRustOr(balancePresentation) {
+            $0.balancePresentationForState(ledgerState: ledgerState)
+        }
+        reconcileLoadStateWithLedgerState()
+        notifyInitialScanLifecycleChanged()
     }
 
     func logReconcile(message: Message) {
@@ -667,8 +924,10 @@ enum WalletManagerPreview {
         }
 
         rustBridge.async { [weak self] in
-            self?.logger.debug("dispatch: \(action)")
-            self?.rust.dispatch(action: action)
+            guard let self, let rust = self.rust else { return }
+
+            self.logger.debug("dispatch: \(action)")
+            try? rust.dispatch(action: action)
         }
     }
 

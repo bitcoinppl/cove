@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 
 enum WalletManagerCacheLoadDecision: Equatable {
@@ -8,8 +9,13 @@ enum WalletManagerCacheLoadDecision: Equatable {
     static func resolve(
         token: WalletManagerCacheLoadToken,
         currentState: WalletManagerCacheState,
-        cachedWalletId: WalletId?
+        cachedWalletId: WalletId?,
+        hasCurrentWaiter: Bool = true
     ) -> Self {
+        guard hasCurrentWaiter else {
+            return .cancelLoaded
+        }
+
         if cachedWalletId == token.targetId {
             return .useCached
         }
@@ -31,6 +37,70 @@ enum WalletManagerCacheLoadDecision: Equatable {
 enum WalletManagerCacheInvalidationScope: Equatable {
     case all
     case wallet(WalletId)
+}
+
+typealias SendFlowManagerFactory = (
+    _ walletManager: WalletManager,
+    _ presenter: SendFlowPresenter
+) throws -> SendFlowManager
+
+typealias WalletManagerLoadFactory = @MainActor (
+    _ id: WalletId,
+    _ delegate: WalletManagerDelegate
+) async throws -> WalletManager
+
+private final class WalletManagerLoadWaiter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isCancelled = false
+    private let isCurrent: @MainActor () -> Bool
+
+    init(isCurrent: @escaping @MainActor () -> Bool) {
+        self.isCurrent = isCurrent
+    }
+
+    func cancel() {
+        lock.withLock {
+            isCancelled = true
+        }
+    }
+
+    @MainActor
+    func isCurrentWaiter() -> Bool {
+        let isCancelled = lock.withLock { self.isCancelled }
+        return !isCancelled && isCurrent()
+    }
+}
+
+@MainActor
+private final class WalletManagerLoadWaiterGroup {
+    private var waiters: [UUID: WalletManagerLoadWaiter] = [:]
+
+    func register(isCurrent: @escaping @MainActor () -> Bool) -> Registration {
+        let id = UUID()
+        let waiter = WalletManagerLoadWaiter(isCurrent: isCurrent)
+        waiters[id] = waiter
+        return Registration(group: self, id: id, waiter: waiter)
+    }
+
+    func hasCurrentWaiter() -> Bool {
+        waiters.values.contains { $0.isCurrentWaiter() }
+    }
+
+    func unregister(id: UUID) {
+        waiters.removeValue(forKey: id)
+    }
+
+    struct Registration {
+        let group: WalletManagerLoadWaiterGroup
+        let id: UUID
+        let waiter: WalletManagerLoadWaiter
+    }
+}
+
+private struct WalletManagerLoad {
+    let id: UUID
+    let waiters: WalletManagerLoadWaiterGroup
+    let task: Task<WalletManager, Error>
 }
 
 struct WalletManagerCacheLoadToken: Equatable {
@@ -81,6 +151,12 @@ struct WalletManagerCacheState: Equatable {
     @ObservationIgnored
     private let backgroundScanTaskHandler: BackgroundScanTaskHandler
     @ObservationIgnored
+    private let makeSendFlowManager: SendFlowManagerFactory
+    @ObservationIgnored
+    private let loadWalletManager: WalletManagerLoadFactory
+    @ObservationIgnored
+    private var walletManagerLoads: [WalletId: WalletManagerLoad] = [:]
+    @ObservationIgnored
     private var walletManagerCacheState = WalletManagerCacheState()
 
     private(set) var walletManager: WalletManager?
@@ -89,8 +165,21 @@ struct WalletManagerCacheState: Equatable {
     @ObservationIgnored
     weak var coinControlManager: CoinControlManager?
 
-    init(backgroundScanTaskHandler: BackgroundScanTaskHandler) {
+    init(
+        backgroundScanTaskHandler: BackgroundScanTaskHandler,
+        makeSendFlowManager: @escaping SendFlowManagerFactory = { walletManager, presenter in
+            try SendFlowManager(
+                walletManager.newSendFlowManager(),
+                presenter: presenter
+            )
+        },
+        loadWalletManager: @escaping WalletManagerLoadFactory = { id, delegate in
+            try await WalletManager.load(id: id, delegate: delegate)
+        }
+    ) {
         self.backgroundScanTaskHandler = backgroundScanTaskHandler
+        self.makeSendFlowManager = makeSendFlowManager
+        self.loadWalletManager = loadWalletManager
     }
 
     func cachedWalletManager(id: WalletId) -> WalletManager? {
@@ -106,28 +195,11 @@ struct WalletManagerCacheState: Equatable {
         return wallets.first(where: { $0.id == id })
     }
 
-    func ensureWalletManager(
-        id: WalletId,
-        delegate: WalletManagerDelegate
-    ) throws -> WalletManager {
-        if let walletManager = cachedWalletManager(id: id) {
-            logger.debug("found and using vm for \(id)")
-            return walletManager
-        }
-
-        logger.debug(
-            "did not find vm for \(id), creating new vm: \(walletManager?.id ?? "none")"
-        )
-
-        let walletManager = try WalletManager(id: id, delegate: delegate)
-        return installWalletManager(walletManager)
-    }
-
     @MainActor
     func ensureWalletManagerLoaded(
         id: WalletId,
         delegate: WalletManagerDelegate,
-        isCurrent: @MainActor () -> Bool = { true }
+        isCurrent: @escaping @MainActor () -> Bool = { true }
     ) async throws -> WalletManager {
         guard isCurrent() else { throw CancellationError() }
 
@@ -136,42 +208,81 @@ struct WalletManagerCacheState: Equatable {
             return walletManager
         }
 
-        let loadToken = walletManagerCacheState.loadToken(for: id)
+        let load = walletManagerLoads[id] ?? startWalletManagerLoad(id: id, delegate: delegate)
+        let waiter = load.waiters.register(isCurrent: isCurrent)
+        defer {
+            waiter.group.unregister(id: waiter.id)
+        }
+
         logger.debug(
             "did not find vm for \(id), loading new vm: \(walletManager?.id ?? "none")"
         )
 
-        let loadedWalletManager = try await WalletManager.load(id: id, delegate: delegate)
-        do {
-            try Task.checkCancellation()
-        } catch {
-            loadedWalletManager.close()
-            throw error
-        }
+        let loadedWalletManager = try await withTaskCancellationHandler(
+            operation: {
+                try await load.task.value
+            },
+            onCancel: {
+                waiter.waiter.cancel()
+            }
+        )
+        try Task.checkCancellation()
 
-        guard isCurrent() else {
-            loadedWalletManager.close()
+        guard waiter.waiter.isCurrentWaiter() else {
             throw CancellationError()
         }
 
-        switch WalletManagerCacheLoadDecision.resolve(
-            token: loadToken,
-            currentState: walletManagerCacheState,
-            cachedWalletId: walletManager?.id
-        ) {
-        case .installLoaded:
-            return installWalletManager(loadedWalletManager)
-        case .useCached:
-            loadedWalletManager.close()
-            guard let walletManager = cachedWalletManager(id: id) else {
-                throw CancellationError()
+        guard let walletManager = cachedWalletManager(id: id),
+              walletManager === loadedWalletManager
+        else {
+            throw CancellationError()
+        }
+
+        return walletManager
+    }
+
+    @MainActor
+    private func startWalletManagerLoad(
+        id: WalletId,
+        delegate: WalletManagerDelegate
+    ) -> WalletManagerLoad {
+        let loadToken = walletManagerCacheState.loadToken(for: id)
+        let loadId = UUID()
+        let waiters = WalletManagerLoadWaiterGroup()
+        let loadTask = Task { @MainActor [weak self] in
+            guard let self else { throw CancellationError() }
+
+            defer {
+                if walletManagerLoads[id]?.id == loadId {
+                    walletManagerLoads[id] = nil
+                }
             }
 
-            return walletManager
-        case .cancelLoaded:
-            loadedWalletManager.close()
-            throw CancellationError()
+            let loadedWalletManager = try await loadWalletManager(id, delegate)
+            switch WalletManagerCacheLoadDecision.resolve(
+                token: loadToken,
+                currentState: walletManagerCacheState,
+                cachedWalletId: walletManager?.id,
+                hasCurrentWaiter: waiters.hasCurrentWaiter()
+            ) {
+            case .installLoaded:
+                return installWalletManager(loadedWalletManager)
+            case .useCached:
+                loadedWalletManager.close()
+                guard let walletManager = cachedWalletManager(id: id) else {
+                    throw CancellationError()
+                }
+
+                return walletManager
+            case .cancelLoaded:
+                loadedWalletManager.close()
+                throw CancellationError()
+            }
         }
+
+        let load = WalletManagerLoad(id: loadId, waiters: waiters, task: loadTask)
+        walletManagerLoads[id] = load
+        return load
     }
 
     private func installWalletManager(_ walletManager: WalletManager) -> WalletManager {
@@ -205,11 +316,12 @@ struct WalletManagerCacheState: Equatable {
             walletManagerCacheState.invalidate(.all)
 
             let hadWalletManager = walletManager != nil
+            clearSendFlowManager()
             backgroundScanTaskHandler.endInitialScanBackgroundTask()
             walletManager?.setInitialScanLifecycleChanged(nil)
+            let walletManager = self.walletManager
+            self.walletManager = nil
             walletManager?.close()
-            walletManager = nil
-            clearSendFlowManager()
 
             if hadWalletManager {
                 walletManagerCacheState.managerChanged()
@@ -219,16 +331,16 @@ struct WalletManagerCacheState: Equatable {
 
         guard let id else { return }
         walletManagerCacheState.invalidate(.wallet(id))
+        clearSendFlowManager(id: id)
 
         if walletManager?.id == id {
             backgroundScanTaskHandler.endInitialScanBackgroundTask()
             walletManager?.setInitialScanLifecycleChanged(nil)
-            walletManager?.close()
-            walletManager = nil
+            let walletManager = self.walletManager
+            self.walletManager = nil
             walletManagerCacheState.managerChanged()
+            walletManager?.close()
         }
-
-        clearSendFlowManager(id: id)
     }
 
     func cachedSendFlowManager(id: WalletId) -> SendFlowManager? {
@@ -249,10 +361,7 @@ struct WalletManagerCacheState: Equatable {
         logger.debug("did not find SendFlowManager for \(walletManager.id), creating new")
         clearSendFlowManager()
 
-        let sendFlowManager = try SendFlowManager(
-            walletManager.rust.newSendFlowManager(balance: walletManager.balance),
-            presenter: presenter
-        )
+        let sendFlowManager = try makeSendFlowManager(walletManager, presenter)
         self.sendFlowManager = sendFlowManager
         return sendFlowManager
     }
@@ -327,7 +436,10 @@ struct WalletManagerCacheState: Equatable {
 
     func clearSendFlowManager(id: WalletId? = nil) {
         guard id == nil || sendFlowManager?.id == id else { return }
-        sendFlowManager = nil
+
+        let sendFlowManager = self.sendFlowManager
+        self.sendFlowManager = nil
+        sendFlowManager?.close()
     }
 
     func beginInitialScanBackgroundTaskIfNeeded() {

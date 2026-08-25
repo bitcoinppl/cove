@@ -128,6 +128,9 @@ impl RustPendingWalletManager {
             return Ok(result.clone());
         }
 
+        let _construction = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
+            .begin_unscoped_construction()
+            .map_err(|error| PendingWalletManagerError::BdkError(error.to_string()))?;
         let pending_wallet = self.state.read().wallet.clone();
         let network = pending_wallet.network;
         let mode = Database::global().global_config.wallet_mode();

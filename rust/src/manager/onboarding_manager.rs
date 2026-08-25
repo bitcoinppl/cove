@@ -583,6 +583,9 @@ impl RustOnboardingManager {
     }
 
     fn create_wallet(branch: OnboardingBranch) -> Result<CreatedWalletFlow, String> {
+        let _construction = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
+            .begin_unscoped_construction()
+            .map_err(|error| error.to_string())?;
         let pending_wallet = PendingWallet::new(NumberOfBip39Words::Twelve);
         let mnemonic = pending_wallet.mnemonic.clone();
         let words = pending_wallet.words();

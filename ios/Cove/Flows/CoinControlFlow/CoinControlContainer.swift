@@ -71,7 +71,7 @@ private struct CoinControlLoadedView: View {
         closeManager()
 
         do {
-            let rustManager = try await walletManager.rust.newCoinControlManager()
+            let rustManager = try await walletManager.newCoinControlManager()
             guard !Task.isCancelled else { return }
 
             let manager = CoinControlManager(rustManager)

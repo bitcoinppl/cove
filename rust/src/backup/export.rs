@@ -12,7 +12,10 @@ use crate::database::Database;
 use crate::database::global_config::GlobalConfigKey;
 use crate::database::global_config::GlobalConfigTable;
 use crate::label_manager::LabelManager;
-use crate::wallet::metadata::{WalletMode, WalletType};
+use crate::wallet::{
+    addressing::authoritative_public_descriptor_mirror,
+    metadata::{WalletMode, WalletType},
+};
 
 use super::crypto;
 use super::error::BackupError;
@@ -115,18 +118,11 @@ impl BackupExporter {
                         }
                     };
 
-                    let descriptors = match self.keychain.get_public_descriptor(id) {
-                        Ok(Some((ext, int))) => Some(DescriptorPair {
-                            external: ext.to_string(),
-                            internal: int.to_string(),
-                        }),
-                        Ok(None) => None,
-                        Err(e) => {
-                            return Err(BackupError::Keychain(format!(
-                                "failed to read descriptors for wallet '{name}' ({network}){mode_tag}: {e}"
-                            )));
-                        }
-                    };
+                    let descriptors = manual_backup_descriptors(&metadata).map_err(|e| {
+                        BackupError::Gather(format!(
+                            "failed to load authoritative descriptors for wallet '{name}' ({network}){mode_tag}: {e}"
+                        ))
+                    })?;
 
                     // gather labels (non-fatal)
                     let labels_jsonl = match export_labels(id.clone()).await {
@@ -185,6 +181,17 @@ impl BackupExporter {
             }
         }
     }
+}
+
+fn manual_backup_descriptors(
+    metadata: &crate::wallet::metadata::WalletMetadata,
+) -> Result<Option<DescriptorPair>, crate::wallet::WalletError> {
+    authoritative_public_descriptor_mirror(metadata).map(|descriptors| {
+        descriptors.map(|(external, internal)| DescriptorPair {
+            external: external.to_string(),
+            internal: internal.to_string(),
+        })
+    })
 }
 
 fn gather_custom_block_explorers(config: &GlobalConfigTable) -> BTreeMap<String, String> {
@@ -253,6 +260,17 @@ async fn export_labels(id: cove_types::WalletId) -> Result<String, BackupError> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn manual_backup_allows_missing_descriptor_mirrors() {
+        crate::test_support::init_test_keychain();
+        let metadata = crate::wallet::metadata::WalletMetadata::preview_new();
+
+        let descriptors = manual_backup_descriptors(&metadata)
+            .expect("missing descriptor mirrors remain compatible with manual backup");
+
+        assert!(descriptors.is_none());
+    }
 
     #[test]
     fn backup_export_gathers_only_normalized_custom_block_explorers() {

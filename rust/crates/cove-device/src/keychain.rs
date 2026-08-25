@@ -81,6 +81,13 @@ pub trait KeychainAccess: Send + Sync + std::fmt::Debug + 'static {
     ///
     /// Returns whether the value was deleted
     fn delete(&self, key: String) -> bool;
+
+    /// Deletes every Cove wallet-specific key without requiring wallet IDs
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KeychainError` if enumeration or any deletion fails
+    fn delete_all_wallet_items(&self) -> Result<(), KeychainError>;
 }
 
 static REF: OnceCell<Keychain> = OnceCell::new();
@@ -250,6 +257,11 @@ impl Keychain {
         self.wallet_public.get_xpub(id)
     }
 
+    /// Deletes a wallet extended public key
+    pub fn delete_wallet_xpub(&self, id: &WalletId) -> bool {
+        self.wallet_public.delete_xpub(id)
+    }
+
     /// Saves a wallet public descriptor pair
     ///
     /// # Errors
@@ -275,6 +287,11 @@ impl Keychain {
         id: &WalletId,
     ) -> Result<Option<(ExtendedDescriptor, ExtendedDescriptor)>, KeychainError> {
         self.wallet_public.get_descriptors(id)
+    }
+
+    /// Deletes a wallet public descriptor pair
+    pub fn delete_public_descriptor(&self, id: &WalletId) -> bool {
+        self.wallet_public.delete_descriptors(id)
     }
 
     /// Saves an encrypted Tap Signer backup
@@ -315,6 +332,15 @@ impl Keychain {
         let tap_signer_ok = self.tap_signer_backups.delete(id);
 
         key_ok && xpub_ok && descriptor_ok && tap_signer_ok
+    }
+
+    /// Deletes every Cove wallet-specific key, including metadata-orphaned entries
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if platform enumeration or any deletion fails
+    pub fn delete_all_wallet_items(&self) -> Result<(), KeychainError> {
+        self.access.delete_all_wallet_items()
     }
 
     /// Checks whether any wallet-specific keychain entry exists

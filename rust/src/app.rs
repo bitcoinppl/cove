@@ -31,7 +31,14 @@ use crate::{
         LOAD_AND_RESET_DELAY_MS, NewWalletRoute, Route, RouteFactory, Router,
         WALLET_SELECTION_LOAD_AND_RESET_DELAY_MS, load_and_reset_nested_to_after,
     },
+    wallet::deletion::{
+        PreparedFullWipe, PreparedWalletDeletion, WalletDeletionFailure, WalletDeletionIntent,
+        WalletInventoryFailure, targets_from_inventory,
+    },
     wallet::metadata::{WalletId, WalletMetadata, WalletType},
+    wallet_lifecycle::{
+        ShutdownAttemptId, ShutdownDeadlineTier, WalletLifecycleCoordinator, WalletLifecycleFailure,
+    },
 };
 use cove_macros::impl_default_for;
 use cove_types::BlockSizeLast;
@@ -101,7 +108,51 @@ pub enum AppError {
     FeesError(String),
     #[error("wallet selection error: {0}")]
     WalletSelection(String),
+    #[error("wallet lifecycle error: {0}")]
+    WalletLifecycle(WalletLifecycleFailure),
+    #[error("wallet inventory error: {0}")]
+    WalletInventory(WalletInventoryFailure),
+    #[error("wallet deletion error: {0}")]
+    WalletDeletion(WalletDeletionFailure),
+    #[error("local data reset error: {0}")]
+    LocalDataReset(LocalDataResetFailure),
 }
+
+/// Phase of a failed device-local reset after wallet deletion
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum LocalDataResetStage {
+    /// Remaining Cove wallet keychain entries
+    WalletKeychain,
+    /// Orphan BDK stores and wallet-data directories
+    WalletArtifacts,
+    /// Cloud Backup local keychain or in-process state
+    CloudBackup,
+    /// Restore markers and locks
+    RestoreState,
+    /// Root data-directory durability synchronization
+    RootDirectorySync,
+    /// Diagnostics logs
+    Diagnostics,
+    /// Main database reset and reinitialization
+    Database,
+}
+
+/// Typed context for a failed post-wallet local reset phase
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct LocalDataResetFailure {
+    /// Cleanup phase that failed
+    pub stage: LocalDataResetStage,
+    /// Underlying source error without duplicated phase context
+    pub source_detail: String,
+}
+
+impl std::fmt::Display for LocalDataResetFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.source_detail)
+    }
+}
+
+impl std::error::Error for LocalDataResetFailure {}
 
 type Error = AppError;
 
@@ -372,6 +423,11 @@ impl FfiApp {
             debug!("Unable to find wallet with card ident {}", tap_signer.card_ident);
             return false;
         };
+        let Ok(_persistence) =
+            WalletLifecycleCoordinator::global().begin_persistence_operation(metadata.id.clone())
+        else {
+            return false;
+        };
 
         let keychain = Keychain::global();
         match keychain.save_tap_signer_backup(&metadata.id, &backup) {
@@ -552,70 +608,44 @@ impl FfiApp {
     }
 
     /// Delete a wallet with a corrupted database, cleaning up all associated data
-    pub fn delete_corrupted_wallet(&self, id: WalletId) {
-        let database = Database::global();
-        let keychain = Keychain::global();
+    pub async fn delete_corrupted_wallet(&self, id: WalletId) -> Result<(), Error> {
+        delete_wallet_with_tier(id.clone(), ShutdownDeadlineTier::Initial, None).await?;
+        self.finish_wallet_deletion_presentation(id);
+        Ok(())
+    }
 
-        if let Err(error) = database.wallets.delete(&id) {
-            error!("Unable to delete corrupted wallet from database: {error}");
-        }
+    /// Retry a corrupted-wallet deletion after a typed shutdown block
+    pub async fn retry_delete_corrupted_wallet(
+        &self,
+        id: WalletId,
+        attempt_id: ShutdownAttemptId,
+    ) -> Result<(), Error> {
+        delete_wallet_with_tier(id.clone(), ShutdownDeadlineTier::Retry, Some(attempt_id)).await?;
+        self.finish_wallet_deletion_presentation(id);
+        Ok(())
+    }
 
-        keychain.delete_wallet_items(&id);
-
-        if let Err(error) = crate::wallet::delete_wallet_specific_data(&id) {
-            error!("Unable to delete wallet persisted data: {error}");
-        }
-
-        Updater::send_update(AppMessage::ClearCachedWalletManager(id.clone()));
-
-        match database.global_config.selected_wallet() {
-            Some(selected_id) if selected_id == id => {
-                let _ = database.global_config.clear_selected_wallet().tap_err(|error| {
-                    error!("Unable to clear selected wallet: {error}");
-                });
-            }
-            _ => (),
-        }
-
-        let remaining_wallets = database.wallets().all().unwrap_or_default();
-        if let Some(next_wallet) = remaining_wallets.first() {
-            let _ = self.select_wallet(next_wallet.id.clone(), None);
-        } else {
-            self.load_and_reset_default_route(Route::NewWallet(Default::default()));
-        }
+    /// Cancel a blocked normal or corrupted wallet-deletion retry
+    pub fn cancel_wallet_deletion_attempt(&self, attempt_id: ShutdownAttemptId) {
+        WalletLifecycleCoordinator::global().cancel_attempt(&attempt_id);
     }
 
     /// DANGER: This will wipe all wallet data on this device
-    pub fn dangerous_wipe_all_data(&self) {
-        let database = Database::global();
-        let keychain = Keychain::global();
+    pub fn dangerous_wipe_all_data(&self) -> Result<(), Error> {
+        run_lifecycle_sync(wipe_all_data_with_tier(ShutdownDeadlineTier::Initial, None))
+    }
 
-        let wallets = Database::global().wallets().all().unwrap_or_default();
+    /// Retry a full wipe after a typed shutdown block
+    pub fn retry_dangerous_wipe_all_data(
+        &self,
+        attempt_id: ShutdownAttemptId,
+    ) -> Result<(), Error> {
+        run_lifecycle_sync(wipe_all_data_with_tier(ShutdownDeadlineTier::Retry, Some(attempt_id)))
+    }
 
-        for wallet in wallets {
-            let wallet_id = &wallet.id;
-
-            // delete the wallet from the database
-            if let Err(error) = database.wallets.delete(wallet_id) {
-                error!("Unable to delete wallet from database: {error}");
-            }
-
-            // delete the secret key, xpub and public descriptor from the keychain
-            keychain.delete_wallet_items(wallet_id);
-
-            // delete the wallet persisted bdk data
-            if let Err(error) = crate::wallet::delete_wallet_specific_data(wallet_id) {
-                error!("Unable to delete wallet persisted bdk data: {error}");
-            }
-
-            Updater::send_update(AppMessage::ClearCachedWalletManager(wallet_id.clone()));
-        }
-
-        if let Err(error) = CloudBackupKeychain::global().clear_local_state() {
-            error!("Unable to clear cloud backup keychain state: {error}");
-        }
-
-        database.dangerous_reset_all_data();
+    /// Cancel a blocked full-wipe retry without changing local data
+    pub fn cancel_dangerous_wipe(&self, attempt_id: ShutdownAttemptId) {
+        WalletLifecycleCoordinator::global().cancel_attempt(&attempt_id);
     }
 
     /// Frontend calls this method to send events to the rust application logic
@@ -661,6 +691,261 @@ impl FfiApp {
     }
 }
 
+fn run_lifecycle_sync<T>(
+    future: impl std::future::Future<Output = Result<T, AppError>> + Send + 'static,
+) -> Result<T, AppError>
+where
+    T: Send + 'static,
+{
+    match cove_tokio::try_block_on(future) {
+        Ok(result) => result,
+        Err(cove_tokio::RuntimeBridgeError::Unavailable) => {
+            Err(AppError::WalletLifecycle(WalletLifecycleFailure::RuntimeUnavailable))
+        }
+        Err(cove_tokio::RuntimeBridgeError::RuntimeThreadCall) => {
+            Err(AppError::WalletLifecycle(WalletLifecycleFailure::RuntimeThreadCall))
+        }
+    }
+}
+
+pub(crate) async fn delete_wallet_with_tier(
+    wallet_id: WalletId,
+    tier: ShutdownDeadlineTier,
+    retry: Option<ShutdownAttemptId>,
+) -> Result<(), AppError> {
+    let database = Database::global();
+    let inventory = database.wallets.complete_inventory().map_err(AppError::WalletInventory)?;
+    if tier == ShutdownDeadlineTier::Initial
+        && matches!(
+            crate::wallet::deletion::resolve_intent(&wallet_id, inventory),
+            WalletDeletionIntent::AlreadyAbsent
+        )
+    {
+        return Ok(());
+    }
+
+    let lifecycle = WalletLifecycleCoordinator::global()
+        .prepare_wallet_deletion(wallet_id.clone(), tier, retry.as_ref())
+        .await
+        .map_err(AppError::WalletLifecycle)?;
+    let inventory = database.wallets.complete_inventory().map_err(AppError::WalletInventory)?;
+    let WalletDeletionIntent::Registered(target) =
+        crate::wallet::deletion::resolve_intent(&wallet_id, inventory)
+    else {
+        return Ok(());
+    };
+
+    PreparedWalletDeletion::new(lifecycle, target).delete().map_err(AppError::WalletDeletion)
+}
+
+async fn wipe_all_data_with_tier(
+    tier: ShutdownDeadlineTier,
+    retry: Option<ShutdownAttemptId>,
+) -> Result<(), AppError> {
+    let database = Database::global();
+
+    // a failed bucket read must stop before actor shutdown or destructive work
+    database.wallets.complete_inventory().map_err(AppError::WalletInventory)?;
+
+    let lifecycle = WalletLifecycleCoordinator::global()
+        .prepare_full_wipe(tier, retry.as_ref())
+        .await
+        .map_err(AppError::WalletLifecycle)?;
+    let cloud_reset = CLOUD_BACKUP_MANAGER.clone().prepare_local_reset().await.map_err(|_| {
+        AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired)
+    })?;
+    let mut prepared = PreparedFullWipe::new(lifecycle, cloud_reset);
+    let wipe_result = async {
+        let inventory = database.wallets.complete_inventory().map_err(AppError::WalletInventory)?;
+
+        let mut first_failure = None;
+        for target in targets_from_inventory(inventory) {
+            if let Err(error) = prepared.delete_wallet(&target) {
+                first_failure.get_or_insert(error);
+            }
+        }
+        if let Some(error) = first_failure {
+            return Err(AppError::WalletDeletion(error));
+        }
+
+        prepared
+            .delete_all_wallet_items()
+            .map_err(|source| local_reset_error(LocalDataResetStage::WalletKeychain, source))?;
+        prepared
+            .purge_orphan_wallet_artifacts()
+            .map_err(|source| local_reset_error(LocalDataResetStage::WalletArtifacts, source))?;
+
+        CloudBackupKeychain::global()
+            .clear_local_state()
+            .map_err(|source| local_reset_error(LocalDataResetStage::CloudBackup, source))?;
+        prepared.prevent_cloud_resume();
+        cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
+
+        crate::backup::recovery::remove_all_restore_recovery_state()
+            .map_err(|source| local_reset_error(LocalDataResetStage::RestoreState, source))?;
+        std::fs::File::open(&*cove_common::consts::ROOT_DATA_DIR)
+            .and_then(|directory| directory.sync_all())
+            .map_err(|source| local_reset_error(LocalDataResetStage::RootDirectorySync, source))?;
+        crate::diagnostics::clear_diagnostics_logs()
+            .map_err(|source| local_reset_error(LocalDataResetStage::Diagnostics, source))?;
+        database
+            .dangerous_reset_all_data()
+            .map_err(|source| local_reset_error(LocalDataResetStage::Database, source))?;
+
+        Ok(())
+    }
+    .await;
+
+    if let Err(error) = wipe_result {
+        return failed_wipe_result(error, prepared.resume_after_failure().await);
+    }
+
+    prepared.complete_after_database_reset().await.map_err(|_| {
+        AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired)
+    })?;
+
+    Ok(())
+}
+
+fn failed_wipe_result(
+    wipe_error: AppError,
+    cloud_recovery: Result<
+        crate::manager::cloud_backup_manager::CloudBackupResetRecovery,
+        crate::manager::cloud_backup_manager::CloudBackupError,
+    >,
+) -> Result<(), AppError> {
+    match cloud_recovery {
+        Ok(_) => Err(wipe_error),
+        Err(_) => {
+            Err(AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired))
+        }
+    }
+}
+
+pub(crate) fn purge_orphan_wallet_artifacts(
+    cleanup: &crate::wallet::deletion::RecoveryCleanup,
+) -> std::io::Result<()> {
+    debug_assert!(cleanup.is_authorized());
+
+    let root = &*cove_common::consts::ROOT_DATA_DIR;
+    for entry in std::fs::read_dir(root)? {
+        let entry = entry?;
+        if parse_bdk_wallet_artifact_name(&entry.file_name())?.is_some() {
+            crate::bdk_store::BdkStore::remove_wallet_artifact(&entry.path())?;
+        }
+    }
+
+    let wallet_data_root = cove_common::consts::wallet_data_dir_path();
+    match std::fs::symlink_metadata(&wallet_data_root) {
+        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {
+            purge_wallet_data_root(&wallet_data_root)?;
+        }
+        Ok(_) => std::fs::remove_file(wallet_data_root)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+
+    std::fs::File::open(root)?.sync_all()
+}
+
+fn purge_wallet_data_root(wallet_data_root: &std::path::Path) -> std::io::Result<()> {
+    let mut retained_unknown_entry = false;
+    for entry in std::fs::read_dir(wallet_data_root)? {
+        let entry = entry?;
+        let wallet_id = match parse_wallet_id(&entry.file_name()) {
+            Ok(wallet_id) => wallet_id,
+            Err(error) => {
+                retained_unknown_entry = true;
+                warn!(
+                    path = ?entry.path(),
+                    reason = %error,
+                    "Skipping unknown wallet-data entry during destructive cleanup"
+                );
+                continue;
+            }
+        };
+
+        crate::database::wallet_data::delete_wallet_data_directory_at_location(
+            &wallet_id,
+            wallet_data_root,
+        )?;
+    }
+
+    if retained_unknown_entry {
+        warn!(
+            path = ?wallet_data_root,
+            "Retaining wallet-data root because it contains unknown entries"
+        );
+    } else {
+        std::fs::remove_dir(wallet_data_root)?;
+    }
+
+    Ok(())
+}
+
+fn parse_bdk_wallet_artifact_name(name: &std::ffi::OsStr) -> std::io::Result<Option<WalletId>> {
+    let Some(name) = name.to_str() else {
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt as _;
+
+            if name.as_bytes().starts_with(b"bdk_wallet_") {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "wallet artifact name is not valid UTF-8",
+                ));
+            }
+        }
+
+        return Ok(None);
+    };
+    let (prefix, suffixes): (&str, &[&str]) = if name.starts_with("bdk_wallet_sqlite_") {
+        (
+            "bdk_wallet_sqlite_",
+            &[
+                ".db.switch-tmp-wal",
+                ".db.switch-tmp-shm",
+                ".db.switch-tmp-journal",
+                ".db.switch-tmp",
+                ".db-journal",
+                ".db-wal",
+                ".db-shm",
+                ".db",
+            ],
+        )
+    } else if name.starts_with("bdk_wallet_") {
+        ("bdk_wallet_", &[".db"])
+    } else {
+        return Ok(None);
+    };
+
+    let value = name.strip_prefix(prefix).expect("prefix was checked");
+    let wallet_id =
+        suffixes.iter().find_map(|suffix| value.strip_suffix(suffix)).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("unrecognized wallet artifact name: {name}"),
+            )
+        })?;
+
+    parse_wallet_id(std::ffi::OsStr::new(wallet_id)).map(Some)
+}
+
+fn parse_wallet_id(value: &std::ffi::OsStr) -> std::io::Result<WalletId> {
+    let value = value.to_str().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, "wallet id is not valid UTF-8")
+    })?;
+    let wallet_id = WalletId::from(value.to_string());
+    crate::backup::recovery::ValidatedRestoreWalletId::validate(&wallet_id)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string()))?;
+
+    Ok(wallet_id)
+}
+
+fn local_reset_error(stage: LocalDataResetStage, source: impl std::fmt::Display) -> AppError {
+    AppError::LocalDataReset(LocalDataResetFailure { stage, source_detail: source.to_string() })
+}
+
 fn refresh_selected_block_height() {
     cove_tokio::task::spawn(async move {
         if let Err(error) = update_selected_block_height().await {
@@ -690,6 +975,24 @@ impl FfiApp {
     /// Fetch global instance of the app, or create one if it doesn't exist
     fn inner(&self) -> &App {
         App::global()
+    }
+
+    fn finish_wallet_deletion_presentation(&self, id: WalletId) {
+        let database = Database::global();
+        Updater::send_update(AppMessage::ClearCachedWalletManager(id.clone()));
+
+        if database.global_config.selected_wallet().as_ref() == Some(&id) {
+            let _ = database.global_config.clear_selected_wallet().tap_err(|error| {
+                error!("Unable to clear selected wallet: {error}");
+            });
+        }
+
+        let remaining_wallets = database.wallets().all().unwrap_or_default();
+        if let Some(next_wallet) = remaining_wallets.first() {
+            let _ = self.select_wallet(next_wallet.id.clone(), None);
+        } else {
+            self.load_and_reset_default_route(Route::NewWallet(Default::default()));
+        }
     }
 
     pub(crate) fn select_wallet(
@@ -745,6 +1048,88 @@ enum SelectLatestWalletError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupResetRecovery};
+
+    #[test]
+    fn orphan_sweep_removes_wallet_data_without_deleting_unknown_entries() {
+        let temporary = tempfile::tempdir().expect("temporary directory");
+        let wallet_data_root = temporary.path().join("wallets");
+        let wallet_directory = wallet_data_root.join("wallet-one");
+        let unknown_entry = wallet_data_root.join(".DS_Store");
+        std::fs::create_dir_all(&wallet_directory).expect("create wallet directory");
+        std::fs::write(wallet_directory.join("wallet-data"), b"wallet").expect("write wallet data");
+        std::fs::write(&unknown_entry, b"unrelated").expect("write unknown entry");
+
+        purge_wallet_data_root(&wallet_data_root).expect("purge wallet data");
+
+        assert!(!wallet_directory.exists());
+        assert!(unknown_entry.exists());
+        assert!(wallet_data_root.exists());
+    }
+
+    #[test]
+    fn orphan_sweep_parses_every_owned_bdk_artifact_shape() {
+        for name in [
+            "bdk_wallet_wallet-one.db",
+            "bdk_wallet_sqlite_wallet-one.db",
+            "bdk_wallet_sqlite_wallet-one.db-wal",
+            "bdk_wallet_sqlite_wallet-one.db-shm",
+            "bdk_wallet_sqlite_wallet-one.db-journal",
+            "bdk_wallet_sqlite_wallet-one.db.switch-tmp",
+            "bdk_wallet_sqlite_wallet-one.db.switch-tmp-wal",
+            "bdk_wallet_sqlite_wallet-one.db.switch-tmp-shm",
+            "bdk_wallet_sqlite_wallet-one.db.switch-tmp-journal",
+        ] {
+            assert_eq!(
+                parse_bdk_wallet_artifact_name(std::ffi::OsStr::new(name)).unwrap(),
+                Some(WalletId::from("wallet-one".to_string()))
+            );
+        }
+    }
+
+    #[test]
+    fn orphan_sweep_rejects_malformed_owned_artifact_name() {
+        let error =
+            parse_bdk_wallet_artifact_name(std::ffi::OsStr::new("bdk_wallet_sqlite_invalid/id.db"))
+                .unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn orphan_sweep_ignores_unrelated_non_utf8_name() {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let name = std::ffi::OsStr::from_bytes(b"unrelated-\xFF");
+
+        assert_eq!(parse_bdk_wallet_artifact_name(name).unwrap(), None);
+    }
+
+    #[test]
+    fn failed_wipe_preserves_original_error_after_safe_cloud_recovery() {
+        let wipe_error = local_reset_error(LocalDataResetStage::WalletArtifacts, "disk error");
+
+        let result =
+            failed_wipe_result(wipe_error.clone(), Ok(CloudBackupResetRecovery::SafelyDisabled));
+
+        assert_eq!(result, Err(wipe_error));
+    }
+
+    #[test]
+    fn failed_wipe_requires_recovery_when_cloud_writers_cannot_resume_safely() {
+        let wipe_error = local_reset_error(LocalDataResetStage::WalletArtifacts, "disk error");
+
+        let result =
+            failed_wipe_result(wipe_error, Err(CloudBackupError::Deferred("resume failed".into())));
+
+        assert_eq!(
+            result,
+            Err(AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired))
+        );
+    }
+
+    use crate::wallet::metadata::WalletMetadata;
 
     fn load_and_reset_targets(route: Route, expected_after_millis: u32) -> Vec<Route> {
         let Route::LoadAndReset { reset_to, after_millis } = route else {
@@ -775,6 +1160,92 @@ mod tests {
         let targets = load_and_reset_targets(route, WALLET_SELECTION_LOAD_AND_RESET_DELAY_MS);
 
         assert_eq!(targets, vec![Route::SelectedWallet(wallet_id), next_route]);
+    }
+
+    #[test]
+    fn dangerous_wipe_all_data_retains_metadata_until_wallet_secrets_are_deleted() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
+
+        let keychain = crate::test_support::shared_mock_keychain();
+        keychain.reset();
+
+        let mut first = WalletMetadata::preview_new();
+        first.id = WalletId::preview_new_random();
+        let mut second = WalletMetadata::preview_new();
+        second.id = WalletId::preview_new_random();
+
+        let database = Database::global();
+        for metadata in [&first, &second] {
+            database
+                .wallets
+                .save_restored_wallet_metadata(metadata.clone())
+                .expect("wallet metadata is saved");
+        }
+
+        let first_id = first.id.as_str();
+        let second_id = second.id.as_str();
+        let first_secret = format!("{first_id}::wallet_mnemonic");
+        let first_xpub = format!("{first_id}::wallet_xpub");
+        let first_descriptors = format!("{first_id}::wallet_public_descriptor");
+        let first_tap_signer = format!("{first_id}::tap_signer_backup");
+        let second_secret = format!("{second_id}::wallet_mnemonic");
+        let second_xpub = format!("{second_id}::wallet_xpub");
+        let second_descriptors = format!("{second_id}::wallet_public_descriptor");
+        let second_tap_signer = format!("{second_id}::tap_signer_backup");
+        let (failed_wallet, failed_secret) = if first.id.as_str() < second.id.as_str() {
+            (&first, &first_secret)
+        } else {
+            (&second, &second_secret)
+        };
+
+        keychain.set_entries(vec![
+            (&first_secret, "first secret"),
+            (&first_xpub, "first xpub"),
+            (&first_descriptors, "first descriptors"),
+            (&first_tap_signer, "first backup"),
+            (&second_secret, "second secret"),
+            (&second_xpub, "second xpub"),
+            (&second_descriptors, "second descriptors"),
+            (&second_tap_signer, "second backup"),
+        ]);
+        keychain.fail_delete_at(1);
+
+        let first_wipe = FfiApp::global().dangerous_wipe_all_data();
+
+        let failure = match first_wipe {
+            Err(AppError::WalletDeletion(failure)) => failure,
+            other => panic!(
+                "the failed wallet secret deletion must return its typed stage, got {other:?}"
+            ),
+        };
+        assert_eq!(failure.stage, crate::wallet::deletion::WalletDeletionStage::Keychain);
+        assert_eq!(
+            database.wallets.all().expect("wallet metadata is read"),
+            vec![failed_wallet.clone()],
+            "the failed wallet row survives because the database was not reset"
+        );
+        assert!(
+            keychain.get_entry(failed_secret).is_some(),
+            "the injected wallet secret remains for the retry"
+        );
+
+        keychain.fail_delete_at(usize::MAX);
+        FfiApp::global().dangerous_wipe_all_data().expect("the retry succeeds");
+
+        assert_eq!(
+            Database::global()
+                .wallets
+                .get(&failed_wallet.id, failed_wallet.network, failed_wallet.wallet_mode)
+                .expect("wallet metadata is read"),
+            None,
+            "the retry removes the failed wallet row"
+        );
+
+        keychain.reset();
     }
 }
 

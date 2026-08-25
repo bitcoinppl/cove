@@ -13,6 +13,7 @@ use cove_util::result_ext::ResultExt as _;
 use tracing::warn;
 
 use crate::{
+    database::wallet::{WalletInternalMetadataPatch, WalletMetadataPatch},
     database::{Database, wallet_data::ReceiveAddressCache},
     manager::wallet_manager::{
         Error, WalletManagerReconcileMessage,
@@ -334,7 +335,17 @@ impl WalletActor {
         now: u64,
         status: ReceiveAddressStatus,
     ) -> Result<ReceiveAddressState, Error> {
-        let address = self.wallet.get_next_address()?;
+        let (address, address_index_update) = self.wallet.get_next_address()?;
+
+        if let Some(address_index) = address_index_update {
+            self.apply_metadata_patch(WalletMetadataPatch::Internal(
+                WalletInternalMetadataPatch {
+                    address_index: Some(Some(address_index)),
+                    ..Default::default()
+                },
+            ))?;
+        }
+
         let cache = ReceiveAddressCache {
             derivation_index: address.info.index,
             first_shown_at_secs: now,
@@ -397,6 +408,18 @@ impl WalletActor {
 
     pub(crate) fn stop_receive_address_refresh_timer(&mut self) {
         self.receive_address_refresh_timer = None;
+    }
+
+    pub(crate) fn resume_receive_address_services(&mut self) {
+        let Some(state) = self.receive_address.visible_state() else {
+            return;
+        };
+
+        if self.receive_address_watcher.is_none() {
+            self.start_receive_address_watcher(state.request_id, state.address.info.index);
+        }
+
+        self.schedule_receive_address_refresh(&state, current_epoch_secs());
     }
 
     fn start_delayed_receive_address_activity_check(
