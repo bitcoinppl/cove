@@ -59,7 +59,7 @@ fun WalletMoreOptionsSheet(
         manager.walletMetadata ?: run {
             return
         }
-    val hasLabels = manager.labelManager().use { it.hasLabels() }
+    val hasLabels = manager.hasLabels()
     val hasTransactions = manager.hasTransactions
     val hardwareMetadata = metadata.hardwareMetadata
 

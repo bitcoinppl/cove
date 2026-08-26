@@ -89,13 +89,14 @@ impl Database {
         self.diagnostics_reports.clone()
     }
 
-    pub fn dangerous_reset_all_data(&self) {
+    pub fn dangerous_reset_all_data(&self) -> Result<(), error::DatabaseError> {
         match std::fs::remove_file(database_location()) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => {
-                error!("unable to delete database cove_main error: {error}");
-                return;
+                return Err(error::DatabaseError::DatabaseAccess(format!(
+                    "unable to delete database cove_main: {error}"
+                )));
             }
         }
 
@@ -103,21 +104,32 @@ impl Database {
             error!("unable to clear diagnostics logs during data reset: {error}");
         }
 
-        let db = Self::init().expect("failed to reinitialize database after reset");
+        let db = Self::init()?;
         DATABASE.get().expect("database not initialized").swap(Arc::new(db));
+
+        Ok(())
     }
 }
 
 impl Database {
     pub fn global() -> Arc<Self> {
-        let db = DATABASE
-            .get_or_init(|| {
-                let db = Self::init().expect("failed to initialize main database");
-                ArcSwap::new(Arc::new(db))
-            })
-            .load();
+        Self::try_global().expect("failed to initialize main database")
+    }
 
-        Arc::clone(&db)
+    pub(crate) fn initialize_for_bootstrap() -> Result<(), error::DatabaseError> {
+        Self::try_global().map(drop)
+    }
+
+    fn try_global() -> Result<Arc<Self>, error::DatabaseError> {
+        let db = DATABASE.get_or_try_init(|| {
+            let db = Self::init()?;
+
+            Ok::<_, error::DatabaseError>(ArcSwap::new(Arc::new(db)))
+        })?;
+
+        let db = db.load();
+
+        Ok(Arc::clone(&db))
     }
 
     /// Re-open the database file and swap the global handle

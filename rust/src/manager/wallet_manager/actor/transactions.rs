@@ -25,13 +25,14 @@ use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
 use crate::{
+    database::Database,
     manager::wallet_manager::{
         Error, SendFlowErrorAlert, WalletManagerBuildTxError, WalletManagerError,
         WalletManagerFeesError, WalletManagerReconcileMessage,
-        actor::{WalletActor, current_wallet_unspent_outpoints_for_txid, exclude_locked_outpoints},
+        actor::{SpendPolicy, WalletActor, current_wallet_unspent_outpoints_for_txid},
         payjoin::{PayjoinActor, PayjoinSessionPersister, build_sender},
     },
-    node::client::NodeClient,
+    node::{Node, client::NodeClient},
     transaction::{FeeRate, Transaction, TransactionDetails, TransactionDetailsPresentation, TxId},
     wallet::Address,
     wallet_secret::WalletSecretExt as _,
@@ -67,12 +68,12 @@ impl WalletActor {
         option: FeeRateOption,
         amount: Amount,
         address: Address,
+        spend_policy: &SpendPolicy,
     ) -> Result<FeeRateOptionWithTotalFee, Error> {
         let coin_selection = CoveDefaultCoinSelection::new(self.seed);
-        let locked_outpoints = self.locked_output_outpoints()?;
         let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
 
-        exclude_locked_outpoints(&mut tx_builder, locked_outpoints);
+        spend_policy.apply(&mut tx_builder);
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(address.script_pubkey(), amount);
         tx_builder.fee_rate(*option.fee_rate);
@@ -103,10 +104,10 @@ impl WalletActor {
 
         debug!("build_ephemeral_drain_tx for fee rate {}", fee.sat_per_vb());
         let script_pubkey = address.script_pubkey();
-        let locked_outpoints = self.locked_output_outpoints()?;
+        let spend_policy = self.automatic_spend_policy()?;
         let mut tx_builder = self.wallet.bdk.build_tx();
 
-        exclude_locked_outpoints(&mut tx_builder, locked_outpoints);
+        spend_policy.apply(&mut tx_builder);
         tx_builder.drain_wallet().drain_to(script_pubkey).fee_rate(fee.into());
         let psbt = tx_builder.finish()?;
         self.wallet.unreserve_tx_change_addresses(&psbt.unsigned_tx);
@@ -129,10 +130,10 @@ impl WalletActor {
         let script_pubkey = address.script_pubkey();
 
         let coin_selection = CoveDefaultCoinSelection::new(self.seed);
-        let locked_outpoints = self.locked_output_outpoints()?;
+        let spend_policy = self.automatic_spend_policy()?;
         let mut tx_builder = self.wallet.bdk.build_tx().coin_selection(coin_selection);
 
-        exclude_locked_outpoints(&mut tx_builder, locked_outpoints);
+        spend_policy.apply(&mut tx_builder);
         tx_builder.ordering(TxOrdering::Untouched);
         tx_builder.add_recipient(script_pubkey, amount);
         tx_builder.fee_rate(fee_rate);
@@ -241,15 +242,27 @@ impl WalletActor {
         address: Address,
     ) -> Result<FeeRateOptionsWithTotalFee, Error> {
         self.ensure_ledger_ready_for_spend()?;
+        let spend_policy = self.automatic_spend_policy()?;
 
         let options = FeeRateOptionsWithTotalFee {
-            fast: self.fee_option_with_total_fee(fee_rate_options.fast, amount, address.clone())?,
+            fast: self.fee_option_with_total_fee(
+                fee_rate_options.fast,
+                amount,
+                address.clone(),
+                &spend_policy,
+            )?,
             medium: self.fee_option_with_total_fee(
                 fee_rate_options.medium,
                 amount,
                 address.clone(),
+                &spend_policy,
             )?,
-            slow: self.fee_option_with_total_fee(fee_rate_options.slow, amount, address.clone())?,
+            slow: self.fee_option_with_total_fee(
+                fee_rate_options.slow,
+                amount,
+                address.clone(),
+                &spend_policy,
+            )?,
             custom: None,
         };
 
@@ -474,7 +487,7 @@ impl WalletActor {
         }
 
         if self.payjoin_actor.is_some() {
-            return Produces::ok(Err(Error::SignAndBroadcastError(
+            return Produces::ok(Err(Error::PayjoinSessionError(
                 "a payjoin session is already in progress".to_string(),
             )));
         }
@@ -494,7 +507,7 @@ impl WalletActor {
                 if !can_cleanup {
                     // Broadcast hasn't completed yet, re-dispatch so the user doesn't need to restart.
                     send!(self.addr.resume_payjoin_session());
-                    return Produces::ok(Err(Error::SignAndBroadcastError(
+                    return Produces::ok(Err(Error::PayjoinSessionError(
                         "retrying a previous payjoin broadcast; please try again in a moment"
                             .to_string(),
                     )));
@@ -504,7 +517,7 @@ impl WalletActor {
                 // in memory without flushing to disk; only drop the session once it is durable.
                 if let Err(error) = self.wallet.persist() {
                     warn!("failed to persist wallet at send gate before payjoin cleanup: {error}");
-                    return Produces::ok(Err(Error::SignAndBroadcastError(
+                    return Produces::ok(Err(Error::PayjoinSessionError(
                         "a previous payjoin session is pending cleanup; please try again later"
                             .to_string(),
                     )));
@@ -512,7 +525,7 @@ impl WalletActor {
 
                 if let Err(error) = self.db.delete_payjoin_sender_session() {
                     warn!("payjoin session cleanup at send gate failed: {error}");
-                    return Produces::ok(Err(Error::SignAndBroadcastError(
+                    return Produces::ok(Err(Error::PayjoinSessionError(
                         "a previous payjoin session is pending cleanup; please try again later"
                             .to_string(),
                     )));
@@ -521,7 +534,7 @@ impl WalletActor {
                 // The completed tx may have been the payjoin proposal, so reusing the
                 // supplied PSBT (which is still the fallback) could cause a conflict.
                 // Ask the user to confirm again now that the record is cleared.
-                return Produces::ok(Err(Error::SignAndBroadcastError(
+                return Produces::ok(Err(Error::PayjoinSessionError(
                     "previous payjoin session cleared; please confirm your payment again"
                         .to_string(),
                 )));
@@ -529,7 +542,7 @@ impl WalletActor {
 
             Err(error) => {
                 error!("failed to check for pending payjoin session: {error}");
-                return Produces::ok(Err(Error::SignAndBroadcastError(
+                return Produces::ok(Err(Error::PayjoinSessionError(
                     "unable to verify payjoin session state; please try again later".to_string(),
                 )));
             }
@@ -577,7 +590,7 @@ impl WalletActor {
         mut psbt: Psbt,
     ) -> Result<(Psbt, BdkTransaction), Error> {
         fn err(s: &str) -> Error {
-            Error::SignAndBroadcastError(s.to_string())
+            Error::SigningError(s.to_string())
         }
 
         let network = self.wallet.network;
@@ -643,7 +656,7 @@ impl WalletActor {
 
     async fn node_client_for_broadcast(&mut self) -> ActorResult<Result<NodeClient, Error>> {
         Produces::ok(self.node_client().cloned().map_err(|_| {
-            Error::SignAndBroadcastError(
+            Error::BroadcastError(
                 "failed to broadcast transaction, could not get node client, try again".to_string(),
             )
         }))
@@ -757,6 +770,32 @@ impl WalletActor {
         self.start_payjoin_terminal_broadcast(tx);
     }
 
+    /// Schedule best-effort broadcast of the exact committed Payjoin transaction
+    pub(crate) fn schedule_payjoin_terminal_broadcast(&mut self, tx: BdkTransaction) {
+        let node = Database::global().global_config.selected_node();
+        let node_client = self.node_client().ok().cloned();
+
+        cove_tokio::task::spawn(async move {
+            if let Err(error) = broadcast_payjoin_terminal_with_client(node_client, node, tx).await
+            {
+                warn!(
+                    "failed to broadcast committed Payjoin transaction during destructive wallet shutdown; the durable terminal marker remains for retry: {error}"
+                );
+            }
+        });
+    }
+
+    /// Broadcast the exact committed Payjoin transaction
+    pub(crate) async fn broadcast_payjoin_terminal_for_shutdown(
+        &mut self,
+        tx: BdkTransaction,
+    ) -> Result<(), Error> {
+        let node = Database::global().global_config.selected_node();
+        let node_client = self.node_client().ok().cloned();
+
+        broadcast_payjoin_terminal_with_client(node_client, node, tx).await
+    }
+
     fn start_payjoin_proposal_broadcast(&mut self, proposal_tx: BdkTransaction) {
         let persister = PayjoinSessionPersister::new(self.db.clone());
         if let Err(error) = persister.set_pending_proposal(&proposal_tx) {
@@ -798,7 +837,7 @@ impl WalletActor {
             error!(
                 "failed to persist wallet after payjoin broadcast; retaining session record for recovery: {error}"
             );
-            return Produces::ok(Err(Error::SignAndBroadcastError(
+            return Produces::ok(Err(Error::PayjoinSessionError(
                 "transaction was broadcast but wallet state could not be saved; please restart the app"
                     .to_string(),
             )));
@@ -903,8 +942,7 @@ impl WalletActor {
                 error!("failed to sign recovered payjoin proposal, pausing for retry: {error:?}");
                 // the receiver accepted a valid proposal; do not fall back — retain the record
                 // so the user can retry after resolving the signing failure
-                self
-                    .send(WalletManagerReconcileMessage::WalletError(Error::SignAndBroadcastError(
+                self.send(WalletManagerReconcileMessage::WalletError(Error::PayjoinSessionError(
                     "could not sign the recovered payjoin proposal; unlock the wallet and restart"
                         .to_string(),
                 )));
@@ -1068,7 +1106,14 @@ impl WalletActor {
         };
 
         let sent_and_received = self.wallet.bdk.sent_and_received(&tx.tx_node.tx).into();
-        Ok(Some(Transaction::new(&self.wallet.id, sent_and_received, tx)))
+        let labels = self
+            .db
+            .labels
+            .all_labels_for_txn(tx.tx_node.txid)
+            .map_err_str(Error::TransactionDetailsError)?
+            .into();
+
+        Ok(Some(Transaction::new_with_labels(sent_and_received, tx, labels)))
     }
 
     pub(crate) fn transaction_details_for_tx_id(
@@ -1105,6 +1150,32 @@ impl WalletActor {
             .map(|(_, block_height)| block_height as u32)
             .unwrap_or_else(|| self.wallet.bdk.local_chain().tip().height())
     }
+}
+
+async fn broadcast_payjoin_terminal_with_client(
+    node_client: Option<NodeClient>,
+    node: Node,
+    tx: BdkTransaction,
+) -> Result<(), Error> {
+    let node_client = match node_client {
+        Some(node_client) => node_client,
+        None => super::node::checked_node_client(&node).await?,
+    };
+    let txid = tx.compute_txid();
+
+    if let Err(error) = node_client.broadcast_transaction(tx).await {
+        let known_to_node = node_client
+            .get_transaction(txid)
+            .await
+            .is_ok_and(|found| found.is_some_and(|transaction| transaction.compute_txid() == txid));
+        if !known_to_node {
+            return Err(Error::BroadcastError(format!(
+                "failed to broadcast committed Payjoin transaction during wallet shutdown: {error:?}"
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 async fn broadcast_transaction_with_connection(
@@ -1173,7 +1244,7 @@ async fn broadcast_to_node_with_connection(
         .await
         .map_err(|_| BroadcastTransactionError::BroadcastFailed(Error::ActorNotFound))?
         .map_err(|error| {
-            BroadcastTransactionError::BroadcastFailed(Error::SignAndBroadcastError(format!(
+            BroadcastTransactionError::BroadcastFailed(Error::BroadcastError(format!(
                 "failed to broadcast transaction, unable to connect to node: {error:?}"
             )))
         })?;
@@ -1184,7 +1255,7 @@ async fn broadcast_to_node_with_connection(
         .map_err(BroadcastTransactionError::BroadcastFailed)?;
 
     node_client.broadcast_transaction(transaction.clone()).await.map_err(|error| {
-        BroadcastTransactionError::BroadcastFailed(Error::SignAndBroadcastError(format!(
+        BroadcastTransactionError::BroadcastFailed(Error::BroadcastError(format!(
             "failed to broadcast transaction, try again: {error:?}"
         )))
     })?;
@@ -1194,9 +1265,46 @@ async fn broadcast_to_node_with_connection(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use bdk_wallet::test_utils::{ReceiveTo, receive_output};
     use bitcoin::Amount;
+    use parking_lot::RwLock;
 
     use super::{WalletActor, WalletManagerError};
+    use crate::{
+        database::wallet_data::{WalletDataDb, wallet_data_artifact_paths},
+        manager::wallet_manager::{WalletScanStatus, WalletSnapshot},
+        wallet::{Wallet, metadata::WalletMetadata},
+    };
+
+    #[test]
+    fn preview_transaction_lookup_uses_in_memory_labels() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::init_test_database();
+        crate::test_support::init_test_keychain();
+        let metadata = WalletMetadata::preview_new();
+        let wallet_data_paths = wallet_data_artifact_paths(&metadata.id);
+        let mut wallet = Wallet::preview_new_wallet_with_metadata(metadata);
+        let outpoint =
+            receive_output(&mut wallet.bdk, Amount::from_sat(50_000), ReceiveTo::Mempool(1));
+        let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
+        let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
+        let wallet_data_db =
+            WalletDataDb::new_in_memory(wallet.id.clone()).expect("in-memory label database opens");
+        let (reconciler, _) = flume::bounded(1);
+        let actor = WalletActor::new_with_db(
+            wallet,
+            reconciler,
+            scan_status,
+            wallet_snapshot,
+            wallet_data_db,
+        );
+
+        assert!(actor.transaction_for_tx_id(outpoint.txid).unwrap().is_some());
+        assert!(wallet_data_paths.iter().all(|path| !path.exists()));
+    }
 
     #[test]
     fn insufficient_funds_needed_amount_derives_fee() {

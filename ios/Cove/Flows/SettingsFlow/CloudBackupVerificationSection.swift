@@ -10,7 +10,7 @@ private extension CloudBackupVerificationState? {
 
     var hasResult: Bool {
         switch self {
-        case .verified, .awaitingUploadConfirmation, .cancelled, .failed: true
+        case .verified, .needsAttention, .awaitingUploadConfirmation, .cancelled, .failed: true
         default: false
         }
     }
@@ -25,8 +25,17 @@ private extension CloudBackupPasskeyRepairState? {
 
 struct VerificationSection: View {
     let manager: CloudBackupManager
-    let onRecreate: () -> Void
-    let onReinitialize: () -> Void
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let recreateConfirmationIsPresented: Binding<Bool>
+    let reinitializeConfirmationIsPresented: Binding<Bool>
+
+    private var undecryptableWalletCount: UInt32 {
+        guard case let .needsAttention(report: report, checkedAt: _) = manager.verificationState else {
+            return 0
+        }
+
+        return report.walletIssues.decryptionFailed
+    }
 
     private var isBusy: Bool {
         manager.verificationState.isVerifying ||
@@ -35,6 +44,11 @@ struct VerificationSection: View {
     }
 
     var body: some View {
+        content
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch manager.verificationState {
         case nil, .notVerified, .required:
             CloudBackupVerificationStartSection(
@@ -42,7 +56,7 @@ struct VerificationSection: View {
                 onVerify: startVerification
             )
         case .running:
-            CloudBackupVerificationProgressSection()
+            EmptyView()
         case let .verified(report: report, lastVerifiedAt: _):
             if let report {
                 CloudBackupVerifiedSection(
@@ -59,6 +73,17 @@ struct VerificationSection: View {
                     onVerify: startVerification
                 )
             }
+        case let .needsAttention(report: report, checkedAt: _):
+            CloudBackupNeedsAttentionSection(
+                report: report,
+                isBusy: isBusy,
+                needsSync: manager.detail?.needsSync.isEmpty == false,
+                syncState: manager.syncState,
+                onSync: syncUnsynced,
+                onVerify: startVerification,
+                deletionState: manager.undecryptableWalletDeletionState,
+                onDeleteUndecryptable: requestUndecryptableWalletDeletion
+            )
         case .awaitingUploadConfirmation:
             CloudBackupUploadConfirmationPendingSection()
         case .cancelled:
@@ -77,8 +102,8 @@ struct VerificationSection: View {
                 destructiveOperationState: manager.destructiveOperationState,
                 onRetry: retry,
                 onRepairPasskey: repairPasskey,
-                onRecreate: onRecreate,
-                onReinitialize: onReinitialize
+                recreateConfirmationIsPresented: recreateConfirmationIsPresented,
+                reinitializeConfirmationIsPresented: reinitializeConfirmationIsPresented
             )
         }
     }
@@ -102,6 +127,14 @@ struct VerificationSection: View {
     private func syncUnsynced() {
         manager.dispatch(action: .syncUnsynced)
     }
+
+    private func requestUndecryptableWalletDeletion() {
+        guard undecryptableWalletCount > 0 else { return }
+
+        presentationCoordinator.present(
+            .alert(.undecryptableWalletDeletion(undecryptableWalletCount))
+        )
+    }
 }
 
 private struct CloudBackupVerificationStartSection: View {
@@ -118,18 +151,6 @@ private struct CloudBackupVerificationStartSection: View {
                 Label("Verify Now", systemImage: "checkmark.shield")
             }
             .disabled(isBusy)
-        }
-    }
-}
-
-private struct CloudBackupVerificationProgressSection: View {
-    var body: some View {
-        Section {
-            HStack {
-                ProgressView()
-                    .padding(.trailing, 8)
-                Text("Verifying backup integrity...")
-            }
         }
     }
 }
@@ -209,24 +230,6 @@ private struct CloudBackupVerifiedSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
-            if report.walletsFailed > 0 {
-                Label(
-                    "\(report.walletsFailed) wallet backup(s) could not be decrypted",
-                    systemImage: "exclamationmark.triangle.fill"
-                )
-                .foregroundStyle(Color.statusError)
-                .font(.caption)
-            }
-
-            if report.walletsUnsupported > 0 {
-                Label(
-                    "\(report.walletsUnsupported) wallet(s) use a newer backup format",
-                    systemImage: "info.circle.fill"
-                )
-                .foregroundStyle(Color.statusWarning)
-                .font(.caption)
-            }
         }
 
         CloudBackupVerificationActionButtons(
@@ -239,6 +242,124 @@ private struct CloudBackupVerifiedSection: View {
     }
 }
 
+private struct CloudBackupNeedsAttentionSection: View {
+    let report: DeepVerificationReport
+    let isBusy: Bool
+    let needsSync: Bool
+    let syncState: CloudBackupSyncState?
+    let onSync: () -> Void
+    let onVerify: () -> Void
+    let deletionState: CloudBackupUndecryptableWalletDeletionState
+    let onDeleteUndecryptable: () -> Void
+
+    var body: some View {
+        Section {
+            Label("Backup needs attention", systemImage: "exclamationmark.shield.fill")
+                .foregroundStyle(Color.statusWarning)
+                .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+
+            Text("The backup key is valid. \(report.walletsVerified) wallet backup(s) passed verification.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            CloudBackupWalletIssueRows(
+                issues: report.walletIssues,
+                deletionState: deletionState,
+                onDeleteUndecryptable: onDeleteUndecryptable
+            )
+        }
+
+        CloudBackupVerificationActionButtons(
+            isBusy: isBusy,
+            needsSync: needsSync,
+            syncState: syncState,
+            onSync: onSync,
+            onVerify: onVerify
+        )
+    }
+}
+
+private struct CloudBackupWalletIssueRows: View {
+    let issues: CloudBackupWalletVerificationIssues
+    let deletionState: CloudBackupUndecryptableWalletDeletionState
+    let onDeleteUndecryptable: () -> Void
+
+    var body: some View {
+        CloudBackupWalletIssueLabel(
+            count: issues.missing,
+            message: "wallet backup file(s) are missing from cloud storage"
+        )
+        CloudBackupWalletIssueLabel(
+            count: issues.downloadFailed,
+            message: "wallet backup(s) could not be downloaded"
+        )
+        CloudBackupWalletIssueLabel(
+            count: issues.invalid,
+            message: "wallet backup file(s) contain invalid data"
+        )
+        CloudBackupUndecryptableWalletIssue(
+            count: issues.decryptionFailed,
+            deletionState: deletionState,
+            onDelete: onDeleteUndecryptable
+        )
+        CloudBackupWalletIssueLabel(
+            count: issues.unsupported,
+            message: "wallet backup(s) use a newer backup format"
+        )
+        CloudBackupWalletIssueLabel(
+            count: issues.unreadable,
+            message: "wallet backup(s) could not be read"
+        )
+
+        if case let .failed(error) = deletionState {
+            Label(error, systemImage: "xmark.circle.fill")
+                .foregroundStyle(Color.statusError)
+                .font(.caption)
+        }
+    }
+}
+
+private struct CloudBackupWalletIssueLabel: View {
+    let count: UInt32
+    let message: String
+
+    var body: some View {
+        if count > 0 {
+            Label("\(count) \(message)", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color.statusError)
+                .font(.caption)
+        }
+    }
+}
+
+private struct CloudBackupUndecryptableWalletIssue: View {
+    let count: UInt32
+    let deletionState: CloudBackupUndecryptableWalletDeletionState
+    let onDelete: () -> Void
+
+    var body: some View {
+        if count > 0 {
+            Button(role: .destructive, action: onDelete) {
+                HStack {
+                    if case .deleting = deletionState {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                    }
+
+                    Text("\(count) wallet backup(s) could not be decrypted with this backup key")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                }
+            }
+            .font(.caption)
+            .disabled(deletionState == .deleting)
+            .accessibilityHint("Opens a confirmation to delete these inaccessible backups")
+        }
+    }
+}
+
 private struct CloudBackupVerificationFailureSection: View {
     let failure: DeepVerificationFailure
     let passkeyRepairState: CloudBackupPasskeyRepairState?
@@ -247,8 +368,8 @@ private struct CloudBackupVerificationFailureSection: View {
     let destructiveOperationState: CloudBackupDestructiveOperationState
     let onRetry: (CloudBackupRetryAction?) -> Void
     let onRepairPasskey: () -> Void
-    let onRecreate: () -> Void
-    let onReinitialize: () -> Void
+    let recreateConfirmationIsPresented: Binding<Bool>
+    let reinitializeConfirmationIsPresented: Binding<Bool>
 
     private var passkeyRepairError: String? {
         guard case let .failed(error) = passkeyRepairState else { return nil }
@@ -275,7 +396,7 @@ private struct CloudBackupVerificationFailureSection: View {
                     isBusy: isBusy,
                     isDetailInventoryComplete: isDetailInventoryComplete,
                     destructiveOperationState: destructiveOperationState,
-                    onRecreate: onRecreate
+                    confirmationIsPresented: recreateConfirmationIsPresented
                 )
             case let .reinitializeBackup(message, warning, _):
                 CloudBackupReinitializeFailureContent(
@@ -284,7 +405,7 @@ private struct CloudBackupVerificationFailureSection: View {
                     isBusy: isBusy,
                     isDetailInventoryComplete: isDetailInventoryComplete,
                     destructiveOperationState: destructiveOperationState,
-                    onReinitialize: onReinitialize
+                    confirmationIsPresented: reinitializeConfirmationIsPresented
                 )
             case let .unsupportedVersion(message, _):
                 CloudBackupUnsupportedVersionFailureContent(message: message)
@@ -328,7 +449,7 @@ private struct CloudBackupRecreateManifestFailureContent: View {
     let isBusy: Bool
     let isDetailInventoryComplete: Bool
     let destructiveOperationState: CloudBackupDestructiveOperationState
-    let onRecreate: () -> Void
+    let confirmationIsPresented: Binding<Bool>
 
     var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -346,7 +467,7 @@ private struct CloudBackupRecreateManifestFailureContent: View {
             currentOperation: destructiveOperationState,
             isBusy: isBusy,
             isDetailInventoryComplete: isDetailInventoryComplete,
-            action: onRecreate
+            action: { confirmationIsPresented.wrappedValue = true }
         )
     }
 }
@@ -357,7 +478,7 @@ private struct CloudBackupReinitializeFailureContent: View {
     let isBusy: Bool
     let isDetailInventoryComplete: Bool
     let destructiveOperationState: CloudBackupDestructiveOperationState
-    let onReinitialize: () -> Void
+    let confirmationIsPresented: Binding<Bool>
 
     var body: some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -375,7 +496,7 @@ private struct CloudBackupReinitializeFailureContent: View {
             currentOperation: destructiveOperationState,
             isBusy: isBusy,
             isDetailInventoryComplete: isDetailInventoryComplete,
-            action: onReinitialize
+            action: { confirmationIsPresented.wrappedValue = true }
         )
     }
 }

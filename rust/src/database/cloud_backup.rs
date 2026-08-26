@@ -21,7 +21,7 @@ pub use state::{
     PersistedDeepVerificationReport, PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
     PersistedDriveAccountSwitchPhase, PersistedDriveAccountSwitchState, PersistedPasskeyState,
     PersistedPendingVerificationCompletion, PersistedPendingVerificationUpload,
-    PersistedRestoreAllMarker,
+    PersistedRestoreAllMarker, PersistedWalletVerificationIssues,
 };
 pub(crate) use tables::{CLOUD_BACKUP_STATE_TABLE, CLOUD_BLOB_SYNC_STATE_TABLE};
 

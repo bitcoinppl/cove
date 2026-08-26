@@ -37,6 +37,7 @@ use super::{
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBackupRecordKey, PersistedCloudBackupState, PersistedCloudBackupStatus,
+    PersistedWalletVerificationIssues,
 };
 use crate::manager::cloud_backup_manager::actors::{
     CloudBackupUploadedWalletsStateMode, CloudBackupWriteClient, CloudBackupWriteCompletion,
@@ -193,6 +194,20 @@ impl RustCloudBackupManager {
                 let previous = state.clone();
                 match result {
                     DeepVerificationResult::Verified(_) => state.mark_verified_at(verified_at),
+                    DeepVerificationResult::NeedsAttention(report) => {
+                        state.mark_verification_needs_attention(
+                            verified_at,
+                            report.wallets_verified,
+                            PersistedWalletVerificationIssues {
+                                missing: report.wallet_issues.missing,
+                                download_failed: report.wallet_issues.download_failed,
+                                invalid: report.wallet_issues.invalid,
+                                decryption_failed: report.wallet_issues.decryption_failed,
+                                unsupported: report.wallet_issues.unsupported,
+                                unreadable: report.wallet_issues.unreadable,
+                            },
+                        );
+                    }
                     DeepVerificationResult::PasskeyMissing(_) => state.mark_passkey_missing(),
                     DeepVerificationResult::UserCancelled(_)
                     | DeepVerificationResult::Failed(_) => {
@@ -304,8 +319,7 @@ impl RustCloudBackupManager {
                 local_master_key_repaired: false,
                 credential_recovered: false,
                 wallets_verified: 0,
-                wallets_failed: 0,
-                wallets_unsupported: 0,
+                wallet_issues: Default::default(),
                 detail: None,
             },
             uploaded.namespace_id,

@@ -615,7 +615,7 @@ private struct UtxoRow: View {
         UtxoListScreen(
             manager: CoinControlManager(RustCoinControlManager.previewNew())
         )
-        .environment(WalletManager(preview: "preview_only"))
+        .environment(WalletManager(preview: .only))
     }
 }
 
@@ -626,6 +626,6 @@ private struct UtxoRow: View {
                 RustCoinControlManager.previewNew(outputCount: 0, changeCount: 0)
             )
         )
-        .environment(WalletManager(preview: "preview_only"))
+        .environment(WalletManager(preview: .only))
     }
 }

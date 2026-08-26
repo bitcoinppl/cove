@@ -1,13 +1,37 @@
 import SwiftUI
 
+struct OtherBackupsNotCheckedSection: View {
+    let manager: CloudBackupManager
+
+    var body: some View {
+        Section(header: Text("Backups with Another Key")) {
+            Button("Check for Backups with Another Key") {
+                manager.dispatch(action: .refreshOtherBackups)
+            }
+
+            Text("This optional check searches iCloud Drive for backup sets protected by a different backup key.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct OtherBackupsCheckingSection: View {
+    var body: some View {
+        Section(header: Text("Backups with Another Key")) {
+            HStack(spacing: 12) {
+                ProgressView()
+                Text("Checking iCloud Drive...")
+            }
+            .foregroundStyle(.secondary)
+        }
+    }
+}
+
 struct OtherBackupsSection: View {
     let summary: CloudBackupOtherBackupsSummary
     let manager: CloudBackupManager
-
-    @State private var showingRecoverConfirmation = false
-    @State private var showingDeleteConfirmation = false
-    @State private var showingFinalDeleteConfirmation = false
-    @State private var recoveryResult: OtherBackupsRecoveryResult?
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     private var isRecovering: Bool {
         if case .recovering = manager.otherBackupsOperation { return true }
@@ -50,58 +74,28 @@ struct OtherBackupsSection: View {
     }
 
     var body: some View {
-        OtherBackupsFinalDeleteAlert(
-            manager: manager,
-            isPresented: $showingFinalDeleteConfirmation,
-            content: OtherBackupsDeleteConfirmationAlert(
-                manager: manager,
-                isPresented: $showingDeleteConfirmation,
-                showFinalConfirmation: $showingFinalDeleteConfirmation,
-                content: OtherBackupsRecoveryResultAlert(
-                    manager: manager,
-                    recoveryResult: $recoveryResult,
-                    content: OtherBackupsRecoverConfirmationDialog(
-                        manager: manager,
-                        isPresented: $showingRecoverConfirmation,
-                        content: OtherBackupsSectionContent(
-                            summaryText: summaryText,
-                            isRecovering: isRecovering,
-                            isDeleting: isDeleting,
-                            isOperating: isOperating,
-                            isInventoryComplete: manager.isDetailInventoryComplete,
-                            failure: failure,
-                            onRequestRecovery: requestRecovery,
-                            onRequestDeletion: requestDeletion
-                        )
-                    )
-                )
-            )
+        OtherBackupsSectionContent(
+            summaryText: summaryText,
+            isRecovering: isRecovering,
+            isDeleting: isDeleting,
+            isOperating: isOperating,
+            isInventoryComplete: manager.isOtherBackupsInventoryReady,
+            failure: failure,
+            onRequestRecovery: requestRecovery,
+            onRequestDeletion: requestDeletion
         )
-        .onChange(of: manager.otherBackupsOperation) { _, operation in
-            handleOperationChange(operation)
-        }
     }
 
     private func requestRecovery() {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isOtherBackupsInventoryReady else { return }
 
-        showingRecoverConfirmation = true
+        presentationCoordinator.present(.dialog(.recoverOtherBackups))
     }
 
     private func requestDeletion() {
-        guard manager.isDetailInventoryComplete else { return }
+        guard manager.isOtherBackupsInventoryReady else { return }
 
-        showingDeleteConfirmation = true
-    }
-
-    private func handleOperationChange(_ operation: OtherBackupsOperation) {
-        if case let .recovered(walletsRestored, walletsFailed, failedWalletErrors) = operation {
-            recoveryResult = OtherBackupsRecoveryResult(
-                walletsRestored: walletsRestored,
-                walletsFailed: walletsFailed,
-                failedWalletErrors: failedWalletErrors
-            )
-        }
+        presentationCoordinator.present(.alert(.otherBackupsDeleteConfirmation))
     }
 }
 
@@ -116,7 +110,7 @@ private struct OtherBackupsSectionContent: View {
     let onRequestDeletion: () -> Void
 
     var body: some View {
-        Section(header: Text("Other Cloud Backups")) {
+        Section(header: Text("Backups with Another Key")) {
             Text(summaryText)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -166,131 +160,39 @@ private struct OtherBackupsOperationLabel: View {
     }
 }
 
-private struct OtherBackupsRecoverConfirmationDialog<Content: View>: View {
-    let manager: CloudBackupManager
-    @Binding var isPresented: Bool
-    let content: Content
-
-    var body: some View {
-        content.confirmationDialog(
-            "Recover wallets from another passkey?",
-            isPresented: $isPresented,
-            titleVisibility: .visible
-        ) {
-            Button("Try Passkey", action: recoverOtherBackups)
-                .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "This will use the selected passkey once to decrypt these other backups. Your current Cloud Backup passkey will not change."
-            )
-        }
-    }
-
-    private func recoverOtherBackups() {
-        guard manager.isDetailInventoryComplete else { return }
-
-        manager.dispatch(action: .recoverOtherBackups)
-    }
-}
-
-private struct OtherBackupsRecoveryResultAlert<Content: View>: View {
-    let manager: CloudBackupManager
-    @Binding var recoveryResult: OtherBackupsRecoveryResult?
-    let content: Content
-
-    private var isPresented: Binding<Bool> {
-        Binding(
-            get: { recoveryResult != nil },
-            set: { if !$0 { recoveryResult = nil } }
-        )
-    }
-
-    var body: some View {
-        content.alert(
-            "Wallets Recovered",
-            isPresented: isPresented
-        ) {
-            Button("Verify Current Passkey", action: verifyCurrentPasskey)
-            Button("Done", role: .cancel) {}
-        } message: {
-            Text(recoveryResult?.message ?? "")
-        }
-    }
-
-    private func verifyCurrentPasskey() {
-        manager.startVerification(source: .cloudBackupDetail)
-    }
-}
-
-private struct OtherBackupsDeleteConfirmationAlert<Content: View>: View {
-    let manager: CloudBackupManager
-    @Binding var isPresented: Bool
-    @Binding var showFinalConfirmation: Bool
-    let content: Content
-
-    var body: some View {
-        content.alert("Delete Other Cloud Backups?", isPresented: $isPresented) {
-            Button("Continue", role: .destructive, action: continueDeletion)
-                .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will permanently remove these other backups from iCloud.")
-        }
-    }
-
-    private func continueDeletion() {
-        guard manager.isDetailInventoryComplete else { return }
-
-        showFinalConfirmation = true
-    }
-}
-
-private struct OtherBackupsFinalDeleteAlert<Content: View>: View {
-    let manager: CloudBackupManager
-    @Binding var isPresented: Bool
-    let content: Content
-
-    var body: some View {
-        content.alert("This Cannot Be Undone", isPresented: $isPresented) {
-            Button("Delete", role: .destructive, action: deleteOtherBackups)
-                .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(
-                "These backups cannot be recovered later, even if you find the passkey that currently protects them."
-            )
-        }
-    }
-
-    private func deleteOtherBackups() {
-        guard manager.isDetailInventoryComplete else { return }
-
-        manager.dispatch(action: .deleteOtherBackups)
-    }
-}
-
 struct OtherBackupsLoadFailedSection: View {
-    let error: String
+    let reason: CloudBackupInventoryIncompleteReason
+    let manager: CloudBackupManager
+
+    private var message: String {
+        switch reason {
+        case .providerSyncPending:
+            "Cove could not check for backup sets made with another backup key because iCloud Drive is still syncing. The wallet backups shown above use your current backup key and remain available."
+        case .offline:
+            "Cove could not check for backup sets made with another backup key because this device is offline. The wallet backups shown above remain available."
+        case .authorizationRequired:
+            "Cove cannot check for backup sets made with another backup key. Turn on iCloud Drive for Cove, then check again."
+        case .providerUnavailable:
+            "Cove cannot check for backup sets made with another backup key because iCloud Drive is not available now. The wallet backups shown above remain available."
+        case .unknown:
+            "Cove could not check for backup sets made with another backup key. The wallet backups shown above remain available."
+        }
+    }
 
     var body: some View {
-        Section(header: Text("Other Cloud Backups")) {
-            Text("Could not load other cloud backups.")
+        Section(header: Text("Backups with Another Key")) {
+            Text(message)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Text(error)
-                .font(.caption)
-                .foregroundStyle(Color.statusError)
+            Button("Check Again") {
+                manager.dispatch(action: .refreshOtherBackups)
+            }
         }
     }
 }
 
-private struct OtherBackupsRecoveryResult: Identifiable {
-    let id = UUID()
+struct OtherBackupsRecoveryResult {
     let walletsRestored: UInt32
     let walletsFailed: UInt32
     let failedWalletErrors: [String]

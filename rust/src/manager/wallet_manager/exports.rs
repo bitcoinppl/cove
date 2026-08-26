@@ -5,11 +5,10 @@ use cove_util::result_ext::ResultExt as _;
 
 use crate::{
     database::Database,
-    keychain::Keychain,
     label_manager::LabelManagerError,
     loading_popup::with_loading_popup,
     reporting::HistoricalFiatPriceReport,
-    wallet::{Wallet, metadata::WalletId},
+    wallet::{addressing::authoritative_public_descriptors, metadata::WalletMetadata},
 };
 
 use cove_types::confirm::QrDensity;
@@ -22,9 +21,13 @@ use super::{
 impl RustWalletManager {
     #[uniffi::method]
     pub async fn create_transactions_with_fiat_export(&self) -> Result<String, Error> {
+        self.ensure_active()?;
         let fiat_currency = Database::global().global_config.fiat_currency().unwrap_or_default();
 
-        let txns_with_prices = call!(self.actor.txns_with_prices()).await.unwrap().unwrap();
+        let txns_with_prices = call!(self.actor.txns_with_prices())
+            .await
+            .map_err(|_| Error::ActorNotFound)?
+            .map_err_str(Error::TransactionsRetrievalError)?;
 
         let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
         let csv = report.create_csv().map_err_str(Error::CsvCreationError)?;
@@ -60,11 +63,16 @@ impl RustWalletManager {
     /// Export public descriptors (xpub) for share
     #[uniffi::method]
     pub async fn export_xpub_for_share(&self) -> Result<XpubExportResult, Error> {
-        let id = self.id.clone();
-        let name = self.metadata.read().name.clone();
+        self.ensure_active()?;
+        if !self.uses_persistent_storage() {
+            return Err(Error::PreviewOperationUnavailable);
+        }
+
+        let metadata = self.metadata.read().clone();
+        let name = metadata.name.clone();
 
         with_loading_popup(async move {
-            let content = get_public_descriptor_content(&id)?;
+            let content = get_public_descriptor_content(&metadata)?;
 
             let sanitized_name = name
                 .replace(' ', "_")
@@ -84,6 +92,11 @@ impl RustWalletManager {
     /// Export public descriptors (xpub) as QR codes
     #[uniffi::method]
     pub async fn export_xpub_for_qr(&self, density: Arc<QrDensity>) -> Result<Vec<String>, Error> {
+        self.ensure_active()?;
+        if !self.uses_persistent_storage() {
+            return Err(Error::PreviewOperationUnavailable);
+        }
+
         use bbqr::{
             encode::Encoding,
             file_type::FileType,
@@ -91,10 +104,10 @@ impl RustWalletManager {
             split::{Split, SplitOptions},
         };
 
-        let id = self.id.clone();
+        let metadata = self.metadata.read().clone();
 
         with_loading_popup(async move {
-            let content = get_public_descriptor_content(&id)?;
+            let content = get_public_descriptor_content(&metadata)?;
             let max_version = density.bbqr_max_version();
 
             cove_tokio::task::spawn_blocking(move || {
@@ -125,6 +138,7 @@ impl RustWalletManager {
     /// Export transactions as CSV with conditional loading popup
     #[uniffi::method]
     pub async fn export_transactions_csv(&self) -> Result<TransactionExportResult, Error> {
+        self.ensure_active()?;
         let name = self.metadata.read().name.clone();
         let actor = self.actor.clone();
 
@@ -162,22 +176,11 @@ impl RustWalletManager {
 ///
 /// Tries single-line BIP-389 multipath `<0;1>` format first,
 /// falls back to two normalized descriptors on separate lines
-fn get_public_descriptor_content(id: &WalletId) -> Result<String, Error> {
+fn get_public_descriptor_content(metadata: &WalletMetadata) -> Result<String, Error> {
     use cove_bdk::descriptor_ext::DescriptorExt;
 
-    match Wallet::try_load_persisted(id.clone()) {
-        Ok(wallet) => {
-            let external = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::External);
-            let internal = wallet.bdk.public_descriptor(bdk_wallet::KeychainKind::Internal);
+    let (external, internal) = authoritative_public_descriptors(metadata)
+        .map_err(|error| Error::UnknownError(format!("failed to load wallet: {error}")))?;
 
-            Ok(DescriptorExt::to_export_string(external, internal))
-        }
-        Err(load_error) => {
-            if let Ok(Some((external, internal))) = Keychain::global().get_public_descriptor(id) {
-                return Ok(DescriptorExt::to_export_string(&external, &internal));
-            }
-
-            Err(Error::UnknownError(format!("failed to load wallet: {load_error}")))
-        }
-    }
+    Ok(DescriptorExt::to_export_string(&external, &internal))
 }

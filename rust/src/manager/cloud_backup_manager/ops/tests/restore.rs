@@ -80,7 +80,7 @@ async fn restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(5));
     assert!(Database::global().cloud_blob_sync_states.list().unwrap().is_empty());
 
-    let exported = LabelManager::new(metadata.id.clone()).export().await.unwrap();
+    let exported = LabelManager::try_new(metadata.id.clone()).unwrap().export().await.unwrap();
     assert!(exported.contains("\"label\":\"last txn received\""));
     assert!(exported.contains(&format!("\"ref\":\"{locked_output_ref}\"")));
     assert!(exported.contains("\"spendable\":false"));
@@ -151,14 +151,24 @@ async fn restore_counts_unsupported_wallet_versions_as_failures() {
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         supported_record_id.clone(),
-        encrypted_wallet_backup_bytes(&supported_wallet, &master_key, "supported-revision", 2)
-            .await,
+        encrypted_remote_wallet_backup_bytes(
+            &supported_wallet,
+            &master_key,
+            "supported-revision",
+            2,
+        )
+        .await,
     );
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         unsupported_record_id.clone(),
-        encrypted_wallet_backup_bytes(&unsupported_wallet, &master_key, "unsupported-revision", 3)
-            .await,
+        encrypted_remote_wallet_backup_bytes(
+            &unsupported_wallet,
+            &master_key,
+            "unsupported-revision",
+            3,
+        )
+        .await,
     );
     globals.cloud.set_wallet_files(
         namespace,
@@ -220,7 +230,7 @@ async fn restore_queues_reupload_when_cloud_upload_confirmation_lags() {
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&wallet, &master_key, "restored-revision", 1).await,
+        encrypted_remote_wallet_backup_bytes(&wallet, &master_key, "restored-revision", 1).await,
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
     globals.cloud.set_uploaded_wallets_pending_confirmation(true);
@@ -306,13 +316,19 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
     globals.cloud.set_wallet_backup(
         first_namespace.clone(),
         first_record_id.clone(),
-        encrypted_wallet_backup_bytes(&first_wallet, &first_master_key, "first-revision", 1).await,
+        encrypted_remote_wallet_backup_bytes(&first_wallet, &first_master_key, "first-revision", 1)
+            .await,
     );
     globals.cloud.set_wallet_backup(
         second_namespace.clone(),
         second_record_id.clone(),
-        encrypted_wallet_backup_bytes(&second_wallet, &second_master_key, "second-revision", 1)
-            .await,
+        encrypted_remote_wallet_backup_bytes(
+            &second_wallet,
+            &second_master_key,
+            "second-revision",
+            1,
+        )
+        .await,
     );
     globals
         .cloud
@@ -397,7 +413,7 @@ async fn restore_activation_upload_failure_keeps_restore_successful_and_queues_u
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&wallet, &master_key, "restore-revision", 1).await,
+        encrypted_remote_wallet_backup_bytes(&wallet, &master_key, "restore-revision", 1).await,
     );
     globals
         .cloud
@@ -683,7 +699,7 @@ async fn restore_refresh_finds_namespace_that_appears_late() {
     Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
     let encrypted_wallet =
-        encrypted_wallet_backup_bytes(&wallet, &master_key, "late-revision", 1).await;
+        encrypted_remote_wallet_backup_bytes(&wallet, &master_key, "late-revision", 1).await;
     globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
         prf_output: prf_key.to_vec(),
         credential_id: vec![1, 2, 3],
@@ -753,10 +769,15 @@ async fn restore_grace_window_accumulates_a_namespace_that_appears_after_the_fir
     let first_record_id = wallet_record_id(first_wallet.id.as_ref());
     let second_record_id = wallet_record_id(second_wallet.id.as_ref());
     let first_encrypted_wallet =
-        encrypted_wallet_backup_bytes(&first_wallet, &first_master_key, "first-revision", 1).await;
-    let second_encrypted_wallet =
-        encrypted_wallet_backup_bytes(&second_wallet, &second_master_key, "second-revision", 1)
+        encrypted_remote_wallet_backup_bytes(&first_wallet, &first_master_key, "first-revision", 1)
             .await;
+    let second_encrypted_wallet = encrypted_remote_wallet_backup_bytes(
+        &second_wallet,
+        &second_master_key,
+        "second-revision",
+        1,
+    )
+    .await;
 
     globals.cloud.set_master_key_backup(
         first_namespace.clone(),
@@ -852,7 +873,7 @@ async fn restore_retries_platform_authorization_discover_failures() {
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&wallet, &master_key, "revision", 1).await,
+        encrypted_remote_wallet_backup_bytes(&wallet, &master_key, "revision", 1).await,
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
@@ -1017,8 +1038,13 @@ async fn restore_counts_listed_missing_wallet_backups_as_failures() {
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         supported_record_id.clone(),
-        encrypted_wallet_backup_bytes(&supported_wallet, &master_key, "supported-revision", 1)
-            .await,
+        encrypted_remote_wallet_backup_bytes(
+            &supported_wallet,
+            &master_key,
+            "supported-revision",
+            1,
+        )
+        .await,
     );
     globals.cloud.set_wallet_files(
         namespace,
@@ -1067,8 +1093,13 @@ async fn restore_sanitizes_non_connectivity_wallet_download_errors() {
     globals.cloud.set_wallet_backup(
         namespace.clone(),
         supported_record_id.clone(),
-        encrypted_wallet_backup_bytes(&supported_wallet, &master_key, "supported-revision", 1)
-            .await,
+        encrypted_remote_wallet_backup_bytes(
+            &supported_wallet,
+            &master_key,
+            "supported-revision",
+            1,
+        )
+        .await,
     );
     globals.cloud.fail_wallet_backup_download(
         namespace.clone(),
@@ -1228,6 +1259,8 @@ async fn restore_all_matches_individual_restore_for_the_same_record() {
         .save_all_wallets(wallet.network, wallet.wallet_mode, Vec::new())
         .unwrap();
     assert!(Keychain::global().delete_wallet_items(&wallet.id));
+    crate::wallet::delete_wallet_specific_data(&wallet.id)
+        .expect("individual restore artifacts are removed before the batch restore");
 
     let mut prepared = manager
         .prepare_restore_all_cloud_wallets(vec![frozen_restore_all_wallet(

@@ -80,7 +80,7 @@ private struct VerifyWordsLoadedView: View {
         loadingError = nil
 
         do {
-            let validator = try manager.rust.wordValidator()
+            let validator = try manager.wordValidator()
             verificationComplete = false
             stateMachine = WordVerifyStateMachine(validator: validator, startingWordNumber: 1)
         } catch {
@@ -719,7 +719,7 @@ private struct VerifyWordsCompactActions: View {
 
 #Preview {
     struct Container: View {
-        @State var manager = WalletManager(preview: "preview_only")
+        @State var manager = WalletManager(preview: .only)
         @State var stateMachine: WordVerifyStateMachine
 
         init() {

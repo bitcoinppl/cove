@@ -31,7 +31,7 @@ struct LockView<Content: View>: View {
 
     /// Args: Lock Properties
     var lockType: AuthType
-    var isPinCorrect: (String) -> Bool
+    var isPinCorrect: (String) async -> Bool
     var showPin: Bool
     var bioMetricUnlockMessage: String
 
@@ -61,7 +61,7 @@ struct LockView<Content: View>: View {
 
     init(
         lockType: AuthType,
-        isPinCorrect: @escaping (String) -> Bool,
+        isPinCorrect: @escaping (String) async -> Bool,
         showPin: Bool = false,
         lockState: Binding<LockState>? = nil,
         bioMetricUnlockMessage: String = "Unlock your wallet",
@@ -230,7 +230,7 @@ private struct LockContentLayer<Content: View>: View {
     @Binding var lockState: LockState
     @Binding var screen: Screen
     let lockType: AuthType
-    let isPinCorrect: (String) -> Bool
+    let isPinCorrect: (String) async -> Bool
     let showPin: Bool
     let pinLength: Int
     let backEnabled: Bool
@@ -268,7 +268,7 @@ private struct LockOverlay: View {
     @Binding var screen: Screen
     @Binding var lockState: LockState
     let lockType: AuthType
-    let isPinCorrect: (String) -> Bool
+    let isPinCorrect: (String) async -> Bool
     let showPin: Bool
     let pinLength: Int
     let backEnabled: Bool
@@ -305,7 +305,7 @@ private struct LockMethodView: View {
     @Binding var screen: Screen
     @Binding var lockState: LockState
     let lockType: AuthType
-    let isPinCorrect: (String) -> Bool
+    let isPinCorrect: (String) async -> Bool
     let showPin: Bool
     let pinLength: Int
     let backEnabled: Bool

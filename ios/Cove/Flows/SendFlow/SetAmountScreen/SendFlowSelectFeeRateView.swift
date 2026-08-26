@@ -125,7 +125,7 @@ private struct FeeOptionView: View {
             return "---"
         }
 
-        return "≈ \(manager.rust.convertAndDisplayFiat(amount: totalFee, prices: prices))"
+        return "≈ \(manager.convertAndDisplayFiat(amount: totalFee, prices: prices))"
     }
 
     var body: some View {
@@ -187,14 +187,14 @@ private struct FeeOptionView: View {
     AsyncPreview {
         VStack {
             SendFlowSelectFeeRateView(
-                manager: WalletManager(preview: "preview_only"),
+                manager: WalletManager(preview: .only),
                 feeOptions: Binding.constant(FeeRateOptionsWithTotalFee.previewNew()),
                 selectedOption: Binding.constant(
                     FeeRateOptionsWithTotalFee.previewNew().medium()
                 ),
                 selectedPresentationDetent: Binding.constant(PresentationDetent.large)
             )
-            .environment(WalletManager(preview: "preview_only"))
+            .environment(WalletManager(preview: .only))
             .environment(AppManager.shared)
             .frame(height: 440)
         }
@@ -207,7 +207,7 @@ private struct FeeOptionView: View {
     AsyncPreview {
         VStack {
             SendFlowSelectFeeRateView(
-                manager: WalletManager(preview: "preview_only"),
+                manager: WalletManager(preview: .only),
                 feeOptions: Binding.constant(
                     FeeRateOptionsWithTotalFee.previewNew().addCustomFeeRate(
                         feeRate: FeeRateOptionWithTotalFee(
@@ -222,7 +222,7 @@ private struct FeeOptionView: View {
                 ),
                 selectedPresentationDetent: Binding.constant(PresentationDetent.large)
             )
-            .environment(WalletManager(preview: "preview_only"))
+            .environment(WalletManager(preview: .only))
             .environment(AppManager.shared)
             .frame(height: 550)
         }

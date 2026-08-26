@@ -11,7 +11,8 @@ struct WalletSettingsView: View {
     private let colorColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 5)
 
     @State private var cloudBackupManager = CloudBackupManager.shared
-    @State private var presentationState: TaggedItem<WalletSettingsPresentationState>?
+    @State private var presentationCoordinator =
+        PresentationTransitionCoordinator<WalletSettingsPresentationState>()
     @State private var accountNumber: UInt32? = nil
 
     private var metadata: WalletMetadata {
@@ -19,7 +20,7 @@ struct WalletSettingsView: View {
     }
 
     private var deleteConfirmationMessage: String {
-        manager.rust.deletionWarningMessage()
+        manager.deletionWarningMessage()
     }
 
     private var finalDeleteConfirmationMessage: String {
@@ -53,7 +54,10 @@ struct WalletSettingsView: View {
             confirmInitialDelete: confirmInitialDelete,
             confirmSecondDelete: confirmSecondDelete,
             deleteWallet: deleteWallet,
-            performXprvExport: performXprvExport
+            retryDeleteWallet: retryDeleteWallet,
+            cancelDeleteWallet: cancelDeleteWallet,
+            performXprvExport: performXprvExport,
+            loadXprv: manager.exposeXprv
         )
     }
 
@@ -67,7 +71,7 @@ struct WalletSettingsView: View {
             content: WalletSettingsContent(
                 metadata: metadata,
                 accountNumber: accountNumber,
-                masterFingerprint: manager.rust.masterFingerprint(),
+                masterFingerprint: manager.masterFingerprint(),
                 colorColumns: colorColumns,
                 showLabels: showLabels,
                 changeName: changeName,
@@ -75,31 +79,78 @@ struct WalletSettingsView: View {
                 isHotWallet: metadata.walletType == .hot,
                 hasRecoveryWords: manager.hasRecoveryWords(),
                 hasXprvSecret: manager.hasXprvSecret() && !auth.isInDecoyMode(),
+                presentationContext: presentationContext,
                 showSecretWordsConfirmation: presentSecretWordsConfirmation,
                 showXprvExportWarning: presentXprvExportWarning,
-                prepareDelete: prepareDelete
+                prepareDelete: prepareDelete,
+                presentationCoordinator: presentationCoordinator
             ),
-            presentationState: $presentationState
+            presentationCoordinator: presentationCoordinator
         )
         .navigationTitle(manager.walletMetadata.name)
         .navigationBarTitleDisplayMode(.inline)
         .foregroundColor(.primary)
         .onDisappear(perform: handleDisappear)
-        .onAppear(perform: manager.validateMetadata)
         .onChange(of: scenePhase, handleScenePhaseChange)
         .task {
-            accountNumber = manager.rust.nonDefaultAccountNumber()
+            accountNumber = manager.nonDefaultAccountNumber()
+
+            do {
+                try await manager.validateMetadata()
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.error("Unable to validate wallet metadata: \(error)")
+            }
         }
         .scrollContentBackground(.hidden)
     }
 
     private func deleteWallet() {
-        do {
-            try manager.rust.deleteWallet()
-            dismiss()
-        } catch {
-            Log.error("Unable to delete wallet: \(error)")
+        performDeleteWallet(.initial)
+    }
+
+    private func retryDeleteWallet(_ attemptId: ShutdownAttemptId) {
+        performDeleteWallet(.retry(attemptId))
+    }
+
+    private func cancelDeleteWallet(_ attemptId: ShutdownAttemptId) {
+        app.cancelWalletDeletionAttempt(attemptId)
+        presentationCoordinator.dismissCurrentPresentation()
+    }
+
+    private func performDeleteWallet(_ call: WalletDeletionCall) {
+        Task { @MainActor in
+            do {
+                switch call {
+                case .initial:
+                    try await manager.deleteWallet()
+                case let .retry(attemptId):
+                    try await manager.retryDeleteWallet(attemptId: attemptId)
+                }
+
+                dismiss()
+            } catch is CancellationError {
+                return
+            } catch let WalletManagerError.WalletLifecycle(
+                .shutdownBlocked(attemptId, _, _)
+            ) {
+                present(.deletionShutdownBlocked(attemptId))
+            } catch {
+                Log.error("Unable to delete wallet: \(error)")
+                app.alertState = .init(
+                    .general(
+                        title: "Unable to Delete Wallet",
+                        message: "Cove could not delete this wallet. Try again."
+                    )
+                )
+            }
         }
+    }
+
+    private enum WalletDeletionCall {
+        case initial
+        case retry(ShutdownAttemptId)
     }
 
     private func changeName() {
@@ -124,7 +175,7 @@ struct WalletSettingsView: View {
 
     private func prepareDelete() {
         let plan = WalletDeletionConfirmationPlan(
-            requiredConfirmations: manager.rust.requiredDeletionConfirmations()
+            requiredConfirmations: manager.requiredDeletionConfirmations()
         )
 
         present(.deleteConfirmation(plan))
@@ -136,7 +187,7 @@ struct WalletSettingsView: View {
             return
         }
 
-        present(.secondDeleteConfirmation(plan))
+        queuePresentation(.secondDeleteConfirmation(plan))
     }
 
     private func confirmSecondDelete(_ plan: WalletDeletionConfirmationPlan) {
@@ -145,58 +196,63 @@ struct WalletSettingsView: View {
             return
         }
 
-        present(.finalDeleteConfirmation)
+        queuePresentation(.finalDeleteConfirmation)
     }
 
     private func startXprvExport(_ action: XprvPostVerificationAction) {
         guard auth.isAuthEnabled else {
-            present(.appLockRequired)
+            queuePresentation(.appLockRequired)
             return
         }
 
-        present(.xprvCredentialVerification(action))
+        queuePresentation(.xprvCredentialVerification(action))
     }
 
     private func performXprvExport(_ action: XprvPostVerificationAction) {
-        presentationState = nil
-
         switch action {
         case .reveal:
-            do {
-                try present(.xprvReveal(manager.rust.exposeXprv()))
-            } catch {
-                Log.error("Unable to reveal private key: \(error)")
-                app.alertState = .init(
-                    .general(
-                        title: "Unable to Reveal Private Key",
-                        message: "Cove could not access this wallet's private key."
-                    )
-                )
+            guard scenePhase == .active else {
+                presentationCoordinator.dismissCurrentPresentation()
+                return
             }
+
+            queuePresentation(.xprvReveal)
         case .keyTeleport:
+            presentationCoordinator.dismissCurrentPresentation()
             app.startKeyTeleportSend(walletId: metadata.id)
         }
     }
 
-    private func dismissXprvReveal() {
-        guard presentationState?.item.style == .xprvReveal else { return }
-
-        presentationState = nil
+    private func clearXprvReveal() {
+        presentationCoordinator.discard { $0.slot == .xprvReveal }
     }
 
     private func handleDisappear() {
-        dismissXprvReveal()
-        manager.validateMetadata()
+        clearXprvReveal()
+
+        Task { @MainActor in
+            do {
+                try await manager.validateMetadata()
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.error("Unable to validate wallet metadata: \(error)")
+            }
+        }
     }
 
     private func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
         guard oldPhase == .active, newPhase != .active else { return }
 
-        dismissXprvReveal()
+        clearXprvReveal()
     }
 
     private func present(_ state: WalletSettingsPresentationState) {
-        presentationState = TaggedItem(state)
+        presentationCoordinator.present(state)
+    }
+
+    private func queuePresentation(_ state: WalletSettingsPresentationState) {
+        presentationCoordinator.transition(to: state)
     }
 }
 
@@ -211,9 +267,11 @@ private struct WalletSettingsContent: View {
     let isHotWallet: Bool
     let hasRecoveryWords: Bool
     let hasXprvSecret: Bool
+    let presentationContext: WalletSettingsPresentationContext
     let showSecretWordsConfirmation: () -> Void
     let showXprvExportWarning: () -> Void
     let prepareDelete: () -> Void
+    let presentationCoordinator: PresentationTransitionCoordinator<WalletSettingsPresentationState>
 
     var body: some View {
         List {
@@ -233,9 +291,11 @@ private struct WalletSettingsContent: View {
                 isHotWallet: isHotWallet,
                 hasRecoveryWords: hasRecoveryWords,
                 hasXprvSecret: hasXprvSecret,
+                presentationContext: presentationContext,
                 showSecretWordsConfirmation: showSecretWordsConfirmation,
                 showXprvExportWarning: showXprvExportWarning,
-                prepareDelete: prepareDelete
+                prepareDelete: prepareDelete,
+                presentationCoordinator: presentationCoordinator
             )
         }
     }
@@ -243,7 +303,7 @@ private struct WalletSettingsContent: View {
 
 #Preview {
     AsyncPreview {
-        WalletSettingsView(manager: WalletManager(preview: "preview_only"))
+        WalletSettingsView(manager: WalletManager(preview: .only))
             .environment(AppManager.shared)
             .environment(AuthManager.shared)
             .environment(\.navigate) { _ in

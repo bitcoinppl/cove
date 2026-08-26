@@ -78,6 +78,10 @@ impl WalletPublicDataStore {
     pub(crate) fn delete_descriptors(&self, id: &WalletId) -> bool {
         delete_if_present(&self.0, descriptor_key_name(id))
     }
+
+    pub(crate) fn has_any(&self, id: &WalletId) -> bool {
+        self.0.get(xpub_key_name(id)).is_some() || self.0.get(descriptor_key_name(id)).is_some()
+    }
 }
 
 fn delete_if_present(access: &SharedAccess, key: String) -> bool {

@@ -84,7 +84,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         let image = render(
             view: NavigationStack {
                 VerificationCompleteScreen(
-                    manager: WalletManager(preview: "preview_only"),
+                    manager: WalletManager(preview: .only),
                     onVerified: {}
                 )
             }
@@ -171,7 +171,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
                 tapSignerSetupRetryContinueCmd(preview: true)
             ),
             screenName: "tap-signer-setup-retry",
-            expectedText: "retry"
+            expectedText: "continue setup"
         )
     }
 
@@ -248,7 +248,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         let feeOptions = FeeRateOptionsWithTotalFee.previewNew()
         let image = render(
             view: SendFlowSelectFeeRateView(
-                manager: WalletManager(preview: "preview_only"),
+                manager: WalletManager(preview: .only),
                 feeOptions: .constant(feeOptions),
                 selectedOption: .constant(feeOptions.medium()),
                 selectedPresentationDetent: .constant(.large)
@@ -275,7 +275,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         try await bootstrapIfNeeded()
 
         let size = CGSize(width: 375, height: 667)
-        let manager = WalletManager(preview: "preview_only")
+        let manager = WalletManager(preview: .only)
         let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
         let image = render(
             view: NavigationStack {
@@ -309,7 +309,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         try await bootstrapIfNeeded()
 
         let size = CGSize(width: 430, height: 932)
-        let manager = WalletManager(preview: "preview_only")
+        let manager = WalletManager(preview: .only)
         let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
         let image = render(
             view: NavigationStack {
@@ -373,7 +373,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         let size = CGSize(width: 375, height: 667)
         let view = NavigationStack {
             VerifyWordsScreen(
-                manager: WalletManager(preview: "preview_only"),
+                manager: WalletManager(preview: .only),
                 stateMachine: WordVerifyStateMachine(
                     validator: WordValidator.preview(preview: true),
                     startingWordNumber: 1
@@ -446,7 +446,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
                 UtxoListScreen(
                     manager: CoinControlManager(RustCoinControlManager.previewNew())
                 )
-                .environment(WalletManager(preview: "preview_only"))
+                .environment(WalletManager(preview: .only))
             }
             .frame(width: size.width, height: size.height),
             size: size

@@ -65,7 +65,7 @@ extension SendFlowConfirmAlertState: TaggedAlertPresentable {
                 actions: {
                     Button("OK") {
                         context.dismissAlert()
-                        context.presenter.app.loadAndReset(to: Route.selectedWallet(walletId))
+                        context.presenter.loadAndReset(to: Route.selectedWallet(walletId))
                     }
                 }
             ).eraseToAny()
@@ -129,7 +129,7 @@ private struct SendFlowErrorAlertActions: View {
         case .NoBalance:
             Button("Go Back") {
                 context.dismissAlert()
-                presenter.app.popRoute()
+                presenter.popRoute()
             }
 
         case .InvalidNumber,

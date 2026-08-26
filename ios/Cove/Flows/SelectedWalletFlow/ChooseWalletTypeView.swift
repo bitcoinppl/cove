@@ -106,9 +106,7 @@ private struct FoundWalletTypeButton: View {
     private func select() {
         Task {
             do {
-                try await manager.rust.switchToDifferentWalletAddressType(
-                    walletAddressType: foundAddress.type
-                )
+                _ = try await manager.switchToDifferentWalletAddressType(foundAddress.type)
             } catch {
                 Log.error(error.localizedDescription)
                 dismiss()
@@ -125,7 +123,7 @@ private struct FoundWalletTypeButton: View {
 #Preview {
     AsyncPreview {
         ChooseWalletTypeView(
-            manager: WalletManager(preview: "preview_only"),
+            manager: WalletManager(preview: .only),
             foundAddresses: [
                 previewNewLegacyFoundAddress(),
                 previewNewWrappedFoundAddress(),

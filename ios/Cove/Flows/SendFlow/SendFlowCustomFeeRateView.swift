@@ -69,7 +69,7 @@ struct SendFlowCustomFeeRateView: View {
         }
 
         return
-            "≈ \(manager.rust.convertAndDisplayFiat(amount: Amount.fromSat(sats: UInt64(totalSats ?? 0)), prices: prices))"
+            "≈ \(manager.convertAndDisplayFiat(amount: Amount.fromSat(sats: UInt64(totalSats ?? 0)), prices: prices))"
     }
 
     var feeSpeed: FeeSpeed {
@@ -311,11 +311,11 @@ private struct SendFlowCustomFeeDoneButton: View {
                 ),
                 selectedPresentationDetent: Binding.constant(PresentationDetent.large)
             )
-            .environment(WalletManager(preview: "preview_only"))
+            .environment(WalletManager(preview: .only))
             .environment(AppManager.shared)
             .environment(
                 SendFlowPresenter(
-                    app: AppManager.shared, manager: WalletManager(preview: "preview_only")
+                    app: AppManager.shared, manager: WalletManager(preview: .only)
                 )
             )
             .frame(height: 300)

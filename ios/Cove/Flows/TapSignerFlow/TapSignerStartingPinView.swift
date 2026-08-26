@@ -5,72 +5,72 @@
 //  Created by Praveen Perera on 3/12/25.
 //
 
+import CoveCore
 import SwiftUI
 
 struct TapSignerStartingPin: View {
-    @Environment(AppManager.self) private var app
     @Environment(TapSignerManager.self) private var manager
 
     let tapSigner: TapSigner
     var chainCode: String? = nil
 
     // private
-    @State private var startingPin: String = ""
+    @State private var startingPin = ""
+    @State private var errorMessage: String?
     @FocusState private var isFocused
 
     var body: some View {
-        TapSignerPinScreen(
-            pin: $startingPin,
+        TapSignerCvcScreen(
+            cvc: $startingPin,
             focus: $isFocused,
             spacing: 30,
             header: TapSignerStartingPinHeader(action: goBack),
             description: TapSignerPinDescription(
-                title: "Enter Starting PIN",
+                title: "Enter Factory CVC",
                 message: """
-                The starting PIN is the 6 digit numeric PIN found of the back of your TAPSIGNER
+                The factory code is the 6 digit ASCII code printed on the back of your TAPSIGNER. Enter it here.
                 """
             ),
-            indicators: TapSignerPinIndicators(pinCount: startingPin.count, focus: $isFocused)
+            submitTitle: "Continue",
+            errorMessage: errorMessage,
+            submitAction: continueSetup
         )
         .onAppear(perform: resetPin)
-        .onChange(of: isFocused, keepFocused)
-        .onChange(of: startingPin, handlePinChange)
-    }
-
-    private func goBack() {
-        manager.popRoute()
+        .onDisappear(perform: clearSensitiveState)
     }
 
     private func resetPin() {
         startingPin = ""
+        errorMessage = nil
         isFocused = true
     }
 
-    private func keepFocused(_: Bool, _: Bool) {
-        isFocused = true
-    }
-
-    private func handlePinChange(old: String, pin: String) {
-        if pin.count == 6 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                manager.navigate(to:
-                    .newPin(TapSignerNewPinArgs(
-                        tapSigner: tapSigner,
-                        startingPin: pin,
-                        chainCode: chainCode,
-                        action: .setup
-                    )))
-            }
-        }
-
-        if pin.count > 6, old.count < 6 {
-            startingPin = old
+    private func continueSetup() {
+        guard let inputError = tapSignerCvcInputError(value: startingPin) else {
+            isFocused = false
+            manager.navigate(to: .newPin(
+                TapSignerNewPinArgs(
+                    tapSigner: tapSigner,
+                    startingPin: startingPin,
+                    chainCode: chainCode,
+                    action: .setup
+                )
+            ))
             return
         }
 
-        if pin.count > 6 {
-            startingPin = String(startingPin.prefix(6))
-        }
+        errorMessage = inputError
+    }
+
+    private func goBack() {
+        clearSensitiveState()
+        manager.popRoute()
+    }
+
+    private func clearSensitiveState() {
+        startingPin = ""
+        errorMessage = nil
+        isFocused = false
     }
 }
 

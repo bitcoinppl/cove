@@ -38,15 +38,25 @@ struct VerificationCompleteScreen: View {
     }
 
     private func completeVerification() {
-        do {
-            try manager.rust.markWalletAsVerified()
-            if let onVerified {
-                onVerified()
-            } else {
-                app.resetRoute(to: Route.selectedWallet(manager.id))
+        Task { @MainActor in
+            do {
+                try await manager.markWalletAsVerified()
+                if let onVerified {
+                    onVerified()
+                } else {
+                    app.resetRoute(to: Route.selectedWallet(manager.id))
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.error("Error marking wallet as verified: \(error)")
+                app.alertState = .init(
+                    .general(
+                        title: "Verification Failed",
+                        message: "Cove could not complete wallet verification. Try again."
+                    )
+                )
             }
-        } catch {
-            Log.error("Error marking wallet as verified: \(error)")
         }
     }
 }
@@ -145,7 +155,7 @@ private struct VerificationCompleteContent: View {
 
 #Preview {
     AsyncPreview {
-        VerificationCompleteScreen(manager: WalletManager(preview: "preview_only"))
+        VerificationCompleteScreen(manager: WalletManager(preview: .only))
             .environment(AppManager.shared)
     }
 }

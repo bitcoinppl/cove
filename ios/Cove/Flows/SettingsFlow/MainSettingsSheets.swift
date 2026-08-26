@@ -279,12 +279,7 @@ private enum MainSettingsSheetFactory {
     }
 
     private static func backupImport(context: MainSettingsPresentationContext) -> AnyView {
-        AnyView(MainSettingsCancellableNavigationSheet(
-            title: "Import Backup",
-            dismiss: context.dismissSheet
-        ) {
-            BackupImportView()
-        })
+        AnyView(MainSettingsBackupImportSheet(dismiss: context.dismissSheet))
     }
 
     private static func backupVerify(context: MainSettingsPresentationContext) -> AnyView {
@@ -338,7 +333,20 @@ private struct MainSettingsEnableAuthSheet: View {
 private struct MainSettingsCancellableNavigationSheet<Content: View>: View {
     let title: String
     let dismiss: () -> Void
+    let isCancellationDisabled: Bool
     @ViewBuilder let content: Content
+
+    init(
+        title: String,
+        dismiss: @escaping () -> Void,
+        isCancellationDisabled: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.dismiss = dismiss
+        self.isCancellationDisabled = isCancellationDisabled
+        self.content = content()
+    }
 
     var body: some View {
         NavigationStack {
@@ -348,8 +356,26 @@ private struct MainSettingsCancellableNavigationSheet<Content: View>: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel", action: dismiss)
+                            .disabled(isCancellationDisabled)
                     }
                 }
+        }
+        .interactiveDismissDisabled(isCancellationDisabled)
+    }
+}
+
+private struct MainSettingsBackupImportSheet: View {
+    let dismiss: () -> Void
+
+    @State private var isImporting = false
+
+    var body: some View {
+        MainSettingsCancellableNavigationSheet(
+            title: "Import Backup",
+            dismiss: dismiss,
+            isCancellationDisabled: isImporting
+        ) {
+            BackupImportView(isImporting: $isImporting)
         }
     }
 }

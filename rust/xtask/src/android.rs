@@ -167,7 +167,7 @@ pub fn build_android(
 
     // check for cargo-ndk
     if !command_exists("cargo-ndk") {
-        print_error("cargo-ndk not found. Please run: cargo xtask install-deps");
+        print_error("cargo-ndk not found. Please run: cargo --locked xtask install-deps");
         color_eyre::eyre::bail!("cargo-ndk is required for Android builds");
     }
 
@@ -220,14 +220,14 @@ pub fn build_android(
         // build with cargo-ndk
         let flags = crate::common::parse_build_flags(&build_flag);
         let build_result = if flags.is_empty() {
-            let cmd = cmd!(sh, "cargo ndk --target {target} build");
+            let cmd = cmd!(sh, "cargo ndk --target {target} build --locked");
             if verbose {
                 cmd.run()
             } else {
                 cmd.quiet().run()
             }
         } else if flags.len() == 1 && flags[0] == "--release" {
-            let cmd = cmd!(sh, "cargo ndk --target {target} build --release");
+            let cmd = cmd!(sh, "cargo ndk --target {target} build --release --locked");
             if verbose {
                 cmd.run()
             } else {
@@ -235,14 +235,15 @@ pub fn build_android(
             }
         } else if flags.len() == 2 && flags[0] == "--profile" {
             let profile_name = &flags[1];
-            let cmd = cmd!(sh, "cargo ndk --target {target} build --profile {profile_name}");
+            let cmd =
+                cmd!(sh, "cargo ndk --target {target} build --profile {profile_name} --locked");
             if verbose {
                 cmd.run()
             } else {
                 cmd.quiet().run()
             }
         } else {
-            let cmd = cmd!(sh, "cargo ndk --target {target} build");
+            let cmd = cmd!(sh, "cargo ndk --target {target} build --locked");
             if verbose {
                 cmd.run()
             } else {
@@ -294,7 +295,7 @@ pub fn build_android(
     print_info(&format!("Generating Kotlin bindings into {}", BINDINGS_DIR));
     cmd!(
         sh,
-        "cargo run -p uniffi_cli -- generate {dynamic_lib_path} --library --language kotlin --no-format --out-dir {BINDINGS_DIR}"
+        "cargo run --locked -p uniffi_cli -- generate {dynamic_lib_path} --library --language kotlin --no-format --out-dir {BINDINGS_DIR}"
     )
     .run()
     .wrap_err("Failed to generate Kotlin bindings")?;

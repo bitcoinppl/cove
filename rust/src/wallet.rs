@@ -2,6 +2,7 @@ pub(crate) mod addressing;
 pub mod amount_display;
 pub mod balance;
 pub(crate) mod builder;
+pub(crate) mod deletion;
 pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;
@@ -27,7 +28,7 @@ use cove_util::result_ext::ResultExt as _;
 use eyre::Context as _;
 use metadata::{WalletBirthday, WalletId, WalletMetadata, WalletType};
 use parking_lot::Mutex;
-use tracing::{debug, warn};
+use tracing::warn;
 
 use builder::{WalletBuilder, WalletSource};
 
@@ -83,9 +84,59 @@ pub struct Wallet {
     pub network: Network,
     pub bdk: bdk_wallet::PersistedWallet<Connection>,
     pub metadata: WalletMetadata,
-    // BDK's PersistedWallet<P> takes &mut P by reference on persist/load/create,
-    // it doesn't hold the connection itself
-    db: Mutex<Connection>,
+    storage: WalletStorage,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct AddressTypeSwitchMetadata {
+    pub master_fingerprint: Option<Arc<fingerprint::Fingerprint>>,
+    pub origin: Option<String>,
+}
+
+#[derive(Debug)]
+pub(crate) struct AddressTypeSwitchOutcome {
+    pub metadata: AddressTypeSwitchMetadata,
+    pub persistence: AddressTypeSwitchPersistence,
+    pub durability_error: Option<String>,
+    pub store_reload_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum AddressTypeSwitchPersistence {
+    InMemory,
+    PublishedPersistent,
+}
+
+impl AddressTypeSwitchPersistence {
+    pub(crate) const fn requires_metadata_commit(self) -> bool {
+        matches!(self, Self::PublishedPersistent)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum WalletStorage {
+    Persistent(Mutex<Connection>),
+    InMemory(Mutex<Connection>),
+}
+
+impl WalletStorage {
+    pub(crate) fn persistent(connection: Connection) -> Self {
+        Self::Persistent(Mutex::new(connection))
+    }
+
+    pub(crate) fn in_memory(connection: Connection) -> Self {
+        Self::InMemory(Mutex::new(connection))
+    }
+
+    pub(crate) fn connection(&self) -> &Mutex<Connection> {
+        match self {
+            Self::Persistent(connection) | Self::InMemory(connection) => connection,
+        }
+    }
+
+    pub(crate) const fn is_persistent(&self) -> bool {
+        matches!(self, Self::Persistent(_))
+    }
 }
 
 #[derive(
@@ -136,24 +187,6 @@ impl WalletAddressType {
 }
 
 impl Wallet {
-    fn current_database_metadata(&self) -> Result<WalletMetadata, WalletError> {
-        Database::global()
-            .wallets
-            .get(&self.id, self.network, self.metadata.wallet_mode)?
-            .ok_or(WalletError::MetadataNotFound)
-    }
-
-    fn persist_address_type_switch_metadata(
-        &mut self,
-        metadata: WalletMetadata,
-    ) -> Result<(), WalletError> {
-        let metadata = Database::global().wallets.replace_wallet_metadata(metadata)?;
-
-        self.metadata = metadata;
-
-        Ok(())
-    }
-
     /// Create a new wallet from the given mnemonic save the bdk wallet filestore, save in our database and select it
     pub fn try_new_persisted_and_selected(
         metadata: WalletMetadata,
@@ -177,8 +210,14 @@ impl Wallet {
         let network = Database::global().global_config.selected_network();
         let mode = Database::global().global_config.wallet_mode();
 
-        let mut store = crate::bdk_store::BdkStore::try_new(&id, network)
+        // keep deletion from starting between the store load and descriptor healing
+        let operation = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
+            .begin_persistence_operation(id.clone())
             .map_err_str(WalletError::LoadError)?;
+        let mut store = crate::bdk_store::BdkStore::try_new_with_persistence_operation(
+            &id, network, &operation,
+        )
+        .map_err_str(WalletError::LoadError)?;
 
         let wallet = bdk_wallet::Wallet::load()
             .load_wallet(&mut store.conn)
@@ -189,6 +228,13 @@ impl Wallet {
             .wallets
             .get(&id, network, mode)?
             .ok_or(WalletError::WalletNotFound)?;
+
+        // an interrupted address-type switch replaces the store before metadata
+        // commits; the store is the durable truth, so metadata follows it
+        metadata = addressing::healed_metadata_for_store(metadata, &wallet);
+
+        // the same publication can fail before its keychain mirror is updated
+        addressing::heal_public_descriptors_for_store(&id, &wallet);
 
         // set and save the origin if not set
         // we should be able to remove this because we should always have the origin
@@ -208,7 +254,13 @@ impl Wallet {
             }
         }
 
-        Ok(Self { id, network, metadata, bdk: wallet, db: Mutex::new(store.conn) })
+        Ok(Self {
+            id,
+            network,
+            metadata,
+            bdk: wallet,
+            storage: WalletStorage::persistent(store.conn),
+        })
     }
 
     /// Create a new watch-only wallet from the given xpub
@@ -230,37 +282,6 @@ impl Wallet {
         WalletBuilder::new(WalletSource::TapSigner { tap_signer, derive, backup, birthday }).build()
     }
 
-    fn try_new_persisted_from_mnemonic_segwit(
-        metadata: WalletMetadata,
-        mnemonic: Mnemonic,
-        passphrase: Option<String>,
-    ) -> Result<Self, WalletError> {
-        Self::try_new_persisted_from_mnemonic(
-            metadata,
-            mnemonic,
-            passphrase,
-            WalletAddressType::NativeSegwit,
-        )
-    }
-
-    fn try_new_persisted_from_mnemonic(
-        metadata: WalletMetadata,
-        mnemonic: Mnemonic,
-        passphrase: Option<String>,
-        address_type: WalletAddressType,
-    ) -> Result<Self, WalletError> {
-        WalletBuilder::new(WalletSource::Mnemonic { metadata, mnemonic, passphrase, address_type })
-            .build()
-    }
-
-    fn try_new_persisted_from_xpriv(
-        metadata: WalletMetadata,
-        xpriv: WalletXprv,
-        address_type: WalletAddressType,
-    ) -> Result<Self, WalletError> {
-        WalletBuilder::new(WalletSource::Xpriv { metadata, xpriv, address_type }).build()
-    }
-
     pub fn balance(&self) -> Balance {
         self.bdk.balance().into()
     }
@@ -278,7 +299,13 @@ impl Wallet {
                 let sent_and_received = self.bdk.sent_and_received(&tx.tx_node.tx).into();
                 (tx, sent_and_received)
             })
-            .map(|(tx, sent_and_received)| Transaction::new(&self.id, sent_and_received, tx))
+            .map(|(tx, sent_and_received)| {
+                if self.uses_persistent_storage() {
+                    Transaction::new(&self.id, sent_and_received, tx)
+                } else {
+                    Transaction::new_without_labels(sent_and_received, tx)
+                }
+            })
             .filter(|tx| tx.sent_and_received().amount() > zero)
             .collect::<Vec<Transaction>>();
 
@@ -287,9 +314,18 @@ impl Wallet {
     }
 
     pub fn persist(&mut self) -> Result<(), WalletError> {
-        self.bdk.persist(&mut self.db.lock()).map_err_str(WalletError::PersistError)?;
+        let _operation = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
+            .begin_persistence_operation(self.id.clone())
+            .map_err_str(WalletError::PersistError)?;
+        self.bdk
+            .persist(&mut self.storage.connection().lock())
+            .map_err_str(WalletError::PersistError)?;
 
         Ok(())
+    }
+
+    pub(crate) const fn uses_persistent_storage(&self) -> bool {
+        self.storage.is_persistent()
     }
 }
 
@@ -298,15 +334,8 @@ impl Wallet {
         let mnemonic = Mnemonic::from_str("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
         let passphrase = None;
 
-        if let Err(error) = delete_wallet_specific_data(&metadata.id) {
-            debug!("clean up failed, failed to delete wallet data: {error}");
-        }
-
-        if let Err(error) = Database::global().wallets.delete(&metadata.id) {
-            debug!("clean up failed, failed to delete wallet: {error}");
-        }
-
-        Self::try_new_persisted_from_mnemonic_segwit(metadata, mnemonic, passphrase).unwrap()
+        WalletBuilder::build_preview(metadata, mnemonic, passphrase)
+            .expect("failed to build in-memory preview wallet")
     }
 }
 
@@ -334,7 +363,7 @@ impl WalletAddressType {
     }
 }
 
-// delete wallet filestore / sqlite store and wallet data database
+// delete the wallet filestore / sqlite store and the wallet data database
 pub fn delete_wallet_specific_data(wallet_id: &WalletId) -> eyre::Result<()> {
     BdkStore::delete_wallet_stores(wallet_id)?;
     crate::database::wallet_data::delete_database(wallet_id)
@@ -347,6 +376,10 @@ pub fn delete_wallet_specific_data(wallet_id: &WalletId) -> eyre::Result<()> {
 impl Wallet {
     #[uniffi::constructor]
     pub fn new_from_xpub(xpub: String) -> Result<Self, WalletError> {
+        let _construction = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
+            .begin_unscoped_construction()
+            .map_err_str(WalletError::PersistError)?;
+
         Self::try_new_persisted_from_xpub(xpub)
     }
 
@@ -354,7 +387,50 @@ impl Wallet {
     pub fn new_from_export(
         export: Arc<crate::hardware_export::HardwareExport>,
     ) -> Result<Self, WalletError> {
+        let _construction = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
+            .begin_unscoped_construction()
+            .map_err_str(WalletError::PersistError)?;
+
         let export = Arc::unwrap_or_clone(export);
         Self::try_new_persisted_from_pubport(export.into_format())
+    }
+}
+
+#[cfg(test)]
+mod test_support {
+    use super::*;
+
+    impl Wallet {
+        pub(crate) fn try_new_persisted_from_mnemonic_segwit(
+            metadata: WalletMetadata,
+            mnemonic: Mnemonic,
+            passphrase: Option<String>,
+        ) -> Result<Self, WalletError> {
+            builder::test_support::build_from_mnemonic(
+                metadata,
+                mnemonic,
+                passphrase,
+                WalletAddressType::NativeSegwit,
+            )
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preview_wallet_uses_only_ephemeral_storage() {
+        let metadata = WalletMetadata::preview_new();
+        let bdk_paths = crate::bdk_store::BdkStore::wallet_store_artifact_paths(&metadata.id);
+        let wallet_data_paths =
+            crate::database::wallet_data::wallet_data_artifact_paths(&metadata.id);
+
+        let wallet = Wallet::preview_new_wallet_with_metadata(metadata);
+
+        assert!(!wallet.uses_persistent_storage());
+        assert!(bdk_paths.iter().all(|path| !path.exists()));
+        assert!(wallet_data_paths.iter().all(|path| !path.exists()));
     }
 }

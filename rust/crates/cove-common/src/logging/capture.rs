@@ -906,8 +906,11 @@ mod tests {
         let dir = TempDir::new()?;
         std::fs::write(current_log_path(dir.path()), "original\n")?;
 
-        let mut state = CaptureState::default();
-        state.writer = Some(writer_that_replaces_current_file_on_shutdown(dir.path()));
+        let mut state = CaptureState {
+            writer: Some(writer_that_replaces_current_file_on_shutdown(dir.path())),
+            ..CaptureState::default()
+        };
+
         state.attach(dir.path().to_path_buf())?;
         state.record_line("after reattach");
 

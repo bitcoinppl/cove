@@ -23,10 +23,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -54,6 +57,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.UnlockMode
+import org.bitcoinppl.cove.WipePresentationState
 import org.bitcoinppl.cove.findFragmentActivity
 import org.bitcoinppl.cove_core.AuthType
 
@@ -205,6 +209,55 @@ fun LockView(
                     }
                 }
             }
+        }
+
+        if (auth.wipePresentationState == WipePresentationState.Running) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.8f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Removing local wallet data…", color = Color.White)
+                }
+            }
+        }
+
+        when (val wipeState = auth.wipePresentationState) {
+            is WipePresentationState.ShutdownBlocked -> {
+                AlertDialog(
+                    onDismissRequest = {},
+                    title = { Text("Wallet Shutdown Is Blocked") },
+                    text = { Text("Cove could not stop all wallet work. Retry or cancel the wipe.") },
+                    confirmButton = {
+                        TextButton(onClick = { auth.retryWipe(wipeState.attemptId) }) {
+                            Text("Retry")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { auth.cancelWipe(wipeState.attemptId) }) {
+                            Text("Cancel")
+                        }
+                    },
+                )
+            }
+
+            is WipePresentationState.Failed -> {
+                AlertDialog(
+                    onDismissRequest = auth::clearWipeFailure,
+                    title = { Text("Unable to Remove Local Data") },
+                    text = { Text(wipeState.message) },
+                    confirmButton = {
+                        TextButton(onClick = auth::clearWipeFailure) { Text("OK") }
+                    },
+                )
+            }
+
+            WipePresentationState.Idle, WipePresentationState.Running -> Unit
         }
     }
 }

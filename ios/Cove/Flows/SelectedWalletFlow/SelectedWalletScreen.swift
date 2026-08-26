@@ -91,10 +91,6 @@ struct SelectedWalletScreen: View {
         manager.dispatch(action: action)
     }
 
-    var labelManager: LabelManager {
-        manager.rust.labelManager()
-    }
-
     func transactionsCard(transactions: [CoveCore.Transaction]) -> some View {
         TransactionsCardView(
             transactions: transactions,
@@ -230,7 +226,7 @@ struct SelectedWalletScreen: View {
     func shareXpubFile() {
         Task {
             do {
-                let result = try await manager.rust.exportXpubForShare()
+                let result = try await manager.exportXpubForShare()
                 ShareSheet.present(data: result.content, filename: result.filename) { success in
                     if !success {
                         Log.warn("Xpub Export Failed: cancelled or failed")
@@ -251,7 +247,7 @@ struct SelectedWalletScreen: View {
     func shareLabelsFile() {
         Task {
             do {
-                let result = try await manager.rust.exportLabelsForShare()
+                let result = try await manager.exportLabelsForShare()
                 ShareSheet.present(data: result.content, filename: result.filename) { success in
                     if !success {
                         Log.warn("Label Export Failed: cancelled or failed")
@@ -377,8 +373,16 @@ struct SelectedWalletScreen: View {
         .onChange(of: manager.walletMetadata.discoveryState, discoveryStateChanged)
         .onAppear(perform: initializePresentation)
         .onAppear(perform: ensureWalletIsSelected)
-        .onAppear(perform: manager.validateMetadata)
         .onAppear(perform: resetHeaderState)
+        .task {
+            do {
+                try await manager.validateMetadata()
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.error("Unable to validate wallet metadata: \(error)")
+            }
+        }
         .onDisappear(perform: cleanUp)
         .presentingAlert(
             Binding(get: { manager.errorAlert }, set: { manager.errorAlert = $0 }),
@@ -392,7 +396,7 @@ struct SelectedWalletScreen: View {
         do {
             let file = try result.get()
             let fileContents = try FileReader(for: file).read()
-            try labelManager.import(jsonl: fileContents)
+            try manager.labelManager().import(jsonl: fileContents)
 
             app.alertState = .init(
                 .general(
@@ -401,7 +405,7 @@ struct SelectedWalletScreen: View {
                 )
             )
 
-            Task { await manager.rust.getTransactions() }
+            Task { try? await manager.refreshTransactions() }
         } catch {
             app.alertState = .init(
                 .general(
@@ -426,8 +430,8 @@ struct SelectedWalletScreen: View {
         guard let transactions = refreshableTransactions else { return }
 
         manager.loadState = .scanning(transactions)
-        await manager.rust.forceWalletScan()
-        _ = try? await manager.rust.forceUpdateHeight()
+        await manager.forceWalletScan()
+        _ = try? await manager.forceUpdateHeight()
         await manager.updateWalletBalance()
     }
 
@@ -755,7 +759,7 @@ struct VerifyReminder: View {
     AsyncPreview {
         NavigationStack {
             SelectedWalletScreen(
-                manager: WalletManager(preview: "preview_only")
+                manager: WalletManager(preview: .only)
             ).environment(AppManager.shared)
         }
     }

@@ -3,6 +3,23 @@ import CoveCore
 import XCTest
 
 final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
+    func testStartupRecoveryClassifiesRecoveryRequiredWithSafeContinuationCopy() {
+        let failure = classifyBootstrapFailure(
+            AppInitError.RecoveryRequired(message: "wallet path and cleanup details")
+        )
+
+        XCTAssertEqual(failure, .recoveryRequired)
+        XCTAssertTrue(startupRecoveryContinuationMessage.contains("Continue"))
+        XCTAssertFalse(startupRecoveryContinuationMessage.contains("wallet path"))
+    }
+
+    func testStartupRecoveryLeavesOtherFatalErrorsWithoutRetryState() {
+        let error = AppInitError.DatabaseVerificationFailed(message: "verification failed")
+        let failure = classifyBootstrapFailure(error)
+
+        XCTAssertEqual(failure, .fatal(error.localizedDescription))
+    }
+
     func testPendingEnableRecoveryPresentationSeparatesSafeCleanupFromSupportOnly() {
         XCTAssertTrue(cloudBackupPendingEnableCleanupIsAvailable(.available))
         XCTAssertFalse(cloudBackupPendingEnableCleanupIsAvailable(.supportOnly))
@@ -53,6 +70,70 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             ),
             .hidden
         )
+    }
+
+    func testCloudBackupProgressPresentationShowsOneVerificationIndicator() {
+        XCTAssertEqual(
+            cloudBackupDetailProgressPresentation(
+                verificationState: .running,
+                isInventoryChecking: true,
+                hasRetainedDetail: true,
+                hasVisibleWalletRows: false
+            ),
+            .verificationCard
+        )
+        XCTAssertEqual(
+            cloudBackupDetailProgressPresentation(
+                verificationState: .running,
+                isInventoryChecking: true,
+                hasRetainedDetail: true,
+                hasVisibleWalletRows: true
+            ),
+            .verificationInline
+        )
+        XCTAssertEqual(
+            cloudBackupDetailProgressPresentation(
+                verificationState: .required,
+                isInventoryChecking: true,
+                hasRetainedDetail: true,
+                hasVisibleWalletRows: true
+            ),
+            .inventoryInline
+        )
+    }
+
+    func testCloudBackupVisibleRowsRequireDetailAndIgnoreCountOnlyState() {
+        let detail = CloudBackupDetail(
+            lastSync: nil,
+            upToDate: [],
+            needsSync: [],
+            cloudOnlyCount: 1
+        )
+        let wallet = CloudBackupWalletItem(
+            name: "Savings",
+            network: .bitcoin,
+            walletMode: nil,
+            walletType: nil,
+            fingerprint: nil,
+            labelCount: nil,
+            backupUpdatedAt: nil,
+            syncStatus: .confirmed,
+            restoreFailure: nil,
+            recordId: "wallet-record"
+        )
+
+        XCTAssertFalse(cloudBackupHasVisibleWalletRows(
+            detail: detail,
+            cloudOnly: .notFetched
+        ))
+        XCTAssertFalse(cloudBackupHasVisibleWalletRows(
+            detail: nil,
+            cloudOnly: .loaded(wallets: [wallet])
+        ))
+        XCTAssertTrue(cloudBackupHasVisibleWalletRows(
+            detail: detail,
+            cloudOnly: .loaded(wallets: [wallet])
+        ))
     }
 
     func testWalletAccessibilityLabelCombinesIdentityStatusAndAction() {
@@ -304,6 +385,50 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
     }
 
     @MainActor
+    func testBackupReadUsesLocalTargetBeforeMetadata() async throws {
+        let fixture = makeICloudMetadataFixture()
+        defer { fixture.removeContainer() }
+
+        let location = try XCTUnwrap(backupLocations().first)
+        let localURL = try fixture.helper.backupFileReadURL(
+            namespace: testNamespace,
+            location: location
+        )
+        try writeTestBackup(at: localURL)
+
+        let target = try await fixture.helper.existingBackupFileReadTarget(
+            namespace: testNamespace,
+            recordId: "wallet-record",
+            locations: backupLocations()
+        )
+        let data = try await fixture.helper.downloadFile(
+            target: target,
+            recordId: "wallet-record"
+        )
+
+        XCTAssertEqual(target, .local(localURL))
+        XCTAssertEqual(data, Data("backup".utf8))
+        XCTAssertEqual(fixture.source.startCount, 0)
+    }
+
+    func testICloudReadAttemptDeadlineReturnsWithoutWaitingForSlowRead() async throws {
+        let startedAt = Date()
+
+        do {
+            _ = try await ICloudReadAttemptDeadline.run(timeout: 0.01) {
+                try await Task.sleep(for: .seconds(10))
+                return Data()
+            }
+            XCTFail("expected read timeout")
+        } catch ICloudReadAttemptDeadlineError.timedOut {
+        } catch {
+            XCTFail("expected read timeout, got \(error)")
+        }
+
+        XCTAssertLessThan(Date().timeIntervalSince(startedAt), 0.5)
+    }
+
+    @MainActor
     func testBackupReadWaitsForLateMetadataAcrossAllLocations() async throws {
         let fixture = makeICloudMetadataFixture()
         defer { fixture.removeContainer() }
@@ -314,7 +439,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             location: locations[1]
         )
         let request = Task {
-            try await fixture.helper.existingBackupFileReadURL(
+            try await fixture.helper.existingBackupFileReadTarget(
                 namespace: self.testNamespace,
                 recordId: "wallet-record",
                 locations: locations,
@@ -331,9 +456,15 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             ),
         ]))
 
-        let resolvedURL = try await request.value
+        let target = try await request.value
 
-        XCTAssertEqual(resolvedURL, legacyURL)
+        XCTAssertEqual(
+            target,
+            .provider(
+                legacyURL,
+                metadataPath: legacyURL.resolvingSymlinksInPath().path
+            )
+        )
         XCTAssertEqual(fixture.source.startCount, 1)
     }
 
@@ -342,7 +473,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         let fixture = makeICloudMetadataFixture(defaultTimeout: 60)
         defer { fixture.removeContainer() }
         let request = Task {
-            try await fixture.helper.existingBackupFileReadURL(
+            try await fixture.helper.existingBackupFileReadTarget(
                 namespace: self.testNamespace,
                 recordId: "wallet-record",
                 locations: self.backupLocations(),
@@ -379,7 +510,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             location: locations[1]
         )
         let request = Task {
-            try await fixture.helper.existingBackupFileReadURL(
+            try await fixture.helper.existingBackupFileReadTarget(
                 namespace: self.testNamespace,
                 recordId: "wallet-record",
                 locations: locations
@@ -398,9 +529,15 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             ),
         ]))
 
-        let resolvedURL = try await request.value
+        let target = try await request.value
 
-        XCTAssertEqual(resolvedURL, currentURL)
+        XCTAssertEqual(
+            target,
+            .provider(
+                currentURL,
+                metadataPath: currentURL.resolvingSymlinksInPath().path
+            )
+        )
     }
 
     @MainActor
@@ -451,14 +588,16 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: currentURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
     }
+}
 
+extension CloudBackupIOSSafetyHelpersTests {
     @MainActor
     func testBackupReadMapsMetadataStartupAndTimeoutFailures() async throws {
         let startupFixture = makeICloudMetadataFixture(startResults: [false])
         defer { startupFixture.removeContainer() }
 
         do {
-            _ = try await startupFixture.helper.existingBackupFileReadURL(
+            _ = try await startupFixture.helper.existingBackupFileReadTarget(
                 namespace: testNamespace,
                 recordId: "wallet-record",
                 locations: backupLocations()
@@ -472,7 +611,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         let timeoutFixture = makeICloudMetadataFixture(defaultTimeout: 0.01)
         defer { timeoutFixture.removeContainer() }
         let request = Task {
-            try await timeoutFixture.helper.existingBackupFileReadURL(
+            try await timeoutFixture.helper.existingBackupFileReadTarget(
                 namespace: self.testNamespace,
                 recordId: "wallet-record",
                 locations: self.backupLocations()
@@ -485,9 +624,9 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         do {
             _ = try await request.value
             XCTFail("expected metadata timeout")
-        } catch CloudStorageError.Offline {
+        } catch CloudStorageError.SyncPending {
         } catch {
-            XCTFail("expected Offline, got \(error)")
+            XCTFail("expected SyncPending, got \(error)")
         }
     }
 
@@ -541,9 +680,9 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
                 locations: backupLocations()
             )
             XCTFail("expected metadata timeout")
-        } catch CloudStorageError.Offline {
+        } catch CloudStorageError.SyncPending {
         } catch {
-            XCTFail("expected Offline, got \(error)")
+            XCTFail("expected SyncPending, got \(error)")
         }
     }
 
@@ -553,7 +692,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         defer { fixture.removeContainer() }
 
         let request = Task {
-            try await fixture.helper.existingBackupFileReadURL(
+            try await fixture.helper.existingBackupFileReadTarget(
                 namespace: self.testNamespace,
                 recordId: "wallet-record",
                 locations: self.backupLocations()
@@ -575,9 +714,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
 
         XCTAssertLessThan(Date().timeIntervalSince(startedAt), 0.5)
     }
-}
 
-extension CloudBackupIOSSafetyHelpersTests {
     func testEventuallyConsistentListingMergesLocalAndMetadataViews() throws {
         let names = try ICloudEventuallyConsistentListing.merged(
             local: ["old-1password"],
@@ -610,15 +747,11 @@ extension CloudBackupIOSSafetyHelpersTests {
             lastSync: nil,
             upToDate: [],
             needsSync: [],
-            cloudOnlyCount: 0,
-            otherBackups: .loaded(summary: CloudBackupOtherBackupsSummary(
-                namespaceCount: 0,
-                walletCount: 0,
-                passkeyHints: []
-            ))
+            cloudOnlyCount: 0
         )
         let loaded = LoadedCloudBackupDetail(
             detail: detail,
+            inventoryAuthority: .providerConfirmed,
             cloudOnly: .notFetched,
             cloudOnlyOperation: .idle,
             otherBackupsOperation: .idle
@@ -635,7 +768,10 @@ extension CloudBackupIOSSafetyHelpersTests {
             retained: loaded
         )
         XCTAssertFalse(failed.isComplete)
-        XCTAssertEqual(failed.inventoryError, "iCloud inventory is unavailable")
+        XCTAssertEqual(
+            failed.inventoryError,
+            "This device is offline. Connect to the internet, then check iCloud Drive again."
+        )
         XCTAssertEqual(failed.retainedDetailState?.detail, detail)
 
         let complete = CloudBackupDetailState.complete(state: loaded)

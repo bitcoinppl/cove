@@ -208,8 +208,7 @@ async fn start_verification_dispatch_resumes_pending_upload_verification() {
                 local_master_key_repaired: false,
                 credential_recovered: false,
                 wallets_verified: 0,
-                wallets_failed: 0,
-                wallets_unsupported: 0,
+                wallet_issues: Default::default(),
                 detail: None,
             },
             namespace_id.clone(),
@@ -248,6 +247,8 @@ async fn pending_upload_verification_finalizes_awaiting_deep_verify() {
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
+    hold_wallet_upload_confirmation(globals, &metadata).await;
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
 
     let result = deep_verify_for_test(&manager, true).await;
@@ -256,6 +257,7 @@ async fn pending_upload_verification_finalizes_awaiting_deep_verify() {
     assert!(manager.pending_verification_completion().is_some());
     assert!(manager.has_pending_cloud_upload_verification());
 
+    globals.cloud.clear_wallet_backup_download_override(&namespace, &record_id);
     let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
 
     assert!(!has_more_pending);
@@ -268,8 +270,7 @@ async fn pending_upload_verification_finalizes_awaiting_deep_verify() {
     match manager.model_snapshot().verification {
         VerificationState::Verified(report) => {
             assert_eq!(report.wallets_verified, 1);
-            assert_eq!(report.wallets_failed, 0);
-            assert_eq!(report.wallets_unsupported, 0);
+            assert!(report.wallet_issues.is_empty());
 
             let detail = report.detail.expect("expected verification detail");
             assert_eq!(detail.up_to_date.len(), 1);
@@ -304,8 +305,7 @@ async fn pending_upload_verification_keeps_master_key_wrapper_hash_mismatch_pend
                 local_master_key_repaired: false,
                 credential_recovered: false,
                 wallets_verified: 0,
-                wallets_failed: 0,
-                wallets_unsupported: 0,
+                wallet_issues: Default::default(),
                 detail: None,
             },
             namespace_id,
@@ -378,8 +378,7 @@ async fn pending_upload_verification_expires_stale_completion() {
                 local_master_key_repaired: false,
                 credential_recovered: false,
                 wallets_verified: 0,
-                wallets_failed: 0,
-                wallets_unsupported: 0,
+                wallet_issues: Default::default(),
                 detail: None,
             },
             namespace_id,
@@ -466,8 +465,7 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
                 local_master_key_repaired: false,
                 credential_recovered: false,
                 wallets_verified: 0,
-                wallets_failed: 0,
-                wallets_unsupported: 0,
+                wallet_issues: Default::default(),
                 detail: None,
             },
             namespace_id,
@@ -504,6 +502,8 @@ async fn pending_upload_verification_survives_restart() {
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
+    hold_wallet_upload_confirmation(globals, &metadata).await;
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
 
     let result = deep_verify_for_test(&manager, true).await;
@@ -515,6 +515,7 @@ async fn pending_upload_verification_survives_restart() {
 
     assert!(restarted_manager.pending_verification_completion().is_some());
     restarted_manager.sync_persisted_state();
+    globals.cloud.clear_wallet_backup_download_override(&namespace, &record_id);
     let has_more_pending = verify_pending_uploads_once_for_test_async(&restarted_manager).await;
 
     assert!(!has_more_pending);
@@ -522,8 +523,7 @@ async fn pending_upload_verification_survives_restart() {
     match restarted_manager.model_snapshot().verification {
         VerificationState::Verified(report) => {
             assert_eq!(report.wallets_verified, 1);
-            assert_eq!(report.wallets_failed, 0);
-            assert_eq!(report.wallets_unsupported, 0);
+            assert!(report.wallet_issues.is_empty());
 
             let detail = report.detail.expect("expected verification detail");
             assert_eq!(detail.up_to_date.len(), 1);
@@ -558,6 +558,7 @@ async fn pending_upload_verification_retries_until_expected_revision_is_readable
     .unwrap()
     .revision_hash;
 
+    hold_wallet_upload_confirmation(globals, &metadata).await;
     let result = deep_verify_for_test(&manager, true).await;
 
     assert!(matches!(result, DeepVerificationResult::AwaitingUploadConfirmation(_)));
@@ -598,8 +599,7 @@ async fn pending_upload_verification_retries_until_expected_revision_is_readable
     match manager.model_snapshot().verification {
         VerificationState::Verified(report) => {
             assert_eq!(report.wallets_verified, 1);
-            assert_eq!(report.wallets_failed, 0);
-            assert_eq!(report.wallets_unsupported, 0);
+            assert!(report.wallet_issues.is_empty());
         }
         other => panic!("expected verified result after retry, got {other:?}"),
     }
@@ -645,8 +645,7 @@ async fn pending_upload_verification_accepts_newer_revision_after_wallet_changes
     match manager.model_snapshot().verification {
         VerificationState::Verified(report) => {
             assert_eq!(report.wallets_verified, 1);
-            assert_eq!(report.wallets_failed, 0);
-            assert_eq!(report.wallets_unsupported, 0);
+            assert!(report.wallet_issues.is_empty());
 
             let detail = report.detail.expect("expected verification detail");
             assert_eq!(detail.up_to_date.len(), 1);
@@ -669,9 +668,11 @@ async fn pending_upload_verification_marks_invalid_wallet_json_failed() {
     let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
 
+    hold_wallet_upload_confirmation(globals, &metadata).await;
     let result = deep_verify_for_test(&manager, true).await;
 
     assert!(matches!(result, DeepVerificationResult::AwaitingUploadConfirmation(_)));
+    globals.cloud.clear_wallet_backup_download_override(&namespace, &record_id);
     globals.cloud.set_wallet_backup(namespace, record_id.clone(), b"{".to_vec());
 
     let has_more_pending = verify_pending_uploads_once_for_test_async(&manager).await;
@@ -680,13 +681,13 @@ async fn pending_upload_verification_marks_invalid_wallet_json_failed() {
     assert!(manager.pending_verification_completion().is_none());
 
     match manager.model_snapshot().verification {
-        VerificationState::Verified(report) => {
+        VerificationState::NeedsAttention(report) => {
             assert_eq!(report.wallets_verified, 0);
-            assert_eq!(report.wallets_failed, 1);
-            assert_eq!(report.wallets_unsupported, 0);
+            assert_eq!(report.wallet_issues.unreadable, 1);
+            assert_eq!(report.wallet_issues.unsupported, 0);
         }
         other => {
-            panic!("expected verified result after pending upload verification, got {other:?}")
+            panic!("expected needs-attention result after pending verification, got {other:?}")
         }
     }
 
@@ -746,11 +747,13 @@ async fn terminally_failed_pending_upload_finishes_verification_without_waiting_
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
 
+    hold_wallet_upload_confirmation(globals, &metadata).await;
     let result = deep_verify_for_test(&manager, true).await;
 
     assert!(matches!(result, DeepVerificationResult::AwaitingUploadConfirmation(_)));
     assert!(manager.pending_verification_completion().is_some());
 
+    globals.cloud.clear_wallet_backup_download_override(&namespace_id, &record_id);
     CloudStorage::global_silent_client()
         .delete_wallet_backup(namespace_id.clone(), record_id.clone())
         .await

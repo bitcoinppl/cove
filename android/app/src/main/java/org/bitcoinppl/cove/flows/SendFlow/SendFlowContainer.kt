@@ -76,7 +76,7 @@ fun SendFlowContainer(
         try {
             android.util.Log.d(tag, "getting wallet for SendRoute $walletId")
 
-            val wm = app.getWalletManager(walletId)
+            val wm = app.getWalletManagerLoaded(walletId)
             val presenter = SendFlowPresenter(app, wm)
             val sfm = app.getSendFlowManager(wm, presenter)
 

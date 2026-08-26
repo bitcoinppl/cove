@@ -159,7 +159,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
 
     private func prepareScreen() async {
         let isAlreadyValid = validate()
-        let shouldShowLoading = !isAlreadyValid || utxos == sendFlowManager.rust.utxos()
+        let shouldShowLoading = !isAlreadyValid || utxos == sendFlowManager.utxos()
 
         if shouldShowLoading {
             Task {
@@ -195,7 +195,7 @@ struct SendFlowCoinControlSetAmountScreen: View {
 
     private func screenAppeared() {
         sendFlowManager.dispatch(.setCoinControlMode(utxos))
-        if validate(), utxos == sendFlowManager.rust.utxos() {
+        if validate(), utxos == sendFlowManager.utxos() {
             isLoading = false
             loadingOpacity = 0
             presenter.focusField = .none
@@ -452,10 +452,10 @@ private struct SendFlowCoinControlFeeSelectionSheet: View {
 #Preview {
     AsyncPreview {
         NavigationStack {
-            let manager = WalletManager(preview: "preview_only")
+            let manager = WalletManager(preview: .only)
             let presenter = SendFlowPresenter(app: AppManager.shared, manager: manager)
 
-            if let rustSendFlowManager = try? manager.rust.newSendFlowManager(balance: manager.balance) {
+            if let rustSendFlowManager = try? manager.newSendFlowManager() {
                 let sendFlowManager = SendFlowManager(rustSendFlowManager, presenter: presenter)
 
                 SendFlowCoinControlSetAmountScreen(

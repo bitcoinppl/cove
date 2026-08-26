@@ -70,7 +70,7 @@ struct SendFlowAccountSection: View {
 #Preview {
     AsyncPreview {
         SendFlowAccountSection(
-            manager: WalletManager(preview: "preview_only"),
+            manager: WalletManager(preview: .only),
             showsTitle: false
         )
     }

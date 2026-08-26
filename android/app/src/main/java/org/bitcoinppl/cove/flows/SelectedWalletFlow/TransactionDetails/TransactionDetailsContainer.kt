@@ -89,7 +89,7 @@ fun TransactionDetailsContainer(
         manager = null
 
         try {
-            manager = app.getWalletManager(walletId)
+            manager = app.getWalletManagerLoaded(walletId)
             loading = false
         } catch (e: KotlinCancellationException) {
             throw e

@@ -7,7 +7,7 @@ use cove_util::result_ext::ResultExt as _;
 
 use crate::{
     app::reconcile::{Update, Updater},
-    fee_client::FeeResponse,
+    fee_client::{FeeResponse, FeeSnapshot},
     fiat::client::PriceResponse,
     network::Network,
 };
@@ -44,8 +44,12 @@ impl GlobalCacheKey {
 #[derive(Debug, Clone, derive_more::From, serde::Serialize, serde::Deserialize)]
 pub enum GlobalCacheData {
     Prices(PriceResponse),
+    /// Legacy fee data without a fetch timestamp. It is retained for decoding old databases but
+    /// must never be treated as a current fee snapshot
     Fees(FeeResponse),
     BlockHeight(BlockSizeLast),
+    /// Fee data with a wall-clock timestamp for bounded offline fallback
+    FeesV2(FeeSnapshot),
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +63,52 @@ impl GlobalCacheTable {
         write_txn.open_table(TABLE).expect("failed to create table");
 
         Self { db }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fee_client::{FeeFetchedAt, FeeSnapshot};
+
+    fn test_table() -> (tempfile::TempDir, GlobalCacheTable) {
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let db = Arc::new(
+            redb::Database::create(tmp.path().join("global_cache.redb"))
+                .expect("failed to create redb"),
+        );
+        let write_txn = db.begin_write().expect("failed to begin write transaction");
+        let table = GlobalCacheTable::new(db, &write_txn);
+        write_txn.commit().expect("failed to commit table creation");
+
+        (tmp, table)
+    }
+
+    fn fees() -> FeeResponse {
+        FeeResponse {
+            fastest_fee: 5.0,
+            half_hour_fee: 3.0,
+            hour_fee: 2.0,
+            economy_fee: 1.0,
+            minimum_fee: 1.0,
+        }
+    }
+
+    #[test]
+    fn legacy_fee_data_is_stale_and_timestamped_data_round_trips() {
+        let (_tmp, table) = test_table();
+        let key = GlobalCacheKey::Fees(FeesKey);
+
+        table.set(key, GlobalCacheData::Fees(fees())).expect("legacy fee data saves");
+        assert!(table.get_fee_snapshot().expect("fee snapshot loads").is_none());
+
+        let snapshot = FeeSnapshot {
+            fees: fees(),
+            fetched_at: FeeFetchedAt::from_unix_seconds(1_700_000_000),
+        };
+        table.set_fee_snapshot(snapshot).expect("timestamped fee data saves");
+
+        assert_eq!(table.get_fee_snapshot().expect("fee snapshot loads"), Some(snapshot));
     }
 }
 
@@ -87,18 +137,18 @@ impl GlobalCacheTable {
         self.set(key, prices.into())
     }
 
-    pub fn get_fees(&self) -> Result<Option<FeeResponse>, Error> {
+    pub fn get_fee_snapshot(&self) -> Result<Option<FeeSnapshot>, Error> {
         let key = GlobalCacheKey::Fees(FeesKey);
-        if let Some(GlobalCacheData::Fees(fees)) = self.get(key)? {
-            return Ok(Some(fees));
+        if let Some(GlobalCacheData::FeesV2(snapshot)) = self.get(key)? {
+            return Ok(Some(snapshot));
         }
 
         Ok(None)
     }
 
-    pub fn set_fees(&self, fees: FeeResponse) -> Result<(), Error> {
+    pub fn set_fee_snapshot(&self, snapshot: FeeSnapshot) -> Result<(), Error> {
         let key = GlobalCacheKey::Fees(FeesKey);
-        self.set(key, fees.into())
+        self.set(key, GlobalCacheData::FeesV2(snapshot))
     }
 
     pub fn get_block_height(&self, network: Network) -> Result<Option<BlockSizeLast>, Error> {

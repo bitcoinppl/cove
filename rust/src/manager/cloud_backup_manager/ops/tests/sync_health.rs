@@ -307,7 +307,7 @@ async fn validate_metadata_marks_generated_wallet_names_dirty() {
     enable_cloud_backup_without_reset(&manager, 1);
 
     let wallet_manager = RustWalletManager::try_new(wallet_id.clone()).unwrap();
-    wallet_manager.validate_metadata();
+    wallet_manager.validate_metadata().await.unwrap();
 
     let updated_metadata = Database::global()
         .wallets()
@@ -445,7 +445,7 @@ async fn refresh_cloud_backup_detail_uses_interactive_wallet_listing() {
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
     globals.cloud.fail_list_wallet_files_non_interactive("offline");
 
-    let Some(CloudBackupDetailResult::Success(detail)) =
+    let Some(CloudBackupDetailResult::SuccessWithAuthority { detail, .. }) =
         manager.refresh_cloud_backup_detail().await
     else {
         panic!("expected cloud backup detail");
@@ -507,7 +507,7 @@ async fn incomplete_inventory_snapshot_is_provisional_and_final_failure_remains_
         panic!("expected incomplete inventory snapshot");
     };
 
-    assert!(!snapshot.is_complete);
+    assert!(snapshot.authority.is_none());
     let provisional = snapshot.provisional_detail.as_ref().expect("expected provisional detail");
     let wallet = provisional
         .up_to_date
@@ -547,11 +547,13 @@ async fn complete_inventory_snapshot_avoids_relisting_current_namespace() {
         panic!("expected complete inventory snapshot");
     };
 
-    assert!(snapshot.is_complete);
+    assert_eq!(snapshot.authority, Some(CloudBackupInventoryAuthority::ProviderConfirmed));
     assert!(snapshot.provisional_detail.is_none());
 
-    let Some(CloudBackupDetailResult::Success(_)) =
-        manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
+    let Some(CloudBackupDetailResult::SuccessWithAuthority {
+        authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+        ..
+    }) = manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
     else {
         panic!("expected complete cloud backup detail");
     };
@@ -561,6 +563,60 @@ async fn complete_inventory_snapshot_avoids_relisting_current_namespace() {
         globals.cloud.list_wallet_files_snapshot_attempt_count(),
         initial_snapshot_attempts + 1
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn complete_local_snapshot_matching_known_count_avoids_metadata_relisting() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let metadata = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![metadata.clone()]);
+
+    let keychain = Keychain::global();
+    let namespace = CloudBackupKeychain::new(keychain.clone()).namespace_id().unwrap();
+    CloudBackupKeychain::new(keychain.clone())
+        .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
+        .unwrap();
+    let master_key =
+        cove_cspp::Cspp::new(keychain.clone()).load_master_key_from_store().unwrap().unwrap();
+    let record_id = wallet_record_id(metadata.id.as_ref());
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        record_id.clone(),
+        encrypted_wallet_backup_bytes(&metadata, &master_key, "snapshot-revision", 1).await,
+    );
+    globals.cloud.set_wallet_files_snapshot(
+        namespace,
+        vec![wallet_filename_from_record_id(&record_id)],
+        false,
+    );
+
+    let Some(CloudBackupDetailInventorySnapshotResult::Success(snapshot)) =
+        manager.load_cloud_backup_detail_inventory_snapshot().await
+    else {
+        panic!("expected local inventory snapshot");
+    };
+
+    assert_eq!(
+        snapshot.authority,
+        Some(CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount)
+    );
+    assert!(snapshot.provisional_detail.is_none());
+
+    globals.cloud.fail_list_wallet_files("metadata query should not run");
+    let Some(CloudBackupDetailResult::SuccessWithAuthority {
+        authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
+        detail,
+    }) = manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
+    else {
+        panic!("expected detail from the trusted local snapshot");
+    };
+
+    assert_eq!(detail.up_to_date.len() + detail.needs_sync.len(), 1);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -686,7 +742,7 @@ async fn refresh_cloud_backup_detail_marks_listed_wallet_unknown_when_master_key
     cspp.delete_master_key();
     cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
 
-    let Some(CloudBackupDetailResult::Success(detail)) =
+    let Some(CloudBackupDetailResult::SuccessWithAuthority { detail, .. }) =
         manager.refresh_cloud_backup_detail().await
     else {
         panic!("expected cloud backup detail");
@@ -750,7 +806,7 @@ async fn integrity_refreshes_detail_after_auto_backup_success() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn integrity_auto_backup_continues_when_other_backup_summary_fails() {
+async fn integrity_auto_backup_does_not_query_other_backup_namespaces() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -765,13 +821,14 @@ async fn integrity_auto_backup_continues_when_other_backup_summary_fails() {
         .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
         .unwrap();
     globals.cloud.fail_list_namespaces("offline while listing namespaces");
+    let namespace_list_attempts = globals.cloud.list_namespaces_attempt_count();
 
     let warning = manager.verify_backup_integrity_impl().await;
 
     assert!(warning.is_none());
     assert_eq!(globals.cloud.wallet_backup_upload_attempt_count(), 1);
-    let detail = manager.model_snapshot().detail.expect("expected cloud backup detail");
-    assert!(matches!(detail.other_backups, CloudBackupOtherBackupsState::LoadFailed { .. }));
+    manager.model_snapshot().detail.expect("expected cloud backup detail");
+    assert_eq!(globals.cloud.list_namespaces_attempt_count(), namespace_list_attempts);
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
 

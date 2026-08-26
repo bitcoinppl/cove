@@ -48,7 +48,7 @@ struct SendFlowDetailsSheetView: View {
 #Preview {
     AsyncPreview {
         SendFlowDetailsSheetView(
-            manager: WalletManager(preview: "preview_only"),
+            manager: WalletManager(preview: .only),
             details: confirmDetailsPreviewNew()
         )
         .padding()

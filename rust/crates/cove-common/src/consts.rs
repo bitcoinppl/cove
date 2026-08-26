@@ -60,8 +60,14 @@ fn data_dir_init() -> PathBuf {
 }
 
 fn wallet_data_dir_init() -> PathBuf {
-    let dir = ROOT_DATA_DIR.join("wallets");
+    let dir = wallet_data_dir_path();
     init_dir(dir)
+}
+
+/// Return the wallet-data root path without creating it
+#[must_use]
+pub fn wallet_data_dir_path() -> PathBuf {
+    ROOT_DATA_DIR.join("wallets")
 }
 
 fn init_dir(dir: PathBuf) -> PathBuf {
