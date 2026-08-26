@@ -19,10 +19,12 @@ use payjoin::{
     },
 };
 use rand::seq::SliceRandom as _;
+use redb::TableDefinition;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{debug, error, warn};
 
+use crate::database::key::OutPointKey;
 use crate::database::wallet_data::{
     PayjoinSenderSession, PendingAction, WalletDataDb, WalletDataError,
 };
@@ -35,6 +37,9 @@ const PAYJOIN_SESSION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 const OHTTP_RELAYS: [&str; 3] =
     ["https://relay.payjoin.org", "https://ohttp.achow101.com", "https://pj.bobspacebkk.com"];
+
+const INPUTS_OFFERED_TABLE: TableDefinition<OutPointKey, u64> =
+    TableDefinition::new("payjoin_inputs_offered");
 
 /// Persists payjoin session events to the wallet's database so sessions survive app restarts.
 ///
@@ -203,6 +208,63 @@ impl PayjoinSessionPersister {
             }
         }
     }
+
+    /// Returns Err if any outpoint was already offered in a prior payjoin session
+    pub(crate) fn check_no_inputs_seen_before(&self, inputs: &[bitcoin::OutPoint]) -> Result<()> {
+        let read_txn =
+            self.db.db.begin_read().map_err(|e| eyre::eyre!("failed to begin read: {e:?}"))?;
+
+        let table = match read_txn.open_table(INPUTS_OFFERED_TABLE) {
+            Ok(t) => t,
+            Err(redb::TableError::TableDoesNotExist(_)) => return Ok(()),
+            Err(e) => return Err(eyre::eyre!("failed to open inputs_offered table: {e:?}")),
+        };
+
+        for outpoint in inputs {
+            let key = OutPointKey::from(outpoint);
+            if table
+                .get(&key)
+                .map_err(|e| eyre::eyre!("failed to read inputs_offered: {e:?}"))?
+                .is_some()
+            {
+                return Err(eyre::eyre!(
+                    "input {}:{} was already offered in a prior payjoin session",
+                    outpoint.txid,
+                    outpoint.vout
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Records outpoints as offered so they are not reused in future payjoin sessions
+    ///
+    /// Inputs are never cleaned up, even after fallback or cancellation, because a
+    /// malicious receiver has already seen them and could probe again on retry
+    pub(crate) fn record_offered_inputs(&self, inputs: &[bitcoin::OutPoint]) -> Result<()> {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+
+        let write_txn =
+            self.db.db.begin_write().map_err(|e| eyre::eyre!("failed to begin write: {e:?}"))?;
+
+        {
+            let mut table = write_txn
+                .open_table(INPUTS_OFFERED_TABLE)
+                .map_err(|e| eyre::eyre!("failed to open inputs_offered table: {e:?}"))?;
+
+            for outpoint in inputs {
+                let key = OutPointKey::from(outpoint);
+                table
+                    .insert(&key, now)
+                    .map_err(|e| eyre::eyre!("failed to insert offered input: {e:?}"))?;
+            }
+        }
+
+        write_txn.commit().map_err(|e| eyre::eyre!("failed to commit offered inputs: {e:?}"))?;
+
+        Ok(())
+    }
 }
 
 impl SessionPersister for PayjoinSessionPersister {
@@ -345,8 +407,12 @@ pub(crate) fn build_sender(
     network: bitcoin::Network,
     persister: &PayjoinSessionPersister,
 ) -> Result<V2Sender<WithReplyKey>> {
-    // TODO: anti-probing (inputs_seen), verify our inputs have not appeared in a prior session
     // TODO: surface payjoin downgrade to the user when the fallback tx is broadcast instead of the proposal
+
+    // reject inputs that were already offered to a receiver in a prior session
+    let input_outpoints: Vec<bitcoin::OutPoint> =
+        signed_psbt.unsigned_tx.input.iter().map(|i| i.previous_output).collect();
+    persister.check_no_inputs_seen_before(&input_outpoints)?;
 
     // SenderBuilder::new (v2) panics on non-OHTTP URIs; '#' in the endpoint signals v2
     if !endpoint.contains('#') {
@@ -390,10 +456,17 @@ pub(crate) fn build_sender(
         })
         .unwrap_or(BdkFeeRate::BROADCAST_MIN);
 
-    let sender = SenderBuilder::new(signed_psbt, pj_uri)
+    let send_session = SenderBuilder::new(signed_psbt, pj_uri)
         .always_disable_output_substitution()
         .build_recommended(fee_rate)
-        .map_err(|e| eyre::eyre!("failed to build payjoin sender: {e:?}"))?
+        .map_err(|e| eyre::eyre!("failed to build payjoin sender: {e:?}"))?;
+
+    // record after sender construction so a build failure does not burn inputs,
+    // but before .save() so a save failure never creates a session with
+    // unrecorded inputs; burned inputs on a save failure are harmless
+    persister.record_offered_inputs(&input_outpoints)?;
+
+    let sender = send_session
         .save(persister)
         .map_err(|e| eyre::eyre!("failed to persist payjoin session: {e:?}"))?;
 
@@ -960,12 +1033,17 @@ mod tests {
     use super::*;
     use crate::{database::wallet_data::test_support, wallet::metadata::WalletId};
     use bitcoin::{
-        ScriptBuf, Transaction, TxOut, psbt::Output as PsbtOutput, transaction::Version,
+        ScriptBuf, Transaction, TxOut, hashes::Hash as _, psbt::Output as PsbtOutput,
+        transaction::Version,
     };
 
     fn new_test_persister() -> (PayjoinSessionPersister, WalletDataDb, tempfile::TempDir) {
         let (db, tmp) = test_support::new_test_wallet_data_db(WalletId::preview_new_random());
         (PayjoinSessionPersister::new(db.clone()), db, tmp)
+    }
+
+    fn test_outpoint(txid_byte: u8, vout: u32) -> bitcoin::OutPoint {
+        bitcoin::OutPoint { txid: bitcoin::Txid::from_byte_array([txid_byte; 32]), vout }
     }
 
     fn test_fallback_tx() -> BdkTransaction {
@@ -1430,5 +1508,42 @@ mod tests {
             db.get_payjoin_sender_session().unwrap().is_some(),
             "record must be retained when broadcast outcome is unknown"
         );
+    }
+
+    #[test]
+    fn inputs_offered_check_passes_for_fresh_inputs() {
+        let (persister, _db, _tmp) = new_test_persister();
+        let inputs = vec![test_outpoint(0xaa, 0), test_outpoint(0xbb, 1)];
+
+        let result = persister.check_no_inputs_seen_before(&inputs);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn inputs_offered_check_rejects_previously_seen_input() {
+        let (persister, _db, _tmp) = new_test_persister();
+        let inputs = vec![test_outpoint(0xaa, 0), test_outpoint(0xbb, 1)];
+
+        persister.record_offered_inputs(&inputs).expect("record succeeds");
+
+        let fresh = vec![test_outpoint(0xcc, 0)];
+        assert!(persister.check_no_inputs_seen_before(&fresh).is_ok());
+
+        let reused = vec![test_outpoint(0xcc, 0), test_outpoint(0xaa, 0)];
+        assert!(persister.check_no_inputs_seen_before(&reused).is_err());
+    }
+
+    #[test]
+    fn record_offered_inputs_persists_across_sessions() {
+        let (persister, db, _tmp) = new_test_persister();
+        let inputs = vec![test_outpoint(0xdd, 2)];
+
+        persister.record_offered_inputs(&inputs).expect("record succeeds");
+
+        let new_persister = PayjoinSessionPersister::new(db);
+        assert!(new_persister.check_no_inputs_seen_before(&inputs).is_err());
+
+        let fresh = vec![test_outpoint(0xee, 0)];
+        assert!(new_persister.check_no_inputs_seen_before(&fresh).is_ok());
     }
 }
