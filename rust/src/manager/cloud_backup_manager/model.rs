@@ -1305,6 +1305,10 @@ impl CloudBackupReducerState {
     }
 
     fn resolve_other_backups_operation(&mut self, other_backups_operation: OtherBackupsOperation) {
+        if matches!(&other_backups_operation, OtherBackupsOperation::Deleted) {
+            self.configured.other_backups = CloudBackupOtherBackupsState::NotChecked;
+        }
+
         if let Some(state) = self.loaded_detail_mut() {
             state.other_backups_operation = other_backups_operation;
         }
@@ -1776,10 +1780,10 @@ pub(crate) mod test_support {
 mod tests {
     use super::*;
     use crate::manager::cloud_backup_manager::{
-        CloudBackupEnableContext, CloudBackupOtherBackupsState, CloudBackupPasskeyHint,
-        CloudBackupProgress, CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
-        CloudBackupVerificationReason, CloudBackupVerificationSource, CloudBackupWalletItem,
-        DeepVerificationReport,
+        CloudBackupEnableContext, CloudBackupOtherBackupsState, CloudBackupOtherBackupsSummary,
+        CloudBackupPasskeyHint, CloudBackupProgress, CloudBackupVerificationMetadata,
+        CloudBackupVerificationPresentation, CloudBackupVerificationReason,
+        CloudBackupVerificationSource, CloudBackupWalletItem, DeepVerificationReport,
     };
 
     fn operation_event(
@@ -2058,6 +2062,34 @@ mod tests {
         };
         assert_eq!(retained.cloud_only_operation, CloudOnlyOperation::Idle);
         assert_eq!(retained.other_backups_operation, OtherBackupsOperation::Deleted);
+    }
+
+    #[test]
+    fn deleted_other_backups_invalidates_loaded_inventory() {
+        let mut model = configured_model_with_cloud_only(Vec::new());
+        model
+            .apply_event(CloudBackupStateReducerEvent::OtherBackupsStateResolved(
+                CloudBackupOtherBackupsState::Loaded {
+                    summary: CloudBackupOtherBackupsSummary {
+                        namespace_count: 1,
+                        wallet_count: 2,
+                        passkey_hints: Vec::new(),
+                    },
+                },
+            ))
+            .unwrap();
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
+                OtherBackupsOperation::Deleted,
+            ))
+            .unwrap();
+
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+
+        assert_eq!(configured.other_backups, CloudBackupOtherBackupsState::NotChecked);
     }
 
     #[test]
