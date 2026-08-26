@@ -483,6 +483,10 @@ enum WalletManagerPreview {
         }
     }
 
+    func cancelPayjoin() async throws {
+        try await withRustAsync { try await $0.cancelPayjoin() }
+    }
+
     func finalizePsbt(_ psbt: Psbt) async throws -> BitcoinTransaction {
         try await withRustAsync { try await $0.finalizePsbt(psbt: psbt) }
     }

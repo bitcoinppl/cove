@@ -827,7 +827,7 @@ impl RustWalletManager {
     #[uniffi::method]
     pub async fn cancel_payjoin(&self) -> Result<(), Error> {
         call!(self.actor.cancel_payjoin()).await.unwrap()?;
-        self.force_wallet_scan().await;
+        let _ = self.force_wallet_scan().await;
         Ok(())
     }
 

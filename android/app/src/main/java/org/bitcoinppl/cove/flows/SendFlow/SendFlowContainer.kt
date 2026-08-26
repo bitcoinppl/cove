@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -462,6 +463,7 @@ private fun SendFlowRouteToScreen(
             var finalizedTransaction by remember { mutableStateOf<BitcoinTransaction?>(null) }
             var showSuccessAlert by remember { mutableStateOf(false) }
             var showErrorAlert by remember { mutableStateOf(false) }
+            var payjoinInitiated by rememberSaveable { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
 
             // lock on appear for hot wallets
@@ -473,10 +475,10 @@ private fun SendFlowRouteToScreen(
             }
 
             // restore or transition to waiting UI from manager-owned deadline;
-            // survives Compose recreation on config changes like rotation
+            // payjoinInitiated survives config changes so only this screen's session matches
             LaunchedEffect(walletManager.payjoinDeadlineSecs) {
                 val deadline = walletManager.payjoinDeadlineSecs
-                if (deadline != null) {
+                if (deadline != null && payjoinInitiated) {
                     sendState = SendState.PayjoinWaiting(deadline)
                 }
             }
@@ -587,7 +589,12 @@ private fun SendFlowRouteToScreen(
                                     walletManager.broadcastTransaction(txnToBroadcast)
                                 }
                                 SendConfirmationInput.Unsigned -> {
+                                    if (payjoinEndpoint != null) {
+                                        payjoinInitiated = true
+                                    }
+
                                     walletManager.initiatePayment(details.psbt(), payjoinEndpoint)
+
                                     // for payjoin, stay in Sending — PayjoinTxBroadcast reconcile triggers success UI
                                     if (payjoinEndpoint != null) return@launch
                                 }

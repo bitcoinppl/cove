@@ -175,6 +175,7 @@ private struct SwipeToSendHandle: View {
                     .onChanged(dragChanged)
                     .onEnded(dragEnded)
             )
+            .allowsHitTesting(sendState == .idle)
     }
 
     private func dragChanged(_ value: DragGesture.Value) {

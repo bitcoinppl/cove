@@ -84,6 +84,7 @@ struct SendFlowConfirmScreen: View {
                 }
             }
             .onDisappear(perform: handleDisappear)
+            .onAppear(perform: restorePayjoinWaitingState)
             .onChange(of: manager.payjoinDeadlineSecs, payjoinPollingStarted)
             .onChange(of: manager.payjoinTxBroadcast, payjoinBroadcastChanged)
             .onChange(of: manager.sendFlowErrorAlert, sendFlowErrorChanged)
@@ -108,8 +109,18 @@ struct SendFlowConfirmScreen: View {
         if sinceLocked < 5 { auth.lockState = .unlocked }
     }
 
+    private func restorePayjoinWaitingState() {
+        guard
+            let deadline = manager.payjoinDeadlineSecs,
+            case .sending = sendState
+        else { return }
+
+        sendState = .payjoinWaiting(deadlineSecs: deadline)
+    }
+
     private func payjoinPollingStarted(_: UInt64?, _ deadline: UInt64?) {
         guard let deadline, case .sending = sendState else { return }
+
         sendState = .payjoinWaiting(deadlineSecs: deadline)
     }
 
@@ -128,7 +139,7 @@ struct SendFlowConfirmScreen: View {
     private func cancelPayjoin() {
         sendState = .sending
         Task {
-            try? await manager.rust.cancelPayjoin()
+            try? await manager.cancelPayjoin()
         }
     }
 

@@ -477,9 +477,12 @@ impl WalletActor {
     }
 
     pub async fn cancel_payjoin(&mut self) -> ActorResult<Result<(), Error>> {
-        if let Some(actor) = self.payjoin_actor.take() {
-            send!(actor.cancel_and_fallback());
+        if let Some(actor) = self.payjoin_actor.take()
+            && let Ok(Some(fallback_tx)) = call!(actor.cancel_and_fallback()).await
+        {
+            send!(self.addr.handle_payjoin_fallback(fallback_tx));
         }
+
         Produces::ok(Ok(()))
     }
 
