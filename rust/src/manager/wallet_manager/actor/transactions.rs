@@ -25,13 +25,14 @@ use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
 use crate::{
+    database::Database,
     manager::wallet_manager::{
         Error, SendFlowErrorAlert, WalletManagerBuildTxError, WalletManagerError,
         WalletManagerFeesError, WalletManagerReconcileMessage,
         actor::{SpendPolicy, WalletActor, current_wallet_unspent_outpoints_for_txid},
         payjoin::{PayjoinActor, PayjoinSessionPersister, build_sender},
     },
-    node::client::NodeClient,
+    node::{Node, client::NodeClient},
     transaction::{FeeRate, Transaction, TransactionDetails, TransactionDetailsPresentation, TxId},
     wallet::Address,
     wallet_secret::WalletSecretExt as _,
@@ -769,6 +770,32 @@ impl WalletActor {
         self.start_payjoin_terminal_broadcast(tx);
     }
 
+    /// Schedule best-effort broadcast of the exact committed Payjoin transaction
+    pub(crate) fn schedule_payjoin_terminal_broadcast(&mut self, tx: BdkTransaction) {
+        let node = Database::global().global_config.selected_node();
+        let node_client = self.node_client().ok().cloned();
+
+        cove_tokio::task::spawn(async move {
+            if let Err(error) = broadcast_payjoin_terminal_with_client(node_client, node, tx).await
+            {
+                warn!(
+                    "failed to broadcast committed Payjoin transaction during destructive wallet shutdown; the durable terminal marker remains for retry: {error}"
+                );
+            }
+        });
+    }
+
+    /// Broadcast the exact committed Payjoin transaction
+    pub(crate) async fn broadcast_payjoin_terminal_for_shutdown(
+        &mut self,
+        tx: BdkTransaction,
+    ) -> Result<(), Error> {
+        let node = Database::global().global_config.selected_node();
+        let node_client = self.node_client().ok().cloned();
+
+        broadcast_payjoin_terminal_with_client(node_client, node, tx).await
+    }
+
     fn start_payjoin_proposal_broadcast(&mut self, proposal_tx: BdkTransaction) {
         let persister = PayjoinSessionPersister::new(self.db.clone());
         if let Err(error) = persister.set_pending_proposal(&proposal_tx) {
@@ -1123,6 +1150,32 @@ impl WalletActor {
             .map(|(_, block_height)| block_height as u32)
             .unwrap_or_else(|| self.wallet.bdk.local_chain().tip().height())
     }
+}
+
+async fn broadcast_payjoin_terminal_with_client(
+    node_client: Option<NodeClient>,
+    node: Node,
+    tx: BdkTransaction,
+) -> Result<(), Error> {
+    let node_client = match node_client {
+        Some(node_client) => node_client,
+        None => super::node::checked_node_client(&node).await?,
+    };
+    let txid = tx.compute_txid();
+
+    if let Err(error) = node_client.broadcast_transaction(tx).await {
+        let known_to_node = node_client
+            .get_transaction(txid)
+            .await
+            .is_ok_and(|found| found.is_some_and(|transaction| transaction.compute_txid() == txid));
+        if !known_to_node {
+            return Err(Error::BroadcastError(format!(
+                "failed to broadcast committed Payjoin transaction during wallet shutdown: {error:?}"
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 async fn broadcast_transaction_with_connection(

@@ -171,7 +171,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
                 tapSignerSetupRetryContinueCmd(preview: true)
             ),
             screenName: "tap-signer-setup-retry",
-            expectedText: "retry"
+            expectedText: "continue setup"
         )
     }
 

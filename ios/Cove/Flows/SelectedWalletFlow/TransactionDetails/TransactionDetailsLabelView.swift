@@ -18,10 +18,6 @@ struct TransactionDetailsLabelView: View {
 
     @FocusState private var isFocused: Bool
 
-    var labelManager: LabelManager {
-        manager.rust.labelManager()
-    }
-
     var txId: TxId {
         details.txId()
     }
@@ -44,7 +40,7 @@ struct TransactionDetailsLabelView: View {
 
     /// get updated details and full transaction list that has the new label
     func updateDetailsAndTxns() {
-        Task { await manager.rust.getTransactions() }
+        Task { try? await manager.refreshTransactions() }
 
         Task {
             do {
@@ -54,7 +50,7 @@ struct TransactionDetailsLabelView: View {
                     self.details = details
                 }
             } catch {
-                await manager.rust.getTransactions()
+                try? await manager.refreshTransactions()
                 Log.error("Error getting updated label: \(error)")
             }
         }
@@ -62,7 +58,7 @@ struct TransactionDetailsLabelView: View {
 
     func saveLabel() {
         do {
-            try labelManager.insertOrUpdateLabelsForTxn(
+            try manager.labelManager().insertOrUpdateLabelsForTxn(
                 details: details,
                 label: editingLabel,
                 origin: manager.walletMetadata.origin
@@ -81,7 +77,7 @@ struct TransactionDetailsLabelView: View {
 
     func deleteLabel() {
         do {
-            try labelManager.deleteLabelsForTxn(txId: txId)
+            try manager.labelManager().deleteLabelsForTxn(txId: txId)
             isEditing = false
             editingLabel = ""
 

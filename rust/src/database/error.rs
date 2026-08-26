@@ -37,6 +37,9 @@ pub enum DatabaseError {
     Wallets(#[from] WalletTableError),
 
     #[error(transparent)]
+    WalletLifecycle(#[from] crate::wallet_lifecycle::WalletLifecycleFailure),
+
+    #[error(transparent)]
     GlobalFlag(#[from] GlobalFlagTableError),
 
     #[error(transparent)]

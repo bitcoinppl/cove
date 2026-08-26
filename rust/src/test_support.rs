@@ -80,6 +80,19 @@ impl KeychainAccess for MockKeychain {
 
         self.entries.lock().remove(&key).is_some()
     }
+
+    fn delete_all_wallet_items(&self) -> Result<(), KeychainError> {
+        let suffixes = [
+            "::wallet_mnemonic",
+            "::wallet_mnemonic_encryption_key_and_nonce",
+            "::wallet_xpub",
+            "::wallet_public_descriptor",
+            "::tap_signer_backup",
+            "::wallet_tap_signer_encryption_key_and_nonce_key_name",
+        ];
+        self.entries.lock().retain(|key, _| !suffixes.iter().any(|suffix| key.ends_with(suffix)));
+        Ok(())
+    }
 }
 
 /// The single [`MockKeychain`] instance behind the process-global keychain

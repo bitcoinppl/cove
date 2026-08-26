@@ -1,5 +1,5 @@
 use cove_cspp::backup_data::wallet_record_id;
-use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
+use cove_device::cloud_storage::CloudStorageClient;
 use cove_device::keychain::Keychain;
 use futures::stream::{self, StreamExt as _};
 use tracing::warn;
@@ -19,15 +19,12 @@ impl RustCloudBackupManager {
         wallet_record_ids: &[String],
         remote_wallet_truth: RemoteWalletTruth,
     ) -> Result<CloudBackupDetail, CloudBackupError> {
-        let cloud = CloudStorage::global_explicit_client();
-        let other_backups = self.other_backup_state(&cloud).await;
-
         Ok(super::cloud_inventory::CloudWalletInventory::load_with_remote_truth(
             wallet_record_ids,
             remote_wallet_truth,
         )
         .await?
-        .build_detail(other_backups))
+        .build_detail())
     }
 
     pub(crate) async fn load_remote_wallet_truth(

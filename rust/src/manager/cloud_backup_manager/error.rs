@@ -25,6 +25,8 @@ const CLOUD_BACKUP_AUTHORIZATION_MESSAGE: &str =
     "Cove couldn't access your cloud backup. Reconnect your cloud account, then try again.";
 const CLOUD_BACKUP_OFFLINE_MESSAGE: &str =
     "Cove couldn't reach your cloud backup. Reconnect to the internet, then try again.";
+const CLOUD_BACKUP_SYNC_PENDING_MESSAGE: &str =
+    "Your cloud provider is still loading Cove backup files. Keep Cove open, then try again.";
 const CLOUD_BACKUP_UNAVAILABLE_MESSAGE: &str =
     "Your cloud backup is temporarily unavailable. Please try again.";
 const CLOUD_BACKUP_NOT_FOUND_MESSAGE: &str =
@@ -209,7 +211,12 @@ impl CloudBackupInternalError {
 }
 
 pub(crate) fn is_connectivity_related_issue(issue: impl Into<CloudStorageIssue>) -> bool {
-    matches!(issue.into(), CloudStorageIssue::Offline | CloudStorageIssue::Unavailable)
+    matches!(
+        issue.into(),
+        CloudStorageIssue::Offline
+            | CloudStorageIssue::SyncPending
+            | CloudStorageIssue::Unavailable
+    )
 }
 
 pub(crate) fn is_provider_wide_interruption(issue: impl Into<CloudStorageIssue>) -> bool {
@@ -217,6 +224,7 @@ pub(crate) fn is_provider_wide_interruption(issue: impl Into<CloudStorageIssue>)
         issue.into(),
         CloudStorageIssue::AuthorizationRequired
             | CloudStorageIssue::Offline
+            | CloudStorageIssue::SyncPending
             | CloudStorageIssue::Unavailable
     )
 }
@@ -271,6 +279,7 @@ impl From<&CloudStorageError> for CloudStorageIssue {
         match error {
             CloudStorageError::AuthorizationRequired(_) => Self::AuthorizationRequired,
             CloudStorageError::Offline(_) => Self::Offline,
+            CloudStorageError::SyncPending(_) => Self::SyncPending,
             CloudStorageError::NotAvailable(_) => Self::Unavailable,
             CloudStorageError::NotFound(_) => Self::NotFound,
             CloudStorageError::QuotaExceeded => Self::QuotaExceeded,
@@ -299,6 +308,9 @@ fn offline_message_for_step(step: BlockingCloudStep) -> &'static str {
         B::DeleteCloudWallet => {
             "Reconnect to the internet, then try deleting this cloud wallet again"
         }
+        B::DeleteUndecryptableWalletBackups => {
+            "Reconnect to the internet, then try deleting the inaccessible wallet backups again"
+        }
         B::RecoverOtherBackups => {
             "Reconnect to the internet, then try recovering the other cloud backups again"
         }
@@ -325,6 +337,7 @@ pub(crate) enum BlockingCloudStep {
     FetchCloudOnly,
     RestoreCloudWallet,
     DeleteCloudWallet,
+    DeleteUndecryptableWalletBackups,
     RecoverOtherBackups,
     DeleteOtherBackups,
     Disable,
@@ -467,6 +480,7 @@ fn cloud_storage_reader_message(error: &CloudStorageError) -> &'static str {
     match CloudStorageIssue::from(error) {
         CloudStorageIssue::AuthorizationRequired => CLOUD_BACKUP_AUTHORIZATION_MESSAGE,
         CloudStorageIssue::Offline => CLOUD_BACKUP_OFFLINE_MESSAGE,
+        CloudStorageIssue::SyncPending => CLOUD_BACKUP_SYNC_PENDING_MESSAGE,
         CloudStorageIssue::Unavailable => CLOUD_BACKUP_UNAVAILABLE_MESSAGE,
         CloudStorageIssue::NotFound => CLOUD_BACKUP_NOT_FOUND_MESSAGE,
         CloudStorageIssue::QuotaExceeded => CLOUD_BACKUP_QUOTA_MESSAGE,

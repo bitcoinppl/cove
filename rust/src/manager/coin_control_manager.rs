@@ -20,6 +20,7 @@ use crate::{
     label_manager::{LabelManager, LabelManagerError},
     manager::deferred_sender,
     wallet::metadata::WalletMetadata,
+    wallet_lifecycle::WalletManagerLifecycleToken,
 };
 use tracing::trace;
 
@@ -43,6 +44,7 @@ pub trait CoinControlManagerReconciler: Send + Sync + std::fmt::Debug + 'static 
 pub struct RustCoinControlManager {
     pub state: Arc<Mutex<State>>,
     pub reconciler: ReconcileChannel<Message>,
+    lifecycle: Option<WalletManagerLifecycleToken>,
 }
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum CoinControlManagerReconcileMessage {
@@ -91,7 +93,8 @@ impl RustCoinControlManager {
     }
 
     #[uniffi::method]
-    pub async fn reload_labels(&self) {
+    pub async fn reload_labels(&self) -> Result<(), LabelManagerError> {
+        self.ensure_active()?;
         let (utxos, selected_utxos, total_value, lock_state_load_failed) = {
             let mut state = self.state.lock();
 
@@ -108,7 +111,7 @@ impl RustCoinControlManager {
                 && !selection_changed
                 && old_lock_state_load_failed == lock_state_load_failed
             {
-                return;
+                return Ok(());
             }
 
             let selected_utxos = state.selected_utxos.clone();
@@ -124,6 +127,8 @@ impl RustCoinControlManager {
         self.reconciler
             .send_async(Message::UpdateLockStateLoadFailed(lock_state_load_failed))
             .await;
+
+        Ok(())
     }
 
     #[uniffi::method]
@@ -137,6 +142,7 @@ impl RustCoinControlManager {
         outpoint: Arc<OutPoint>,
         spendable: bool,
     ) -> Result<(), LabelManagerError> {
+        self.ensure_active()?;
         let wallet_id = self.state.lock().wallet_id.clone();
         let outpoint = bitcoin::OutPoint::from(outpoint.as_ref());
 
@@ -144,7 +150,7 @@ impl RustCoinControlManager {
             .map_err_str(LabelManagerError::SaveOutputLabels)?
             .set_output_spendability_for_outpoints(vec![outpoint], spendable)?;
 
-        self.reload_labels().await;
+        self.reload_labels().await?;
 
         Ok(())
     }
@@ -235,13 +241,29 @@ impl RustCoinControlManager {
 }
 
 impl RustCoinControlManager {
-    pub fn new(metadata: WalletMetadata, local_outputs: Vec<LocalOutput>) -> Self {
+    pub(crate) fn new(
+        metadata: WalletMetadata,
+        local_outputs: Vec<LocalOutput>,
+        lifecycle: WalletManagerLifecycleToken,
+    ) -> Self {
         let mut state = State::new(metadata, local_outputs);
 
         state.sort_utxos(CoinControlListSort::Date(ListSortDirection::Descending));
         state.load_utxo_labels();
 
-        Self { state: Arc::new(Mutex::new(state)), reconciler: ReconcileChannel::new(10) }
+        Self {
+            state: Arc::new(Mutex::new(state)),
+            reconciler: ReconcileChannel::new(10),
+            lifecycle: Some(lifecycle),
+        }
+    }
+
+    fn ensure_active(&self) -> Result<(), LabelManagerError> {
+        if self.lifecycle.as_ref().is_none_or(|lifecycle| lifecycle.ensure_active().is_ok()) {
+            return Ok(());
+        }
+
+        Err(LabelManagerError::ManagerClosed)
     }
 
     pub fn total_value_of_utxos(&self, selected_utxo_ids: &[Arc<OutPoint>]) -> Amount {
@@ -585,7 +607,7 @@ mod tests {
             )
             .expect("failed to lock searched output");
 
-        manager.reload_labels().await;
+        manager.reload_labels().await.expect("labels reload");
 
         let message = manager.reconciler.receiver().recv_async().await.expect("reconcile message");
         let SingleOrMany::Single(Message::UpdateUtxos(utxos)) = message else {
@@ -712,6 +734,10 @@ impl RustCoinControlManager {
     #[uniffi::constructor(default(output_count = 20, change_count = 4))]
     pub fn preview_new(output_count: u8, change_count: u8) -> Self {
         let state = State::preview_new(output_count, change_count);
-        Self { state: Arc::new(Mutex::new(state)), reconciler: ReconcileChannel::new(10) }
+        Self {
+            state: Arc::new(Mutex::new(state)),
+            reconciler: ReconcileChannel::new(10),
+            lifecycle: None,
+        }
     }
 }

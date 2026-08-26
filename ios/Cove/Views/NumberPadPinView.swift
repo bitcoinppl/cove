@@ -11,7 +11,7 @@ struct NumberPadPinView: View {
     var title: String
     @Binding var lockState: LockState
 
-    let isPinCorrect: (String) -> Bool
+    let isPinCorrect: (String) async -> Bool
     var showPin: Bool
     var pinLength: Int
 
@@ -30,7 +30,7 @@ struct NumberPadPinView: View {
     public init(
         title: String = "Enter Pin",
         lockState: Binding<LockState> = .constant(.unlocked),
-        isPinCorrect: @escaping (String) -> Bool,
+        isPinCorrect: @escaping (String) async -> Bool,
         showPin: Bool = false,
         pinLength: Int = 6,
         backAction: (() -> Void)? = nil,
@@ -170,8 +170,9 @@ private struct PinNumberPad: View {
     let pinLength: Int
     let backEnabled: Bool
     let backAction: () -> Void
-    let isPinCorrect: (String) -> Bool
+    let isPinCorrect: (String) async -> Bool
     let onUnlock: (String) -> Void
+    @State private var isSubmitting = false
 
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(), count: 3)) {
@@ -183,6 +184,7 @@ private struct PinNumberPad: View {
             PinNumberButton(number: 0, pin: $pin, pinLength: pinLength)
             PinDeleteButton(pin: $pin)
         }
+        .disabled(isSubmitting)
         .padding(.vertical)
         .onChange(of: pin) { _, newValue in
             validate(newValue)
@@ -190,17 +192,23 @@ private struct PinNumberPad: View {
     }
 
     private func validate(_ newValue: String) {
-        guard newValue.count == pinLength else { return }
+        guard newValue.count == pinLength, !isSubmitting else { return }
+        isSubmitting = true
 
-        if isPinCorrect(newValue) {
-            withAnimation(.snappy, completionCriteria: .logicallyComplete) {
-                lockState = .unlocked
-            } completion: {
-                onUnlock(newValue)
+        Task {
+            if await isPinCorrect(newValue) {
+                withAnimation(.snappy, completionCriteria: .logicallyComplete) {
+                    lockState = .unlocked
+                } completion: {
+                    onUnlock(newValue)
+                    pin = ""
+                }
+            } else {
+                animateField.toggle()
                 pin = ""
             }
-        } else {
-            animateField.toggle()
+
+            isSubmitting = false
         }
     }
 }

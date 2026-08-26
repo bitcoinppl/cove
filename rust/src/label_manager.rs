@@ -9,6 +9,7 @@ use crate::{
     multi_format::Bip329Labels,
     transaction::{TransactionDetails, TransactionDirection},
     wallet::{Address, metadata::WalletId},
+    wallet_lifecycle::WalletManagerLifecycleToken,
 };
 
 use ahash::AHashMap as HashMap;
@@ -21,6 +22,7 @@ use cove_types::{TxId, confirm::QrDensity};
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct LabelManager {
     db: WalletDataDb,
+    lifecycle: Option<WalletManagerLifecycleToken>,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -58,6 +60,9 @@ pub enum LabelManagerError {
 
     #[error("BIP329 labels can only be imported into the selected wallet")]
     WalletNotSelected,
+
+    #[error("wallet manager is closed")]
+    ManagerClosed,
 }
 
 pub type Error = LabelManagerError;
@@ -87,13 +92,6 @@ impl AddressArgs {
 
 #[uniffi::export]
 impl LabelManager {
-    #[uniffi::constructor]
-    pub fn new(id: WalletId) -> Self {
-        let db = WalletDataDb::new_or_existing(id)
-            .expect("failed to open wallet database for label manager");
-        Self { db }
-    }
-
     pub fn export_default_file_name(&self, name: String) -> String {
         let name = name
             .replace(' ', "_")
@@ -103,15 +101,20 @@ impl LabelManager {
         format!("{name}-bip329-labels")
     }
 
-    pub fn has_labels(&self) -> bool {
-        self.db.labels.has_labels().unwrap_or(false)
+    pub fn has_labels(&self) -> Result<bool> {
+        self.ensure_active()?;
+        self.db.labels.has_labels().map_err_str(LabelManagerError::Get)
     }
 
-    pub fn transaction_label(&self, tx_id: Arc<TxId>) -> Option<String> {
-        let label = self.db.labels.get_txn_label_record(tx_id.0).unwrap_or(None)?;
+    pub fn transaction_label(&self, tx_id: Arc<TxId>) -> Result<Option<String>> {
+        self.ensure_active()?;
+        let Some(label) =
+            self.db.labels.get_txn_label_record(tx_id.0).map_err_str(LabelManagerError::Get)?
+        else {
+            return Ok(None);
+        };
 
-        let label_str = label.item.label.as_ref()?;
-        Some(label_str.to_string())
+        Ok(label.item.label)
     }
 
     pub fn insert_or_update_labels_for_txn(
@@ -120,6 +123,7 @@ impl LabelManager {
         label: String,
         origin: Option<String>,
     ) -> Result<()> {
+        self.ensure_active()?;
         let label = label.trim();
 
         // if the label is empty, delete the label
@@ -191,6 +195,7 @@ impl LabelManager {
     }
 
     pub fn delete_labels_for_txn(&self, tx_id: Arc<TxId>) -> Result<(), LabelManagerError> {
+        self.ensure_active()?;
         if self.delete_labels_for_txn_without_cloud_backup_dirty(tx_id)? {
             self.mark_cloud_backup_dirty();
         }
@@ -200,6 +205,7 @@ impl LabelManager {
 
     #[uniffi::method(name = "importLabels")]
     pub fn _import_labels(&self, labels: Arc<Bip329Labels>) -> Result<(), LabelManagerError> {
+        self.ensure_active()?;
         let labels = Arc::unwrap_or_clone(labels);
         self.ensure_selected_wallet()?;
 
@@ -207,10 +213,12 @@ impl LabelManager {
     }
 
     pub fn import(&self, jsonl: &str) -> Result<(), LabelManagerError> {
+        self.ensure_active()?;
         self.save_imported_labels(parse_labels(jsonl)?, true)
     }
 
     pub async fn export(&self) -> Result<String, LabelManagerError> {
+        self.ensure_active()?;
         let db = self.db.clone();
 
         cove_tokio::task::spawn_blocking(move || {
@@ -263,14 +271,27 @@ impl LabelManager {
 
 impl LabelManager {
     pub(crate) fn new_with_db(db: WalletDataDb) -> Self {
-        Self { db }
+        Self { db, lifecycle: None }
     }
 
     pub fn try_new(
         id: WalletId,
     ) -> std::result::Result<Self, crate::database::wallet_data::WalletDataError> {
         let db = WalletDataDb::new_or_existing(id)?;
-        Ok(Self { db })
+        Ok(Self { db, lifecycle: None })
+    }
+
+    pub(crate) fn with_lifecycle(mut self, lifecycle: WalletManagerLifecycleToken) -> Self {
+        self.lifecycle = Some(lifecycle);
+        self
+    }
+
+    fn ensure_active(&self) -> Result<()> {
+        if self.lifecycle.as_ref().is_none_or(|lifecycle| lifecycle.ensure_active().is_ok()) {
+            return Ok(());
+        }
+
+        Err(LabelManagerError::ManagerClosed)
     }
 
     pub(crate) fn set_output_spendability_for_outpoints(
@@ -278,6 +299,7 @@ impl LabelManager {
         outpoints: Vec<OutPoint>,
         spendable: bool,
     ) -> Result<()> {
+        self.ensure_active()?;
         self.db
             .labels
             .set_output_spendability_for_outpoints(outpoints, spendable)
@@ -291,6 +313,7 @@ impl LabelManager {
         &self,
         jsonl: &str,
     ) -> Result<(), LabelManagerError> {
+        self.ensure_active()?;
         self.save_imported_labels(parse_labels(jsonl)?, false)
     }
 
@@ -641,7 +664,7 @@ mod tests {
     fn test_manager() -> (LabelManager, tempfile::TempDir) {
         let (db, tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
 
-        (LabelManager { db }, tmp)
+        (LabelManager { db, lifecycle: None }, tmp)
     }
 
     fn received_details_with_output(vout: u32) -> TransactionDetails {

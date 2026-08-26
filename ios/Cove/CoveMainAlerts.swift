@@ -118,8 +118,8 @@ private struct WalletAlertActions: View {
         case .confirmWatchOnly:
             ConfirmWatchOnlyActions(app: app)
 
-        case let .walletDatabaseCorrupted(walletId, _):
-            CorruptedWalletActions(walletId: walletId, app: app)
+        case let .walletDatabaseCorrupted(walletId, error):
+            CorruptedWalletActions(walletId: walletId, databaseError: error, app: app)
 
         default:
             EmptyView()
@@ -172,12 +172,13 @@ private struct HotWalletKeyMissingActions: View {
     }
 
     private func useAsHardwareWallet() {
-        do {
-            try app.ensureWalletManager(id: walletId).rust.setWalletType(walletType: .cold)
-            app.alertState = .none
-        } catch {
-            Log.error("Failed to set wallet type to cold: \(error)")
-            DispatchQueue.main.async {
+        Task { @MainActor in
+            do {
+                let manager = try await app.ensureWalletManagerLoaded(id: walletId)
+                try await manager.setWalletType(.cold)
+                app.alertState = .none
+            } catch {
+                Log.error("Failed to set wallet type to cold: \(error)")
                 app.alertState = .init(
                     .general(
                         title: "Error",
@@ -201,17 +202,32 @@ private struct ConfirmWatchOnlyActions: View {
 
 private struct CorruptedWalletActions: View {
     let walletId: WalletId
+    let databaseError: String
     let app: AppManager
 
+    private var retry: CorruptedWalletDeletionRetry? {
+        app.corruptedWalletDeletionRetry.flatMap { retry in
+            retry.walletId == walletId ? retry : nil
+        }
+    }
+
     var body: some View {
-        Button("Delete Wallet", role: .destructive) {
+        Button(retry == nil ? "Delete Wallet" : "Retry", role: .destructive) {
             app.alertState = .none
-            app.rust.deleteCorruptedWallet(id: walletId)
+            if let retry {
+                app.retryCorruptedWalletDeletion(retry)
+            } else {
+                app.deleteCorruptedWallet(id: walletId, databaseError: databaseError)
+            }
         }
 
         Button("Cancel", role: .cancel) {
-            app.alertState = .none
-            app.trySelectLatestOrNewWallet()
+            if let retry {
+                app.cancelCorruptedWalletDeletion(retry)
+            } else {
+                app.alertState = .none
+                app.trySelectLatestOrNewWallet()
+            }
         }
     }
 }

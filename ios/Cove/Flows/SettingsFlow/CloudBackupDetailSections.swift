@@ -26,7 +26,11 @@ struct DetailFormContent: View {
                 presentationCoordinator: presentationCoordinator
             )
         }
-        switch detail.otherBackups {
+        switch manager.otherBackupsState {
+        case .notChecked:
+            OtherBackupsNotCheckedSection(manager: manager)
+        case .checking:
+            OtherBackupsCheckingSection()
         case let .loaded(summary):
             if summary.namespaceCount > 0 {
                 OtherBackupsSection(
@@ -35,8 +39,8 @@ struct DetailFormContent: View {
                     presentationCoordinator: presentationCoordinator
                 )
             }
-        case let .loadFailed(error):
-            OtherBackupsLoadFailedSection(error: error)
+        case let .loadFailed(reason):
+            OtherBackupsLoadFailedSection(reason: reason, manager: manager)
         }
     }
 
@@ -143,7 +147,9 @@ struct DisableCloudBackupSection: View {
                 return "Restore or delete wallets that are only in Cloud Backup before disabling."
             }
 
-            if case let .loaded(summary) = detail.otherBackups, summary.namespaceCount > 0 {
+            if case let .loaded(summary) = manager.otherBackupsState,
+               summary.namespaceCount > 0
+            {
                 return "Recover or delete other Cloud Backups before disabling."
             }
         }

@@ -132,7 +132,7 @@ private struct CloudOnlySectionContent: View {
                 wallets: wallets,
                 operatingRecordId: manager.cloudOnlyOperation.operatingRecordId,
                 isOperating: isOperating || manager.restoreAllState.isRunning
-                    || !manager.isDetailInventoryComplete,
+                    || !manager.isDetailInventoryReady,
                 presentationCoordinator: presentationCoordinator,
                 onRetryWallet: { item in
                     manager.dispatch(action: .restoreCloudWallet(item.recordId))

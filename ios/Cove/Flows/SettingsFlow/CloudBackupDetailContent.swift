@@ -2,12 +2,11 @@ import SwiftUI
 
 struct CloudBackupDetailForm: View {
     let manager: CloudBackupManager
-    let isVerifying: Bool
-    let hasVerificationResult: Bool
     let isCancelled: Bool
     let isPasskeyMissing: Bool
     let isUnsupportedPasskeyProvider: Bool
     let shouldShowLoadingState: Bool
+    let progressPresentation: CloudBackupDetailProgressPresentation
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
     let recreateConfirmationIsPresented: Binding<Bool>
     let reinitializeConfirmationIsPresented: Binding<Bool>
@@ -16,12 +15,11 @@ struct CloudBackupDetailForm: View {
         Form {
             CloudBackupDetailFormContent(
                 manager: manager,
-                isVerifying: isVerifying,
-                hasVerificationResult: hasVerificationResult,
                 isCancelled: isCancelled,
                 isPasskeyMissing: isPasskeyMissing,
                 isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
                 shouldShowLoadingState: shouldShowLoadingState,
+                progressPresentation: progressPresentation,
                 presentationCoordinator: presentationCoordinator,
                 recreateConfirmationIsPresented: recreateConfirmationIsPresented,
                 reinitializeConfirmationIsPresented: reinitializeConfirmationIsPresented
@@ -32,12 +30,11 @@ struct CloudBackupDetailForm: View {
 
 private struct CloudBackupDetailFormContent: View {
     let manager: CloudBackupManager
-    let isVerifying: Bool
-    let hasVerificationResult: Bool
     let isCancelled: Bool
     let isPasskeyMissing: Bool
     let isUnsupportedPasskeyProvider: Bool
     let shouldShowLoadingState: Bool
+    let progressPresentation: CloudBackupDetailProgressPresentation
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
     let recreateConfirmationIsPresented: Binding<Bool>
     let reinitializeConfirmationIsPresented: Binding<Bool>
@@ -60,14 +57,14 @@ private struct CloudBackupDetailFormContent: View {
 
             CloudBackupStatusSection(
                 manager: manager,
-                isVerifying: isVerifying,
-                hasVerificationResult: hasVerificationResult,
                 isCancelled: isCancelled,
                 shouldShowLoadingState: shouldShowLoadingState,
+                progressPresentation: progressPresentation,
                 presentationCoordinator: presentationCoordinator
             )
             VerificationSection(
                 manager: manager,
+                presentationCoordinator: presentationCoordinator,
                 recreateConfirmationIsPresented: recreateConfirmationIsPresented,
                 reinitializeConfirmationIsPresented: reinitializeConfirmationIsPresented
             )
@@ -84,18 +81,21 @@ private struct CloudBackupDetailFormContent: View {
 
 private struct CloudBackupStatusSection: View {
     let manager: CloudBackupManager
-    let isVerifying: Bool
-    let hasVerificationResult: Bool
     let isCancelled: Bool
     let shouldShowLoadingState: Bool
+    let progressPresentation: CloudBackupDetailProgressPresentation
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     @AccessibilityFocusState private var inventoryErrorFocused: Bool
 
     var body: some View {
         Group {
-            if manager.isDetailInventoryChecking, manager.detail != nil {
+            if progressPresentation == .inventoryInline {
                 CloudBackupInventoryCheckingSection()
+            }
+
+            if progressPresentation == .verificationInline {
+                CloudBackupVerificationInlineSection()
             }
 
             if let error = manager.detailError {
@@ -108,10 +108,9 @@ private struct CloudBackupStatusSection: View {
 
             CloudBackupDetailStatusContent(
                 manager: manager,
-                isVerifying: isVerifying,
-                hasVerificationResult: hasVerificationResult,
                 isCancelled: isCancelled,
                 shouldShowLoadingState: shouldShowLoadingState,
+                progressPresentation: progressPresentation,
                 presentationCoordinator: presentationCoordinator
             )
         }
@@ -128,7 +127,7 @@ private struct CloudBackupInventoryCheckingSection: View {
                 ProgressView()
                     .padding(.trailing, 8)
 
-                Text("Checking for more cloud backups...")
+                Text("Refreshing the wallet backup list...")
             }
             .foregroundStyle(.secondary)
             .accessibilityIdentifier("cloudBackup.inventory.checking")
@@ -167,15 +166,14 @@ private struct CloudBackupInventoryErrorSection: View {
 
 private struct CloudBackupDetailStatusContent: View {
     let manager: CloudBackupManager
-    let isVerifying: Bool
-    let hasVerificationResult: Bool
     let isCancelled: Bool
     let shouldShowLoadingState: Bool
+    let progressPresentation: CloudBackupDetailProgressPresentation
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     var body: some View {
-        if isVerifying, !hasVerificationResult {
-            CloudBackupVerifyingSection()
+        if progressPresentation == .verificationCard {
+            CloudBackupVerificationCard()
         } else if let detail = manager.detail, !isCancelled {
             DetailFormContent(
                 detail: detail,
@@ -189,7 +187,7 @@ private struct CloudBackupDetailStatusContent: View {
     }
 }
 
-private struct CloudBackupVerifyingSection: View {
+private struct CloudBackupVerificationCard: View {
     var body: some View {
         Section {
             VStack {
@@ -197,6 +195,19 @@ private struct CloudBackupVerifyingSection: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
+        }
+    }
+}
+
+private struct CloudBackupVerificationInlineSection: View {
+    var body: some View {
+        Section {
+            HStack {
+                ProgressView()
+                    .padding(.trailing, 8)
+
+                Text("Verifying backup integrity...")
+            }
         }
     }
 }

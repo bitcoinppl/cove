@@ -3,6 +3,19 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct BackupImportView: View {
+    private enum ImportReview: Sendable {
+        case awaitingApproval(preparation: BackupImportPreparation, conflictWalletCount: Int)
+        /// The preparation and approval are held by the running import task
+        case approved(conflictWalletCount: Int)
+
+        var conflictWalletCount: Int {
+            switch self {
+            case let .awaitingApproval(_, count), let .approved(count):
+                count
+            }
+        }
+    }
+
     @Environment(AppManager.self) private var app
     @Environment(\.dismiss) private var dismiss
 
@@ -12,14 +25,17 @@ struct BackupImportView: View {
     @State private var fileName: String? = nil
     @State private var password = ""
     @State private var isPasswordVisible = false
-    @State private var isImporting = false
+    @Binding private var isImporting: Bool
     @State private var isVerifying = false
     @State private var showFilePicker = false
     @State private var errorMessage: String? = nil
     @State private var verifyReport: BackupVerifyReport? = nil
     @State private var importReport: BackupImportReport? = nil
+    @State private var importReview: ImportReview? = nil
     @State private var importTask: Task<Void, Never>? = nil
+    @State private var inputGenerations = GenerationTracker()
     @State private var showConfirmation = false
+    @State private var showCleanupConfirmation = false
     @State private var backupManager = BackupManager()
     @State private var passwordDelegate: PasswordRetrievalDelegate? = nil
 
@@ -45,44 +61,46 @@ struct BackupImportView: View {
         importReport.map(formatReport)
     }
 
-    init(onImported: (() -> Void)? = nil) {
+    private var conflictWalletCount: Int {
+        importReview?.conflictWalletCount ?? 0
+    }
+
+    init(isImporting: Binding<Bool>, onImported: (() -> Void)? = nil) {
+        _isImporting = isImporting
         self.onImported = onImported
     }
 
     var body: some View {
-        Form {
-            if let report = verifyReport {
-                BackupImportConfirmationContent(
-                    report: report,
-                    isImporting: isImporting,
-                    onConfirmImport: presentImportConfirmation,
-                    onBack: showBackupSelection
-                )
-            } else {
-                BackupFileSelectionSection(
-                    fileName: fileName,
-                    hasFile: fileData != nil,
-                    onSelectFile: presentFilePicker
-                )
-
-                BackupCredentialsSections(
-                    isPresented: fileData != nil,
-                    password: $password,
-                    isPasswordVisible: $isPasswordVisible,
-                    isPasswordValid: isPasswordValid,
-                    actionTitle: "Preview Backup",
-                    isRunning: isVerifying,
-                    onRetrievePassword: retrieveFromPasswords,
-                    action: verifyBackup
-                )
-            }
-        }
+        BackupImportForm(
+            verifyReport: verifyReport,
+            conflictWalletCount: conflictWalletCount,
+            fileName: fileName,
+            hasFile: fileData != nil,
+            password: $password,
+            isPasswordVisible: $isPasswordVisible,
+            isPasswordValid: isPasswordValid,
+            isImporting: isImporting,
+            isVerifying: isVerifying,
+            onSelectFile: presentFilePicker,
+            onRetrievePassword: retrieveFromPasswords,
+            onVerifyBackup: verifyBackup,
+            onConfirmImport: presentImportConfirmation,
+            onBack: showBackupSelection
+        )
         .onDisappear(perform: handleDisappear)
+        .onChange(of: fileData, initial: false, handleFileDataChange)
+        .onChange(of: password, initial: false, handlePasswordChange)
         .alert("Import Backup?", isPresented: $showConfirmation) {
-            Button("Import", role: .destructive, action: importBackup)
-            Button("Cancel", role: .cancel) {}
+            Button("Continue", action: prepareImport)
+            Button("Cancel", role: .cancel, action: cancelImportConfirmation)
         } message: {
             Text("This will import wallets and restore settings from the backup. Existing wallets with the same fingerprint will be skipped.")
+        }
+        .alert("Remove Existing Wallet Data?", isPresented: $showCleanupConfirmation) {
+            Button("Approve and Import", role: .destructive, action: approveAndImport)
+            Button("Cancel", role: .cancel, action: cancelCleanupConfirmation)
+        } message: {
+            Text(cleanupWarningMessage)
         }
         .fileImporter(
             isPresented: $showFilePicker,
@@ -111,14 +129,55 @@ struct BackupImportView: View {
     }
 
     private func showBackupSelection() {
+        guard !isImporting else { return }
+
         verifyReport = nil
+        invalidateImportReview(clearVerifyReport: false, cancelTask: true)
     }
 
     private func handleDisappear() {
         importTask?.cancel()
+        invalidateImportReview(clearVerifyReport: true)
         password = ""
         fileData = nil
-        verifyReport = nil
+        fileName = nil
+    }
+
+    private func handleFileDataChange(_: Data?, _: Data?) {
+        invalidateImportReview(clearVerifyReport: true, cancelTask: true)
+    }
+
+    private func handlePasswordChange(_: String, _: String) {
+        invalidateImportReview(clearVerifyReport: true, cancelTask: true)
+    }
+
+    private var cleanupWarningMessage: String {
+        backupCleanupWarningMessage(walletCount: conflictWalletCount)
+    }
+
+    private func invalidateImportReview(clearVerifyReport: Bool, cancelTask: Bool = false) {
+        _ = inputGenerations.advance()
+
+        if cancelTask {
+            importTask?.cancel()
+        }
+
+        isImporting = false
+        isVerifying = false
+        importReview = nil
+        showCleanupConfirmation = false
+
+        if clearVerifyReport {
+            verifyReport = nil
+        }
+    }
+
+    private func cancelCleanupConfirmation() {
+        invalidateImportReview(clearVerifyReport: false)
+    }
+
+    private func cancelImportConfirmation() {
+        invalidateImportReview(clearVerifyReport: false)
     }
 
     private func updateErrorPresentation(_ isPresented: Bool) {
@@ -163,47 +222,145 @@ struct BackupImportView: View {
             } catch {
                 fileData = nil
                 fileName = nil
-                errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                errorMessage = safeBackupImportErrorMessage(error)
             }
 
         case let .failure(error):
-            errorMessage = error.localizedDescription
+            errorMessage = safeBackupImportErrorMessage(error)
         }
     }
 
     private func verifyBackup() {
         guard let fileData else { return }
+        invalidateImportReview(clearVerifyReport: false, cancelTask: true)
+        let generation = inputGenerations.capture()
+        let requestedPassword = password
         isVerifying = true
         importTask = Task {
             do {
-                let report = try await backupManager.verifyBackup(data: fileData, password: password)
+                let report = try await backupManager.verifyBackup(
+                    data: fileData,
+                    password: requestedPassword
+                )
+                try Task.checkCancellation()
                 await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
                     isVerifying = false
                     verifyReport = report
                 }
             } catch {
+                let isCancelled = Task.isCancelled
                 await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
                     isVerifying = false
-                    errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                    if !isCancelled {
+                        errorMessage = safeBackupImportErrorMessage(error)
+                    }
                 }
             }
         }
     }
 
-    private func importBackup() {
+    private func prepareImport() {
         guard let fileData else { return }
+        invalidateImportReview(clearVerifyReport: false, cancelTask: true)
+        let generation = inputGenerations.capture()
+        let requestedPassword = password
         isImporting = true
         importTask = Task {
             do {
-                let report = try await backupManager.importBackup(data: fileData, password: password)
+                let preparation = try await backupManager.prepareImport(
+                    data: fileData,
+                    password: requestedPassword
+                )
+                let conflictWalletCount = preparation.markerlessConflictWalletIds().count
+                try Task.checkCancellation()
+
+                if preparation.requiresImportApproval() {
+                    await MainActor.run {
+                        guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
+                        importReview = .awaitingApproval(
+                            preparation: preparation,
+                            conflictWalletCount: conflictWalletCount
+                        )
+                        isImporting = false
+                        showCleanupConfirmation = true
+                    }
+                    return
+                }
+
+                let report = try await backupManager.importPrepared(
+                    preparation: preparation,
+                    approval: nil
+                )
+
                 await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
                     isImporting = false
+                    invalidateImportReview(clearVerifyReport: false)
                     importReport = report
                 }
             } catch {
+                let isCancelled = Task.isCancelled
                 await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
                     isImporting = false
-                    errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                    invalidateImportReview(clearVerifyReport: false)
+                    if !isCancelled {
+                        errorMessage = safeBackupImportErrorMessage(error)
+                    }
+                }
+            }
+        }
+    }
+
+    private func approveAndImport() {
+        guard case let .awaitingApproval(preparation, conflictWalletCount) = importReview else {
+            invalidateImportReview(clearVerifyReport: false)
+            return
+        }
+
+        importTask?.cancel()
+        let generation = inputGenerations.advance()
+        showCleanupConfirmation = false
+        isImporting = true
+        importTask = Task {
+            do {
+                try Task.checkCancellation()
+                let approval = try await backupManager.approveImport(preparation: preparation)
+                await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
+                    importReview = .approved(conflictWalletCount: conflictWalletCount)
+                }
+                try Task.checkCancellation()
+                let report = try await backupManager.importPrepared(
+                    preparation: preparation,
+                    approval: approval
+                )
+
+                await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
+                    isImporting = false
+                    invalidateImportReview(clearVerifyReport: false)
+                    importReport = report
+                }
+            } catch {
+                let isCancelled = Task.isCancelled
+                await MainActor.run {
+                    guard inputGenerations.isCurrent(capturedToken: generation) else { return }
+
+                    isImporting = false
+                    invalidateImportReview(clearVerifyReport: false)
+                    if !isCancelled {
+                        errorMessage = safeBackupImportErrorMessage(error)
+                    }
                 }
             }
         }
@@ -211,6 +368,10 @@ struct BackupImportView: View {
 
     private func handleImportCompletionDismissal() {
         importReport = nil
+        invalidateImportReview(clearVerifyReport: true)
+        fileData = nil
+        fileName = nil
+        password = ""
         app.dispatch(action: .refreshAfterImport)
         if let onImported {
             onImported()
@@ -266,6 +427,122 @@ struct BackupImportView: View {
             lines.append("Cleanup warnings: \(report.cleanupWarnings.joined(separator: ", "))")
         }
         return lines.joined(separator: "\n")
+    }
+}
+
+func backupCleanupWarningMessage(walletCount: Int) -> String {
+    let walletDescription = walletCount == 1 ? "1 wallet" : "\(walletCount) wallets"
+    let verb = walletCount == 1 ? "has" : "have"
+    return "\(walletDescription) \(verb) existing wallet data without a matching wallet record. Approving this import will permanently remove that data, including any existing keychain items. Removed keychain items cannot be restored."
+}
+
+private struct BackupImportForm: View {
+    let verifyReport: BackupVerifyReport?
+    let conflictWalletCount: Int
+    let fileName: String?
+    let hasFile: Bool
+    @Binding var password: String
+    @Binding var isPasswordVisible: Bool
+    let isPasswordValid: Bool
+    let isImporting: Bool
+    let isVerifying: Bool
+    let onSelectFile: () -> Void
+    let onRetrievePassword: () -> Void
+    let onVerifyBackup: () -> Void
+    let onConfirmImport: () -> Void
+    let onBack: () -> Void
+
+    var body: some View {
+        Form {
+            if let verifyReport {
+                if conflictWalletCount > 0 {
+                    BackupImportConflictSummarySection(walletCount: conflictWalletCount)
+                }
+
+                BackupImportConfirmationContent(
+                    report: verifyReport,
+                    isImporting: isImporting,
+                    onConfirmImport: onConfirmImport,
+                    onBack: onBack
+                )
+            } else {
+                BackupFileSelectionSection(
+                    fileName: fileName,
+                    hasFile: hasFile,
+                    onSelectFile: onSelectFile
+                )
+
+                BackupCredentialsSections(
+                    isPresented: hasFile,
+                    password: $password,
+                    isPasswordVisible: $isPasswordVisible,
+                    isPasswordValid: isPasswordValid,
+                    actionTitle: "Preview Backup",
+                    isRunning: isVerifying,
+                    onRetrievePassword: onRetrievePassword,
+                    action: onVerifyBackup
+                )
+            }
+        }
+    }
+}
+
+private struct BackupImportConflictSummarySection: View {
+    let walletCount: Int
+
+    var body: some View {
+        Section {
+            Label(
+                summaryText,
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .foregroundStyle(.orange)
+        } header: {
+            Text("Import Review")
+        } footer: {
+            Text("The backup has existing wallet data without a matching wallet record.")
+        }
+    }
+
+    private var summaryText: String {
+        if walletCount == 1 {
+            return "1 existing wallet record needs cleanup approval"
+        }
+
+        return "\(walletCount) existing wallet records need cleanup approval"
+    }
+}
+
+private func safeBackupImportErrorMessage(_ error: Error) -> String {
+    guard let backupError = error as? BackupError else {
+        return "Cove could not import this backup. Check the file and password, then try again."
+    }
+
+    switch backupError {
+    case .PasswordTooShort:
+        return "The backup password is too short."
+    case .DecryptionFailed:
+        return "The backup password is incorrect, or the backup is damaged."
+    case .InvalidFormat:
+        return "The selected file is not a valid Cove backup."
+    case .FileTooLarge:
+        return "The backup file is too large."
+    case .UnsupportedVersion, .UnsupportedPayloadVersion:
+        return "This backup was created by a newer version of Cove. Update Cove and try again."
+    case .Truncated:
+        return "The backup file is incomplete. Select the original backup and try again."
+    case .ImportApprovalStale:
+        return "The existing wallet data changed while the import was waiting for approval. Review the backup again and try again."
+    case .ImportApprovalRequired:
+        return "This import needs approval before existing wallet data can be removed. Review the backup again and try again."
+    case .ImportApprovalUsed:
+        return "This import review has expired. Review the backup again and try again."
+    case .InvalidWalletId:
+        return "The backup contains an invalid wallet record and cannot be imported."
+    case .WalletIdOccupied:
+        return "A wallet changed while the import was waiting. Review the backup again and try again."
+    case .Encryption, .Serialization, .Deserialization, .Gather, .Restore, .Keychain, .Database, .Decompression:
+        return "Cove could not finish importing this backup. Review it and try again."
     }
 }
 

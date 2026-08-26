@@ -8,8 +8,16 @@ internal enum class StartupMode {
     READY,
 }
 
+internal const val RECOVERY_CONTINUATION_MESSAGE =
+    "Cove saved your restore progress. Select Continue to finish the wallet restore."
+
 internal sealed class BootstrapFailure {
     data object CatastrophicRecovery : BootstrapFailure()
+
+    data object RecoveryRequired : BootstrapFailure() {
+        val message: String
+            get() = RECOVERY_CONTINUATION_MESSAGE
+    }
 
     data class Fatal(
         val message: String,
@@ -18,6 +26,7 @@ internal sealed class BootstrapFailure {
 
 internal sealed class CatastrophicCloudRestoreCheck {
     data object Idle : CatastrophicCloudRestoreCheck()
+
     data object Checking : CatastrophicCloudRestoreCheck()
 
     data class Complete(
@@ -37,14 +46,27 @@ internal val CatastrophicCloudRestoreResult.failureMessage: String?
 
 internal fun classifyBootstrapFailure(error: Exception): BootstrapFailure =
     when (error) {
-        is AppInitException.DatabaseKeyMismatch -> BootstrapFailure.CatastrophicRecovery
-        is AppInitException.AlreadyCalled ->
+        is AppInitException.DatabaseKeyMismatch -> {
+            BootstrapFailure.CatastrophicRecovery
+        }
+
+        is AppInitException.RecoveryRequired -> {
+            BootstrapFailure.RecoveryRequired
+        }
+
+        is AppInitException.AlreadyCalled -> {
             BootstrapFailure.Fatal("App initialization error. Please force-quit and restart.")
-        is AppInitException.Cancelled ->
+        }
+
+        is AppInitException.Cancelled -> {
             BootstrapFailure.Fatal(
                 "App startup timed out. Please force-quit and try again.\n\nPlease contact feedback@covebitcoinwallet.com",
             )
-        else -> BootstrapFailure.Fatal(error.message ?: "Unknown error")
+        }
+
+        else -> {
+            BootstrapFailure.Fatal(error.message ?: "Unknown error")
+        }
     }
 
 internal fun resolveStartupMode(

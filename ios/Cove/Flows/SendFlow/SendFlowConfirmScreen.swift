@@ -43,7 +43,7 @@ struct SendFlowConfirmScreen: View {
         }
 
         let amount = details.sendingAmount()
-        return manager.rust.convertAndDisplayFiat(amount: amount, prices: prices)
+        return manager.convertAndDisplayFiat(amount: amount, prices: prices)
     }
 
     var metadata: WalletMetadata {
@@ -133,18 +133,14 @@ struct SendFlowConfirmScreen: View {
         do {
             switch input {
             case let .signedTransaction(txn):
-                _ = try await manager.rust.broadcastTransaction(
-                    signedTransaction: txn
-                )
+                try await manager.broadcastTransaction(txn)
             case .signedPsbt:
                 guard let finalizedTransaction else {
                     throw SendConfirmationError.unfinalizedSignedPsbt
                 }
-                _ = try await manager.rust.broadcastTransaction(
-                    signedTransaction: finalizedTransaction
-                )
+                try await manager.broadcastTransaction(finalizedTransaction)
             case .unsigned:
-                _ = try await manager.rust.initiatePayment(
+                try await manager.initiatePayment(
                     psbt: details.psbt(),
                     payjoinEndpoint: payjoinEndpoint
                 )
@@ -185,7 +181,7 @@ private struct SendFlowFinalizePsbtView: View {
 
     private func finalizePsbt() async {
         do {
-            finalizedTransaction = try await manager.rust.finalizePsbt(psbt: psbt)
+            finalizedTransaction = try await manager.finalizePsbt(psbt)
         } catch let error as WalletManagerError {
             app.alertState = .init(.general(
                 title: "Unable to finalize transaction",

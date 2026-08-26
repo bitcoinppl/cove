@@ -214,7 +214,7 @@ private struct UnsignedTransactionRows: View {
 
     private func delete(_ transaction: UnsignedTransaction) {
         do {
-            try manager.rust.deleteUnsignedTransaction(txId: transaction.id())
+            try manager.deleteUnsignedTransaction(txId: transaction.id())
         } catch {
             Log.error("Failed to delete unsigned transaction \(transaction.id()): \(error)")
             app.alertState = .init(.general(

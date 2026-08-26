@@ -75,13 +75,14 @@ async fn detail_reports_other_backup_namespaces() {
         ],
     );
 
-    let Some(CloudBackupDetailResult::Success(detail)) =
+    let Some(CloudBackupDetailResult::SuccessWithAuthority { .. }) =
         manager.refresh_cloud_backup_detail().await
     else {
         panic!("expected cloud backup detail");
     };
 
-    let CloudBackupOtherBackupsState::Loaded { summary } = detail.other_backups else {
+    let other_backups = manager.other_backup_state(&CloudStorage::global_explicit_client()).await;
+    let CloudBackupOtherBackupsState::Loaded { summary } = other_backups else {
         panic!("expected loaded other backups");
     };
 
@@ -174,17 +175,18 @@ async fn detail_refresh_keeps_current_detail_when_other_namespace_inspection_fai
         .cloud
         .fail_master_key_download_offline(other_namespace, "offline while inspecting namespace");
 
-    let Some(CloudBackupDetailResult::Success(detail)) =
+    let Some(CloudBackupDetailResult::SuccessWithAuthority { detail, .. }) =
         manager.refresh_cloud_backup_detail().await
     else {
         panic!("expected usable current cloud backup detail");
     };
 
-    let CloudBackupOtherBackupsState::LoadFailed { error } = detail.other_backups else {
+    let other_backups = manager.other_backup_state(&CloudStorage::global_explicit_client()).await;
+    let CloudBackupOtherBackupsState::LoadFailed { reason } = other_backups else {
         panic!("expected isolated other-backups failure");
     };
 
-    assert!(error.contains("Reconnect to the internet"), "{error}");
+    assert_eq!(reason, CloudBackupInventoryIncompleteReason::Offline);
     assert!(detail.up_to_date.is_empty());
     assert!(detail.needs_sync.is_empty());
 }

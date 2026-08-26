@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 3/25/25.
 //
 
+import CoveCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -14,17 +15,17 @@ struct TapSignerSetupRetry: View {
 
     let tapSigner: TapSigner
     let response: SetupCmdResponse
+    @State private var isSubmitting = false
 
     var body: some View {
         TapSignerAdaptiveLayout { usesFlexibleSpacing in
-            TapSignerRetryContent(
+            TapSignerContinuationContent(
                 usesFlexibleSpacing: usesFlexibleSpacing,
-                title: "Could not complete setup",
-                message: """
-                Please try again and hold your TAPSIGNER steady until setup is complete.
-                """,
+                title: "Setup in Progress",
+                message: "Your TAPSIGNER saved its setup progress. Continue to finish setup.",
+                isSubmitting: isSubmitting,
                 cancelAction: cancel,
-                retryAction: retry
+                continueAction: continueSetup
             )
         }
         .background(TapSignerResultBackground())
@@ -33,31 +34,34 @@ struct TapSignerSetupRetry: View {
     }
 
     private func cancel() {
-        manager.popRoute()
+        app.sheetState = nil
     }
 
-    private func retry() {
+    private func continueSetup() {
+        guard !isSubmitting else { return }
+
+        isSubmitting = true
+
         Task {
             let nfc = manager.getOrCreateNfc(tapSigner)
+            let result = await nfc.continueSetup(response)
 
-            switch await nfc.continueSetup(response) {
-            case let .success(.complete(complete)):
-                manager.resetRoute(to: .setupSuccess(tapSigner, complete))
-            case let .success(incomplete):
-                Log.error("TapSigner setup retry returned an incomplete response")
-                app.sheetState = nil
-                app.alertState = .init(
-                    .tapSignerSetupFailed(
-                        message: "TapSigner setup failed. Please try again."
+            await MainActor.run {
+                isSubmitting = false
+
+                switch result {
+                case let .success(.complete(complete)):
+                    manager.resetRoute(to: .setupSuccess(tapSigner, complete))
+                case let .success(.retry(next)):
+                    manager.resetRoute(to: .setupRetry(tapSigner, .retry(next)))
+                case .failure:
+                    app.sheetState = nil
+                    app.alertState = .init(
+                        .tapSignerSetupFailed(
+                            message: "TapSigner setup failed. Please try again."
+                        )
                     )
-                )
-            case .failure:
-                app.sheetState = nil
-                app.alertState = .init(
-                    .tapSignerSetupFailed(
-                        message: "TapSigner setup failed. Please try again."
-                    )
-                )
+                }
             }
         }
     }

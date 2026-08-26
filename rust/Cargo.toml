@@ -157,7 +157,7 @@ bip329 = { workspace = true }
 payjoin = { workspace = true }
 
 # tapsigner / satscard
-rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap", rev = "97d780f8a8680661ac476d469f9513dba219ea45" }
+rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap", rev = "3d74272692278f31e2e230b0963a12ebe9b8745b" }
 
 # actors
 act-zero = { version = "0.4.0", features = ["default-tokio"] }

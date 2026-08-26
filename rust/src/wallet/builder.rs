@@ -56,17 +56,6 @@ pub(crate) enum WalletSource {
         backup: Option<Vec<u8>>,
         birthday: Option<WalletBirthday>,
     },
-    Mnemonic {
-        metadata: WalletMetadata,
-        mnemonic: Mnemonic,
-        passphrase: Option<String>,
-        address_type: WalletAddressType,
-    },
-    Xpriv {
-        metadata: WalletMetadata,
-        xpriv: WalletXprv,
-        address_type: WalletAddressType,
-    },
 }
 
 impl WalletBuilder {
@@ -90,12 +79,6 @@ impl WalletBuilder {
             WalletSource::Pubport(pubport) => Self::build_from_pubport(*pubport),
             WalletSource::TapSigner { tap_signer, derive, backup, birthday } => {
                 Self::build_from_tap_signer(tap_signer, derive, backup, birthday)
-            }
-            WalletSource::Mnemonic { metadata, mnemonic, passphrase, address_type } => {
-                Self::build_from_mnemonic(metadata, mnemonic, passphrase, address_type)
-            }
-            WalletSource::Xpriv { metadata, xpriv, address_type } => {
-                Self::build_from_xpriv(metadata, xpriv, address_type)
             }
         }
     }
@@ -616,6 +599,20 @@ fn should_start_json_discovery(
     [(&json.bip49, WalletAddressType::WrappedSegwit), (&json.bip44, WalletAddressType::Legacy)]
         .into_iter()
         .any(|(descriptors, type_)| descriptors.is_some() && type_ != address_type)
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    pub(crate) fn build_from_mnemonic(
+        metadata: WalletMetadata,
+        mnemonic: Mnemonic,
+        passphrase: Option<String>,
+        address_type: WalletAddressType,
+    ) -> Result<Wallet, WalletError> {
+        WalletBuilder::build_from_mnemonic(metadata, mnemonic, passphrase, address_type)
+    }
 }
 
 #[cfg(test)]

@@ -1667,6 +1667,8 @@ enum CloudStorageError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     )
     case Offline(String
     )
+    case SyncPending(String
+    )
     case UploadFailed(String
     )
     case DownloadFailed(String
@@ -1725,17 +1727,20 @@ public struct FfiConverterTypeCloudStorageError: FfiConverterRustBuffer {
         case 3: return .Offline(
             try FfiConverterString.read(from: &buf)
             )
-        case 4: return .UploadFailed(
+        case 4: return .SyncPending(
             try FfiConverterString.read(from: &buf)
             )
-        case 5: return .DownloadFailed(
+        case 5: return .UploadFailed(
             try FfiConverterString.read(from: &buf)
             )
-        case 6: return .NotFound(
+        case 6: return .DownloadFailed(
             try FfiConverterString.read(from: &buf)
             )
-        case 7: return .QuotaExceeded
-        case 8: return .InvalidNamespace(
+        case 7: return .NotFound(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 8: return .QuotaExceeded
+        case 9: return .InvalidNamespace(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -1765,27 +1770,32 @@ public struct FfiConverterTypeCloudStorageError: FfiConverterRustBuffer {
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .UploadFailed(v1):
+        case let .SyncPending(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .DownloadFailed(v1):
+        case let .UploadFailed(v1):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .NotFound(v1):
+        case let .DownloadFailed(v1):
             writeInt(&buf, Int32(6))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case .QuotaExceeded:
+        case let .NotFound(v1):
             writeInt(&buf, Int32(7))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case .QuotaExceeded:
+            writeInt(&buf, Int32(8))
 
 
         case let .InvalidNamespace(v1):
-            writeInt(&buf, Int32(8))
+            writeInt(&buf, Int32(9))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -3496,6 +3506,15 @@ public protocol KeychainAccess: AnyObject, Sendable {
      */
     func delete(key: String)  -> Bool
 
+    /**
+     * Deletes every Cove wallet-specific key without requiring wallet IDs
+     *
+     * # Errors
+     *
+     * Returns a `KeychainError` if enumeration or any deletion fails
+     */
+    func deleteAllWalletItems() throws
+
 }
 
 
@@ -3594,6 +3613,29 @@ fileprivate struct UniffiCallbackInterfaceKeychainAccess {
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
                 writeReturn: writeReturn
+            )
+        },
+        deleteAllWalletItems: { (
+            uniffiHandle: UInt64,
+            uniffiOutReturn: UnsafeMutableRawPointer,
+            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
+        ) in
+            let makeCall = {
+                () throws -> () in
+                guard let uniffiObj = try? FfiConverterCallbackInterfaceKeychainAccess.handleMap.get(handle: uniffiHandle) else {
+                    throw UniffiInternalError.unexpectedStaleHandle
+                }
+                return try uniffiObj.deleteAllWalletItems(
+                )
+            }
+
+
+            let writeReturn = { () }
+            uniffiTraitInterfaceCallWithError(
+                callStatus: uniffiCallStatus,
+                makeCall: makeCall,
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeKeychainError_lower
             )
         }
     )
@@ -4287,6 +4329,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_keychainaccess_delete() != 35329) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_device_checksum_method_keychainaccess_delete_all_wallet_items() != 23006) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_passkeyprovider_create_passkey() != 8345) {

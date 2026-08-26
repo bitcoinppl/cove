@@ -20,7 +20,8 @@ use crate::manager::cloud_backup_manager::wallets::{
     StagedPrfKey, UnpersistedPrfKey, WalletRestoreOutcome,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, CloudBackupLifecycle, CloudBackupOtherBackupsState,
+    CloudBackupDetail, CloudBackupInventoryAuthority, CloudBackupLifecycle,
+    CloudBackupOtherBackupsSummary,
     CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery, CloudBackupStore,
     CloudBackupSettingsRowStatus, CloudOnlyState, PendingEnableJournal,
     PendingEnableNamespaceOwnership, PendingEnableJournalPhase, PendingEnablePasskeyMetadata,
@@ -158,7 +159,6 @@ fn prepare_restore_all_queue_fixture(
         up_to_date: Vec::new(),
         needs_sync: Vec::new(),
         cloud_only_count: items.len().try_into().unwrap(),
-        other_backups: CloudBackupOtherBackupsState::Loaded { summary: Default::default() },
     }));
     manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(items.clone()));
     assert!(matches!(
@@ -283,8 +283,7 @@ fn test_pending_completion(
             local_master_key_repaired: false,
             credential_recovered: false,
             wallets_verified: 0,
-            wallets_failed: 0,
-            wallets_unsupported: 0,
+            wallet_issues: Default::default(),
             detail: None,
         },
         namespace_id,
@@ -1086,15 +1085,15 @@ async fn repair_passkey_refresh_failure_resolves_superseded_detail_refresh() {
 
     supervisor
         .complete_refresh_detail(
-            Some(CloudBackupDetailResult::Success(CloudBackupDetail {
-                last_sync: None,
-                up_to_date: Vec::new(),
-                needs_sync: Vec::new(),
-                cloud_only_count: 0,
-                other_backups: CloudBackupOtherBackupsState::Loaded {
-                    summary: Default::default(),
+            Some(CloudBackupDetailResult::SuccessWithAuthority {
+                detail: CloudBackupDetail {
+                    last_sync: None,
+                    up_to_date: Vec::new(),
+                    needs_sync: Vec::new(),
+                    cloud_only_count: 0,
                 },
-            })),
+                authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+            }),
             DetailRefreshAttempt::Initial,
             superseded_refresh,
         )
@@ -3648,6 +3647,45 @@ async fn closing_detail_does_not_cancel_restore_all() {
     assert!(!cancellation.load(Ordering::Acquire));
     assert_eq!(supervisor.active_operation, Some(claim));
     assert_eq!(manager.projected_exclusive_operation(), Some(claim));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn closing_detail_resets_an_invalidated_other_backups_scan() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    supervisor.detail_workflow.open();
+    supervisor.detail_workflow.start_user_requested_other_backups_scan().unwrap();
+    manager.apply_other_backups_state(CloudBackupOtherBackupsState::Checking);
+
+    supervisor.close_detail().await.unwrap();
+
+    assert_eq!(
+        manager.state.read().other_backups_state(),
+        CloudBackupOtherBackupsState::NotChecked
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn closing_detail_preserves_a_completed_other_backups_scan() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    supervisor.detail_workflow.open();
+    let loaded = CloudBackupOtherBackupsState::Loaded {
+        summary: CloudBackupOtherBackupsSummary::default(),
+    };
+    manager.apply_other_backups_state(loaded.clone());
+
+    supervisor.close_detail().await.unwrap();
+
+    assert_eq!(manager.state.read().other_backups_state(), loaded);
 }
 
 #[tokio::test(flavor = "current_thread")]

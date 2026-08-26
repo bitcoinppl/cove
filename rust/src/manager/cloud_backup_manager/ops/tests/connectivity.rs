@@ -130,7 +130,7 @@ async fn manual_detail_refresh_recovers_after_automatic_retry_fails() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn provider_signal_reopens_only_an_owned_detail_inventory() {
+async fn provider_signal_does_not_reopen_a_ready_detail_inventory() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -150,20 +150,17 @@ async fn provider_signal_reopens_only_an_owned_detail_inventory() {
     })
     .await;
     let complete_detail = manager.model_snapshot().detail.expect("expected loaded detail");
+    let active_snapshot_attempts = globals.cloud.list_wallet_files_snapshot_attempt_count();
 
     manager.cloud_storage_did_change();
-    wait_for_test_condition(
-        Duration::from_secs(1),
-        "expected provider signal checking state",
-        || {
-            matches!(
-                manager.state().lifecycle,
-                CloudBackupLifecycle::Configured(ref configured)
-                    if matches!(&configured.detail, CloudBackupDetailState::Checking { .. })
-            )
-        },
-    )
-    .await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::Configured(ref configured)
+            if matches!(&configured.detail, CloudBackupDetailState::Complete { .. })
+    ));
+    assert_eq!(globals.cloud.list_wallet_files_snapshot_attempt_count(), active_snapshot_attempts);
 
     call!(manager.supervisor.close_detail()).await.unwrap();
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(complete_detail));

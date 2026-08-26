@@ -57,6 +57,47 @@ impl PayjoinSessionPersister {
     /// Idempotent: `None → BroadcastFallback` and `BroadcastFallback → ok`.
     /// Rejects an attempt to downgrade a `BroadcastProposal` commitment.
     pub(crate) fn set_pending_fallback(&self) -> Result<(), WalletDataError> {
+        self.set_pending_fallback_with(|session| self.db.set_payjoin_sender_session(session))
+    }
+
+    /// Return the exact committed terminal transaction for destructive shutdown
+    ///
+    /// If the session has no terminal commitment, this selects and persists the
+    /// fallback under the quiescence capability. An existing proposal commitment
+    /// is returned unchanged and can never be replaced by the fallback
+    pub(crate) fn terminal_transaction_for_shutdown(
+        &self,
+        authority: &crate::wallet_lifecycle::TerminalPayjoinPersistenceAuthority,
+    ) -> Result<Option<BdkTransaction>, WalletDataError> {
+        let _guard = self
+            .lock
+            .lock()
+            .map_err(|_| WalletDataError::Save("session lock poisoned".to_string()))?;
+
+        let Some(mut session) = self.db.get_payjoin_sender_session()? else {
+            return Ok(None);
+        };
+
+        let transaction = match &session.pending_action {
+            None => {
+                session.pending_action = Some(PendingAction::BroadcastFallback);
+                self.db.set_terminal_payjoin_fallback(session.clone(), authority)?;
+
+                session.fallback_tx.as_ref()
+            }
+            Some(PendingAction::BroadcastFallback) => session.fallback_tx.as_ref(),
+            Some(PendingAction::BroadcastProposal { transaction }) => transaction.as_ref(),
+        };
+
+        consensus::deserialize(transaction).map(Some).map_err(|error| {
+            WalletDataError::Read(format!("committed payjoin transaction is unreadable: {error}"))
+        })
+    }
+
+    fn set_pending_fallback_with(
+        &self,
+        save: impl FnOnce(PayjoinSenderSession) -> Result<(), WalletDataError>,
+    ) -> Result<(), WalletDataError> {
         let _guard = self
             .lock
             .lock()
@@ -81,7 +122,7 @@ impl PayjoinSessionPersister {
         }
 
         session.pending_action = Some(PendingAction::BroadcastFallback);
-        self.db.set_payjoin_sender_session(session)
+        save(session)
     }
 
     /// Persists the exact consensus-encoded proposal transaction before broadcasting.
@@ -645,10 +686,40 @@ impl PayjoinActor {
         });
     }
 
-    /// Cancels the session and broadcasts the fallback transaction
-    pub(crate) async fn cancel_and_fallback(&mut self) -> ActorResult<()> {
-        self.complete_with_fallback();
-        Produces::ok(())
+    /// Cancel the session and return its committed fallback transaction
+    pub(crate) async fn cancel_and_fallback(&mut self) -> ActorResult<Option<BdkTransaction>> {
+        if matches!(self.session, PayjoinSession::Closed) {
+            return Produces::ok(None);
+        }
+
+        self.persister
+            .set_pending_fallback()
+            .map_err(|error| act_zero::ActorError::from(error.to_string()))?;
+        self.close_session();
+        Produces::ok(Some(self.fallback_tx.clone()))
+    }
+
+    /// Commit the exact terminal transaction under the wallet shutdown capability
+    pub(crate) async fn cancel_and_fallback_for_terminal_shutdown(
+        &mut self,
+        authority: crate::wallet_lifecycle::TerminalPayjoinPersistenceAuthority,
+    ) -> ActorResult<Option<BdkTransaction>> {
+        if matches!(self.session, PayjoinSession::Closed) {
+            return Produces::ok(None);
+        }
+
+        let terminal_transaction = self
+            .persister
+            .terminal_transaction_for_shutdown(&authority)
+            .map_err(|error| act_zero::ActorError::from(error.to_string()))?;
+        let Some(terminal_transaction) = terminal_transaction else {
+            return Err(act_zero::ActorError::from(
+                "active payjoin session has no persisted recovery data".to_string(),
+            ));
+        };
+
+        self.close_session();
+        Produces::ok(Some(terminal_transaction))
     }
 
     async fn complete_with_success(&mut self, proposal_psbt: Psbt) -> ActorResult<()> {
@@ -667,7 +738,7 @@ impl PayjoinActor {
     }
 
     fn complete_with_fallback(&mut self) {
-        if !self.close_session() {
+        if matches!(self.session, PayjoinSession::Closed) {
             return;
         }
 
@@ -683,6 +754,14 @@ impl PayjoinActor {
             send!(self.wallet_addr.notify_payjoin_error(
                 "payment is paused — please restart the app to complete or cancel it".to_string()
             ));
+            return;
+        }
+
+        self.dispatch_persisted_fallback();
+    }
+
+    fn dispatch_persisted_fallback(&mut self) {
+        if !self.close_session() {
             return;
         }
 
@@ -858,6 +937,25 @@ fn proposal_from_record(_db: &WalletDataDb, record: PayjoinSenderSession) -> Ses
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    pub(crate) fn terminal_actor(
+        persister: PayjoinSessionPersister,
+        fallback_tx: BdkTransaction,
+    ) -> PayjoinActor {
+        PayjoinActor {
+            addr: WeakAddr::default(),
+            wallet_addr: WeakAddr::default(),
+            persister,
+            fallback_tx,
+            session: PayjoinSession::Posting,
+            poll_deadline: Some(Instant::now()),
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{database::wallet_data::test_support, wallet::metadata::WalletId};
@@ -917,6 +1015,104 @@ mod tests {
             input: vec![],
             output: vec![],
         }
+    }
+
+    fn terminal_test_actor(persister: PayjoinSessionPersister) -> PayjoinActor {
+        super::test_support::terminal_actor(persister, empty_transaction())
+    }
+
+    async fn assert_terminal_preparation_persists_fallback(full_wipe: bool) {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+
+        let (persister, db, _tmp) = new_test_persister();
+        persister.create_session(&test_fallback_tx()).expect("payjoin session is persisted");
+        let wallet_id = db.id.clone();
+        let actor = cove_tokio::task::spawn_actor(terminal_test_actor(persister));
+        let (authority, preparation) = if full_wipe {
+            crate::wallet_lifecycle::test_support::begin_full_wipe(wallet_id)
+        } else {
+            crate::wallet_lifecycle::test_support::begin_wallet_deletion(wallet_id)
+        };
+
+        call!(actor.cancel_and_fallback_for_terminal_shutdown(authority))
+            .await
+            .expect("terminal Payjoin actor persists fallback across its actor task");
+
+        let session = db.get_payjoin_sender_session().unwrap().unwrap();
+        assert_eq!(session.pending_action, Some(PendingAction::BroadcastFallback));
+        drop(preparation);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn terminal_payjoin_actor_persists_fallback_during_wallet_deletion() {
+        assert_terminal_preparation_persists_fallback(false).await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn terminal_payjoin_actor_persists_fallback_during_full_wipe() {
+        assert_terminal_preparation_persists_fallback(true).await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn terminal_shutdown_preserves_exact_proposal_commitment() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+
+        let (persister, db, _tmp) = new_test_persister();
+        let fallback = test_fallback_tx();
+        let proposal = BdkTransaction {
+            version: Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![],
+            output: vec![TxOut {
+                value: Amount::from_sat(1),
+                script_pubkey: bitcoin::ScriptBuf::new(),
+            }],
+        };
+        persister.create_session(&fallback).unwrap();
+        persister.set_pending_proposal(&proposal).unwrap();
+        let (authority, preparation) =
+            crate::wallet_lifecycle::test_support::begin_wallet_deletion(db.id.clone());
+
+        let terminal = persister
+            .terminal_transaction_for_shutdown(&authority)
+            .expect("stored proposal remains readable")
+            .expect("terminal transaction is present");
+
+        assert_eq!(terminal, proposal);
+        assert!(matches!(
+            db.get_payjoin_sender_session().unwrap().unwrap().pending_action,
+            Some(PendingAction::BroadcastProposal { transaction })
+                if transaction.as_ref().as_slice() == consensus::serialize(&proposal)
+        ));
+        drop(preparation);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn terminal_payjoin_persistence_failure_keeps_session_retryable() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+
+        let (persister, db, _tmp) = new_test_persister();
+        let actor = cove_tokio::task::spawn_actor(terminal_test_actor(persister.clone()));
+        let (authority, preparation) =
+            crate::wallet_lifecycle::test_support::begin_wallet_deletion(db.id.clone());
+
+        assert!(
+            call!(actor.cancel_and_fallback_for_terminal_shutdown(authority)).await.is_err(),
+            "missing recovery data must fail quiescence"
+        );
+        assert!(db.get_payjoin_sender_session().unwrap().is_none());
+        drop(preparation);
+
+        persister.create_session(&test_fallback_tx()).expect("recovery data is restored");
+        call!(actor.cancel_and_fallback())
+            .await
+            .expect("the retained Payjoin actor retries after persistence recovers");
+
+        let session = db.get_payjoin_sender_session().unwrap().unwrap();
+        assert_eq!(session.pending_action, Some(PendingAction::BroadcastFallback));
     }
 
     #[test]

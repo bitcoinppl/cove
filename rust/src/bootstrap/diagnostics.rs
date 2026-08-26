@@ -42,6 +42,7 @@ enum ErrorCategory {
     AlreadyCalled,
     DatabaseKeyMismatch,
     DatabaseVerificationFailed,
+    RecoveryRequired,
 }
 
 impl ErrorCategory {
@@ -54,6 +55,7 @@ impl ErrorCategory {
             Self::AlreadyCalled => "already_called",
             Self::DatabaseKeyMismatch => "database_key_mismatch",
             Self::DatabaseVerificationFailed => "database_verification_failed",
+            Self::RecoveryRequired => "recovery_required",
         }
     }
 }
@@ -68,6 +70,7 @@ impl From<&AppInitError> for ErrorCategory {
             AppInitError::AlreadyCalled(_) => Self::AlreadyCalled,
             AppInitError::DatabaseKeyMismatch(_) => Self::DatabaseKeyMismatch,
             AppInitError::DatabaseVerificationFailed(_) => Self::DatabaseVerificationFailed,
+            AppInitError::RecoveryRequired(_) => Self::RecoveryRequired,
         }
     }
 }

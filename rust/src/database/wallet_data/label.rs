@@ -6,6 +6,7 @@ use std::{
 };
 
 use crate::database::{Record, error::DatabaseError, record::Timestamps};
+use crate::wallet::metadata::WalletId;
 use bip329::{
     AddressRecord, InputRecord, Label, Labels, OutputRecord, ParsedLabels, TransactionRecord,
 };
@@ -51,11 +52,12 @@ pub(crate) const OUTPUT_TABLE: TableDefinition<OutPointKey, SerdeRecord<OutputRe
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct LabelsTable {
+    id: WalletId,
     db: Arc<redb::Database>,
 }
 
 impl LabelsTable {
-    pub fn new(db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
+    pub fn new(id: WalletId, db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
         // create tables  if it doesn't exist
         write_txn.open_table(TXN_TABLE).expect("failed to transactions create table");
 
@@ -65,7 +67,7 @@ impl LabelsTable {
 
         write_txn.open_table(OUTPUT_TABLE).expect("failed to create output table");
 
-        Self { db }
+        Self { id, db }
     }
 
     pub fn has_labels(&self) -> Result<bool, Error> {
@@ -363,6 +365,7 @@ impl LabelsTable {
         labels: impl IntoIterator<Item = Label>,
         timestamp: Timestamps,
     ) -> Result<(), Error> {
+        let _persistence = self.begin_persistence()?;
         let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
 
         labels
@@ -379,6 +382,7 @@ impl LabelsTable {
         label: impl Into<Label>,
         timestamps: Timestamps,
     ) -> Result<(), Error> {
+        let _persistence = self.begin_persistence()?;
         let label: Label = label.into();
         let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
 
@@ -393,6 +397,7 @@ impl LabelsTable {
         &self,
         records: impl IntoIterator<Item = Record<Label>>,
     ) -> Result<(), Error> {
+        let _persistence = self.begin_persistence()?;
         let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
 
         records.into_iter().try_for_each(|record| {
@@ -409,6 +414,7 @@ impl LabelsTable {
         labels: impl IntoIterator<Item = Label>,
         records: impl IntoIterator<Item = Record<Label>>,
     ) -> Result<(), Error> {
+        let _persistence = self.begin_persistence()?;
         let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
 
         labels
@@ -428,6 +434,7 @@ impl LabelsTable {
         outpoints: impl IntoIterator<Item = bitcoin::OutPoint>,
         spendable: bool,
     ) -> Result<(), Error> {
+        let _persistence = self.begin_persistence()?;
         let write_txn = self.db.begin_write().map_err_str(DatabaseError::DatabaseAccess)?;
         let now = jiff::Timestamp::now().as_second().cast_unsigned();
 
@@ -460,6 +467,15 @@ impl LabelsTable {
         write_txn.commit().map_err_str(DatabaseError::DatabaseAccess)?;
 
         Ok(())
+    }
+
+    fn begin_persistence(
+        &self,
+    ) -> Result<crate::wallet_lifecycle::WalletPersistenceOperation, Error> {
+        crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
+            .begin_persistence_operation(self.id.clone())
+            .map_err(DatabaseError::from)
+            .map_err(Error::from)
     }
 
     fn insert_label_with_write_txn(
@@ -635,7 +651,7 @@ pub(crate) mod test_support {
         }
         write_txn.commit().expect("failed to commit write transaction");
 
-        let labels = LabelsTable { db: db.clone() };
+        let labels = LabelsTable { id: id.clone(), db: db.clone() };
         let wallet_db = WalletDataDb { id, db, labels, storage: WalletDataStorage::Persistent };
 
         (wallet_db, tmp)

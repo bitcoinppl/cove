@@ -102,7 +102,7 @@ private struct SendFlowLoadedView: View {
         applyRouteArguments(to: sendFlowManager)
 
         // rust handles alert + popRoute on failure
-        if await sendFlowManager.rust.waitForInit() {
+        if await sendFlowManager.waitForInit() {
             guard !Task.isCancelled else { return }
 
             initializedSendFlowManagerId = sendFlowManagerId

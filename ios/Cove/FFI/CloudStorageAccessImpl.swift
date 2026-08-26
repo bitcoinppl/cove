@@ -313,13 +313,13 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         policy: CloudAccessPolicy
     ) async throws -> Data {
         let recordId = csppMasterKeyRecordId()
-        let url = try await helper.existingBackupFileReadURL(
+        let target = try await helper.existingBackupFileReadTarget(
             namespace: namespace,
             recordId: recordId,
             locations: locations,
             lookupMode: policy.backupLookupMode
         )
-        return try await helper.downloadFile(url: url, recordId: recordId)
+        return try await helper.downloadFile(target: target, recordId: recordId)
     }
 
     func downloadWalletBackup(
@@ -328,13 +328,13 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         locations: [RemoteBackupLocation],
         policy: CloudAccessPolicy
     ) async throws -> Data {
-        let url = try await helper.existingBackupFileReadURL(
+        let target = try await helper.existingBackupFileReadTarget(
             namespace: namespace,
             recordId: recordId,
             locations: locations,
             lookupMode: policy.backupLookupMode
         )
-        return try await helper.downloadFile(url: url, recordId: recordId)
+        return try await helper.downloadFile(target: target, recordId: recordId)
     }
 
     func deleteWalletBackup(

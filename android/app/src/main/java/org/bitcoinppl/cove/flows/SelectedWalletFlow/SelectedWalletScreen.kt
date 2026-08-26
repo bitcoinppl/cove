@@ -65,6 +65,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.initialScanActive
 import org.bitcoinppl.cove.initialScanIncomplete
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.views.AutoSizeText
@@ -77,6 +78,7 @@ import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletLedgerState
 import org.bitcoinppl.cove_core.WalletLoadState
 import org.bitcoinppl.cove_core.WalletManagerAction
+import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.WalletScanStatus
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.WalletType
@@ -159,7 +161,13 @@ fun SelectedWalletScreen(
     val unsignedTransactions = manager.unsignedTransactions
 
     LaunchedEffect(manager) {
-        manager.validateMetadata()
+        try {
+            manager.validateMetadata()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: WalletManagerException) {
+            Log.e("SelectedWalletScreen", "failed to validate wallet metadata", e)
+        }
     }
 
     // use Material Design system colors for native Android feel

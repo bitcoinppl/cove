@@ -142,5 +142,9 @@ mod tests {
         fn delete(&self, key: String) -> bool {
             self.0.delete(key)
         }
+
+        fn delete_all_wallet_items(&self) -> Result<(), KeychainError> {
+            self.0.delete_all_wallet_items()
+        }
     }
 }

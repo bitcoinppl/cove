@@ -537,6 +537,7 @@ impl CloudBackupSupervisor {
                 && matches!(
                     &result,
                     DeepVerificationResult::Verified(_)
+                        | DeepVerificationResult::NeedsAttention(_)
                         | DeepVerificationResult::AwaitingUploadConfirmation(_)
                         | DeepVerificationResult::PasskeyConfirmed(_)
                         | DeepVerificationResult::PasskeyMissing(_)

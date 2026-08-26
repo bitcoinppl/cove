@@ -45,6 +45,7 @@ enum WalletSettingsPresentationState: Equatable {
     case deleteConfirmation(WalletDeletionConfirmationPlan)
     case secondDeleteConfirmation(WalletDeletionConfirmationPlan)
     case finalDeleteConfirmation
+    case deletionShutdownBlocked(ShutdownAttemptId)
     case appLockRequired
     case xprvCredentialVerification(XprvPostVerificationAction)
     case xprvReveal
@@ -57,7 +58,10 @@ enum WalletSettingsPresentationState: Equatable {
             .xprvExportWarningDialog
         case .deleteConfirmation:
             .deleteConfirmationDialog
-        case .secondDeleteConfirmation, .finalDeleteConfirmation, .appLockRequired:
+        case .secondDeleteConfirmation,
+             .finalDeleteConfirmation,
+             .deletionShutdownBlocked,
+             .appLockRequired:
             .alert
         case .xprvCredentialVerification:
             .credentialVerification
@@ -78,6 +82,8 @@ struct WalletSettingsPresentationContext {
     let confirmInitialDelete: (WalletDeletionConfirmationPlan) -> Void
     let confirmSecondDelete: (WalletDeletionConfirmationPlan) -> Void
     let deleteWallet: () -> Void
+    let retryDeleteWallet: (ShutdownAttemptId) -> Void
+    let cancelDeleteWallet: (ShutdownAttemptId) -> Void
     let performXprvExport: (XprvPostVerificationAction) -> Void
     let loadXprv: () throws -> String
 
@@ -87,6 +93,8 @@ struct WalletSettingsPresentationContext {
             "Confirm Deletion"
         case .finalDeleteConfirmation:
             "Final Warning"
+        case .deletionShutdownBlocked:
+            "Wallet Shutdown Is Blocked"
         case .appLockRequired:
             "App Lock Required"
         default:
@@ -160,17 +168,50 @@ private struct WalletSettingsAlertActions: View {
     var body: some View {
         switch presentation {
         case let .secondDeleteConfirmation(plan):
-            Button("Delete", role: .destructive) {
-                context.confirmSecondDelete(plan)
-            }
-            Button("Cancel", role: .cancel) {}
+            WalletSettingsSecondDeleteActions(plan: plan, context: context)
         case .finalDeleteConfirmation:
-            Button(context.finalDeleteButtonTitle, role: .destructive, action: context.deleteWallet)
-            Button("Cancel", role: .cancel) {}
+            WalletSettingsFinalDeleteActions(context: context)
+        case let .deletionShutdownBlocked(attemptId):
+            WalletSettingsBlockedDeleteActions(attemptId: attemptId, context: context)
         case .appLockRequired:
             Button("OK", role: .cancel) {}
         default:
             EmptyView()
+        }
+    }
+}
+
+private struct WalletSettingsSecondDeleteActions: View {
+    let plan: WalletDeletionConfirmationPlan
+    let context: WalletSettingsPresentationContext
+
+    var body: some View {
+        Button("Delete", role: .destructive) {
+            context.confirmSecondDelete(plan)
+        }
+        Button("Cancel", role: .cancel) {}
+    }
+}
+
+private struct WalletSettingsFinalDeleteActions: View {
+    let context: WalletSettingsPresentationContext
+
+    var body: some View {
+        Button(context.finalDeleteButtonTitle, role: .destructive, action: context.deleteWallet)
+        Button("Cancel", role: .cancel) {}
+    }
+}
+
+private struct WalletSettingsBlockedDeleteActions: View {
+    let attemptId: ShutdownAttemptId
+    let context: WalletSettingsPresentationContext
+
+    var body: some View {
+        Button("Retry") {
+            context.retryDeleteWallet(attemptId)
+        }
+        Button("Cancel", role: .cancel) {
+            context.cancelDeleteWallet(attemptId)
         }
     }
 }
@@ -185,6 +226,8 @@ private struct WalletSettingsAlertMessage: View {
             Text("Are you sure you want to delete '\(context.walletName)'?")
         case .finalDeleteConfirmation:
             Text(context.finalDeleteConfirmationMessage)
+        case .deletionShutdownBlocked:
+            Text("Cove could not stop all wallet work. Retry or cancel the deletion.")
         case .appLockRequired:
             Text("Enable a PIN or biometric app lock before exporting a private key.")
         default:

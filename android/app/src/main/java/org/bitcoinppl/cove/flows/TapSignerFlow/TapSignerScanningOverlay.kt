@@ -81,13 +81,12 @@ fun TapSignerScanningOverlay(
 
                 Text(
                     text =
-                        if (hasError) {
-                            errorMessage!!
-                        } else if (isTagDetected) {
-                            "Scanning please hold still" + ".".repeat(dotCount)
-                        } else {
-                            "Ready to scan"
-                        },
+                        errorMessage
+                            ?: if (isTagDetected) {
+                                "Scanning please hold still" + ".".repeat(dotCount)
+                            } else {
+                                "Ready to scan"
+                            },
                     style = MaterialTheme.typography.titleLarge,
                     color = if (hasError) MaterialTheme.colorScheme.error else Color.Unspecified,
                 )

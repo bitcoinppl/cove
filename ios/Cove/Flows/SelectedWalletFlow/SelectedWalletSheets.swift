@@ -41,10 +41,10 @@ private struct LabelQrExportSheet: View {
             title: "Export Labels",
             subtitle: "Scan to import labels\ninto another wallet",
             generateBbqrStrings: { density in
-                try await manager.rust.exportLabelsForQr(density: density)
+                try await manager.exportLabelsForQr(density: density)
             },
             generateUrStrings: nil,
-            copyData: { try await manager.rust.exportLabelsForShare().content }
+            copyData: { try await manager.exportLabelsForShare().content }
         )
         .presentationDetents([.height(500), .height(600), .large])
         .padding()
@@ -60,10 +60,10 @@ private struct XpubQrExportSheet: View {
             title: "Export Xpub",
             subtitle: "Public descriptor for\nwatch-only wallet",
             generateBbqrStrings: { density in
-                try await manager.rust.exportXpubForQr(density: density)
+                try await manager.exportXpubForQr(density: density)
             },
             generateUrStrings: nil,
-            copyData: { try await manager.rust.exportXpubForShare().content }
+            copyData: { try await manager.exportXpubForShare().content }
         )
         .presentationDetents([.height(500), .height(600), .large])
         .padding()

@@ -16,6 +16,9 @@ pub enum CloudStorageError {
     #[error("offline: {0}")]
     Offline(String),
 
+    #[error("provider sync pending: {0}")]
+    SyncPending(String),
+
     #[error("upload failed: {0}")]
     UploadFailed(String),
 

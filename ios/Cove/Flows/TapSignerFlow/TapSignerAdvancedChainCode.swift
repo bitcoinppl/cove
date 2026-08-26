@@ -5,10 +5,10 @@
 //  Created by Praveen Perera on 3/24/25.
 //
 
+import CoveCore
 import SwiftUI
 
 struct TapSignerAdvancedChainCode: View {
-    @Environment(AppManager.self) var app
     @Environment(TapSignerManager.self) var manager
 
     let tapSigner: TapSigner
@@ -17,7 +17,12 @@ struct TapSignerAdvancedChainCode: View {
     @State private var chainCode: String = ""
 
     private var isButtonDisabled: Bool {
-        !isValidChainCode(chainCode: chainCode)
+        tapSignerChainCodeBytes(hex: chainCode) == nil
+    }
+
+    private var chainCodeError: String? {
+        guard !chainCode.isEmpty else { return nil }
+        return tapSignerChainCodeInputError(hex: chainCode)
     }
 
     var body: some View {
@@ -25,6 +30,7 @@ struct TapSignerAdvancedChainCode: View {
             TapSignerAdvancedChainCodeContent(
                 chainCode: $chainCode,
                 isButtonDisabled: isButtonDisabled,
+                chainCodeError: chainCodeError,
                 usesFlexibleSpacing: usesFlexibleSpacing,
                 backAction: goBack,
                 generateAction: generateChainCode,
@@ -45,6 +51,7 @@ struct TapSignerAdvancedChainCode: View {
     }
 
     private func continueSetup() {
+        guard tapSignerChainCodeBytes(hex: chainCode) != nil else { return }
         manager.navigate(to: .startingPin(tapSigner: tapSigner, chainCode: chainCode))
     }
 }
@@ -53,6 +60,7 @@ private struct TapSignerAdvancedChainCodeContent: View {
     @Binding var chainCode: String
 
     let isButtonDisabled: Bool
+    let chainCodeError: String?
     let usesFlexibleSpacing: Bool
     let backAction: () -> Void
     let generateAction: () -> Void
@@ -100,6 +108,14 @@ private struct TapSignerAdvancedChainCodeContent: View {
             .padding(.horizontal, 20)
             .foregroundStyle(.primary)
             .padding(.top, 10)
+
+            if let chainCodeError {
+                Text(chainCodeError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
 
             Button(action: generateAction) {
                 Text("Generate new string for me")

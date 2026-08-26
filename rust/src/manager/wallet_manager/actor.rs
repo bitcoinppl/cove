@@ -1,15 +1,26 @@
 use crate::{
-    database::{Database, wallet_data::WalletDataDb},
+    database::{
+        Database,
+        wallet::{
+            WalletAddressTypePatch, WalletInternalMetadataPatch, WalletMetadataPatch,
+            WalletUserMetadataPatch,
+        },
+        wallet_data::WalletDataDb,
+    },
     historical_price_service::HistoricalPriceService,
+    manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
     manager::wallet_manager::{
-        Error, SendFlowErrorAlert, TransactionLockState, WalletLedgerState, WalletScanPhase,
-        WalletScanStatus, WalletSnapshot, receive_address::ReceiveAddressSession,
+        Error, SendFlowErrorAlert, TransactionLockState, WalletLedgerState, WalletManagerAction,
+        WalletScanPhase, WalletScanStatus, WalletSnapshot, receive_address::ReceiveAddressSession,
     },
     node::client::{Error as NodeError, NodeClient},
     receive_address_watcher::ReceiveAddressWatcher,
     transaction::{ConfirmedTransaction, Transaction, TransactionDetailsPresentation, TxId},
     transaction_watcher::TransactionWatcher,
-    wallet::{Wallet, WalletAddressType, balance::Balance, metadata::WalletMetadata},
+    wallet::{
+        AddressTypeSwitchMetadata, Wallet, WalletAddressType, balance::Balance,
+        metadata::WalletMetadata,
+    },
 };
 mod node;
 mod receive_address;
@@ -17,7 +28,7 @@ mod scan;
 mod transaction_confirmation;
 mod transactions;
 
-use super::payjoin::{PayjoinActor, SessionResumption, resume_session};
+use super::payjoin::{PayjoinActor, PayjoinSessionPersister, SessionResumption, resume_session};
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
@@ -49,7 +60,7 @@ use self::scan::{
 use super::{SingleOrMany, WalletManagerReconcileMessage};
 
 #[derive(Debug)]
-pub struct WalletActor {
+pub(crate) struct WalletActor {
     pub addr: WeakAddr<Self>,
     pub reconciler: Sender<SingleOrMany>,
     pub wallet: Wallet,
@@ -57,12 +68,14 @@ pub struct WalletActor {
 
     pub db: WalletDataDb,
     pub state: ActorState,
+    pub metadata: Arc<RwLock<WalletMetadata>>,
     pub receive_address: ReceiveAddressSession,
     pub scan_status: Arc<RwLock<WalletScanStatus>>,
     pub wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
 
     seed: u64,
     transaction_watchers: HashMap<Txid, Addr<TransactionWatcher>>,
+    quiesced_transaction_watchers: HashSet<Txid>,
     targeted_transaction_scans: transaction_confirmation::TargetedTransactionScans,
     receive_address_watcher: Option<Addr<ReceiveAddressWatcher>>,
     receive_address_refresh_timer: Option<AbortableTask<()>>,
@@ -77,7 +90,7 @@ pub struct WalletActor {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum ActorState {
+pub(crate) enum ActorState {
     Initial,
     PerformingIncrementalScan,
     PerformingFullScan(FullScanType),
@@ -150,25 +163,247 @@ impl Actor for WalletActor {
 }
 
 impl WalletActor {
-    pub fn new(
+    pub async fn dispatch_metadata_action(
+        &mut self,
+        action: WalletManagerAction,
+    ) -> ActorResult<()> {
+        let Some(patch) = self.metadata_patch_for_action(action) else {
+            return Produces::ok(());
+        };
+
+        if let Err(error) = self.apply_metadata_patch(patch) {
+            self.send(WalletManagerReconcileMessage::WalletError(error));
+        }
+
+        Produces::ok(())
+    }
+
+    pub async fn set_wallet_type(
+        &mut self,
+        wallet_type: crate::wallet::metadata::WalletType,
+    ) -> ActorResult<Result<(), Error>> {
+        let result = self.apply_metadata_patch(WalletMetadataPatch::WalletType(wallet_type));
+        if let Err(error) = &result {
+            self.send(WalletManagerReconcileMessage::WalletError(error.clone()));
+        }
+
+        Produces::ok(result)
+    }
+
+    pub async fn validate_metadata(&mut self) -> ActorResult<Result<(), Error>> {
+        if !self.wallet.metadata.name.trim().is_empty() {
+            return Produces::ok(Ok(()));
+        }
+
+        let name = self.wallet.metadata.master_fingerprint.as_deref().map_or_else(
+            || "Unnamed Wallet".to_string(),
+            crate::wallet::fingerprint::Fingerprint::as_uppercase,
+        );
+
+        let result =
+            self.apply_metadata_patch(WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                name: Some(name),
+                ..Default::default()
+            }));
+        if let Err(error) = &result {
+            self.send(WalletManagerReconcileMessage::WalletError(error.clone()));
+        }
+
+        Produces::ok(result)
+    }
+
+    pub async fn mark_wallet_as_verified(&mut self) -> ActorResult<Result<(), Error>> {
+        let result = self.apply_metadata_patch(WalletMetadataPatch::Verified(true));
+        if let Err(error) = &result {
+            self.send(WalletManagerReconcileMessage::WalletError(error.clone()));
+        }
+
+        Produces::ok(result)
+    }
+
+    pub async fn update_discovery_state(
+        &mut self,
+        discovery_state: crate::wallet::metadata::DiscoveryState,
+    ) -> ActorResult<Result<(), Error>> {
+        let result =
+            self.apply_metadata_patch(WalletMetadataPatch::DiscoveryState(discovery_state));
+        if let Err(error) = &result {
+            self.send(WalletManagerReconcileMessage::WalletError(error.clone()));
+        }
+
+        Produces::ok(result)
+    }
+
+    fn metadata_patch_for_action(
+        &self,
+        action: WalletManagerAction,
+    ) -> Option<WalletMetadataPatch> {
+        let metadata = &self.wallet.metadata;
+
+        let patch = match action {
+            WalletManagerAction::UpdateName(name) => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    name: Some(name),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::UpdateColor(color) => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    color: Some(color),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::UpdateUnit(unit) => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    selected_unit: Some(unit),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::UpdateFiatOrBtc(fiat_or_btc) => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    fiat_or_btc: Some(fiat_or_btc),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::ToggleSensitiveVisibility => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    sensitive_visible: Some(!metadata.sensitive_visible),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::ToggleDetailsExpanded => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    details_expanded: Some(!metadata.details_expanded),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::ToggleFiatOrBtc => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    fiat_or_btc: Some(match metadata.fiat_or_btc {
+                        crate::wallet::metadata::FiatOrBtc::Btc => {
+                            crate::wallet::metadata::FiatOrBtc::Fiat
+                        }
+                        crate::wallet::metadata::FiatOrBtc::Fiat => {
+                            crate::wallet::metadata::FiatOrBtc::Btc
+                        }
+                    }),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::ToggleFiatBtcPrimarySecondary => {
+                const ORDER: &[(crate::wallet::metadata::FiatOrBtc, crate::transaction::Unit); 4] =
+                    &[
+                        (crate::wallet::metadata::FiatOrBtc::Btc, crate::transaction::Unit::Btc),
+                        (crate::wallet::metadata::FiatOrBtc::Fiat, crate::transaction::Unit::Btc),
+                        (crate::wallet::metadata::FiatOrBtc::Btc, crate::transaction::Unit::Sat),
+                        (crate::wallet::metadata::FiatOrBtc::Fiat, crate::transaction::Unit::Sat),
+                    ];
+                let current = (metadata.fiat_or_btc, metadata.selected_unit);
+                let current_index = ORDER.iter().position(|option| option == &current)?;
+                let (fiat_or_btc, selected_unit) = ORDER[(current_index + 1) % ORDER.len()];
+
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    fiat_or_btc: Some(fiat_or_btc),
+                    selected_unit: Some(selected_unit),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::ToggleShowLabels => {
+                WalletMetadataPatch::UserFacing(WalletUserMetadataPatch {
+                    show_labels: Some(!metadata.show_labels),
+                    ..Default::default()
+                })
+            }
+            WalletManagerAction::SelectCurrentWalletAddressType => {
+                WalletMetadataPatch::DiscoveryState(
+                    crate::wallet::metadata::DiscoveryState::ChoseAdressType,
+                )
+            }
+            WalletManagerAction::OpenReceiveAddress
+            | WalletManagerAction::CreateNewReceiveAddress
+            | WalletManagerAction::CloseReceiveAddress(_) => return None,
+        };
+
+        Some(patch)
+    }
+
+    fn apply_metadata_patch(&mut self, patch: WalletMetadataPatch) -> Result<(), Error> {
+        let before = self.wallet.metadata.clone();
+
+        let after = if self.wallet.uses_persistent_storage() {
+            let result = Database::global()
+                .wallets
+                .patch_wallet_metadata(
+                    &self.wallet.id,
+                    self.wallet.network,
+                    self.wallet.metadata.wallet_mode,
+                    patch,
+                )
+                .map_err_str(Error::UnknownError)?;
+            result.after
+        } else {
+            let mut after = before.clone();
+            patch.apply_to(&mut after);
+            after
+        };
+
+        self.wallet.metadata = after.clone();
+        *self.metadata.write() = after.clone();
+        self.send_metadata_changed(&before, &after);
+
+        if self.wallet.uses_persistent_storage() {
+            CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before, &after);
+        }
+
+        Ok(())
+    }
+
+    fn send_metadata_changed(&self, before: &WalletMetadata, after: &WalletMetadata) {
+        if before == after {
+            return;
+        }
+
+        // the actor is the sole metadata writer, so a full snapshot over the ordered
+        // reconcile channel cannot clobber a concurrent update and self-corrects the UI
+        self.send(WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(after.clone())));
+
+        let ledger_state_changed = before.address_type != after.address_type
+            || before.discovery_state != after.discovery_state
+            || before.internal.performed_full_scan_at != after.internal.performed_full_scan_at;
+        if ledger_state_changed {
+            self.send_ledger_state(self.scan_status.read().clone());
+        }
+    }
+
+    pub(crate) fn new_with_metadata(
         wallet: Wallet,
         reconciler: Sender<SingleOrMany>,
         scan_status: Arc<RwLock<WalletScanStatus>>,
         wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
+        metadata: Arc<RwLock<WalletMetadata>>,
     ) -> Result<Self, crate::database::wallet_data::WalletDataError> {
         let db = WalletDataDb::new_or_existing(wallet.id.clone())?;
 
-        Ok(Self::new_with_db(wallet, reconciler, scan_status, wallet_snapshot, db))
+        Ok(Self::new_with_metadata_and_db(
+            wallet,
+            reconciler,
+            scan_status,
+            wallet_snapshot,
+            db,
+            metadata,
+        ))
     }
 
-    pub(crate) fn new_with_db(
-        wallet: Wallet,
+    pub(crate) fn new_with_metadata_and_db(
+        mut wallet: Wallet,
         reconciler: Sender<SingleOrMany>,
         scan_status: Arc<RwLock<WalletScanStatus>>,
         wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
         db: WalletDataDb,
+        metadata: Arc<RwLock<WalletMetadata>>,
     ) -> Self {
         let seed = rand::rng().random();
+        wallet.metadata = metadata.read().clone();
 
         Self {
             addr: Default::default(),
@@ -180,10 +415,12 @@ impl WalletActor {
             last_height_fetched: None,
             height_refreshes_in_flight: HashMap::default(),
             state: ActorState::Initial,
+            metadata,
             receive_address: ReceiveAddressSession::default(),
             scan_status,
             wallet_snapshot,
             transaction_watchers: HashMap::default(),
+            quiesced_transaction_watchers: HashSet::default(),
             targeted_transaction_scans: Default::default(),
             receive_address_watcher: None,
             receive_address_refresh_timer: None,
@@ -405,12 +642,9 @@ impl WalletActor {
         &mut self,
         address_type: WalletAddressType,
     ) -> Result<(), Error> {
-        self.wallet.switch_private_wallet_to_new_address_type(address_type)?;
-        self.restart_scan_after_address_type_switch()
-            .await
-            .map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
-
-        Ok(())
+        let previous_metadata = self.wallet.metadata.clone();
+        let switch_outcome = self.wallet.switch_private_wallet_to_new_address_type(address_type)?;
+        self.finish_address_type_switch(switch_outcome, address_type, previous_metadata).await
     }
 
     pub async fn switch_descriptor_to_new_address_type(
@@ -456,12 +690,69 @@ impl WalletActor {
         descriptors: pubport::descriptor::Descriptors,
         address_type: WalletAddressType,
     ) -> Result<(), Error> {
-        self.wallet.switch_descriptor_to_new_address_type(descriptors, address_type)?;
-        self.restart_scan_after_address_type_switch()
-            .await
-            .map_err(|error| Error::UnableToSwitch(address_type, error.to_string()))?;
+        let previous_metadata = self.wallet.metadata.clone();
+        let switch_outcome =
+            self.wallet.switch_descriptor_to_new_address_type(descriptors, address_type)?;
+        self.finish_address_type_switch(switch_outcome, address_type, previous_metadata).await
+    }
 
-        Ok(())
+    async fn finish_address_type_switch(
+        &mut self,
+        switch_outcome: crate::wallet::AddressTypeSwitchOutcome,
+        address_type: WalletAddressType,
+        previous_metadata: WalletMetadata,
+    ) -> Result<(), Error> {
+        let patch = WalletMetadataPatch::AddressType(address_type_patch(
+            address_type,
+            switch_outcome.metadata,
+            &previous_metadata,
+        ));
+        let mut target_metadata = previous_metadata.clone();
+        patch.apply_to(&mut target_metadata);
+
+        // publication already committed, so every live metadata owner must move forward
+        self.wallet.metadata = target_metadata.clone();
+        *self.metadata.write() = target_metadata.clone();
+        self.send_metadata_changed(&previous_metadata, &target_metadata);
+
+        let mut failures = Vec::new();
+        if let Some(source_detail) = switch_outcome.durability_error {
+            failures.push(super::AddressTypeSwitchRecoveryFailure {
+                stage: super::AddressTypeSwitchRecoveryStage::Durability,
+                source_detail,
+            });
+        }
+        if let Some(source_detail) = switch_outcome.store_reload_error {
+            failures.push(super::AddressTypeSwitchRecoveryFailure {
+                stage: super::AddressTypeSwitchRecoveryStage::StoreReload,
+                source_detail,
+            });
+        }
+
+        if switch_outcome.persistence.requires_metadata_commit() {
+            match Database::global().wallets.replace_wallet_metadata(target_metadata.clone()) {
+                Ok(_) => CLOUD_BACKUP_MANAGER
+                    .handle_wallet_metadata_update(&previous_metadata, &target_metadata),
+                Err(error) => failures.push(super::AddressTypeSwitchRecoveryFailure {
+                    stage: super::AddressTypeSwitchRecoveryStage::Metadata,
+                    source_detail: error.to_string(),
+                }),
+            }
+        }
+
+        if let Err(error) = self.restart_scan_after_address_type_switch().await {
+            self.reset_scan_lifecycle_for_address_type_switch();
+            failures.push(super::AddressTypeSwitchRecoveryFailure {
+                stage: super::AddressTypeSwitchRecoveryStage::ScanRestart,
+                source_detail: error.to_string(),
+            });
+        }
+
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(Error::AddressTypeSwitchCommittedWithRecoveryPending { address_type, failures })
+        }
     }
 
     #[into_actor_result]
@@ -514,26 +805,164 @@ impl WalletActor {
         Ok(state)
     }
 
-    pub async fn shutdown(&mut self) {
+    pub async fn shutdown(&mut self) -> ActorResult<()> {
+        self.quiesce(None).await
+    }
+
+    /// Stop every child that can read or write persistent wallet state
+    pub(crate) async fn quiesce_for_terminal_shutdown(
+        &mut self,
+        authority: crate::wallet_lifecycle::TerminalPayjoinPersistenceAuthority,
+    ) -> ActorResult<()> {
+        self.quiesce(Some(authority)).await
+    }
+
+    async fn quiesce(
+        &mut self,
+        terminal_payjoin_authority: Option<
+            crate::wallet_lifecycle::TerminalPayjoinPersistenceAuthority,
+        >,
+    ) -> ActorResult<()> {
         debug!("shutdown wallet actor");
         let scan_generation = self.advance_scan_generation();
+        let mut first_error = None;
 
-        if let Some(scan_actor) = &self.scan_actor {
-            send!(scan_actor.shutdown(scan_generation));
+        if let Some(scan_actor) = self.scan_actor.take()
+            && let Err(error) = call!(scan_actor.shutdown(scan_generation)).await
+        {
+            first_error.get_or_insert_with(|| error.to_string());
+            self.scan_actor = Some(scan_actor);
         }
 
-        self.stop_receive_address_watcher();
+        if let Some(watcher) = self.receive_address_watcher.take()
+            && let Err(error) = call!(watcher.stop_watching()).await
+        {
+            first_error.get_or_insert_with(|| error.to_string());
+            self.receive_address_watcher = Some(watcher);
+        }
         self.stop_receive_address_refresh_timer();
-        if let Some(actor) = self.payjoin_actor.take() {
-            send!(actor.cancel_and_fallback());
+        match terminal_payjoin_authority {
+            Some(authority) => {
+                let mut payjoin_quiesced = true;
+                if let Some(actor) = self.payjoin_actor.take()
+                    && let Err(error) =
+                        call!(actor.cancel_and_fallback_for_terminal_shutdown(authority.clone()))
+                            .await
+                {
+                    first_error.get_or_insert_with(|| error.to_string());
+                    self.payjoin_actor = Some(actor);
+                    payjoin_quiesced = false;
+                }
+
+                if payjoin_quiesced {
+                    let terminal_transaction = PayjoinSessionPersister::new(self.db.clone())
+                        .terminal_transaction_for_shutdown(&authority)
+                        .map_err(|error| error.to_string());
+
+                    match terminal_transaction {
+                        Ok(Some(transaction)) => {
+                            // keep node latency outside the destructive shutdown deadline
+                            self.schedule_payjoin_terminal_broadcast(transaction);
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            first_error.get_or_insert(error);
+                        }
+                    }
+                }
+            }
+            None => {
+                if let Some(actor) = self.payjoin_actor.take() {
+                    let terminal_fallback = match call!(actor.cancel_and_fallback()).await {
+                        Ok(fallback) => fallback,
+                        Err(error) => {
+                            first_error.get_or_insert_with(|| error.to_string());
+                            self.payjoin_actor = Some(actor);
+                            None
+                        }
+                    };
+
+                    if let Some(fallback) = terminal_fallback
+                        && let Err(error) =
+                            self.broadcast_payjoin_terminal_for_shutdown(fallback).await
+                    {
+                        first_error.get_or_insert_with(|| error.to_string());
+                    }
+                }
+            }
         }
         self.state = ActorState::Initial;
-        for watcher in self.transaction_watchers.values() {
-            send!(watcher.stop_watching());
+        self.quiesce_transaction_watchers(&mut first_error).await;
+
+        self.send_scan_idle_status();
+
+        if let Some(error) = first_error {
+            return Err(error.into());
         }
 
-        self.transaction_watchers = HashMap::default();
-        self.send_scan_idle_status();
+        Produces::ok(())
+    }
+
+    async fn quiesce_transaction_watchers(&mut self, first_error: &mut Option<String>) {
+        let transaction_watcher_ids = self.transaction_watchers.keys().copied().collect::<Vec<_>>();
+
+        for tx_id in transaction_watcher_ids {
+            let watcher = self
+                .transaction_watchers
+                .get(&tx_id)
+                .expect("active watcher remains actor-owned")
+                .clone();
+
+            match call!(watcher.stop_watching()).await {
+                Ok(()) => {
+                    self.transaction_watchers.remove(&tx_id);
+                    self.quiesced_transaction_watchers.insert(tx_id);
+                }
+                Err(error) => {
+                    first_error.get_or_insert_with(|| error.to_string());
+                }
+            }
+        }
+    }
+
+    /// Restore child services after a destructive request fails before termination
+    pub(crate) async fn resume_after_failed_quiesce(&mut self) -> ActorResult<()> {
+        if self.scan_actor.is_none() {
+            self.spawn_scan_actor();
+        }
+
+        self.resume_payjoin_session().await?;
+        self.resume_receive_address_services();
+        self.resume_transaction_watchers().await?;
+
+        send!(self.addr.check_node_connection());
+        Produces::ok(())
+    }
+
+    async fn resume_transaction_watchers(&mut self) -> ActorResult<()> {
+        let retained_watcher_ids = self.transaction_watchers.keys().copied().collect::<Vec<_>>();
+        for tx_id in retained_watcher_ids {
+            let watcher = self
+                .transaction_watchers
+                .get(&tx_id)
+                .expect("retained watcher remains actor-owned")
+                .clone();
+
+            if !matches!(call!(watcher.is_watching()).await, Ok(true)) {
+                self.transaction_watchers.remove(&tx_id);
+                self.quiesced_transaction_watchers.insert(tx_id);
+            }
+        }
+
+        let transaction_watcher_ids =
+            self.quiesced_transaction_watchers.iter().copied().collect::<Vec<_>>();
+
+        for tx_id in transaction_watcher_ids {
+            self.start_transaction_watcher(tx_id).await?;
+            self.quiesced_transaction_watchers.remove(&tx_id);
+        }
+
+        Produces::ok(())
     }
 
     async fn perform_full_scan(&mut self) -> ActorResult<()> {
@@ -567,6 +996,7 @@ impl WalletActor {
         let spendable = self.wallet.balance().0.trusted_spendable();
         let locked_outpoints =
             self.db.labels.locked_output_outpoints().map_err_str(Error::OutputLabelsError)?;
+
         let chain_tip_height = self.wallet.bdk.local_chain().tip().height();
         let locked_amount = self
             .wallet
@@ -772,19 +1202,18 @@ impl WalletActor {
             }
         }
 
-        if full_scan_updates_initial_metadata(full_scan_type) {
+        let metadata_result = if full_scan_updates_initial_metadata(full_scan_type) {
             let now = jiff::Timestamp::now().as_second() as u64;
-
-            if let Err(error) = self.record_full_scan_performed(now) {
-                self.state = ActorState::FailedFullScan(full_scan_type);
-                self.send_scan_idle_status();
-                return Err(error.into());
-            }
-
-            self.save_last_scan_finished();
-            self.send_metadata_changed();
+            self.record_full_scan_performed(now)
         } else {
-            self.save_last_scan_finished();
+            Ok(())
+        }
+        .and_then(|()| self.save_last_scan_finished());
+
+        if let Err(error) = metadata_result {
+            self.state = ActorState::FailedFullScan(full_scan_type);
+            self.send_scan_idle_status();
+            return Err(error.into());
         }
 
         self.notify_scan_complete().await?;
@@ -810,7 +1239,11 @@ impl WalletActor {
 
         self.wallet.bdk.apply_update(sync_result)?;
         self.wallet.persist()?;
-        self.save_last_scan_finished();
+        if let Err(error) = self.save_last_scan_finished() {
+            self.state = ActorState::FailedIncrementalScan;
+            self.send_scan_idle_status();
+            return Err(error.into());
+        }
 
         self.notify_scan_complete().await?;
         self.state = ActorState::IncrementalScanComplete;
@@ -853,7 +1286,11 @@ impl WalletActor {
         }
 
         match Wallet::try_load_persisted(self.wallet.id.clone()) {
-            Ok(wallet) => self.wallet = wallet,
+            Ok(mut wallet) => {
+                // the actor owns metadata; reloading BDK state must not replace it with a stale row
+                wallet.metadata = self.wallet.metadata.clone();
+                self.wallet = wallet;
+            }
             Err(error) => error!("failed to reload wallet: {error:?}"),
         }
     }
@@ -863,56 +1300,31 @@ impl WalletActor {
             return Some(last_scan_finished);
         }
 
-        let metadata = Database::global()
-            .wallets()
-            .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
-            .ok()??;
-
-        let last_scan_finished = metadata.internal.last_scan_finished;
+        let last_scan_finished = self.wallet.metadata.internal.last_scan_finished;
         self.last_scan_finished = last_scan_finished;
 
         last_scan_finished
     }
 
-    fn save_last_scan_finished(&mut self) -> Option<()> {
+    fn save_last_scan_finished(&mut self) -> Result<(), Error> {
         let now = UNIX_EPOCH.elapsed().unwrap_or_default();
+
+        self.apply_metadata_patch(WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
+            last_scan_finished: Some(Some(now)),
+            ..Default::default()
+        }))?;
         self.last_scan_finished = Some(now);
 
-        if !self.wallet.uses_persistent_storage() {
-            self.wallet.metadata.internal.last_scan_finished = Some(now);
-            return Some(());
-        }
-
-        let wallets = Database::global().wallets();
-
-        let mut metadata = wallets
-            .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
-            .ok()??;
-
-        metadata.internal.last_scan_finished = Some(now);
-        wallets.update_internal_metadata(&metadata).ok();
-        self.wallet.metadata = metadata;
-
-        Some(())
+        Ok(())
     }
 
-    fn record_full_scan_performed(&mut self, completed_at: u64) -> Result<WalletMetadata, Error> {
-        if !self.wallet.uses_persistent_storage() {
-            self.wallet.metadata.internal.performed_full_scan_at = Some(completed_at);
-            return Ok(self.wallet.metadata.clone());
-        }
+    fn record_full_scan_performed(&mut self, completed_at: u64) -> Result<(), Error> {
+        self.apply_metadata_patch(WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
+            performed_full_scan_at: Some(Some(completed_at)),
+            ..Default::default()
+        }))?;
 
-        let wallets = Database::global().wallets();
-        let current_metadata = wallets
-            .get(&self.wallet.id, self.wallet.network, self.wallet.metadata.wallet_mode)
-            .map_err_str(Error::WalletScanError)?
-            .ok_or(Error::WalletDoesNotExist)?;
-
-        let metadata = metadata_with_full_scan_performed(current_metadata, completed_at);
-        wallets.update_internal_metadata(&metadata).map_err_str(Error::WalletScanError)?;
-        self.wallet.metadata = metadata.clone();
-
-        Ok(metadata)
+        Ok(())
     }
 
     fn completed_initial_scan(&self) -> bool {
@@ -921,6 +1333,21 @@ impl WalletActor {
 
     fn ensure_ledger_ready_for_spend(&self) -> Result<(), Error> {
         ledger_ready_for_spend(self.completed_initial_scan())
+    }
+}
+
+fn address_type_patch(
+    address_type: WalletAddressType,
+    switch_metadata: AddressTypeSwitchMetadata,
+    previous_metadata: &WalletMetadata,
+) -> WalletAddressTypePatch {
+    WalletAddressTypePatch {
+        address_type,
+        discovery_state: crate::wallet::metadata::DiscoveryState::ChoseAdressType,
+        origin: switch_metadata.origin.or_else(|| previous_metadata.origin.clone()),
+        master_fingerprint: switch_metadata
+            .master_fingerprint
+            .or_else(|| previous_metadata.master_fingerprint.clone()),
     }
 }
 
@@ -995,6 +1422,7 @@ const fn full_scan_updates_initial_metadata(full_scan_type: FullScanType) -> boo
     should_update_full_scan_metadata(full_scan_type)
 }
 
+#[cfg(test)]
 fn metadata_with_full_scan_performed(
     mut metadata: WalletMetadata,
     completed_at: u64,
@@ -1078,15 +1506,6 @@ impl WalletActor {
         let state =
             WalletLedgerState::from_metadata_and_scan_status(&self.wallet.metadata, &status);
         self.send(WalletManagerReconcileMessage::LedgerStateChanged(state));
-    }
-
-    fn send_metadata_changed(&self) {
-        self.send(WalletManagerReconcileMessage::WalletMetadataChanged(Box::new(
-            self.wallet.metadata.clone(),
-        )));
-
-        // metadata may be complete before the active scan status has reconciled idle
-        self.send_ledger_state(self.scan_status.read().clone());
     }
 
     fn reset_scan_lifecycle_for_address_type_switch(&mut self) {
@@ -1268,11 +1687,49 @@ impl SpendPolicy {
 }
 
 #[cfg(test)]
+mod test_support {
+    use std::sync::Arc;
+
+    use flume::Sender;
+    use parking_lot::RwLock;
+
+    use crate::{
+        database::wallet_data::WalletDataDb,
+        manager::wallet_manager::{WalletScanStatus, WalletSnapshot},
+        wallet::Wallet,
+    };
+
+    use super::{SingleOrMany, WalletActor};
+
+    impl WalletActor {
+        pub(crate) fn new_with_db(
+            wallet: Wallet,
+            reconciler: Sender<SingleOrMany>,
+            scan_status: Arc<RwLock<WalletScanStatus>>,
+            wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
+            db: WalletDataDb,
+        ) -> Self {
+            let metadata = Arc::new(RwLock::new(wallet.metadata.clone()));
+
+            Self::new_with_metadata_and_db(
+                wallet,
+                reconciler,
+                scan_status,
+                wallet_snapshot,
+                db,
+                metadata,
+            )
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use act_zero::{runtimes::tokio::spawn_actor, *};
     use bdk_wallet::{
         KeychainKind, LocalOutput,
         chain::{BlockId, ChainPosition, ConfirmationBlockTime},
+        miniscript::descriptor::DescriptorType,
         test_utils::{
             ReceiveTo, get_funded_wallet_wpkh, insert_checkpoint, receive_output,
             receive_output_in_latest_block, receive_output_to_address,
@@ -1304,14 +1761,15 @@ mod tests {
     use tokio::{
         io::{AsyncReadExt as _, AsyncWriteExt as _},
         net::TcpListener,
+        sync::{Notify, oneshot},
         task::JoinHandle,
     };
 
-    use crate::wallet::metadata::WalletMetadata;
+    use crate::{database::wallet::WalletMetadataPatch, wallet::metadata::WalletMetadata};
 
     use super::{
         ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, InitialScanRoute,
-        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, SingleOrMany,
+        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, SingleOrMany, address_type_patch,
         full_scan_updates_initial_metadata, initial_scan_route, ledger_ready_for_spend,
         metadata_with_full_scan_performed, progressive_scan_update_response,
         reset_scan_lifecycle_state_for_address_type_switch, should_accept_wallet_scan_generation,
@@ -1327,7 +1785,10 @@ mod tests {
         },
         node::Node,
         transaction_watcher::TransactionWatcherEvent,
-        wallet::{Address, Wallet, WalletAddressType, metadata::WalletId},
+        wallet::{
+            Address, Wallet, WalletAddressType,
+            metadata::{WalletId, WalletType},
+        },
     };
 
     const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -1348,6 +1809,12 @@ mod tests {
 
     struct BroadcastEsploraNode {
         broadcast_requests: Arc<AtomicUsize>,
+        server: JoinHandle<()>,
+    }
+
+    struct PendingBroadcastEsploraNode {
+        broadcast_requests: Arc<AtomicUsize>,
+        release: tokio::sync::watch::Sender<bool>,
         server: JoinHandle<()>,
     }
 
@@ -1393,6 +1860,34 @@ mod tests {
             tx_id: Txid,
         ) -> ActorResult<Option<Addr<crate::transaction_watcher::TransactionWatcher>>> {
             Produces::ok(self.transaction_watchers.get(&tx_id).cloned())
+        }
+
+        async fn finish_published_address_switch_with_reload_failure_for_test(
+            &mut self,
+            address_type: WalletAddressType,
+        ) -> ActorResult<Result<(), crate::manager::wallet_manager::Error>> {
+            let previous_metadata = self.wallet.metadata.clone();
+            self.wallet.use_in_memory_placeholder_for_test();
+            let outcome = crate::wallet::AddressTypeSwitchOutcome {
+                metadata: crate::wallet::AddressTypeSwitchMetadata::default(),
+                persistence: crate::wallet::AddressTypeSwitchPersistence::PublishedPersistent,
+                durability_error: None,
+                store_reload_error: Some("injected reload failure".to_string()),
+            };
+            let result =
+                self.finish_address_type_switch(outcome, address_type, previous_metadata).await;
+
+            Produces::ok(result)
+        }
+
+        async fn address_switch_metadata_owners_for_test(
+            &mut self,
+        ) -> ActorResult<(WalletMetadata, WalletMetadata, bool)> {
+            Produces::ok((
+                self.wallet.metadata.clone(),
+                self.metadata.read().clone(),
+                self.wallet.uses_persistent_storage(),
+            ))
         }
     }
 
@@ -1468,9 +1963,16 @@ mod tests {
         crate::test_support::ensure_tokio_runtime();
 
         let wallet_snapshot = test_wallet_snapshot(&wallet);
+        let metadata = Arc::new(RwLock::new(wallet.metadata.clone()));
 
-        super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-            .expect("actor is created")
+        super::WalletActor::new_with_metadata(
+            wallet,
+            sender,
+            test_scan_status(),
+            wallet_snapshot,
+            metadata,
+        )
+        .expect("actor is created")
     }
 
     fn test_keychain() -> &'static Keychain {
@@ -1840,6 +2342,71 @@ mod tests {
         });
 
         BroadcastEsploraNode { broadcast_requests, server }
+    }
+
+    async fn set_pending_broadcast_esplora_node() -> PendingBroadcastEsploraNode {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("test esplora server binds");
+        let address = listener.local_addr().expect("test esplora server has address");
+        let node = Node::new_esplora(
+            "pending broadcast test esplora node".to_string(),
+            format!("http://{address}"),
+            CoveNetwork::Bitcoin,
+        );
+
+        crate::database::Database::global()
+            .global_config
+            .set_selected_node(&node)
+            .expect("test node config is saved");
+
+        let broadcast_requests = Arc::new(AtomicUsize::new(0));
+        let broadcast_counter = broadcast_requests.clone();
+        let (release, release_request) = tokio::sync::watch::channel(false);
+        let server = tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else { return };
+                let broadcast_counter = broadcast_counter.clone();
+                let release_request = release_request.clone();
+                tokio::spawn(async move {
+                    let mut request = [0; 8192];
+                    let bytes_read = stream.read(&mut request).await.unwrap_or_default();
+                    let request = String::from_utf8_lossy(&request[..bytes_read]);
+                    let is_broadcast = request.starts_with("POST /tx ");
+                    if is_broadcast {
+                        broadcast_counter.fetch_add(1, Ordering::SeqCst);
+                        let mut release_request = release_request.clone();
+                        while !*release_request.borrow() {
+                            if release_request.changed().await.is_err() {
+                                return;
+                            }
+                        }
+                    }
+
+                    let body = if is_broadcast { "broadcast" } else { "1" };
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = stream.write_all(response.as_bytes()).await;
+                });
+            }
+        });
+
+        PendingBroadcastEsploraNode { broadcast_requests, release, server }
+    }
+
+    async fn wait_for_broadcast_request_count(broadcast_requests: &Arc<AtomicUsize>, count: usize) {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if broadcast_requests.load(Ordering::SeqCst) >= count {
+                    return;
+                }
+
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("broadcast request count is reached");
     }
 
     fn restore_default_bitcoin_node() {
@@ -2466,6 +3033,98 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn terminal_payjoin_fallback_waits_for_node_broadcast() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_broadcast_esplora_node(200).await;
+        let wallet = Wallet::preview_new_wallet();
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor = new_test_wallet_actor(wallet, sender);
+
+        actor
+            .broadcast_payjoin_terminal_for_shutdown(test_broadcast_transaction())
+            .await
+            .expect("terminal fallback reaches the node before shutdown returns");
+
+        restore_default_bitcoin_node();
+        server.server.abort();
+        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn destructive_quiesce_succeeds_after_terminal_broadcast_failure() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let failed_server = set_broadcast_esplora_node(500).await;
+        let wallet = Wallet::preview_new_wallet();
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor = new_test_wallet_actor(wallet, sender);
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+        let terminal_tx = test_broadcast_transaction();
+        let persister =
+            crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
+        persister.create_session(&terminal_tx).unwrap();
+        actor.payjoin_actor = Some(spawn_actor(
+            crate::manager::wallet_manager::payjoin::test_support::terminal_actor(
+                persister,
+                terminal_tx,
+            ),
+        ));
+        actor.db = db.clone();
+
+        let (authority, preparation) =
+            crate::wallet_lifecycle::test_support::begin_wallet_deletion(db.id.clone());
+        actor_value(actor.quiesce_for_terminal_shutdown(authority).await).await;
+        wait_for_broadcast_request_count(&failed_server.broadcast_requests, 1).await;
+        drop(preparation);
+        failed_server.server.abort();
+
+        assert!(actor.payjoin_actor.is_none(), "the failed broadcast leaves no child actor");
+        assert_eq!(
+            db.get_payjoin_sender_session().unwrap().unwrap().pending_action,
+            Some(crate::database::wallet_data::PendingAction::BroadcastFallback),
+            "the retry marker must remain after the failed broadcast"
+        );
+
+        restore_default_bitcoin_node();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn destructive_quiesce_does_not_wait_for_terminal_broadcast() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let pending_server = set_pending_broadcast_esplora_node().await;
+        let wallet = Wallet::preview_new_wallet();
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor = new_test_wallet_actor(wallet, sender);
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+        let terminal_tx = test_broadcast_transaction();
+        let persister =
+            crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
+        persister.create_session(&terminal_tx).unwrap();
+        persister.set_pending_fallback().unwrap();
+        actor.db = db.clone();
+
+        let (authority, preparation) =
+            crate::wallet_lifecycle::test_support::begin_wallet_deletion(db.id.clone());
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            actor_value(actor.quiesce_for_terminal_shutdown(authority).await),
+        )
+        .await
+        .expect("destructive quiesce does not wait for a pending node request");
+        wait_for_broadcast_request_count(&pending_server.broadcast_requests, 1).await;
+
+        pending_server.release.send(true).expect("pending broadcast request is listening");
+        drop(preparation);
+        pending_server.server.abort();
+        restore_default_bitcoin_node();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn payjoin_uri_completes_via_normal_broadcast_when_gated() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
 
@@ -2490,10 +3149,7 @@ mod tests {
             .expect("mnemonic stored in test keychain");
 
         let (sender, _receiver) = flume::bounded(100);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
 
         let result = actor
             .build_tx(Amount::from_sat(50_000), Address::preview_new(), one_sat_vbyte_fee_rate())
@@ -2822,6 +3478,115 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn cancelled_watcher_quiescence_keeps_every_watcher_owned_for_resume() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::database::test_support::init_test_database();
+        test_keychain();
+
+        let mut wallet = Wallet::preview_new_wallet();
+        let pending =
+            receive_output(&mut wallet.bdk, Amount::from_sat(20_000), ReceiveTo::Mempool(1));
+        let tx_id = pending.txid;
+        let (sender, _receiver) = flume::bounded(100);
+        let mut actor = new_test_wallet_actor(wallet, sender);
+
+        actor.start_transaction_watcher(tx_id).await.expect("transaction watcher starts");
+        let watcher = actor
+            .transaction_watchers
+            .get(&tx_id)
+            .cloned()
+            .expect("transaction watcher is registered");
+        let release = Arc::new(Notify::new());
+        let (started_sender, started_receiver) = oneshot::channel();
+        send!(watcher.block_for_test(started_sender, release.clone()));
+        started_receiver.await.expect("watcher blocker starts");
+
+        let mut first_error = None;
+        assert!(
+            tokio::time::timeout(
+                Duration::from_millis(10),
+                actor.quiesce_transaction_watchers(&mut first_error),
+            )
+            .await
+            .is_err(),
+            "quiescence is cancelled while the watcher stop is queued"
+        );
+        assert_eq!(
+            (
+                actor.transaction_watchers.contains_key(&tx_id),
+                actor.quiesced_transaction_watchers.contains(&tx_id),
+            ),
+            (true, false),
+            "the actor retains the active watcher until its stop request succeeds"
+        );
+
+        release.notify_one();
+        actor.resume_transaction_watchers().await.expect("resume restores the cancelled watcher");
+        assert_eq!(
+            (
+                actor.transaction_watchers.contains_key(&tx_id),
+                actor.quiesced_transaction_watchers.contains(&tx_id),
+            ),
+            (true, false)
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cancelled_or_failed_watcher_resume_retains_restart_ownership() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::database::test_support::init_test_database();
+        test_keychain();
+
+        let mut wallet = Wallet::preview_new_wallet();
+        let pending =
+            receive_output(&mut wallet.bdk, Amount::from_sat(20_000), ReceiveTo::Mempool(1));
+        let tx_id = pending.txid;
+        let (sender, _receiver) = flume::bounded(100);
+        let mut actor = new_test_wallet_actor(wallet, sender);
+
+        actor.start_transaction_watcher(tx_id).await.expect("transaction watcher starts");
+        let watcher = actor
+            .transaction_watchers
+            .get(&tx_id)
+            .cloned()
+            .expect("transaction watcher is registered");
+        let release = Arc::new(Notify::new());
+        let (started_sender, started_receiver) = oneshot::channel();
+        send!(watcher.block_for_test(started_sender, release.clone()));
+        started_receiver.await.expect("watcher blocker starts");
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), actor.resume_transaction_watchers(),)
+                .await
+                .is_err(),
+            "resume is cancelled while confirming the old watcher is stopped"
+        );
+        assert_eq!(
+            (
+                actor.transaction_watchers.contains_key(&tx_id),
+                actor.quiesced_transaction_watchers.contains(&tx_id),
+            ),
+            (true, false),
+            "cancelled reconciliation leaves the retained watcher actor-owned"
+        );
+
+        release.notify_one();
+        watcher.send_mut(Box::new(|_| Box::pin(async { true })));
+        watcher.termination().await;
+        actor
+            .resume_transaction_watchers()
+            .await
+            .expect("a terminated retained watcher is restarted");
+        assert_eq!(
+            (
+                actor.transaction_watchers.contains_key(&tx_id),
+                actor.quiesced_transaction_watchers.contains(&tx_id),
+            ),
+            (true, false),
+            "resume replaces the failed retained watcher without losing its restart ID"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn height_staleness_windows_return_cached_or_refresh_as_before() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
 
@@ -2952,6 +3717,193 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn published_reload_failure_moves_live_metadata_forward_and_reports_recovery() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_test_bitcoin_esplora_node().await;
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        let error = call!(addr.finish_published_address_switch_with_reload_failure_for_test(
+            WalletAddressType::Legacy
+        ))
+        .await
+        .expect("actor responds")
+        .expect_err("published reload failure is recovery pending");
+        let (wallet_metadata, shared_metadata, uses_persistent_storage) =
+            call!(addr.address_switch_metadata_owners_for_test())
+                .await
+                .expect("metadata owners are available");
+
+        let super::Error::AddressTypeSwitchCommittedWithRecoveryPending { address_type, failures } =
+            error
+        else {
+            panic!("published reload failure must be classified as committed")
+        };
+        assert_eq!(address_type, WalletAddressType::Legacy);
+        assert!(failures.iter().any(|failure| {
+            failure.stage
+                == crate::manager::wallet_manager::AddressTypeSwitchRecoveryStage::StoreReload
+                && failure.source_detail == "injected reload failure"
+        }));
+        assert_eq!(wallet_metadata.address_type, WalletAddressType::Legacy);
+        assert_eq!(shared_metadata.address_type, WalletAddressType::Legacy);
+        assert!(
+            !uses_persistent_storage,
+            "the published reload failure leaves the live placeholder in memory"
+        );
+        assert_eq!(persisted_wallet_metadata(&metadata).address_type, WalletAddressType::Legacy);
+
+        restore_default_bitcoin_node();
+        server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn mnemonic_address_type_switch_updates_keychain_descriptor_pair() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_test_bitcoin_esplora_node().await;
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        test_keychain()
+            .save_wallet_key(&metadata.id, test_mnemonic())
+            .expect("wallet secret is saved");
+        test_keychain()
+            .save_public_descriptor(
+                &metadata.id,
+                wallet.bdk.public_descriptor(KeychainKind::External).clone(),
+                wallet.bdk.public_descriptor(KeychainKind::Internal).clone(),
+            )
+            .expect("wallet descriptors are saved");
+        let (old_external, old_internal) = test_keychain()
+            .get_public_descriptor(&metadata.id)
+            .expect("wallet descriptors load from keychain")
+            .expect("wallet descriptors are saved");
+
+        assert!(matches!(old_external.desc_type(), DescriptorType::Wpkh));
+        assert!(matches!(old_internal.desc_type(), DescriptorType::Wpkh));
+
+        let (addr, receiver) = spawn_test_wallet_actor(wallet);
+        drain_reconcile_messages(&receiver);
+
+        call!(addr.switch_private_wallet_to_new_address_type(WalletAddressType::Legacy))
+            .await
+            .expect("address type switch actor responds")
+            .expect("address type switches");
+
+        let (new_external, new_internal) = test_keychain()
+            .get_public_descriptor(&metadata.id)
+            .expect("updated wallet descriptors load from keychain")
+            .expect("updated wallet descriptors are saved");
+        assert!(matches!(new_external.desc_type(), DescriptorType::Pkh));
+        assert!(matches!(new_internal.desc_type(), DescriptorType::Pkh));
+
+        restore_default_bitcoin_node();
+        server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn published_address_switch_heals_failed_keychain_write_on_reload() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet = persisted_preview_wallet(metadata.clone());
+        let original_pair = (
+            wallet.bdk.public_descriptor(KeychainKind::External).clone(),
+            wallet.bdk.public_descriptor(KeychainKind::Internal).clone(),
+        );
+        test_keychain()
+            .save_wallet_key(&metadata.id, test_mnemonic())
+            .expect("wallet secret is saved");
+        test_keychain()
+            .save_public_descriptor(&metadata.id, original_pair.0.clone(), original_pair.1.clone())
+            .expect("original descriptor pair is saved");
+        crate::test_support::shared_mock_keychain().fail_save_at(1);
+
+        let outcome = wallet
+            .switch_private_wallet_to_new_address_type(WalletAddressType::Legacy)
+            .expect("replacement store is published");
+        assert!(
+            outcome
+                .durability_error
+                .as_deref()
+                .is_some_and(|error| error.contains("wallet descriptors")),
+            "the failed keychain mirror is reported as recovery pending"
+        );
+
+        let stale_pair = test_keychain()
+            .get_public_descriptor(&metadata.id)
+            .expect("stale descriptor pair is readable")
+            .expect("original descriptor pair remains");
+        assert_eq!(stale_pair, original_pair);
+
+        let mut target_metadata = metadata.clone();
+        target_metadata.address_type = WalletAddressType::Legacy;
+        crate::database::Database::global()
+            .wallets
+            .replace_wallet_metadata(target_metadata.clone())
+            .expect("published metadata is persisted");
+        drop(wallet);
+
+        let reloaded = Wallet::try_load_persisted(metadata.id.clone())
+            .expect("wallet reloads from the published store");
+        let published_pair = (
+            reloaded.bdk.public_descriptor(KeychainKind::External).clone(),
+            reloaded.bdk.public_descriptor(KeychainKind::Internal).clone(),
+        );
+        let healed_pair = test_keychain()
+            .get_public_descriptor(&metadata.id)
+            .expect("healed descriptor pair is readable")
+            .expect("descriptor pair is healed");
+
+        assert!(matches!(published_pair.0.desc_type(), DescriptorType::Pkh));
+        assert_eq!(healed_pair, published_pair);
+
+        // backup and descriptor export share this store-first path, so a stale
+        // keychain mirror cannot change either payload during a recovery gap
+        test_keychain()
+            .save_public_descriptor(&metadata.id, original_pair.0, original_pair.1)
+            .expect("stale descriptor fixture is restored");
+        let backup_pair =
+            crate::wallet::addressing::authoritative_public_descriptors(&target_metadata)
+                .expect("authoritative backup descriptors load from the published store");
+        assert_eq!(backup_pair, published_pair);
+
+        drop(reloaded);
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[test]
+    fn missing_store_rejects_stale_keychain_descriptor_mirror() {
+        test_keychain();
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.address_type = WalletAddressType::Legacy;
+        let stale_wallet = Wallet::preview_new_wallet();
+        test_keychain()
+            .save_public_descriptor(
+                &metadata.id,
+                stale_wallet.bdk.public_descriptor(KeychainKind::External).clone(),
+                stale_wallet.bdk.public_descriptor(KeychainKind::Internal).clone(),
+            )
+            .expect("stale descriptor mirror is saved");
+
+        let error = crate::wallet::addressing::authoritative_public_descriptor_mirror(&metadata)
+            .expect_err("stale keychain descriptors must not be used for backup");
+
+        assert!(error.to_string().contains("do not match published wallet metadata"));
+        assert!(test_keychain().delete_public_descriptor(&metadata.id));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn mnemonic_address_type_switch_surfaces_scan_start_failure() {
         let _guard = address_type_switch_test_lock().lock().await;
 
@@ -3051,6 +4003,207 @@ mod tests {
             persisted_wallet_metadata(&metadata).address_type,
             WalletAddressType::NativeSegwit
         );
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn metadata_patch_failure_leaves_actor_metadata_unchanged() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let expected_metadata = wallet.metadata.clone();
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        crate::database::Database::global()
+            .wallets
+            .remove_wallet_metadata(metadata.network, metadata.wallet_mode, &metadata.id)
+            .expect("metadata row is removed");
+
+        let result =
+            call!(addr.set_wallet_type(WalletType::WatchOnly)).await.expect("actor responds");
+        assert!(result.is_err());
+
+        let actor_metadata =
+            call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");
+        assert_eq!(actor_metadata, expected_metadata);
+
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn address_type_switch_metadata_failure_heals_forward_on_reload() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_test_bitcoin_esplora_node().await;
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy);
+        let (addr, _receiver) = spawn_test_wallet_actor(wallet);
+
+        crate::database::Database::global()
+            .wallets
+            .remove_wallet_metadata(metadata.network, metadata.wallet_mode, &metadata.id)
+            .expect("metadata row is removed");
+
+        let result = call!(
+            addr.switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy)
+        )
+        .await
+        .expect("actor responds");
+        assert!(result.is_err(), "the switch surfaces the metadata commit failure");
+
+        // the store is already switched; restoring the metadata row and reloading
+        // heals the metadata forward to match the store
+        crate::database::Database::global()
+            .wallets
+            .save_new_wallet_metadata(metadata.clone())
+            .expect("metadata row is restored for reload");
+        let reloaded = Wallet::try_load_persisted(metadata.id.clone())
+            .expect("wallet reloads from the switched store");
+
+        assert_eq!(reloaded.metadata.address_type, WalletAddressType::Legacy);
+        assert_eq!(reloaded.metadata.internal.performed_full_scan_at, None);
+        assert_eq!(
+            persisted_wallet_metadata(&metadata).address_type,
+            WalletAddressType::Legacy,
+            "the healed metadata is persisted"
+        );
+
+        restore_default_bitcoin_node();
+        server.abort();
+        drop(reloaded);
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn interrupted_address_type_switch_heals_metadata_on_next_load() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet = persisted_preview_wallet(metadata.clone());
+        let original_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
+        let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy);
+
+        let _switch_metadata = wallet
+            .switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy)
+            .expect("address type store is replaced");
+        let replacement_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
+        assert_ne!(replacement_address, original_address);
+
+        // dropping the wallet simulates a process stop before the metadata commit
+        drop(wallet);
+
+        let reloaded = Wallet::try_load_persisted(metadata.id.clone())
+            .expect("wallet reloads from the replacement store");
+        let reloaded_address = reloaded.bdk.peek_address(KeychainKind::External, 0).address;
+
+        assert_eq!(reloaded.metadata.address_type, WalletAddressType::Legacy);
+        assert_eq!(
+            reloaded.metadata.discovery_state,
+            crate::wallet::metadata::DiscoveryState::ChoseAdressType
+        );
+        assert_eq!(reloaded.metadata.internal.performed_full_scan_at, None);
+        assert_eq!(reloaded.metadata.internal.address_index, None);
+        assert_eq!(reloaded_address, replacement_address);
+        assert_eq!(
+            persisted_wallet_metadata(&metadata).address_type,
+            WalletAddressType::Legacy,
+            "the healed metadata is persisted for the next load"
+        );
+
+        drop(reloaded);
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn completed_address_type_switch_reloads_without_healing() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet = persisted_preview_wallet(metadata.clone());
+        let old_metadata = wallet.metadata.clone();
+        let descriptors = descriptor_pair_for_address_type(WalletAddressType::Legacy);
+
+        let switch_metadata = wallet
+            .switch_descriptor_to_new_address_type(descriptors, WalletAddressType::Legacy)
+            .expect("address type store is replaced");
+        let replacement_address = wallet.bdk.peek_address(KeychainKind::External, 0).address;
+
+        let patch = WalletMetadataPatch::AddressType(address_type_patch(
+            WalletAddressType::Legacy,
+            switch_metadata.metadata,
+            &old_metadata,
+        ));
+        let mut target_metadata = old_metadata;
+        patch.apply_to(&mut target_metadata);
+        crate::database::Database::global()
+            .wallets
+            .replace_wallet_metadata(target_metadata.clone())
+            .expect("target metadata is persisted");
+
+        drop(wallet);
+
+        let reloaded = Wallet::try_load_persisted(metadata.id.clone())
+            .expect("wallet reloads from the replacement store");
+        let reloaded_address = reloaded.bdk.peek_address(KeychainKind::External, 0).address;
+
+        assert_eq!(reloaded.metadata, target_metadata, "a completed switch is not healed");
+        assert_eq!(reloaded_address, replacement_address);
+
+        drop(reloaded);
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn receive_address_index_patch_updates_shared_and_persisted_metadata() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet = persisted_preview_wallet(metadata.clone());
+        let _ = wallet.bdk.reveal_addresses_to(KeychainKind::External, 25).last();
+        let (addr, receiver) = spawn_test_wallet_actor(wallet);
+        drain_reconcile_messages(&receiver);
+
+        call!(addr.create_new_receive_address_intent())
+            .await
+            .expect("receive address actor responds");
+
+        let actor_metadata =
+            call!(addr.in_memory_wallet_metadata()).await.expect("wallet metadata loads");
+        let persisted_metadata = persisted_wallet_metadata(&metadata);
+        assert_eq!(
+            actor_metadata.internal.address_index,
+            persisted_metadata.internal.address_index
+        );
+        assert!(actor_metadata.internal.address_index.is_some());
+
+        let emitted_address_index_update = receiver.try_iter().any(|batch| {
+            let has_update = |message: &WalletManagerReconcileMessage| {
+                matches!(
+                    message,
+                    WalletManagerReconcileMessage::WalletMetadataChanged(metadata)
+                        if metadata.internal.address_index.is_some()
+                )
+            };
+
+            match batch {
+                SingleOrMany::Single(message) => has_update(&message),
+                SingleOrMany::Many(messages) => messages.iter().any(has_update),
+            }
+        });
+        assert!(emitted_address_index_update);
+
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 
@@ -3163,10 +4316,7 @@ mod tests {
         mark_wallet_ledger_ready(&mut wallet);
 
         let (sender, _receiver) = flume::bounded(10);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
 
         let fallback_tx = bitcoin::Transaction {
@@ -3206,10 +4356,7 @@ mod tests {
             (*wallet.bdk.get_tx(outpoint.txid).expect("tx in wallet").tx_node.tx).clone();
 
         let (sender, _receiver) = flume::bounded(10);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
 
         let persister =
@@ -3281,10 +4428,7 @@ mod tests {
         mark_wallet_ledger_ready(&mut wallet);
 
         let (sender, _receiver) = flume::bounded(10);
-        let wallet_snapshot = test_wallet_snapshot(&wallet);
-        let mut actor =
-            super::WalletActor::new(wallet, sender, test_scan_status(), wallet_snapshot)
-                .expect("actor is created");
+        let mut actor = new_test_wallet_actor(wallet, sender);
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
 
         let fallback_tx = bitcoin::Transaction {

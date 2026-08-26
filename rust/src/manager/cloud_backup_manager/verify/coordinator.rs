@@ -101,6 +101,20 @@ impl CloudBackupVerificationCoordinator {
         }
     }
 
+    pub(crate) fn needs_attention(
+        source: CloudBackupVerificationSource,
+        report: DeepVerificationReport,
+    ) -> CloudBackupVerificationEffect {
+        CloudBackupVerificationEffect {
+            presentation: Some(CloudBackupVerificationPresentation::Completed { source }),
+            verification: Some(VerificationState::NeedsAttention(report.clone())),
+            recovery: Some(RecoveryState::Idle),
+            detail: report.detail.clone(),
+            refresh_sync_health: true,
+            ..CloudBackupVerificationEffect::default()
+        }
+    }
+
     pub(crate) fn fail(
         source: CloudBackupVerificationSource,
         failure: DeepVerificationFailure,
@@ -169,8 +183,7 @@ mod tests {
             local_master_key_repaired: false,
             credential_recovered: false,
             wallets_verified: 0,
-            wallets_failed: 0,
-            wallets_unsupported: 0,
+            wallet_issues: Default::default(),
             detail: None,
         }
     }

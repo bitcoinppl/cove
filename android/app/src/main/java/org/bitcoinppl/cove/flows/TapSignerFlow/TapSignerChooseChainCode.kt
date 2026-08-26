@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ui.theme.callout
 import org.bitcoinppl.cove_core.TapSignerRoute
+import org.bitcoinppl.cove_core.util.generateRandomChainCode
 
 /**
  * chain code selection screen for TapSigner setup
@@ -101,7 +102,12 @@ fun TapSignerChooseChainCode(
                 // automatic setup button
                 Surface(
                     onClick = {
-                        manager.navigate(TapSignerRoute.StartingPin(tapSigner, null))
+                        manager.navigate(
+                            TapSignerRoute.StartingPin(
+                                tapSigner,
+                                generateRandomChainCode(),
+                            ),
+                        )
                     },
                     modifier =
                         Modifier

@@ -125,7 +125,7 @@ private struct FeeOptionView: View {
             return "---"
         }
 
-        return "≈ \(manager.rust.convertAndDisplayFiat(amount: totalFee, prices: prices))"
+        return "≈ \(manager.convertAndDisplayFiat(amount: totalFee, prices: prices))"
     }
 
     var body: some View {

@@ -41,6 +41,19 @@ class OnboardingHelpersTest {
     }
 
     @Test
+    fun recoveryRequiredUsesPrivacySafeContinuationStartupFailure() {
+        val failure =
+            classifyBootstrapFailure(
+                AppInitException.RecoveryRequired("wallet path and cleanup details"),
+            )
+
+        assertEquals(BootstrapFailure.RecoveryRequired, failure)
+        val recovery = failure as BootstrapFailure.RecoveryRequired
+        assertTrue(recovery.message.contains("Continue"))
+        assertFalse(recovery.message.contains("wallet path"))
+    }
+
+    @Test
     fun nonCatastrophicBootstrapErrorsRemainFatal() {
         val failure = classifyBootstrapFailure(AppInitException.AlreadyCalled("already called"))
 

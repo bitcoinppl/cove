@@ -1,15 +1,13 @@
-use std::{path::Path, sync::LazyLock};
+use std::sync::LazyLock;
 
+use crate::database::Database;
 use cove_device::{
     cloud_storage::{CloudAccessPolicy, CloudStorage, CloudStorageError},
     keychain::Keychain,
 };
 use cove_util::ResultExt as _;
-use tracing::{error, warn};
 
-use crate::{database::Database, wallet::metadata::WalletId};
-
-use super::{CLOUD_BACKUP_MANAGER, CloudBackupKeychain, CloudBackupStore};
+use super::{CLOUD_BACKUP_MANAGER, CloudBackupKeychain};
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
@@ -106,6 +104,12 @@ fn catastrophic_cloud_restore_error(
         CloudStorageError::Offline(message) => CatastrophicCloudRestoreResult::Offline {
             message: format!("Cannot check {} while offline: {message}", provider.storage_name()),
         },
+        CloudStorageError::SyncPending(_) => CatastrophicCloudRestoreResult::Inconclusive {
+            message: format!(
+                "{} is still loading Cove backup files. Keep Cove open, then try again.",
+                provider.storage_name()
+            ),
+        },
         CloudStorageError::NotFound(_) => CatastrophicCloudRestoreResult::NoBackupFound {
             message: format!(
                 "No Cloud Backup was found for the selected {}.",
@@ -134,33 +138,28 @@ fn catastrophic_cloud_restore_error(
 }
 
 fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {
-    use crate::database::migration::log_remove_file;
-
-    wipe_wallet_keychain_items_for_catastrophic_recovery()?;
+    let cleanup = crate::wallet::deletion::RecoveryCleanup::prepare_database_unavailable()
+        .map_err_str(CatastrophicRecoveryError::Failure)?;
+    cleanup.delete_all_wallet_items().map_err_str(CatastrophicRecoveryError::Failure)?;
     CloudBackupKeychain::global()
         .clear_local_state()
         .map_err_str(CatastrophicRecoveryError::Failure)?;
 
+    cleanup
+        .purge_orphan_wallet_artifacts()
+        .map_err_prefix("remove wallet artifacts", CatastrophicRecoveryError::Failure)?;
+
+    // restore markers and locks must not survive the wallets they describe, or
+    // the next bootstrap replays recovery against data this reset removed
+    crate::backup::recovery::remove_all_restore_recovery_state()
+        .map_err_str(CatastrophicRecoveryError::Failure)?;
+
     let root = &*cove_common::consts::ROOT_DATA_DIR;
 
-    log_remove_file(&root.join("cove.encrypted.db"));
-    log_remove_file(&root.join("cove.db"));
-
-    if let Ok(entries) = std::fs::read_dir(root) {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            if name.to_string_lossy().starts_with("bdk_wallet") {
-                log_remove_file(&entry.path());
-            }
-        }
-    }
-
-    let wallet_dir = &*cove_common::consts::WALLET_DATA_DIR;
-    if wallet_dir.exists()
-        && let Err(error) = std::fs::remove_dir_all(wallet_dir)
-    {
-        error!("Failed to remove wallet data dir: {error}");
-    }
+    crate::bdk_store::BdkStore::remove_wallet_artifact(&root.join("cove.encrypted.db"))
+        .map_err_prefix("remove encrypted database", CatastrophicRecoveryError::Failure)?;
+    crate::bdk_store::BdkStore::remove_wallet_artifact(&root.join("cove.db"))
+        .map_err_prefix("remove database", CatastrophicRecoveryError::Failure)?;
 
     Ok(())
 }
@@ -179,95 +178,10 @@ fn reinit_database_after_catastrophic_recovery() -> Result<(), CatastrophicRecov
         .map_err_prefix("reinitialize database", CatastrophicRecoveryError::Failure)
 }
 
-fn wipe_wallet_keychain_items_for_catastrophic_recovery() -> Result<(), CatastrophicRecoveryError> {
-    let keychain = Keychain::global();
-    let wallet_ids = catastrophic_wipe_wallet_ids(
-        persisted_wallet_ids_for_catastrophic_wipe(),
-        &cove_common::consts::WALLET_DATA_DIR,
-    );
-    let mut failed_wallet_ids = Vec::new();
-
-    for wallet_id in wallet_ids {
-        if !keychain.delete_wallet_items(&wallet_id) {
-            failed_wallet_ids.push(wallet_id.to_string());
-        }
-    }
-
-    if failed_wallet_ids.is_empty() {
-        return Ok(());
-    }
-
-    let failed_wallet_ids = failed_wallet_ids.join(", ");
-    error!("Failed to delete wallet keychain items for: {failed_wallet_ids}");
-    Err(CatastrophicRecoveryError::Failure(format!(
-        "failed to delete wallet keychain items for: {failed_wallet_ids}"
-    )))
-}
-
-fn persisted_wallet_ids_for_catastrophic_wipe() -> Option<Vec<WalletId>> {
-    let Some(db_swap) = crate::database::DATABASE.get() else {
-        warn!("Database not initialized, deriving wipe wallet ids from wallet data dir");
-        return None;
-    };
-
-    let db = db_swap.load();
-    match CloudBackupStore::new(&db).all_wallets() {
-        Ok(wallets) => Some(wallets.into_iter().map(|wallet| wallet.id).collect()),
-        Err(error) => {
-            warn!(
-                "Failed to read wallet ids for catastrophic recovery, deriving from wallet data dir: {error}"
-            );
-            None
-        }
-    }
-}
-
-fn catastrophic_wipe_wallet_ids(
-    persisted_wallet_ids: Option<Vec<WalletId>>,
-    wallet_data_dir: &Path,
-) -> Vec<WalletId> {
-    if let Some(wallet_ids) = persisted_wallet_ids {
-        return wallet_ids;
-    }
-
-    wallet_ids_from_wallet_data_dir(wallet_data_dir)
-}
-
-fn wallet_ids_from_wallet_data_dir(wallet_data_dir: &Path) -> Vec<WalletId> {
-    let mut wallet_ids = std::collections::BTreeSet::new();
-    let entries = match std::fs::read_dir(wallet_data_dir) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
-        Err(error) => {
-            warn!("Failed to read wallet data dir during catastrophic wipe: {error}");
-            return Vec::new();
-        }
-    };
-
-    for entry in entries.flatten() {
-        let Ok(file_type) = entry.file_type() else {
-            continue;
-        };
-        if !file_type.is_dir() {
-            continue;
-        }
-
-        let file_name = entry.file_name();
-        let Some(wallet_id) = file_name.to_str() else {
-            continue;
-        };
-        wallet_ids.insert(wallet_id.to_owned());
-    }
-
-    wallet_ids.into_iter().map(WalletId::from).collect()
-}
-
 #[cfg(test)]
 mod tests {
-    use cove_device::cloud_storage::CloudStorageError;
-    use tempfile::TempDir;
-
     use super::*;
+    use cove_device::cloud_storage::CloudStorageError;
 
     #[test]
     fn catastrophic_cloud_restore_check_result_reports_backup_found() {
@@ -405,58 +319,5 @@ mod tests {
             ),
             CatastrophicCloudRestoreResult::Inconclusive { message: "upload failed".into() }
         );
-    }
-
-    #[test]
-    fn catastrophic_wipe_wallet_ids_prefers_persisted_wallet_ids() {
-        let dir = TempDir::new().unwrap();
-        std::fs::create_dir_all(dir.path().join("wallet-from-dir")).unwrap();
-
-        let wallet_ids = catastrophic_wipe_wallet_ids(
-            Some(vec![WalletId::from("wallet-from-db".to_string())]),
-            dir.path(),
-        );
-
-        assert_eq!(wallet_ids, vec![WalletId::from("wallet-from-db".to_string())]);
-    }
-
-    #[test]
-    fn catastrophic_wipe_wallet_ids_falls_back_to_wallet_data_dir() {
-        let dir = TempDir::new().unwrap();
-        std::fs::create_dir_all(dir.path().join("wallet-from-dir")).unwrap();
-        std::fs::create_dir_all(dir.path().join("wallet-two")).unwrap();
-
-        let wallet_ids = catastrophic_wipe_wallet_ids(None, dir.path());
-
-        assert_eq!(
-            wallet_ids,
-            vec![
-                WalletId::from("wallet-from-dir".to_string()),
-                WalletId::from("wallet-two".to_string()),
-            ]
-        );
-    }
-
-    #[test]
-    fn wallet_ids_from_wallet_data_dir_uses_directory_names() {
-        let dir = TempDir::new().unwrap();
-        std::fs::create_dir_all(dir.path().join("AbCd123")).unwrap();
-        std::fs::create_dir_all(dir.path().join("wallet-two")).unwrap();
-        std::fs::write(dir.path().join("bdk_wallet_abcd123.db"), "").unwrap();
-
-        let wallet_ids = wallet_ids_from_wallet_data_dir(dir.path());
-
-        assert_eq!(
-            wallet_ids,
-            vec![WalletId::from("AbCd123".to_string()), WalletId::from("wallet-two".to_string()),],
-        );
-    }
-
-    #[test]
-    fn wallet_ids_from_wallet_data_dir_returns_empty_for_missing_dir() {
-        let dir = TempDir::new().unwrap();
-        let wallet_ids = wallet_ids_from_wallet_data_dir(&dir.path().join("missing"));
-
-        assert!(wallet_ids.is_empty());
     }
 }

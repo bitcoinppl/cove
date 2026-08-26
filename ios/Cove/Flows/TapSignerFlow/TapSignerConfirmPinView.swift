@@ -5,6 +5,7 @@
 //  Created by Praveen Perera on 3/12/25.
 //
 
+import CoveCore
 import SwiftUI
 
 struct TapSignerConfirmPinView: View {
@@ -14,36 +15,58 @@ struct TapSignerConfirmPinView: View {
     let args: TapSignerConfirmPinArgs
 
     // private
-    @State private var confirmPin: String = ""
-    @State private var animateField: Bool = false
+    @State private var confirmPin = ""
+    @State private var errorMessage: String?
+    @State private var isSubmitting = false
     @FocusState private var isFocused
 
-    var chainCodeBytes: Data? {
-        guard let chainCode = args.chainCode else { return nil }
-        return hexDecode(hex: chainCode)
-    }
+    private func checkPin() {
+        guard !isSubmitting else { return }
 
-    func checkPin() {
-        if confirmPin != args.newPin {
-            animateField.toggle()
+        if let inputError = tapSignerCvcInputError(value: confirmPin) {
+            errorMessage = inputError
+            return
+        }
+
+        if let inputError = tapSignerCvcInputError(value: args.newPin) {
+            errorMessage = inputError
+            return
+        }
+
+        guard confirmPin == args.newPin else {
+            errorMessage = "The CVCs do not match."
             confirmPin = ""
             return
         }
 
+        isFocused = false
         switch args.action {
         case .setup: setupTapSigner()
         case .change: changeTapSignerPin()
         }
     }
 
-    func setupTapSigner() {
+    private func setupTapSigner() {
+        guard let chainCode = args.chainCode else {
+            errorMessage = "Enter exactly 64 hexadecimal characters (32 bytes)"
+            return
+        }
+
+        guard let chainCodeBytes = tapSignerChainCodeBytes(hex: chainCode) else {
+            errorMessage = tapSignerChainCodeInputError(hex: chainCode)
+            return
+        }
+
         let nfc = manager.getOrCreateNfc(args.tapSigner)
+        isSubmitting = true
 
         Task {
             let response = await nfc.setupTapSigner(
                 factoryPin: args.startingPin, newPin: args.newPin, chainCode: chainCodeBytes
             )
             await MainActor.run {
+                isSubmitting = false
+
                 switch response {
                 case let .success(.complete(c)):
                     manager.resetRoute(to: .setupSuccess(args.tapSigner, c))
@@ -68,85 +91,80 @@ struct TapSignerConfirmPinView: View {
         }
     }
 
-    func changeTapSignerPin() {
+    private func changeTapSignerPin() {
         let nfc = manager.getOrCreateNfc(args.tapSigner)
+        isSubmitting = true
+
         Task {
             let response = await nfc.changePin(
                 currentPin: args.startingPin, newPin: args.newPin
             )
-            switch response {
-            case .success:
-                app.alertState = .init(
-                    .general(
-                        title: "PIN Changed",
-                        message: "Your TAPSIGNER PIN was changed successfully!"
+            await MainActor.run {
+                isSubmitting = false
+
+                switch response {
+                case .success:
+                    clearSensitiveState()
+                    manager.cancel()
+                    app.sheetState = .none
+                    app.alertState = .init(
+                        .general(
+                            title: "PIN Changed",
+                            message: "Your TAPSIGNER PIN was changed successfully!"
+                        )
                     )
-                )
-            case let .failure(error):
-                if error.isAuthError() { return app.alertState = .init(.tapSignerInvalidAuth) }
-                if error.isNoBackupError() { return app.alertState = .init(.tapSignerNoBackup(tapSigner: args.tapSigner)) }
-                app.alertState = .init(
-                    .general(
-                        title: "Error",
-                        message: "TapSigner PIN change failed. Please try again."
+                case let .failure(error):
+                    if error.isAuthError() { return app.alertState = .init(.tapSignerInvalidAuth) }
+                    if error.isNoBackupError() { return app.alertState = .init(.tapSignerNoBackup(tapSigner: args.tapSigner)) }
+                    app.alertState = .init(
+                        .general(
+                            title: "Error",
+                            message: "TapSigner PIN change failed. Please try again."
+                        )
                     )
-                )
+                }
             }
         }
     }
 
     var body: some View {
-        TapSignerPinScreen(
-            pin: $confirmPin,
+        TapSignerCvcScreen(
+            cvc: $confirmPin,
             focus: $isFocused,
             spacing: 40,
             header: TapSignerPinHeader(actionTitle: "Back", action: goBack),
             description: TapSignerPinDescription(
-                title: "Confirm New PIN",
+                title: "Confirm New CVC",
                 message: """
-                The PIN code is a security feature that prevents unauthorized access to your key. \
-                Please back it up and keep it safe. You'll need it for signing transactions.
+                Enter the same CVC again to confirm it. The CVC prevents unauthorized access to your key.
                 """
             ),
-            indicators: TapSignerShakingPinIndicators(
-                pinCount: confirmPin.count,
-                animateField: animateField,
-                focus: $isFocused
-            )
+            submitTitle: "Continue",
+            errorMessage: errorMessage,
+            submitAction: checkPin,
+            isSubmitting: isSubmitting
         )
         .onAppear(perform: resetPin)
-        .onChange(of: isFocused, keepFocused)
-        .onChange(of: confirmPin, handlePinChange)
+        .onDisappear(perform: clearSensitiveState)
     }
 
     private func goBack() {
+        clearSensitiveState()
         manager.popRoute()
     }
 
     private func resetPin() {
         confirmPin = ""
+        errorMessage = nil
+        isSubmitting = false
         isFocused = true
     }
 
-    private func keepFocused(_: Bool, _: Bool) {
-        isFocused = true
-    }
-
-    private func handlePinChange(old: String, pin: String) {
-        if pin.count == 6 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                checkPin()
-            }
-        }
-
-        if pin.count > 6, old.count < 6 {
-            confirmPin = old
-            return
-        }
-
-        if pin.count > 6 {
-            confirmPin = String(args.startingPin.prefix(6))
-        }
+    private func clearSensitiveState() {
+        confirmPin = ""
+        errorMessage = nil
+        isSubmitting = false
+        isFocused = false
     }
 }
 

@@ -36,7 +36,6 @@ use crate::{
     fiat::client::PriceResponse,
     keychain::{Keychain, KeychainError},
     label_manager::LabelManager,
-    manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
     psbt::Psbt,
     router::Route,
     transaction::{
@@ -48,6 +47,9 @@ use crate::{
         balance::Balance,
         fingerprint::Fingerprint,
         metadata::{DiscoveryState, FiatOrBtc, WalletColor, WalletId, WalletMetadata, WalletType},
+    },
+    wallet_lifecycle::{
+        WalletActorRegistration, WalletLifecycleFailure, WalletManagerLifecycleToken,
     },
     word_validator::WordValidator,
 };
@@ -111,7 +113,6 @@ pub enum WalletManagerAction {
     ToggleFiatBtcPrimarySecondary,
     ToggleShowLabels,
     SelectCurrentWalletAddressType,
-    SelectedWalletDisappeared,
     OpenReceiveAddress,
     CreateNewReceiveAddress,
     CloseReceiveAddress(u64),
@@ -280,6 +281,8 @@ pub struct RustWalletManager {
 
     label_manager: Arc<LabelManager>,
     discovery_scanner: Option<Addr<WalletDiscoveryScanner>>,
+    lifecycle: Option<WalletManagerLifecycleToken>,
+    _actor_registration: Option<WalletActorRegistration>,
 }
 
 pub type Error = WalletManagerError;
@@ -294,6 +297,9 @@ pub enum WalletManagerError {
 
     #[error("operation is unavailable for a preview wallet")]
     PreviewOperationUnavailable,
+
+    #[error("unable to delete wallet: {0}")]
+    DeleteWalletError(String),
 
     #[error("unable to retrieve the secret words for the wallet {0}")]
     SecretRetrievalError(#[from] KeychainError),
@@ -396,6 +402,49 @@ pub enum WalletManagerError {
 
     #[error("Receive address error: {0}")]
     ReceiveAddressError(String),
+
+    #[error("wallet manager is closed")]
+    ManagerClosed,
+
+    #[error("wallet lifecycle error: {0}")]
+    WalletLifecycle(WalletLifecycleFailure),
+
+    #[error("address type switch committed with recovery pending")]
+    AddressTypeSwitchCommittedWithRecoveryPending {
+        address_type: WalletAddressType,
+        failures: Vec<AddressTypeSwitchRecoveryFailure>,
+    },
+}
+
+/// Repair phase that failed after an address-store rename committed
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum AddressTypeSwitchRecoveryStage {
+    /// File or parent-directory durability synchronization
+    Durability,
+    /// Reloading the newly published wallet store
+    StoreReload,
+    /// Exact metadata commit
+    Metadata,
+    /// Scan-state reset or restart
+    ScanRestart,
+}
+
+/// One post-publication repair failure
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct AddressTypeSwitchRecoveryFailure {
+    /// Repair phase that failed
+    pub stage: AddressTypeSwitchRecoveryStage,
+    /// Underlying source error without duplicated phase context
+    pub source_detail: String,
+}
+
+impl From<WalletLifecycleFailure> for WalletManagerError {
+    fn from(error: WalletLifecycleFailure) -> Self {
+        match error {
+            WalletLifecycleFailure::ManagerRecoveryRequired { .. } => Self::ManagerClosed,
+            other => Self::WalletLifecycle(other),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -572,11 +621,17 @@ impl RustWalletManager {
     /// Returns the bootstrap wallet snapshot used before reconcile messages arrive
     #[uniffi::method]
     pub fn initial_state(&self) -> WalletInitialState {
+        let unsigned_transactions = if self.ensure_active().is_ok() {
+            self.unsigned_transactions.load()
+        } else {
+            Ok(Vec::new())
+        };
+
         initial_state_from_snapshot_with_pending_unsigned_transactions(
             self.current_metadata(),
             self.current_scan_status(),
             self.wallet_snapshot.read().clone(),
-            self.unsigned_transactions.load(),
+            unsigned_transactions,
         )
     }
 
@@ -630,9 +685,11 @@ impl RustWalletManager {
         self.ensure_ledger_ready_for_spend()?;
 
         let metadata = self.current_metadata();
-        let unspent = call!(self.actor.list_unspent()).await.expect("actor failed")?;
+        let unspent =
+            call!(self.actor.list_unspent()).await.map_err(|_| Error::ManagerClosed)??;
+        let lifecycle = self.lifecycle.clone().ok_or(Error::PreviewOperationUnavailable)?;
 
-        let manager = RustCoinControlManager::new(metadata, unspent);
+        let manager = RustCoinControlManager::new(metadata, unspent, lifecycle);
         Ok(Arc::new(manager))
     }
 
@@ -651,6 +708,7 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub async fn get_fee_options(&self) -> Result<FeeRateOptions, Error> {
+        self.ensure_active()?;
         let fee_client = &FEE_CLIENT;
         let fees = fee_client.fetch_and_get_fees().await.map_err(WalletManagerFeesError::from)?;
 
@@ -659,6 +717,7 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub async fn first_address(&self) -> Result<AddressInfo, Error> {
+        self.ensure_active()?;
         let address_info = call!(self.actor.address_at(0))
             .await
             .map_err(|_| Error::UnknownError("failed to get first address".to_string()))?;
@@ -668,6 +727,7 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn save_unsigned_transaction(&self, details: Arc<ConfirmDetails>) -> Result<(), Error> {
+        self.ensure_active()?;
         self.save_unsigned_transaction_internal(details)
     }
 
@@ -676,6 +736,7 @@ impl RustWalletManager {
         &self,
         outputs: Vec<AddressAndAmount>,
     ) -> Result<SplitOutput, Error> {
+        self.ensure_active()?;
         let outputs = call!(self.actor.split_transaction_outputs(outputs))
             .await
             .map_err(|_| Error::UnknownError("failed to split outputs".to_string()))?;
@@ -685,28 +746,34 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn get_unsigned_transactions(&self) -> Result<Vec<Arc<UnsignedTransaction>>, Error> {
+        self.ensure_active()?;
         self.get_unsigned_transactions_internal()
     }
 
     #[uniffi::method]
-    pub async fn get_transactions(&self) {
-        let Ok(txns) = call!(self.actor.transactions()).await else { return };
+    pub async fn get_transactions(&self) -> Result<(), Error> {
+        self.ensure_active()?;
+        let txns = call!(self.actor.transactions()).await.map_err(|_| Error::ManagerClosed)?;
 
         self.reconciler.send(Message::UpdatedTransactions(txns));
+        Ok(())
     }
 
     #[uniffi::method]
     pub fn delete_unsigned_transaction(&self, tx_id: Arc<TxId>) -> Result<(), Error> {
+        self.ensure_active()?;
         self.delete_unsigned_transaction_internal(tx_id)
     }
 
     #[uniffi::method]
-    pub async fn balance(&self) -> Balance {
-        call!(self.actor.balance()).await.unwrap_or_default()
+    pub async fn balance(&self) -> Result<Balance, Error> {
+        self.ensure_active()?;
+        call!(self.actor.balance()).await.map_err(|_| Error::ManagerClosed)
     }
 
     #[uniffi::method]
     pub async fn unlocked_spendable_balance(&self) -> Result<Amount, Error> {
+        self.ensure_active()?;
         let amount = call!(self.actor.unlocked_trusted_spendable_balance())
             .await
             .map_err(|_| Error::ActorNotFound)??;
@@ -724,9 +791,11 @@ impl RustWalletManager {
         self.ensure_ledger_ready_for_spend()?;
 
         let psbt = Arc::unwrap_or_clone(psbt);
-        call!(self.actor.initiate_payment(psbt.into(), payjoin_endpoint)).await.unwrap()?;
+        call!(self.actor.initiate_payment(psbt.into(), payjoin_endpoint))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
 
-        self.force_wallet_scan().await;
+        self.force_wallet_scan().await?;
 
         Ok(())
     }
@@ -741,19 +810,22 @@ impl RustWalletManager {
         let txn = Arc::unwrap_or_clone(signed_transaction);
         let tx_id = txn.tx_id();
 
-        call!(self.actor.broadcast_transaction(txn.into())).await.unwrap()?;
+        call!(self.actor.broadcast_transaction(txn.into()))
+            .await
+            .map_err(|_| Error::ActorNotFound)??;
 
         if let Err(error) = self.delete_unsigned_transaction(tx_id.into()) {
             error!("unable to delete unsigned transaction record: {error}");
         }
 
-        self.force_wallet_scan().await;
+        self.force_wallet_scan().await?;
 
         Ok(())
     }
 
     #[uniffi::method]
     pub async fn current_block_height(&self) -> Result<u32, Error> {
+        self.ensure_active()?;
         let height = call!(self.actor.get_height(false))
             .await
             .map_err(|_| Error::GetHeightError)?
@@ -764,6 +836,7 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub async fn force_update_height(&self) -> Result<u32, Error> {
+        self.ensure_active()?;
         let height = call!(self.actor.get_height(true))
             .await
             .map_err(|_| Error::GetHeightError)?
@@ -777,6 +850,7 @@ impl RustWalletManager {
         &self,
         tx_id: Arc<TxId>,
     ) -> Result<Arc<TransactionDetailsPresentation>, Error> {
+        self.ensure_active()?;
         let tx_id = Arc::unwrap_or_clone(tx_id);
         let actor = self.actor.clone();
 
@@ -797,6 +871,7 @@ impl RustWalletManager {
     /// Get address at the given index
     #[uniffi::method]
     pub async fn address_at(&self, index: u32) -> Result<AddressInfo, Error> {
+        self.ensure_active()?;
         let address =
             call!(self.actor.address_at(index)).await.map_err(|_| Error::ActorNotFound)?;
 
@@ -804,22 +879,34 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub fn delete_wallet(&self) -> Result<(), Error> {
-        self.delete_wallet_internal()
+    pub async fn delete_wallet(&self) -> Result<(), Error> {
+        self.delete_wallet_internal().await
+    }
+
+    /// Retry a deletion after a typed shutdown block
+    #[uniffi::method]
+    pub async fn retry_delete_wallet(
+        &self,
+        attempt_id: crate::wallet_lifecycle::ShutdownAttemptId,
+    ) -> Result<(), Error> {
+        self.retry_delete_wallet_internal(attempt_id).await
     }
 
     #[uniffi::method]
-    pub fn set_wallet_type(&self, wallet_type: WalletType) -> Result<(), Error> {
-        self.set_wallet_type_internal(wallet_type)
+    pub async fn set_wallet_type(&self, wallet_type: WalletType) -> Result<(), Error> {
+        self.ensure_active()?;
+        self.set_wallet_type_internal(wallet_type).await
     }
 
     #[uniffi::method]
-    pub fn validate_metadata(&self) {
-        self.validate_metadata_internal()
+    pub async fn validate_metadata(&self) -> Result<(), Error> {
+        self.ensure_active()?;
+        self.validate_metadata_internal().await
     }
 
     #[uniffi::method]
     pub async fn start_wallet_scan(&self) -> Result<(), Error> {
+        self.ensure_active()?;
         debug!("start_wallet_scan: {}", self.id);
 
         send!(self.actor.wallet_scan_and_notify(false));
@@ -828,14 +915,17 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub async fn force_wallet_scan(&self) {
+    pub async fn force_wallet_scan(&self) -> Result<(), Error> {
+        self.ensure_active()?;
         debug!("force_wallet_scan: {}", self.id);
 
         send!(self.actor.wallet_scan_and_notify(true));
+        Ok(())
     }
 
     #[uniffi::method]
     pub async fn rescan_wallet_with_gap_limit(&self, gap_limit: u32) -> Result<(), Error> {
+        self.ensure_active()?;
         debug!("rescan_wallet_with_gap_limit: {} gap_limit={}", self.id, gap_limit);
 
         if gap_limit == 0 || gap_limit > MAX_RESCAN_GAP_LIMIT {
@@ -850,8 +940,9 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub fn mark_wallet_as_verified(&self) -> Result<(), Error> {
-        self.mark_wallet_as_verified_internal()
+    pub async fn mark_wallet_as_verified(&self) -> Result<(), Error> {
+        self.ensure_active()?;
+        self.mark_wallet_as_verified_internal().await
     }
 
     #[uniffi::method]
@@ -860,12 +951,13 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub fn non_default_account_number(&self) -> Option<u32> {
+    pub fn non_default_account_number(&self) -> Result<Option<u32>, Error> {
+        self.ensure_active()?;
         if !self.uses_persistent_storage() {
-            return None;
+            return Ok(None);
         }
 
-        wallet_account_number(&self.id).filter(|account| *account != 0)
+        Ok(wallet_account_number(&self.id).filter(|account| *account != 0))
     }
 
     /// Returns the number of confirmation steps required to delete this wallet
@@ -889,30 +981,26 @@ impl RustWalletManager {
 
     /// Returns the warning message for the first delete confirmation dialog
     #[uniffi::method]
-    pub fn deletion_warning_message(&self) -> String {
+    pub fn deletion_warning_message(&self) -> Result<String, Error> {
+        self.ensure_active()?;
         let (wallet_type, verified) = {
             let metadata = self.metadata.read();
             (metadata.wallet_type, metadata.verified)
         };
 
         if wallet_type == WalletType::Hot && !verified {
-            return if self.has_recovery_words() {
+            let message = if self.has_recovery_words()? {
                 "This wallet is not backed up. Make sure you have your secret words saved before deleting."
                     .to_string()
             } else {
                 "This wallet is not backed up. Make sure you have your extended private key saved before deleting."
                     .to_string()
             };
+
+            return Ok(message);
         }
 
-        "This action cannot be undone.".to_string()
-    }
-
-    // only called from the frontend, to make sure all metadata places are up to date,
-    // this would not be needed if we didn't keep a metadata cache in the view model
-    #[uniffi::method]
-    fn set_wallet_metadata(&self, metadata: WalletMetadata) {
-        self.metadata.write().clone_from(&metadata);
+        Ok("This action cannot be undone.".to_string())
     }
 
     #[uniffi::method]
@@ -929,6 +1017,7 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn word_validator(&self) -> Result<WordValidator, Error> {
+        self.ensure_active()?;
         let mnemonic = Keychain::global()
             .get_wallet_key(&self.metadata.read().id)?
             .ok_or(Error::WalletDoesNotExist)?;
@@ -940,22 +1029,24 @@ impl RustWalletManager {
 
     /// Returns whether this hot wallet is backed by BIP39 recovery words
     #[uniffi::method]
-    pub fn has_recovery_words(&self) -> bool {
-        Keychain::global()
+    pub fn has_recovery_words(&self) -> Result<bool, Error> {
+        self.ensure_active()?;
+        let secret = Keychain::global()
             .get_wallet_secret(&self.metadata.read().id)
-            .ok()
-            .flatten()
-            .is_some_and(|secret| secret.as_mnemonic().is_some())
+            .map_err(Error::SecretRetrievalError)?;
+
+        Ok(secret.is_some_and(|secret| secret.as_mnemonic().is_some()))
     }
 
     /// Returns whether this hot wallet is backed by an extended private key (no mnemonic)
     #[uniffi::method]
-    pub fn has_xprv_secret(&self) -> bool {
-        Keychain::global()
+    pub fn has_xprv_secret(&self) -> Result<bool, Error> {
+        self.ensure_active()?;
+        let secret = Keychain::global()
             .get_wallet_secret(&self.metadata.read().id)
-            .ok()
-            .flatten()
-            .is_some_and(|secret| secret.as_xprv().is_some())
+            .map_err(Error::SecretRetrievalError)?;
+
+        Ok(secret.is_some_and(|secret| secret.as_xprv().is_some()))
     }
 
     /// Returns the wallet's master extended private key string for export
@@ -964,6 +1055,7 @@ impl RustWalletManager {
     /// zeroized; same limitation as displaying the mnemonic words
     #[uniffi::method]
     pub fn expose_xprv(&self) -> Result<String, Error> {
+        self.ensure_active()?;
         let secret = Keychain::global()
             .get_wallet_secret(&self.metadata.read().id)?
             .ok_or(Error::WalletDoesNotExist)?;
@@ -979,6 +1071,7 @@ impl RustWalletManager {
     }
 
     pub async fn fee_rate_options(&self) -> Result<FeeRateOptions, Error> {
+        self.ensure_active()?;
         let fee_client = &FEE_CLIENT;
         let fees = fee_client.fetch_and_get_fees().await.map_err(WalletManagerFeesError::from)?;
 
@@ -1000,7 +1093,8 @@ impl RustWalletManager {
 
         let actor = self.actor.clone();
         let psbt = Arc::unwrap_or_clone(psbt).into();
-        let transaction = call!(actor.finalize_psbt(psbt)).await.unwrap()?;
+        let transaction =
+            call!(actor.finalize_psbt(psbt)).await.map_err(|_| Error::ManagerClosed)??;
 
         Ok(BitcoinTransaction::from(transaction))
     }
@@ -1010,8 +1104,9 @@ impl RustWalletManager {
         &self,
         wallet_address_type: WalletAddressType,
     ) -> Result<(), Error> {
+        self.ensure_active()?;
         let discovery_state = self.metadata.read().discovery_state.clone();
-        match discovery_state {
+        let switch_result = match discovery_state {
             DiscoveryState::FoundAddressesFromJson(_vec, json) => {
                 let descriptors = match wallet_address_type {
                     WalletAddressType::WrappedSegwit => json.bip49.clone(),
@@ -1029,38 +1124,26 @@ impl RustWalletManager {
                     )
                 })?;
 
-                let id = self.id.clone();
                 let actor = self.actor.clone();
-                call!(
-                    actor.switch_descriptor_to_new_address_type(descriptors, wallet_address_type)
-                )
-                .await
-                .map_err(|source| {
-                    WalletManagerUnableToSwitchError::new(wallet_address_type, source)
-                })?
-                .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
-                self.refresh_metadata_from_database()?;
-
-                // reset route as a navigation fallback; actor scan refreshes transactions
-                FfiApp::global().load_and_reset_default_route(Route::SelectedWallet(id));
-            }
-
-            DiscoveryState::FoundAddressesFromMnemonic(_)
-            | DiscoveryState::FoundAddressesFromXprv(_) => {
-                let id = self.id.clone();
-                let actor = self.actor.clone();
-                call!(actor.switch_private_wallet_to_new_address_type(wallet_address_type))
+                call!(actor.switch_descriptor_to_new_address_type(descriptors, wallet_address_type))
                     .await
                     .map_err(|source| {
                         WalletManagerUnableToSwitchError::new(wallet_address_type, source)
                     })?
-                    .map_err(|e| Error::UnableToSwitch(wallet_address_type, e.to_string()))?;
-                self.refresh_metadata_from_database()?;
+            }
+
+            DiscoveryState::FoundAddressesFromMnemonic(_)
+            | DiscoveryState::FoundAddressesFromXprv(_) => {
+                let actor = self.actor.clone();
+                let result =
+                    call!(actor.switch_private_wallet_to_new_address_type(wallet_address_type))
+                        .await
+                        .map_err(|source| {
+                            WalletManagerUnableToSwitchError::new(wallet_address_type, source)
+                        })?;
 
                 debug!("switch done");
-
-                // reset route as a navigation fallback; actor scan refreshes transactions
-                FfiApp::global().load_and_reset_default_route(Route::SelectedWallet(id));
+                result
             }
 
             DiscoveryState::Single
@@ -1068,130 +1151,46 @@ impl RustWalletManager {
             | DiscoveryState::StartedXprv
             | DiscoveryState::NoneFound
             | DiscoveryState::ChoseAdressType
-            | DiscoveryState::StartedJson(_) => {
-                return Err(Error::UnableToSwitch(
-                    wallet_address_type,
-                    format!("wallet in unexpected discovery state: {discovery_state:?}"),
-                ));
-            }
+            | DiscoveryState::StartedJson(_) => Err(Error::UnableToSwitch(
+                wallet_address_type,
+                format!("wallet in unexpected discovery state: {discovery_state:?}"),
+            )),
+        };
+
+        if matches!(
+            &switch_result,
+            Ok(()) | Err(Error::AddressTypeSwitchCommittedWithRecoveryPending { .. })
+        ) {
+            // the exported manager owns the one route reset after publication commits
+            FfiApp::global().load_and_reset_default_route(Route::SelectedWallet(self.id.clone()));
         }
 
-        Ok(())
+        switch_result
     }
 
     /// Action from the frontend to change the state of the view model
     #[uniffi::method]
-    pub fn dispatch(&self, action: Action) {
-        let before_metadata = self.metadata.read().clone();
-        let mut candidate = before_metadata.clone();
-
+    pub fn dispatch(&self, action: Action) -> Result<(), Error> {
+        self.ensure_active()?;
         match action {
-            Action::UpdateName(name) => candidate.name = name,
-
-            Action::UpdateColor(color) => candidate.color = color,
-
-            Action::UpdateUnit(unit) => candidate.selected_unit = unit,
-
-            Action::ToggleSensitiveVisibility => {
-                candidate.sensitive_visible = !candidate.sensitive_visible;
-            }
-
-            Action::ToggleFiatOrBtc => {
-                candidate.fiat_or_btc = match candidate.fiat_or_btc {
-                    FiatOrBtc::Btc => FiatOrBtc::Fiat,
-                    FiatOrBtc::Fiat => FiatOrBtc::Btc,
-                };
-            }
-
-            Action::UpdateFiatOrBtc(fiat_or_btc) => candidate.fiat_or_btc = fiat_or_btc,
-
-            Action::ToggleFiatBtcPrimarySecondary => {
-                const ORDER: &[(FiatOrBtc, Unit); 4] = &[
-                    (FiatOrBtc::Btc, Unit::Btc),
-                    (FiatOrBtc::Fiat, Unit::Btc),
-                    (FiatOrBtc::Btc, Unit::Sat),
-                    (FiatOrBtc::Fiat, Unit::Sat),
-                ];
-
-                let current = (candidate.fiat_or_btc, candidate.selected_unit);
-
-                let current_index = ORDER
-                    .iter()
-                    .position(|option| option == &current)
-                    .expect("all options covered");
-
-                let next_index = (current_index + 1) % ORDER.len();
-                let (fiat_or_btc, unit) = ORDER[next_index];
-
-                candidate.fiat_or_btc = fiat_or_btc;
-                candidate.selected_unit = unit;
-            }
-
-            Action::ToggleDetailsExpanded => {
-                candidate.details_expanded = !candidate.details_expanded;
-            }
-
-            Action::SelectCurrentWalletAddressType => {
-                candidate.discovery_state = DiscoveryState::ChoseAdressType;
-            }
-
-            Action::ToggleShowLabels => candidate.show_labels = !candidate.show_labels,
-
-            Action::SelectedWalletDisappeared => {
-                self.shutdown_actors();
-                return;
-            }
-
             Action::OpenReceiveAddress => {
                 send!(self.actor.open_receive_address_intent());
-                return;
             }
 
             Action::CreateNewReceiveAddress => {
                 send!(self.actor.create_new_receive_address_intent());
-                return;
             }
 
             Action::CloseReceiveAddress(request_id) => {
                 send!(self.actor.close_receive_address(request_id));
-                return;
+            }
+
+            action => {
+                send!(self.actor.dispatch_metadata_action(action));
             }
         }
 
-        let uses_persistent_storage = self.uses_persistent_storage();
-        let candidate = if uses_persistent_storage {
-            match Database::global().wallets.update_wallet_metadata(candidate.clone()) {
-                Ok(candidate) => candidate,
-                Err(error) => {
-                    error!("Unable to update wallet metadata: {error:?}");
-                    return;
-                }
-            }
-        } else {
-            candidate
-        };
-
-        *self.metadata.write() = candidate.clone();
-        self.reconciler.send(Message::WalletMetadataChanged(Box::new(candidate.clone())));
-        let scan_status = self.current_scan_status();
-        self.reconciler.send(Message::LedgerStateChanged(
-            WalletLedgerState::from_metadata_and_scan_status(&candidate, &scan_status),
-        ));
-        if uses_persistent_storage {
-            CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &candidate);
-        }
-    }
-
-    pub fn shutdown(&self) {
-        self.shutdown_actors();
-    }
-
-    fn shutdown_actors(&self) {
-        send!(self.actor.shutdown());
-
-        if let Some(discovery_scanner) = &self.discovery_scanner {
-            send!(discovery_scanner.shutdown());
-        }
+        Ok(())
     }
 }
 
@@ -1205,41 +1204,11 @@ impl RustWalletManager {
     }
 
     fn current_metadata(&self) -> WalletMetadata {
-        let cached_metadata = self.metadata.read().clone();
-        if !self.uses_persistent_storage() {
-            return cached_metadata;
-        }
-
-        let database_metadata = Database::global().wallets().get(
-            &self.id,
-            cached_metadata.network,
-            cached_metadata.wallet_mode,
-        );
-
-        match database_metadata {
-            Ok(Some(metadata)) => metadata,
-            Ok(None) => {
-                let id = &self.id;
-                let network = cached_metadata.network;
-                let wallet_mode = cached_metadata.wallet_mode;
-                warn!(
-                    "wallet metadata missing id={id:?} network={network:?} wallet_mode={wallet_mode}, using cached metadata"
-                );
-                cached_metadata
-            }
-            Err(error) => {
-                let id = &self.id;
-                let network = cached_metadata.network;
-                let wallet_mode = cached_metadata.wallet_mode;
-                warn!(
-                    "unable to load wallet metadata id={id:?} network={network:?} wallet_mode={wallet_mode}: {error}, using cached metadata"
-                );
-                cached_metadata
-            }
-        }
+        self.metadata.read().clone()
     }
 
     fn ensure_ledger_ready_for_spend(&self) -> Result<(), Error> {
+        self.ensure_active()?;
         if self.current_metadata().internal.performed_full_scan_at.is_some() {
             return Ok(());
         }
@@ -1247,28 +1216,11 @@ impl RustWalletManager {
         Err(Error::InitialScanIncomplete)
     }
 
-    fn refresh_metadata_from_database(&self) -> Result<WalletMetadata, Error> {
-        if !self.uses_persistent_storage() {
-            return Ok(self.metadata.read().clone());
+    pub(crate) fn ensure_active(&self) -> Result<(), Error> {
+        match &self.lifecycle {
+            Some(lifecycle) => lifecycle.ensure_active(),
+            None => Ok(()),
         }
-
-        let before_metadata = self.metadata.read().clone();
-        let metadata = Database::global()
-            .wallets()
-            .get(&self.id, before_metadata.network, before_metadata.wallet_mode)?
-            .ok_or(Error::WalletDoesNotExist)?;
-
-        *self.metadata.write() = metadata.clone();
-        self.reconciler.send(Message::WalletMetadataChanged(Box::new(metadata.clone())));
-        let scan_status = self.current_scan_status();
-
-        // address type switches may already have reconciled idle; repeating it is harmless
-        self.reconciler.send(Message::LedgerStateChanged(
-            WalletLedgerState::from_metadata_and_scan_status(&metadata, &scan_status),
-        ));
-        CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before_metadata, &metadata);
-
-        Ok(metadata)
     }
 }
 
@@ -1299,32 +1251,42 @@ impl RustWalletManager {
         let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::in_memory(Vec::new());
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
-        let wallet_actor = WalletActor::new_with_db(
+        let shared_metadata = Arc::new(RwLock::new(metadata.clone()));
+        let wallet_actor = WalletActor::new_with_metadata_and_db(
             wallet,
             channel.raw_sender(),
             scan_status.clone(),
             wallet_snapshot.clone(),
             wallet_data_db,
+            shared_metadata.clone(),
         );
         let actor = task::spawn_actor(wallet_actor);
 
         Self {
             id: metadata.id.clone(),
             actor,
-            metadata: Arc::new(RwLock::new(metadata)),
+            metadata: shared_metadata,
             reconciler: channel,
             scan_status,
             wallet_snapshot,
             unsigned_transactions,
             label_manager,
             discovery_scanner: None,
+            lifecycle: None,
+            _actor_registration: None,
         }
     }
 }
 
 impl Drop for RustWalletManager {
     fn drop(&mut self) {
-        self.shutdown();
+        if self._actor_registration.is_none() {
+            send!(self.actor.shutdown());
+
+            if let Some(discovery_scanner) = &self.discovery_scanner {
+                send!(discovery_scanner.shutdown());
+            }
+        }
         debug!("[DROP] Wallet View manager: {}", self.id);
     }
 }
@@ -1435,7 +1397,7 @@ mod tests {
         let manager = RustWalletManager::preview_new_wallet_with_metadata(metadata);
 
         assert!(manager.get_unsigned_transactions().unwrap().is_empty());
-        assert_eq!(manager.non_default_account_number(), None);
+        assert_eq!(manager.non_default_account_number(), Ok(None));
         assert!(bdk_paths.iter().all(|path| !path.exists()));
         assert!(wallet_data_paths.iter().all(|path| !path.exists()));
     }
@@ -1458,13 +1420,13 @@ mod tests {
         assert!(wallet_data_paths.iter().all(|path| !path.exists()));
     }
 
-    #[test]
-    fn preview_manager_rejects_wallet_deletion() {
+    #[tokio::test]
+    async fn preview_manager_rejects_wallet_deletion() {
         crate::test_support::ensure_tokio_runtime();
 
         let manager = RustWalletManager::preview_new_wallet();
 
-        assert_eq!(manager.delete_wallet(), Err(Error::PreviewOperationUnavailable));
+        assert_eq!(manager.delete_wallet().await, Err(Error::PreviewOperationUnavailable));
     }
 
     #[test]

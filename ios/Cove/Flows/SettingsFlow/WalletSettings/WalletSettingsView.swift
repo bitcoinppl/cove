@@ -20,7 +20,7 @@ struct WalletSettingsView: View {
     }
 
     private var deleteConfirmationMessage: String {
-        manager.rust.deletionWarningMessage()
+        manager.deletionWarningMessage()
     }
 
     private var finalDeleteConfirmationMessage: String {
@@ -54,8 +54,10 @@ struct WalletSettingsView: View {
             confirmInitialDelete: confirmInitialDelete,
             confirmSecondDelete: confirmSecondDelete,
             deleteWallet: deleteWallet,
+            retryDeleteWallet: retryDeleteWallet,
+            cancelDeleteWallet: cancelDeleteWallet,
             performXprvExport: performXprvExport,
-            loadXprv: manager.rust.exposeXprv
+            loadXprv: manager.exposeXprv
         )
     }
 
@@ -69,7 +71,7 @@ struct WalletSettingsView: View {
             content: WalletSettingsContent(
                 metadata: metadata,
                 accountNumber: accountNumber,
-                masterFingerprint: manager.rust.masterFingerprint(),
+                masterFingerprint: manager.masterFingerprint(),
                 colorColumns: colorColumns,
                 showLabels: showLabels,
                 changeName: changeName,
@@ -89,21 +91,66 @@ struct WalletSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .foregroundColor(.primary)
         .onDisappear(perform: handleDisappear)
-        .onAppear(perform: manager.validateMetadata)
         .onChange(of: scenePhase, handleScenePhaseChange)
         .task {
-            accountNumber = manager.rust.nonDefaultAccountNumber()
+            accountNumber = manager.nonDefaultAccountNumber()
+
+            do {
+                try await manager.validateMetadata()
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.error("Unable to validate wallet metadata: \(error)")
+            }
         }
         .scrollContentBackground(.hidden)
     }
 
     private func deleteWallet() {
-        do {
-            try manager.rust.deleteWallet()
-            dismiss()
-        } catch {
-            Log.error("Unable to delete wallet: \(error)")
+        performDeleteWallet(.initial)
+    }
+
+    private func retryDeleteWallet(_ attemptId: ShutdownAttemptId) {
+        performDeleteWallet(.retry(attemptId))
+    }
+
+    private func cancelDeleteWallet(_ attemptId: ShutdownAttemptId) {
+        app.cancelWalletDeletionAttempt(attemptId)
+        presentationCoordinator.dismissCurrentPresentation()
+    }
+
+    private func performDeleteWallet(_ call: WalletDeletionCall) {
+        Task { @MainActor in
+            do {
+                switch call {
+                case .initial:
+                    try await manager.deleteWallet()
+                case let .retry(attemptId):
+                    try await manager.retryDeleteWallet(attemptId: attemptId)
+                }
+
+                dismiss()
+            } catch is CancellationError {
+                return
+            } catch let WalletManagerError.WalletLifecycle(
+                .shutdownBlocked(attemptId, _, _)
+            ) {
+                present(.deletionShutdownBlocked(attemptId))
+            } catch {
+                Log.error("Unable to delete wallet: \(error)")
+                app.alertState = .init(
+                    .general(
+                        title: "Unable to Delete Wallet",
+                        message: "Cove could not delete this wallet. Try again."
+                    )
+                )
+            }
         }
+    }
+
+    private enum WalletDeletionCall {
+        case initial
+        case retry(ShutdownAttemptId)
     }
 
     private func changeName() {
@@ -128,7 +175,7 @@ struct WalletSettingsView: View {
 
     private func prepareDelete() {
         let plan = WalletDeletionConfirmationPlan(
-            requiredConfirmations: manager.rust.requiredDeletionConfirmations()
+            requiredConfirmations: manager.requiredDeletionConfirmations()
         )
 
         present(.deleteConfirmation(plan))
@@ -182,7 +229,16 @@ struct WalletSettingsView: View {
 
     private func handleDisappear() {
         clearXprvReveal()
-        manager.validateMetadata()
+
+        Task { @MainActor in
+            do {
+                try await manager.validateMetadata()
+            } catch is CancellationError {
+                return
+            } catch {
+                Log.error("Unable to validate wallet metadata: \(error)")
+            }
+        }
     }
 
     private func handleScenePhaseChange(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
