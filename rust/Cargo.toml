@@ -13,7 +13,7 @@ members = ["crates/*", "xtask"]
 ## MARK: WORKSPACE DEPENDENCIES
 [workspace.dependencies]
 # bindings
-uniffi = { git = "https://github.com/mozilla/uniffi-rs", branch = "main", features = ["tokio"] }
+uniffi = { git = "https://github.com/mozilla/uniffi-rs", rev = "42e834a4371547d9da47fd06e34062a91fa25b57", features = ["tokio"] }
 
 # sync
 parking_lot = { version = "0.12.5" }
@@ -78,7 +78,7 @@ ahash = "0.8.12"
 once_cell = "1.21.4"
 
 # fmt currency
-numfmt = { git = "https://github.com/bitcoinppl/numfmt" }
+numfmt = { git = "https://github.com/bitcoinppl/numfmt", rev = "a130b90092457526a336d3d13eb63493271aa190" }
 
 # num 
 num-bigint = "0.5"
@@ -157,7 +157,7 @@ bip329 = { workspace = true }
 payjoin = { workspace = true }
 
 # tapsigner / satscard
-rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap" }
+rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap", rev = "3d74272692278f31e2e230b0963a12ebe9b8745b" }
 
 # actors
 act-zero = { version = "0.4.0", features = ["default-tokio"] }
@@ -301,13 +301,18 @@ uniffi = { workspace = true, features = ["build"] }
 
 [dev-dependencies]
 bdk_wallet = { workspace = true, features = ["test-utils"] }
+ciborium = "0.2.2"
 tempfile = "3.27.0"
 pretty_assertions = "1.4.1"
 minicbor = { workspace = true }
+serde_bytes = "0.11.17"
 
 tokio = { workspace = true, features = ["rt", "test-util", "macros"] }
 uniffi = { workspace = true, features = ["bindgen-tests"] }
 
+
+[profile.dev]
+debug = "line-tables-only"
 
 [profile.release]
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.

@@ -1,4 +1,6 @@
-use cove_device::cloud_storage::CloudStorage;
+use std::collections::HashSet;
+
+use cove_device::cloud_storage::{CloudStorage, CloudStorageInventorySnapshot};
 use tracing::{info, warn};
 
 use crate::database::Database;
@@ -6,7 +8,7 @@ use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobS
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupDetailInventorySnapshot,
     CloudBackupDetailInventorySnapshotResult, CloudBackupDetailResult, CloudBackupError,
-    CloudBackupOtherBackupsState, CloudBackupStatus, RustCloudBackupManager, blocking_cloud_error,
+    CloudBackupInventoryAuthority, CloudBackupStatus, RustCloudBackupManager, blocking_cloud_error,
     cloud_inventory::CloudWalletInventory, cloud_inventory::RemoteWalletTruth,
     offline_error_for_step,
 };
@@ -43,7 +45,8 @@ impl RustCloudBackupManager {
             }
         };
 
-        let provisional_detail = if snapshot.is_complete {
+        let authority = self.inventory_snapshot_authority(&namespace, &snapshot);
+        let provisional_detail = if authority.is_some() {
             None
         } else {
             match self.build_provisional_cloud_backup_detail(&snapshot.names).await {
@@ -58,7 +61,7 @@ impl RustCloudBackupManager {
             CloudBackupDetailInventorySnapshot {
                 namespace,
                 wallet_record_ids: snapshot.names,
-                is_complete: snapshot.is_complete,
+                authority,
                 provisional_detail,
             },
         ))
@@ -84,18 +87,18 @@ impl RustCloudBackupManager {
             )));
         }
 
-        if self.is_known_offline() && !snapshot.is_complete {
+        if self.is_known_offline() && snapshot.authority.is_none() {
             return Some(CloudBackupDetailResult::AccessError(offline_error_for_step(
                 BlockingCloudStep::DetailRefresh,
             )));
         }
 
         let cloud = CloudStorage::global_explicit_client();
-        let wallet_record_ids = if snapshot.is_complete {
-            snapshot.wallet_record_ids
+        let (wallet_record_ids, authority) = if let Some(authority) = snapshot.authority {
+            (snapshot.wallet_record_ids, authority)
         } else {
             match cloud.list_wallet_backups(snapshot.namespace.clone()).await {
-                Ok(record_ids) => record_ids,
+                Ok(record_ids) => (record_ids, CloudBackupInventoryAuthority::ProviderConfirmed),
                 Err(error) => {
                     let error = blocking_cloud_error(
                         BlockingCloudStep::DetailRefresh,
@@ -107,7 +110,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        Some(self.finish_cloud_backup_detail_refresh(wallet_record_ids, cloud).await)
+        Some(self.finish_cloud_backup_detail_refresh(wallet_record_ids, authority, cloud).await)
     }
 
     /// List wallet backups in the current namespace and build detail
@@ -146,12 +149,20 @@ impl RustCloudBackupManager {
             }
         };
 
-        Some(self.finish_cloud_backup_detail_refresh(wallet_record_ids, cloud).await)
+        Some(
+            self.finish_cloud_backup_detail_refresh(
+                wallet_record_ids,
+                CloudBackupInventoryAuthority::ProviderConfirmed,
+                cloud,
+            )
+            .await,
+        )
     }
 
     async fn finish_cloud_backup_detail_refresh(
         &self,
         wallet_record_ids: Vec<String>,
+        authority: CloudBackupInventoryAuthority,
         cloud: cove_device::cloud_storage::CloudStorageClient,
     ) -> CloudBackupDetailResult {
         let remote_wallet_truth =
@@ -166,9 +177,43 @@ impl RustCloudBackupManager {
             .build_cloud_backup_detail_with_remote_truth(&wallet_record_ids, remote_wallet_truth)
             .await
         {
-            Ok(detail) => CloudBackupDetailResult::Success(detail),
+            Ok(detail) => CloudBackupDetailResult::SuccessWithAuthority { detail, authority },
             Err(error) => CloudBackupDetailResult::AccessError(error),
         }
+    }
+
+    fn inventory_snapshot_authority(
+        &self,
+        namespace: &str,
+        snapshot: &CloudStorageInventorySnapshot,
+    ) -> Option<CloudBackupInventoryAuthority> {
+        if snapshot.is_complete {
+            return Some(CloudBackupInventoryAuthority::ProviderConfirmed);
+        }
+
+        let known_count = Self::load_persisted_state().wallet_count()? as usize;
+        let snapshot_record_ids = snapshot.names.iter().collect::<HashSet<_>>();
+        if snapshot_record_ids.is_empty() || snapshot_record_ids.len() < known_count {
+            return None;
+        }
+
+        let confirmed_record_ids = Database::global()
+            .cloud_blob_sync_states
+            .list()
+            .ok()?
+            .into_iter()
+            .filter(|state| {
+                state.namespace_id == namespace
+                    && state.is_wallet_record()
+                    && matches!(state.state, PersistedCloudBlobState::Confirmed(_))
+            })
+            .map(|state| state.record_id().to_owned())
+            .collect::<HashSet<_>>();
+
+        confirmed_record_ids
+            .iter()
+            .all(|record_id| snapshot_record_ids.contains(record_id))
+            .then_some(CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount)
     }
 
     async fn build_provisional_cloud_backup_detail(
@@ -178,19 +223,13 @@ impl RustCloudBackupManager {
         let mut unknown_record_ids = self.expected_wallet_record_ids().await?;
         unknown_record_ids.extend(wallet_record_ids.iter().cloned());
 
-        let other_backups = self
-            .state
-            .read()
-            .detail()
-            .map(|detail| detail.other_backups)
-            .unwrap_or(CloudBackupOtherBackupsState::Loaded { summary: Default::default() });
         let inventory = CloudWalletInventory::load_with_remote_truth(
             wallet_record_ids,
             RemoteWalletTruth { unknown_record_ids, ..RemoteWalletTruth::default() },
         )
         .await?;
 
-        Ok(inventory.build_detail(other_backups))
+        Ok(inventory.build_detail())
     }
 
     pub(crate) fn cleanup_confirmed_pending_blobs(&self, remote_wallet_truth: &RemoteWalletTruth) {

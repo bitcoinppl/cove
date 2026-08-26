@@ -4,12 +4,19 @@ use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
 use tracing::warn;
 
 use super::{
-    BlockingCloudStep, CloudBackupError, CloudBackupOtherBackupsOutcome,
-    CloudBackupOtherBackupsState, CloudBackupOtherBackupsSummary, CloudBackupPasskeyHint,
-    OtherBackupsOperation, RustCloudBackupManager, blocking_cloud_error,
+    BlockingCloudStep, CloudBackupError, CloudBackupInventoryIncompleteReason,
+    CloudBackupOtherBackupsOutcome, CloudBackupOtherBackupsState, CloudBackupOtherBackupsSummary,
+    CloudBackupPasskeyHint, OtherBackupsOperation, RustCloudBackupManager, blocking_cloud_error,
 };
+use crate::database::cloud_backup::CloudStorageIssue;
 
 impl RustCloudBackupManager {
+    pub(crate) fn apply_other_backups_state(&self, state: CloudBackupOtherBackupsState) {
+        self.apply_model_event(super::CloudBackupStateReducerEvent::OtherBackupsStateResolved(
+            state,
+        ));
+    }
+
     pub(crate) async fn other_backup_state(
         &self,
         cloud: &CloudStorageClient,
@@ -18,7 +25,11 @@ impl RustCloudBackupManager {
             Ok(summary) => CloudBackupOtherBackupsState::Loaded { summary },
             Err(error) => {
                 warn!("Failed to summarize other cloud backups: {error}");
-                CloudBackupOtherBackupsState::LoadFailed { error: error.reader_message() }
+                CloudBackupOtherBackupsState::LoadFailed {
+                    reason: CloudBackupInventoryIncompleteReason::from(CloudStorageIssue::from(
+                        &error,
+                    )),
+                }
             }
         }
     }

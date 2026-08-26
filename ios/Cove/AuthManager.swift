@@ -4,6 +4,19 @@ enum UnlockMode {
     case main, decoy, wipe, locked
 }
 
+enum WipePresentationState: Equatable {
+    case idle
+    case running
+    case shutdownBlocked(ShutdownAttemptId)
+    case failed(String)
+}
+
+private enum WipeCallResult: Sendable {
+    case success
+    case failure(AppError)
+    case unexpectedFailure(String)
+}
+
 @Observable final class AuthManager: AuthManagerReconciler {
     static let shared = makeShared()
 
@@ -13,6 +26,7 @@ enum UnlockMode {
     var lockState: LockState = .locked
     var isWipeDataPinEnabled: Bool
     var isDecoyPinEnabled: Bool
+    var wipePresentationState = WipePresentationState.idle
 
     @ObservationIgnored
     var lockedAt: Date? {
@@ -78,7 +92,7 @@ enum UnlockMode {
     }
 
     @MainActor
-    public func handleAndReturnUnlockMode(_ pin: String) -> UnlockMode {
+    public func handleAndReturnUnlockMode(_ pin: String) async -> UnlockMode {
         if AuthPin().check(pin: pin) {
             if Database().globalConfig().isInDecoyMode() { switchToMainMode() }
             unlock()
@@ -116,21 +130,78 @@ enum UnlockMode {
         // check if the entered pin is a wipeDataPin
         // if so wipe the data
         if checkWipeDataPin(pin) {
-            AppManager.shared.rust.dangerousWipeAllData()
-
-            // reset auth maanger
-            rust = RustAuthManager()
-            unlock()
-
-            type = .none
-
-            // reset app manager
-            AppManager.shared.reset()
-
-            return .wipe
+            wipePresentationState = .running
+            return await finishWipe(call: .initial)
         }
 
         return .locked
+    }
+
+    @MainActor
+    func retryWipe(_ attemptId: ShutdownAttemptId) async {
+        wipePresentationState = .running
+        _ = await finishWipe(call: .retry(attemptId))
+    }
+
+    @MainActor
+    func cancelWipe(_ attemptId: ShutdownAttemptId) {
+        AppManager.shared.rust.cancelDangerousWipe(attemptId: attemptId)
+        wipePresentationState = .idle
+    }
+
+    @MainActor
+    func clearWipeFailure() {
+        wipePresentationState = .idle
+    }
+
+    private enum WipeCall: Sendable {
+        case initial
+        case retry(ShutdownAttemptId)
+    }
+
+    @MainActor
+    private func finishWipe(call: WipeCall) async -> UnlockMode {
+        let app = AppManager.shared.rust
+        let result = await Task.detached(priority: .userInitiated) {
+            do {
+                switch call {
+                case .initial:
+                    try app.dangerousWipeAllData()
+                case let .retry(attemptId):
+                    try app.retryDangerousWipeAllData(attemptId: attemptId)
+                }
+
+                return WipeCallResult.success
+            } catch let error as AppError {
+                return WipeCallResult.failure(error)
+            } catch {
+                return WipeCallResult.unexpectedFailure(error.localizedDescription)
+            }
+        }.value
+
+        switch result {
+        case .success:
+            rust = RustAuthManager()
+            unlock()
+            type = .none
+            wipePresentationState = .idle
+            AppManager.shared.reset()
+            return .wipe
+
+        case let .failure(.WalletLifecycle(.shutdownBlocked(attemptId, _, _))):
+            wipePresentationState = .shutdownBlocked(attemptId)
+            return .locked
+
+        case let .failure(error):
+            logger.error("Failed to wipe all data: \(error)")
+            wipePresentationState = .failed(error.localizedDescription)
+            return .locked
+
+        case let .unexpectedFailure(message):
+            logger.error("Failed to wipe all data: \(message)")
+            wipePresentationState = .failed(message)
+            return .locked
+        }
     }
 
     @MainActor

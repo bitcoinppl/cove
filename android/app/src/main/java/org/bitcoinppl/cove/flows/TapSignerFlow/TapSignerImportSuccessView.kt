@@ -71,8 +71,8 @@ fun TapSignerImportSuccessView(
         try {
             walletId = persistWallet(tapSigner, deriveInfo)
         } catch (e: Exception) {
-            android.util.Log.e("TapSignerImportSuccess", "Failed to save wallet", e)
-            error = e.message ?: "Failed to save wallet"
+            android.util.Log.e("TapSignerImportSuccess", "Failed to save TapSigner wallet")
+            error = "Failed to save wallet"
         } finally {
             saving = false
         }
@@ -155,8 +155,11 @@ fun TapSignerImportSuccessView(
                                 try {
                                     walletId = persistWallet(tapSigner, deriveInfo)
                                 } catch (e: Exception) {
-                                    android.util.Log.e("TapSignerImportSuccess", "Failed to save wallet", e)
-                                    error = e.message ?: "Failed to save wallet"
+                                    android.util.Log.e(
+                                        "TapSignerImportSuccess",
+                                        "Failed to save TapSigner wallet",
+                                    )
+                                    error = "Failed to save wallet"
                                 } finally {
                                     saving = false
                                 }

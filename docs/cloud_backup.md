@@ -71,6 +71,13 @@ mandatory FileManager-plus-`NSMetadataQuery` union. Android's first successful
 Google Drive list is complete because Drive returns provider inventory directly.
 The platform result feeds the same Rust reducer on both platforms.
 
+Each native detail screen projects one progress presentation from verification
+state, inventory state, retained detail, and visible wallet rows. Verification
+progress takes priority over inventory progress. It uses a standalone card when
+no wallet rows are visible and an inline row when local or loaded cloud-only
+wallet rows stay on screen. `cloudOnlyCount` is not a visible row by itself.
+The verification section does not render a second running indicator.
+
 ## Passkeys And Enable
 
 Cloud access has an explicit presentation boundary. Silent startup discovery

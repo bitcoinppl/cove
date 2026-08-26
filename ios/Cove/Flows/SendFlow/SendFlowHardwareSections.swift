@@ -1,5 +1,15 @@
 import SwiftUI
 
+struct SendFlowHardwareDialogActions {
+    let exportQr: () -> Void
+    let exportNfc: () -> Void
+    let shareTransaction: () -> Void
+    let scanQr: () -> Void
+    let importFile: () -> Void
+    let pasteSignature: () -> Void
+    let scanNfc: () -> Void
+}
+
 struct SendFlowHardwareAccountSection: View {
     let metadata: WalletMetadata
 
@@ -29,6 +39,9 @@ struct SendFlowHardwareAccountSection: View {
 struct SendFlowHardwareSignTransactionSection: View {
     let exportTransaction: () -> Void
     let importSignature: () -> Void
+    let exportDialogIsPresented: Binding<Bool>
+    let importDialogIsPresented: Binding<Bool>
+    let dialogActions: SendFlowHardwareDialogActions
 
     var body: some View {
         VStack(spacing: 17) {
@@ -48,6 +61,17 @@ struct SendFlowHardwareSignTransactionSection: View {
                         systemImage: "square.and.arrow.up"
                     )
                 }
+                .confirmationDialog(
+                    "Export Transaction",
+                    isPresented: exportDialogIsPresented,
+                    actions: {
+                        SendFlowHardwareExportTransactionDialog(
+                            exportQr: dialogActions.exportQr,
+                            exportNfc: dialogActions.exportNfc,
+                            shareTransaction: dialogActions.shareTransaction
+                        )
+                    }
+                )
 
                 Spacer()
 
@@ -57,6 +81,18 @@ struct SendFlowHardwareSignTransactionSection: View {
                         systemImage: "square.and.arrow.down"
                     )
                 }
+                .confirmationDialog(
+                    "Import Signature",
+                    isPresented: importDialogIsPresented,
+                    actions: {
+                        SendFlowHardwareImportTransactionDialog(
+                            scanQr: dialogActions.scanQr,
+                            importFile: dialogActions.importFile,
+                            pasteSignature: dialogActions.pasteSignature,
+                            scanNfc: dialogActions.scanNfc
+                        )
+                    }
+                )
             }
         }
     }

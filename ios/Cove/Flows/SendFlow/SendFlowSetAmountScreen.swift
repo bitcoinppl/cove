@@ -495,7 +495,7 @@ private struct SendFlowFeeSelectionSheet: View {
 #Preview("with address") {
     AsyncPreview {
         NavigationStack {
-            let manager = WalletManager(preview: "preview_only")
+            let manager = WalletManager(preview: .only)
 
             SendFlowSetAmountScreen(
                 id: WalletId()
@@ -510,7 +510,7 @@ private struct SendFlowFeeSelectionSheet: View {
 #Preview("no address") {
     AsyncPreview {
         NavigationStack {
-            let manager = WalletManager(preview: "preview_only")
+            let manager = WalletManager(preview: .only)
 
             SendFlowSetAmountScreen(
                 id: WalletId()

@@ -6,13 +6,17 @@ use zeroize::Zeroizing;
 
 use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret};
 use cove_types::network::Network;
+use cove_util::result_ext::ResultExt as _;
 
 use crate::custom_block_explorer::CustomBlockExplorerTemplate;
 use crate::database::Database;
 use crate::database::global_config::GlobalConfigKey;
 use crate::database::global_config::GlobalConfigTable;
 use crate::label_manager::LabelManager;
-use crate::wallet::metadata::{WalletMode, WalletType};
+use crate::wallet::{
+    addressing::authoritative_public_descriptor_mirror,
+    metadata::{WalletMode, WalletType},
+};
 
 use super::crypto;
 use super::error::BackupError;
@@ -41,11 +45,8 @@ impl BackupExporter {
 
         for network in Network::iter() {
             for mode in [WalletMode::Main, WalletMode::Decoy] {
-                let wallets = self
-                    .db
-                    .wallets
-                    .get_all(network, mode)
-                    .map_err(|e| BackupError::Database(e.to_string()))?;
+                let wallets =
+                    self.db.wallets.get_all(network, mode).map_err_str(BackupError::Database)?;
 
                 for metadata in wallets {
                     let id = &metadata.id;
@@ -55,7 +56,7 @@ impl BackupExporter {
                     // serialize metadata to JSON value for forward compatibility
                     let metadata_value =
                         serde_json::to_value(metadata.clone_without_local_scan_state())
-                            .map_err(|e| BackupError::Serialization(e.to_string()))?;
+                            .map_err_str(BackupError::Serialization)?;
 
                     // gather secret material based on wallet type
                     let secret = match metadata.wallet_type {
@@ -115,18 +116,11 @@ impl BackupExporter {
                         }
                     };
 
-                    let descriptors = match self.keychain.get_public_descriptor(id) {
-                        Ok(Some((ext, int))) => Some(DescriptorPair {
-                            external: ext.to_string(),
-                            internal: int.to_string(),
-                        }),
-                        Ok(None) => None,
-                        Err(e) => {
-                            return Err(BackupError::Keychain(format!(
-                                "failed to read descriptors for wallet '{name}' ({network}){mode_tag}: {e}"
-                            )));
-                        }
-                    };
+                    let descriptors = manual_backup_descriptors(&metadata).map_err(|e| {
+                        BackupError::Gather(format!(
+                            "failed to load authoritative descriptors for wallet '{name}' ({network}){mode_tag}: {e}"
+                        ))
+                    })?;
 
                     // gather labels (non-fatal)
                     let labels_jsonl = match export_labels(id.clone()).await {
@@ -189,6 +183,17 @@ impl BackupExporter {
     }
 }
 
+fn manual_backup_descriptors(
+    metadata: &crate::wallet::metadata::WalletMetadata,
+) -> Result<Option<DescriptorPair>, crate::wallet::WalletError> {
+    authoritative_public_descriptor_mirror(metadata).map(|descriptors| {
+        descriptors.map(|(external, internal)| DescriptorPair {
+            external: external.to_string(),
+            internal: internal.to_string(),
+        })
+    })
+}
+
 fn gather_custom_block_explorers(config: &GlobalConfigTable) -> BTreeMap<String, String> {
     let mut explorers = BTreeMap::new();
 
@@ -218,8 +223,7 @@ pub async fn export_all(password: String) -> Result<BackupResult, BackupError> {
 
     let payload = BackupPayload::try_new(wallets, settings)?;
 
-    let json =
-        serde_json::to_vec(&payload).map_err(|e| BackupError::Serialization(e.to_string()))?;
+    let json = serde_json::to_vec(&payload).map_err_str(BackupError::Serialization)?;
     let json = Zeroizing::new(json);
 
     let compressed = crypto::compress(&json)?;
@@ -249,12 +253,23 @@ async fn export_labels(id: cove_types::WalletId) -> Result<String, BackupError> 
         BackupError::Gather(e.to_string())
     })?;
 
-    manager.export().await.map_err(|e| BackupError::Gather(e.to_string()))
+    manager.export().await.map_err_str(BackupError::Gather)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn manual_backup_allows_missing_descriptor_mirrors() {
+        crate::test_support::init_test_keychain();
+        let metadata = crate::wallet::metadata::WalletMetadata::preview_new();
+
+        let descriptors = manual_backup_descriptors(&metadata)
+            .expect("missing descriptor mirrors remain compatible with manual backup");
+
+        assert!(descriptors.is_none());
+    }
 
     #[test]
     fn backup_export_gathers_only_normalized_custom_block_explorers() {

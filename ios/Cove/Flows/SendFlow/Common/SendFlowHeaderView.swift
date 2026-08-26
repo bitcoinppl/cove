@@ -175,7 +175,7 @@ private struct SendFlowHeaderUnitMenu: View {
 
 #Preview {
     struct Container: View {
-        @State var manager: WalletManager = .init(preview: "preview_only")
+        @State var manager: WalletManager = .init(preview: .only)
 
         var body: some View {
             SendFlowHeaderView(
@@ -189,7 +189,7 @@ private struct SendFlowHeaderUnitMenu: View {
 
 #Preview("small") {
     struct Container: View {
-        @State var manager: WalletManager = .init(preview: "preview_only")
+        @State var manager: WalletManager = .init(preview: .only)
 
         var body: some View {
             SendFlowHeaderView(

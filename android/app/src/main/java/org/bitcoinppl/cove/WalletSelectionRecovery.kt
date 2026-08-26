@@ -50,18 +50,20 @@ internal data class WalletManagerCacheState(
 
     fun invalidate(invalidation: WalletManagerInvalidation): WalletManagerCacheState =
         when (invalidation) {
-            WalletManagerInvalidation.All ->
+            WalletManagerInvalidation.All -> {
                 copy(
                     allInvalidationGeneration = allInvalidationGeneration + 1,
                     walletInvalidationGenerations = emptyMap(),
                 )
+            }
 
-            is WalletManagerInvalidation.Wallet ->
+            is WalletManagerInvalidation.Wallet -> {
                 copy(
                     walletInvalidationGenerations =
                         walletInvalidationGenerations +
                             (invalidation.id to walletInvalidationGeneration(invalidation.id) + 1),
                 )
+            }
         }
 
     fun invalidated(loadToken: WalletManagerLoadToken): Boolean =
@@ -84,8 +86,10 @@ internal enum class WalletManagerBootstrapDecision {
             loadToken: WalletManagerLoadToken,
             cacheState: WalletManagerCacheState,
             cachedWalletId: WalletId?,
+            hasCurrentWaiter: Boolean = true,
         ): WalletManagerBootstrapDecision =
             when {
+                !hasCurrentWaiter -> Cancel
                 cachedWalletId == loadToken.targetId -> UseCached
                 cacheState.invalidated(loadToken) -> Cancel
                 cacheState.managerGeneration != loadToken.managerGeneration && cachedWalletId != null -> Cancel

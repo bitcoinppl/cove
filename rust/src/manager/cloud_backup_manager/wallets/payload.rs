@@ -15,6 +15,7 @@ use crate::manager::cloud_backup_manager::{CloudBackupError, LocalWalletMode, Lo
 use crate::mnemonic::MnemonicExt as _;
 use crate::wallet::{
     WalletAddressType,
+    addressing::authoritative_public_descriptor_mirror,
     metadata::{WalletBirthday, WalletColor, WalletMetadata, WalletType},
 };
 use crate::wallet_secret::WalletSecretExt as _;
@@ -119,6 +120,7 @@ async fn build_wallet_entry(
                     format!("failed to get wallet private key: {error}").into(),
                 )
             })?;
+
             let Some(secret) = secret else {
                 return Err(CloudBackupError::Internal("hot wallet has no private key".into()));
             };
@@ -127,6 +129,7 @@ async fn build_wallet_entry(
                 KeychainWalletSecret::Mnemonic(mnemonic) => {
                     CloudWalletSecret::Mnemonic(mnemonic.to_string())
                 }
+
                 KeychainWalletSecret::Xpriv(xpriv) => {
                     CloudWalletSecret::Xprv(xpriv.expose().to_string())
                 }
@@ -144,7 +147,7 @@ async fn build_wallet_entry(
         }
     };
 
-    let descriptors = backup_descriptors(keychain, metadata, id, &secret)?;
+    let descriptors = backup_descriptors(metadata, &secret)?;
 
     let metadata_value = serde_json::to_value(metadata.clone_without_local_scan_state())
         .map_err(|source| CloudBackupError::internal_context("serialize metadata", source))?;
@@ -160,6 +163,7 @@ async fn build_wallet_entry(
         &descriptors,
         &xpub,
     )?;
+
     let content_revision_hash = revision_payload.content_revision_hash()?;
     let updated_at = crate::manager::cloud_backup_manager::current_timestamp();
 
@@ -180,24 +184,18 @@ async fn build_wallet_entry(
 }
 
 fn backup_descriptors(
-    keychain: &Keychain,
     metadata: &WalletMetadata,
-    id: &crate::wallet::metadata::WalletId,
     secret: &CloudWalletSecret,
 ) -> Result<Option<DescriptorPair>, CloudBackupError> {
-    match keychain.get_public_descriptor(id) {
-        Ok(Some((external, internal))) => {
-            return Ok(Some(DescriptorPair {
-                external: external.to_string(),
-                internal: internal.to_string(),
-            }));
-        }
-        Ok(None) => {}
-        Err(error) => {
-            return Err(CloudBackupError::Internal(
-                format!("failed to read descriptors: {error}").into(),
-            ));
-        }
+    let authoritative = authoritative_public_descriptor_mirror(metadata).map_err(|error| {
+        CloudBackupError::Internal(format!("failed to load wallet descriptors: {error}").into())
+    })?;
+
+    if let Some((external, internal)) = authoritative {
+        return Ok(Some(DescriptorPair {
+            external: external.to_string(),
+            internal: internal.to_string(),
+        }));
     }
 
     match secret {
@@ -205,6 +203,7 @@ fn backup_descriptors(
             let mnemonic = bip39::Mnemonic::from_str(mnemonic).map_err(|error| {
                 CloudBackupError::Internal(format!("failed to parse mnemonic: {error}").into())
             })?;
+
             let descriptors =
                 mnemonic.into_descriptors(None, metadata.network, metadata.address_type);
 
@@ -213,10 +212,12 @@ fn backup_descriptors(
                 internal: descriptors.internal.extended_descriptor.to_string(),
             }))
         }
+
         CloudWalletSecret::Xprv(value) => {
             let xpriv = WalletXprv::parse(value.as_str()).map_err(|error| {
                 CloudBackupError::Internal(format!("failed to parse xprv: {error}").into())
             })?;
+
             let descriptors = KeychainWalletSecret::Xpriv(xpriv)
                 .into_descriptors(metadata.network, metadata.address_type);
 
@@ -225,6 +226,7 @@ fn backup_descriptors(
                 internal: descriptors.internal.extended_descriptor.to_string(),
             }))
         }
+
         CloudWalletSecret::TapSignerBackup(_) => {
             Err(CloudBackupError::Internal("tap signer wallet has no public descriptors".into()))
         }
@@ -375,6 +377,40 @@ pub(crate) fn descriptor_pair_from_cloud(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hot_cloud_backup_derives_descriptors_when_both_mirrors_are_missing() {
+        crate::test_support::init_test_keychain();
+        let metadata = WalletMetadata::preview_new();
+        let secret = CloudWalletSecret::Mnemonic(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+                .to_string(),
+        );
+
+        let descriptors = backup_descriptors(&metadata, &secret)
+            .expect("hot-wallet descriptors derive from the loaded mnemonic")
+            .expect("hot-wallet backup contains descriptors");
+
+        assert!(descriptors.external.starts_with("wpkh("));
+        assert!(descriptors.internal.starts_with("wpkh("));
+    }
+
+    #[test]
+    fn hot_cloud_backup_derives_descriptors_from_loaded_xprv() {
+        crate::test_support::init_test_keychain();
+        let metadata = WalletMetadata::preview_new();
+        let secret = CloudWalletSecret::Xprv(
+            "xprv9s21ZrQH143K4BwRCYKSEPwcAMYweWkfKLURabnnv2GLNhJN1LSCgDQyGWyNcat72najQKwyshCBXWfHHVbcdxPAZPqByMyWDbWp5SjCfEa"
+                .to_string(),
+        );
+
+        let descriptors = backup_descriptors(&metadata, &secret)
+            .expect("hot-wallet descriptors derive from the loaded xprv")
+            .expect("hot-wallet backup contains descriptors");
+
+        assert!(descriptors.external.starts_with("wpkh("));
+        assert!(descriptors.internal.starts_with("wpkh("));
+    }
 
     fn content_revision_hash_for_metadata(metadata: &WalletMetadata) -> String {
         WalletBackupRevisionPayload::for_metadata(metadata).content_revision_hash().unwrap()

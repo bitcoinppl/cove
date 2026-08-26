@@ -14,6 +14,20 @@ enum WalletTargetPreparationOutcome {
     case redirected
 }
 
+private enum CorruptedWalletDeletionCall {
+    case initial(walletId: WalletId, databaseError: String)
+    case retry(CorruptedWalletDeletionRetry)
+
+    var context: (walletId: WalletId, databaseError: String) {
+        switch self {
+        case let .initial(walletId, databaseError):
+            (walletId, databaseError)
+        case let .retry(retry):
+            (retry.walletId, retry.databaseError)
+        }
+    }
+}
+
 struct WalletTransitionRecoveryPlan {
     private(set) var attemptedIds: [WalletId] = []
 
@@ -30,6 +44,12 @@ struct WalletTransitionRecoveryPlan {
             candidates.append(id)
         }
     }
+}
+
+struct CorruptedWalletDeletionRetry: Equatable {
+    let walletId: WalletId
+    let databaseError: String
+    let attemptId: ShutdownAttemptId
 }
 
 @Observable final class AppManager: FfiReconcile {
@@ -52,6 +72,7 @@ struct WalletTransitionRecoveryPlan {
 
     var alertState: TaggedItem<AppAlertState>? = .none
     var sheetState: TaggedItem<AppSheetState>? = .none
+    var corruptedWalletDeletionRetry: CorruptedWalletDeletionRetry?
 
     /// tracks if current screen is scrolled past header for adaptive nav styling
     var isPastHeader = false
@@ -152,14 +173,10 @@ struct WalletTransitionRecoveryPlan {
         managerCache.walletMetadata(id: id, wallets: wallets)
     }
 
-    func ensureWalletManager(id: WalletId) throws -> WalletManager {
-        try managerCache.ensureWalletManager(id: id, delegate: self)
-    }
-
     @MainActor
     func ensureWalletManagerLoaded(
         id: WalletId,
-        isCurrent: @MainActor () -> Bool = { true }
+        isCurrent: @escaping @MainActor () -> Bool = { true }
     ) async throws -> WalletManager {
         try await managerCache.ensureWalletManagerLoaded(
             id: id,
@@ -229,6 +246,7 @@ struct WalletTransitionRecoveryPlan {
     /// Reset the manager state
     public func reset() {
         navigationCoordinator.reset()
+        corruptedWalletDeletionRetry = nil
 
         database = Database()
         needsOnboarding = rust.needsOnboarding()
@@ -238,6 +256,70 @@ struct WalletTransitionRecoveryPlan {
 
         let state = rust.state()
         router = state.router
+    }
+
+    func deleteCorruptedWallet(id: WalletId, databaseError: String) {
+        performCorruptedWalletDeletion(.initial(walletId: id, databaseError: databaseError))
+    }
+
+    func retryCorruptedWalletDeletion(_ retry: CorruptedWalletDeletionRetry) {
+        performCorruptedWalletDeletion(.retry(retry))
+    }
+
+    func cancelCorruptedWalletDeletion(_ retry: CorruptedWalletDeletionRetry) {
+        rust.cancelWalletDeletionAttempt(attemptId: retry.attemptId)
+        if corruptedWalletDeletionRetry == retry {
+            corruptedWalletDeletionRetry = nil
+        }
+
+        alertState = nil
+        trySelectLatestOrNewWallet()
+    }
+
+    func cancelWalletDeletionAttempt(_ attemptId: ShutdownAttemptId) {
+        rust.cancelWalletDeletionAttempt(attemptId: attemptId)
+    }
+
+    private func performCorruptedWalletDeletion(_ call: CorruptedWalletDeletionCall) {
+        Task { @MainActor in
+            do {
+                switch call {
+                case let .initial(walletId, _):
+                    try await rust.deleteCorruptedWallet(id: walletId)
+                case let .retry(retry):
+                    try await rust.retryDeleteCorruptedWallet(
+                        id: retry.walletId,
+                        attemptId: retry.attemptId
+                    )
+                }
+
+                corruptedWalletDeletionRetry = nil
+            } catch is CancellationError {
+                return
+            } catch let AppError.WalletLifecycle(.shutdownBlocked(attemptId, _, _)) {
+                let context = call.context
+                corruptedWalletDeletionRetry = CorruptedWalletDeletionRetry(
+                    walletId: context.walletId,
+                    databaseError: context.databaseError,
+                    attemptId: attemptId
+                )
+                alertState = .init(
+                    .walletDatabaseCorrupted(
+                        walletId: context.walletId,
+                        error: "Cove could not stop all wallet work. Retry or cancel the deletion."
+                    )
+                )
+            } catch {
+                corruptedWalletDeletionRetry = nil
+                logger.error("Unable to delete corrupted wallet: \(error)")
+                alertState = .init(
+                    .general(
+                        title: "Unable to Delete Wallet",
+                        message: "Cove could not delete this wallet. Try again."
+                    )
+                )
+            }
+        }
     }
 
     /// Reload wallets from database (e.g. after cloud restore)
@@ -672,6 +754,17 @@ struct WalletTransitionRecoveryPlan {
         }
     }
 
+    public func dispatch(action: AppAction) {
+        logger.debug("dispatch \(action)")
+        do {
+            try rust.dispatch(action: action)
+        } catch {
+            logger.error("Unable to dispatch app action \(action), error: \(error)")
+        }
+    }
+}
+
+extension AppManager {
     @MainActor
     private func applyConfigurationMessage(_ message: AppStateReconcileMessage) {
         switch message {
@@ -742,15 +835,6 @@ struct WalletTransitionRecoveryPlan {
 
         default:
             preconditionFailure("Expected an app wallet presentation reconcile message")
-        }
-    }
-
-    public func dispatch(action: AppAction) {
-        logger.debug("dispatch \(action)")
-        do {
-            try rust.dispatch(action: action)
-        } catch {
-            logger.error("Unable to dispatch app action \(action), error: \(error)")
         }
     }
 }

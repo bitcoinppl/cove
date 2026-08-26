@@ -52,7 +52,7 @@ struct EnterAmountView: View {
     }
 
     var exceedsBalance: Bool {
-        sendFlowManager.rust.amountExceedsBalance()
+        sendFlowManager.amountExceedsBalance()
     }
 
     var amountTextColor: Color {
@@ -62,7 +62,11 @@ struct EnterAmountView: View {
     private func handleBtcAmountChange(oldValue: String, newValue: String) {
         Log.debug("onChangeBTC \(oldValue) -> \(newValue) (\(sendFlowManager.enteringBtcAmount))")
 
-        let newEnteringAmount = sendFlowManager.rust.sanitizeBtcEnteringAmount(oldValue: oldValue, newValue: newValue)
+        let newEnteringAmount = sendFlowManager.sanitizeBtcEnteringAmount(
+            oldValue: oldValue,
+            newValue: newValue
+        )
+
         if let newEnteringAmount, newValue != newEnteringAmount {
             enteringBtcAmount = newEnteringAmount
             return
@@ -77,7 +81,11 @@ struct EnterAmountView: View {
     private func handleFiatAmountChange(oldValue: String, newValue: String) {
         Log.debug("onChangeFiat \(oldValue) -> \(newValue) (\(sendFlowManager.enteringFiatAmount))")
 
-        let newEnteringAmount = sendFlowManager.rust.sanitizeFiatEnteringAmount(oldValue: oldValue, newValue: newValue)
+        let newEnteringAmount = sendFlowManager.sanitizeFiatEnteringAmount(
+            oldValue: oldValue,
+            newValue: newValue
+        )
+
         if let newEnteringAmount, newValue != newEnteringAmount {
             enteringFiatAmount = newEnteringAmount
             return
@@ -202,12 +210,12 @@ struct EnterAmountView: View {
     private func lockStateChanged(_: LockState, _ newValue: LockState) {
         guard newValue == .unlocked else { return }
 
-        if !sendFlowManager.rust.validateAmount() {
+        if !sendFlowManager.validateAmount() {
             sendFlowManager.dispatch(.changeSetAmountFocusField(.amount))
             return
         }
 
-        if !sendFlowManager.rust.validateAddress() {
+        if !sendFlowManager.validateAddress() {
             sendFlowManager.dispatch(.changeSetAmountFocusField(.address))
         }
     }

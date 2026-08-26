@@ -196,7 +196,7 @@ private enum CoinControlManagerError: LocalizedError {
     func reloadLabels() async {
         guard let rust else { return }
 
-        await rust.reloadLabels()
+        _ = try? await rust.reloadLabels()
     }
 
     func setSpendability(_ spendable: Bool, for outpoint: OutPoint) async throws {

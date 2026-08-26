@@ -10,34 +10,33 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
-import org.bitcoinppl.cove.findActivity
-import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.SetupCmdResponse
 import org.bitcoinppl.cove_core.TapSignerRoute
 
-/**
- * setup retry screen
- * displays when setup encounters an error but can be retried
- */
+/** Retry an opaque setup continuation returned by Rust. */
 @Composable
 fun TapSignerSetupRetryView(
     app: AppManager,
@@ -47,21 +46,14 @@ fun TapSignerSetupRetryView(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
+    var isSubmitting by remember { mutableStateOf(false) }
 
     Column(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
+        modifier = modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        // cancel button
         Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 20.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
             horizontalArrangement = Arrangement.Start,
         ) {
             TextButton(onClick = { app.sheetState = null }) {
@@ -69,107 +61,75 @@ fun TapSignerSetupRetryView(
             }
         }
 
-        // main content
         Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+            modifier = Modifier.fillMaxWidth().weight(1f),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
             Icon(
-                imageVector = Icons.Default.Warning,
-                contentDescription = "Warning",
+                imageVector = Icons.Default.Refresh,
+                contentDescription = null,
                 modifier = Modifier.size(100.dp),
-                tint = Color.Yellow,
+                tint = MaterialTheme.colorScheme.primary,
             )
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = "Setup Incomplete",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+            Text(
+                text = "Setup in Progress",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+            )
 
-                Text(
-                    text =
-                        "The setup process was interrupted. You can retry to continue where you left off.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                )
-            }
+            Text(
+                text = "Your TAPSIGNER saved its setup progress. Continue to finish setup.",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 12.dp),
+            )
         }
 
-        // retry button
         Button(
             onClick = {
+                if (isSubmitting) return@Button
+                isSubmitting = true
                 scope.launch {
-                    val activity = context.findActivity()
-                    if (activity == null) {
-                        app.alertState =
-                            TaggedItem(
-                                AppAlertState.General(
-                                    title = "Error",
-                                    message = "Unable to access NFC. Please try again.",
-                                ),
-                            )
-                        return@launch
-                    }
-
-                    val nfc = manager.getOrCreateNfc(tapSigner)
-
-                    // set up message callback for progress updates
-                    val nfcManager = TapCardNfcManager.getInstance()
-                    nfcManager.onMessageUpdate = { message ->
-                        manager.scanMessage = message
-                    }
-                    nfcManager.onTagDetected = { manager.isTagDetected = true }
-
-                    manager.scanMessage = "Hold your phone near the TapSigner to continue setup"
-                    manager.isTagDetected = false
-                    manager.isScanning = true
-
                     try {
-                        val result = nfc.continueSetup(response)
-                        manager.isScanning = false
-                        manager.isTagDetected = false
-                        nfcManager.onMessageUpdate = null
-                        nfcManager.onTagDetected = null
+                        val nfc = manager.getOrCreateNfc(tapSigner)
+                        manager.beginScan("Hold your phone near the TapSigner to continue setup")
 
-                        when (result) {
+                        val nextResponse =
+                            nfc.continueSetup(response, manager.operationCallbacks())
+                        when (nextResponse) {
                             is SetupCmdResponse.Complete -> {
-                                manager.resetRoute(TapSignerRoute.SetupSuccess(tapSigner, result.v1))
+                                manager.resetRoute(
+                                    TapSignerRoute.SetupSuccess(tapSigner, nextResponse.v1),
+                                )
                             }
-                            else -> {
-                                manager.resetRoute(TapSignerRoute.SetupRetry(tapSigner, result))
+                            is SetupCmdResponse.Retry -> {
+                                manager.resetRoute(TapSignerRoute.SetupRetry(tapSigner, nextResponse))
                             }
                         }
-                    } catch (e: Exception) {
-                        manager.isScanning = false
-                        manager.isTagDetected = false
-                        nfcManager.onMessageUpdate = null
-                        nfcManager.onTagDetected = null
-
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
                         app.sheetState = null
                         app.alertState =
                             TaggedItem(
                                 AppAlertState.TapSignerSetupFailed(
-                                    e.message ?: "Unknown error",
+                                    "TapSigner setup failed. Please try again.",
                                 ),
                             )
+                    } finally {
+                        manager.endScan()
+                        isSubmitting = false
                     }
                 }
             },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp),
+            enabled = !isSubmitting,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 30.dp).testTag("tapSignerSetupRetry.continue"),
         ) {
-            Text("Retry Setup")
+            Text(if (isSubmitting) "Working…" else "Continue Setup")
         }
     }
 }

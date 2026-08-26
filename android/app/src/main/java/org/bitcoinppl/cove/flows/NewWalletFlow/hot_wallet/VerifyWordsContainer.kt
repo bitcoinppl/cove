@@ -59,7 +59,7 @@ fun VerifyWordsContainer(
     LaunchedEffect(id) {
         loading = true
         try {
-            val walletManager = app.getWalletManager(id)
+            val walletManager = app.getWalletManagerLoaded(id)
             val wordValidator = walletManager.wordValidator()
             val sm = WordVerifyStateMachine(wordValidator, 1u)
 

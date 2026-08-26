@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -29,8 +28,11 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -69,7 +71,9 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.BackupException
+import org.bitcoinppl.cove_core.BackupImportApproval
 import org.bitcoinppl.cove_core.BackupImportReport
+import org.bitcoinppl.cove_core.BackupImportPreparation
 import org.bitcoinppl.cove_core.BackupManager
 import org.bitcoinppl.cove_core.BackupVerifyReport
 
@@ -86,18 +90,70 @@ fun BackupImportScreen(
     var fileData by remember { mutableStateOf<ByteArray?>(null) }
     var fileName by remember { mutableStateOf<String?>(null) }
     var password by remember { mutableStateOf("") }
-    val handleDismiss = { password = ""; fileData = null; onDismiss() }
     var isPasswordVisible by remember { mutableStateOf(false) }
     var isImporting by remember { mutableStateOf(false) }
+    var isPreparing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var infoMessage by remember { mutableStateOf<String?>(null) }
     var verifyReport by remember { mutableStateOf<BackupVerifyReport?>(null) }
     var isVerifying by remember { mutableStateOf(false) }
     var importReport by remember { mutableStateOf<BackupImportReport?>(null) }
+    var preparation by remember { mutableStateOf<BackupImportPreparation?>(null) }
+    var approval by remember { mutableStateOf<BackupImportApproval?>(null) }
+    var conflictCount by remember { mutableStateOf<Int?>(null) }
     var showConfirmDialog by remember { mutableStateOf(false) }
+    var showCleanupConfirmation by remember { mutableStateOf(false) }
+    var inputGeneration by remember { mutableStateOf(0) }
+
+    fun clearPreparation() {
+        val oldApproval = approval
+        val oldPreparation = preparation
+        approval = null
+        preparation = null
+        conflictCount = null
+        oldApproval?.close()
+        oldPreparation?.close()
+    }
+
+    fun invalidateImportReview(clearVerifyReport: Boolean = true) {
+        inputGeneration += 1
+        isVerifying = false
+        isImporting = false
+        isPreparing = false
+        showConfirmDialog = false
+        showCleanupConfirmation = false
+        if (clearVerifyReport) {
+            verifyReport = null
+        }
+        clearPreparation()
+    }
+
+    fun updatePassword(value: String) {
+        if (value == password) return
+
+        password = value
+        invalidateImportReview()
+    }
+
+    fun handleDismiss() {
+        inputGeneration += 1
+        isVerifying = false
+        isImporting = false
+        isPreparing = false
+        showConfirmDialog = false
+        showCleanupConfirmation = false
+        verifyReport = null
+        importReport = null
+        clearPreparation()
+        password = ""
+        fileData = null
+        fileName = null
+        onDismiss()
+    }
 
     DisposableEffect(Unit) {
         onDispose {
+            clearPreparation()
             password = ""
             fileData = null
             backupManager.close()
@@ -105,6 +161,124 @@ fun BackupImportScreen(
     }
 
     val isPasswordValid = backupManager.isPasswordValid(password)
+
+    fun prepareImportForImport() {
+        val data = fileData
+        if (data == null) {
+            errorMessage = "No backup file loaded, please select a file first"
+            return
+        }
+
+        clearPreparation()
+        val generation = inputGeneration
+        val requestedPassword = password
+        isImporting = true
+        isPreparing = true
+
+        scope.launch {
+            var prepared: BackupImportPreparation? = null
+            try {
+                prepared = withContext(Dispatchers.IO) {
+                    backupManager.prepareImport(data, requestedPassword)
+                }
+
+                if (generation != inputGeneration) {
+                    prepared.close()
+                    prepared = null
+                    return@launch
+                }
+
+                val preparedImport = prepared
+                val requiresApproval = withContext(Dispatchers.IO) {
+                    preparedImport.requiresImportApproval()
+                }
+                val preparedConflictCount = withContext(Dispatchers.IO) {
+                    preparedImport.markerlessConflictWalletIds().size
+                }
+                preparation = preparedImport
+                prepared = null
+                conflictCount = preparedConflictCount
+
+                if (requiresApproval) {
+                    showCleanupConfirmation = true
+                    return@launch
+                }
+
+                isPreparing = false
+                val report = withContext(Dispatchers.IO) {
+                    backupManager.importPrepared(preparedImport, null)
+                }
+
+                if (generation != inputGeneration) return@launch
+
+                clearPreparation()
+                verifyReport = null
+                importReport = report
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (generation == inputGeneration) {
+                    clearPreparation()
+                    errorMessage = backupErrorMessage(e)
+                }
+            } finally {
+                prepared?.close()
+
+                if (generation == inputGeneration) {
+                    isPreparing = false
+                    isImporting = false
+                }
+            }
+        }
+    }
+
+    fun approveAndImport() {
+        val prepared = preparation
+        if (prepared == null) {
+            invalidateImportReview(clearVerifyReport = false)
+            return
+        }
+
+        val generation = inputGeneration
+        showCleanupConfirmation = false
+        isImporting = true
+
+        scope.launch {
+            var createdApproval: BackupImportApproval? = null
+            try {
+                createdApproval = withContext(Dispatchers.IO) {
+                    backupManager.approveImport(prepared)
+                }
+
+                if (generation != inputGeneration) {
+                    createdApproval.close()
+                    return@launch
+                }
+
+                approval = createdApproval
+                val report = withContext(Dispatchers.IO) {
+                    backupManager.importPrepared(prepared, createdApproval)
+                }
+
+                if (generation != inputGeneration) return@launch
+
+                clearPreparation()
+                verifyReport = null
+                importReport = report
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (generation == inputGeneration) {
+                    clearPreparation()
+                    errorMessage = backupErrorMessage(e)
+                }
+            } finally {
+                if (generation == inputGeneration) {
+                    isImporting = false
+                }
+            }
+        }
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -139,12 +313,15 @@ fun BackupImportScreen(
                         bytes to (DocumentFile.fromSingleUri(context, uri)?.name ?: "backup file")
                     }
                 }.onSuccess { (bytes, name) ->
+                    invalidateImportReview()
                     fileData = bytes
                     fileName = name
+                    errorMessage = null
                 }.onFailure { e ->
+                    invalidateImportReview()
                     fileData = null
                     fileName = null
-                    errorMessage = backupErrorMessage(e as Exception)
+                    errorMessage = backupErrorMessage(e)
                 }
             }
         }
@@ -157,7 +334,7 @@ fun BackupImportScreen(
         topBar = {
             SettingsTopAppBar(
                 title = "Import Backup",
-                onBack = handleDismiss,
+                onBack = ::handleDismiss,
             )
         },
     ) { paddingValues ->
@@ -172,6 +349,10 @@ fun BackupImportScreen(
             if (verifyReport != null) {
                 VerifyResultContent(verifyReport!!)
 
+                conflictCount?.takeIf { it > 0 }?.let { count ->
+                    ImportConflictSummary(count)
+                }
+
                 Spacer(modifier = Modifier.size(16.dp))
 
                 Button(
@@ -183,7 +364,10 @@ fun BackupImportScreen(
                 }
 
                 OutlinedButton(
-                    onClick = { verifyReport = null },
+                    onClick = {
+                        verifyReport = null
+                        clearPreparation()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("Back")
@@ -209,7 +393,7 @@ fun BackupImportScreen(
 
                     OutlinedTextField(
                         value = password,
-                        onValueChange = { password = it },
+                        onValueChange = ::updatePassword,
                         label = { Text("Password") },
                         modifier = Modifier.fillMaxWidth(),
                         visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -241,7 +425,7 @@ fun BackupImportScreen(
                                     )
                                     val credential = result.credential
                                     if (credential is PasswordCredential) {
-                                        password = credential.password
+                                        updatePassword(credential.password)
                                     }
                                 } catch (e: androidx.credentials.exceptions.NoCredentialException) {
                                     infoMessage = "No saved passwords found"
@@ -261,24 +445,38 @@ fun BackupImportScreen(
 
                     Button(
                         onClick = {
+                            val data = fileData
+                            if (data == null) {
+                                errorMessage = "No backup file loaded, please select a file first"
+                                return@Button
+                            }
+
+                            invalidateImportReview()
+                            val requestedPassword = password
+                            val generation = inputGeneration
                             isVerifying = true
                             scope.launch {
                                 try {
-                                    val data = fileData ?: run {
-                                        isVerifying = false
-                                        errorMessage = "No backup file loaded, please select a file first"
+                                    val report = withContext(Dispatchers.IO) {
+                                        backupManager.verifyBackup(data, requestedPassword)
+                                    }
+
+                                    if (generation != inputGeneration) {
                                         return@launch
                                     }
-                                    val report = withContext(Dispatchers.IO) {
-                                        backupManager.verifyBackup(data, password)
-                                    }
-                                    isVerifying = false
+
                                     verifyReport = report
                                 } catch (e: CancellationException) {
                                     throw e
                                 } catch (e: Exception) {
-                                    isVerifying = false
-                                    errorMessage = backupErrorMessage(e)
+                                    if (generation == inputGeneration) {
+                                        clearPreparation()
+                                        errorMessage = backupErrorMessage(e)
+                                    }
+                                } finally {
+                                    if (generation == inputGeneration) {
+                                        isVerifying = false
+                                    }
                                 }
                             }
                         },
@@ -334,7 +532,7 @@ fun BackupImportScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     CircularProgressIndicator()
-                    Text("Importing backup...")
+                    Text(if (isPreparing) "Preparing import..." else "Importing backup...")
                 }
             }
         }
@@ -342,39 +540,67 @@ fun BackupImportScreen(
 
     if (showConfirmDialog) {
         AlertDialog(
-            onDismissRequest = { showConfirmDialog = false },
+            onDismissRequest = {
+                showConfirmDialog = false
+                clearPreparation()
+            },
             title = { Text("Import Backup?") },
-            text = { Text("This will import wallets and restore settings from the backup. Existing wallets with the same fingerprint will be skipped.") },
+            text = {
+                Text(
+                    "This will import wallets and restore settings from the backup. Existing wallets with the same " +
+                        "fingerprint will be skipped. Cove will check for existing wallet artifacts before writing."
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     showConfirmDialog = false
-                    isImporting = true
-                    scope.launch {
-                        try {
-                            val data = fileData ?: run {
-                                isImporting = false
-                                errorMessage = "No backup file loaded, please select a file first"
-                                return@launch
-                            }
-                            val report = withContext(Dispatchers.IO) {
-                                backupManager.importBackup(data, password)
-                            }
-                            fileData = null
-                            isImporting = false
-                            importReport = report
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            isImporting = false
-                            errorMessage = backupErrorMessage(e)
-                        }
-                    }
+                    prepareImportForImport()
                 }) {
-                    Text("Import")
+                    Text("Continue")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showConfirmDialog = false }) {
+                TextButton(onClick = {
+                    showConfirmDialog = false
+                    clearPreparation()
+                }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showCleanupConfirmation) {
+        val conflicts = conflictCount ?: 0
+        AlertDialog(
+            onDismissRequest = {
+                showCleanupConfirmation = false
+                clearPreparation()
+            },
+            title = { Text("Remove Existing Wallet Data?") },
+            text = {
+                Text(
+                    if (conflicts == 1) {
+                        "1 wallet has existing wallet data without a matching restore marker. Approving this import " +
+                            "will permanently remove that data, including any existing keychain items. Removed " +
+                            "keychain items cannot be restored."
+                    } else {
+                        "$conflicts wallets have existing wallet data without matching restore markers. Approving " +
+                            "this import will permanently remove that data, including any existing keychain items. " +
+                            "Removed keychain items cannot be restored."
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = ::approveAndImport) {
+                    Text("Approve and Import")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showCleanupConfirmation = false
+                    clearPreparation()
+                }) {
                     Text("Cancel")
                 }
             },
@@ -383,12 +609,18 @@ fun BackupImportScreen(
 
     errorMessage?.let { msg ->
         AlertDialog(
-            onDismissRequest = { errorMessage = null },
+            onDismissRequest = {
+                errorMessage = null
+                clearPreparation()
+            },
             title = { Text("Import Failed") },
             text = { Text(msg) },
             confirmButton = {
-                TextButton(onClick = { errorMessage = null }) {
-                    Text("OK")
+                TextButton(onClick = {
+                    errorMessage = null
+                    clearPreparation()
+                }) {
+                    Text("Try Again")
                 }
             },
         )
@@ -429,16 +661,76 @@ fun BackupImportScreen(
     }
 }
 
-private fun backupErrorMessage(e: Exception): String = when (e) {
-    is BackupException.PasswordTooShort -> "Password must be at least 20 characters"
-    is BackupException.DecryptionFailed -> "Wrong password or corrupted backup file"
-    is BackupException.InvalidFormat -> "Not a valid Cove backup file"
-    is BackupException.FileTooLarge -> "Backup file is too large (max 50 MB)"
-    is BackupException.Truncated -> "Backup file is truncated or corrupted"
-    is BackupException.UnsupportedVersion -> "Unsupported backup version, please update the app"
-    is BackupException -> e.message?.takeIf { it.isNotEmpty() } ?: "Backup operation failed"
-    else -> e.message ?: "Unknown error"
+@Composable
+private fun ImportConflictSummary(count: Int) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
+        ),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Existing wallet artifacts",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            Text(
+                "$count wallet(s) have existing artifacts without a restore marker. " +
+                    "Confirm the cleanup warning before those artifacts are removed.",
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+        }
+    }
 }
+
+private fun backupErrorMessage(error: Throwable): String {
+    // a non-BackupException carries an arbitrary Throwable.message, which must never reach the user
+    if (error !is BackupException) return "Backup operation failed"
+
+    return backupFileErrorMessage(error) ?: backupImportErrorMessage(error)
+}
+
+// messages for reading and validating the backup file itself
+private fun backupFileErrorMessage(error: BackupException): String? =
+    when (error) {
+        is BackupException.PasswordTooShort -> "Password must be at least 20 characters"
+        is BackupException.DecryptionFailed -> "Wrong password or corrupted backup file"
+        is BackupException.InvalidFormat -> "Not a valid Cove backup file"
+        is BackupException.FileTooLarge -> "Backup file is too large (max 50 MB)"
+        is BackupException.UnsupportedVersion -> "Unsupported backup version, please update the app"
+        is BackupException.UnsupportedPayloadVersion -> "Unsupported backup payload, please update the app"
+        is BackupException.Truncated -> "Backup file is truncated or corrupted"
+        else -> null
+    }
+
+// messages for applying a validated backup to local wallet data
+private fun backupImportErrorMessage(error: BackupException): String =
+    when (error) {
+        is BackupException.Encryption,
+        is BackupException.Serialization,
+        is BackupException.Deserialization,
+        is BackupException.Gather,
+        is BackupException.Decompression,
+        -> "Cove could not finish importing this backup. Review it and try again."
+        is BackupException.Restore ->
+            "Cove could not restore local wallet data. Check available storage and try again."
+        is BackupException.Keychain ->
+            "Cove could not update secure wallet data. Check device security and try again."
+        is BackupException.Database ->
+            "Cove could not update local wallet data. Check available storage and try again."
+        is BackupException.WalletIdOccupied ->
+            "A wallet or restore operation is using existing local data. Close it and preview the backup again."
+        is BackupException.InvalidWalletId ->
+            "The backup contains an invalid wallet id and cannot be imported."
+        is BackupException.ImportApprovalStale ->
+            "Existing wallet data changed after the preview. Preview the backup again before importing."
+        is BackupException.ImportApprovalRequired ->
+            "This import needs cleanup approval. Preview the backup again and confirm the cleanup warning."
+        is BackupException.ImportApprovalUsed ->
+            "This import preview has already been used. Preview the backup again before importing."
+        else -> "Backup operation failed"
+    }
 
 private fun formatReport(report: BackupImportReport): String {
     val lines = mutableListOf<String>()

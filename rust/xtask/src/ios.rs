@@ -426,14 +426,14 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
         // build with cargo
         let flags = crate::common::parse_build_flags(&build_flag);
         let build_result = if flags.is_empty() {
-            let cmd = cmd!(sh, "cargo build --target {target}");
+            let cmd = cmd!(sh, "cargo build --locked --target {target}");
             if verbose {
                 cmd.run()
             } else {
                 cmd.quiet().run()
             }
         } else if flags.len() == 1 && flags[0] == "--release" {
-            let cmd = cmd!(sh, "cargo build --target {target} --release");
+            let cmd = cmd!(sh, "cargo build --locked --target {target} --release");
             if verbose {
                 cmd.run()
             } else {
@@ -441,14 +441,14 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
             }
         } else if flags.len() == 2 && flags[0] == "--profile" {
             let profile_name = &flags[1];
-            let cmd = cmd!(sh, "cargo build --target {target} --profile {profile_name}");
+            let cmd = cmd!(sh, "cargo build --locked --target {target} --profile {profile_name}");
             if verbose {
                 cmd.run()
             } else {
                 cmd.quiet().run()
             }
         } else {
-            let cmd = cmd!(sh, "cargo build --target {target}");
+            let cmd = cmd!(sh, "cargo build --locked --target {target}");
             if verbose {
                 cmd.run()
             } else {
@@ -487,7 +487,7 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
     let _ = sh.remove_path(BINDINGS_DIR);
     cmd!(
         sh,
-        "cargo run -p uniffi_cli -- {static_lib_path} {BINDINGS_DIR} --swift-sources --headers --modulemap --module-name {UNIFFI_MODULE_NAME} --modulemap-filename {MODULEMAP_FILENAME}"
+        "cargo run --locked -p uniffi_cli -- {static_lib_path} {BINDINGS_DIR} --swift-sources --headers --modulemap --module-name {UNIFFI_MODULE_NAME} --modulemap-filename {MODULEMAP_FILENAME}"
     )
     .run()
     .wrap_err("Failed to generate Swift bindings")?;

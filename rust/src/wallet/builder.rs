@@ -7,7 +7,6 @@ use bip39::Mnemonic;
 use cove_device::keychain::{WalletSecret, WalletXprv};
 use cove_types::Network;
 use cove_util::result_ext::ResultExt as _;
-use parking_lot::Mutex;
 use pubport::formats::Format;
 use tracing::{error, warn};
 
@@ -26,7 +25,7 @@ use crate::{
 };
 
 use super::{
-    Wallet, WalletAddressType, WalletError, delete_wallet_specific_data,
+    Wallet, WalletAddressType, WalletError, WalletStorage, delete_wallet_specific_data,
     fingerprint::Fingerprint,
     metadata,
     metadata::{
@@ -57,17 +56,6 @@ pub(crate) enum WalletSource {
         backup: Option<Vec<u8>>,
         birthday: Option<WalletBirthday>,
     },
-    Mnemonic {
-        metadata: WalletMetadata,
-        mnemonic: Mnemonic,
-        passphrase: Option<String>,
-        address_type: WalletAddressType,
-    },
-    Xpriv {
-        metadata: WalletMetadata,
-        xpriv: WalletXprv,
-        address_type: WalletAddressType,
-    },
 }
 
 impl WalletBuilder {
@@ -92,13 +80,24 @@ impl WalletBuilder {
             WalletSource::TapSigner { tap_signer, derive, backup, birthday } => {
                 Self::build_from_tap_signer(tap_signer, derive, backup, birthday)
             }
-            WalletSource::Mnemonic { metadata, mnemonic, passphrase, address_type } => {
-                Self::build_from_mnemonic(metadata, mnemonic, passphrase, address_type)
-            }
-            WalletSource::Xpriv { metadata, xpriv, address_type } => {
-                Self::build_from_xpriv(metadata, xpriv, address_type)
-            }
         }
+    }
+
+    pub(crate) fn build_preview(
+        metadata: WalletMetadata,
+        mnemonic: Mnemonic,
+        passphrase: Option<String>,
+    ) -> Result<Wallet, WalletError> {
+        let id = metadata.id.clone();
+        let network = metadata.network;
+
+        Self::build_from_mnemonic_with_store(
+            metadata,
+            mnemonic,
+            passphrase,
+            WalletAddressType::NativeSegwit,
+            BdkStore::in_memory(&id, network).map_err_str(WalletError::LoadError)?,
+        )
     }
 
     fn build_persisted_and_selected(
@@ -289,7 +288,13 @@ impl WalletBuilder {
         database.wallets.save_new_wallet_metadata(metadata.clone())?;
         CLOUD_BACKUP_MANAGER.handle_wallet_set_change();
 
-        Ok(Wallet { id, metadata, network, bdk: wallet, db: Mutex::new(store.conn) })
+        Ok(Wallet {
+            id,
+            metadata,
+            network,
+            bdk: wallet,
+            storage: WalletStorage::persistent(store.conn),
+        })
     }
 
     fn build_from_tap_signer(
@@ -355,11 +360,17 @@ impl WalletBuilder {
         database.wallets.save_new_wallet_metadata(metadata.clone())?;
         CLOUD_BACKUP_MANAGER.handle_wallet_set_change();
 
-        Ok(Wallet { id, metadata, network, bdk: wallet, db: Mutex::new(store.conn) })
+        Ok(Wallet {
+            id,
+            metadata,
+            network,
+            bdk: wallet,
+            storage: WalletStorage::persistent(store.conn),
+        })
     }
 
     fn build_from_mnemonic(
-        mut metadata: WalletMetadata,
+        metadata: WalletMetadata,
         mnemonic: Mnemonic,
         passphrase: Option<String>,
         address_type: WalletAddressType,
@@ -367,7 +378,20 @@ impl WalletBuilder {
         let network = metadata.network;
 
         let id = metadata.id.clone();
-        let mut store = BdkStore::try_new(&id, network).map_err_str(WalletError::LoadError)?;
+        let store = BdkStore::try_new(&id, network).map_err_str(WalletError::LoadError)?;
+
+        Self::build_from_mnemonic_with_store(metadata, mnemonic, passphrase, address_type, store)
+    }
+
+    fn build_from_mnemonic_with_store(
+        mut metadata: WalletMetadata,
+        mnemonic: Mnemonic,
+        passphrase: Option<String>,
+        address_type: WalletAddressType,
+        mut store: BdkStore,
+    ) -> Result<Wallet, WalletError> {
+        let id = metadata.id.clone();
+        let network = metadata.network;
 
         let descriptors = mnemonic.into_descriptors(passphrase, network, address_type);
         let origin = descriptors.origin().ok();
@@ -375,13 +399,24 @@ impl WalletBuilder {
         metadata.master_fingerprint = descriptors.fingerprint().map(|f| Arc::new(f.into()));
         metadata.origin = origin;
 
+        let storage = store.is_in_memory();
         let wallet = descriptors
             .into_create_params()
             .network(network.into())
             .create_wallet(&mut store.conn)
             .map_err_str(WalletError::BdkError)?;
 
-        Ok(Wallet { id, metadata, network, bdk: wallet, db: Mutex::new(store.conn) })
+        Ok(Wallet {
+            id,
+            metadata,
+            network,
+            bdk: wallet,
+            storage: if storage {
+                WalletStorage::in_memory(store.conn)
+            } else {
+                WalletStorage::persistent(store.conn)
+            },
+        })
     }
 
     fn build_from_xpriv(
@@ -404,7 +439,13 @@ impl WalletBuilder {
             .create_wallet(&mut store.conn)
             .map_err_str(WalletError::BdkError)?;
 
-        Ok(Wallet { id, metadata, network, bdk: wallet, db: Mutex::new(store.conn) })
+        Ok(Wallet {
+            id,
+            metadata,
+            network,
+            bdk: wallet,
+            storage: WalletStorage::persistent(store.conn),
+        })
     }
 
     fn upgrade_to_cold(
@@ -558,6 +599,20 @@ fn should_start_json_discovery(
     [(&json.bip49, WalletAddressType::WrappedSegwit), (&json.bip44, WalletAddressType::Legacy)]
         .into_iter()
         .any(|(descriptors, type_)| descriptors.is_some() && type_ != address_type)
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    pub(crate) fn build_from_mnemonic(
+        metadata: WalletMetadata,
+        mnemonic: Mnemonic,
+        passphrase: Option<String>,
+        address_type: WalletAddressType,
+    ) -> Result<Wallet, WalletError> {
+        WalletBuilder::build_from_mnemonic(metadata, mnemonic, passphrase, address_type)
+    }
 }
 
 #[cfg(test)]

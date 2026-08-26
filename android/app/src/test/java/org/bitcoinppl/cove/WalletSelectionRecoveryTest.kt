@@ -1,5 +1,14 @@
 package org.bitcoinppl.cove
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.bitcoinppl.cove_core.WalletManagerException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -8,7 +17,106 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.coroutines.cancellation.CancellationException
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class WalletSelectionRecoveryTest {
+    @Test
+    fun concurrentWalletLoadsShareOneInFlightResult() =
+        runTest {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val scope = CoroutineScope(SupervisorJob() + dispatcher)
+            val loads = WalletManagerLoadCoordinator<String>(scope, dispatcher)
+            val release = CompletableDeferred<Unit>()
+            var loadCount = 0
+
+            val first =
+                async {
+                    loads
+                        .getOrStart("wallet-a") {
+                            loadCount += 1
+                            release.await()
+                            "winner"
+                        }.await()
+                }
+            val second =
+                async {
+                    loads
+                        .getOrStart("wallet-a") {
+                            loadCount += 1
+                            "loser"
+                        }.await()
+                }
+            runCurrent()
+
+            assertEquals(1, loadCount)
+            release.complete(Unit)
+            assertEquals("winner", first.await())
+            assertEquals("winner", second.await())
+
+            scope.cancel()
+        }
+
+    @Test
+    fun staleWaiterIsExcludedWhenTheLoadGateReleases() =
+        runTest {
+            val state = WalletManagerCacheState()
+            val token = state.loadToken("wallet-a")
+            var staleIsCurrent = true
+            val waiters = WalletManagerLoadWaiterGroup()
+            val staleWaiter = waiters.register { staleIsCurrent }
+            val release = CompletableDeferred<Unit>()
+            val publication =
+                async {
+                    release.await()
+                    WalletManagerBootstrapDecision.resolve(
+                        loadToken = token,
+                        cacheState = state,
+                        cachedWalletId = null,
+                        hasCurrentWaiter = waiters.hasCurrentWaiter(),
+                    )
+                }
+
+            runCurrent()
+            staleIsCurrent = false
+            release.complete(Unit)
+
+            assertEquals(WalletManagerBootstrapDecision.Cancel, publication.await())
+            staleWaiter.group.unregister(staleWaiter.id)
+        }
+
+    @Test
+    fun currentWaiterReceivesThePublishedWinnerWhenAnotherWaiterIsStale() =
+        runTest {
+            val state = WalletManagerCacheState()
+            val token = state.loadToken("wallet-a")
+            var staleIsCurrent = true
+            val waiters = WalletManagerLoadWaiterGroup()
+            val staleWaiter = waiters.register { staleIsCurrent }
+            val currentWaiter = waiters.register { true }
+            val release = CompletableDeferred<Unit>()
+            val publishedWinner =
+                async {
+                    release.await()
+                    val decision =
+                        WalletManagerBootstrapDecision.resolve(
+                            loadToken = token,
+                            cacheState = state,
+                            cachedWalletId = null,
+                            hasCurrentWaiter = waiters.hasCurrentWaiter(),
+                        )
+                    if (decision == WalletManagerBootstrapDecision.Install) "winner" else null
+                }
+
+            runCurrent()
+            staleIsCurrent = false
+            release.complete(Unit)
+
+            assertEquals("winner", publishedWinner.await())
+            assertTrue(currentWaiter.waiter.isCurrentWaiter())
+            assertFalse(staleWaiter.waiter.isCurrentWaiter())
+            staleWaiter.group.unregister(staleWaiter.id)
+            currentWaiter.group.unregister(currentWaiter.id)
+        }
+
     @Test
     fun recoveryTriesRequestedThenCachedThenWalletDisplayOrder() {
         val recovery =

@@ -218,8 +218,7 @@ impl RustCloudBackupManager {
             return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
         }
 
-        if let Some(detail) = state.detail()
-            && let CloudBackupOtherBackupsState::Loaded { summary } = detail.other_backups
+        if let CloudBackupOtherBackupsState::Loaded { summary } = state.other_backups_state()
             && summary.namespace_count > 0
         {
             return Err(CloudBackupError::RecoveryRequired(

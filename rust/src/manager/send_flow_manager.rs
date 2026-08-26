@@ -20,7 +20,7 @@ use cove_tokio::DebouncedTask;
 
 use crate::{
     app::App,
-    fee_client::FEE_CLIENT,
+    fee_client::{FEE_CLIENT, FeeResponse},
     fiat::client::PriceResponse,
     wallet::{
         Address,
@@ -44,7 +44,7 @@ use error::SendFlowError;
 use fiat_on_change::FiatOnChangeHandler;
 use parking_lot::Mutex;
 use state::{CoinControlMode, EnterMode, FeeSelection, SendFlowManagerState, State};
-use tracing::{debug, error, trace};
+use tracing::{debug, error, trace, warn};
 
 use super::{
     deferred_sender,
@@ -53,6 +53,16 @@ use super::{
 };
 
 pub type Error = error::SendFlowError;
+
+fn remote_fee_rate_options(fees: FeeResponse) -> Option<FeeRateOptions> {
+    match fees.fee_rate_options() {
+        Ok(options) => Some(options),
+        Err(error) => {
+            warn!("ignoring invalid remote fee rates: {error}");
+            None
+        }
+    }
+}
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 type Action = SendFlowManagerAction;
@@ -167,20 +177,20 @@ impl RustSendFlowManager {
         let state = State::new(metadata, balance);
 
         // immediately populate cached values if available
-        let has_base_fees = if let Some(fee_response) = FEE_CLIENT.fees() {
-            let base_options = FeeRateOptions::from(fee_response);
-            let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
-            let selected = Arc::new(fee_options.medium);
-            let fee_selection = FeeSelection::new(Arc::new(fee_options), selected);
+        let has_base_fees =
+            if let Some(base_options) = FEE_CLIENT.fees().and_then(remote_fee_rate_options) {
+                let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
+                let selected = Arc::new(fee_options.medium);
+                let fee_selection = FeeSelection::new(Arc::new(fee_options), selected);
 
-            let mut state_guard = state.lock();
-            state_guard.fee_rate_options_base = Some(Arc::new(base_options));
-            state_guard.fee_selection = Some(fee_selection);
-            state_guard.has_base_fees = true;
-            true
-        } else {
-            false
-        };
+                let mut state_guard = state.lock();
+                state_guard.fee_rate_options_base = Some(Arc::new(base_options));
+                state_guard.fee_selection = Some(fee_selection);
+                state_guard.has_base_fees = true;
+                true
+            } else {
+                false
+            };
 
         debug!(
             "SendFlowManager::new - has_base_fees: {}, balance: {:?}",
@@ -673,7 +683,9 @@ impl RustSendFlowManager {
                 return;
             };
 
-            let base_options = FeeRateOptions::from(fee_response);
+            let Some(base_options) = remote_fee_rate_options(fee_response) else {
+                return;
+            };
             let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
             let previous_selected =
                 state.lock().fee_selection.as_ref().map(|selection| selection.selected.clone());
@@ -714,7 +726,13 @@ impl RustSendFlowManager {
     }
 
     async fn get_wallet_balance(self: &Arc<Self>) {
-        let balance = self.wallet_manager.balance().await;
+        let balance = match self.wallet_manager.balance().await {
+            Ok(balance) => balance,
+            Err(error) => {
+                error!("failed to get wallet balance: {error}");
+                return;
+            }
+        };
         let unlocked_spendable_sats =
             self.wallet_manager.unlocked_spendable_balance().await.map(|amount| amount.as_sats());
         if let Err(error) = &unlocked_spendable_sats {
@@ -745,7 +763,10 @@ mod tests {
     use std::sync::Arc;
 
     use cove_types::{
-        fees::{FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptionsWithTotalFee, FeeSpeed},
+        fees::{
+            FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
+            FeeSpeed,
+        },
         utxo::{UtxoList, ffi_preview::preview_new_utxo_list},
     };
 
@@ -803,7 +824,7 @@ mod tests {
     }
 
     fn set_selected_fee_without_total(manager: &super::RustSendFlowManager) {
-        let base_options = super::FeeRateOptions::_ffi_preview_new();
+        let base_options = FeeRateOptions::_ffi_preview_new();
         let fee_option = FeeRateOption::new(FeeSpeed::Custom { duration_mins: 10 }, 1.0);
         let selected = FeeRateOptionWithTotalFee::without_total(fee_option);
         let options = FeeRateOptionsWithTotalFee::without_totals(base_options);

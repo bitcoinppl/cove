@@ -5,6 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import java.util.UUID
 
 /**
@@ -26,8 +30,6 @@ class TapSignerManager(
     var initialRoute by mutableStateOf(initialRoute)
         private set
 
-    var enteredPin: String? by mutableStateOf(null)
-
     // NFC scanning state
     var isScanning by mutableStateOf(false)
     var isTagDetected by mutableStateOf(false)
@@ -43,7 +45,7 @@ class TapSignerManager(
         // clean up old NFC helper before replacing
         nfc?.close()
 
-        val newNfc = TapSignerNfcHelper(tapSigner)
+        val newNfc = TapSignerNfcHelper()
         nfc = newNfc
         nfcFor = tapSigner
         return newNfc
@@ -56,9 +58,26 @@ class TapSignerManager(
             return
         }
 
-        android.util.Log.d(tag, "Navigating to $to, current path: $path")
+        android.util.Log.d(
+            tag,
+            "Navigating to ${routeKind(to)}, current path count: ${path.size}",
+        )
         path.add(to)
     }
+
+    private fun routeKind(route: org.bitcoinppl.cove_core.TapSignerRoute): String =
+        when (route) {
+            is org.bitcoinppl.cove_core.TapSignerRoute.InitSelect -> "initSelect"
+            is org.bitcoinppl.cove_core.TapSignerRoute.InitAdvanced -> "initAdvanced"
+            is org.bitcoinppl.cove_core.TapSignerRoute.StartingPin -> "startingPin"
+            is org.bitcoinppl.cove_core.TapSignerRoute.NewPin -> "newPin"
+            is org.bitcoinppl.cove_core.TapSignerRoute.ConfirmPin -> "confirmPin"
+            is org.bitcoinppl.cove_core.TapSignerRoute.SetupSuccess -> "setupSuccess"
+            is org.bitcoinppl.cove_core.TapSignerRoute.SetupRetry -> "setupRetry"
+            is org.bitcoinppl.cove_core.TapSignerRoute.ImportSuccess -> "importSuccess"
+            is org.bitcoinppl.cove_core.TapSignerRoute.ImportRetry -> "importRetry"
+            is org.bitcoinppl.cove_core.TapSignerRoute.EnterPin -> "enterPin"
+        }
 
     private fun shouldPreventNavigation(
         from: org.bitcoinppl.cove_core.TapSignerRoute,
@@ -88,7 +107,26 @@ class TapSignerManager(
         path.clear()
         initialRoute = to
         id = UUID.randomUUID()
-        enteredPin = null
+    }
+
+    fun operationCallbacks(): TapCardNfcManager.OperationCallbacks =
+        TapCardNfcManager.OperationCallbacks(
+            onMessageUpdate = { message -> scanMessage = message },
+            onTagDetected = { isTagDetected = true },
+        )
+
+    fun beginScan(message: String) {
+        scanMessage = message
+        isTagDetected = false
+        isScanning = true
+        errorMessage = null
+    }
+
+    suspend fun endScan() {
+        withContext(NonCancellable + Dispatchers.Main.immediate) {
+            isScanning = false
+            isTagDetected = false
+        }
     }
 
     fun close() {

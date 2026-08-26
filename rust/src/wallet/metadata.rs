@@ -441,13 +441,6 @@ impl InternalOnlyMetadata {
 
         Some(address_index.last_seen_index as usize)
     }
-
-    pub fn set_last_seen_address_index(&mut self, addreses: &[AddressInfo], index: usize) {
-        let address_list_hash = cove_util::calculate_hash(addreses);
-
-        self.address_index =
-            Some(cove_types::AddressIndex { last_seen_index: index as u8, address_list_hash });
-    }
 }
 
 impl HardwareWalletMetadata {

@@ -14,6 +14,9 @@ pub enum SeedQrError {
     #[error("Not a standard seed QR, contains non numeric chars")]
     ContainsNonNumericChars,
 
+    #[error("Seed QR digit length must be a multiple of four")]
+    InvalidLength,
+
     #[error("Index out of bounds: {0}, max is: 2047")]
     IndexOutOfBounds(u16),
 
@@ -108,33 +111,27 @@ impl SeedQr {
 }
 
 fn parse_str_into_word_indexes(qr: &str) -> Result<Vec<u16>, SeedQrError> {
-    if !qr.chars().all(char::is_numeric) {
+    if !qr.is_ascii() || !qr.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err(SeedQrError::ContainsNonNumericChars);
     }
 
-    let max_index = qr.len();
-    let mut indexes: Vec<u16> = Vec::with_capacity((qr.len() / 4) + 1);
-    let mut current_starting_index = 0;
+    if !qr.len().is_multiple_of(4) {
+        return Err(SeedQrError::InvalidLength);
+    }
 
-    let end_index = |starting_index: usize| -> usize {
-        let index = starting_index + 4;
-        if index > max_index { max_index } else { index }
-    };
+    let mut indexes: Vec<u16> = Vec::with_capacity(qr.len() / 4);
 
-    while current_starting_index < max_index {
-        let starting_index = current_starting_index;
-        let ending_index = end_index(starting_index);
-
-        let word_index: u16 =
-            qr[starting_index..ending_index].parse().expect("already checked all numeric");
+    for group in qr.as_bytes().as_chunks::<4>().0 {
+        let word_index = u16::from(group[0] - b'0') * 1000
+            + u16::from(group[1] - b'0') * 100
+            + u16::from(group[2] - b'0') * 10
+            + u16::from(group[3] - b'0');
 
         if word_index > 2047 {
             return Err(SeedQrError::IndexOutOfBounds(word_index));
         }
 
         indexes.push(word_index);
-
-        current_starting_index = ending_index;
     }
 
     match indexes.len() {
@@ -175,6 +172,28 @@ pub mod tests {
     fn test_parse_str_into_word_indexes() {
         let qr = "192402220235174306311124037817700641198012901210";
         let expected = vec![1924, 222, 235, 1743, 631, 1124, 378, 1770, 641, 1980, 1290, 1210];
+
+        assert_eq!(parse_str_into_word_indexes(qr).unwrap(), expected);
+    }
+
+    #[test]
+    fn rejects_non_multiple_of_four_without_panicking() {
+        assert_eq!(parse_str_into_word_indexes("123"), Err(SeedQrError::InvalidLength));
+        assert_eq!(parse_str_into_word_indexes("12345"), Err(SeedQrError::InvalidLength));
+    }
+
+    #[test]
+    fn rejects_unicode_digits_without_panicking() {
+        let result = std::panic::catch_unwind(|| SeedQr::try_from_str("１２３４"));
+
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), Err(SeedQrError::ContainsNonNumericChars)));
+    }
+
+    #[test]
+    fn preserves_leading_zeroes_in_four_digit_groups() {
+        let qr = "073318950739065415961602009907670428187212261116";
+        let expected = vec![733, 1895, 739, 654, 1596, 1602, 99, 767, 428, 1872, 1226, 1116];
 
         assert_eq!(parse_str_into_word_indexes(qr).unwrap(), expected);
     }

@@ -18,6 +18,9 @@ pub(crate) struct DetailRefreshClaim {
 pub(crate) struct DetailResultClaim(u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct OtherBackupsScanClaim(u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum DetailRefreshPlan {
     Start(DetailRefreshClaim),
     Wait { owner: u64, delay: Duration },
@@ -148,6 +151,8 @@ pub(super) struct DetailWorkflow {
     runtime_passkey_authorization: Option<RuntimePasskeyAuthorization>,
     next_result_generation: u64,
     newest_result_generation: Option<u64>,
+    next_other_backups_generation: u64,
+    other_backups_scan: Option<OtherBackupsScanClaim>,
 }
 
 impl Default for DetailWorkflow {
@@ -159,6 +164,8 @@ impl Default for DetailWorkflow {
             runtime_passkey_authorization: None,
             next_result_generation: 0,
             newest_result_generation: None,
+            next_other_backups_generation: 0,
+            other_backups_scan: None,
         }
     }
 }
@@ -168,8 +175,31 @@ impl DetailWorkflow {
         self.refresh.open();
     }
 
-    pub(super) fn close(&mut self) {
+    pub(super) fn close(&mut self) -> bool {
         self.refresh.close();
+        self.other_backups_scan.take().is_some()
+    }
+
+    pub(super) fn start_user_requested_other_backups_scan(
+        &mut self,
+    ) -> Option<OtherBackupsScanClaim> {
+        if !self.refresh.is_open {
+            return None;
+        }
+
+        let claim = OtherBackupsScanClaim(self.next_other_backups_generation);
+        self.next_other_backups_generation = self.next_other_backups_generation.wrapping_add(1);
+        self.other_backups_scan = Some(claim);
+        Some(claim)
+    }
+
+    pub(super) fn complete_other_backups_scan(&mut self, claim: OtherBackupsScanClaim) -> bool {
+        if !self.refresh.is_open || self.other_backups_scan != Some(claim) {
+            return false;
+        }
+
+        self.other_backups_scan = None;
+        true
     }
 
     pub(super) fn request_refresh(&mut self) -> DetailRefreshPlan {
@@ -385,5 +415,30 @@ mod tests {
 
         assert!(!completion.apply);
         assert!(matches!(completion.next, DetailRefreshPlan::Wait { .. }));
+    }
+
+    #[test]
+    fn user_requested_other_backup_scan_replaces_the_previous_claim() {
+        let mut workflow = DetailWorkflow::default();
+        workflow.open();
+
+        let previous = workflow.start_user_requested_other_backups_scan().unwrap();
+        let current = workflow.start_user_requested_other_backups_scan().unwrap();
+
+        assert!(!workflow.complete_other_backups_scan(previous));
+        assert!(workflow.complete_other_backups_scan(current));
+        assert!(!workflow.close());
+    }
+
+    #[test]
+    fn closing_detail_reports_and_invalidates_a_running_other_backup_scan() {
+        let mut workflow = DetailWorkflow::default();
+
+        assert_eq!(workflow.start_user_requested_other_backups_scan(), None);
+        workflow.open();
+        let claim = workflow.start_user_requested_other_backups_scan().unwrap();
+
+        assert!(workflow.close());
+        assert!(!workflow.complete_other_backups_scan(claim));
     }
 }

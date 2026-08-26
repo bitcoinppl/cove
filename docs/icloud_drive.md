@@ -78,9 +78,11 @@ late-visible items may be missing locally.
 
 ### Why this app uses it
 
-For iCloud-backed files, coordination is the safe path for actual reads, writes, deletes, and directory creation. The system may need to serialize access with another process, hand back a different concrete URL than the one you started with, or materialize file contents that are still represented by a placeholder.
+For provider-backed placeholders, coordination is the safe path for actual reads. The system may need to serialize access with another process, hand back a different concrete URL than the one you started with, or materialize file contents that are still represented by a placeholder. Writes, deletes, and directory creation also use coordination.
 
-In this project, the coordinated helpers in `ICloudDriveHelper` are the default for touching file contents in the ubiquity container. Direct `Data(contentsOf:)`, `data.write(to:)`, or `FileManager.removeItem` calls are fine for ordinary local files, but they are less reliable for ubiquitous items.
+Backup reads keep local and provider-backed targets as different domain values. If the expected backup path exists locally, `ICloudDriveHelper` first reads it directly. This avoids provider coordination after the container is already synchronized. If that direct read fails, the helper resolves the file through metadata and uses the provider path. Files found only through metadata use the provider path from the start.
+
+Do not use a local existence check on a metadata URL to change a provider target into a local target. A provider URL can represent a placeholder. The target type records how the file was discovered.
 
 ### How to use it correctly
 
@@ -88,6 +90,8 @@ In this project, the coordinated helpers in `ICloudDriveHelper` are the default 
 - treat the outer coordinator error separately from the inner read or write error
 - keep metadata discovery and file coordination as separate concerns: `NSMetadataQuery` finds the item, `NSFileCoordinator` safely touches it
 - a coordinated read can also trigger download or materialization of an evicted iCloud file
+- bound each coordinated read attempt and call `cancel()` on its coordinator when the attempt expires
+- do not add a final unbounded coordinated read after the whole-file deadline
 
 ### Placeholders and download state
 
@@ -165,6 +169,7 @@ These numbers are project heuristics, not Apple guidance:
 
 - `60s` for consent-allowed operations that need to find one specific file
 - `5s` for a normal metadata listing while FileManager supplies the fast local snapshot
+- `5s` for each direct or coordinated file-read attempt inside the `60s` whole-file deadline
 - silent downloads use the bounded current-or-initial metadata snapshot and
   return `NotFound` when it contains no candidate
 - silent onboarding namespace discovery has one outer `15s` deadline, performs at most four inspections, and uses retry delays of `1s`, `2s`, and `4s`
@@ -190,3 +195,5 @@ remains active.
 8. Debugging metadata queries on a dev build with stale credentials. Bump the build number or re-sign iCloud on the device if queries return 0 results
 9. Returning a nonempty FileManager snapshot without running the mandatory metadata union
 10. Converting metadata timeout or failure into a confirmed empty inventory
+11. Sending an already-local backup through `NSFileCoordinator` before trying a direct read
+12. Allowing one coordinated read to run past the whole-file deadline

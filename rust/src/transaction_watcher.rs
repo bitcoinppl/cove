@@ -159,6 +159,10 @@ impl TransactionWatcher {
         Produces::ok(())
     }
 
+    pub(crate) async fn is_watching(&mut self) -> ActorResult<bool> {
+        Produces::ok(self.keep_watching)
+    }
+
     fn schedule_poll(&self, wait_time: Duration) {
         self.addr.send_fut_with(move |addr| async move {
             tokio::time::sleep(wait_time).await;
@@ -177,9 +181,20 @@ impl TransactionWatcher {
 #[cfg(test)]
 mod test_support {
     use super::*;
+    use tokio::sync::{Notify, oneshot};
 
     impl TransactionWatcher {
         pub(crate) async fn probe(&mut self) -> ActorResult<()> {
+            Produces::ok(())
+        }
+
+        pub(crate) async fn block_for_test(
+            &mut self,
+            started: oneshot::Sender<()>,
+            release: Arc<Notify>,
+        ) -> ActorResult<()> {
+            let _ = started.send(());
+            release.notified().await;
             Produces::ok(())
         }
     }

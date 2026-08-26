@@ -200,6 +200,13 @@ impl MockCloudStorage {
         self.state.lock().wallet_backup_download_overrides.insert((namespace, record_id), backup);
     }
 
+    pub(crate) fn clear_wallet_backup_download_override(&self, namespace: &str, record_id: &str) {
+        self.state
+            .lock()
+            .wallet_backup_download_overrides
+            .remove(&(namespace.to_owned(), record_id.to_owned()));
+    }
+
     pub(crate) fn fail_wallet_backup_download_offline(
         &self,
         namespace: String,
@@ -388,6 +395,10 @@ impl MockCloudStorage {
 
     pub(crate) fn has_master_key_backup(&self, namespace: &str) -> bool {
         self.state.lock().master_key_backups.contains_key(namespace)
+    }
+
+    pub(crate) fn has_wallet_backup(&self, namespace: &str, record_id: &str) -> bool {
+        self.state.lock().wallet_backups.contains_key(&(namespace.to_owned(), record_id.to_owned()))
     }
 
     pub(crate) fn has_namespace(&self, namespace: &str) -> bool {
@@ -1336,6 +1347,22 @@ pub(crate) async fn encrypted_wallet_backup_bytes(
         cove_cspp::wallet_crypto::encrypt_wallet_entry(&prepared.entry, &critical_key).unwrap();
     encrypted.version = version;
     serde_json::to_vec(&encrypted).unwrap()
+}
+
+pub(crate) async fn encrypted_remote_wallet_backup_bytes(
+    metadata: &WalletMetadata,
+    master_key: &cove_cspp::master_key::MasterKey,
+    revision_hash: &str,
+    version: u32,
+) -> Vec<u8> {
+    let bytes = encrypted_wallet_backup_bytes(metadata, master_key, revision_hash, version).await;
+
+    assert!(Keychain::global().delete_wallet_items(&metadata.id));
+    assert!(!Keychain::global().wallet_items_exist(&metadata.id));
+    crate::wallet::delete_wallet_specific_data(&metadata.id)
+        .expect("remote restore fixture has no local wallet data");
+
+    bytes
 }
 
 pub(crate) fn wallet_entry_with_labels(

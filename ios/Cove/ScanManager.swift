@@ -202,14 +202,28 @@ import SwiftUI
             let wallet = try Wallet.newFromExport(export: export)
             let id = wallet.id()
             Log.debug("Imported Wallet: \(id)")
-            app.alertState = TaggedItem(.importedSuccessfully)
 
             if app.walletManager?.id != id {
                 try app.selectWalletOrThrow(id)
             }
 
-            if app.walletManager?.id == id, app.walletManager?.walletMetadata.walletType != .hot {
-                try app.walletManager?.rust.setWalletType(walletType: .cold)
+            guard let manager = app.walletManager,
+                  manager.id == id,
+                  manager.walletMetadata.walletType != .hot
+            else {
+                app.alertState = TaggedItem(.importedSuccessfully)
+                return
+            }
+
+            Task { @MainActor in
+                do {
+                    try await manager.setWalletType(.cold)
+                    app.alertState = TaggedItem(.importedSuccessfully)
+                } catch {
+                    app.alertState = TaggedItem(
+                        .errorImportingHardwareWallet(message: error.localizedDescription)
+                    )
+                }
             }
         } catch let WalletError.WalletAlreadyExists(id) {
             app.alertState = TaggedItem(.duplicateWallet(walletId: id))

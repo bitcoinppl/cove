@@ -346,7 +346,7 @@ private struct WalletBalancePendingView: View {
                 showReceiveSheet: {}
             )
             .environment(AppManager.shared)
-            .environment(WalletManager(preview: "preview_only"))
+            .environment(WalletManager(preview: .only))
         }
 }
 
@@ -368,7 +368,7 @@ private struct WalletBalancePendingView: View {
                 showReceiveSheet: {}
             )
             .environment(AppManager.shared)
-            .environment(WalletManager(preview: "preview_only"))
+            .environment(WalletManager(preview: .only))
         }
 }
 
@@ -389,7 +389,7 @@ private struct WalletBalancePendingView: View {
                 showReceiveSheet: {}
             )
             .environment(AppManager.shared)
-            .environment(WalletManager(preview: "preview_only"))
+            .environment(WalletManager(preview: .only))
         }
 }
 
@@ -410,7 +410,7 @@ private struct WalletBalancePendingView: View {
                 showReceiveSheet: {}
             )
             .environment(AppManager.shared)
-            .environment(WalletManager(preview: "preview_only"))
+            .environment(WalletManager(preview: .only))
         }
 }
 
@@ -432,7 +432,7 @@ private struct WalletBalancePendingView: View {
                 showReceiveSheet: {}
             )
             .environment(AppManager.shared)
-            .environment(WalletManager(preview: "preview_only"))
+            .environment(WalletManager(preview: .only))
         }
 }
 
@@ -453,6 +453,6 @@ private struct WalletBalancePendingView: View {
                 showReceiveSheet: {}
             )
             .environment(AppManager.shared)
-            .environment(WalletManager(preview: "preview_only"))
+            .environment(WalletManager(preview: .only))
         }
 }

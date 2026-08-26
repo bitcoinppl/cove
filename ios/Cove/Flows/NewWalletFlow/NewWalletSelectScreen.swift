@@ -268,21 +268,13 @@ private struct NewWalletTypeActions: View {
     var body: some View {
         VStack(spacing: 16) {
             NewWalletTypeButtons(
-                showHardwareWalletOptions: showHardwareWalletOptions,
-                hotWalletRoute: hotWalletRoute
+                showSelectDialog: $showSelectDialog,
+                hotWalletRoute: hotWalletRoute,
+                qrRoute: qrRoute,
+                importFile: importFile,
+                scanNfc: scanNfc,
+                pasteWallet: pasteWallet
             )
-            .confirmationDialog(
-                "Import hardware wallet using",
-                isPresented: $showSelectDialog,
-                titleVisibility: .visible
-            ) {
-                NewWalletSelectConfirmationDialogContent(
-                    qrRoute: qrRoute,
-                    importFile: importFile,
-                    scanNfc: scanNfc,
-                    pasteWallet: pasteWallet
-                )
-            }
 
             if nfcCalled {
                 Button(action: showNfcHelp) {
@@ -296,15 +288,16 @@ private struct NewWalletTypeActions: View {
             }
         }
     }
-
-    private func showHardwareWalletOptions() {
-        showSelectDialog = true
-    }
 }
 
 private struct NewWalletTypeButtons: View {
-    let showHardwareWalletOptions: () -> Void
+    @Binding var showSelectDialog: Bool
+
     let hotWalletRoute: Route
+    let qrRoute: Route
+    let importFile: () -> Void
+    let scanNfc: () -> Void
+    let pasteWallet: () -> Void
 
     var body: some View {
         HStack(spacing: 14) {
@@ -322,6 +315,18 @@ private struct NewWalletTypeButtons: View {
                 .background(Color.btnPrimary)
                 .foregroundColor(.midnightBlue)
                 .cornerRadius(10)
+            }
+            .confirmationDialog(
+                "Import hardware wallet using",
+                isPresented: $showSelectDialog,
+                titleVisibility: .visible
+            ) {
+                NewWalletSelectConfirmationDialogContent(
+                    qrRoute: qrRoute,
+                    importFile: importFile,
+                    scanNfc: scanNfc,
+                    pasteWallet: pasteWallet
+                )
             }
 
             NavigationLink(value: hotWalletRoute) {
@@ -343,6 +348,10 @@ private struct NewWalletTypeButtons: View {
             }
             .buttonStyle(PlainButtonStyle())
         }
+    }
+
+    private func showHardwareWalletOptions() {
+        showSelectDialog = true
     }
 }
 

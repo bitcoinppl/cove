@@ -16,11 +16,7 @@ struct MoreInfoPopover: View {
     let exportXpub: () -> Void
 
     private var hasLabels: Bool {
-        labelManager.hasLabels()
-    }
-
-    private var labelManager: LabelManager {
-        manager.rust.labelManager()
+        (try? manager.labelManager().hasLabels()) ?? false
     }
 
     private var metadata: WalletMetadata {
@@ -63,7 +59,7 @@ struct MoreInfoPopover: View {
     private func exportTransactions() {
         Task {
             do {
-                let result = try await manager.rust.exportTransactionsCsv()
+                let result = try await manager.exportTransactionsCsv()
                 ShareSheet.presentFromMenu(data: result.content, filename: result.filename)
             } catch {
                 app.alertState = .init(.general(
@@ -225,7 +221,7 @@ private struct MoreInfoWalletActions: View {
 #Preview {
     AsyncPreview {
         MoreInfoPopover(
-            manager: WalletManager(preview: "preview_only"),
+            manager: WalletManager(preview: .only),
             importLabels: {},
             exportLabels: {},
             exportXpub: {}

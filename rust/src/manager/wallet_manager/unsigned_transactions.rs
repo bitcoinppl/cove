@@ -16,6 +16,10 @@ impl RustWalletManager {
         &self,
         details: Arc<ConfirmDetails>,
     ) -> Result<(), Error> {
+        if self.unsigned_transactions.is_in_memory() {
+            return Ok(());
+        }
+
         let wallet_id = self.id.clone();
         let tx_id = details.psbt.tx_id();
         let db = Database::global();
@@ -48,6 +52,10 @@ impl RustWalletManager {
     pub(crate) fn get_unsigned_transactions_internal(
         &self,
     ) -> Result<Vec<Arc<UnsignedTransaction>>, Error> {
+        if self.unsigned_transactions.is_in_memory() {
+            return Ok(Vec::new());
+        }
+
         let wallet_id = &self.id;
 
         let db = Database::global();
@@ -65,6 +73,10 @@ impl RustWalletManager {
         &self,
         tx_id: Arc<TxId>,
     ) -> Result<(), Error> {
+        if self.unsigned_transactions.is_in_memory() {
+            return Ok(());
+        }
+
         debug!("deleting unsigned transaction: {tx_id:?}");
         let db = Database::global();
 

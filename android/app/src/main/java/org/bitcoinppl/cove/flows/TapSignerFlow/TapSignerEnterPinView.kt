@@ -1,7 +1,7 @@
 package org.bitcoinppl.cove.flows.TapSignerFlow
 
+import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,12 +14,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,7 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,53 +36,60 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
-import org.bitcoinppl.cove.findActivity
-import org.bitcoinppl.cove.nfc.TapCardNfcManager
+import org.bitcoinppl.cove.runCatchingCancellable
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.TapSignerConfirmPinArgs
+import org.bitcoinppl.cove_core.TapSignerNewPinArgs
 import org.bitcoinppl.cove_core.TapSignerPinAction
+import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.types.Psbt
 
-/**
- * PIN entry screen for TapSigner authentication
- * handles derive, change PIN, backup, and sign actions
- */
+/** Enter a TAPSIGNER CVC before a card operation. */
 @Composable
 fun TapSignerEnterPinView(
     app: AppManager,
     manager: TapSignerManager,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
-    action: org.bitcoinppl.cove_core.AfterPinAction,
+    action: AfterPinAction,
     modifier: Modifier = Modifier,
 ) {
-    var pin by remember { mutableStateOf("") }
-    var isActionPending by remember { mutableStateOf(false) }
+    var cvc by remember { mutableStateOf("") }
+    var isSubmitting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-
-    val message =
-        when (action) {
-            is AfterPinAction.Derive ->
-                "Enter your TapSigner PIN to import the wallet"
-            is AfterPinAction.Change ->
-                "Enter your current PIN to change it"
-            is AfterPinAction.Backup ->
-                "Enter your PIN to backup your TapSigner"
-            is AfterPinAction.Sign ->
-                "Enter your PIN to sign the transaction"
-        }
-
-    // reset pin when screen appears
-    LaunchedEffect(Unit) {
-        pin = ""
-    }
-
-    // launcher for creating backup file
+    val message = action.userMessage()
     val createBackupLauncher =
         rememberBackupExportLauncher(app) {
             app.getTapSignerBackup(tapSigner)
-                ?: throw IllegalStateException("Backup not available for this TapSigner")
+                ?: error("Backup is not available for this TAPSIGNER")
         }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            cvc = ""
+        }
+    }
+
+    fun submit() {
+        if (isSubmitting || !isValidCvc(cvc)) return
+
+        isSubmitting = true
+        scope.launch {
+            try {
+                runAction(
+                    app = app,
+                    manager = manager,
+                    tapSigner = tapSigner,
+                    action = action,
+                    cvc = cvc,
+                    createBackupLauncher = createBackupLauncher,
+                )
+            } finally {
+                cvc = ""
+                isSubmitting = false
+            }
+        }
+    }
 
     Column(
         modifier =
@@ -89,9 +97,8 @@ fun TapSignerEnterPinView(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(40.dp),
+        verticalArrangement = Arrangement.spacedBy(32.dp),
     ) {
-        // header with cancel button
         Row(
             modifier =
                 Modifier
@@ -104,7 +111,6 @@ fun TapSignerEnterPinView(
             }
         }
 
-        // lock icon
         Icon(
             imageVector = Icons.Default.Lock,
             contentDescription = "Lock",
@@ -112,14 +118,13 @@ fun TapSignerEnterPinView(
             tint = MaterialTheme.colorScheme.primary,
         )
 
-        // title and message
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text(
-                text = "Enter TAPSIGNER PIN",
+                text = "Enter TAPSIGNER CVC",
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Bold,
             )
@@ -129,58 +134,24 @@ fun TapSignerEnterPinView(
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )
+
+            TapSignerCvcInput(
+                value = cvc,
+                onValueChange = { cvc = it },
+                label = "CVC",
+                options = TapSignerCvcInputOptions(testTag = "tapSignerEnter.cvc"),
+            )
         }
 
-        // PIN circles
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center,
+        Button(
+            onClick = ::submit,
+            enabled = !isSubmitting && isValidCvc(cvc),
+            modifier = Modifier.fillMaxWidth().testTag("tapSignerEnter.submit"),
         ) {
-            PinCirclesView(pinLength = pin.length)
+            Text(if (isSubmitting) "Working…" else "Submit")
         }
 
-        // hidden text field
-        HiddenPinTextField(
-            value = pin,
-            onValueChange = { newPin ->
-                pin = newPin
-                if (newPin.length == 6 && !isActionPending) {
-                    isActionPending = true
-                    manager.enteredPin = newPin
-                    scope.launch {
-                        val activity = context.findActivity()
-                        if (activity == null) {
-                            app.alertState =
-                                TaggedItem(
-                                    AppAlertState.General(
-                                        title = "Error",
-                                        message = "Unable to access NFC. Please try again.",
-                                    ),
-                                )
-                            isActionPending = false
-                            return@launch
-                        }
-
-                        try {
-                            runAction(
-                                app,
-                                manager,
-                                tapSigner,
-                                action,
-                                newPin,
-                                createBackupLauncher,
-                                activity,
-                            )
-                        } finally {
-                            pin = ""
-                            isActionPending = false
-                        }
-                    }
-                }
-            },
-        )
-
-        Spacer(modifier = Modifier.height(40.dp))
+        Spacer(modifier = Modifier.height(20.dp))
     }
 }
 
@@ -188,71 +159,55 @@ private suspend fun runAction(
     app: AppManager,
     manager: TapSignerManager,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
-    action: org.bitcoinppl.cove_core.AfterPinAction,
-    pin: String,
-    createBackupLauncher: androidx.activity.result.ActivityResultLauncher<String>,
-    activity: android.app.Activity,
+    action: AfterPinAction,
+    cvc: String,
+    createBackupLauncher: ActivityResultLauncher<String>,
 ) {
-    val nfc = manager.getOrCreateNfc(tapSigner)
-
     when (action) {
-        is AfterPinAction.Derive -> {
-            deriveAction(app, manager, nfc, tapSigner, pin, activity)
+        AfterPinAction.Derive -> deriveAction(app, manager, tapSigner, cvc)
+        AfterPinAction.Change -> changeAction(manager, tapSigner, cvc)
+        AfterPinAction.Backup -> {
+            backupAction(app, manager, tapSigner, cvc, createBackupLauncher)
         }
-        is AfterPinAction.Change -> {
-            changeAction(manager, tapSigner, pin)
-        }
-        is AfterPinAction.Backup -> {
-            backupAction(app, manager, nfc, tapSigner, pin, createBackupLauncher, activity)
-        }
-        is AfterPinAction.Sign -> {
-            signAction(app, manager, nfc, tapSigner, action.v1, pin, activity)
-        }
+        is AfterPinAction.Sign -> signAction(app, manager, tapSigner, action.v1, cvc)
     }
 }
 
 private suspend fun deriveAction(
     app: AppManager,
     manager: TapSignerManager,
-    nfc: TapSignerNfcHelper,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
-    pin: String,
-    activity: android.app.Activity,
+    cvc: String,
 ) {
-    // set up message callback for progress updates
-    val nfcManager = TapCardNfcManager.getInstance()
-    nfcManager.onMessageUpdate = { message ->
-        manager.scanMessage = message
+    val nfc = manager.getOrCreateNfc(tapSigner)
+    manager.beginScan("Hold your phone near the TapSigner to import the wallet")
+    val result = try {
+        runCatchingCancellable("TapSignerEnterPin", "TapSigner import failed") {
+            nfc.derive(cvc, manager.operationCallbacks())
+        }
+    } finally {
+        manager.endScan()
     }
-    nfcManager.onTagDetected = { manager.isTagDetected = true }
+    val deriveInfo = result.getOrNull()
+    val error = result.exceptionOrNull()
 
-    manager.scanMessage = "Hold your phone near the TapSigner to import wallet"
-    manager.isTagDetected = false
-    manager.isScanning = true
-    try {
-        val deriveInfo = nfc.derive(pin)
-        manager.isScanning = false
-        manager.isTagDetected = false
-        nfcManager.onMessageUpdate = null
-        nfcManager.onTagDetected = null
-
-        manager.resetRoute(
-            org.bitcoinppl.cove_core.TapSignerRoute.ImportSuccess(
-                tapSigner,
-                deriveInfo,
-            ),
-        )
-    } catch (e: Exception) {
-        manager.isScanning = false
-        manager.isTagDetected = false
-        nfcManager.onMessageUpdate = null
-        nfcManager.onTagDetected = null
-
-        // show error in overlay - sheet stays open for retry
-        if (isAuthError(e)) {
-            Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
-            manager.errorMessage = "Wrong PIN, please try again"
-        } else {
+    when {
+        deriveInfo != null -> manager.resetRoute(TapSignerRoute.ImportSuccess(tapSigner, deriveInfo))
+        error is TapSignerOperationRetryException -> {
+            manager.resetRoute(TapSignerRoute.ImportRetry(tapSigner))
+        }
+        error != null && isAuthError(error) -> {
+            app.sheetState = null
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.TapSignerWrongPin(
+                        tapSigner,
+                        AfterPinAction.Derive,
+                    ),
+                )
+        }
+        error != null -> {
+            Log.w("TapSignerEnterPin", "TapSigner import failed")
             manager.errorMessage = "Connection failed, please try again"
         }
     }
@@ -261,13 +216,13 @@ private suspend fun deriveAction(
 private fun changeAction(
     manager: TapSignerManager,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
-    pin: String,
+    cvc: String,
 ) {
     manager.navigate(
-        org.bitcoinppl.cove_core.TapSignerRoute.NewPin(
-            org.bitcoinppl.cove_core.TapSignerNewPinArgs(
+        TapSignerRoute.NewPin(
+            TapSignerNewPinArgs(
                 tapSigner = tapSigner,
-                startingPin = pin,
+                startingPin = cvc,
                 chainCode = null,
                 action = TapSignerPinAction.CHANGE,
             ),
@@ -278,46 +233,40 @@ private fun changeAction(
 private suspend fun backupAction(
     app: AppManager,
     manager: TapSignerManager,
-    nfc: TapSignerNfcHelper,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
-    pin: String,
-    createBackupLauncher: androidx.activity.result.ActivityResultLauncher<String>,
-    activity: android.app.Activity,
+    cvc: String,
+    createBackupLauncher: ActivityResultLauncher<String>,
 ) {
-    // set up message callback for progress updates
-    val nfcManager = TapCardNfcManager.getInstance()
-    nfcManager.onMessageUpdate = { message ->
-        manager.scanMessage = message
+    val nfc = manager.getOrCreateNfc(tapSigner)
+    manager.beginScan("Hold your phone near the TapSigner to back up the card")
+
+    val result = try {
+        runCatchingCancellable("TapSignerEnterPin", "TapSigner backup failed") {
+            nfc.backup(cvc, manager.operationCallbacks())
+        }
+    } finally {
+        manager.endScan()
     }
-    nfcManager.onTagDetected = { manager.isTagDetected = true }
+    val backup = result.getOrNull()
+    val error = result.exceptionOrNull()
 
-    manager.scanMessage = "Hold your phone near the TapSigner to backup"
-    manager.isTagDetected = false
-    manager.isScanning = true
-    try {
-        val backup = nfc.backup(pin)
-        manager.isScanning = false
-        manager.isTagDetected = false
-        nfcManager.onMessageUpdate = null
-        nfcManager.onTagDetected = null
-
-        // save backup and show export dialog
+    if (backup != null) {
         app.saveTapSignerBackup(tapSigner, backup)
+        createBackupLauncher.launch("${tapSigner.identFileNamePrefix()}_backup.txt")
+        app.sheetState = null
+        return
+    }
 
-        // trigger backup export
-        val fileName = "${tapSigner.identFileNamePrefix()}_backup.txt"
-        createBackupLauncher.launch(fileName)
-    } catch (e: Exception) {
-        manager.isScanning = false
-        manager.isTagDetected = false
-        nfcManager.onMessageUpdate = null
-        nfcManager.onTagDetected = null
-
-        // show error in overlay - sheet stays open for retry
-        if (isAuthError(e)) {
-            Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
-            manager.errorMessage = "Wrong PIN, please try again"
-        } else {
+    when {
+        error is TapSignerOperationRetryException -> {
+        manager.errorMessage = "The backup needs another card scan. Please try again"
+        }
+        error != null && isAuthError(error) -> {
+            app.sheetState = null
+            app.alertState =
+                TaggedItem(AppAlertState.TapSignerWrongPin(tapSigner, AfterPinAction.Backup))
+        }
+        error != null -> {
             manager.errorMessage = "Connection failed, please try again"
         }
     }
@@ -326,62 +275,67 @@ private suspend fun backupAction(
 private suspend fun signAction(
     app: AppManager,
     manager: TapSignerManager,
-    nfc: TapSignerNfcHelper,
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
     psbt: Psbt,
-    pin: String,
-    activity: android.app.Activity,
+    cvc: String,
 ) {
-    // set up message callback for progress updates
-    val nfcManager = TapCardNfcManager.getInstance()
-    nfcManager.onMessageUpdate = { message ->
-        manager.scanMessage = message
+    val nfc = manager.getOrCreateNfc(tapSigner)
+    manager.beginScan("Hold your phone near the TapSigner to sign")
+
+    val result = try {
+        runCatchingCancellable("TapSignerEnterPin", "TapSigner signing failed") {
+            nfc.sign(psbt, cvc, manager.operationCallbacks())
+        }
+    } finally {
+        manager.endScan()
     }
-    nfcManager.onTagDetected = { manager.isTagDetected = true }
+    val signedPsbt = result.getOrNull()
+    val error = result.exceptionOrNull()
 
-    manager.scanMessage = "Hold your phone near the TapSigner to sign"
-    manager.isTagDetected = false
-    manager.isScanning = true
-    try {
-        val signedPsbt = nfc.sign(psbt, pin)
-        manager.isScanning = false
-        manager.isTagDetected = false
-        nfcManager.onMessageUpdate = null
-        nfcManager.onTagDetected = null
-
-        val db =
-            org.bitcoinppl.cove_core
-                .Database()
-                .unsignedTransactions()
-        val txId = psbt.txId()
-        val record = db.getTxThrow(txId = txId)
+    if (signedPsbt != null) {
         val route =
-            org.bitcoinppl.cove_core.RouteFactory().sendConfirmSignedPsbt(
-                id = record.walletId(),
-                details = record.confirmDetails(),
-                psbt = signedPsbt,
-            )
+            try {
+                runCatchingCancellable("TapSignerEnterPin", "Failed to open signed PSBT") {
+                    val db = org.bitcoinppl.cove_core.Database().unsignedTransactions()
+                    val record = db.getTxThrow(psbt.txId())
+                    org.bitcoinppl.cove_core.RouteFactory().use { factory ->
+                        factory.sendConfirmSignedPsbt(
+                            id = record.walletId(),
+                            details = record.confirmDetails(),
+                            psbt = signedPsbt,
+                        )
+                    }
+                }.getOrNull()
+            } finally {
+                signedPsbt.destroy()
+            }
 
-        app.sheetState = null
-        app.pushRoute(route)
-    } catch (e: Exception) {
-        manager.isScanning = false
-        manager.isTagDetected = false
-        nfcManager.onMessageUpdate = null
-        nfcManager.onTagDetected = null
-
-        // show error in overlay - sheet stays open for retry
-        if (isAuthError(e)) {
-            Log.w("TapSignerEnterPin", "TapSigner auth failed - likely wrong PIN")
-            manager.errorMessage = "Wrong PIN, please try again"
+        if (route != null) {
+            app.sheetState = null
+            app.pushRoute(route)
         } else {
+            manager.errorMessage = "Signing completed, but the transaction could not be opened"
+        }
+
+        return
+    }
+
+    when {
+        error is TapSignerOperationRetryException -> {
+        manager.errorMessage = "Signing needs another card scan. Please try again"
+        }
+        error != null && isAuthError(error) -> {
+            app.sheetState = null
+            app.alertState =
+                TaggedItem(
+                    AppAlertState.TapSignerWrongPin(
+                        tapSigner,
+                        AfterPinAction.Sign(psbt),
+                    ),
+                )
+        }
+        error != null -> {
             manager.errorMessage = "Connection failed, please try again"
         }
     }
-}
-
-private fun isAuthError(error: Exception): Boolean {
-    // check if error is a bad auth error using type-safe FFI function
-    return error is org.bitcoinppl.cove_core.TapSignerReaderException &&
-        error.isAuthError()
 }

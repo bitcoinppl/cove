@@ -125,7 +125,7 @@ async fn deep_verify_persists_partial_auto_sync_upload_before_later_wallet_fails
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn deep_verify_awaits_upload_confirmation_when_relist_still_misses_uploaded_wallet() {
+async fn deep_verify_confirms_upload_directly_when_metadata_listing_is_stale() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();
     let globals = test_globals();
@@ -136,18 +136,18 @@ async fn deep_verify_awaits_upload_confirmation_when_relist_still_misses_uploade
     let result = deep_verify_for_test(&manager, true).await;
 
     match result {
-        DeepVerificationResult::AwaitingUploadConfirmation(report) => {
+        DeepVerificationResult::Verified(report) => {
             let detail = report.detail.expect("expected verification detail");
             assert_eq!(detail.up_to_date.len(), 1);
             assert!(detail.needs_sync.is_empty());
             assert_eq!(detail.up_to_date[0].record_id, record_id);
         }
-        other => panic!("expected awaiting upload confirmation, got {other:?}"),
+        other => panic!("expected direct upload confirmation, got {other:?}"),
     }
 
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
-    assert!(manager.pending_verification_completion().is_some());
-    assert!(manager.has_pending_cloud_upload_verification());
+    assert!(manager.pending_verification_completion().is_none());
+    assert!(!manager.has_pending_cloud_upload_verification());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -158,6 +158,7 @@ async fn manual_verification_clears_interactive_state_when_awaiting_upload_confi
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+    hold_wallet_upload_confirmation(globals, &metadata).await;
 
     call!(manager.supervisor.start_verification(true)).await.unwrap();
     wait_for_test_condition(
@@ -179,9 +180,9 @@ async fn manual_verification_clears_interactive_state_when_awaiting_upload_confi
     assert!(manager.pending_verification_completion().is_some());
 
     let detail = state.detail.expect("expected verification detail");
-    assert_eq!(detail.up_to_date.len(), 1);
-    assert!(detail.needs_sync.is_empty());
-    assert_eq!(detail.up_to_date[0].record_id, record_id);
+    assert!(detail.up_to_date.is_empty());
+    assert_eq!(detail.needs_sync.len(), 1);
+    assert_eq!(detail.needs_sync[0].record_id, record_id);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -375,8 +376,7 @@ async fn deep_verify_reads_each_wallet_backup_once() {
     match result {
         DeepVerificationResult::Verified(report) => {
             assert_eq!(report.wallets_verified, 1);
-            assert_eq!(report.wallets_failed, 0);
-            assert_eq!(report.wallets_unsupported, 0);
+            assert!(report.wallet_issues.is_empty());
 
             let detail = report.detail.expect("expected verification detail");
             assert_eq!(detail.up_to_date.len(), 1);
@@ -411,12 +411,11 @@ async fn deep_verify_preserves_unsupported_remote_wallet_backups() {
     let result = deep_verify_for_test(&manager, true).await;
 
     match result {
-        DeepVerificationResult::Verified(report) => {
+        DeepVerificationResult::NeedsAttention(report) => {
             assert_eq!(report.wallets_verified, 0);
-            assert_eq!(report.wallets_failed, 0);
-            assert_eq!(report.wallets_unsupported, 1);
+            assert_eq!(report.wallet_issues.unsupported, 1);
         }
-        other => panic!("expected verified result, got {other:?}"),
+        other => panic!("expected needs-attention result, got {other:?}"),
     }
 
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);

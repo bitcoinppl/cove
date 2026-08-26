@@ -3,12 +3,8 @@ import SwiftUI
 struct SendFlowHardwarePresentationContext {
     let manager: WalletManager
     let details: ConfirmDetails
-    let alertState: Binding<TaggedItem<SendFlowHardwareAlertState>?>
+    let dismissAlert: () -> Void
     let inputOutputDetailsPresentationSize: Binding<PresentationDetent>
-
-    func dismissAlert() {
-        alertState.wrappedValue = nil
-    }
 }
 
 extension SendFlowHardwareAlertState: TaggedAlertPresentable {

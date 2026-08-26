@@ -2,9 +2,9 @@ use cove_device::cloud_storage::CloudSyncHealth;
 
 use crate::database::cloud_backup::CloudStorageIssue;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, CloudBackupEnableContext, CloudBackupPasskeyChoiceIntent,
-    CloudBackupPasskeyHint, CloudBackupProgress, CloudBackupRootPrompt,
-    CloudBackupVerificationPresentation, CloudOnlyOperation, CloudOnlyState,
+    CloudBackupDetail, CloudBackupEnableContext, CloudBackupOtherBackupsState,
+    CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupProgress,
+    CloudBackupRootPrompt, CloudBackupVerificationPresentation, CloudOnlyOperation, CloudOnlyState,
     DeepVerificationFailure, DeepVerificationReport, OtherBackupsOperation,
     SavedPasskeyConfirmationMode,
 };
@@ -31,6 +31,7 @@ pub enum CloudBackupPasskeyRepairState {
 pub enum CloudBackupVerificationState {
     NotVerified,
     Verified { report: Option<DeepVerificationReport>, last_verified_at: Option<u64> },
+    NeedsAttention { report: DeepVerificationReport, checked_at: Option<u64> },
     Required,
     Running,
     AwaitingUploadConfirmation,
@@ -57,13 +58,34 @@ pub enum CloudBackupDestructiveOperationState {
     DisableFailed { message: String, can_keep_enabled: bool },
 }
 
+/// Status of a request to remove cloud-only backups that the active key cannot decrypt
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupUndecryptableWalletDeletionState {
+    Idle,
+    Deleting,
+    Failed(String),
+}
+
 /// Detail payload shown after remote backup detail has loaded
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct LoadedCloudBackupDetail {
     pub detail: CloudBackupDetail,
+    /// Evidence used to accept the active namespace inventory
+    pub inventory_authority: CloudBackupInventoryAuthority,
     pub cloud_only: CloudOnlyState,
     pub cloud_only_operation: CloudOnlyOperation,
     pub other_backups_operation: OtherBackupsOperation,
+}
+
+/// Evidence used to accept wallet inventory for the active backup namespace
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupInventoryAuthority {
+    /// The provider returned an authoritative inventory
+    ProviderConfirmed,
+    /// The local provider snapshot contains the last known wallet count
+    LocalSnapshotMatchesKnownCount,
+    /// Rows are useful for display but cannot authorize wallet actions
+    Provisional,
 }
 
 /// Typed reason why provider inventory could not be confirmed complete
@@ -71,6 +93,7 @@ pub struct LoadedCloudBackupDetail {
 pub enum CloudBackupInventoryIncompleteReason {
     AuthorizationRequired,
     Offline,
+    ProviderSyncPending,
     ProviderUnavailable,
     Unknown,
 }
@@ -80,6 +103,7 @@ impl From<CloudStorageIssue> for CloudBackupInventoryIncompleteReason {
         match issue {
             CloudStorageIssue::AuthorizationRequired => Self::AuthorizationRequired,
             CloudStorageIssue::Offline => Self::Offline,
+            CloudStorageIssue::SyncPending => Self::ProviderSyncPending,
             CloudStorageIssue::Unavailable => Self::ProviderUnavailable,
             CloudStorageIssue::NotFound
             | CloudStorageIssue::QuotaExceeded
@@ -136,7 +160,9 @@ pub struct CloudBackupConfiguredState {
     pub verification: CloudBackupVerificationState,
     pub sync: CloudBackupSyncState,
     pub destructive_operation: CloudBackupDestructiveOperationState,
+    pub undecryptable_wallet_deletion: CloudBackupUndecryptableWalletDeletionState,
     pub detail: CloudBackupDetailState,
+    pub other_backups: CloudBackupOtherBackupsState,
     pub restore_all: CloudBackupRestoreAllState,
     pub root_prompt: CloudBackupRootPrompt,
     pub sync_health: CloudSyncHealth,

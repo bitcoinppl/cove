@@ -90,7 +90,9 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     }
 
     private var maxSend: Double {
-        var amount = manager.rust.maxSendMinusFees() ?? Amount.fromSat(sats: conservativeDustLimitSatsU + 1000)
+        var amount = manager.maxSendMinusFees()
+            ?? Amount.fromSat(sats: conservativeDustLimitSatsU + 1000)
+
         if amount.asSats() <= conservativeDustLimitSatsU {
             amount = Amount.fromSat(sats: conservativeDustLimitSatsU + 1000)
         }
@@ -100,13 +102,13 @@ struct SendFlowUtxoCustomAmountSheetView: View {
     /// softMaxSend is the next biggest amount below maxSend that can be selected
     /// any amount between softMaxSend and maxSend can NOT be selected, because that would create a dust UTXO
     private var softMaxSend: Double {
-        let amount = manager.rust.maxSendMinusFeesAndSmallUtxo() ?? conservativeDustLimitAmount
+        let amount = manager.maxSendMinusFeesAndSmallUtxo() ?? conservativeDustLimitAmount
         return amountToDouble(amount)
     }
 
     private func displayAmount(_ amount: String? = nil) -> String {
         let amountDouble = amount.flatMap {
-            manager.rust.sanitizeBtcEnteringAmount(oldValue: enteringAmount ?? "", newValue: $0)
+            manager.sanitizeBtcEnteringAmount(oldValue: enteringAmount ?? "", newValue: $0)
         }.map { $0.replacingOccurrences(of: ",", with: "") }.flatMap { Double($0) }
         let amount =
             switch (metadata.selectedUnit, amountDouble) {
@@ -364,7 +366,7 @@ private struct UtxoRowIdentity: View {
 
 #Preview {
     AsyncPreview {
-        let wm = WalletManager(preview: "preview_only")
+        let wm = WalletManager(preview: .only)
         let ap = AppManager.shared
         let presenter = SendFlowPresenter(app: ap, manager: wm)
         let utxos = previewNewUtxoList(outputCount: 2, changeCount: 1)

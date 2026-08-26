@@ -144,6 +144,23 @@ impl PersistedCloudBackupState {
         self.configured().and_then(|configured| configured.verification.dismissed_at())
     }
 
+    pub fn verification_needs_attention(
+        &self,
+    ) -> Option<(u64, u32, &PersistedWalletVerificationIssues)> {
+        let configured = self.configured()?;
+        let PersistedBackupVerificationState::NeedsAttention {
+            checked_at,
+            wallets_verified,
+            issues,
+            ..
+        } = &configured.verification
+        else {
+            return None;
+        };
+
+        Some((*checked_at, *wallets_verified, issues))
+    }
+
     pub fn pending_verification_completion(
         &self,
     ) -> Option<&PersistedPendingVerificationCompletion> {
@@ -267,6 +284,25 @@ impl PersistedCloudBackupState {
         configured.passkey = PersistedPasskeyState::Available;
         configured.verification = PersistedBackupVerificationState::Verified {
             last_verified_at: verified_at,
+            requested_at: configured.verification.requested_at(),
+            dismissed_at: configured.verification.dismissed_at(),
+        };
+    }
+
+    pub fn mark_verification_needs_attention(
+        &mut self,
+        checked_at: u64,
+        wallets_verified: u32,
+        issues: PersistedWalletVerificationIssues,
+    ) {
+        let Some(configured) = self.configured_mut() else { return };
+
+        configured.passkey = PersistedPasskeyState::Available;
+        configured.verification = PersistedBackupVerificationState::NeedsAttention {
+            checked_at,
+            wallets_verified,
+            issues,
+            last_verified_at: configured.verification.last_verified_at(),
             requested_at: configured.verification.requested_at(),
             dismissed_at: configured.verification.dismissed_at(),
         };
@@ -554,6 +590,17 @@ pub enum PersistedBackupVerificationState {
         #[serde(default)]
         dismissed_at: Option<u64>,
     },
+    NeedsAttention {
+        checked_at: u64,
+        wallets_verified: u32,
+        issues: PersistedWalletVerificationIssues,
+        #[serde(default)]
+        last_verified_at: Option<u64>,
+        #[serde(default)]
+        requested_at: Option<u64>,
+        #[serde(default)]
+        dismissed_at: Option<u64>,
+    },
     Required {
         #[serde(default)]
         last_verified_at: Option<u64>,
@@ -567,7 +614,9 @@ pub enum PersistedBackupVerificationState {
 impl PersistedBackupVerificationState {
     fn status(&self) -> PersistedCloudBackupStatus {
         match self {
-            Self::NotVerified { .. } | Self::Verified { .. } => PersistedCloudBackupStatus::Enabled,
+            Self::NotVerified { .. } | Self::Verified { .. } | Self::NeedsAttention { .. } => {
+                PersistedCloudBackupStatus::Enabled
+            }
             Self::Required { .. } => PersistedCloudBackupStatus::Unverified,
         }
     }
@@ -576,7 +625,8 @@ impl PersistedBackupVerificationState {
         match self {
             Self::NotVerified { .. } => None,
             Self::Verified { last_verified_at, .. } => Some(*last_verified_at),
-            Self::Required { last_verified_at, .. } => *last_verified_at,
+            Self::NeedsAttention { last_verified_at, .. }
+            | Self::Required { last_verified_at, .. } => *last_verified_at,
         }
     }
 
@@ -584,6 +634,7 @@ impl PersistedBackupVerificationState {
         match self {
             Self::NotVerified { requested_at, .. }
             | Self::Verified { requested_at, .. }
+            | Self::NeedsAttention { requested_at, .. }
             | Self::Required { requested_at, .. } => *requested_at,
         }
     }
@@ -592,6 +643,7 @@ impl PersistedBackupVerificationState {
         match self {
             Self::NotVerified { dismissed_at, .. }
             | Self::Verified { dismissed_at, .. }
+            | Self::NeedsAttention { dismissed_at, .. }
             | Self::Required { dismissed_at, .. } => *dismissed_at,
         }
     }
@@ -604,6 +656,21 @@ impl PersistedBackupVerificationState {
             Self::Verified { last_verified_at, requested_at, .. } => {
                 Self::Verified { last_verified_at, requested_at, dismissed_at: Some(dismissed_at) }
             }
+            Self::NeedsAttention {
+                checked_at,
+                wallets_verified,
+                issues,
+                last_verified_at,
+                requested_at,
+                ..
+            } => Self::NeedsAttention {
+                checked_at,
+                wallets_verified,
+                issues,
+                last_verified_at,
+                requested_at,
+                dismissed_at: Some(dismissed_at),
+            },
             Self::Required { last_verified_at, requested_at, .. } => {
                 Self::Required { last_verified_at, requested_at, dismissed_at: Some(dismissed_at) }
             }
@@ -634,8 +701,22 @@ pub struct PersistedDeepVerificationReport {
     pub local_master_key_repaired: bool,
     pub credential_recovered: bool,
     pub wallets_verified: u32,
+    #[serde(default)]
     pub wallets_failed: u32,
+    #[serde(default)]
     pub wallets_unsupported: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wallet_issues: Option<PersistedWalletVerificationIssues>,
+}
+
+#[derive(Debug, Clone, Default, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersistedWalletVerificationIssues {
+    pub missing: u32,
+    pub download_failed: u32,
+    pub invalid: u32,
+    pub decryption_failed: u32,
+    pub unsupported: u32,
+    pub unreadable: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -821,6 +902,7 @@ pub struct CloudBlobFailedState {
 pub enum CloudStorageIssue {
     AuthorizationRequired,
     Offline,
+    SyncPending,
     Unavailable,
     NotFound,
     QuotaExceeded,

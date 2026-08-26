@@ -6,6 +6,59 @@ enum ICloudBackupLookupMode {
     case currentSnapshot
 }
 
+enum ICloudBackupReadTarget: Equatable, Sendable {
+    case local(URL)
+    case provider(URL, metadataPath: String?)
+
+    var url: URL {
+        switch self {
+        case let .local(url), let .provider(url, _): url
+        }
+    }
+}
+
+enum ICloudReadAttemptDeadlineError: Error, Equatable {
+    case timedOut
+}
+
+enum ICloudReadAttemptDeadline {
+    private enum Outcome<Value: Sendable>: Sendable {
+        case completed(Value)
+        case timedOut
+    }
+
+    static func run<Value: Sendable>(
+        timeout: TimeInterval,
+        operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        guard timeout > 0 else { throw ICloudReadAttemptDeadlineError.timedOut }
+
+        return try await withThrowingTaskGroup(of: Outcome<Value>.self) { group in
+            group.addTask {
+                try await .completed(operation())
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(timeout))
+                return .timedOut
+            }
+
+            defer { group.cancelAll() }
+
+            guard let outcome = try await group.next() else {
+                throw ICloudReadAttemptDeadlineError.timedOut
+            }
+
+            switch outcome {
+            case let .completed(value):
+                try Task.checkCancellation()
+                return value
+            case .timedOut:
+                throw ICloudReadAttemptDeadlineError.timedOut
+            }
+        }
+    }
+}
+
 final class ICloudDriveHelper: @unchecked Sendable {
     static let shared = ICloudDriveHelper()
 
@@ -17,11 +70,12 @@ final class ICloudDriveHelper: @unchecked Sendable {
     let metadataIndexProvider: @MainActor @Sendable () -> ICloudMetadataIndex
     let defaultTimeout: TimeInterval
     let metadataListingTimeout: TimeInterval
+    let readAttemptTimeout: TimeInterval
     private let pollInterval: TimeInterval = 0.1
     let metadataSettleInterval: TimeInterval = 0.5
     private let progressLogInterval: TimeInterval = 1
-    private let coordinatedReadQueue = DispatchQueue(
-        label: "cove.ICloudDriveHelper.coordinatedRead",
+    private let fileReadQueue = DispatchQueue(
+        label: "cove.ICloudDriveHelper.fileRead",
         qos: .userInitiated,
         attributes: .concurrent
     )
@@ -37,12 +91,14 @@ final class ICloudDriveHelper: @unchecked Sendable {
             ICloudMetadataIndex.shared
         },
         defaultTimeout: TimeInterval = 60,
-        metadataListingTimeout: TimeInterval = 5
+        metadataListingTimeout: TimeInterval = 5,
+        readAttemptTimeout: TimeInterval = 5
     ) {
         self.containerURLProvider = containerURLProvider
         self.metadataIndexProvider = metadataIndexProvider
         self.defaultTimeout = defaultTimeout
         self.metadataListingTimeout = metadataListingTimeout
+        self.readAttemptTimeout = readAttemptTimeout
     }
 
     struct ResolvedMetadataItem {
@@ -93,7 +149,6 @@ final class ICloudDriveHelper: @unchecked Sendable {
             return [
                 .notConnectedToInternet,
                 .networkConnectionLost,
-                .timedOut,
                 .cannotFindHost,
                 .cannotConnectToHost,
                 .dnsLookupFailed,
@@ -107,7 +162,6 @@ final class ICloudDriveHelper: @unchecked Sendable {
             return [
                 NSURLErrorNotConnectedToInternet,
                 NSURLErrorNetworkConnectionLost,
-                NSURLErrorTimedOut,
                 NSURLErrorCannotFindHost,
                 NSURLErrorCannotConnectToHost,
                 NSURLErrorDNSLookupFailed,
@@ -209,16 +263,16 @@ final class ICloudDriveHelper: @unchecked Sendable {
         return try appendBackupLocation(location, to: namespaceDirectory, createParentDirectories: false)
     }
 
-    func existingBackupFileReadURL(
+    func existingBackupFileReadTarget(
         namespace: String,
         recordId: String,
         locations: [RemoteBackupLocation],
         lookupMode: ICloudBackupLookupMode = .waitForSync
-    ) async throws -> URL {
+    ) async throws -> ICloudBackupReadTarget {
         let urls = try backupCandidateURLs(namespace: namespace, locations: locations)
 
         if let localURL = urls.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
-            return localURL
+            return .local(localURL)
         }
 
         guard !urls.isEmpty else { throw CloudStorageError.NotFound(recordId) }
@@ -230,12 +284,15 @@ final class ICloudDriveHelper: @unchecked Sendable {
                 timeout: defaultTimeout,
                 operation: "find backup \(recordId)"
             )
-            return match.preferred.url
+            return .provider(
+                match.preferred.url,
+                metadataPath: match.preferred.resolvedPath
+            )
         case .currentSnapshot:
             guard let match = try await metadataItemsIfPresent(matching: urls).first else {
                 throw CloudStorageError.NotFound(recordId)
             }
-            return match.url
+            return .provider(match.url, metadataPath: match.metadataPath)
         }
     }
 
@@ -413,11 +470,13 @@ extension ICloudDriveHelper {
         }
     }
 
-    func coordinatedRead(from url: URL) throws -> Data {
+    private static func coordinatedRead(
+        from url: URL,
+        coordinator: NSFileCoordinator
+    ) throws -> Data {
         var coordinatorError: NSError?
         var readResult: Result<Data, Error>?
 
-        let coordinator = NSFileCoordinator()
         coordinator.coordinate(readingItemAt: url, options: [], error: &coordinatorError) {
             newURL in
             do {
@@ -442,46 +501,122 @@ extension ICloudDriveHelper {
         }
     }
 
-    private func coordinatedReadAsync(from url: URL) async throws -> Data {
-        try await CancellableDispatchOperation.run(on: coordinatedReadQueue) {
-            try self.coordinatedRead(from: url)
+    func coordinatedRead(from url: URL) throws -> Data {
+        try Self.coordinatedRead(from: url, coordinator: NSFileCoordinator())
+    }
+
+    private final class CoordinatedReadOperation: @unchecked Sendable {
+        private let url: URL
+        private let lock = NSLock()
+        private var coordinator: NSFileCoordinator?
+        private var isCancelled = false
+
+        init(url: URL) {
+            self.url = url
+        }
+
+        func run() throws -> Data {
+            let coordinator = NSFileCoordinator()
+            let shouldCancel = lock.withLock {
+                self.coordinator = coordinator
+                return isCancelled
+            }
+
+            if shouldCancel {
+                coordinator.cancel()
+            }
+
+            defer {
+                lock.withLock {
+                    self.coordinator = nil
+                }
+            }
+
+            return try ICloudDriveHelper.coordinatedRead(
+                from: url,
+                coordinator: coordinator
+            )
+        }
+
+        func cancel() {
+            let activeCoordinator = lock.withLock {
+                isCancelled = true
+                return self.coordinator
+            }
+            activeCoordinator?.cancel()
         }
     }
 
-    /// Downloads a file from iCloud via coordinated read
-    ///
-    /// Tries startDownloadingUbiquitousItem as a hint, then uses NSFileCoordinator
-    /// which forces the download through a different (more reliable) path
-    func downloadFile(url: URL, recordId: String) async throws -> Data {
-        try await downloadData(url: url, recordId: recordId)
+    private func coordinatedReadAsync(from url: URL) async throws -> Data {
+        let operation = CoordinatedReadOperation(url: url)
+
+        return try await withTaskCancellationHandler {
+            try await CancellableDispatchOperation.run(on: fileReadQueue) {
+                try operation.run()
+            }
+        } onCancel: {
+            operation.cancel()
+        }
+    }
+
+    private func directReadAsync(from url: URL) async throws -> Data {
+        try await CancellableDispatchOperation.run(on: fileReadQueue) {
+            try Data(contentsOf: url)
+        }
+    }
+
+    /// Reads a local backup directly or materializes a provider item with bounded coordination
+    func downloadFile(target: ICloudBackupReadTarget, recordId: String) async throws -> Data {
+        try await downloadData(target: target, recordId: recordId)
     }
 
     // MARK: - Download
 
-    private func downloadData(url: URL, recordId: String) async throws -> Data {
-        let filename = url.lastPathComponent
+    private func downloadData(
+        target: ICloudBackupReadTarget,
+        recordId: String
+    ) async throws -> Data {
+        let targetURL = target.url
+        let filename = targetURL.lastPathComponent
+        let deadline = Date().addingTimeInterval(defaultTimeout)
+        let resolvedItem: ResolvedMetadataItem
 
-        if FileManager.default.fileExists(atPath: url.path), case .current = downloadState(for: url) {
-            Log.info("downloadFile: \(filename) already current on local URL")
-            return try await coordinatedReadAsync(from: url)
+        switch target {
+        case let .local(url):
+            Log.info("downloadFile: reading locally visible file directly for \(filename)")
+
+            do {
+                return try await boundedDirectRead(
+                    from: url,
+                    filename: filename,
+                    deadline: deadline
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                Log.warn(
+                    "downloadFile: direct local read failed for \(filename): \(error.localizedDescription)"
+                )
+                resolvedItem = try await resolveDownloadItem(
+                    url: url,
+                    filename: filename,
+                    deadline: deadline
+                )
+            }
+        case let .provider(url, metadataPath):
+            resolvedItem = ResolvedMetadataItem(url: url, metadataPath: metadataPath)
         }
 
-        let deadline = Date().addingTimeInterval(defaultTimeout)
-        let resolvedItem = try await resolveDownloadItem(
-            url: url,
-            filename: filename,
-            deadline: deadline
-        )
-
-        logResolvedDownloadItem(resolvedItem, localURL: url, filename: filename)
+        logResolvedDownloadItem(resolvedItem, targetURL: targetURL, filename: filename)
         try triggerDownload(url: resolvedItem.url, recordId: recordId, filename: filename)
 
         var readState = CoordinatedReadState()
-        switch await attemptCoordinatedRead(
+        switch try await attemptCoordinatedRead(
             from: resolvedItem.url,
             filename: filename,
             reason: "initial",
-            attempt: readState.attempt
+            attempt: readState.attempt,
+            deadline: deadline
         ) {
         case let .success(data):
             return data
@@ -520,32 +655,96 @@ extension ICloudDriveHelper {
 
     private func logResolvedDownloadItem(
         _ resolvedItem: ResolvedMetadataItem,
-        localURL: URL,
+        targetURL: URL,
         filename: String
     ) {
-        if resolvedItem.url != localURL {
+        if resolvedItem.url != targetURL {
             Log.info(
-                "downloadFile: using metadata URL for \(filename) local=\(localURL.path) metadata=\(resolvedItem.url.path)"
+                "downloadFile: using metadata URL for \(filename) target=\(targetURL.path) metadata=\(resolvedItem.url.path)"
             )
         } else {
-            Log.info("downloadFile: \(filename) reading via resolved local URL")
+            Log.info("downloadFile: \(filename) reading via provider URL")
         }
+    }
+
+    private func boundedDirectRead(
+        from url: URL,
+        filename: String,
+        deadline: Date
+    ) async throws -> Data {
+        let timeout = try readAttemptDuration(filename: filename, deadline: deadline)
+
+        do {
+            return try await ICloudReadAttemptDeadline.run(timeout: timeout) {
+                try await self.directReadAsync(from: url)
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch ICloudReadAttemptDeadlineError.timedOut {
+            throw CloudStorageError.SyncPending(
+                "iCloud is still downloading \(filename)"
+            )
+        } catch let error as CloudStorageError {
+            throw error
+        } catch {
+            throw Self.downloadError("direct read failed for \(filename)", error: error)
+        }
+    }
+
+    private func boundedCoordinatedRead(
+        from url: URL,
+        filename: String,
+        deadline: Date
+    ) async throws -> Data {
+        let timeout = try readAttemptDuration(filename: filename, deadline: deadline)
+
+        do {
+            return try await ICloudReadAttemptDeadline.run(timeout: timeout) {
+                try await self.coordinatedReadAsync(from: url)
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch ICloudReadAttemptDeadlineError.timedOut {
+            throw CloudStorageError.SyncPending(
+                "iCloud is still downloading \(filename)"
+            )
+        } catch let error as CloudStorageError {
+            throw error
+        } catch {
+            throw Self.downloadError("coordinated read failed for \(filename)", error: error)
+        }
+    }
+
+    private func readAttemptDuration(filename: String, deadline: Date) throws -> TimeInterval {
+        let remaining = deadline.timeIntervalSinceNow
+        guard remaining > 0 else {
+            throw CloudStorageError.SyncPending("iCloud is still downloading \(filename)")
+        }
+
+        return min(readAttemptTimeout, remaining)
     }
 
     private func attemptCoordinatedRead(
         from url: URL,
         filename: String,
         reason: String,
-        attempt: Int
-    ) async -> Result<Data, Error> {
+        attempt: Int,
+        deadline: Date
+    ) async throws -> Result<Data, Error> {
         Log.info(
             "downloadFile: trying coordinated read attempt=\(attempt) reason=\(reason) file=\(filename)"
         )
 
         do {
-            let data = try await coordinatedReadAsync(from: url)
+            let data = try await boundedCoordinatedRead(
+                from: url,
+                filename: filename,
+                deadline: deadline
+            )
             Log.info("downloadFile: coordinated read succeeded for \(filename)")
             return .success(data)
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
             Log.warn(
                 "downloadFile: coordinated read failed attempt=\(attempt): \(error.localizedDescription)"
@@ -567,6 +766,7 @@ extension ICloudDriveHelper {
         // not-downloaded even though they can be materialized
         let retriggerInterval: TimeInterval = 5
         var lastRetrigger = Date()
+        var lastDirectRead = Date.distantPast
         var lastProgressLog = Date.distantPast
         var readState = initialReadState
 
@@ -579,11 +779,12 @@ extension ICloudDriveHelper {
                 lastRetrigger = now
                 readState.attempt += 1
 
-                switch await attemptCoordinatedRead(
+                switch try await attemptCoordinatedRead(
                     from: resolvedItem.url,
                     filename: filename,
                     reason: "retry",
-                    attempt: readState.attempt
+                    attempt: readState.attempt,
+                    deadline: deadline
                 ) {
                 case let .success(data):
                     return data
@@ -599,9 +800,26 @@ extension ICloudDriveHelper {
                 lastProgressLog = now
             }
 
-            if case .current = state {
-                Log.info("downloadFile: poll path won for \(filename)")
-                return try await coordinatedReadAsync(from: resolvedItem.url)
+            if case .current = state,
+               now.timeIntervalSince(lastDirectRead) >= retriggerInterval
+            {
+                lastDirectRead = now
+                Log.info("downloadFile: provider reports current for \(filename)")
+
+                do {
+                    return try await boundedDirectRead(
+                        from: resolvedItem.url,
+                        filename: filename,
+                        deadline: deadline
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    readState.lastError = error
+                    Log.warn(
+                        "downloadFile: direct provider read failed for \(filename): \(error.localizedDescription)"
+                    )
+                }
             }
 
             if case let .failed(error) = state {
@@ -611,15 +829,10 @@ extension ICloudDriveHelper {
             try await Task.sleep(for: .seconds(pollInterval))
         }
 
-        Log.info("downloadFile: polling timed out, trying final coordinated read for \(filename)")
-        do {
-            return try await coordinatedReadAsync(from: resolvedItem.url)
-        } catch {
-            let diagnosticError = readState.lastError?.localizedDescription ?? "none"
-            throw CloudStorageError.Offline(
-                "iCloud download timed out after \(defaultTimeout)s (last coordinated read error: \(diagnosticError), final coordinated read failed: \(error.localizedDescription))"
-            )
-        }
+        let diagnosticError = readState.lastError?.localizedDescription ?? "none"
+        throw CloudStorageError.SyncPending(
+            "iCloud is still downloading the requested file (last read error: \(diagnosticError))"
+        )
     }
 
     private struct CoordinatedReadState {

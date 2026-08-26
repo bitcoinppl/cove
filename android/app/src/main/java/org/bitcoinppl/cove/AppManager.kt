@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
@@ -115,6 +116,8 @@ class AppManager private constructor() : FfiReconcile {
 
     var alertState by mutableStateOf<TaggedItem<AppAlertState>?>(null)
     var sheetState by mutableStateOf<TaggedItem<AppSheetState>?>(null)
+    internal var corruptedWalletDeletionRetry by mutableStateOf<CorruptedWalletDeletionRetry?>(null)
+        private set
 
     // startup state
     var needsOnboarding by mutableStateOf(rust.needsOnboarding())
@@ -203,16 +206,54 @@ class AppManager private constructor() : FfiReconcile {
 
     fun walletMetadata(id: WalletId): WalletMetadata? = managerCache.walletMetadata(id, wallets)
 
-    /**
-     * get or create wallet manager for the given wallet id
-     * caches the instance so we don't recreate unnecessarily
-     */
-    fun getWalletManager(id: WalletId): WalletManager = managerCache.getWalletManager(id)
+    internal fun convertWalletToCold(walletId: WalletId) {
+        mainScope.launch {
+            try {
+                getWalletManagerLoaded(walletId).setWalletType(WalletType.COLD)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to set wallet type to cold", e)
+                alertState =
+                    TaggedItem(
+                        AppAlertState.General(
+                            title = "Error",
+                            message = "Cove could not convert this wallet to a hardware wallet. Try again.",
+                        ),
+                    )
+            }
+        }
+    }
 
     suspend fun getWalletManagerLoaded(
         id: WalletId,
         isCurrent: () -> Boolean = { true },
     ): WalletManager = managerCache.getWalletManagerLoaded(id, isCurrent)
+
+    internal fun deleteWalletInOwnerScope(manager: WalletManager): Deferred<Result<Unit>> =
+        mainScope.async {
+            try {
+                Result.success(manager.deleteWallet())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    internal fun retryDeleteWalletInOwnerScope(
+        manager: WalletManager,
+        attemptId: ShutdownAttemptId,
+    ): Deferred<Result<Unit>> =
+        mainScope.async {
+            try {
+                Result.success(manager.retryDeleteWallet(attemptId))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
 
     /**
      * get or create send flow manager for the given wallet manager
@@ -331,6 +372,7 @@ class AppManager private constructor() : FfiReconcile {
         // close managers before clearing them
         clearWalletManager()
         clearKeyTeleportManager()
+        corruptedWalletDeletionRetry = null
 
         database = Database()
         needsOnboarding =
@@ -697,9 +739,81 @@ class AppManager private constructor() : FfiReconcile {
         }
     }
 
-    fun deleteCorruptedWallet(id: WalletId) {
+    internal fun deleteCorruptedWallet(id: WalletId, databaseError: String) {
+        performCorruptedWalletDeletion(
+            CorruptedWalletDeletionCall.Initial(id, databaseError),
+        )
+    }
+
+    internal fun retryCorruptedWalletDeletion(retry: CorruptedWalletDeletionRetry) {
+        performCorruptedWalletDeletion(CorruptedWalletDeletionCall.Retry(retry))
+    }
+
+    internal fun cancelCorruptedWalletDeletion(retry: CorruptedWalletDeletionRetry) {
         withRust {
-            deleteCorruptedWallet(id)
+            cancelWalletDeletionAttempt(retry.attemptId)
+        }
+        if (corruptedWalletDeletionRetry == retry) {
+            corruptedWalletDeletionRetry = null
+        }
+
+        alertState = null
+        trySelectLatestOrNewWallet()
+    }
+
+    private fun performCorruptedWalletDeletion(call: CorruptedWalletDeletionCall) {
+        mainScope.launch {
+            try {
+                withRustSuspend {
+                    when (call) {
+                        is CorruptedWalletDeletionCall.Initial ->
+                            deleteCorruptedWallet(call.walletId)
+
+                        is CorruptedWalletDeletionCall.Retry ->
+                            retryDeleteCorruptedWallet(
+                                call.walletId,
+                                call.attemptId,
+                            )
+                    }
+                }
+
+                corruptedWalletDeletionRetry = null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val lifecycle = (e as? AppException.WalletLifecycle)?.v1
+                if (lifecycle is WalletLifecycleFailure.ShutdownBlocked) {
+                    corruptedWalletDeletionRetry =
+                        CorruptedWalletDeletionRetry(
+                            walletId = call.walletId,
+                            databaseError = call.databaseError,
+                            attemptId = lifecycle.attemptId,
+                        )
+                    alertState =
+                        TaggedItem(
+                            AppAlertState.WalletDatabaseCorrupted(
+                                walletId = call.walletId,
+                                error = "Cove could not stop all wallet work. Retry or cancel the deletion.",
+                            ),
+                        )
+                } else {
+                    corruptedWalletDeletionRetry = null
+                    Log.e(tag, "Unable to delete corrupted wallet", e)
+                    alertState =
+                        TaggedItem(
+                            AppAlertState.General(
+                                title = "Unable to Delete Wallet",
+                                message = "Cove could not delete this wallet. Try again.",
+                            ),
+                        )
+                }
+            }
+        }
+    }
+
+    internal fun cancelWalletDeletionAttempt(attemptId: ShutdownAttemptId) {
+        withRust {
+            cancelWalletDeletionAttempt(attemptId)
         }
     }
 
@@ -711,6 +825,18 @@ class AppManager private constructor() : FfiReconcile {
     internal fun dangerousWipeAllData() {
         withRust {
             dangerousWipeAllData()
+        }
+    }
+
+    internal fun retryDangerousWipeAllData(attemptId: ShutdownAttemptId) {
+        withRust {
+            retryDangerousWipeAllData(attemptId)
+        }
+    }
+
+    internal fun cancelDangerousWipe(attemptId: ShutdownAttemptId) {
+        withRust {
+            cancelDangerousWipe(attemptId)
         }
     }
 
@@ -840,6 +966,30 @@ internal enum class KeyTeleportSendCompletion {
     OPEN_ROUTE,
     SHOW_FAILURE,
     IGNORE,
+}
+
+internal data class CorruptedWalletDeletionRetry(
+    val walletId: WalletId,
+    val databaseError: String,
+    val attemptId: ShutdownAttemptId,
+)
+
+private sealed interface CorruptedWalletDeletionCall {
+    val walletId: WalletId
+    val databaseError: String
+
+    data class Initial(
+        override val walletId: WalletId,
+        override val databaseError: String,
+    ) : CorruptedWalletDeletionCall
+
+    data class Retry(
+        val retry: CorruptedWalletDeletionRetry,
+    ) : CorruptedWalletDeletionCall {
+        override val walletId = retry.walletId
+        override val databaseError = retry.databaseError
+        val attemptId = retry.attemptId
+    }
 }
 
 internal fun resolveKeyTeleportSendCompletion(

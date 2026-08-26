@@ -5,9 +5,10 @@ use crate::database::cloud_backup::DriveAccountSwitchId;
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupDisableOutcome, CloudBackupEnableContext, CloudBackupEnableState,
     CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupProgress,
-    CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupVerificationMetadata,
-    CloudBackupVerificationPresentation, CloudOnlyOperation, CloudOnlyState, OtherBackupsOperation,
-    PendingUploadVerificationState, RecoveryState, SyncState, VerificationState,
+    CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupUndecryptableWalletDeletionState,
+    CloudBackupVerificationMetadata, CloudBackupVerificationPresentation, CloudOnlyOperation,
+    CloudOnlyState, OtherBackupsOperation, PendingUploadVerificationState, RecoveryState,
+    SyncState, VerificationState,
 };
 
 use super::{CloudBackupLifecycle, CloudBackupPendingEnableRecovery, CloudBackupRestoreFlow};
@@ -36,6 +37,7 @@ pub(crate) enum CloudBackupExclusiveOperation {
     RestoreCloudWallet,
     RestoreAllCloudWallets,
     DeleteCloudWallet,
+    DeleteUndecryptableWalletBackups,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -147,10 +149,11 @@ pub(crate) enum CloudBackupStateReducerEvent {
     SyncStateResolved(SyncState),
     RecoveryStateResolved(RecoveryState),
     DisableStateResolved(CloudBackupDisableOutcome),
+    UndecryptableWalletDeletionStateResolved(CloudBackupUndecryptableWalletDeletionState),
     DetailRefreshStarted,
     DetailRefreshProvisional(CloudBackupDetail),
     DetailRefreshApplied {
-        detail: Option<CloudBackupDetail>,
+        detail: Option<(CloudBackupDetail, super::CloudBackupInventoryAuthority)>,
         reset_cloud_only: bool,
     },
     DetailRefreshFailed {
@@ -160,6 +163,7 @@ pub(crate) enum CloudBackupStateReducerEvent {
     CloudOnlyStateResolved(CloudOnlyState),
     CloudOnlyOperationResolved(CloudOnlyOperation),
     OtherBackupsOperationResolved(OtherBackupsOperation),
+    OtherBackupsStateResolved(crate::manager::cloud_backup_manager::CloudBackupOtherBackupsState),
 }
 
 /// Intentionally uninhabited marker because reducer events are currently total

@@ -1151,15 +1151,21 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_create_transport_error_from_code(
     ): Short
-    external fun uniffi_cove_checksum_func_is_valid_chain_code(
+    external fun uniffi_cove_checksum_func_tap_signer_chain_code_from_hex(
+    ): Short
+    external fun uniffi_cove_checksum_func_tap_signer_chain_code_validation_message(
     ): Short
     external fun uniffi_cove_checksum_func_create_tap_signer_reader(
+    ): Short
+    external fun uniffi_cove_checksum_func_resolve_tap_signer_command(
     ): Short
     external fun uniffi_cove_checksum_func_tapsignerresponsebackupresponse(
     ): Short
     external fun uniffi_cove_checksum_func_tapsignerresponsechangeresponse(
     ): Short
     external fun uniffi_cove_checksum_func_tapsignerresponsederiveresponse(
+    ): Short
+    external fun uniffi_cove_checksum_func_tapsignerresponseretryresponse(
     ): Short
     external fun uniffi_cove_checksum_func_tapsignerresponsesetupresponse(
     ): Short
@@ -1168,6 +1174,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_func_tapsignersetupcompletenew(
     ): Short
     external fun uniffi_cove_checksum_func_tapsignersetupretrycontinuecmd(
+    ): Short
+    external fun uniffi_cove_checksum_func_tap_signer_cvc_validation_message(
     ): Short
     external fun uniffi_cove_checksum_func_transaction_preview_confirmed_new(
     ): Short
@@ -1212,6 +1220,10 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_method_ffiapp_can_go_back(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_can_key_teleport_send(
+    ): Short
+    external fun uniffi_cove_checksum_method_ffiapp_cancel_dangerous_wipe(
+    ): Short
+    external fun uniffi_cove_checksum_method_ffiapp_cancel_wallet_deletion_attempt(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data(
     ): Short
@@ -1263,6 +1275,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to(
     ): Short
+    external fun uniffi_cove_checksum_method_ffiapp_retry_dangerous_wipe_all_data(
+    ): Short
+    external fun uniffi_cove_checksum_method_ffiapp_retry_delete_corrupted_wallet(
+    ): Short
     external fun uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup(
     ): Short
     external fun uniffi_cove_checksum_method_ffiapp_state(
@@ -1291,15 +1307,27 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_bip39wordspecificautocomplete_next_field_number(
     ): Short
+    external fun uniffi_cove_checksum_method_backupimportpreparation_markerless_conflict_wallet_ids(
+    ): Short
+    external fun uniffi_cove_checksum_method_backupimportpreparation_payload_digest(
+    ): Short
+    external fun uniffi_cove_checksum_method_backupimportpreparation_requires_import_approval(
+    ): Short
+    external fun uniffi_cove_checksum_method_backupimportpreparation_wallet_ids(
+    ): Short
+    external fun uniffi_cove_checksum_method_backupmanager_approveimport(
+    ): Short
     external fun uniffi_cove_checksum_method_backupmanager_backup_account_name(
     ): Short
     external fun uniffi_cove_checksum_method_backupmanager_export(
     ): Short
     external fun uniffi_cove_checksum_method_backupmanager_generate_password(
     ): Short
-    external fun uniffi_cove_checksum_method_backupmanager_importbackup(
+    external fun uniffi_cove_checksum_method_backupmanager_importprepared(
     ): Short
     external fun uniffi_cove_checksum_method_backupmanager_is_password_valid(
+    ): Short
+    external fun uniffi_cove_checksum_method_backupmanager_prepareimport(
     ): Short
     external fun uniffi_cove_checksum_method_backupmanager_validate_format(
     ): Short
@@ -1743,15 +1771,11 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_rescan_wallet_with_gap_limit(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_retry_delete_wallet(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction(
     ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata(
-    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_shutdown(
-    ): Short
-    external fun uniffi_cove_checksum_method_rustwalletmanager_shutdown_actors(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs(
     ): Short
@@ -1895,15 +1919,21 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_headericonpresenter_ring_color(
     ): Short
-    external fun uniffi_cove_checksum_method_tapsignerreader_continue_setup(
+    external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_can_retry(
     ): Short
-    external fun uniffi_cove_checksum_method_tapsignerreader_last_response(
+    external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_error(
+    ): Short
+    external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_id(
+    ): Short
+    external fun uniffi_cove_checksum_method_tapsigneroperationcontinuation_message(
     ): Short
     external fun uniffi_cove_checksum_method_tapsignerreader_run(
     ): Short
-    external fun uniffi_cove_checksum_method_tapsignerreader_setup(
+    external fun uniffi_cove_checksum_method_tapsignersetupcontinuation_error(
     ): Short
-    external fun uniffi_cove_checksum_method_tapsignerreader_sign(
+    external fun uniffi_cove_checksum_method_tapsignersetupcontinuation_id(
+    ): Short
+    external fun uniffi_cove_checksum_method_tapsignersetupcontinuation_message(
     ): Short
     external fun uniffi_cove_checksum_method_confirmedtransaction_block_height(
     ): Short
@@ -2073,8 +2103,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_constructor_addressargs_new(
     ): Short
-    external fun uniffi_cove_checksum_constructor_labelmanager_new(
-    ): Short
     external fun uniffi_cove_checksum_constructor_rustauthmanager_new(
     ): Short
     external fun uniffi_cove_checksum_constructor_rustcloudbackupmanager_new(
@@ -2122,6 +2150,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_cove_checksum_constructor_headericonpresenter_new(
     ): Short
     external fun uniffi_cove_checksum_constructor_setupcmd_try_new(
+    ): Short
+    external fun uniffi_cove_checksum_constructor_tapsignercvc_try_new(
     ): Short
     external fun uniffi_cove_checksum_constructor_bitcointransaction_new(
     ): Short
@@ -2247,12 +2277,16 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_ffiapp_can_key_teleport_send(`ptr`: Long,`walletId`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_ffiapp_cancel_dangerous_wipe(`ptr`: Long,`attemptId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_ffiapp_cancel_wallet_deletion_attempt(`ptr`: Long,`attemptId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
     external fun uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_ffiapp_debug_or_release(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_ffiapp_delete_corrupted_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
+    external fun uniffi_cove_fn_method_ffiapp_delete_corrupted_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,
+    ): Long
     external fun uniffi_cove_fn_method_ffiapp_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_ffiapp_email_mailto(`ptr`: Long,`ios`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2297,6 +2331,10 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_ffiapp_reset_nested_routes_to(`ptr`: Long,`defaultRoute`: RustBuffer.ByValue,`nestedRoutes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_ffiapp_retry_dangerous_wipe_all_data(`ptr`: Long,`attemptId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_ffiapp_retry_delete_corrupted_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`attemptId`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(`ptr`: Long,`tapSigner`: Long,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_ffiapp_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -2349,11 +2387,29 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_bip39wordspecificautocomplete_next_field_number(`ptr`: Long,`currentFieldNumber`: Byte,`enteredWords`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_clone_backupimportapproval(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_free_backupimportapproval(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_clone_backupimportpreparation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_free_backupimportpreparation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_backupimportpreparation_markerless_conflict_wallet_ids(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_backupimportpreparation_payload_digest(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_backupimportpreparation_requires_import_approval(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_backupimportpreparation_wallet_ids(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_backupmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_free_backupmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_constructor_backupmanager_new(uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_method_backupmanager_approveimport(`ptr`: Long,`preparation`: Long,
     ): Long
     external fun uniffi_cove_fn_method_backupmanager_backup_account_name(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -2361,10 +2417,12 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_backupmanager_generate_password(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_backupmanager_importbackup(`ptr`: Long,`data`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,
+    external fun uniffi_cove_fn_method_backupmanager_importprepared(`ptr`: Long,`preparation`: Long,`approval`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_backupmanager_is_password_valid(`ptr`: Long,`password`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_backupmanager_prepareimport(`ptr`: Long,`data`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_method_backupmanager_validate_format(`ptr`: Long,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_backupmanager_verifybackup(`ptr`: Long,`data`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,
@@ -2621,8 +2679,6 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_free_labelmanager(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_constructor_labelmanager_new(`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): Long
     external fun uniffi_cove_fn_method_labelmanager_delete_labels_for_txn(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_labelmanager_export(`ptr`: Long,
@@ -2939,8 +2995,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_delete_unsigned_transaction(`ptr`: Long,`txId`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_method_rustwalletmanager_delete_wallet(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
+    external fun uniffi_cove_fn_method_rustwalletmanager_delete_wallet(`ptr`: Long,
+    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_deletion_warning_message(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2979,8 +3035,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
+    external fun uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(`ptr`: Long,
+    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_master_fingerprint(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_new_coin_control_manager(`ptr`: Long,
@@ -2993,16 +3049,12 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_rustwalletmanager_rescan_wallet_with_gap_limit(`ptr`: Long,`gapLimit`: Int,
     ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_retry_delete_wallet(`ptr`: Long,`attemptId`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_save_unsigned_transaction(`ptr`: Long,`details`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_method_rustwalletmanager_set_wallet_metadata(`ptr`: Long,`metadata`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
-    external fun uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(`ptr`: Long,`walletType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
-    external fun uniffi_cove_fn_method_rustwalletmanager_shutdown(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
-    external fun uniffi_cove_fn_method_rustwalletmanager_shutdown_actors(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
+    external fun uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(`ptr`: Long,`walletType`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_split_transaction_outputs(`ptr`: Long,`outputs`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_start_wallet_scan(`ptr`: Long,
@@ -3013,8 +3065,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_unlocked_spendable_balance(`ptr`: Long,
     ): Long
-    external fun uniffi_cove_fn_method_rustwalletmanager_validate_metadata(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
+    external fun uniffi_cove_fn_method_rustwalletmanager_validate_metadata(`ptr`: Long,
+    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_wallet_metadata(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_word_validator(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3207,22 +3259,42 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_free_setupcmd(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_constructor_setupcmd_try_new(`factoryPin`: RustBuffer.ByValue,`newPin`: RustBuffer.ByValue,`chainCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_constructor_setupcmd_try_new(`factoryCvc`: Long,`newCvc`: Long,`chainCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_cove_fn_clone_tapsignercvc(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_free_tapsignercvc(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_constructor_tapsignercvc_try_new(`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_clone_tapsigneroperationcontinuation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
+    external fun uniffi_cove_fn_free_tapsigneroperationcontinuation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_can_retry(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_error(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_tapsigneroperationcontinuation_message(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_tapsignerreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_free_tapsignerreader(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_method_tapsignerreader_continue_setup(`ptr`: Long,`response`: RustBuffer.ByValue,
-    ): Long
-    external fun uniffi_cove_fn_method_tapsignerreader_last_response(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_tapsignerreader_run(`ptr`: Long,
     ): Long
-    external fun uniffi_cove_fn_method_tapsignerreader_setup(`ptr`: Long,`cmd`: Long,
+    external fun uniffi_cove_fn_clone_tapsignersetupcontinuation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_fn_method_tapsignerreader_sign(`ptr`: Long,`psbt`: Long,`pin`: RustBuffer.ByValue,
-    ): Long
+    external fun uniffi_cove_fn_free_tapsignersetupcontinuation(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_tapsignersetupcontinuation_error(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_tapsignersetupcontinuation_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_tapsignersetupcontinuation_message(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_confirmedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_free_confirmedtransaction(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3633,6 +3705,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_transporterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_tapsignercvcerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_tapsignerreadererror_isautherror(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_tapsignerreadererror_isnobackuperror(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -3664,6 +3738,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_wallettype_display_name(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_wallettype_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_walletlifecyclefailure_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_descriptorerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -3755,15 +3831,21 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_create_transport_error_from_code(`code`: Short,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_func_is_valid_chain_code(`chainCode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): Byte
+    external fun uniffi_cove_fn_func_tap_signer_chain_code_from_hex(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_tap_signer_chain_code_validation_message(`hex`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_create_tap_signer_reader(`transport`: Long,`cmd`: RustBuffer.ByValue,
     ): Long
+    external fun uniffi_cove_fn_func_resolve_tap_signer_command(`cmd`: RustBuffer.ByValue,`pending`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_tapsignerresponsebackupresponse(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_tapsignerresponsechangeresponse(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_func_tapsignerresponsederiveresponse(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_tapsignerresponseretryresponse(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_tapsignerresponsesetupresponse(`response`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -3772,6 +3854,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_func_tapsignersetupcompletenew(`preview`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_tapsignersetupretrycontinuecmd(`preview`: Byte,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_tap_signer_cvc_validation_message(`value`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_transaction_preview_confirmed_new(uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4041,13 +4125,19 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_signed_transaction_or_psbt_try_parse() != 1615.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_create_transport_error_from_code() != 25443.toShort()) {
+    if (lib.uniffi_cove_checksum_func_create_transport_error_from_code() != 20311.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_is_valid_chain_code() != 9081.toShort()) {
+    if (lib.uniffi_cove_checksum_func_tap_signer_chain_code_from_hex() != 5668.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_tap_signer_chain_code_validation_message() != 61474.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_create_tap_signer_reader() != 3262.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_resolve_tap_signer_command() != 2385.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_tapsignerresponsebackupresponse() != 35822.toShort()) {
@@ -4057,6 +4147,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_tapsignerresponsederiveresponse() != 2522.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_tapsignerresponseretryresponse() != 43345.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_tapsignerresponsesetupresponse() != 8378.toShort()) {
@@ -4069,6 +4162,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_tapsignersetupretrycontinuecmd() != 41835.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_tap_signer_cvc_validation_message() != 60434.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_transaction_preview_confirmed_new() != 46336.toShort()) {
@@ -4137,13 +4233,19 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_can_key_teleport_send() != 8307.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 40843.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_cancel_dangerous_wipe() != 61153.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_ffiapp_cancel_wallet_deletion_attempt() != 29231.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 1643.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_debug_or_release() != 2224.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_delete_corrupted_wallet() != 9591.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_delete_corrupted_wallet() != 8180.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_dispatch() != 26517.toShort()) {
@@ -4212,6 +4314,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to() != 57261.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_ffiapp_retry_dangerous_wipe_all_data() != 38709.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_ffiapp_retry_delete_corrupted_wallet() != 50275.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_ffiapp_save_tap_signer_backup() != 11203.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4254,6 +4362,21 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_bip39wordspecificautocomplete_next_field_number() != 32810.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_backupimportpreparation_markerless_conflict_wallet_ids() != 58519.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_backupimportpreparation_payload_digest() != 15148.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_backupimportpreparation_requires_import_approval() != 37163.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_backupimportpreparation_wallet_ids() != 2696.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_backupmanager_approveimport() != 30902.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_backupmanager_backup_account_name() != 2715.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4263,10 +4386,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_backupmanager_generate_password() != 46391.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_backupmanager_importbackup() != 60835.toShort()) {
+    if (lib.uniffi_cove_checksum_method_backupmanager_importprepared() != 53980.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_backupmanager_is_password_valid() != 49165.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_backupmanager_prepareimport() != 662.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_backupmanager_validate_format() != 1869.toShort()) {
@@ -4287,7 +4413,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_converter_remove_fiat_suffix() != 8821.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_database_dangerous_reset_all_data() != 25988.toShort()) {
+    if (lib.uniffi_cove_checksum_method_database_dangerous_reset_all_data() != 1221.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_database_diagnostics_reports() != 32801.toShort()) {
@@ -4515,7 +4641,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_labelmanager_export_to_bbqr_with_density() != 3845.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_has_labels() != 29517.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_has_labels() != 46321.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_labelmanager_import() != 37462.toShort()) {
@@ -4527,7 +4653,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_labelmanager_insert_or_update_labels_for_txn() != 51703.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_labelmanager_transaction_label() != 3331.toShort()) {
+    if (lib.uniffi_cove_checksum_method_labelmanager_transaction_label() != 30685.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_auth_type() != 16523.toShort()) {
@@ -4668,7 +4794,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_lock_state_load_failed() != 30996.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_reload_labels() != 44692.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_reload_labels() != 25947.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_selected_utxos() != 30072.toShort()) {
@@ -4830,7 +4956,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_address_at() != 47845.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_balance() != 14970.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_balance() != 18356.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_balance_presentation() != 27753.toShort()) {
@@ -4851,13 +4977,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_delete_unsigned_transaction() != 8082.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_delete_wallet() != 58138.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_delete_wallet() != 46643.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_deletion_warning_message() != 57956.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_deletion_warning_message() != 56716.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 57298.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 12354.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_expose_xprv() != 36145.toShort()) {
@@ -4878,22 +5004,22 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_force_update_height() != 37409.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_force_wallet_scan() != 28212.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_force_wallet_scan() != 57797.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_get_fee_options() != 42115.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_get_transactions() != 28120.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_get_transactions() != 22277.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_get_unsigned_transactions() != 35895.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_has_recovery_words() != 23756.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_has_recovery_words() != 8236.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_has_xprv_secret() != 29721.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_has_xprv_secret() != 8066.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_state() != 46436.toShort()) {
@@ -4911,7 +5037,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_listen_for_updates() != 34012.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_mark_wallet_as_verified() != 27203.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_mark_wallet_as_verified() != 12117.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_master_fingerprint() != 64370.toShort()) {
@@ -4923,7 +5049,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_new_send_flow_manager() != 10979.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_non_default_account_number() != 54959.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_non_default_account_number() != 37520.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_required_deletion_confirmations() != 30427.toShort()) {
@@ -4932,19 +5058,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_rescan_wallet_with_gap_limit() != 7508.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_retry_delete_wallet() != 50851.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_save_unsigned_transaction() != 1404.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_metadata() != 8711.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 13112.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_shutdown() != 8138.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_shutdown_actors() != 16080.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_set_wallet_type() != 45834.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_split_transaction_outputs() != 4285.toShort()) {
@@ -4962,7 +5082,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_unlocked_spendable_balance() != 11834.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_validate_metadata() != 36684.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_validate_metadata() != 44621.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_wallet_metadata() != 23312.toShort()) {
@@ -5160,19 +5280,28 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_headericonpresenter_ring_color() != 13077.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapsignerreader_continue_setup() != 58562.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_can_retry() != 25356.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapsignerreader_last_response() != 10948.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_error() != 35579.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapsignerreader_run() != 41710.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_id() != 10770.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapsignerreader_setup() != 31009.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapsigneroperationcontinuation_message() != 38050.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapsignerreader_sign() != 27840.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapsignerreader_run() != 44034.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_tapsignersetupcontinuation_error() != 24487.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_tapsignersetupcontinuation_id() != 22895.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_tapsignersetupcontinuation_message() != 36823.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_confirmedtransaction_block_height() != 51200.toShort()) {
@@ -5427,9 +5556,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_addressargs_new() != 36827.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_labelmanager_new() != 55767.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_constructor_rustauthmanager_new() != 54478.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -5499,7 +5625,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_constructor_headericonpresenter_new() != 27668.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_constructor_setupcmd_try_new() != 36259.toShort()) {
+    if (lib.uniffi_cove_checksum_constructor_setupcmd_try_new() != 11780.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_constructor_tapsignercvc_try_new() != 35195.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_constructor_bitcointransaction_new() != 3054.toShort()) {
@@ -5610,13 +5739,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_walletmanagerreconciler_reconcile_many() != 25357.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapcardtransportprotocol_set_message() != 44727.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapcardtransportprotocol_set_message() != 54906.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapcardtransportprotocol_append_message() != 54292.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapcardtransportprotocol_append_message() != 55490.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu() != 62461.toShort()) {
+    if (lib.uniffi_cove_checksum_method_tapcardtransportprotocol_transmit_apdu() != 60729.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -7189,7 +7318,588 @@ public object FfiConverterTypeAutoComplete: FfiConverter<AutoComplete, Long> {
 //
 
 
+/**
+ * A one-use approval for the exact preflighted backup and artifact snapshots
+ */
+public interface BackupImportApprovalInterface {
+
+    companion object
+}
+
+/**
+ * A one-use approval for the exact preflighted backup and artifact snapshots
+ */
+open class BackupImportApproval: Disposable, AutoCloseable, BackupImportApprovalInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_backupimportapproval(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_backupimportapproval(handle, status)
+        }
+    }
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBackupImportApproval: FfiConverter<BackupImportApproval, Long> {
+    override fun lower(value: BackupImportApproval): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BackupImportApproval {
+        return BackupImportApproval(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BackupImportApproval {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BackupImportApproval) = 8UL
+
+    override fun write(value: BackupImportApproval, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * A decrypted and preflighted backup import that can be approved before it writes local state
+ */
+public interface BackupImportPreparationInterface {
+
+    /**
+     * Return wallet ids whose existing artifacts need explicit cleanup approval
+     */
+    fun `markerlessConflictWalletIds`(): List<WalletId>
+
+    /**
+     * Return the digest that binds an approval to this backup payload
+     */
+    fun `payloadDigest`(): kotlin.String
+
+    /**
+     * Return whether this import needs explicit cleanup approval
+     */
+    fun `requiresImportApproval`(): kotlin.Boolean
+
+    /**
+     * Return wallet ids found during preflight
+     */
+    fun `walletIds`(): List<WalletId>
+
+    companion object
+}
+
+/**
+ * A decrypted and preflighted backup import that can be approved before it writes local state
+ */
+open class BackupImportPreparation: Disposable, AutoCloseable, BackupImportPreparationInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_backupimportpreparation(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_backupimportpreparation(handle, status)
+        }
+    }
+
+
+    /**
+     * Return wallet ids whose existing artifacts need explicit cleanup approval
+     */override fun `markerlessConflictWalletIds`(): List<WalletId> {
+            return FfiConverterSequenceTypeWalletId.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_backupimportpreparation_markerless_conflict_wallet_ids(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Return the digest that binds an approval to this backup payload
+     */override fun `payloadDigest`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_backupimportpreparation_payload_digest(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Return whether this import needs explicit cleanup approval
+     */override fun `requiresImportApproval`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_backupimportpreparation_requires_import_approval(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Return wallet ids found during preflight
+     */override fun `walletIds`(): List<WalletId> {
+            return FfiConverterSequenceTypeWalletId.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_backupimportpreparation_wallet_ids(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBackupImportPreparation: FfiConverter<BackupImportPreparation, Long> {
+    override fun lower(value: BackupImportPreparation): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BackupImportPreparation {
+        return BackupImportPreparation(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BackupImportPreparation {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BackupImportPreparation) = 8UL
+
+    override fun write(value: BackupImportPreparation, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
 public interface BackupManagerInterface {
+
+    /**
+     * Approve cleanup of markerless artifacts after rechecking the preflight snapshots
+     */
+    suspend fun `approveImport`(`preparation`: BackupImportPreparation): BackupImportApproval
 
     /**
      * Account name for saving backup passwords to the system credential store
@@ -7208,12 +7918,20 @@ public interface BackupManagerInterface {
      */
     fun `generatePassword`(): kotlin.String
 
-    suspend fun `importBackup`(`data`: kotlin.ByteArray, `password`: kotlin.String): BackupImportReport
+    /**
+     * Consume a preparation and optional one-use approval to import the backup
+     */
+    suspend fun `importPrepared`(`preparation`: BackupImportPreparation, `approval`: BackupImportApproval?): BackupImportReport
 
     /**
      * Check whether a password meets backup requirements
      */
     fun `isPasswordValid`(`password`: kotlin.String): kotlin.Boolean
+
+    /**
+     * Decrypt and preflight a backup without changing local wallet state
+     */
+    suspend fun `prepareImport`(`data`: kotlin.ByteArray, `password`: kotlin.String): BackupImportPreparation
 
     /**
      * Validate the file format without decrypting
@@ -7336,6 +8054,31 @@ open class BackupManager: Disposable, AutoCloseable, BackupManagerInterface
 
 
     /**
+     * Approve cleanup of markerless artifacts after rechecking the preflight snapshots
+     */
+    @Throws(BackupException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `approveImport`(`preparation`: BackupImportPreparation) : BackupImportApproval {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_backupmanager_approveimport(
+                uniffiHandle,
+
+        FfiConverterTypeBackupImportPreparation.lower(`preparation`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeBackupImportApproval.lift(it) },
+        // Error FFI converter
+        BackupException.ErrorHandler,
+    )
+    }
+
+
+    /**
      * Account name for saving backup passwords to the system credential store
      */override fun `backupAccountName`(): kotlin.String {
             return FfiConverterString.lift(
@@ -7394,16 +8137,19 @@ open class BackupManager: Disposable, AutoCloseable, BackupManagerInterface
 
 
 
+    /**
+     * Consume a preparation and optional one-use approval to import the backup
+     */
     @Throws(BackupException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `importBackup`(`data`: kotlin.ByteArray, `password`: kotlin.String) : BackupImportReport {
+    override suspend fun `importPrepared`(`preparation`: BackupImportPreparation, `approval`: BackupImportApproval?) : BackupImportReport {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_backupmanager_importbackup(
+            UniffiLib.uniffi_cove_fn_method_backupmanager_importprepared(
                 uniffiHandle,
 
-        FfiConverterByteArray.lower(`data`),
-        FfiConverterString.lower(`password`),
+        FfiConverterTypeBackupImportPreparation.lower(`preparation`),
+        FfiConverterOptionalTypeBackupImportApproval.lower(`approval`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
@@ -7432,6 +8178,32 @@ open class BackupManager: Disposable, AutoCloseable, BackupManagerInterface
     )
     }
 
+
+
+    /**
+     * Decrypt and preflight a backup without changing local wallet state
+     */
+    @Throws(BackupException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `prepareImport`(`data`: kotlin.ByteArray, `password`: kotlin.String) : BackupImportPreparation {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_backupmanager_prepareimport(
+                uniffiHandle,
+
+        FfiConverterByteArray.lower(`data`),
+        FfiConverterString.lower(`password`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
+        // lift function
+        { FfiConverterTypeBackupImportPreparation.lift(it) },
+        // Error FFI converter
+        BackupException.ErrorHandler,
+    )
+    }
 
 
     /**
@@ -10407,10 +11179,11 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
         }
     }
 
-    override fun `dangerousResetAllData`()
+
+    @Throws(DatabaseException::class)override fun `dangerousResetAllData`()
         =
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_database_dangerous_reset_all_data(
         it,
         _status)
@@ -11277,6 +12050,16 @@ public interface FfiAppInterface {
     fun `canKeyTeleportSend`(`walletId`: WalletId): kotlin.Boolean
 
     /**
+     * Cancel a blocked full-wipe retry without changing local data
+     */
+    fun `cancelDangerousWipe`(`attemptId`: ShutdownAttemptId)
+
+    /**
+     * Cancel a blocked normal or corrupted wallet-deletion retry
+     */
+    fun `cancelWalletDeletionAttempt`(`attemptId`: ShutdownAttemptId)
+
+    /**
      * DANGER: This will wipe all wallet data on this device
      */
     fun `dangerousWipeAllData`()
@@ -11286,7 +12069,7 @@ public interface FfiAppInterface {
     /**
      * Delete a wallet with a corrupted database, cleaning up all associated data
      */
-    fun `deleteCorruptedWallet`(`id`: WalletId)
+    suspend fun `deleteCorruptedWallet`(`id`: WalletId)
 
     /**
      * Frontend calls this method to send events to the rust application logic
@@ -11375,6 +12158,16 @@ public interface FfiAppInterface {
      * Reset the default route, with a nested route
      */
     fun `resetNestedRoutesTo`(`defaultRoute`: Route, `nestedRoutes`: List<Route>)
+
+    /**
+     * Retry a full wipe after a typed shutdown block
+     */
+    fun `retryDangerousWipeAllData`(`attemptId`: ShutdownAttemptId)
+
+    /**
+     * Retry a corrupted-wallet deletion after a typed shutdown block
+     */
+    suspend fun `retryDeleteCorruptedWallet`(`id`: WalletId, `attemptId`: ShutdownAttemptId)
 
     /**
      * Save the backup for the tap signer in the keychain
@@ -11556,11 +12349,44 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
 
 
     /**
-     * DANGER: This will wipe all wallet data on this device
-     */override fun `dangerousWipeAllData`()
+     * Cancel a blocked full-wipe retry without changing local data
+     */override fun `cancelDangerousWipe`(`attemptId`: ShutdownAttemptId)
         =
     callWithHandle {
     uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_cancel_dangerous_wipe(
+        it,
+
+        FfiConverterTypeShutdownAttemptId.lower(`attemptId`),_status)
+}
+    }
+
+
+
+
+    /**
+     * Cancel a blocked normal or corrupted wallet-deletion retry
+     */override fun `cancelWalletDeletionAttempt`(`attemptId`: ShutdownAttemptId)
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_cancel_wallet_deletion_attempt(
+        it,
+
+        FfiConverterTypeShutdownAttemptId.lower(`attemptId`),_status)
+}
+    }
+
+
+
+
+    /**
+     * DANGER: This will wipe all wallet data on this device
+     */
+    @Throws(AppException::class)override fun `dangerousWipeAllData`()
+        =
+    callWithHandle {
+    uniffiRustCallWithError(AppException) { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(
         it,
         _status)
@@ -11585,18 +12411,28 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
 
     /**
      * Delete a wallet with a corrupted database, cleaning up all associated data
-     */override fun `deleteCorruptedWallet`(`id`: WalletId)
-        =
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_ffiapp_delete_corrupted_wallet(
-        it,
+     */
+    @Throws(AppException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `deleteCorruptedWallet`(`id`: WalletId) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_ffiapp_delete_corrupted_wallet(
+                uniffiHandle,
 
-        FfiConverterTypeWalletId.lower(`id`),_status)
-}
+        FfiConverterTypeWalletId.lower(`id`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        AppException.ErrorHandler,
+    )
     }
-
-
 
 
     /**
@@ -11944,6 +12780,50 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     }
 
 
+
+
+    /**
+     * Retry a full wipe after a typed shutdown block
+     */
+    @Throws(AppException::class)override fun `retryDangerousWipeAllData`(`attemptId`: ShutdownAttemptId)
+        =
+    callWithHandle {
+    uniffiRustCallWithError(AppException) { _status ->
+    UniffiLib.uniffi_cove_fn_method_ffiapp_retry_dangerous_wipe_all_data(
+        it,
+
+        FfiConverterTypeShutdownAttemptId.lower(`attemptId`),_status)
+}
+    }
+
+
+
+
+    /**
+     * Retry a corrupted-wallet deletion after a typed shutdown block
+     */
+    @Throws(AppException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `retryDeleteCorruptedWallet`(`id`: WalletId, `attemptId`: ShutdownAttemptId) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_ffiapp_retry_delete_corrupted_wallet(
+                uniffiHandle,
+
+        FfiConverterTypeWalletId.lower(`id`),
+        FfiConverterTypeShutdownAttemptId.lower(`attemptId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        AppException.ErrorHandler,
+    )
+    }
 
 
     /**
@@ -16364,15 +17244,6 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
         this.handle = 0
         this.cleanable = null
     }
-    constructor(`id`: WalletId) :
-        this(UniffiWithHandle,
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_constructor_labelmanager_new(
-
-
-        FfiConverterTypeWalletId.lower(`id`),_status)
-}
-    )
 
     protected val handle: Long
     protected val cleanable: UniffiCleaner.Cleanable?
@@ -16524,10 +17395,11 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
     )
     }
 
-    override fun `hasLabels`(): kotlin.Boolean {
+
+    @Throws(LabelManagerException::class)override fun `hasLabels`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(LabelManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_labelmanager_has_labels(
         it,
         _status)
@@ -16581,10 +17453,11 @@ open class LabelManager: Disposable, AutoCloseable, LabelManagerInterface
 
 
 
-    override fun `transactionLabel`(`txId`: TxId): kotlin.String? {
+
+    @Throws(LabelManagerException::class)override fun `transactionLabel`(`txId`: TxId): kotlin.String? {
             return FfiConverterOptionalString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(LabelManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_labelmanager_transaction_label(
         it,
 
@@ -21211,6 +22084,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
 
 
 
+    @Throws(LabelManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `reloadLabels`() {
         return uniffiRustCallAsync(
@@ -21227,7 +22101,7 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
         { Unit },
 
         // Error FFI converter
-        UniffiNullRustCallStatusErrorHandler,
+        LabelManagerException.ErrorHandler,
     )
     }
 
@@ -23696,7 +24570,7 @@ public interface RustWalletManagerInterface {
 
     fun `deleteUnsignedTransaction`(`txId`: TxId)
 
-    fun `deleteWallet`()
+    suspend fun `deleteWallet`()
 
     /**
      * Returns the warning message for the first delete confirmation dialog
@@ -23766,7 +24640,7 @@ public interface RustWalletManagerInterface {
 
     fun `listenForUpdates`(`reconciler`: WalletManagerReconciler)
 
-    fun `markWalletAsVerified`()
+    suspend fun `markWalletAsVerified`()
 
     fun `masterFingerprint`(): kotlin.String?
 
@@ -23785,15 +24659,14 @@ public interface RustWalletManagerInterface {
 
     suspend fun `rescanWalletWithGapLimit`(`gapLimit`: kotlin.UInt)
 
+    /**
+     * Retry a deletion after a typed shutdown block
+     */
+    suspend fun `retryDeleteWallet`(`attemptId`: ShutdownAttemptId)
+
     fun `saveUnsignedTransaction`(`details`: ConfirmDetails)
 
-    fun `setWalletMetadata`(`metadata`: WalletMetadata)
-
-    fun `setWalletType`(`walletType`: WalletType)
-
-    fun `shutdown`()
-
-    fun `shutdownActors`()
+    suspend fun `setWalletType`(`walletType`: WalletType)
 
     suspend fun `splitTransactionOutputs`(`outputs`: List<AddressAndAmount>): SplitOutput
 
@@ -23805,7 +24678,7 @@ public interface RustWalletManagerInterface {
 
     suspend fun `unlockedSpendableBalance`(): Amount
 
-    fun `validateMetadata`()
+    suspend fun `validateMetadata`()
 
     fun `walletMetadata`(): WalletMetadata
 
@@ -24045,6 +24918,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
 
 
+    @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `balance`() : Balance {
         return uniffiRustCallAsync(
@@ -24060,7 +24934,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         // lift function
         { FfiConverterTypeBalance.lift(it) },
         // Error FFI converter
-        UniffiNullRustCallStatusErrorHandler,
+        WalletManagerException.ErrorHandler,
     )
     }
 
@@ -24166,25 +25040,35 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
 
 
-    @Throws(WalletManagerException::class)override fun `deleteWallet`()
-        =
-    callWithHandle {
-    uniffiRustCallWithError(WalletManagerException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_delete_wallet(
-        it,
-        _status)
-}
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `deleteWallet`() {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_delete_wallet(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
     }
-
-
 
 
     /**
      * Returns the warning message for the first delete confirmation dialog
-     */override fun `deletionWarningMessage`(): kotlin.String {
+     */
+    @Throws(WalletManagerException::class)override fun `deletionWarningMessage`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_deletion_warning_message(
         it,
         _status)
@@ -24197,10 +25081,11 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
     /**
      * Action from the frontend to change the state of the view model
-     */override fun `dispatch`(`action`: WalletManagerAction)
+     */
+    @Throws(WalletManagerException::class)override fun `dispatch`(`action`: WalletManagerAction)
         =
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_dispatch(
         it,
 
@@ -24332,6 +25217,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
 
 
+    @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `forceWalletScan`() {
         return uniffiRustCallAsync(
@@ -24348,7 +25234,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         { Unit },
 
         // Error FFI converter
-        UniffiNullRustCallStatusErrorHandler,
+        WalletManagerException.ErrorHandler,
     )
     }
 
@@ -24374,6 +25260,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
 
 
+    @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `getTransactions`() {
         return uniffiRustCallAsync(
@@ -24390,7 +25277,7 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
         { Unit },
 
         // Error FFI converter
-        UniffiNullRustCallStatusErrorHandler,
+        WalletManagerException.ErrorHandler,
     )
     }
 
@@ -24411,10 +25298,11 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
     /**
      * Returns whether this hot wallet is backed by BIP39 recovery words
-     */override fun `hasRecoveryWords`(): kotlin.Boolean {
+     */
+    @Throws(WalletManagerException::class)override fun `hasRecoveryWords`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_has_recovery_words(
         it,
         _status)
@@ -24427,10 +25315,11 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
     /**
      * Returns whether this hot wallet is backed by an extended private key (no mnemonic)
-     */override fun `hasXprvSecret`(): kotlin.Boolean {
+     */
+    @Throws(WalletManagerException::class)override fun `hasXprvSecret`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_has_xprv_secret(
         it,
         _status)
@@ -24526,17 +25415,26 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
 
 
-    @Throws(WalletManagerException::class)override fun `markWalletAsVerified`()
-        =
-    callWithHandle {
-    uniffiRustCallWithError(WalletManagerException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(
-        it,
-        _status)
-}
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `markWalletAsVerified`() {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_mark_wallet_as_verified(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
     }
-
-
 
     override fun `masterFingerprint`(): kotlin.String? {
             return FfiConverterOptionalString.lift(
@@ -24587,10 +25485,11 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
 
 
-    override fun `nonDefaultAccountNumber`(): kotlin.UInt? {
+
+    @Throws(WalletManagerException::class)override fun `nonDefaultAccountNumber`(): kotlin.UInt? {
             return FfiConverterOptionalUInt.lift(
     callWithHandle {
-    uniffiRustCall() { _status ->
+    uniffiRustCallWithError(WalletManagerException) { _status ->
     UniffiLib.uniffi_cove_fn_method_rustwalletmanager_non_default_account_number(
         it,
         _status)
@@ -24642,6 +25541,32 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     }
 
 
+    /**
+     * Retry a deletion after a typed shutdown block
+     */
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `retryDeleteWallet`(`attemptId`: ShutdownAttemptId) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_retry_delete_wallet(
+                uniffiHandle,
+
+        FfiConverterTypeShutdownAttemptId.lower(`attemptId`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
+
     @Throws(WalletManagerException::class)override fun `saveUnsignedTransaction`(`details`: ConfirmDetails)
         =
     callWithHandle {
@@ -24655,56 +25580,28 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
 
 
-    override fun `setWalletMetadata`(`metadata`: WalletMetadata)
-        =
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_set_wallet_metadata(
-        it,
 
-        FfiConverterTypeWalletMetadata.lower(`metadata`),_status)
-}
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `setWalletType`(`walletType`: WalletType) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(
+                uniffiHandle,
+
+        FfiConverterTypeWalletType.lower(`walletType`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
     }
-
-
-
-
-    @Throws(WalletManagerException::class)override fun `setWalletType`(`walletType`: WalletType)
-        =
-    callWithHandle {
-    uniffiRustCallWithError(WalletManagerException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_set_wallet_type(
-        it,
-
-        FfiConverterTypeWalletType.lower(`walletType`),_status)
-}
-    }
-
-
-
-    override fun `shutdown`()
-        =
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_shutdown(
-        it,
-        _status)
-}
-    }
-
-
-
-    override fun `shutdownActors`()
-        =
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_shutdown_actors(
-        it,
-        _status)
-}
-    }
-
-
 
 
     @Throws(WalletManagerException::class)
@@ -24816,17 +25713,27 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
     )
     }
 
-    override fun `validateMetadata`()
-        =
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustwalletmanager_validate_metadata(
-        it,
-        _status)
-}
+
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `validateMetadata`() {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_validate_metadata(
+                uniffiHandle,
+
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
     }
-
-
 
     override fun `walletMetadata`(): WalletMetadata {
             return FfiConverterTypeWalletMetadata.lift(
@@ -26017,11 +26924,17 @@ public object FfiConverterTypeSendFlowManagerState: FfiConverter<SendFlowManager
 //
 
 
+/**
+ * A setup command with validated, typed authentication values
+ */
 public interface SetupCmdInterface {
 
     companion object
 }
 
+/**
+ * A setup command with validated, typed authentication values
+ */
 open class SetupCmd: Disposable, AutoCloseable, SetupCmdInterface
 {
 
@@ -26131,14 +27044,17 @@ open class SetupCmd: Disposable, AutoCloseable, SetupCmdInterface
 
     companion object {
 
-    @Throws(TapSignerReaderException::class) fun `tryNew`(`factoryPin`: kotlin.String, `newPin`: kotlin.String, `chainCode`: kotlin.ByteArray? = null): SetupCmd {
+    /**
+     * Build a setup command with an optional exact 32-byte chain code
+     */
+    @Throws(TapSignerReaderException::class) fun `tryNew`(`factoryCvc`: TapSignerCvc, `newCvc`: TapSignerCvc, `chainCode`: kotlin.ByteArray? = null): SetupCmd {
             return FfiConverterTypeSetupCmd.lift(
     uniffiRustCallWithError(TapSignerReaderException) { _status ->
     UniffiLib.uniffi_cove_fn_constructor_setupcmd_try_new(
 
 
-        FfiConverterString.lower(`factoryPin`),
-        FfiConverterString.lower(`newPin`),
+        FfiConverterTypeTapSignerCvc.lower(`factoryCvc`),
+        FfiConverterTypeTapSignerCvc.lower(`newCvc`),
         FfiConverterOptionalByteArray.lower(`chainCode`),_status)
 }
     )
@@ -26270,30 +27186,612 @@ public object FfiConverterTypeSetupCmd: FfiConverter<SetupCmd, Long> {
 //
 
 
-public interface TapSignerReaderInterface {
-
-    /**
-     * User started the setup process, but errored out before completing the setup, we can continue from the last step
-     */
-    suspend fun `continueSetup`(`response`: SetupCmdResponse): SetupCmdResponse
-
-    /**
-     * Get the last response from the reader
-     */
-    fun `lastResponse`(): TapSignerResponse?
-
-    suspend fun `run`(): TapSignerResponse
-
-    /**
-     * Start the setup process
-     */
-    suspend fun `setup`(`cmd`: SetupCmd): SetupCmdResponse
-
-    suspend fun `sign`(`psbt`: Psbt, `pin`: kotlin.String): Psbt
+/**
+ * An opaque numeric CVC used to authenticate a TAPSIGNER
+ */
+public interface TapSignerCvcInterface {
 
     companion object
 }
 
+/**
+ * An opaque numeric CVC used to authenticate a TAPSIGNER
+ */
+open class TapSignerCvc: Disposable, AutoCloseable, TapSignerCvcInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_tapsignercvc(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_tapsignercvc(handle, status)
+        }
+    }
+
+
+
+
+
+
+
+    companion object {
+
+    /**
+     * Construct a CVC from six to 32 ASCII digits
+     */
+    @Throws(TapSignerCvcException::class) fun `tryNew`(`value`: kotlin.String): TapSignerCvc {
+            return FfiConverterTypeTapSignerCvc.lift(
+    uniffiRustCallWithError(TapSignerCvcException) { _status ->
+    UniffiLib.uniffi_cove_fn_constructor_tapsignercvc_try_new(
+
+
+        FfiConverterString.lower(`value`),_status)
+}
+    )
+    }
+
+
+
+    }
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTapSignerCvc: FfiConverter<TapSignerCvc, Long> {
+    override fun lower(value: TapSignerCvc): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): TapSignerCvc {
+        return TapSignerCvc(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): TapSignerCvc {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: TapSignerCvc) = 8UL
+
+    override fun write(value: TapSignerCvc, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * Opaque continuation for an uncertain standalone TAPSIGNER operation
+ */
+public interface TapSignerOperationContinuationInterface {
+
+    /**
+     * Return whether this continuation can be passed to another retry attempt
+     */
+    fun `canRetry`(): kotlin.Boolean
+
+    /**
+     * Return the typed error that caused this continuation
+     */
+    fun `error`(): TapSignerReaderException
+
+    /**
+     * Return the stable id of this continuation
+     */
+    fun `id`(): kotlin.String
+
+    /**
+     * Return a safe user-facing description of the continuation stage
+     */
+    fun `message`(): kotlin.String
+
+    companion object
+}
+
+/**
+ * Opaque continuation for an uncertain standalone TAPSIGNER operation
+ */
+open class TapSignerOperationContinuation: Disposable, AutoCloseable, TapSignerOperationContinuationInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_tapsigneroperationcontinuation(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_tapsigneroperationcontinuation(handle, status)
+        }
+    }
+
+
+    /**
+     * Return whether this continuation can be passed to another retry attempt
+     */override fun `canRetry`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_can_retry(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Return the typed error that caused this continuation
+     */override fun `error`(): TapSignerReaderException {
+            return FfiConverterTypeTapSignerReaderError.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_error(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Return the stable id of this continuation
+     */override fun `id`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_id(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Return a safe user-facing description of the continuation stage
+     */override fun `message`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsigneroperationcontinuation_message(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTapSignerOperationContinuation: FfiConverter<TapSignerOperationContinuation, Long> {
+    override fun lower(value: TapSignerOperationContinuation): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): TapSignerOperationContinuation {
+        return TapSignerOperationContinuation(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): TapSignerOperationContinuation {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: TapSignerOperationContinuation) = 8UL
+
+    override fun write(value: TapSignerOperationContinuation, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * A verified TAPSIGNER reader
+ */
+public interface TapSignerReaderInterface {
+
+    /**
+     * Execute the command supplied when this reader was created
+     */
+    suspend fun `run`(): TapSignerResponse
+
+    companion object
+}
+
+/**
+ * A verified TAPSIGNER reader
+ */
 open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
 {
 
@@ -26397,46 +27895,8 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
 
 
     /**
-     * User started the setup process, but errored out before completing the setup, we can continue from the last step
+     * Execute the command supplied when this reader was created
      */
-    @Throws(TapSignerReaderException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `continueSetup`(`response`: SetupCmdResponse) : SetupCmdResponse {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_tapsignerreader_continue_setup(
-                uniffiHandle,
-
-        FfiConverterTypeSetupCmdResponse.lower(`response`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
-        // lift function
-        { FfiConverterTypeSetupCmdResponse.lift(it) },
-        // Error FFI converter
-        TapSignerReaderException.ErrorHandler,
-    )
-    }
-
-
-    /**
-     * Get the last response from the reader
-     */override fun `lastResponse`(): TapSignerResponse? {
-            return FfiConverterOptionalTypeTapSignerResponse.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_tapsignerreader_last_response(
-        it,
-        _status)
-}
-    }
-    )
-    }
-
-
-
     @Throws(TapSignerReaderException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
     override suspend fun `run`() : TapSignerResponse {
@@ -26452,54 +27912,6 @@ open class TapSignerReader: Disposable, AutoCloseable, TapSignerReaderInterface
         { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
         // lift function
         { FfiConverterTypeTapSignerResponse.lift(it) },
-        // Error FFI converter
-        TapSignerReaderException.ErrorHandler,
-    )
-    }
-
-
-    /**
-     * Start the setup process
-     */
-    @Throws(TapSignerReaderException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `setup`(`cmd`: SetupCmd) : SetupCmdResponse {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_tapsignerreader_setup(
-                uniffiHandle,
-
-        FfiConverterTypeSetupCmd.lower(`cmd`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
-        // lift function
-        { FfiConverterTypeSetupCmdResponse.lift(it) },
-        // Error FFI converter
-        TapSignerReaderException.ErrorHandler,
-    )
-    }
-
-
-    @Throws(TapSignerReaderException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `sign`(`psbt`: Psbt, `pin`: kotlin.String) : Psbt {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_tapsignerreader_sign(
-                uniffiHandle,
-
-        FfiConverterTypePsbt.lower(`psbt`),
-        FfiConverterString.lower(`pin`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_u64(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_u64(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_u64(future) },
-        // lift function
-        { FfiConverterTypePsbt.lift(it) },
         // Error FFI converter
         TapSignerReaderException.ErrorHandler,
     )
@@ -26539,6 +27951,315 @@ public object FfiConverterTypeTapSignerReader: FfiConverter<TapSignerReader, Lon
     override fun allocationSize(value: TapSignerReader) = 8UL
 
     override fun write(value: TapSignerReader, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * Opaque continuation for an uncertain TAPSIGNER setup command
+ */
+public interface TapSignerSetupContinuationInterface {
+
+    /**
+     * Return the typed error that caused this continuation
+     */
+    fun `error`(): TapSignerReaderException
+
+    /**
+     * Return the stable id of this continuation
+     */
+    fun `id`(): kotlin.String
+
+    /**
+     * Return a safe user-facing description of the continuation stage
+     */
+    fun `message`(): kotlin.String
+
+    companion object
+}
+
+/**
+ * Opaque continuation for an uncertain TAPSIGNER setup command
+ */
+open class TapSignerSetupContinuation: Disposable, AutoCloseable, TapSignerSetupContinuationInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_cove_fn_free_tapsignersetupcontinuation(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_cove_fn_clone_tapsignersetupcontinuation(handle, status)
+        }
+    }
+
+
+    /**
+     * Return the typed error that caused this continuation
+     */override fun `error`(): TapSignerReaderException {
+            return FfiConverterTypeTapSignerReaderError.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsignersetupcontinuation_error(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Return the stable id of this continuation
+     */override fun `id`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsignersetupcontinuation_id(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Return a safe user-facing description of the continuation stage
+     */override fun `message`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsignersetupcontinuation_message(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTapSignerSetupContinuation: FfiConverter<TapSignerSetupContinuation, Long> {
+    override fun lower(value: TapSignerSetupContinuation): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): TapSignerSetupContinuation {
+        return TapSignerSetupContinuation(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): TapSignerSetupContinuation {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: TapSignerSetupContinuation) = 8UL
+
+    override fun write(value: TapSignerSetupContinuation, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -31146,6 +32867,53 @@ public object FfiConverterTypeWordVerifyStateMachine: FfiConverter<WordVerifySta
 
 
 
+/**
+ * One post-publication repair failure
+ */
+data class AddressTypeSwitchRecoveryFailure (
+    /**
+     * Repair phase that failed
+     */
+    var `stage`: AddressTypeSwitchRecoveryStage
+    ,
+    /**
+     * Underlying source error without duplicated phase context
+     */
+    var `sourceDetail`: kotlin.String
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAddressTypeSwitchRecoveryFailure: FfiConverterRustBuffer<AddressTypeSwitchRecoveryFailure> {
+    override fun read(buf: ByteBuffer): AddressTypeSwitchRecoveryFailure {
+        return AddressTypeSwitchRecoveryFailure(
+            FfiConverterTypeAddressTypeSwitchRecoveryStage.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: AddressTypeSwitchRecoveryFailure) = (
+            FfiConverterTypeAddressTypeSwitchRecoveryStage.allocationSize(value.`stage`) +
+            FfiConverterString.allocationSize(value.`sourceDetail`)
+    )
+
+    override fun write(value: AddressTypeSwitchRecoveryFailure, buf: ByteBuffer) {
+            FfiConverterTypeAddressTypeSwitchRecoveryStage.write(value.`stage`, buf)
+            FfiConverterString.write(value.`sourceDetail`, buf)
+    }
+}
+
+
+
 data class AppState (
     var `router`: Router
 
@@ -31531,7 +33299,11 @@ data class CloudBackupConfiguredState (
     ,
     var `destructiveOperation`: CloudBackupDestructiveOperationState
     ,
+    var `undecryptableWalletDeletion`: CloudBackupUndecryptableWalletDeletionState
+    ,
     var `detail`: CloudBackupDetailState
+    ,
+    var `otherBackups`: CloudBackupOtherBackupsState
     ,
     var `restoreAll`: CloudBackupRestoreAllState
     ,
@@ -31560,7 +33332,9 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
             FfiConverterTypeCloudBackupVerificationState.read(buf),
             FfiConverterTypeCloudBackupSyncState.read(buf),
             FfiConverterTypeCloudBackupDestructiveOperationState.read(buf),
+            FfiConverterTypeCloudBackupUndecryptableWalletDeletionState.read(buf),
             FfiConverterTypeCloudBackupDetailState.read(buf),
+            FfiConverterTypeCloudBackupOtherBackupsState.read(buf),
             FfiConverterTypeCloudBackupRestoreAllState.read(buf),
             FfiConverterTypeCloudBackupRootPrompt.read(buf),
             FfiConverterTypeCloudSyncHealth.read(buf),
@@ -31573,7 +33347,9 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
             FfiConverterTypeCloudBackupVerificationState.allocationSize(value.`verification`) +
             FfiConverterTypeCloudBackupSyncState.allocationSize(value.`sync`) +
             FfiConverterTypeCloudBackupDestructiveOperationState.allocationSize(value.`destructiveOperation`) +
+            FfiConverterTypeCloudBackupUndecryptableWalletDeletionState.allocationSize(value.`undecryptableWalletDeletion`) +
             FfiConverterTypeCloudBackupDetailState.allocationSize(value.`detail`) +
+            FfiConverterTypeCloudBackupOtherBackupsState.allocationSize(value.`otherBackups`) +
             FfiConverterTypeCloudBackupRestoreAllState.allocationSize(value.`restoreAll`) +
             FfiConverterTypeCloudBackupRootPrompt.allocationSize(value.`rootPrompt`) +
             FfiConverterTypeCloudSyncHealth.allocationSize(value.`syncHealth`) +
@@ -31585,7 +33361,9 @@ public object FfiConverterTypeCloudBackupConfiguredState: FfiConverterRustBuffer
             FfiConverterTypeCloudBackupVerificationState.write(value.`verification`, buf)
             FfiConverterTypeCloudBackupSyncState.write(value.`sync`, buf)
             FfiConverterTypeCloudBackupDestructiveOperationState.write(value.`destructiveOperation`, buf)
+            FfiConverterTypeCloudBackupUndecryptableWalletDeletionState.write(value.`undecryptableWalletDeletion`, buf)
             FfiConverterTypeCloudBackupDetailState.write(value.`detail`, buf)
+            FfiConverterTypeCloudBackupOtherBackupsState.write(value.`otherBackups`, buf)
             FfiConverterTypeCloudBackupRestoreAllState.write(value.`restoreAll`, buf)
             FfiConverterTypeCloudBackupRootPrompt.write(value.`rootPrompt`, buf)
             FfiConverterTypeCloudSyncHealth.write(value.`syncHealth`, buf)
@@ -31609,8 +33387,6 @@ data class CloudBackupDetail (
      * Number of wallets in the cloud that aren't on this device
      */
     var `cloudOnlyCount`: kotlin.UInt
-    ,
-    var `otherBackups`: CloudBackupOtherBackupsState
 
 ){
 
@@ -31631,7 +33407,6 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
             FfiConverterSequenceTypeCloudBackupWalletItem.read(buf),
             FfiConverterSequenceTypeCloudBackupWalletItem.read(buf),
             FfiConverterUInt.read(buf),
-            FfiConverterTypeCloudBackupOtherBackupsState.read(buf),
         )
     }
 
@@ -31639,8 +33414,7 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
             FfiConverterOptionalULong.allocationSize(value.`lastSync`) +
             FfiConverterSequenceTypeCloudBackupWalletItem.allocationSize(value.`upToDate`) +
             FfiConverterSequenceTypeCloudBackupWalletItem.allocationSize(value.`needsSync`) +
-            FfiConverterUInt.allocationSize(value.`cloudOnlyCount`) +
-            FfiConverterTypeCloudBackupOtherBackupsState.allocationSize(value.`otherBackups`)
+            FfiConverterUInt.allocationSize(value.`cloudOnlyCount`)
     )
 
     override fun write(value: CloudBackupDetail, buf: ByteBuffer) {
@@ -31648,7 +33422,6 @@ public object FfiConverterTypeCloudBackupDetail: FfiConverterRustBuffer<CloudBac
             FfiConverterSequenceTypeCloudBackupWalletItem.write(value.`upToDate`, buf)
             FfiConverterSequenceTypeCloudBackupWalletItem.write(value.`needsSync`, buf)
             FfiConverterUInt.write(value.`cloudOnlyCount`, buf)
-            FfiConverterTypeCloudBackupOtherBackupsState.write(value.`otherBackups`, buf)
     }
 }
 
@@ -32122,6 +33895,67 @@ public object FfiConverterTypeCloudBackupWalletRestoreFailure: FfiConverterRustB
 
 
 
+/**
+ * Wallet-file issues found during deep verification
+ */
+data class CloudBackupWalletVerificationIssues (
+    var `missing`: kotlin.UInt
+    ,
+    var `downloadFailed`: kotlin.UInt
+    ,
+    var `invalid`: kotlin.UInt
+    ,
+    var `decryptionFailed`: kotlin.UInt
+    ,
+    var `unsupported`: kotlin.UInt
+    ,
+    var `unreadable`: kotlin.UInt
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupWalletVerificationIssues: FfiConverterRustBuffer<CloudBackupWalletVerificationIssues> {
+    override fun read(buf: ByteBuffer): CloudBackupWalletVerificationIssues {
+        return CloudBackupWalletVerificationIssues(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: CloudBackupWalletVerificationIssues) = (
+            FfiConverterUInt.allocationSize(value.`missing`) +
+            FfiConverterUInt.allocationSize(value.`downloadFailed`) +
+            FfiConverterUInt.allocationSize(value.`invalid`) +
+            FfiConverterUInt.allocationSize(value.`decryptionFailed`) +
+            FfiConverterUInt.allocationSize(value.`unsupported`) +
+            FfiConverterUInt.allocationSize(value.`unreadable`)
+    )
+
+    override fun write(value: CloudBackupWalletVerificationIssues, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`missing`, buf)
+            FfiConverterUInt.write(value.`downloadFailed`, buf)
+            FfiConverterUInt.write(value.`invalid`, buf)
+            FfiConverterUInt.write(value.`decryptionFailed`, buf)
+            FfiConverterUInt.write(value.`unsupported`, buf)
+            FfiConverterUInt.write(value.`unreadable`, buf)
+    }
+}
+
+
+
 data class CloudRestoreProviderHint (
     var `providerName`: kotlin.String?
     ,
@@ -32236,165 +34070,6 @@ public object FfiConverterTypeConnectivityState: FfiConverterRustBuffer<Connecti
 
 
 
-data class ContinueFromBackup (
-    var `backup`: kotlin.ByteArray
-    ,
-    var `continueCmd`: SetupCmd
-    ,
-    var `error`: TapSignerReaderException
-
-): Disposable{
-
-
-
-
-
-    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
-    override fun destroy() {
-
-    Disposable.destroy(
-        this.`backup`,
-        this.`continueCmd`,
-        this.`error`
-    )
-    }
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeContinueFromBackup: FfiConverterRustBuffer<ContinueFromBackup> {
-    override fun read(buf: ByteBuffer): ContinueFromBackup {
-        return ContinueFromBackup(
-            FfiConverterByteArray.read(buf),
-            FfiConverterTypeSetupCmd.read(buf),
-            FfiConverterTypeTapSignerReaderError.read(buf),
-        )
-    }
-
-    override fun allocationSize(value: ContinueFromBackup) = (
-            FfiConverterByteArray.allocationSize(value.`backup`) +
-            FfiConverterTypeSetupCmd.allocationSize(value.`continueCmd`) +
-            FfiConverterTypeTapSignerReaderError.allocationSize(value.`error`)
-    )
-
-    override fun write(value: ContinueFromBackup, buf: ByteBuffer) {
-            FfiConverterByteArray.write(value.`backup`, buf)
-            FfiConverterTypeSetupCmd.write(value.`continueCmd`, buf)
-            FfiConverterTypeTapSignerReaderError.write(value.`error`, buf)
-    }
-}
-
-
-
-data class ContinueFromDerive (
-    var `backup`: kotlin.ByteArray
-    ,
-    var `deriveInfo`: DeriveInfo
-    ,
-    var `continueCmd`: SetupCmd
-    ,
-    var `error`: TapSignerReaderException
-
-): Disposable{
-
-
-
-
-
-    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
-    override fun destroy() {
-
-    Disposable.destroy(
-        this.`backup`,
-        this.`deriveInfo`,
-        this.`continueCmd`,
-        this.`error`
-    )
-    }
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeContinueFromDerive: FfiConverterRustBuffer<ContinueFromDerive> {
-    override fun read(buf: ByteBuffer): ContinueFromDerive {
-        return ContinueFromDerive(
-            FfiConverterByteArray.read(buf),
-            FfiConverterTypeDeriveInfo.read(buf),
-            FfiConverterTypeSetupCmd.read(buf),
-            FfiConverterTypeTapSignerReaderError.read(buf),
-        )
-    }
-
-    override fun allocationSize(value: ContinueFromDerive) = (
-            FfiConverterByteArray.allocationSize(value.`backup`) +
-            FfiConverterTypeDeriveInfo.allocationSize(value.`deriveInfo`) +
-            FfiConverterTypeSetupCmd.allocationSize(value.`continueCmd`) +
-            FfiConverterTypeTapSignerReaderError.allocationSize(value.`error`)
-    )
-
-    override fun write(value: ContinueFromDerive, buf: ByteBuffer) {
-            FfiConverterByteArray.write(value.`backup`, buf)
-            FfiConverterTypeDeriveInfo.write(value.`deriveInfo`, buf)
-            FfiConverterTypeSetupCmd.write(value.`continueCmd`, buf)
-            FfiConverterTypeTapSignerReaderError.write(value.`error`, buf)
-    }
-}
-
-
-
-data class ContinueFromInit (
-    var `continueCmd`: SetupCmd
-    ,
-    var `error`: TapSignerReaderException
-
-): Disposable{
-
-
-
-
-
-    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
-    override fun destroy() {
-
-    Disposable.destroy(
-        this.`continueCmd`,
-        this.`error`
-    )
-    }
-
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeContinueFromInit: FfiConverterRustBuffer<ContinueFromInit> {
-    override fun read(buf: ByteBuffer): ContinueFromInit {
-        return ContinueFromInit(
-            FfiConverterTypeSetupCmd.read(buf),
-            FfiConverterTypeTapSignerReaderError.read(buf),
-        )
-    }
-
-    override fun allocationSize(value: ContinueFromInit) = (
-            FfiConverterTypeSetupCmd.allocationSize(value.`continueCmd`) +
-            FfiConverterTypeTapSignerReaderError.allocationSize(value.`error`)
-    )
-
-    override fun write(value: ContinueFromInit, buf: ByteBuffer) {
-            FfiConverterTypeSetupCmd.write(value.`continueCmd`, buf)
-            FfiConverterTypeTapSignerReaderError.write(value.`error`, buf)
-    }
-}
-
-
-
 /**
  * Counts and repairs observed during a deep verification pass
  */
@@ -32416,12 +34091,7 @@ data class DeepVerificationReport (
     ,
     var `walletsVerified`: kotlin.UInt
     ,
-    var `walletsFailed`: kotlin.UInt
-    ,
-    /**
-     * Wallet backups with unsupported version (newer format, skipped)
-     */
-    var `walletsUnsupported`: kotlin.UInt
+    var `walletIssues`: CloudBackupWalletVerificationIssues
     ,
     /**
      * May be None if wallet list was missing but master key verified
@@ -32447,8 +34117,7 @@ public object FfiConverterTypeDeepVerificationReport: FfiConverterRustBuffer<Dee
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterUInt.read(buf),
-            FfiConverterUInt.read(buf),
-            FfiConverterUInt.read(buf),
+            FfiConverterTypeCloudBackupWalletVerificationIssues.read(buf),
             FfiConverterOptionalTypeCloudBackupDetail.read(buf),
         )
     }
@@ -32458,8 +34127,7 @@ public object FfiConverterTypeDeepVerificationReport: FfiConverterRustBuffer<Dee
             FfiConverterBoolean.allocationSize(value.`localMasterKeyRepaired`) +
             FfiConverterBoolean.allocationSize(value.`credentialRecovered`) +
             FfiConverterUInt.allocationSize(value.`walletsVerified`) +
-            FfiConverterUInt.allocationSize(value.`walletsFailed`) +
-            FfiConverterUInt.allocationSize(value.`walletsUnsupported`) +
+            FfiConverterTypeCloudBackupWalletVerificationIssues.allocationSize(value.`walletIssues`) +
             FfiConverterOptionalTypeCloudBackupDetail.allocationSize(value.`detail`)
     )
 
@@ -32468,25 +34136,45 @@ public object FfiConverterTypeDeepVerificationReport: FfiConverterRustBuffer<Dee
             FfiConverterBoolean.write(value.`localMasterKeyRepaired`, buf)
             FfiConverterBoolean.write(value.`credentialRecovered`, buf)
             FfiConverterUInt.write(value.`walletsVerified`, buf)
-            FfiConverterUInt.write(value.`walletsFailed`, buf)
-            FfiConverterUInt.write(value.`walletsUnsupported`, buf)
+            FfiConverterTypeCloudBackupWalletVerificationIssues.write(value.`walletIssues`, buf)
             FfiConverterOptionalTypeCloudBackupDetail.write(value.`detail`, buf)
     }
 }
 
 
 
+/**
+ * Extended public key data returned by TAPSIGNER derivation
+ */
 data class DeriveInfo (
+    /**
+     * The serialized master public key
+     */
     var `masterPubkey`: kotlin.ByteArray
     ,
+    /**
+     * The serialized public key at the configured path
+     */
     var `pubkey`: kotlin.ByteArray
     ,
+    /**
+     * The current extended public key chain code
+     */
     var `chainCode`: kotlin.ByteArray
     ,
+    /**
+     * The non-hardened display form of the derivation path
+     */
     var `path`: List<kotlin.UInt>
     ,
+    /**
+     * The network used for derivation
+     */
     var `network`: Network
     ,
+    /**
+     * The card birth height when valid
+     */
     var `birthHeight`: kotlin.ULong?
 
 ){
@@ -33383,6 +35071,11 @@ public object FfiConverterTypeLabelExportResult: FfiConverterRustBuffer<LabelExp
 data class LoadedCloudBackupDetail (
     var `detail`: CloudBackupDetail
     ,
+    /**
+     * Evidence used to accept the active namespace inventory
+     */
+    var `inventoryAuthority`: CloudBackupInventoryAuthority
+    ,
     var `cloudOnly`: CloudOnlyState
     ,
     var `cloudOnlyOperation`: CloudOnlyOperation
@@ -33405,6 +35098,7 @@ public object FfiConverterTypeLoadedCloudBackupDetail: FfiConverterRustBuffer<Lo
     override fun read(buf: ByteBuffer): LoadedCloudBackupDetail {
         return LoadedCloudBackupDetail(
             FfiConverterTypeCloudBackupDetail.read(buf),
+            FfiConverterTypeCloudBackupInventoryAuthority.read(buf),
             FfiConverterTypeCloudOnlyState.read(buf),
             FfiConverterTypeCloudOnlyOperation.read(buf),
             FfiConverterTypeOtherBackupsOperation.read(buf),
@@ -33413,6 +35107,7 @@ public object FfiConverterTypeLoadedCloudBackupDetail: FfiConverterRustBuffer<Lo
 
     override fun allocationSize(value: LoadedCloudBackupDetail) = (
             FfiConverterTypeCloudBackupDetail.allocationSize(value.`detail`) +
+            FfiConverterTypeCloudBackupInventoryAuthority.allocationSize(value.`inventoryAuthority`) +
             FfiConverterTypeCloudOnlyState.allocationSize(value.`cloudOnly`) +
             FfiConverterTypeCloudOnlyOperation.allocationSize(value.`cloudOnlyOperation`) +
             FfiConverterTypeOtherBackupsOperation.allocationSize(value.`otherBackupsOperation`)
@@ -33420,9 +35115,57 @@ public object FfiConverterTypeLoadedCloudBackupDetail: FfiConverterRustBuffer<Lo
 
     override fun write(value: LoadedCloudBackupDetail, buf: ByteBuffer) {
             FfiConverterTypeCloudBackupDetail.write(value.`detail`, buf)
+            FfiConverterTypeCloudBackupInventoryAuthority.write(value.`inventoryAuthority`, buf)
             FfiConverterTypeCloudOnlyState.write(value.`cloudOnly`, buf)
             FfiConverterTypeCloudOnlyOperation.write(value.`cloudOnlyOperation`, buf)
             FfiConverterTypeOtherBackupsOperation.write(value.`otherBackupsOperation`, buf)
+    }
+}
+
+
+
+/**
+ * Typed context for a failed post-wallet local reset phase
+ */
+data class LocalDataResetFailure (
+    /**
+     * Cleanup phase that failed
+     */
+    var `stage`: LocalDataResetStage
+    ,
+    /**
+     * Underlying source error without duplicated phase context
+     */
+    var `sourceDetail`: kotlin.String
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLocalDataResetFailure: FfiConverterRustBuffer<LocalDataResetFailure> {
+    override fun read(buf: ByteBuffer): LocalDataResetFailure {
+        return LocalDataResetFailure(
+            FfiConverterTypeLocalDataResetStage.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: LocalDataResetFailure) = (
+            FfiConverterTypeLocalDataResetStage.allocationSize(value.`stage`) +
+            FfiConverterString.allocationSize(value.`sourceDetail`)
+    )
+
+    override fun write(value: LocalDataResetFailure, buf: ByteBuffer) {
+            FfiConverterTypeLocalDataResetStage.write(value.`stage`, buf)
+            FfiConverterString.write(value.`sourceDetail`, buf)
     }
 }
 
@@ -34030,6 +35773,45 @@ public object FfiConverterTypeSendRouteConfirmArgs: FfiConverterRustBuffer<SendR
 
 
 /**
+ * Opaque authorization for one blocked shutdown retry
+ */
+data class ShutdownAttemptId (
+    /**
+     * Random process-local attempt identifier
+     */
+    var `value`: kotlin.String
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeShutdownAttemptId: FfiConverterRustBuffer<ShutdownAttemptId> {
+    override fun read(buf: ByteBuffer): ShutdownAttemptId {
+        return ShutdownAttemptId(
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ShutdownAttemptId) = (
+            FfiConverterString.allocationSize(value.`value`)
+    )
+
+    override fun write(value: ShutdownAttemptId, buf: ByteBuffer) {
+            FfiConverterString.write(value.`value`, buf)
+    }
+}
+
+
+
+/**
  * Result of a state transition
  */
 data class StateTransition (
@@ -34208,11 +35990,23 @@ public object FfiConverterTypeTapSignerNewPinArgs: FfiConverterRustBuffer<TapSig
 
 
 
+/**
+ * The successful result of TAPSIGNER setup
+ */
 data class TapSignerSetupComplete (
+    /**
+     * The encrypted card backup bytes
+     */
     var `backup`: kotlin.ByteArray
     ,
+    /**
+     * The derived key information
+     */
     var `deriveInfo`: DeriveInfo
     ,
+    /**
+     * The wallet birthday selected for import
+     */
     var `birthday`: WalletBirthday
 
 ){
@@ -34327,6 +36121,61 @@ public object FfiConverterTypeUnsupportedDbVersion: FfiConverterRustBuffer<Unsup
 
 
 
+/**
+ * Typed context for a failed wallet deletion phase
+ */
+data class WalletDeletionFailure (
+    /**
+     * Wallet being deleted
+     */
+    var `walletId`: WalletId
+    ,
+    /**
+     * Cleanup phase that failed
+     */
+    var `stage`: WalletDeletionStage
+    ,
+    /**
+     * Underlying source error without duplicated phase context
+     */
+    var `sourceDetail`: kotlin.String
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWalletDeletionFailure: FfiConverterRustBuffer<WalletDeletionFailure> {
+    override fun read(buf: ByteBuffer): WalletDeletionFailure {
+        return WalletDeletionFailure(
+            FfiConverterTypeWalletId.read(buf),
+            FfiConverterTypeWalletDeletionStage.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: WalletDeletionFailure) = (
+            FfiConverterTypeWalletId.allocationSize(value.`walletId`) +
+            FfiConverterTypeWalletDeletionStage.allocationSize(value.`stage`) +
+            FfiConverterString.allocationSize(value.`sourceDetail`)
+    )
+
+    override fun write(value: WalletDeletionFailure, buf: ByteBuffer) {
+            FfiConverterTypeWalletId.write(value.`walletId`, buf)
+            FfiConverterTypeWalletDeletionStage.write(value.`stage`, buf)
+            FfiConverterString.write(value.`sourceDetail`, buf)
+    }
+}
+
+
+
 data class WalletInitialState (
     var `metadata`: WalletMetadata
     ,
@@ -34399,6 +36248,108 @@ public object FfiConverterTypeWalletInitialState: FfiConverterRustBuffer<WalletI
             FfiConverterTypeBalancePresentation.write(value.`balancePresentation`, buf)
             FfiConverterTypeBalance.write(value.`balance`, buf)
             FfiConverterSequenceTypeUnsignedTransaction.write(value.`unsignedTransactions`, buf)
+    }
+}
+
+
+
+/**
+ * Typed context for a failed authoritative wallet inventory bucket
+ */
+data class WalletInventoryFailure (
+    /**
+     * Network bucket, or `None` for a global inventory failure
+     */
+    var `network`: Network?
+    ,
+    /**
+     * Wallet mode bucket, or `None` for a global inventory failure
+     */
+    var `walletMode`: WalletMode?
+    ,
+    /**
+     * Underlying source error without duplicated inventory context
+     */
+    var `sourceDetail`: kotlin.String
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWalletInventoryFailure: FfiConverterRustBuffer<WalletInventoryFailure> {
+    override fun read(buf: ByteBuffer): WalletInventoryFailure {
+        return WalletInventoryFailure(
+            FfiConverterOptionalTypeNetwork.read(buf),
+            FfiConverterOptionalTypeWalletMode.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: WalletInventoryFailure) = (
+            FfiConverterOptionalTypeNetwork.allocationSize(value.`network`) +
+            FfiConverterOptionalTypeWalletMode.allocationSize(value.`walletMode`) +
+            FfiConverterString.allocationSize(value.`sourceDetail`)
+    )
+
+    override fun write(value: WalletInventoryFailure, buf: ByteBuffer) {
+            FfiConverterOptionalTypeNetwork.write(value.`network`, buf)
+            FfiConverterOptionalTypeWalletMode.write(value.`walletMode`, buf)
+            FfiConverterString.write(value.`sourceDetail`, buf)
+    }
+}
+
+
+
+/**
+ * Exact database bucket that contains one wallet metadata row
+ */
+data class WalletLocation (
+    /**
+     * Bitcoin network stored in the wallet-table key
+     */
+    var `network`: Network
+    ,
+    /**
+     * Main or decoy wallet table
+     */
+    var `walletMode`: WalletMode
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWalletLocation: FfiConverterRustBuffer<WalletLocation> {
+    override fun read(buf: ByteBuffer): WalletLocation {
+        return WalletLocation(
+            FfiConverterTypeNetwork.read(buf),
+            FfiConverterTypeWalletMode.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: WalletLocation) = (
+            FfiConverterTypeNetwork.allocationSize(value.`network`) +
+            FfiConverterTypeWalletMode.allocationSize(value.`walletMode`)
+    )
+
+    override fun write(value: WalletLocation, buf: ByteBuffer) {
+            FfiConverterTypeNetwork.write(value.`network`, buf)
+            FfiConverterTypeWalletMode.write(value.`walletMode`, buf)
     }
 }
 
@@ -34752,6 +36703,57 @@ public object FfiConverterTypeXpubExportResult: FfiConverterRustBuffer<XpubExpor
             FfiConverterString.write(value.`filename`, buf)
     }
 }
+
+
+
+/**
+ * Repair phase that failed after an address-store rename committed
+ */
+
+enum class AddressTypeSwitchRecoveryStage {
+
+    /**
+     * File or parent-directory durability synchronization
+     */
+    DURABILITY,
+    /**
+     * Reloading the newly published wallet store
+     */
+    STORE_RELOAD,
+    /**
+     * Exact metadata commit
+     */
+    METADATA,
+    /**
+     * Scan-state reset or restart
+     */
+    SCAN_RESTART;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAddressTypeSwitchRecoveryStage: FfiConverterRustBuffer<AddressTypeSwitchRecoveryStage> {
+    override fun read(buf: ByteBuffer) = try {
+        AddressTypeSwitchRecoveryStage.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: AddressTypeSwitchRecoveryStage) = 4UL
+
+    override fun write(value: AddressTypeSwitchRecoveryStage, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 
@@ -36347,6 +38349,38 @@ sealed class AppException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class WalletLifecycle(
+
+        val v1: WalletLifecycleFailure
+        ) : AppException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class WalletInventory(
+
+        val v1: WalletInventoryFailure
+        ) : AppException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class WalletDeletion(
+
+        val v1: WalletDeletionFailure
+        ) : AppException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class LocalDataReset(
+
+        val v1: LocalDataResetFailure
+        ) : AppException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
 
 
 
@@ -36384,6 +38418,18 @@ public object FfiConverterTypeAppError : FfiConverterRustBuffer<AppException> {
             3 -> AppException.WalletSelection(
                 FfiConverterString.read(buf),
                 )
+            4 -> AppException.WalletLifecycle(
+                FfiConverterTypeWalletLifecycleFailure.read(buf),
+                )
+            5 -> AppException.WalletInventory(
+                FfiConverterTypeWalletInventoryFailure.read(buf),
+                )
+            6 -> AppException.WalletDeletion(
+                FfiConverterTypeWalletDeletionFailure.read(buf),
+                )
+            7 -> AppException.LocalDataReset(
+                FfiConverterTypeLocalDataResetFailure.read(buf),
+                )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -36405,6 +38451,26 @@ public object FfiConverterTypeAppError : FfiConverterRustBuffer<AppException> {
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is AppException.WalletLifecycle -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletLifecycleFailure.allocationSize(value.v1)
+            )
+            is AppException.WalletInventory -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletInventoryFailure.allocationSize(value.v1)
+            )
+            is AppException.WalletDeletion -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletDeletionFailure.allocationSize(value.v1)
+            )
+            is AppException.LocalDataReset -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeLocalDataResetFailure.allocationSize(value.v1)
+            )
         }
     }
 
@@ -36423,6 +38489,26 @@ public object FfiConverterTypeAppError : FfiConverterRustBuffer<AppException> {
             is AppException.WalletSelection -> {
                 buf.putInt(3)
                 FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is AppException.WalletLifecycle -> {
+                buf.putInt(4)
+                FfiConverterTypeWalletLifecycleFailure.write(value.v1, buf)
+                Unit
+            }
+            is AppException.WalletInventory -> {
+                buf.putInt(5)
+                FfiConverterTypeWalletInventoryFailure.write(value.v1, buf)
+                Unit
+            }
+            is AppException.WalletDeletion -> {
+                buf.putInt(6)
+                FfiConverterTypeWalletDeletionFailure.write(value.v1, buf)
+                Unit
+            }
+            is AppException.LocalDataReset -> {
+                buf.putInt(7)
+                FfiConverterTypeLocalDataResetFailure.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -36450,6 +38536,11 @@ sealed class AppInitException(message: String): kotlin.Exception(message) {
 
         class DatabaseVerificationFailed(message: String) : AppInitException(message)
 
+    /**
+     * Bootstrap found an interrupted backup restore that needs recovery
+     */
+        class RecoveryRequired(message: String) : AppInitException(message)
+
 
     companion object ErrorHandler : UniffiRustCallStatusErrorHandler<AppInitException> {
         override fun lift(error_buf: RustBuffer.ByValue): AppInitException = FfiConverterTypeAppInitError.lift(error_buf)
@@ -36470,6 +38561,7 @@ public object FfiConverterTypeAppInitError : FfiConverterRustBuffer<AppInitExcep
             5 -> AppInitException.AlreadyCalled(FfiConverterString.read(buf))
             6 -> AppInitException.DatabaseKeyMismatch(FfiConverterString.read(buf))
             7 -> AppInitException.DatabaseVerificationFailed(FfiConverterString.read(buf))
+            8 -> AppInitException.RecoveryRequired(FfiConverterString.read(buf))
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
 
@@ -36507,6 +38599,10 @@ public object FfiConverterTypeAppInitError : FfiConverterRustBuffer<AppInitExcep
             }
             is AppInitException.DatabaseVerificationFailed -> {
                 buf.putInt(7)
+                Unit
+            }
+            is AppInitException.RecoveryRequired -> {
+                buf.putInt(8)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -37620,6 +39716,59 @@ sealed class BackupException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * The wallet id is already used by local wallet state or restore artifacts
+     */
+    class WalletIdOccupied(
+
+        val v1: WalletId
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    /**
+     * The backup contains a wallet id that cannot be used as a local path component
+     */
+    class InvalidWalletId(
+
+        val v1: kotlin.String
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    /**
+     * The local artifact snapshot changed after the import was prepared
+     */
+    class ImportApprovalStale(
+
+        val v1: WalletId
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    /**
+     * Destructive cleanup requires a one-use import approval
+     */
+    class ImportApprovalRequired(
+
+        val v1: WalletId
+        ) : BackupException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    /**
+     * An import preparation or approval object was already consumed
+     */
+    class ImportApprovalUsed(
+        ) : BackupException() {
+        override val message
+            get() = ""
+    }
+
     class Decompression(
 
         val v1: kotlin.String
@@ -37688,7 +39837,20 @@ public object FfiConverterTypeBackupError : FfiConverterRustBuffer<BackupExcepti
             14 -> BackupException.Database(
                 FfiConverterString.read(buf),
                 )
-            15 -> BackupException.Decompression(
+            15 -> BackupException.WalletIdOccupied(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            16 -> BackupException.InvalidWalletId(
+                FfiConverterString.read(buf),
+                )
+            17 -> BackupException.ImportApprovalStale(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            18 -> BackupException.ImportApprovalRequired(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            19 -> BackupException.ImportApprovalUsed()
+            20 -> BackupException.Decompression(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -37761,6 +39923,30 @@ public object FfiConverterTypeBackupError : FfiConverterRustBuffer<BackupExcepti
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
+            )
+            is BackupException.WalletIdOccupied -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.v1)
+            )
+            is BackupException.InvalidWalletId -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is BackupException.ImportApprovalStale -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.v1)
+            )
+            is BackupException.ImportApprovalRequired -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.v1)
+            )
+            is BackupException.ImportApprovalUsed -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
             )
             is BackupException.Decompression -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -37837,8 +40023,32 @@ public object FfiConverterTypeBackupError : FfiConverterRustBuffer<BackupExcepti
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is BackupException.Decompression -> {
+            is BackupException.WalletIdOccupied -> {
                 buf.putInt(15)
+                FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.InvalidWalletId -> {
+                buf.putInt(16)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.ImportApprovalStale -> {
+                buf.putInt(17)
+                FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.ImportApprovalRequired -> {
+                buf.putInt(18)
+                FfiConverterTypeWalletId.write(value.v1, buf)
+                Unit
+            }
+            is BackupException.ImportApprovalUsed -> {
+                buf.putInt(19)
+                Unit
+            }
+            is BackupException.Decompression -> {
+                buf.putInt(20)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -38577,68 +40787,104 @@ public object FfiConverterTypeCatastrophicRecoveryError : FfiConverterRustBuffer
 
 
 
+/**
+ * Card errors defined by the CkTap protocol
+ */
 sealed class CkTapException: kotlin.Exception() {
 
+    /**
+     * The card reported a rare or unlucky value
+     */
     class UnluckyNumber(
         ) : CkTapException() {
         override val message
             get() = ""
     }
 
+    /**
+     * The command arguments are invalid
+     */
     class BadArguments(
         ) : CkTapException() {
         override val message
             get() = ""
     }
 
+    /**
+     * Authentication details are invalid
+     */
     class BadAuth(
         ) : CkTapException() {
         override val message
             get() = ""
     }
 
+    /**
+     * The command requires authentication
+     */
     class NeedsAuth(
         ) : CkTapException() {
         override val message
             get() = ""
     }
 
+    /**
+     * The card does not recognize the command
+     */
     class UnknownCommand(
         ) : CkTapException() {
         override val message
             get() = ""
     }
 
+    /**
+     * The command cannot be retried in the current state
+     */
     class InvalidCommand(
         ) : CkTapException() {
         override val message
             get() = ""
     }
 
+    /**
+     * The card cannot run the command in its current state
+     */
     class InvalidState(
         ) : CkTapException() {
         override val message
             get() = ""
     }
 
+    /**
+     * The card rejected a nonce as too weak
+     */
     class WeakNonce(
         ) : CkTapException() {
         override val message
             get() = ""
     }
 
+    /**
+     * The card could not decode the CBOR request
+     */
     class BadCbor(
         ) : CkTapException() {
         override val message
             get() = ""
     }
 
+    /**
+     * The card requires a backup before changing its CVC
+     */
     class BackupFirst(
         ) : CkTapException() {
         override val message
             get() = ""
     }
 
+    /**
+     * The card requires an authentication delay
+     */
     class RateLimited(
         ) : CkTapException() {
         override val message
@@ -39422,6 +41668,53 @@ public object FfiConverterTypeCloudBackupEnablePromptChoice: FfiConverterRustBuf
 
 
 /**
+ * Evidence used to accept wallet inventory for the active backup namespace
+ */
+
+enum class CloudBackupInventoryAuthority {
+
+    /**
+     * The provider returned an authoritative inventory
+     */
+    PROVIDER_CONFIRMED,
+    /**
+     * The local provider snapshot contains the last known wallet count
+     */
+    LOCAL_SNAPSHOT_MATCHES_KNOWN_COUNT,
+    /**
+     * Rows are useful for display but cannot authorize wallet actions
+     */
+    PROVISIONAL;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupInventoryAuthority: FfiConverterRustBuffer<CloudBackupInventoryAuthority> {
+    override fun read(buf: ByteBuffer) = try {
+        CloudBackupInventoryAuthority.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: CloudBackupInventoryAuthority) = 4UL
+
+    override fun write(value: CloudBackupInventoryAuthority, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
  * Typed reason why provider inventory could not be confirmed complete
  */
 
@@ -39429,6 +41722,7 @@ enum class CloudBackupInventoryIncompleteReason {
 
     AUTHORIZATION_REQUIRED,
     OFFLINE,
+    PROVIDER_SYNC_PENDING,
     PROVIDER_UNAVAILABLE,
     UNKNOWN;
 
@@ -39751,6 +42045,9 @@ sealed class CloudBackupManagerAction {
         companion object
     }
 
+    object DeleteUndecryptableWalletBackups : CloudBackupManagerAction()
+
+
     object RecoverOtherBackups : CloudBackupManagerAction()
 
 
@@ -39764,6 +42061,9 @@ sealed class CloudBackupManagerAction {
 
 
     object RefreshDetail : CloudBackupManagerAction()
+
+
+    object RefreshOtherBackups : CloudBackupManagerAction()
 
 
     object EnterDetail : CloudBackupManagerAction()
@@ -39844,17 +42144,19 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             24 -> CloudBackupManagerAction.DeleteCloudWallet(
                 FfiConverterTypeRecordId.read(buf),
                 )
-            25 -> CloudBackupManagerAction.RecoverOtherBackups
-            26 -> CloudBackupManagerAction.DeleteOtherBackups
-            27 -> CloudBackupManagerAction.DisableCloudBackup
-            28 -> CloudBackupManagerAction.KeepCloudBackupEnabled
-            29 -> CloudBackupManagerAction.RefreshDetail
-            30 -> CloudBackupManagerAction.EnterDetail
-            31 -> CloudBackupManagerAction.CloseDetail
-            32 -> CloudBackupManagerAction.PromptEnablePasskeyChoice(
+            25 -> CloudBackupManagerAction.DeleteUndecryptableWalletBackups
+            26 -> CloudBackupManagerAction.RecoverOtherBackups
+            27 -> CloudBackupManagerAction.DeleteOtherBackups
+            28 -> CloudBackupManagerAction.DisableCloudBackup
+            29 -> CloudBackupManagerAction.KeepCloudBackupEnabled
+            30 -> CloudBackupManagerAction.RefreshDetail
+            31 -> CloudBackupManagerAction.RefreshOtherBackups
+            32 -> CloudBackupManagerAction.EnterDetail
+            33 -> CloudBackupManagerAction.CloseDetail
+            34 -> CloudBackupManagerAction.PromptEnablePasskeyChoice(
                 FfiConverterTypeCloudBackupEnableContext.read(buf),
                 )
-            33 -> CloudBackupManagerAction.AcceptEnablePrompt(
+            35 -> CloudBackupManagerAction.AcceptEnablePrompt(
                 FfiConverterTypeCloudBackupEnablePromptChoice.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -40013,6 +42315,12 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 + FfiConverterTypeRecordId.allocationSize(value.v1)
             )
         }
+        is CloudBackupManagerAction.DeleteUndecryptableWalletBackups -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is CloudBackupManagerAction.RecoverOtherBackups -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -40038,6 +42346,12 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             )
         }
         is CloudBackupManagerAction.RefreshDetail -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupManagerAction.RefreshOtherBackups -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -40176,41 +42490,49 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 FfiConverterTypeRecordId.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupManagerAction.RecoverOtherBackups -> {
+            is CloudBackupManagerAction.DeleteUndecryptableWalletBackups -> {
                 buf.putInt(25)
                 Unit
             }
-            is CloudBackupManagerAction.DeleteOtherBackups -> {
+            is CloudBackupManagerAction.RecoverOtherBackups -> {
                 buf.putInt(26)
                 Unit
             }
-            is CloudBackupManagerAction.DisableCloudBackup -> {
+            is CloudBackupManagerAction.DeleteOtherBackups -> {
                 buf.putInt(27)
                 Unit
             }
-            is CloudBackupManagerAction.KeepCloudBackupEnabled -> {
+            is CloudBackupManagerAction.DisableCloudBackup -> {
                 buf.putInt(28)
                 Unit
             }
-            is CloudBackupManagerAction.RefreshDetail -> {
+            is CloudBackupManagerAction.KeepCloudBackupEnabled -> {
                 buf.putInt(29)
                 Unit
             }
-            is CloudBackupManagerAction.EnterDetail -> {
+            is CloudBackupManagerAction.RefreshDetail -> {
                 buf.putInt(30)
                 Unit
             }
-            is CloudBackupManagerAction.CloseDetail -> {
+            is CloudBackupManagerAction.RefreshOtherBackups -> {
                 buf.putInt(31)
                 Unit
             }
-            is CloudBackupManagerAction.PromptEnablePasskeyChoice -> {
+            is CloudBackupManagerAction.EnterDetail -> {
                 buf.putInt(32)
+                Unit
+            }
+            is CloudBackupManagerAction.CloseDetail -> {
+                buf.putInt(33)
+                Unit
+            }
+            is CloudBackupManagerAction.PromptEnablePasskeyChoice -> {
+                buf.putInt(34)
                 FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.AcceptEnablePrompt -> {
-                buf.putInt(33)
+                buf.putInt(35)
                 FfiConverterTypeCloudBackupEnablePromptChoice.write(value.v1, buf)
                 Unit
             }
@@ -40265,6 +42587,12 @@ public object FfiConverterTypeCloudBackupOnboardingCompletionReadiness: FfiConve
  */
 sealed class CloudBackupOtherBackupsState {
 
+    object NotChecked : CloudBackupOtherBackupsState()
+
+
+    object Checking : CloudBackupOtherBackupsState()
+
+
     data class Loaded(
         val `summary`: org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary) : CloudBackupOtherBackupsState()
 
@@ -40275,7 +42603,7 @@ sealed class CloudBackupOtherBackupsState {
     }
 
     data class LoadFailed(
-        val `error`: kotlin.String) : CloudBackupOtherBackupsState()
+        val `reason`: org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason) : CloudBackupOtherBackupsState()
 
     {
 
@@ -40299,17 +42627,31 @@ sealed class CloudBackupOtherBackupsState {
 public object FfiConverterTypeCloudBackupOtherBackupsState : FfiConverterRustBuffer<CloudBackupOtherBackupsState>{
     override fun read(buf: ByteBuffer): CloudBackupOtherBackupsState {
         return when(buf.getInt()) {
-            1 -> CloudBackupOtherBackupsState.Loaded(
+            1 -> CloudBackupOtherBackupsState.NotChecked
+            2 -> CloudBackupOtherBackupsState.Checking
+            3 -> CloudBackupOtherBackupsState.Loaded(
                 FfiConverterTypeCloudBackupOtherBackupsSummary.read(buf),
                 )
-            2 -> CloudBackupOtherBackupsState.LoadFailed(
-                FfiConverterString.read(buf),
+            4 -> CloudBackupOtherBackupsState.LoadFailed(
+                FfiConverterTypeCloudBackupInventoryIncompleteReason.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
 
     override fun allocationSize(value: CloudBackupOtherBackupsState): ULong = when(value) {
+        is CloudBackupOtherBackupsState.NotChecked -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupOtherBackupsState.Checking -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
         is CloudBackupOtherBackupsState.Loaded -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -40321,21 +42663,29 @@ public object FfiConverterTypeCloudBackupOtherBackupsState : FfiConverterRustBuf
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.`error`)
+                + FfiConverterTypeCloudBackupInventoryIncompleteReason.allocationSize(value.`reason`)
             )
         }
     }
 
     override fun write(value: CloudBackupOtherBackupsState, buf: ByteBuffer) {
         when(value) {
-            is CloudBackupOtherBackupsState.Loaded -> {
+            is CloudBackupOtherBackupsState.NotChecked -> {
                 buf.putInt(1)
+                Unit
+            }
+            is CloudBackupOtherBackupsState.Checking -> {
+                buf.putInt(2)
+                Unit
+            }
+            is CloudBackupOtherBackupsState.Loaded -> {
+                buf.putInt(3)
                 FfiConverterTypeCloudBackupOtherBackupsSummary.write(value.`summary`, buf)
                 Unit
             }
             is CloudBackupOtherBackupsState.LoadFailed -> {
-                buf.putInt(2)
-                FfiConverterString.write(value.`error`, buf)
+                buf.putInt(4)
+                FfiConverterTypeCloudBackupInventoryIncompleteReason.write(value.`reason`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -41760,6 +44110,96 @@ public object FfiConverterTypeCloudBackupSyncState : FfiConverterRustBuffer<Clou
 
 
 /**
+ * Status of a request to remove cloud-only backups that the active key cannot decrypt
+ */
+sealed class CloudBackupUndecryptableWalletDeletionState {
+
+    object Idle : CloudBackupUndecryptableWalletDeletionState()
+
+
+    object Deleting : CloudBackupUndecryptableWalletDeletionState()
+
+
+    data class Failed(
+        val v1: kotlin.String) : CloudBackupUndecryptableWalletDeletionState()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeCloudBackupUndecryptableWalletDeletionState : FfiConverterRustBuffer<CloudBackupUndecryptableWalletDeletionState>{
+    override fun read(buf: ByteBuffer): CloudBackupUndecryptableWalletDeletionState {
+        return when(buf.getInt()) {
+            1 -> CloudBackupUndecryptableWalletDeletionState.Idle
+            2 -> CloudBackupUndecryptableWalletDeletionState.Deleting
+            3 -> CloudBackupUndecryptableWalletDeletionState.Failed(
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: CloudBackupUndecryptableWalletDeletionState): ULong = when(value) {
+        is CloudBackupUndecryptableWalletDeletionState.Idle -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUndecryptableWalletDeletionState.Deleting -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is CloudBackupUndecryptableWalletDeletionState.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: CloudBackupUndecryptableWalletDeletionState, buf: ByteBuffer) {
+        when(value) {
+            is CloudBackupUndecryptableWalletDeletionState.Idle -> {
+                buf.putInt(1)
+                Unit
+            }
+            is CloudBackupUndecryptableWalletDeletionState.Deleting -> {
+                buf.putInt(2)
+                Unit
+            }
+            is CloudBackupUndecryptableWalletDeletionState.Failed -> {
+                buf.putInt(3)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
  * Persisted verification metadata projected into prompts and detail state
  */
 sealed class CloudBackupVerificationMetadata {
@@ -41772,6 +44212,17 @@ sealed class CloudBackupVerificationMetadata {
 
     data class Verified(
         val v1: kotlin.ULong) : CloudBackupVerificationMetadata()
+
+    {
+
+
+        companion object
+    }
+
+    data class NeedsAttention(
+        val `checkedAt`: kotlin.ULong,
+        val `walletsVerified`: kotlin.UInt,
+        val `walletIssues`: org.bitcoinppl.cove_core.CloudBackupWalletVerificationIssues) : CloudBackupVerificationMetadata()
 
     {
 
@@ -41803,7 +44254,12 @@ public object FfiConverterTypeCloudBackupVerificationMetadata : FfiConverterRust
             3 -> CloudBackupVerificationMetadata.Verified(
                 FfiConverterULong.read(buf),
                 )
-            4 -> CloudBackupVerificationMetadata.NeedsVerification
+            4 -> CloudBackupVerificationMetadata.NeedsAttention(
+                FfiConverterULong.read(buf),
+                FfiConverterUInt.read(buf),
+                FfiConverterTypeCloudBackupWalletVerificationIssues.read(buf),
+                )
+            5 -> CloudBackupVerificationMetadata.NeedsVerification
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -41826,6 +44282,15 @@ public object FfiConverterTypeCloudBackupVerificationMetadata : FfiConverterRust
             (
                 4UL
                 + FfiConverterULong.allocationSize(value.v1)
+            )
+        }
+        is CloudBackupVerificationMetadata.NeedsAttention -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterULong.allocationSize(value.`checkedAt`)
+                + FfiConverterUInt.allocationSize(value.`walletsVerified`)
+                + FfiConverterTypeCloudBackupWalletVerificationIssues.allocationSize(value.`walletIssues`)
             )
         }
         is CloudBackupVerificationMetadata.NeedsVerification -> {
@@ -41851,8 +44316,15 @@ public object FfiConverterTypeCloudBackupVerificationMetadata : FfiConverterRust
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
-            is CloudBackupVerificationMetadata.NeedsVerification -> {
+            is CloudBackupVerificationMetadata.NeedsAttention -> {
                 buf.putInt(4)
+                FfiConverterULong.write(value.`checkedAt`, buf)
+                FfiConverterUInt.write(value.`walletsVerified`, buf)
+                FfiConverterTypeCloudBackupWalletVerificationIssues.write(value.`walletIssues`, buf)
+                Unit
+            }
+            is CloudBackupVerificationMetadata.NeedsVerification -> {
+                buf.putInt(5)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -42173,6 +44645,16 @@ sealed class CloudBackupVerificationState {
         companion object
     }
 
+    data class NeedsAttention(
+        val `report`: org.bitcoinppl.cove_core.DeepVerificationReport,
+        val `checkedAt`: kotlin.ULong?) : CloudBackupVerificationState()
+
+    {
+
+
+        companion object
+    }
+
     object Required : CloudBackupVerificationState()
 
 
@@ -42215,11 +44697,15 @@ public object FfiConverterTypeCloudBackupVerificationState : FfiConverterRustBuf
                 FfiConverterOptionalTypeDeepVerificationReport.read(buf),
                 FfiConverterOptionalULong.read(buf),
                 )
-            3 -> CloudBackupVerificationState.Required
-            4 -> CloudBackupVerificationState.Running
-            5 -> CloudBackupVerificationState.AwaitingUploadConfirmation
-            6 -> CloudBackupVerificationState.Cancelled
-            7 -> CloudBackupVerificationState.Failed(
+            3 -> CloudBackupVerificationState.NeedsAttention(
+                FfiConverterTypeDeepVerificationReport.read(buf),
+                FfiConverterOptionalULong.read(buf),
+                )
+            4 -> CloudBackupVerificationState.Required
+            5 -> CloudBackupVerificationState.Running
+            6 -> CloudBackupVerificationState.AwaitingUploadConfirmation
+            7 -> CloudBackupVerificationState.Cancelled
+            8 -> CloudBackupVerificationState.Failed(
                 FfiConverterTypeDeepVerificationFailure.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -42239,6 +44725,14 @@ public object FfiConverterTypeCloudBackupVerificationState : FfiConverterRustBuf
                 4UL
                 + FfiConverterOptionalTypeDeepVerificationReport.allocationSize(value.`report`)
                 + FfiConverterOptionalULong.allocationSize(value.`lastVerifiedAt`)
+            )
+        }
+        is CloudBackupVerificationState.NeedsAttention -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeDeepVerificationReport.allocationSize(value.`report`)
+                + FfiConverterOptionalULong.allocationSize(value.`checkedAt`)
             )
         }
         is CloudBackupVerificationState.Required -> {
@@ -42286,24 +44780,30 @@ public object FfiConverterTypeCloudBackupVerificationState : FfiConverterRustBuf
                 FfiConverterOptionalULong.write(value.`lastVerifiedAt`, buf)
                 Unit
             }
-            is CloudBackupVerificationState.Required -> {
+            is CloudBackupVerificationState.NeedsAttention -> {
                 buf.putInt(3)
+                FfiConverterTypeDeepVerificationReport.write(value.`report`, buf)
+                FfiConverterOptionalULong.write(value.`checkedAt`, buf)
                 Unit
             }
-            is CloudBackupVerificationState.Running -> {
+            is CloudBackupVerificationState.Required -> {
                 buf.putInt(4)
                 Unit
             }
-            is CloudBackupVerificationState.AwaitingUploadConfirmation -> {
+            is CloudBackupVerificationState.Running -> {
                 buf.putInt(5)
                 Unit
             }
-            is CloudBackupVerificationState.Cancelled -> {
+            is CloudBackupVerificationState.AwaitingUploadConfirmation -> {
                 buf.putInt(6)
                 Unit
             }
-            is CloudBackupVerificationState.Failed -> {
+            is CloudBackupVerificationState.Cancelled -> {
                 buf.putInt(7)
+                Unit
+            }
+            is CloudBackupVerificationState.Failed -> {
+                buf.putInt(8)
                 FfiConverterTypeDeepVerificationFailure.write(value.v1, buf)
                 Unit
             }
@@ -43509,6 +46009,14 @@ sealed class DatabaseException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class WalletLifecycle(
+
+        val v1: WalletLifecycleFailure
+        ) : DatabaseException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
     class GlobalFlag(
 
         val v1: GlobalFlagTableException
@@ -43674,49 +46182,52 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
             3 -> DatabaseException.Wallets(
                 FfiConverterTypeWalletTableError.read(buf),
                 )
-            4 -> DatabaseException.GlobalFlag(
+            4 -> DatabaseException.WalletLifecycle(
+                FfiConverterTypeWalletLifecycleFailure.read(buf),
+                )
+            5 -> DatabaseException.GlobalFlag(
                 FfiConverterTypeGlobalFlagTableError.read(buf),
                 )
-            5 -> DatabaseException.GlobalConfig(
+            6 -> DatabaseException.GlobalConfig(
                 FfiConverterTypeGlobalConfigTableError.read(buf),
                 )
-            6 -> DatabaseException.GlobalCache(
+            7 -> DatabaseException.GlobalCache(
                 FfiConverterTypeGlobalCacheTableError.read(buf),
                 )
-            7 -> DatabaseException.UnsignedTransactions(
+            8 -> DatabaseException.UnsignedTransactions(
                 FfiConverterTypeUnsignedTransactionsTableError.read(buf),
                 )
-            8 -> DatabaseException.HistoricalPrice(
+            9 -> DatabaseException.HistoricalPrice(
                 FfiConverterTypeHistoricalPriceTableError.read(buf),
                 )
-            9 -> DatabaseException.DiagnosticsReports(
+            10 -> DatabaseException.DiagnosticsReports(
                 FfiConverterTypeDiagnosticsReportsTableError.read(buf),
                 )
-            10 -> DatabaseException.Serialization(
+            11 -> DatabaseException.Serialization(
                 FfiConverterTypeSerdeError.read(buf),
                 )
-            11 -> DatabaseException.WalletNotFound()
-            12 -> DatabaseException.EncryptionKeyNotSet()
-            13 -> DatabaseException.BootstrapFailed(
+            12 -> DatabaseException.WalletNotFound()
+            13 -> DatabaseException.EncryptionKeyNotSet()
+            14 -> DatabaseException.BootstrapFailed(
                 FfiConverterString.read(buf),
                 )
-            14 -> DatabaseException.BackendOpen(
-                FfiConverterString.read(buf),
-                FfiConverterString.read(buf),
-                )
-            15 -> DatabaseException.CorruptBlock(
+            15 -> DatabaseException.BackendOpen(
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 )
-            16 -> DatabaseException.DatabaseAlreadyOpen()
-            17 -> DatabaseException.HeaderIntegrity(
+            16 -> DatabaseException.CorruptBlock(
                 FfiConverterString.read(buf),
                 FfiConverterString.read(buf),
                 )
-            18 -> DatabaseException.UnsupportedVersion(
+            17 -> DatabaseException.DatabaseAlreadyOpen()
+            18 -> DatabaseException.HeaderIntegrity(
+                FfiConverterString.read(buf),
+                FfiConverterString.read(buf),
+                )
+            19 -> DatabaseException.UnsupportedVersion(
                 FfiConverterTypeUnsupportedDbVersion.read(buf),
                 )
-            19 -> DatabaseException.PlaintextNotAllowed(
+            20 -> DatabaseException.PlaintextNotAllowed(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -43739,6 +46250,11 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterTypeWalletTableError.allocationSize(value.v1)
+            )
+            is DatabaseException.WalletLifecycle -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletLifecycleFailure.allocationSize(value.v1)
             )
             is DatabaseException.GlobalFlag -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -43840,83 +46356,88 @@ public object FfiConverterTypeDatabaseError : FfiConverterRustBuffer<DatabaseExc
                 FfiConverterTypeWalletTableError.write(value.v1, buf)
                 Unit
             }
-            is DatabaseException.GlobalFlag -> {
+            is DatabaseException.WalletLifecycle -> {
                 buf.putInt(4)
+                FfiConverterTypeWalletLifecycleFailure.write(value.v1, buf)
+                Unit
+            }
+            is DatabaseException.GlobalFlag -> {
+                buf.putInt(5)
                 FfiConverterTypeGlobalFlagTableError.write(value.v1, buf)
                 Unit
             }
             is DatabaseException.GlobalConfig -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 FfiConverterTypeGlobalConfigTableError.write(value.v1, buf)
                 Unit
             }
             is DatabaseException.GlobalCache -> {
-                buf.putInt(6)
+                buf.putInt(7)
                 FfiConverterTypeGlobalCacheTableError.write(value.v1, buf)
                 Unit
             }
             is DatabaseException.UnsignedTransactions -> {
-                buf.putInt(7)
+                buf.putInt(8)
                 FfiConverterTypeUnsignedTransactionsTableError.write(value.v1, buf)
                 Unit
             }
             is DatabaseException.HistoricalPrice -> {
-                buf.putInt(8)
+                buf.putInt(9)
                 FfiConverterTypeHistoricalPriceTableError.write(value.v1, buf)
                 Unit
             }
             is DatabaseException.DiagnosticsReports -> {
-                buf.putInt(9)
+                buf.putInt(10)
                 FfiConverterTypeDiagnosticsReportsTableError.write(value.v1, buf)
                 Unit
             }
             is DatabaseException.Serialization -> {
-                buf.putInt(10)
+                buf.putInt(11)
                 FfiConverterTypeSerdeError.write(value.v1, buf)
                 Unit
             }
             is DatabaseException.WalletNotFound -> {
-                buf.putInt(11)
-                Unit
-            }
-            is DatabaseException.EncryptionKeyNotSet -> {
                 buf.putInt(12)
                 Unit
             }
-            is DatabaseException.BootstrapFailed -> {
+            is DatabaseException.EncryptionKeyNotSet -> {
                 buf.putInt(13)
+                Unit
+            }
+            is DatabaseException.BootstrapFailed -> {
+                buf.putInt(14)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is DatabaseException.BackendOpen -> {
-                buf.putInt(14)
-                FfiConverterString.write(value.`path`, buf)
-                FfiConverterString.write(value.`error`, buf)
-                Unit
-            }
-            is DatabaseException.CorruptBlock -> {
                 buf.putInt(15)
                 FfiConverterString.write(value.`path`, buf)
                 FfiConverterString.write(value.`error`, buf)
                 Unit
             }
-            is DatabaseException.DatabaseAlreadyOpen -> {
+            is DatabaseException.CorruptBlock -> {
                 buf.putInt(16)
+                FfiConverterString.write(value.`path`, buf)
+                FfiConverterString.write(value.`error`, buf)
+                Unit
+            }
+            is DatabaseException.DatabaseAlreadyOpen -> {
+                buf.putInt(17)
                 Unit
             }
             is DatabaseException.HeaderIntegrity -> {
-                buf.putInt(17)
+                buf.putInt(18)
                 FfiConverterString.write(value.`path`, buf)
                 FfiConverterString.write(value.`error`, buf)
                 Unit
             }
             is DatabaseException.UnsupportedVersion -> {
-                buf.putInt(18)
+                buf.putInt(19)
                 FfiConverterTypeUnsupportedDbVersion.write(value.v1, buf)
                 Unit
             }
             is DatabaseException.PlaintextNotAllowed -> {
-                buf.putInt(19)
+                buf.putInt(20)
                 FfiConverterString.write(value.`path`, buf)
                 Unit
             }
@@ -44125,6 +46646,15 @@ sealed class DeepVerificationResult {
         companion object
     }
 
+    data class NeedsAttention(
+        val v1: org.bitcoinppl.cove_core.DeepVerificationReport) : DeepVerificationResult()
+
+    {
+
+
+        companion object
+    }
+
     data class AwaitingUploadConfirmation(
         val v1: org.bitcoinppl.cove_core.DeepVerificationReport) : DeepVerificationResult()
 
@@ -44192,20 +46722,23 @@ public object FfiConverterTypeDeepVerificationResult : FfiConverterRustBuffer<De
             1 -> DeepVerificationResult.Verified(
                 FfiConverterTypeDeepVerificationReport.read(buf),
                 )
-            2 -> DeepVerificationResult.AwaitingUploadConfirmation(
+            2 -> DeepVerificationResult.NeedsAttention(
                 FfiConverterTypeDeepVerificationReport.read(buf),
                 )
-            3 -> DeepVerificationResult.PasskeyConfirmed(
+            3 -> DeepVerificationResult.AwaitingUploadConfirmation(
+                FfiConverterTypeDeepVerificationReport.read(buf),
+                )
+            4 -> DeepVerificationResult.PasskeyConfirmed(
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
                 )
-            4 -> DeepVerificationResult.PasskeyMissing(
+            5 -> DeepVerificationResult.PasskeyMissing(
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
                 )
-            5 -> DeepVerificationResult.UserCancelled(
+            6 -> DeepVerificationResult.UserCancelled(
                 FfiConverterOptionalTypeCloudBackupDetail.read(buf),
                 )
-            6 -> DeepVerificationResult.NotEnabled
-            7 -> DeepVerificationResult.Failed(
+            7 -> DeepVerificationResult.NotEnabled
+            8 -> DeepVerificationResult.Failed(
                 FfiConverterTypeDeepVerificationFailure.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -44214,6 +46747,13 @@ public object FfiConverterTypeDeepVerificationResult : FfiConverterRustBuffer<De
 
     override fun allocationSize(value: DeepVerificationResult): ULong = when(value) {
         is DeepVerificationResult.Verified -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeDeepVerificationReport.allocationSize(value.v1)
+            )
+        }
+        is DeepVerificationResult.NeedsAttention -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -44270,32 +46810,37 @@ public object FfiConverterTypeDeepVerificationResult : FfiConverterRustBuffer<De
                 FfiConverterTypeDeepVerificationReport.write(value.v1, buf)
                 Unit
             }
-            is DeepVerificationResult.AwaitingUploadConfirmation -> {
+            is DeepVerificationResult.NeedsAttention -> {
                 buf.putInt(2)
                 FfiConverterTypeDeepVerificationReport.write(value.v1, buf)
                 Unit
             }
-            is DeepVerificationResult.PasskeyConfirmed -> {
+            is DeepVerificationResult.AwaitingUploadConfirmation -> {
                 buf.putInt(3)
-                FfiConverterOptionalTypeCloudBackupDetail.write(value.v1, buf)
+                FfiConverterTypeDeepVerificationReport.write(value.v1, buf)
                 Unit
             }
-            is DeepVerificationResult.PasskeyMissing -> {
+            is DeepVerificationResult.PasskeyConfirmed -> {
                 buf.putInt(4)
                 FfiConverterOptionalTypeCloudBackupDetail.write(value.v1, buf)
                 Unit
             }
-            is DeepVerificationResult.UserCancelled -> {
+            is DeepVerificationResult.PasskeyMissing -> {
                 buf.putInt(5)
                 FfiConverterOptionalTypeCloudBackupDetail.write(value.v1, buf)
                 Unit
             }
-            is DeepVerificationResult.NotEnabled -> {
+            is DeepVerificationResult.UserCancelled -> {
                 buf.putInt(6)
+                FfiConverterOptionalTypeCloudBackupDetail.write(value.v1, buf)
+                Unit
+            }
+            is DeepVerificationResult.NotEnabled -> {
+                buf.putInt(7)
                 Unit
             }
             is DeepVerificationResult.Failed -> {
-                buf.putInt(7)
+                buf.putInt(8)
                 FfiConverterTypeDeepVerificationFailure.write(value.v1, buf)
                 Unit
             }
@@ -49121,6 +51666,12 @@ sealed class LabelManagerException: kotlin.Exception() {
             get() = ""
     }
 
+    class ManagerClosed(
+        ) : LabelManagerException() {
+        override val message
+            get() = ""
+    }
+
 
 
 
@@ -49180,6 +51731,7 @@ public object FfiConverterTypeLabelManagerError : FfiConverterRustBuffer<LabelMa
                 FfiConverterString.read(buf),
                 )
             11 -> LabelManagerException.WalletNotSelected()
+            12 -> LabelManagerException.ManagerClosed()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -49237,6 +51789,10 @@ public object FfiConverterTypeLabelManagerError : FfiConverterRustBuffer<LabelMa
                 + FfiConverterString.allocationSize(value.v1)
             )
             is LabelManagerException.WalletNotSelected -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is LabelManagerException.ManagerClosed -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -49299,6 +51855,10 @@ public object FfiConverterTypeLabelManagerError : FfiConverterRustBuffer<LabelMa
                 buf.putInt(11)
                 Unit
             }
+            is LabelManagerException.ManagerClosed -> {
+                buf.putInt(12)
+                Unit
+            }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
 
@@ -49332,6 +51892,69 @@ public object FfiConverterTypeListSortDirection: FfiConverterRustBuffer<ListSort
     override fun allocationSize(value: ListSortDirection) = 4UL
 
     override fun write(value: ListSortDirection, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * Phase of a failed device-local reset after wallet deletion
+ */
+
+enum class LocalDataResetStage {
+
+    /**
+     * Remaining Cove wallet keychain entries
+     */
+    WALLET_KEYCHAIN,
+    /**
+     * Orphan BDK stores and wallet-data directories
+     */
+    WALLET_ARTIFACTS,
+    /**
+     * Cloud Backup local keychain or in-process state
+     */
+    CLOUD_BACKUP,
+    /**
+     * Restore markers and locks
+     */
+    RESTORE_STATE,
+    /**
+     * Root data-directory durability synchronization
+     */
+    ROOT_DIRECTORY_SYNC,
+    /**
+     * Diagnostics logs
+     */
+    DIAGNOSTICS,
+    /**
+     * Main database reset and reinitialization
+     */
+    DATABASE;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLocalDataResetStage: FfiConverterRustBuffer<LocalDataResetStage> {
+    override fun read(buf: ByteBuffer) = try {
+        LocalDataResetStage.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: LocalDataResetStage) = 4UL
+
+    override fun write(value: LocalDataResetStage, buf: ByteBuffer) {
         buf.putInt(value.ordinal + 1)
     }
 }
@@ -53659,6 +56282,12 @@ sealed class SeedQrException: kotlin.Exception() {
             get() = ""
     }
 
+    class InvalidLength(
+        ) : SeedQrException() {
+        override val message
+            get() = ""
+    }
+
     class IndexOutOfBounds(
 
         val v1: kotlin.UShort
@@ -53712,13 +56341,14 @@ public object FfiConverterTypeSeedQrError : FfiConverterRustBuffer<SeedQrExcepti
 
         return when(buf.getInt()) {
             1 -> SeedQrException.ContainsNonNumericChars()
-            2 -> SeedQrException.IndexOutOfBounds(
+            2 -> SeedQrException.InvalidLength()
+            3 -> SeedQrException.IndexOutOfBounds(
                 FfiConverterUShort.read(buf),
                 )
-            3 -> SeedQrException.IncorrectWordLength(
+            4 -> SeedQrException.IncorrectWordLength(
                 FfiConverterUShort.read(buf),
                 )
-            4 -> SeedQrException.InvalidMnemonic(
+            5 -> SeedQrException.InvalidMnemonic(
                 FfiConverterTypeBip39Error.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -53728,6 +56358,10 @@ public object FfiConverterTypeSeedQrError : FfiConverterRustBuffer<SeedQrExcepti
     override fun allocationSize(value: SeedQrException): ULong {
         return when(value) {
             is SeedQrException.ContainsNonNumericChars -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is SeedQrException.InvalidLength -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -53755,18 +56389,22 @@ public object FfiConverterTypeSeedQrError : FfiConverterRustBuffer<SeedQrExcepti
                 buf.putInt(1)
                 Unit
             }
-            is SeedQrException.IndexOutOfBounds -> {
+            is SeedQrException.InvalidLength -> {
                 buf.putInt(2)
-                FfiConverterUShort.write(value.v1, buf)
                 Unit
             }
-            is SeedQrException.IncorrectWordLength -> {
+            is SeedQrException.IndexOutOfBounds -> {
                 buf.putInt(3)
                 FfiConverterUShort.write(value.v1, buf)
                 Unit
             }
-            is SeedQrException.InvalidMnemonic -> {
+            is SeedQrException.IncorrectWordLength -> {
                 buf.putInt(4)
+                FfiConverterUShort.write(value.v1, buf)
+                Unit
+            }
+            is SeedQrException.InvalidMnemonic -> {
+                buf.putInt(5)
                 FfiConverterTypeBip39Error.write(value.v1, buf)
                 Unit
             }
@@ -56263,10 +58901,16 @@ public object FfiConverterTypeSettingsRoute : FfiConverterRustBuffer<SettingsRou
 
 
 
+/**
+ * The result of a setup attempt
+ */
 sealed class SetupCmdResponse: Disposable  {
 
-    data class ContinueFromInit(
-        val v1: org.bitcoinppl.cove_core.ContinueFromInit) : SetupCmdResponse()
+    /**
+     * The mobile layer must pass this opaque continuation to ContinueSetup
+     */
+    data class Retry(
+        val v1: org.bitcoinppl.cove_core.TapSignerSetupContinuation) : SetupCmdResponse()
 
     {
 
@@ -56274,24 +58918,9 @@ sealed class SetupCmdResponse: Disposable  {
         companion object
     }
 
-    data class ContinueFromBackup(
-        val v1: org.bitcoinppl.cove_core.ContinueFromBackup) : SetupCmdResponse()
-
-    {
-
-
-        companion object
-    }
-
-    data class ContinueFromDerive(
-        val v1: org.bitcoinppl.cove_core.ContinueFromDerive) : SetupCmdResponse()
-
-    {
-
-
-        companion object
-    }
-
+    /**
+     * Setup completed and returned the backup and derived key data
+     */
     data class Complete(
         val v1: org.bitcoinppl.cove_core.TapSignerSetupComplete) : SetupCmdResponse()
 
@@ -56306,21 +58935,7 @@ sealed class SetupCmdResponse: Disposable  {
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
-            is SetupCmdResponse.ContinueFromInit -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is SetupCmdResponse.ContinueFromBackup -> {
-
-    Disposable.destroy(
-        this.v1
-    )
-
-            }
-            is SetupCmdResponse.ContinueFromDerive -> {
+            is SetupCmdResponse.Retry -> {
 
     Disposable.destroy(
         this.v1
@@ -56351,16 +58966,10 @@ sealed class SetupCmdResponse: Disposable  {
 public object FfiConverterTypeSetupCmdResponse : FfiConverterRustBuffer<SetupCmdResponse>{
     override fun read(buf: ByteBuffer): SetupCmdResponse {
         return when(buf.getInt()) {
-            1 -> SetupCmdResponse.ContinueFromInit(
-                FfiConverterTypeContinueFromInit.read(buf),
+            1 -> SetupCmdResponse.Retry(
+                FfiConverterTypeTapSignerSetupContinuation.read(buf),
                 )
-            2 -> SetupCmdResponse.ContinueFromBackup(
-                FfiConverterTypeContinueFromBackup.read(buf),
-                )
-            3 -> SetupCmdResponse.ContinueFromDerive(
-                FfiConverterTypeContinueFromDerive.read(buf),
-                )
-            4 -> SetupCmdResponse.Complete(
+            2 -> SetupCmdResponse.Complete(
                 FfiConverterTypeTapSignerSetupComplete.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -56368,25 +58977,11 @@ public object FfiConverterTypeSetupCmdResponse : FfiConverterRustBuffer<SetupCmd
     }
 
     override fun allocationSize(value: SetupCmdResponse): ULong = when(value) {
-        is SetupCmdResponse.ContinueFromInit -> {
+        is SetupCmdResponse.Retry -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterTypeContinueFromInit.allocationSize(value.v1)
-            )
-        }
-        is SetupCmdResponse.ContinueFromBackup -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeContinueFromBackup.allocationSize(value.v1)
-            )
-        }
-        is SetupCmdResponse.ContinueFromDerive -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-                + FfiConverterTypeContinueFromDerive.allocationSize(value.v1)
+                + FfiConverterTypeTapSignerSetupContinuation.allocationSize(value.v1)
             )
         }
         is SetupCmdResponse.Complete -> {
@@ -56400,27 +58995,60 @@ public object FfiConverterTypeSetupCmdResponse : FfiConverterRustBuffer<SetupCmd
 
     override fun write(value: SetupCmdResponse, buf: ByteBuffer) {
         when(value) {
-            is SetupCmdResponse.ContinueFromInit -> {
+            is SetupCmdResponse.Retry -> {
                 buf.putInt(1)
-                FfiConverterTypeContinueFromInit.write(value.v1, buf)
-                Unit
-            }
-            is SetupCmdResponse.ContinueFromBackup -> {
-                buf.putInt(2)
-                FfiConverterTypeContinueFromBackup.write(value.v1, buf)
-                Unit
-            }
-            is SetupCmdResponse.ContinueFromDerive -> {
-                buf.putInt(3)
-                FfiConverterTypeContinueFromDerive.write(value.v1, buf)
+                FfiConverterTypeTapSignerSetupContinuation.write(value.v1, buf)
                 Unit
             }
             is SetupCmdResponse.Complete -> {
-                buf.putInt(4)
+                buf.putInt(2)
                 FfiConverterTypeTapSignerSetupComplete.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Deadline selected for a terminal wallet actor request
+ */
+
+enum class ShutdownDeadlineTier {
+
+    /**
+     * Five-second first attempt
+     */
+    INITIAL,
+    /**
+     * Twenty-second authorized retry
+     */
+    RETRY;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeShutdownDeadlineTier: FfiConverterRustBuffer<ShutdownDeadlineTier> {
+    override fun read(buf: ByteBuffer) = try {
+        ShutdownDeadlineTier.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: ShutdownDeadlineTier) = 4UL
+
+    override fun write(value: ShutdownDeadlineTier, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -56829,8 +59457,14 @@ public object FfiConverterTypeStringOrData : FfiConverterRustBuffer<StringOrData
 
 
 
+/**
+ * A command sent to a connected TAPSIGNER
+ */
 sealed class TapSignerCmd: Disposable  {
 
+    /**
+     * Initialize and set up the card
+     */
     data class Setup(
         val v1: org.bitcoinppl.cove_core.SetupCmd) : TapSignerCmd()
 
@@ -56840,8 +59474,35 @@ sealed class TapSignerCmd: Disposable  {
         companion object
     }
 
+    /**
+     * Continue a previously uncertain setup stage
+     */
+    data class ContinueSetup(
+        val v1: org.bitcoinppl.cove_core.TapSignerSetupContinuation) : TapSignerCmd()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Continue a previously uncertain standalone operation
+     */
+    data class ContinueOperation(
+        val v1: org.bitcoinppl.cove_core.TapSignerOperationContinuation) : TapSignerCmd()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * Create a card backup
+     */
     data class Backup(
-        val `pin`: kotlin.String) : TapSignerCmd()
+        val `cvc`: org.bitcoinppl.cove_core.TapSignerCvc) : TapSignerCmd()
 
     {
 
@@ -56849,8 +59510,11 @@ sealed class TapSignerCmd: Disposable  {
         companion object
     }
 
+    /**
+     * Derive the configured wallet key
+     */
     data class Derive(
-        val `pin`: kotlin.String) : TapSignerCmd()
+        val `cvc`: org.bitcoinppl.cove_core.TapSignerCvc) : TapSignerCmd()
 
     {
 
@@ -56858,9 +59522,12 @@ sealed class TapSignerCmd: Disposable  {
         companion object
     }
 
+    /**
+     * Change the current card CVC
+     */
     data class Change(
-        val `currentPin`: kotlin.String,
-        val `newPin`: kotlin.String) : TapSignerCmd()
+        val `currentCvc`: org.bitcoinppl.cove_core.TapSignerCvc,
+        val `newCvc`: org.bitcoinppl.cove_core.TapSignerCvc) : TapSignerCmd()
 
     {
 
@@ -56868,9 +59535,12 @@ sealed class TapSignerCmd: Disposable  {
         companion object
     }
 
+    /**
+     * Sign a PSBT with the card
+     */
     data class Sign(
         val `psbt`: org.bitcoinppl.cove_core.types.Psbt,
-        val `pin`: kotlin.String) : TapSignerCmd()
+        val `cvc`: org.bitcoinppl.cove_core.TapSignerCvc) : TapSignerCmd()
 
     {
 
@@ -56890,25 +59560,39 @@ sealed class TapSignerCmd: Disposable  {
     )
 
             }
+            is TapSignerCmd.ContinueSetup -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is TapSignerCmd.ContinueOperation -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
             is TapSignerCmd.Backup -> {
 
     Disposable.destroy(
-        this.`pin`
+        this.`cvc`
     )
 
             }
             is TapSignerCmd.Derive -> {
 
     Disposable.destroy(
-        this.`pin`
+        this.`cvc`
     )
 
             }
             is TapSignerCmd.Change -> {
 
     Disposable.destroy(
-        this.`currentPin`,
-        this.`newPin`
+        this.`currentCvc`,
+        this.`newCvc`
     )
 
             }
@@ -56916,7 +59600,7 @@ sealed class TapSignerCmd: Disposable  {
 
     Disposable.destroy(
         this.`psbt`,
-        this.`pin`
+        this.`cvc`
     )
 
             }
@@ -56940,19 +59624,25 @@ public object FfiConverterTypeTapSignerCmd : FfiConverterRustBuffer<TapSignerCmd
             1 -> TapSignerCmd.Setup(
                 FfiConverterTypeSetupCmd.read(buf),
                 )
-            2 -> TapSignerCmd.Backup(
-                FfiConverterString.read(buf),
+            2 -> TapSignerCmd.ContinueSetup(
+                FfiConverterTypeTapSignerSetupContinuation.read(buf),
                 )
-            3 -> TapSignerCmd.Derive(
-                FfiConverterString.read(buf),
+            3 -> TapSignerCmd.ContinueOperation(
+                FfiConverterTypeTapSignerOperationContinuation.read(buf),
                 )
-            4 -> TapSignerCmd.Change(
-                FfiConverterString.read(buf),
-                FfiConverterString.read(buf),
+            4 -> TapSignerCmd.Backup(
+                FfiConverterTypeTapSignerCvc.read(buf),
                 )
-            5 -> TapSignerCmd.Sign(
+            5 -> TapSignerCmd.Derive(
+                FfiConverterTypeTapSignerCvc.read(buf),
+                )
+            6 -> TapSignerCmd.Change(
+                FfiConverterTypeTapSignerCvc.read(buf),
+                FfiConverterTypeTapSignerCvc.read(buf),
+                )
+            7 -> TapSignerCmd.Sign(
                 FfiConverterTypePsbt.read(buf),
-                FfiConverterString.read(buf),
+                FfiConverterTypeTapSignerCvc.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
@@ -56966,26 +59656,40 @@ public object FfiConverterTypeTapSignerCmd : FfiConverterRustBuffer<TapSignerCmd
                 + FfiConverterTypeSetupCmd.allocationSize(value.v1)
             )
         }
+        is TapSignerCmd.ContinueSetup -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTapSignerSetupContinuation.allocationSize(value.v1)
+            )
+        }
+        is TapSignerCmd.ContinueOperation -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTapSignerOperationContinuation.allocationSize(value.v1)
+            )
+        }
         is TapSignerCmd.Backup -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.`pin`)
+                + FfiConverterTypeTapSignerCvc.allocationSize(value.`cvc`)
             )
         }
         is TapSignerCmd.Derive -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.`pin`)
+                + FfiConverterTypeTapSignerCvc.allocationSize(value.`cvc`)
             )
         }
         is TapSignerCmd.Change -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterString.allocationSize(value.`currentPin`)
-                + FfiConverterString.allocationSize(value.`newPin`)
+                + FfiConverterTypeTapSignerCvc.allocationSize(value.`currentCvc`)
+                + FfiConverterTypeTapSignerCvc.allocationSize(value.`newCvc`)
             )
         }
         is TapSignerCmd.Sign -> {
@@ -56993,7 +59697,7 @@ public object FfiConverterTypeTapSignerCmd : FfiConverterRustBuffer<TapSignerCmd
             (
                 4UL
                 + FfiConverterTypePsbt.allocationSize(value.`psbt`)
-                + FfiConverterString.allocationSize(value.`pin`)
+                + FfiConverterTypeTapSignerCvc.allocationSize(value.`cvc`)
             )
         }
     }
@@ -57005,26 +59709,36 @@ public object FfiConverterTypeTapSignerCmd : FfiConverterRustBuffer<TapSignerCmd
                 FfiConverterTypeSetupCmd.write(value.v1, buf)
                 Unit
             }
-            is TapSignerCmd.Backup -> {
+            is TapSignerCmd.ContinueSetup -> {
                 buf.putInt(2)
-                FfiConverterString.write(value.`pin`, buf)
+                FfiConverterTypeTapSignerSetupContinuation.write(value.v1, buf)
+                Unit
+            }
+            is TapSignerCmd.ContinueOperation -> {
+                buf.putInt(3)
+                FfiConverterTypeTapSignerOperationContinuation.write(value.v1, buf)
+                Unit
+            }
+            is TapSignerCmd.Backup -> {
+                buf.putInt(4)
+                FfiConverterTypeTapSignerCvc.write(value.`cvc`, buf)
                 Unit
             }
             is TapSignerCmd.Derive -> {
-                buf.putInt(3)
-                FfiConverterString.write(value.`pin`, buf)
+                buf.putInt(5)
+                FfiConverterTypeTapSignerCvc.write(value.`cvc`, buf)
                 Unit
             }
             is TapSignerCmd.Change -> {
-                buf.putInt(4)
-                FfiConverterString.write(value.`currentPin`, buf)
-                FfiConverterString.write(value.`newPin`, buf)
+                buf.putInt(6)
+                FfiConverterTypeTapSignerCvc.write(value.`currentCvc`, buf)
+                FfiConverterTypeTapSignerCvc.write(value.`newCvc`, buf)
                 Unit
             }
             is TapSignerCmd.Sign -> {
-                buf.putInt(5)
+                buf.putInt(7)
                 FfiConverterTypePsbt.write(value.`psbt`, buf)
-                FfiConverterString.write(value.`pin`, buf)
+                FfiConverterTypeTapSignerCvc.write(value.`cvc`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -57032,6 +59746,148 @@ public object FfiConverterTypeTapSignerCmd : FfiConverterRustBuffer<TapSignerCmd
 }
 
 
+
+
+
+/**
+ * How a requested TAPSIGNER command relates to a pending retry continuation
+ */
+
+enum class TapSignerCommandResolution {
+
+    /**
+     * No usable continuation applies: run the fresh command
+     */
+    FRESH,
+    /**
+     * The pending continuation resumes this exact command: send ContinueOperation
+     */
+    RESUME,
+    /**
+     * A different interrupted operation must finish or be cancelled first
+     */
+    PENDING_OPERATION_CONFLICT;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTapSignerCommandResolution: FfiConverterRustBuffer<TapSignerCommandResolution> {
+    override fun read(buf: ByteBuffer) = try {
+        TapSignerCommandResolution.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: TapSignerCommandResolution) = 4UL
+
+    override fun write(value: TapSignerCommandResolution, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+
+
+/**
+ * Errors returned when constructing a TAPSIGNER CVC
+ */
+sealed class TapSignerCvcException: kotlin.Exception() {
+
+    /**
+     * The input contains a value other than an ASCII digit
+     */
+    class InvalidCharacters(
+        ) : TapSignerCvcException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * The input is outside the six to 32 digit protocol range
+     */
+    class InvalidLength(
+
+        val v1: kotlin.UInt
+        ) : TapSignerCvcException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_tapsignercvcerror_uniffi_trait_display(FfiConverterTypeTapSignerCvcError.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object ErrorHandler : UniffiRustCallStatusErrorHandler<TapSignerCvcException> {
+        override fun lift(error_buf: RustBuffer.ByValue): TapSignerCvcException = FfiConverterTypeTapSignerCvcError.lift(error_buf)
+    }
+
+
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTapSignerCvcError : FfiConverterRustBuffer<TapSignerCvcException> {
+    override fun read(buf: ByteBuffer): TapSignerCvcException {
+
+
+        return when(buf.getInt()) {
+            1 -> TapSignerCvcException.InvalidCharacters()
+            2 -> TapSignerCvcException.InvalidLength(
+                FfiConverterUInt.read(buf),
+                )
+            else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: TapSignerCvcException): ULong {
+        return when(value) {
+            is TapSignerCvcException.InvalidCharacters -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is TapSignerCvcException.InvalidLength -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterUInt.allocationSize(value.v1)
+            )
+        }
+    }
+
+    override fun write(value: TapSignerCvcException, buf: ByteBuffer) {
+        when(value) {
+            is TapSignerCvcException.InvalidCharacters -> {
+                buf.putInt(1)
+                Unit
+            }
+            is TapSignerCvcException.InvalidLength -> {
+                buf.putInt(2)
+                FfiConverterUInt.write(value.v1, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+
+}
 
 
 
@@ -57075,8 +59931,14 @@ public object FfiConverterTypeTapSignerPinAction: FfiConverterRustBuffer<TapSign
 
 
 
+/**
+ * Errors returned by a TAPSIGNER reader operation
+ */
 sealed class TapSignerReaderException: kotlin.Exception() {
 
+    /**
+     * The card or transport reported a typed error
+     */
     class TapSignerException(
 
         val v1: TransportException
@@ -57085,6 +59947,9 @@ sealed class TapSignerReaderException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * The PSBT could not be signed
+     */
     class PsbtSignException(
 
         val v1: kotlin.String
@@ -57093,6 +59958,9 @@ sealed class TapSignerReaderException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * The transaction could not be extracted from the PSBT
+     */
     class ExtractTxException(
 
         val v1: kotlin.String
@@ -57101,6 +59969,9 @@ sealed class TapSignerReaderException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * The connected card is not a TAPSIGNER
+     */
     class UnknownCardType(
 
         val v1: kotlin.String
@@ -57109,34 +59980,36 @@ sealed class TapSignerReaderException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * No command was supplied to the reader
+     */
     class NoCommand(
         ) : TapSignerReaderException() {
         override val message
             get() = ""
     }
 
-    class InvalidPinLength(
-
-        val v1: kotlin.UByte
-        ) : TapSignerReaderException() {
-        override val message
-            get() = "v1=${ v1 }"
-    }
-
-    class NonNumericPin(
-
-        val v1: kotlin.String
-        ) : TapSignerReaderException() {
-        override val message
-            get() = "v1=${ v1 }"
-    }
-
-    class SetupAlreadyComplete(
+    /**
+     * The continuation was already claimed by an earlier attempt
+     */
+    class SetupContinuationAlreadyUsed(
         ) : TapSignerReaderException() {
         override val message
             get() = ""
     }
 
+    /**
+     * A continuation belongs to another verified card
+     */
+    class ContinuationCardMismatch(
+        ) : TapSignerReaderException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * The setup chain code is not exactly 32 bytes
+     */
     class InvalidChainCodeLength(
 
         val v1: kotlin.UInt
@@ -57145,6 +60018,38 @@ sealed class TapSignerReaderException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * The card has reached the protocol backup limit
+     */
+    class BackupLimitReached(
+
+        val v1: kotlin.UInt
+        ) : TapSignerReaderException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    /**
+     * The card state cannot be determined safely
+     */
+    class ManualRecoveryRequired(
+        ) : TapSignerReaderException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * The backup command may have completed, but its bytes are not available
+     */
+    class BackupDataUnavailable(
+        ) : TapSignerReaderException() {
+        override val message
+            get() = ""
+    }
+
+    /**
+     * An error without a more specific public classification
+     */
     class Unknown(
 
         val v1: kotlin.String
@@ -57154,7 +60059,10 @@ sealed class TapSignerReaderException: kotlin.Exception() {
     }
 
 
-     fun `isAuthError`(): kotlin.Boolean {
+
+        /**
+         * Check whether this error means authentication failed
+         */ fun `isAuthError`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_tapsignerreadererror_isautherror(FfiConverterTypeTapSignerReaderError.lower(this),
@@ -57164,7 +60072,10 @@ sealed class TapSignerReaderException: kotlin.Exception() {
     }
 
 
-     fun `isNoBackupError`(): kotlin.Boolean {
+
+        /**
+         * Check whether this error means the card needs a backup first
+         */ fun `isNoBackupError`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_tapsignerreadererror_isnobackuperror(FfiConverterTypeTapSignerReaderError.lower(this),
@@ -57214,17 +60125,17 @@ public object FfiConverterTypeTapSignerReaderError : FfiConverterRustBuffer<TapS
                 FfiConverterString.read(buf),
                 )
             5 -> TapSignerReaderException.NoCommand()
-            6 -> TapSignerReaderException.InvalidPinLength(
-                FfiConverterUByte.read(buf),
-                )
-            7 -> TapSignerReaderException.NonNumericPin(
-                FfiConverterString.read(buf),
-                )
-            8 -> TapSignerReaderException.SetupAlreadyComplete()
-            9 -> TapSignerReaderException.InvalidChainCodeLength(
+            6 -> TapSignerReaderException.SetupContinuationAlreadyUsed()
+            7 -> TapSignerReaderException.ContinuationCardMismatch()
+            8 -> TapSignerReaderException.InvalidChainCodeLength(
                 FfiConverterUInt.read(buf),
                 )
-            10 -> TapSignerReaderException.Unknown(
+            9 -> TapSignerReaderException.BackupLimitReached(
+                FfiConverterUInt.read(buf),
+                )
+            10 -> TapSignerReaderException.ManualRecoveryRequired()
+            11 -> TapSignerReaderException.BackupDataUnavailable()
+            12 -> TapSignerReaderException.Unknown(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -57257,17 +60168,11 @@ public object FfiConverterTypeTapSignerReaderError : FfiConverterRustBuffer<TapS
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
-            is TapSignerReaderException.InvalidPinLength -> (
+            is TapSignerReaderException.SetupContinuationAlreadyUsed -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterUByte.allocationSize(value.v1)
             )
-            is TapSignerReaderException.NonNumericPin -> (
-                // Add the size for the Int that specifies the variant plus the size needed for all fields
-                4UL
-                + FfiConverterString.allocationSize(value.v1)
-            )
-            is TapSignerReaderException.SetupAlreadyComplete -> (
+            is TapSignerReaderException.ContinuationCardMismatch -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -57275,6 +60180,19 @@ public object FfiConverterTypeTapSignerReaderError : FfiConverterRustBuffer<TapS
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterUInt.allocationSize(value.v1)
+            )
+            is TapSignerReaderException.BackupLimitReached -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterUInt.allocationSize(value.v1)
+            )
+            is TapSignerReaderException.ManualRecoveryRequired -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is TapSignerReaderException.BackupDataUnavailable -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
             )
             is TapSignerReaderException.Unknown -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -57310,27 +60228,34 @@ public object FfiConverterTypeTapSignerReaderError : FfiConverterRustBuffer<TapS
                 buf.putInt(5)
                 Unit
             }
-            is TapSignerReaderException.InvalidPinLength -> {
+            is TapSignerReaderException.SetupContinuationAlreadyUsed -> {
                 buf.putInt(6)
-                FfiConverterUByte.write(value.v1, buf)
                 Unit
             }
-            is TapSignerReaderException.NonNumericPin -> {
+            is TapSignerReaderException.ContinuationCardMismatch -> {
                 buf.putInt(7)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is TapSignerReaderException.SetupAlreadyComplete -> {
-                buf.putInt(8)
                 Unit
             }
             is TapSignerReaderException.InvalidChainCodeLength -> {
+                buf.putInt(8)
+                FfiConverterUInt.write(value.v1, buf)
+                Unit
+            }
+            is TapSignerReaderException.BackupLimitReached -> {
                 buf.putInt(9)
                 FfiConverterUInt.write(value.v1, buf)
                 Unit
             }
-            is TapSignerReaderException.Unknown -> {
+            is TapSignerReaderException.ManualRecoveryRequired -> {
                 buf.putInt(10)
+                Unit
+            }
+            is TapSignerReaderException.BackupDataUnavailable -> {
+                buf.putInt(11)
+                Unit
+            }
+            is TapSignerReaderException.Unknown -> {
+                buf.putInt(12)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -57341,8 +60266,14 @@ public object FfiConverterTypeTapSignerReaderError : FfiConverterRustBuffer<TapS
 
 
 
+/**
+ * A response from a TAPSIGNER operation
+ */
 sealed class TapSignerResponse: Disposable  {
 
+    /**
+     * The setup operation returned a retry or completion response
+     */
     data class Setup(
         val v1: org.bitcoinppl.cove_core.SetupCmdResponse) : TapSignerResponse()
 
@@ -57352,6 +60283,21 @@ sealed class TapSignerResponse: Disposable  {
         companion object
     }
 
+    /**
+     * A standalone operation needs reconciliation before it can safely continue
+     */
+    data class Retry(
+        val v1: org.bitcoinppl.cove_core.TapSignerOperationContinuation) : TapSignerResponse()
+
+    {
+
+
+        companion object
+    }
+
+    /**
+     * The card backup bytes
+     */
     data class Backup(
         val v1: kotlin.ByteArray) : TapSignerResponse()
 
@@ -57361,6 +60307,9 @@ sealed class TapSignerResponse: Disposable  {
         companion object
     }
 
+    /**
+     * The derived public key information
+     */
     data class Import(
         val v1: org.bitcoinppl.cove_core.DeriveInfo) : TapSignerResponse()
 
@@ -57370,9 +60319,15 @@ sealed class TapSignerResponse: Disposable  {
         companion object
     }
 
+    /**
+     * The CVC change completed
+     */
     object Change : TapSignerResponse()
 
 
+    /**
+     * The signed PSBT
+     */
     data class Sign(
         val v1: org.bitcoinppl.cove_core.types.Psbt) : TapSignerResponse()
 
@@ -57388,6 +60343,13 @@ sealed class TapSignerResponse: Disposable  {
     override fun destroy() {
         when(this) {
             is TapSignerResponse.Setup -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
+            }
+            is TapSignerResponse.Retry -> {
 
     Disposable.destroy(
         this.v1
@@ -57437,14 +60399,17 @@ public object FfiConverterTypeTapSignerResponse : FfiConverterRustBuffer<TapSign
             1 -> TapSignerResponse.Setup(
                 FfiConverterTypeSetupCmdResponse.read(buf),
                 )
-            2 -> TapSignerResponse.Backup(
+            2 -> TapSignerResponse.Retry(
+                FfiConverterTypeTapSignerOperationContinuation.read(buf),
+                )
+            3 -> TapSignerResponse.Backup(
                 FfiConverterByteArray.read(buf),
                 )
-            3 -> TapSignerResponse.Import(
+            4 -> TapSignerResponse.Import(
                 FfiConverterTypeDeriveInfo.read(buf),
                 )
-            4 -> TapSignerResponse.Change
-            5 -> TapSignerResponse.Sign(
+            5 -> TapSignerResponse.Change
+            6 -> TapSignerResponse.Sign(
                 FfiConverterTypePsbt.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -57457,6 +60422,13 @@ public object FfiConverterTypeTapSignerResponse : FfiConverterRustBuffer<TapSign
             (
                 4UL
                 + FfiConverterTypeSetupCmdResponse.allocationSize(value.v1)
+            )
+        }
+        is TapSignerResponse.Retry -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeTapSignerOperationContinuation.allocationSize(value.v1)
             )
         }
         is TapSignerResponse.Backup -> {
@@ -57495,22 +60467,27 @@ public object FfiConverterTypeTapSignerResponse : FfiConverterRustBuffer<TapSign
                 FfiConverterTypeSetupCmdResponse.write(value.v1, buf)
                 Unit
             }
-            is TapSignerResponse.Backup -> {
+            is TapSignerResponse.Retry -> {
                 buf.putInt(2)
+                FfiConverterTypeTapSignerOperationContinuation.write(value.v1, buf)
+                Unit
+            }
+            is TapSignerResponse.Backup -> {
+                buf.putInt(3)
                 FfiConverterByteArray.write(value.v1, buf)
                 Unit
             }
             is TapSignerResponse.Import -> {
-                buf.putInt(3)
+                buf.putInt(4)
                 FfiConverterTypeDeriveInfo.write(value.v1, buf)
                 Unit
             }
             is TapSignerResponse.Change -> {
-                buf.putInt(4)
+                buf.putInt(5)
                 Unit
             }
             is TapSignerResponse.Sign -> {
-                buf.putInt(5)
+                buf.putInt(6)
                 FfiConverterTypePsbt.write(value.v1, buf)
                 Unit
             }
@@ -58275,8 +61252,14 @@ public object FfiConverterTypeTransactionState: FfiConverterRustBuffer<Transacti
 
 
 
+/**
+ * Errors reported while communicating with a CkTap card
+ */
 sealed class TransportException: kotlin.Exception() {
 
+    /**
+     * The response could not be decoded as CBOR
+     */
     class CiborDe(
 
         val v1: kotlin.String
@@ -58285,6 +61268,9 @@ sealed class TransportException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * A CBOR value could not be represented
+     */
     class CiborValue(
 
         val v1: kotlin.String
@@ -58293,6 +61279,9 @@ sealed class TransportException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * A protocol-defined card rejection
+     */
     class CkTap(
 
         val v1: CkTapException
@@ -58301,6 +61290,20 @@ sealed class TransportException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * The APDU exchange did not establish whether the command reached the card
+     */
+    class Transport(
+
+        val v1: kotlin.String
+        ) : TransportException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    /**
+     * Card authenticity verification failed
+     */
     class IncorrectSignature(
 
         val v1: kotlin.String
@@ -58309,6 +61312,9 @@ sealed class TransportException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * The card type is not supported by this operation
+     */
     class UnknownCardType(
 
         val v1: kotlin.String
@@ -58317,6 +61323,9 @@ sealed class TransportException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * The CVC could not be used for a card command
+     */
     class CvcChangeException(
 
         val v1: kotlin.String
@@ -58325,6 +61334,22 @@ sealed class TransportException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * The card returned a protocol error code that this version does not know
+     */
+    class UnknownCardErrorCode(
+
+        val `code`: kotlin.UShort,
+
+        val `detail`: kotlin.String
+        ) : TransportException() {
+        override val message
+            get() = "code=${ `code` }, detail=${ `detail` }"
+    }
+
+    /**
+     * An error without a more specific public classification
+     */
     class UnknownException(
 
         val v1: kotlin.String
@@ -58370,16 +61395,23 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
             3 -> TransportException.CkTap(
                 FfiConverterTypeCkTapError.read(buf),
                 )
-            4 -> TransportException.IncorrectSignature(
+            4 -> TransportException.Transport(
                 FfiConverterString.read(buf),
                 )
-            5 -> TransportException.UnknownCardType(
+            5 -> TransportException.IncorrectSignature(
                 FfiConverterString.read(buf),
                 )
-            6 -> TransportException.CvcChangeException(
+            6 -> TransportException.UnknownCardType(
                 FfiConverterString.read(buf),
                 )
-            7 -> TransportException.UnknownException(
+            7 -> TransportException.CvcChangeException(
+                FfiConverterString.read(buf),
+                )
+            8 -> TransportException.UnknownCardErrorCode(
+                FfiConverterUShort.read(buf),
+                FfiConverterString.read(buf),
+                )
+            9 -> TransportException.UnknownException(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -58403,6 +61435,11 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
                 4UL
                 + FfiConverterTypeCkTapError.allocationSize(value.v1)
             )
+            is TransportException.Transport -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
             is TransportException.IncorrectSignature -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
@@ -58417,6 +61454,12 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
+            )
+            is TransportException.UnknownCardErrorCode -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterUShort.allocationSize(value.`code`)
+                + FfiConverterString.allocationSize(value.`detail`)
             )
             is TransportException.UnknownException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -58443,23 +61486,34 @@ public object FfiConverterTypeTransportError : FfiConverterRustBuffer<TransportE
                 FfiConverterTypeCkTapError.write(value.v1, buf)
                 Unit
             }
-            is TransportException.IncorrectSignature -> {
+            is TransportException.Transport -> {
                 buf.putInt(4)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is TransportException.UnknownCardType -> {
+            is TransportException.IncorrectSignature -> {
                 buf.putInt(5)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is TransportException.CvcChangeException -> {
+            is TransportException.UnknownCardType -> {
                 buf.putInt(6)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is TransportException.UnknownException -> {
+            is TransportException.CvcChangeException -> {
                 buf.putInt(7)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is TransportException.UnknownCardErrorCode -> {
+                buf.putInt(8)
+                FfiConverterUShort.write(value.`code`, buf)
+                FfiConverterString.write(value.`detail`, buf)
+                Unit
+            }
+            is TransportException.UnknownException -> {
+                buf.putInt(9)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
@@ -58850,6 +61904,49 @@ public object FfiConverterTypeUrType : FfiConverterRustBuffer<UrType>{
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Persistent actor kind that did not reach terminal shutdown
+ */
+
+enum class WalletActorKind {
+
+    /**
+     * Main wallet actor
+     */
+    WALLET,
+    /**
+     * Alternate-address discovery actor
+     */
+    DISCOVERY;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWalletActorKind: FfiConverterRustBuffer<WalletActorKind> {
+    override fun read(buf: ByteBuffer) = try {
+        WalletActorKind.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: WalletActorKind) = 4UL
+
+    override fun write(value: WalletActorKind, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -59524,6 +62621,14 @@ public object FfiConverterTypeWalletCreationError : FfiConverterRustBuffer<Walle
 
 sealed class WalletDataException: kotlin.Exception() {
 
+    class WalletLifecycle(
+
+        val v1: WalletLifecycleFailure
+        ) : WalletDataException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
     class DatabaseAccess(
 
         val `id`: WalletId,
@@ -59598,21 +62703,24 @@ public object FfiConverterTypeWalletDataError : FfiConverterRustBuffer<WalletDat
 
 
         return when(buf.getInt()) {
-            1 -> WalletDataException.DatabaseAccess(
+            1 -> WalletDataException.WalletLifecycle(
+                FfiConverterTypeWalletLifecycleFailure.read(buf),
+                )
+            2 -> WalletDataException.DatabaseAccess(
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterString.read(buf),
                 )
-            2 -> WalletDataException.TableAccess(
+            3 -> WalletDataException.TableAccess(
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterString.read(buf),
                 )
-            3 -> WalletDataException.Read(
+            4 -> WalletDataException.Read(
                 FfiConverterString.read(buf),
                 )
-            4 -> WalletDataException.Save(
+            5 -> WalletDataException.Save(
                 FfiConverterString.read(buf),
                 )
-            5 -> WalletDataException.UnsupportedVersion(
+            6 -> WalletDataException.UnsupportedVersion(
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterTypeUnsupportedDbVersion.read(buf),
                 )
@@ -59622,6 +62730,11 @@ public object FfiConverterTypeWalletDataError : FfiConverterRustBuffer<WalletDat
 
     override fun allocationSize(value: WalletDataException): ULong {
         return when(value) {
+            is WalletDataException.WalletLifecycle -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletLifecycleFailure.allocationSize(value.v1)
+            )
             is WalletDataException.DatabaseAccess -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
@@ -59655,30 +62768,35 @@ public object FfiConverterTypeWalletDataError : FfiConverterRustBuffer<WalletDat
 
     override fun write(value: WalletDataException, buf: ByteBuffer) {
         when(value) {
-            is WalletDataException.DatabaseAccess -> {
+            is WalletDataException.WalletLifecycle -> {
                 buf.putInt(1)
-                FfiConverterTypeWalletId.write(value.`id`, buf)
-                FfiConverterString.write(value.`error`, buf)
+                FfiConverterTypeWalletLifecycleFailure.write(value.v1, buf)
                 Unit
             }
-            is WalletDataException.TableAccess -> {
+            is WalletDataException.DatabaseAccess -> {
                 buf.putInt(2)
                 FfiConverterTypeWalletId.write(value.`id`, buf)
                 FfiConverterString.write(value.`error`, buf)
                 Unit
             }
-            is WalletDataException.Read -> {
+            is WalletDataException.TableAccess -> {
                 buf.putInt(3)
-                FfiConverterString.write(value.v1, buf)
+                FfiConverterTypeWalletId.write(value.`id`, buf)
+                FfiConverterString.write(value.`error`, buf)
                 Unit
             }
-            is WalletDataException.Save -> {
+            is WalletDataException.Read -> {
                 buf.putInt(4)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletDataException.UnsupportedVersion -> {
+            is WalletDataException.Save -> {
                 buf.putInt(5)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletDataException.UnsupportedVersion -> {
+                buf.putInt(6)
                 FfiConverterTypeWalletId.write(value.`id`, buf)
                 FfiConverterTypeUnsupportedDbVersion.write(value.`version`, buf)
                 Unit
@@ -59770,6 +62888,65 @@ public object FfiConverterTypeWalletDataKey : FfiConverterRustBuffer<WalletDataK
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
+/**
+ * Phase of a failed registered-wallet deletion
+ */
+
+enum class WalletDeletionStage {
+
+    /**
+     * Wallet keychain entries
+     */
+    KEYCHAIN,
+    /**
+     * Temporary address-switch store
+     */
+    ADDRESS_SWITCH_STORE,
+    /**
+     * BDK SQLite and legacy stores
+     */
+    BDK_ARTIFACTS,
+    /**
+     * Per-wallet application data directory
+     */
+    WALLET_DATA,
+    /**
+     * Parent-directory durability synchronization
+     */
+    DIRECTORY_SYNC,
+    /**
+     * Exact durable metadata rows
+     */
+    METADATA;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWalletDeletionStage: FfiConverterRustBuffer<WalletDeletionStage> {
+    override fun read(buf: ByteBuffer) = try {
+        WalletDeletionStage.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: WalletDeletionStage) = 4UL
+
+    override fun write(value: WalletDeletionStage, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
     }
 }
 
@@ -60213,6 +63390,291 @@ public object FfiConverterTypeWalletLedgerState : FfiConverterRustBuffer<WalletL
 
 
 
+/**
+ * Typed failure from the process wallet lifecycle owner
+ */
+sealed class WalletLifecycleFailure {
+
+    /**
+     * The shared Tokio runtime is not initialized
+     */
+    object RuntimeUnavailable : WalletLifecycleFailure()
+
+
+    /**
+     * A synchronous runtime bridge was called from a Tokio runtime thread
+     */
+    object RuntimeThreadCall : WalletLifecycleFailure()
+
+
+    /**
+     * Another destructive operation currently owns the lifecycle coordinator
+     */
+    object CoordinatorBusy : WalletLifecycleFailure()
+
+
+    /**
+     * Another construction is already loading this wallet
+     */
+    data class ConstructionInProgress(
+        /**
+         * Wallet whose construction is already running
+         */
+        val `walletId`: org.bitcoinppl.cove_core.types.WalletId) : WalletLifecycleFailure()
+
+    {
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletlifecyclefailure_uniffi_trait_display(FfiConverterTypeWalletLifecycleFailure.lower(this),
+        _status)
+}
+    )
+    }
+        companion object
+    }
+
+    /**
+     * A released manager still owns actors that are reaching terminal shutdown
+     */
+    data class ManagerClosing(
+        /**
+         * Wallet whose previous manager is closing
+         */
+        val `walletId`: org.bitcoinppl.cove_core.types.WalletId) : WalletLifecycleFailure()
+
+    {
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletlifecyclefailure_uniffi_trait_display(FfiConverterTypeWalletLifecycleFailure.lower(this),
+        _status)
+}
+    )
+    }
+        companion object
+    }
+
+    /**
+     * One or more actors can still write wallet state
+     */
+    data class ShutdownBlocked(
+        /**
+         * Identifier required by Retry or Cancel
+         */
+        val `attemptId`: org.bitcoinppl.cove_core.ShutdownAttemptId,
+        /**
+         * Actors that did not reach terminal shutdown
+         */
+        val `actors`: List<org.bitcoinppl.cove_core.WalletActorKind>,
+        /**
+         * Deadline used by this attempt
+         */
+        val `deadlineTier`: org.bitcoinppl.cove_core.ShutdownDeadlineTier) : WalletLifecycleFailure()
+
+    {
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletlifecyclefailure_uniffi_trait_display(FfiConverterTypeWalletLifecycleFailure.lower(this),
+        _status)
+}
+    )
+    }
+        companion object
+    }
+
+    /**
+     * A manager could not resume after a cancelled or failed quiescence
+     */
+    data class ManagerRecoveryRequired(
+        /**
+         * Wallet whose manager cannot safely resume
+         */
+        val `walletId`: org.bitcoinppl.cove_core.types.WalletId) : WalletLifecycleFailure()
+
+    {
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletlifecyclefailure_uniffi_trait_display(FfiConverterTypeWalletLifecycleFailure.lower(this),
+        _status)
+}
+    )
+    }
+        companion object
+    }
+
+    /**
+     * Cloud Backup local writers could not return to a safe runtime state
+     */
+    object CloudBackupRecoveryRequired : WalletLifecycleFailure()
+
+
+
+
+
+
+
+
+    // The local Rust `Display`/`Debug` implementation.
+    override fun toString(): String {
+        return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletlifecyclefailure_uniffi_trait_display(FfiConverterTypeWalletLifecycleFailure.lower(this),
+        _status)
+}
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeWalletLifecycleFailure : FfiConverterRustBuffer<WalletLifecycleFailure>{
+    override fun read(buf: ByteBuffer): WalletLifecycleFailure {
+        return when(buf.getInt()) {
+            1 -> WalletLifecycleFailure.RuntimeUnavailable
+            2 -> WalletLifecycleFailure.RuntimeThreadCall
+            3 -> WalletLifecycleFailure.CoordinatorBusy
+            4 -> WalletLifecycleFailure.ConstructionInProgress(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            5 -> WalletLifecycleFailure.ManagerClosing(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            6 -> WalletLifecycleFailure.ShutdownBlocked(
+                FfiConverterTypeShutdownAttemptId.read(buf),
+                FfiConverterSequenceTypeWalletActorKind.read(buf),
+                FfiConverterTypeShutdownDeadlineTier.read(buf),
+                )
+            7 -> WalletLifecycleFailure.ManagerRecoveryRequired(
+                FfiConverterTypeWalletId.read(buf),
+                )
+            8 -> WalletLifecycleFailure.CloudBackupRecoveryRequired
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: WalletLifecycleFailure): ULong = when(value) {
+        is WalletLifecycleFailure.RuntimeUnavailable -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is WalletLifecycleFailure.RuntimeThreadCall -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is WalletLifecycleFailure.CoordinatorBusy -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is WalletLifecycleFailure.ConstructionInProgress -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.`walletId`)
+            )
+        }
+        is WalletLifecycleFailure.ManagerClosing -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.`walletId`)
+            )
+        }
+        is WalletLifecycleFailure.ShutdownBlocked -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeShutdownAttemptId.allocationSize(value.`attemptId`)
+                + FfiConverterSequenceTypeWalletActorKind.allocationSize(value.`actors`)
+                + FfiConverterTypeShutdownDeadlineTier.allocationSize(value.`deadlineTier`)
+            )
+        }
+        is WalletLifecycleFailure.ManagerRecoveryRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeWalletId.allocationSize(value.`walletId`)
+            )
+        }
+        is WalletLifecycleFailure.CloudBackupRecoveryRequired -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+    }
+
+    override fun write(value: WalletLifecycleFailure, buf: ByteBuffer) {
+        when(value) {
+            is WalletLifecycleFailure.RuntimeUnavailable -> {
+                buf.putInt(1)
+                Unit
+            }
+            is WalletLifecycleFailure.RuntimeThreadCall -> {
+                buf.putInt(2)
+                Unit
+            }
+            is WalletLifecycleFailure.CoordinatorBusy -> {
+                buf.putInt(3)
+                Unit
+            }
+            is WalletLifecycleFailure.ConstructionInProgress -> {
+                buf.putInt(4)
+                FfiConverterTypeWalletId.write(value.`walletId`, buf)
+                Unit
+            }
+            is WalletLifecycleFailure.ManagerClosing -> {
+                buf.putInt(5)
+                FfiConverterTypeWalletId.write(value.`walletId`, buf)
+                Unit
+            }
+            is WalletLifecycleFailure.ShutdownBlocked -> {
+                buf.putInt(6)
+                FfiConverterTypeShutdownAttemptId.write(value.`attemptId`, buf)
+                FfiConverterSequenceTypeWalletActorKind.write(value.`actors`, buf)
+                FfiConverterTypeShutdownDeadlineTier.write(value.`deadlineTier`, buf)
+                Unit
+            }
+            is WalletLifecycleFailure.ManagerRecoveryRequired -> {
+                buf.putInt(7)
+                FfiConverterTypeWalletId.write(value.`walletId`, buf)
+                Unit
+            }
+            is WalletLifecycleFailure.CloudBackupRecoveryRequired -> {
+                buf.putInt(8)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 sealed class WalletLoadState: Disposable  {
 
     object Loading : WalletLoadState()
@@ -60399,9 +63861,6 @@ sealed class WalletManagerAction {
     object SelectCurrentWalletAddressType : WalletManagerAction()
 
 
-    object SelectedWalletDisappeared : WalletManagerAction()
-
-
     object OpenReceiveAddress : WalletManagerAction()
 
 
@@ -60451,10 +63910,9 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
             8 -> WalletManagerAction.ToggleFiatBtcPrimarySecondary
             9 -> WalletManagerAction.ToggleShowLabels
             10 -> WalletManagerAction.SelectCurrentWalletAddressType
-            11 -> WalletManagerAction.SelectedWalletDisappeared
-            12 -> WalletManagerAction.OpenReceiveAddress
-            13 -> WalletManagerAction.CreateNewReceiveAddress
-            14 -> WalletManagerAction.CloseReceiveAddress(
+            11 -> WalletManagerAction.OpenReceiveAddress
+            12 -> WalletManagerAction.CreateNewReceiveAddress
+            13 -> WalletManagerAction.CloseReceiveAddress(
                 FfiConverterULong.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -60521,12 +63979,6 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
             )
         }
         is WalletManagerAction.SelectCurrentWalletAddressType -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is WalletManagerAction.SelectedWalletDisappeared -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -60599,20 +64051,16 @@ public object FfiConverterTypeWalletManagerAction : FfiConverterRustBuffer<Walle
                 buf.putInt(10)
                 Unit
             }
-            is WalletManagerAction.SelectedWalletDisappeared -> {
+            is WalletManagerAction.OpenReceiveAddress -> {
                 buf.putInt(11)
                 Unit
             }
-            is WalletManagerAction.OpenReceiveAddress -> {
+            is WalletManagerAction.CreateNewReceiveAddress -> {
                 buf.putInt(12)
                 Unit
             }
-            is WalletManagerAction.CreateNewReceiveAddress -> {
-                buf.putInt(13)
-                Unit
-            }
             is WalletManagerAction.CloseReceiveAddress -> {
-                buf.putInt(14)
+                buf.putInt(13)
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
@@ -60640,6 +64088,20 @@ sealed class WalletManagerException: kotlin.Exception() {
         ) : WalletManagerException() {
         override val message
             get() = ""
+    }
+
+    class PreviewOperationUnavailable(
+        ) : WalletManagerException() {
+        override val message
+            get() = ""
+    }
+
+    class DeleteWalletException(
+
+        val v1: kotlin.String
+        ) : WalletManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
     }
 
     class SecretRetrievalException(
@@ -60802,7 +64264,23 @@ sealed class WalletManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
-    class SignAndBroadcastException(
+    class SigningException(
+
+        val v1: kotlin.String
+        ) : WalletManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class BroadcastException(
+
+        val v1: kotlin.String
+        ) : WalletManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class PayjoinSessionException(
 
         val v1: kotlin.String
         ) : WalletManagerException() {
@@ -60892,6 +64370,30 @@ sealed class WalletManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class ManagerClosed(
+        ) : WalletManagerException() {
+        override val message
+            get() = ""
+    }
+
+    class WalletLifecycle(
+
+        val v1: WalletLifecycleFailure
+        ) : WalletManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class AddressTypeSwitchCommittedWithRecoveryPending(
+
+        val `addressType`: WalletAddressType,
+
+        val `failures`: List<AddressTypeSwitchRecoveryFailure>
+        ) : WalletManagerException() {
+        override val message
+            get() = "addressType=${ `addressType` }, failures=${ `failures` }"
+    }
+
 
 
 
@@ -60924,93 +64426,111 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 FfiConverterString.read(buf),
                 )
             2 -> WalletManagerException.WalletDoesNotExist()
-            3 -> WalletManagerException.SecretRetrievalException(
+            3 -> WalletManagerException.PreviewOperationUnavailable()
+            4 -> WalletManagerException.DeleteWalletException(
+                FfiConverterString.read(buf),
+                )
+            5 -> WalletManagerException.SecretRetrievalException(
                 FfiConverterTypeKeychainError.read(buf),
                 )
-            4 -> WalletManagerException.MarkWalletAsVerifiedException(
+            6 -> WalletManagerException.MarkWalletAsVerifiedException(
                 FfiConverterTypeDatabaseError.read(buf),
                 )
-            5 -> WalletManagerException.LoadWalletException(
+            7 -> WalletManagerException.LoadWalletException(
                 FfiConverterTypeWalletError.read(buf),
                 )
-            6 -> WalletManagerException.NodeConnectionFailed(
+            8 -> WalletManagerException.NodeConnectionFailed(
                 FfiConverterString.read(buf),
                 )
-            7 -> WalletManagerException.WalletScanException(
+            9 -> WalletManagerException.WalletScanException(
                 FfiConverterString.read(buf),
                 )
-            8 -> WalletManagerException.TransactionsRetrievalException(
+            10 -> WalletManagerException.TransactionsRetrievalException(
                 FfiConverterString.read(buf),
                 )
-            9 -> WalletManagerException.WalletBalanceException(
+            11 -> WalletManagerException.WalletBalanceException(
                 FfiConverterString.read(buf),
                 )
-            10 -> WalletManagerException.NextAddressException(
+            12 -> WalletManagerException.NextAddressException(
                 FfiConverterString.read(buf),
                 )
-            11 -> WalletManagerException.SetWalletTypeException(
+            13 -> WalletManagerException.SetWalletTypeException(
                 FfiConverterString.read(buf),
                 )
-            12 -> WalletManagerException.GetHeightException()
-            13 -> WalletManagerException.TransactionDetailsException(
+            14 -> WalletManagerException.GetHeightException()
+            15 -> WalletManagerException.TransactionDetailsException(
                 FfiConverterString.read(buf),
                 )
-            14 -> WalletManagerException.ActorNotFound()
-            15 -> WalletManagerException.UnableToSwitch(
+            16 -> WalletManagerException.ActorNotFound()
+            17 -> WalletManagerException.UnableToSwitch(
                 FfiConverterTypeWalletAddressType.read(buf),
                 FfiConverterString.read(buf),
                 )
-            16 -> WalletManagerException.FiatException(
+            18 -> WalletManagerException.FiatException(
                 FfiConverterString.read(buf),
                 )
-            17 -> WalletManagerException.FeesException(
+            19 -> WalletManagerException.FeesException(
                 FfiConverterString.read(buf),
                 )
-            18 -> WalletManagerException.InitialScanIncomplete()
-            19 -> WalletManagerException.BuildTxException(
+            20 -> WalletManagerException.InitialScanIncomplete()
+            21 -> WalletManagerException.BuildTxException(
                 FfiConverterString.read(buf),
                 )
-            20 -> WalletManagerException.InsufficientFunds(
+            22 -> WalletManagerException.InsufficientFunds(
                 FfiConverterString.read(buf),
                 )
-            21 -> WalletManagerException.OutputBelowDustLimit()
-            22 -> WalletManagerException.LockedOutputsSelected()
-            23 -> WalletManagerException.GetConfirmDetailsException(
+            23 -> WalletManagerException.OutputBelowDustLimit()
+            24 -> WalletManagerException.LockedOutputsSelected()
+            25 -> WalletManagerException.GetConfirmDetailsException(
                 FfiConverterString.read(buf),
                 )
-            24 -> WalletManagerException.SignAndBroadcastException(
+            26 -> WalletManagerException.SigningException(
                 FfiConverterString.read(buf),
                 )
-            25 -> WalletManagerException.Converter(
+            27 -> WalletManagerException.BroadcastException(
+                FfiConverterString.read(buf),
+                )
+            28 -> WalletManagerException.PayjoinSessionException(
+                FfiConverterString.read(buf),
+                )
+            29 -> WalletManagerException.Converter(
                 FfiConverterTypeConverterError.read(buf),
                 )
-            26 -> WalletManagerException.UnknownException(
+            30 -> WalletManagerException.UnknownException(
                 FfiConverterString.read(buf),
                 )
-            27 -> WalletManagerException.PsbtFinalizeException(
+            31 -> WalletManagerException.PsbtFinalizeException(
                 FfiConverterString.read(buf),
                 )
-            28 -> WalletManagerException.GetHistoricalPricesException(
+            32 -> WalletManagerException.GetHistoricalPricesException(
                 FfiConverterString.read(buf),
                 )
-            29 -> WalletManagerException.CsvCreationException(
+            33 -> WalletManagerException.CsvCreationException(
                 FfiConverterString.read(buf),
                 )
-            30 -> WalletManagerException.AddUtxosException(
+            34 -> WalletManagerException.AddUtxosException(
                 FfiConverterString.read(buf),
                 )
-            31 -> WalletManagerException.OutputLabelsException(
+            35 -> WalletManagerException.OutputLabelsException(
                 FfiConverterString.read(buf),
                 )
-            32 -> WalletManagerException.DatabaseCorruption(
+            36 -> WalletManagerException.DatabaseCorruption(
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterString.read(buf),
                 )
-            33 -> WalletManagerException.PendingUnsignedTransactionsLoadException(
+            37 -> WalletManagerException.PendingUnsignedTransactionsLoadException(
                 FfiConverterString.read(buf),
                 )
-            34 -> WalletManagerException.ReceiveAddressException(
+            38 -> WalletManagerException.ReceiveAddressException(
                 FfiConverterString.read(buf),
+                )
+            39 -> WalletManagerException.ManagerClosed()
+            40 -> WalletManagerException.WalletLifecycle(
+                FfiConverterTypeWalletLifecycleFailure.read(buf),
+                )
+            41 -> WalletManagerException.AddressTypeSwitchCommittedWithRecoveryPending(
+                FfiConverterTypeWalletAddressType.read(buf),
+                FfiConverterSequenceTypeAddressTypeSwitchRecoveryFailure.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
@@ -61026,6 +64546,15 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
             is WalletManagerException.WalletDoesNotExist -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
+            )
+            is WalletManagerException.PreviewOperationUnavailable -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is WalletManagerException.DeleteWalletException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
             )
             is WalletManagerException.SecretRetrievalException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -61128,7 +64657,17 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
-            is WalletManagerException.SignAndBroadcastException -> (
+            is WalletManagerException.SigningException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is WalletManagerException.BroadcastException -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is WalletManagerException.PayjoinSessionException -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
@@ -61184,6 +64723,21 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
             )
+            is WalletManagerException.ManagerClosed -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is WalletManagerException.WalletLifecycle -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletLifecycleFailure.allocationSize(value.v1)
+            )
+            is WalletManagerException.AddressTypeSwitchCommittedWithRecoveryPending -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypeWalletAddressType.allocationSize(value.`addressType`)
+                + FfiConverterSequenceTypeAddressTypeSwitchRecoveryFailure.allocationSize(value.`failures`)
+            )
         }
     }
 
@@ -61198,161 +64752,195 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 buf.putInt(2)
                 Unit
             }
-            is WalletManagerException.SecretRetrievalException -> {
+            is WalletManagerException.PreviewOperationUnavailable -> {
                 buf.putInt(3)
+                Unit
+            }
+            is WalletManagerException.DeleteWalletException -> {
+                buf.putInt(4)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.SecretRetrievalException -> {
+                buf.putInt(5)
                 FfiConverterTypeKeychainError.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.MarkWalletAsVerifiedException -> {
-                buf.putInt(4)
+                buf.putInt(6)
                 FfiConverterTypeDatabaseError.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.LoadWalletException -> {
-                buf.putInt(5)
+                buf.putInt(7)
                 FfiConverterTypeWalletError.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.NodeConnectionFailed -> {
-                buf.putInt(6)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is WalletManagerException.WalletScanException -> {
-                buf.putInt(7)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is WalletManagerException.TransactionsRetrievalException -> {
                 buf.putInt(8)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.WalletBalanceException -> {
+            is WalletManagerException.WalletScanException -> {
                 buf.putInt(9)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.NextAddressException -> {
+            is WalletManagerException.TransactionsRetrievalException -> {
                 buf.putInt(10)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.SetWalletTypeException -> {
+            is WalletManagerException.WalletBalanceException -> {
                 buf.putInt(11)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.GetHeightException -> {
+            is WalletManagerException.NextAddressException -> {
                 buf.putInt(12)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.TransactionDetailsException -> {
+            is WalletManagerException.SetWalletTypeException -> {
                 buf.putInt(13)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.ActorNotFound -> {
+            is WalletManagerException.GetHeightException -> {
                 buf.putInt(14)
                 Unit
             }
-            is WalletManagerException.UnableToSwitch -> {
+            is WalletManagerException.TransactionDetailsException -> {
                 buf.putInt(15)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.ActorNotFound -> {
+                buf.putInt(16)
+                Unit
+            }
+            is WalletManagerException.UnableToSwitch -> {
+                buf.putInt(17)
                 FfiConverterTypeWalletAddressType.write(value.v1, buf)
                 FfiConverterString.write(value.v2, buf)
                 Unit
             }
             is WalletManagerException.FiatException -> {
-                buf.putInt(16)
+                buf.putInt(18)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.FeesException -> {
-                buf.putInt(17)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is WalletManagerException.InitialScanIncomplete -> {
-                buf.putInt(18)
-                Unit
-            }
-            is WalletManagerException.BuildTxException -> {
                 buf.putInt(19)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.InsufficientFunds -> {
+            is WalletManagerException.InitialScanIncomplete -> {
                 buf.putInt(20)
+                Unit
+            }
+            is WalletManagerException.BuildTxException -> {
+                buf.putInt(21)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.InsufficientFunds -> {
+                buf.putInt(22)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.OutputBelowDustLimit -> {
-                buf.putInt(21)
+                buf.putInt(23)
                 Unit
             }
             is WalletManagerException.LockedOutputsSelected -> {
-                buf.putInt(22)
+                buf.putInt(24)
                 Unit
             }
             is WalletManagerException.GetConfirmDetailsException -> {
-                buf.putInt(23)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is WalletManagerException.SignAndBroadcastException -> {
-                buf.putInt(24)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is WalletManagerException.Converter -> {
                 buf.putInt(25)
-                FfiConverterTypeConverterError.write(value.v1, buf)
+                FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.UnknownException -> {
+            is WalletManagerException.SigningException -> {
                 buf.putInt(26)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.PsbtFinalizeException -> {
+            is WalletManagerException.BroadcastException -> {
                 buf.putInt(27)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.GetHistoricalPricesException -> {
+            is WalletManagerException.PayjoinSessionException -> {
                 buf.putInt(28)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.CsvCreationException -> {
+            is WalletManagerException.Converter -> {
                 buf.putInt(29)
-                FfiConverterString.write(value.v1, buf)
+                FfiConverterTypeConverterError.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.AddUtxosException -> {
+            is WalletManagerException.UnknownException -> {
                 buf.putInt(30)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.OutputLabelsException -> {
+            is WalletManagerException.PsbtFinalizeException -> {
                 buf.putInt(31)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.DatabaseCorruption -> {
+            is WalletManagerException.GetHistoricalPricesException -> {
                 buf.putInt(32)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.CsvCreationException -> {
+                buf.putInt(33)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.AddUtxosException -> {
+                buf.putInt(34)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.OutputLabelsException -> {
+                buf.putInt(35)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.DatabaseCorruption -> {
+                buf.putInt(36)
                 FfiConverterTypeWalletId.write(value.`id`, buf)
                 FfiConverterString.write(value.`error`, buf)
                 Unit
             }
             is WalletManagerException.PendingUnsignedTransactionsLoadException -> {
-                buf.putInt(33)
+                buf.putInt(37)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.ReceiveAddressException -> {
-                buf.putInt(34)
+                buf.putInt(38)
                 FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.ManagerClosed -> {
+                buf.putInt(39)
+                Unit
+            }
+            is WalletManagerException.WalletLifecycle -> {
+                buf.putInt(40)
+                FfiConverterTypeWalletLifecycleFailure.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.AddressTypeSwitchCommittedWithRecoveryPending -> {
+                buf.putInt(41)
+                FfiConverterTypeWalletAddressType.write(value.`addressType`, buf)
+                FfiConverterSequenceTypeAddressTypeSwitchRecoveryFailure.write(value.`failures`, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -62438,6 +66026,12 @@ sealed class WalletTableException: kotlin.Exception() {
             get() = ""
     }
 
+    class WalletNotFound(
+        ) : WalletTableException() {
+        override val message
+            get() = ""
+    }
+
 
 
 
@@ -62473,6 +66067,7 @@ public object FfiConverterTypeWalletTableError : FfiConverterRustBuffer<WalletTa
                 FfiConverterString.read(buf),
                 )
             3 -> WalletTableException.WalletAlreadyExists()
+            4 -> WalletTableException.WalletNotFound()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -62493,6 +66088,10 @@ public object FfiConverterTypeWalletTableError : FfiConverterRustBuffer<WalletTa
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
+            is WalletTableException.WalletNotFound -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
         }
     }
 
@@ -62510,6 +66109,10 @@ public object FfiConverterTypeWalletTableError : FfiConverterRustBuffer<WalletTa
             }
             is WalletTableException.WalletAlreadyExists -> {
                 buf.putInt(3)
+                Unit
+            }
+            is WalletTableException.WalletNotFound -> {
+                buf.putInt(4)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -63428,12 +67031,24 @@ public object FfiConverterTypeSendFlowManagerReconciler: FfiConverterCallbackInt
 
 
 
+/**
+ * Transport callback implemented by the mobile NFC layers
+ */
 public interface TapcardTransportProtocol {
 
+    /**
+     * Show a progress message to the user
+     */
     fun `setMessage`(`message`: kotlin.String)
 
+    /**
+     * Append a progress message to the user-visible status
+     */
     fun `appendMessage`(`message`: kotlin.String)
 
+    /**
+     * Exchange one APDU with the card
+     */
     suspend fun `transmitApdu`(`commandApdu`: kotlin.ByteArray): kotlin.ByteArray
 
     companion object
@@ -63841,6 +67456,38 @@ public object FfiConverterOptionalDuration: FfiConverterRustBuffer<java.time.Dur
 /**
  * @suppress
  */
+public object FfiConverterOptionalTypeBackupImportApproval: FfiConverterRustBuffer<BackupImportApproval?> {
+    override fun read(buf: ByteBuffer): BackupImportApproval? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeBackupImportApproval.read(buf)
+    }
+
+    override fun allocationSize(value: BackupImportApproval?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeBackupImportApproval.allocationSize(value)
+        }
+    }
+
+    override fun write(value: BackupImportApproval?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeBackupImportApproval.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalTypeBitcoinTransaction: FfiConverterRustBuffer<BitcoinTransaction?> {
     override fun read(buf: ByteBuffer): BitcoinTransaction? {
         if (buf.get().toInt() == 0) {
@@ -63927,6 +67574,38 @@ public object FfiConverterOptionalTypeMigration: FfiConverterRustBuffer<Migratio
         } else {
             buf.put(1)
             FfiConverterTypeMigration.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeTapSignerOperationContinuation: FfiConverterRustBuffer<TapSignerOperationContinuation?> {
+    override fun read(buf: ByteBuffer): TapSignerOperationContinuation? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeTapSignerOperationContinuation.read(buf)
+    }
+
+    override fun allocationSize(value: TapSignerOperationContinuation?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeTapSignerOperationContinuation.allocationSize(value)
+        }
+    }
+
+    override fun write(value: TapSignerOperationContinuation?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeTapSignerOperationContinuation.write(value, buf)
         }
     }
 }
@@ -64769,38 +68448,6 @@ public object FfiConverterOptionalTypeTapSignerCmd: FfiConverterRustBuffer<TapSi
 /**
  * @suppress
  */
-public object FfiConverterOptionalTypeTapSignerResponse: FfiConverterRustBuffer<TapSignerResponse?> {
-    override fun read(buf: ByteBuffer): TapSignerResponse? {
-        if (buf.get().toInt() == 0) {
-            return null
-        }
-        return FfiConverterTypeTapSignerResponse.read(buf)
-    }
-
-    override fun allocationSize(value: TapSignerResponse?): ULong {
-        if (value == null) {
-            return 1UL
-        } else {
-            return 1UL + FfiConverterTypeTapSignerResponse.allocationSize(value)
-        }
-    }
-
-    override fun write(value: TapSignerResponse?, buf: ByteBuffer) {
-        if (value == null) {
-            buf.put(0)
-        } else {
-            buf.put(1)
-            FfiConverterTypeTapSignerResponse.write(value, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
 public object FfiConverterOptionalTypeWalletBirthday: FfiConverterRustBuffer<WalletBirthday?> {
     override fun read(buf: ByteBuffer): WalletBirthday? {
         if (buf.get().toInt() == 0) {
@@ -65123,6 +68770,34 @@ public object FfiConverterSequenceTypeOutPoint: FfiConverterRustBuffer<List<OutP
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeOutPoint.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeAddressTypeSwitchRecoveryFailure: FfiConverterRustBuffer<List<AddressTypeSwitchRecoveryFailure>> {
+    override fun read(buf: ByteBuffer): List<AddressTypeSwitchRecoveryFailure> {
+        val len = buf.getInt()
+        return List<AddressTypeSwitchRecoveryFailure>(len) {
+            FfiConverterTypeAddressTypeSwitchRecoveryFailure.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<AddressTypeSwitchRecoveryFailure>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeAddressTypeSwitchRecoveryFailure.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<AddressTypeSwitchRecoveryFailure>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeAddressTypeSwitchRecoveryFailure.write(it, buf)
         }
     }
 }
@@ -65627,6 +69302,34 @@ public object FfiConverterSequenceTypeTransaction: FfiConverterRustBuffer<List<T
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeTransaction.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeWalletActorKind: FfiConverterRustBuffer<List<WalletActorKind>> {
+    override fun read(buf: ByteBuffer): List<WalletActorKind> {
+        val len = buf.getInt()
+        return List<WalletActorKind>(len) {
+            FfiConverterTypeWalletActorKind.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<WalletActorKind>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeWalletActorKind.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<WalletActorKind>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeWalletActorKind.write(it, buf)
         }
     }
 }
@@ -66383,7 +70086,10 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     )
     }
 
- fun `createTransportErrorFromCode`(`code`: kotlin.UShort, `message`: kotlin.String): TransportException {
+
+        /**
+         * Convert a card protocol error code into a typed error
+         */ fun `createTransportErrorFromCode`(`code`: kotlin.UShort, `message`: kotlin.String): TransportException {
             return FfiConverterTypeTransportError.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_create_transport_error_from_code(
@@ -66395,13 +70101,30 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
     )
     }
 
- fun `isValidChainCode`(`chainCode`: kotlin.String): kotlin.Boolean {
-            return FfiConverterBoolean.lift(
+
+        /**
+         * Decode a TAPSIGNER chain code only when it is exactly 32 bytes of hexadecimal data
+         */ fun `tapSignerChainCodeFromHex`(`hex`: kotlin.String): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_func_is_valid_chain_code(
+    UniffiLib.uniffi_cove_fn_func_tap_signer_chain_code_from_hex(
 
 
-        FfiConverterString.lower(`chainCode`),_status)
+        FfiConverterString.lower(`hex`),_status)
+}
+    )
+    }
+
+
+        /**
+         * User-facing validation message for a chain-code input, or None when it is valid
+         */ fun `tapSignerChainCodeValidationMessage`(`hex`: kotlin.String): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_tap_signer_chain_code_validation_message(
+
+
+        FfiConverterString.lower(`hex`),_status)
 }
     )
     }
@@ -66427,6 +70150,24 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
         TapSignerReaderException.ErrorHandler,
     )
     }
+
+        /**
+         * Decide whether a command starts fresh or resumes the pending continuation
+         *
+         * The continuation may guard a mutation the card already applied, so a fresh
+         * command that does not match it is a conflict, never a silent replacement
+         */ fun `resolveTapSignerCommand`(`cmd`: TapSignerCmd, `pending`: TapSignerOperationContinuation): TapSignerCommandResolution {
+            return FfiConverterTypeTapSignerCommandResolution.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_resolve_tap_signer_command(
+
+
+        FfiConverterTypeTapSignerCmd.lower(`cmd`),
+        FfiConverterTypeTapSignerOperationContinuation.lower(`pending`),_status)
+}
+    )
+    }
+
  fun `tapSignerResponseBackupResponse`(`response`: TapSignerResponse): kotlin.ByteArray? {
             return FfiConverterOptionalByteArray.lift(
     uniffiRustCall() { _status ->
@@ -66453,6 +70194,17 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
             return FfiConverterOptionalTypeDeriveInfo.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_func_tapsignerresponsederiveresponse(
+
+
+        FfiConverterTypeTapSignerResponse.lower(`response`),_status)
+}
+    )
+    }
+
+ fun `tapSignerResponseRetryResponse`(`response`: TapSignerResponse): TapSignerOperationContinuation? {
+            return FfiConverterOptionalTypeTapSignerOperationContinuation.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_tapsignerresponseretryresponse(
 
 
         FfiConverterTypeTapSignerResponse.lower(`response`),_status)
@@ -66500,6 +70252,20 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 
 
         FfiConverterBoolean.lower(`preview`),_status)
+}
+    )
+    }
+
+
+        /**
+         * User-facing validation message for a CVC input, or None when it is valid
+         */ fun `tapSignerCvcValidationMessage`(`value`: kotlin.String): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_tap_signer_cvc_validation_message(
+
+
+        FfiConverterString.lower(`value`),_status)
 }
     )
     }

@@ -42,9 +42,6 @@ import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.Wallet
-import org.bitcoinppl.cove_core.WalletType
-
-
 
 @Composable
 internal fun GlobalAlertHandler(
@@ -133,18 +130,7 @@ private fun GlobalAlertDialog(
                     add(
                         DialogChoice("Use with Hardware Wallet") {
                             onDismiss()
-                            try {
-                                app.getWalletManager(walletId).setWalletType(WalletType.COLD)
-                            } catch (e: Exception) {
-                                Log.e("GlobalAlert", "Failed to set wallet type to cold", e)
-                                app.alertState =
-                                    TaggedItem(
-                                        AppAlertState.General(
-                                            title = "Error",
-                                            message = e.message ?: "Failed to convert wallet",
-                                        ),
-                                    )
-                            }
+                            app.convertWalletToCold(walletId)
                         },
                     )
                     add(
@@ -506,23 +492,38 @@ private fun GlobalAlertDialog(
         }
 
         is AppAlertState.WalletDatabaseCorrupted -> {
+            val retry =
+                app.corruptedWalletDeletionRetry?.takeIf { it.walletId == state.walletId }
+            val dismiss = {
+                if (retry == null) {
+                    onDismiss()
+                    app.trySelectLatestOrNewWallet()
+                } else {
+                    app.cancelCorruptedWalletDeletion(retry)
+                }
+            }
+
             AlertDialog(
-                onDismissRequest = onDismiss,
+                onDismissRequest = dismiss,
                 title = { Text(state.title()) },
                 text = { Text(state.message()) },
                 confirmButton = {
                     TextButton(onClick = {
                         onDismiss()
-                        app.deleteCorruptedWallet(state.walletId)
+                        if (retry == null) {
+                            app.deleteCorruptedWallet(state.walletId, state.error)
+                        } else {
+                            app.retryCorruptedWalletDeletion(retry)
+                        }
                     }) {
-                        Text("Delete Wallet", color = MaterialTheme.colorScheme.error)
+                        Text(
+                            if (retry == null) "Delete Wallet" else "Retry",
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = {
-                        onDismiss()
-                        app.trySelectLatestOrNewWallet()
-                    }) { Text("Cancel") }
+                    TextButton(onClick = dismiss) { Text("Cancel") }
                 },
             )
         }

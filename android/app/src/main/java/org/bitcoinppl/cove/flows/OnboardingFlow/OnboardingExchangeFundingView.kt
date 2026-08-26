@@ -76,7 +76,7 @@ internal fun OnboardingExchangeFundingView(
         }
 
         try {
-            val currentWalletManager = app.getWalletManager(walletId)
+            val currentWalletManager = app.getWalletManagerLoaded(walletId)
             currentWalletManager.firstAddress().use { addressInfo ->
                 addressRaw = addressInfo.addressUnformatted()
                 addressText =

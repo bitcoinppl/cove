@@ -5,14 +5,17 @@
 //  Created by Praveen Perera on 3/12/25.
 //
 
+import CoveCore
 import SwiftUI
 
 @Observable
+@MainActor
 class TapSignerManager {
     private let logger = Log(id: "TapSignerManager")
 
     var id = UUID()
-    private var nfc: TapSignerNFC?
+    @ObservationIgnored
+    private nonisolated(unsafe) var nfc: TapSignerNFC?
     var path: [TapSignerRoute] = []
     var initialRoute: TapSignerRoute
 
@@ -23,17 +26,30 @@ class TapSignerManager {
     }
 
     deinit {
-        AppManager.shared.tapSignerNfc = nil
+        let nfc = nfc
+
+        Task { @MainActor [nfc] in
+            nfc?.cancel()
+        }
+
+        self.nfc = nil
+
+        if AppManager.shared.tapSignerNfc === nfc {
+            AppManager.shared.tapSignerNfc = nil
+        }
     }
 
     func getOrCreateNfc(_ tapSigner: TapSigner) -> TapSignerNFC {
-        if let nfc { return nfc }
+        if let nfc {
+            AppManager.shared.tapSignerNfc = nfc
+            return nfc
+        }
 
         let nfc = TapSignerNFC(tapSigner)
         self.nfc = nfc
         AppManager.shared.tapSignerNfc = nfc
 
-        return self.nfc!
+        return nfc
     }
 
     func navigate(to newRoute: TapSignerRoute) {
@@ -50,12 +66,40 @@ class TapSignerManager {
             }
         }
 
-        logger.debug("Navigating to \(newRoute), current path: \(path)")
+        logger.debug(
+            "Navigating to \(routeKind(newRoute)), current path count: \(path.count)"
+        )
         path.append(newRoute)
+    }
+
+    private func routeKind(_ route: TapSignerRoute) -> String {
+        switch route {
+        case .initSelect: "initSelect"
+        case .initAdvanced: "initAdvanced"
+        case .startingPin: "startingPin"
+        case .newPin: "newPin"
+        case .confirmPin: "confirmPin"
+        case .setupSuccess: "setupSuccess"
+        case .setupRetry: "setupRetry"
+        case .importSuccess: "importSuccess"
+        case .importRetry: "importRetry"
+        case .enterPin: "enterPin"
+        }
     }
 
     func popRoute() {
         if !path.isEmpty { path.removeLast() }
+    }
+
+    func cancel() {
+        let nfc = nfc
+        nfc?.cancel()
+        self.nfc = nil
+        enteredPin = nil
+
+        if AppManager.shared.tapSignerNfc === nfc {
+            AppManager.shared.tapSignerNfc = nil
+        }
     }
 
     func resetRoute(to route: TapSignerRoute) {
@@ -65,6 +109,7 @@ class TapSignerManager {
     }
 }
 
+@MainActor
 struct TapSignerContainer: View {
     let app = AppManager.shared
     @State var manager: TapSignerManager

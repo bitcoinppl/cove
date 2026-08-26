@@ -16,7 +16,7 @@ use crate::{
     network::Network,
     wallet::{WalletAddressType, metadata::WalletId},
 };
-use cove_common::consts::WALLET_DATA_DIR;
+use cove_common::consts::{WALLET_DATA_DIR, wallet_data_dir_path};
 use cove_types::redb::Json;
 
 use ahash::AHashMap as HashMap;
@@ -26,6 +26,10 @@ pub static DATABASE_CONNECTIONS: Lazy<RwLock<HashMap<WalletId, Arc<redb::Databas
 
 /// Per-wallet locks so concurrent opens of the same id serialize without blocking other wallets
 static DATABASE_OPEN_LOCKS: Lazy<Mutex<HashMap<WalletId, Arc<Mutex<()>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+/// Per-wallet gates held while restore cleanup evicts and removes wallet data
+static DATABASE_STORAGE_GATES: Lazy<Mutex<HashMap<WalletId, Arc<Mutex<()>>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn database_location(id: &WalletId, location: &Path) -> Result<PathBuf, std::io::Error> {
@@ -125,11 +129,21 @@ pub struct WalletDataDb {
     pub id: WalletId,
     pub db: Arc<redb::Database>,
     pub labels: LabelsTable,
+    storage: WalletDataStorage,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum WalletDataStorage {
+    Persistent,
+    InMemory,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi::export(Display)]
 pub enum WalletDataError {
+    #[error(transparent)]
+    WalletLifecycle(#[from] crate::wallet_lifecycle::WalletLifecycleFailure),
+
     #[error("Unable to access database for wallet {id}, error: {error}")]
     DatabaseAccess { id: WalletId, error: String },
 
@@ -155,8 +169,32 @@ impl WalletDataDb {
         Self::new_with_db_location(id, &WALLET_DATA_DIR)
     }
 
+    /// Creates an ephemeral wallet-data database that never touches the wallet-data directory
+    pub(crate) fn new_in_memory(id: WalletId) -> Result<Self> {
+        let db = redb::Database::builder()
+            .create_with_backend(redb::backends::InMemoryBackend::new())
+            .map_err(|error| WalletDataError::DatabaseAccess {
+                id: id.clone(),
+                error: error.to_string(),
+            })?;
+
+        Self::new_with_db(id, Arc::new(db), WalletDataStorage::InMemory)
+    }
+
     fn new_with_db_location(id: WalletId, db_location: &Path) -> Result<Self> {
-        let db = get_or_create_database(&id, db_location)?;
+        let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
+            .begin_persistence_operation(id.clone())?;
+        let storage_gate = wallet_data_storage_gate(&id);
+        let _storage_guard = storage_gate.lock();
+        let db = get_or_create_database_locked(&id, db_location)?;
+        Self::new_with_db(id, db, WalletDataStorage::Persistent)
+    }
+
+    fn new_with_db(
+        id: WalletId,
+        db: Arc<redb::Database>,
+        storage: WalletDataStorage,
+    ) -> Result<Self> {
         let write_txn = db.begin_write().map_err(|e| WalletDataError::DatabaseAccess {
             id: id.clone(),
             error: e.to_string(),
@@ -166,7 +204,7 @@ impl WalletDataDb {
         write_txn
             .open_table(TABLE)
             .map_err(|e| WalletDataError::TableAccess { id: id.clone(), error: e.to_string() })?;
-        let labels = LabelsTable::new(db.clone(), &write_txn);
+        let labels = LabelsTable::new(id.clone(), db.clone(), &write_txn);
 
         // commit the write transaction
         write_txn.commit().map_err(|e| WalletDataError::DatabaseAccess {
@@ -174,7 +212,11 @@ impl WalletDataDb {
             error: e.to_string(),
         })?;
 
-        Ok(Self { id, db, labels })
+        Ok(Self { id, db, labels, storage })
+    }
+
+    pub(crate) const fn is_in_memory(&self) -> bool {
+        matches!(self.storage, WalletDataStorage::InMemory)
     }
 
     pub fn get_scan_state(&self, address_type: WalletAddressType) -> Result<Option<ScanState>> {
@@ -234,6 +276,20 @@ impl WalletDataDb {
         self.set(WalletDataKey::PayjoinSenderSession, WalletData::PayjoinSenderSession(session))
     }
 
+    /// Persist the terminal fallback marker authorized by wallet quiescence
+    pub(crate) fn set_terminal_payjoin_fallback(
+        &self,
+        session: PayjoinSenderSession,
+        authority: &crate::wallet_lifecycle::TerminalPayjoinPersistenceAuthority,
+    ) -> Result<()> {
+        let _persistence = (!self.is_in_memory()).then(|| authority.begin(&self.id)).transpose()?;
+
+        self.set_without_lifecycle(
+            WalletDataKey::PayjoinSenderSession,
+            WalletData::PayjoinSenderSession(session),
+        )
+    }
+
     pub fn delete_payjoin_sender_session(&self) -> Result<()> {
         self.delete(WalletDataKey::PayjoinSenderSession)
     }
@@ -250,6 +306,17 @@ impl WalletDataDb {
     }
 
     fn set(&self, key: WalletDataKey, value: WalletData) -> Result<()> {
+        let _persistence = (!self.is_in_memory())
+            .then(|| {
+                crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
+                    .begin_persistence_operation(self.id.clone())
+            })
+            .transpose()?;
+
+        self.set_without_lifecycle(key, value)
+    }
+
+    fn set_without_lifecycle(&self, key: WalletDataKey, value: WalletData) -> Result<()> {
         let write_txn = self.db.begin_write().map_err(|error| Error::DatabaseAccess {
             id: self.id.clone(),
             error: error.to_string(),
@@ -273,6 +340,12 @@ impl WalletDataDb {
     }
 
     fn delete(&self, key: WalletDataKey) -> Result<()> {
+        let _persistence = (!self.is_in_memory())
+            .then(|| {
+                crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
+                    .begin_persistence_operation(self.id.clone())
+            })
+            .transpose()?;
         let write_txn = self.db.begin_write().map_err(|error| Error::DatabaseAccess {
             id: self.id.clone(),
             error: error.to_string(),
@@ -310,8 +383,7 @@ impl WalletDataDb {
     }
 }
 
-/// Get an existing database or create a new one
-pub fn get_or_create_database(id: &WalletId, location: &Path) -> Result<Arc<redb::Database>> {
+fn get_or_create_database_locked(id: &WalletId, location: &Path) -> Result<Arc<redb::Database>> {
     let path = database_location(id, location)
         .map_err(|e| WalletDataError::DatabaseAccess { id: id.clone(), error: e.to_string() })?;
 
@@ -349,17 +421,231 @@ pub fn delete_database(id: &WalletId) -> Result<(), std::io::Error> {
     delete_database_at_location(id, &WALLET_DATA_DIR)
 }
 
+/// Remove the complete wallet-data namespace without creating a missing path
+pub(crate) fn delete_wallet_data_directory(id: &WalletId) -> Result<(), std::io::Error> {
+    delete_wallet_data_directory_at_location(id, &WALLET_DATA_DIR)
+}
+
+pub(crate) fn delete_wallet_data_directory_at_location(
+    id: &WalletId,
+    location: &Path,
+) -> Result<(), std::io::Error> {
+    delete_wallet_data_directory_with_sync(id, location, sync_immediate_parent)
+}
+
+fn delete_wallet_data_directory_with_sync(
+    id: &WalletId,
+    location: &Path,
+    sync_parent: impl FnOnce(&Path) -> Result<(), std::io::Error>,
+) -> Result<(), std::io::Error> {
+    let directory = location.join(id.as_str());
+    let metadata = match std::fs::symlink_metadata(&directory) {
+        Ok(metadata) => Some(metadata),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+
+    evict_wallet_data_connections(id);
+    if let Some(metadata) = metadata {
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            std::fs::remove_dir_all(&directory)?;
+        } else {
+            std::fs::remove_file(&directory)?;
+        }
+    }
+
+    sync_parent(&directory)
+}
+
+fn sync_immediate_parent(directory: &Path) -> Result<(), std::io::Error> {
+    let Some(parent) = directory.parent() else {
+        return Ok(());
+    };
+    if !parent.exists() {
+        return Ok(());
+    }
+
+    std::fs::File::open(parent)?.sync_all()
+}
+
+#[cfg(test)]
+pub(crate) fn wallet_data_artifact_paths(id: &WalletId) -> Vec<PathBuf> {
+    let directory = wallet_data_directory_path(id);
+    let mut paths = vec![directory.clone()];
+
+    let Ok(metadata) = std::fs::symlink_metadata(&directory) else {
+        return paths;
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return paths;
+    }
+
+    let Ok(entries) = std::fs::read_dir(&directory) else {
+        return paths;
+    };
+
+    paths.extend(entries.filter_map(std::result::Result::ok).map(|entry| entry.path()));
+    paths
+}
+
+/// Enumerate wallet-data artifacts without following symbolic links
+///
+/// Restore recovery uses this checked owner API so nested files and directories are cleaned
+/// without hiding permission or I/O failures
+pub(crate) fn wallet_data_artifact_paths_checked(
+    id: &WalletId,
+) -> Result<Vec<PathBuf>, std::io::Error> {
+    let root_metadata = match std::fs::symlink_metadata(&*WALLET_DATA_DIR) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(vec![wallet_data_directory_path(id)]);
+        }
+        Err(error) => return Err(error),
+    };
+    if root_metadata.file_type().is_symlink() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "wallet-data root is a symbolic link",
+        ));
+    }
+    if !root_metadata.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotADirectory,
+            "wallet-data root is not a directory",
+        ));
+    }
+
+    let directory = wallet_data_directory_path(id);
+    let metadata = match std::fs::symlink_metadata(&directory) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(vec![directory]),
+        Err(error) => return Err(error),
+    };
+
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Ok(vec![directory]);
+    }
+
+    let mut paths = vec![directory.clone()];
+    enumerate_wallet_data_children(&directory, &mut paths)?;
+    Ok(paths)
+}
+
+fn enumerate_wallet_data_children(
+    directory: &Path,
+    paths: &mut Vec<PathBuf>,
+) -> Result<(), std::io::Error> {
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        let metadata = std::fs::symlink_metadata(&path)?;
+        let is_directory = metadata.is_dir() && !metadata.file_type().is_symlink();
+        paths.push(path.clone());
+
+        if is_directory {
+            enumerate_wallet_data_children(&path, paths)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Return the wallet-data directory without opening or creating it
+///
+/// Restore recovery uses this owner-provided path only after the wallet id has
+/// passed restore validation, so inspecting a marker never creates storage
+pub(crate) fn wallet_data_directory_path(id: &WalletId) -> PathBuf {
+    wallet_data_dir_path().join(id.as_str())
+}
+
+/// List wallet-data root entries so restore validation can reject case-folded aliases
+pub(crate) fn wallet_data_root_entries() -> Result<Vec<PathBuf>, std::io::Error> {
+    let metadata = match std::fs::symlink_metadata(&*WALLET_DATA_DIR) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error),
+    };
+    if metadata.file_type().is_symlink() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "wallet-data root is a symbolic link",
+        ));
+    }
+    if !metadata.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotADirectory,
+            "wallet-data root is not a directory",
+        ));
+    }
+
+    let entries = std::fs::read_dir(&*WALLET_DATA_DIR)?;
+    entries.map(|entry| entry.map(|entry| entry.path())).collect()
+}
+
+/// Remove one restore-owned wallet-data artifact without opening the database
+pub(crate) fn remove_wallet_artifact(path: &Path) -> std::io::Result<()> {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    let result = if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        std::fs::remove_file(path)
+    } else {
+        std::fs::remove_dir(path)
+    };
+
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(test)]
+fn directory_contains_wallet_data(directory: &Path) -> bool {
+    let metadata = match std::fs::symlink_metadata(directory) {
+        Ok(metadata) => metadata,
+        Err(error) => return error.kind() != std::io::ErrorKind::NotFound,
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return true;
+    }
+
+    std::fs::read_dir(directory).map(|mut entries| entries.next().is_some()).unwrap_or(true)
+}
+
 /// Drop all cached wallet data connections and open locks
 pub fn clear_database_connections() {
     DATABASE_CONNECTIONS.write().clear();
     DATABASE_OPEN_LOCKS.lock().clear();
 }
 
+/// Return the shared per-wallet gate used by database opens and restore cleanup
+pub(crate) fn wallet_data_storage_gate(id: &WalletId) -> Arc<Mutex<()>> {
+    let mut gates = DATABASE_STORAGE_GATES.lock();
+    gates.entry(id.clone()).or_insert_with(|| Arc::new(Mutex::new(()))).clone()
+}
+
+/// Evict cached wallet-data connections before restore cleanup
+pub(crate) fn evict_wallet_data_connections(id: &WalletId) {
+    DATABASE_CONNECTIONS.write().remove(id);
+    DATABASE_OPEN_LOCKS.lock().remove(id);
+}
+
 fn delete_database_at_location(id: &WalletId, location: &Path) -> Result<(), std::io::Error> {
+    let storage_gate = wallet_data_storage_gate(id);
+    let _storage_guard = storage_gate.lock();
     DATABASE_CONNECTIONS.write().remove(id);
     DATABASE_OPEN_LOCKS.lock().remove(id);
 
-    std::fs::remove_file(database_location(id, location)?)
+    // a wallet that never opened its wallet-data database has nothing to delete,
+    // and deletion must still converge when the file is already gone
+    match std::fs::remove_file(database_location(id, location)?) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 impl WalletDataKey {
@@ -407,8 +693,57 @@ pub(crate) mod test_support {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        cell::Cell,
+        sync::{Barrier, mpsc},
+        time::Duration,
+    };
+
     use super::*;
-    use std::sync::Barrier;
+
+    #[test]
+    fn unreadable_wallet_data_path_is_treated_as_occupied() {
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let parent_file = tmp.path().join("not-a-directory");
+        std::fs::write(&parent_file, b"occupied").expect("failed to create parent file");
+
+        assert!(directory_contains_wallet_data(&parent_file.join("wallet")));
+    }
+
+    #[test]
+    fn deleting_missing_wallet_data_does_not_create_its_directory() {
+        let wallet_id = WalletId::preview_new_random();
+        let directory = wallet_data_directory_path(&wallet_id);
+        assert!(!directory.exists());
+
+        delete_wallet_data_directory(&wallet_id).expect("missing wallet data is idempotent");
+
+        assert!(!directory.exists());
+    }
+
+    #[test]
+    fn retry_after_parent_sync_failure_syncs_parent_when_wallet_path_is_absent() {
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let wallet_id = WalletId::preview_new_random();
+        let directory = tmp.path().join(wallet_id.as_str());
+        std::fs::create_dir(&directory).expect("wallet directory is created");
+
+        let first = delete_wallet_data_directory_with_sync(&wallet_id, tmp.path(), |_| {
+            Err(std::io::Error::other("injected parent sync failure"))
+        });
+        assert!(first.is_err());
+        assert!(!directory.exists(), "the first attempt removes the wallet directory");
+
+        let sync_calls = Cell::new(0);
+        delete_wallet_data_directory_with_sync(&wallet_id, tmp.path(), |requested_directory| {
+            assert_eq!(requested_directory, directory);
+            sync_calls.set(sync_calls.get() + 1);
+            Ok(())
+        })
+        .expect("retry syncs the deletion even though the wallet path is absent");
+
+        assert_eq!(sync_calls.get(), 1);
+    }
 
     #[test]
     fn concurrent_new_or_existing_calls_share_one_database_handle() {
@@ -484,6 +819,35 @@ mod tests {
         for wallet_id in &wallet_ids {
             test_support::clear_wallet_registry_entry(wallet_id);
         }
+    }
+
+    #[test]
+    fn storage_gate_blocks_database_open_until_cleanup_releases_it() {
+        crate::database::encrypted_backend::tests::set_test_encryption_key();
+        let wallet_id = WalletId::preview_new_random();
+        test_support::clear_wallet_registry_entry(&wallet_id);
+        let tmp = tempfile::tempdir().expect("failed to create temp dir");
+        let gate = wallet_data_storage_gate(&wallet_id);
+        let gate_guard = gate.lock();
+        let barrier = Arc::new(Barrier::new(2));
+        let (sender, receiver) = mpsc::channel();
+        let location = tmp.path().to_path_buf();
+        let thread_wallet_id = wallet_id.clone();
+        let thread_barrier = Arc::clone(&barrier);
+
+        let handle = std::thread::spawn(move || {
+            thread_barrier.wait();
+            let result = WalletDataDb::new_with_db_location(thread_wallet_id, &location);
+            sender.send(result.is_ok()).expect("open result receiver should exist");
+        });
+
+        barrier.wait();
+        assert!(receiver.recv_timeout(Duration::from_millis(100)).is_err());
+        drop(gate_guard);
+
+        assert!(receiver.recv_timeout(Duration::from_secs(2)).unwrap());
+        handle.join().expect("wallet data open thread should not panic");
+        test_support::clear_wallet_registry_entry(&wallet_id);
     }
 
     #[test]

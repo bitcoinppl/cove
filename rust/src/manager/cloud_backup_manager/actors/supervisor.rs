@@ -55,12 +55,13 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupEnableRecoveryCompletion, CloudBackupEnableRecoveryPreparation,
     CloudBackupEnableState, CloudBackupError, CloudBackupInventoryIncompleteReason,
     CloudBackupKeepEnabledPreparation, CloudBackupNoDiscoveryEnablePreparation,
-    CloudBackupOtherBackupsOutcome, CloudBackupPasskeyChoiceIntent,
+    CloudBackupOtherBackupsOutcome, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
     CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
     CloudBackupPreparedCloudWalletDelete, CloudBackupPreparedRestoreAll,
-    CloudBackupReadyEnableUpload, CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState,
-    CloudBackupRestoreOutcome, CloudBackupRestoreReport, CloudBackupReuploadedWallets,
-    CloudBackupSavedPasskeyConfirmation, CloudBackupStatus, CloudBackupStore,
+    CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupReadyEnableUpload,
+    CloudBackupRegisteredEnablePasskey, CloudBackupRestoreAllState, CloudBackupRestoreOutcome,
+    CloudBackupRestoreReport, CloudBackupReuploadedWallets, CloudBackupSavedPasskeyConfirmation,
+    CloudBackupStatus, CloudBackupStore, CloudBackupUndecryptableWalletDeletionState,
     CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
     CloudBackupVerificationSource, CloudBackupWalletItem, CloudBackupWalletStatus,
     CloudOnlyOperation, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
@@ -81,11 +82,14 @@ mod disable;
 mod enable;
 mod other_backups;
 mod restore_all;
+mod undecryptable_wallets;
 mod verification;
 
 pub(crate) use verification::DeepVerificationContinuation;
 
-use detail_workflow::{DetailRefreshClaim, DetailRefreshPlan, DetailResultClaim, DetailWorkflow};
+use detail_workflow::{
+    DetailRefreshClaim, DetailRefreshPlan, DetailResultClaim, DetailWorkflow, OtherBackupsScanClaim,
+};
 use restore_all::restore_all_marker_matches_active_namespace;
 
 mod tests {
@@ -154,8 +158,11 @@ fn should_retry_connectivity_failure(status: ConnectivityStatus) -> bool {
 
 fn apply_refresh_detail_result(manager: &RustCloudBackupManager, result: &CloudBackupDetailResult) {
     match result {
-        CloudBackupDetailResult::Success(detail) => {
-            manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail.clone()));
+        CloudBackupDetailResult::SuccessWithAuthority { detail, authority } => {
+            manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithAuthority {
+                detail: detail.clone(),
+                authority: *authority,
+            });
         }
         CloudBackupDetailResult::AccessError(error) => {
             error!("Failed to refresh detail: {error}");
@@ -172,9 +179,12 @@ fn apply_cloud_only_operation_refresh_detail_result(
     result: &CloudBackupDetailResult,
 ) {
     match result {
-        CloudBackupDetailResult::Success(detail) => {
+        CloudBackupDetailResult::SuccessWithAuthority { detail, authority } => {
             manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
-                CloudBackupDetailOutcome::Refreshed(detail.clone()),
+                CloudBackupDetailOutcome::RefreshedWithAuthority {
+                    detail: detail.clone(),
+                    authority: *authority,
+                },
             );
         }
         CloudBackupDetailResult::AccessError(error) => {
@@ -647,6 +657,11 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
+    pub async fn start_delete_undecryptable_wallet_backups_operation(&mut self) -> ActorResult<()> {
+        self.begin_delete_undecryptable_wallet_backups_operation();
+        Produces::ok(())
+    }
+
     pub async fn start_recover_other_backups_operation(&mut self) -> ActorResult<()> {
         self.begin_recover_other_backups_operation();
         Produces::ok(())
@@ -742,11 +757,11 @@ impl CloudBackupSupervisor {
         let Some(manager) = self.manager() else {
             return Produces::ok(());
         };
+        if manager.detail_inventory_is_ready() {
+            return Produces::ok(());
+        }
 
         let plan = self.detail_workflow.request_refresh();
-        if !matches!(plan, DetailRefreshPlan::Ignored) {
-            manager.apply_detail_outcome(CloudBackupDetailOutcome::Checking);
-        }
         self.handle_detail_refresh_plan(manager, plan);
 
         Produces::ok(())
@@ -936,7 +951,6 @@ impl CloudBackupSupervisor {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         self.detail_workflow.open();
-
         let plan = self.detail_workflow.entry_plan(&manager);
         match plan {
             DetailEntryPlan::StartPasskeyVerification { force_discoverable } => {
@@ -964,8 +978,51 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
+    pub async fn refresh_other_backups(&mut self) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+        let Some(claim) = self.detail_workflow.start_user_requested_other_backups_scan() else {
+            return Produces::ok(());
+        };
+
+        self.schedule_other_backups_scan(manager, claim);
+        Produces::ok(())
+    }
+
+    fn schedule_other_backups_scan(
+        &self,
+        manager: Arc<RustCloudBackupManager>,
+        claim: OtherBackupsScanClaim,
+    ) {
+        let Some(addr) = self.addr() else { return };
+
+        manager.apply_other_backups_state(CloudBackupOtherBackupsState::Checking);
+        let scan_manager = manager.clone();
+        addr.send_fut_with(move |addr| async move {
+            let cloud = CloudStorage::global_explicit_client();
+            let state = scan_manager.other_backup_state(&cloud).await;
+            send!(addr.complete_other_backups_scan(claim, state));
+        });
+    }
+
+    async fn complete_other_backups_scan(
+        &mut self,
+        claim: OtherBackupsScanClaim,
+        state: CloudBackupOtherBackupsState,
+    ) -> ActorResult<()> {
+        if self.detail_workflow.complete_other_backups_scan(claim)
+            && let Some(manager) = self.manager()
+        {
+            manager.apply_other_backups_state(state);
+        }
+
+        Produces::ok(())
+    }
+
     pub async fn close_detail(&mut self) -> ActorResult<()> {
-        self.detail_workflow.close();
+        let other_backups_scan_invalidated = self.detail_workflow.close();
+        if other_backups_scan_invalidated && let Some(manager) = self.manager() {
+            manager.apply_other_backups_state(CloudBackupOtherBackupsState::NotChecked);
+        }
 
         Produces::ok(())
     }
@@ -1161,6 +1218,25 @@ impl CloudBackupSupervisor {
         call!(self.sync_health.clear_upload_runtime_state()).await?;
         call!(self.uploads.clear_upload_runtime_state()).await?;
         Produces::ok(())
+    }
+
+    pub async fn prepare_local_reset_runtime(&mut self) -> ActorResult<()> {
+        if let Some(run) = self.active_operation.0.as_ref()
+            && let ActiveOperationRun::RestoreAll(run) = run
+        {
+            run.cancellation.store(true, Ordering::Release);
+        }
+
+        if let Some(claim) = self.active_operation.claim()
+            && let Some(manager) = self.manager()
+        {
+            manager.project_exclusive_operation_finished(claim);
+        }
+        self.active_operation.clear();
+        self.active_sync_request = None;
+        self.active_cloud_only_fetch_request = None;
+        self.pending_disable_write_drain = None;
+        self.clear_upload_runtime_state().await
     }
 }
 

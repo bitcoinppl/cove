@@ -1,28 +1,24 @@
 package org.bitcoinppl.cove.cloudbackup
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -88,6 +84,7 @@ internal fun VerificationSection(
     onReinitialize: () -> Unit,
 ) {
     val colors = cloudBackupVisualColors()
+    var showUndecryptableDeletionConfirmation by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.padding(top = 10.dp),
@@ -113,10 +110,7 @@ internal fun VerificationSection(
             }
 
             CloudBackupVerificationState.Running -> {
-                CloudBackupProgressCard(
-                    title = "Verifying backup integrity",
-                    message = "Confirming that wallet backups can be decrypted and restored",
-                )
+                Unit
             }
 
             is CloudBackupVerificationState.Verified -> {
@@ -126,6 +120,16 @@ internal fun VerificationSection(
                 } else {
                     PasskeyConfirmedSectionContent(manager)
                 }
+            }
+
+            is CloudBackupVerificationState.NeedsAttention -> {
+                NeedsAttentionSectionContent(
+                    report = verification.report,
+                    deletionState = manager.undecryptableWalletDeletionState,
+                    onDeleteUndecryptable = {
+                        showUndecryptableDeletionConfirmation = true
+                    },
+                )
             }
 
             CloudBackupVerificationState.AwaitingUploadConfirmation -> {
@@ -175,18 +179,14 @@ internal fun VerificationSection(
             )
         }
 
-        if (manager.verificationState is CloudBackupVerificationState.Verified) {
-            VerifyAgainButton(
-                onClick = {
-                    manager.dispatch(
-                        CloudBackupManagerAction.StartVerification(
-                            CloudBackupVerificationSource.CLOUD_BACKUP_DETAIL,
-                        ),
-                    )
-                },
-            )
-        }
+        VerificationRepeatAction(manager)
     }
+
+    UndecryptableWalletDeletionConfirmation(
+        manager = manager,
+        isPresented = showUndecryptableDeletionConfirmation,
+        onDismiss = { showUndecryptableDeletionConfirmation = false },
+    )
 }
 
 @Composable
@@ -286,13 +286,6 @@ private fun VerifiedSectionContent(
                 color = colors.secondaryText,
             )
 
-            if (report.walletsFailed > 0u) {
-                ErrorInlineMessage("${report.walletsFailed} wallet backup(s) could not be decrypted")
-            }
-
-            if (report.walletsUnsupported > 0u) {
-                ErrorInlineMessage("${report.walletsUnsupported} wallet(s) use a newer backup format")
-            }
         }
     }
 }
@@ -339,34 +332,6 @@ private fun buildVerifiedSummaryItems(report: DeepVerificationReport): List<Stri
         }
         add("${report.walletsVerified} wallet(s) verified")
     }
-
-@Composable
-private fun VerifyAgainButton(onClick: () -> Unit) {
-    val colors = cloudBackupVisualColors()
-
-    OutlinedButton(
-        onClick = onClick,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .padding(horizontal = 14.dp),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.5.dp, colors.outlineButtonBorder),
-        colors =
-            ButtonDefaults.outlinedButtonColors(
-                contentColor = colors.outlineButtonBorder,
-            ),
-    ) {
-        Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(20.dp))
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            "Verify Again",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
 
 @Composable
 private fun VerificationFailureContent(

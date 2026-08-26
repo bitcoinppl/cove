@@ -68,7 +68,7 @@ struct AddressTextEditor: View {
 #Preview("focused") {
     AsyncPreview {
         let app = AppManager.shared
-        let manager = WalletManager(preview: "preview_only")
+        let manager = WalletManager(preview: .only)
         let presenter = SendFlowPresenter(app: app, manager: manager)
 
         AddressTextEditor(
@@ -84,7 +84,7 @@ struct AddressTextEditor: View {
 #Preview("not focused") {
     AsyncPreview {
         let app = AppManager.shared
-        let manager = WalletManager(preview: "preview_only")
+        let manager = WalletManager(preview: .only)
         let presenter = SendFlowPresenter(app: app, manager: manager)
 
         AddressTextEditor(

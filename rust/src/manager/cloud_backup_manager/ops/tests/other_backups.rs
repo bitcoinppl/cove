@@ -75,13 +75,14 @@ async fn detail_reports_other_backup_namespaces() {
         ],
     );
 
-    let Some(CloudBackupDetailResult::Success(detail)) =
+    let Some(CloudBackupDetailResult::SuccessWithAuthority { .. }) =
         manager.refresh_cloud_backup_detail().await
     else {
         panic!("expected cloud backup detail");
     };
 
-    let CloudBackupOtherBackupsState::Loaded { summary } = detail.other_backups else {
+    let other_backups = manager.other_backup_state(&CloudStorage::global_explicit_client()).await;
+    let CloudBackupOtherBackupsState::Loaded { summary } = other_backups else {
         panic!("expected loaded other backups");
     };
 
@@ -174,17 +175,18 @@ async fn detail_refresh_keeps_current_detail_when_other_namespace_inspection_fai
         .cloud
         .fail_master_key_download_offline(other_namespace, "offline while inspecting namespace");
 
-    let Some(CloudBackupDetailResult::Success(detail)) =
+    let Some(CloudBackupDetailResult::SuccessWithAuthority { detail, .. }) =
         manager.refresh_cloud_backup_detail().await
     else {
         panic!("expected usable current cloud backup detail");
     };
 
-    let CloudBackupOtherBackupsState::LoadFailed { error } = detail.other_backups else {
+    let other_backups = manager.other_backup_state(&CloudStorage::global_explicit_client()).await;
+    let CloudBackupOtherBackupsState::LoadFailed { reason } = other_backups else {
         panic!("expected isolated other-backups failure");
     };
 
-    assert!(error.contains("Reconnect to the internet"), "{error}");
+    assert_eq!(reason, CloudBackupInventoryIncompleteReason::Offline);
     assert!(detail.up_to_date.is_empty());
     assert!(detail.needs_sync.is_empty());
 }
@@ -224,7 +226,7 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
     globals.cloud.set_wallet_backup(
         other_namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&wallet, &other_master_key, "other-revision", 1).await,
+        encrypted_remote_wallet_backup_bytes(&wallet, &other_master_key, "other-revision", 1).await,
     );
     globals.cloud.set_wallet_files(
         other_namespace.clone(),
@@ -342,8 +344,13 @@ async fn recover_other_backups_keeps_partially_moved_namespace() {
     globals.cloud.set_wallet_backup(
         other_namespace.clone(),
         restored_record_id.clone(),
-        encrypted_wallet_backup_bytes(&restored_wallet, &other_master_key, "other-revision", 1)
-            .await,
+        encrypted_remote_wallet_backup_bytes(
+            &restored_wallet,
+            &other_master_key,
+            "other-revision",
+            1,
+        )
+        .await,
     );
     globals.cloud.set_wallet_files(
         other_namespace.clone(),
@@ -395,7 +402,7 @@ async fn recover_other_backups_keeps_namespace_when_current_upload_fails() {
     globals.cloud.set_wallet_backup(
         other_namespace.clone(),
         record_id.clone(),
-        encrypted_wallet_backup_bytes(&wallet, &other_master_key, "other-revision", 1).await,
+        encrypted_remote_wallet_backup_bytes(&wallet, &other_master_key, "other-revision", 1).await,
     );
     globals.cloud.set_wallet_files(
         other_namespace.clone(),

@@ -15,6 +15,7 @@ impl RustWalletManager {
         &self,
         tx_id: Arc<TxId>,
     ) -> Result<TransactionLockState, Error> {
+        self.ensure_active()?;
         let tx_id = Arc::unwrap_or_clone(tx_id);
         let state = call!(self.actor.transaction_lock_state(tx_id))
             .await
@@ -28,6 +29,7 @@ impl RustWalletManager {
         &self,
         tx_id: Arc<TxId>,
     ) -> Result<TransactionLockState, Error> {
+        self.ensure_active()?;
         let tx_id = Arc::unwrap_or_clone(tx_id);
         let state = call!(self.actor.transaction_lock_state(tx_id))
             .await
@@ -55,6 +57,7 @@ impl RustWalletManager {
         &self,
         tx_id: Arc<TxId>,
     ) -> Result<TransactionLockState, Error> {
+        self.ensure_active()?;
         let tx_id = Arc::unwrap_or_clone(tx_id);
         let outpoints = call!(self.actor.current_wallet_unspent_outpoints_for_txn(tx_id))
             .await

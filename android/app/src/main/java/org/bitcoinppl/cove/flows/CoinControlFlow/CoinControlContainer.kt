@@ -45,7 +45,7 @@ fun CoinControlContainer(
         try {
             android.util.Log.d(tag, "getting wallet for CoinControlRoute $walletId")
 
-            val wm = app.getWalletManager(walletId)
+            val wm = app.getWalletManagerLoaded(walletId)
             val ccm = wm.newCoinControlManager()
 
             walletManager = wm

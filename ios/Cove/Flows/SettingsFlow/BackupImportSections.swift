@@ -35,6 +35,7 @@ struct BackupImportConfirmationContent: View {
                     Spacer()
                 }
             }
+            .disabled(isImporting)
         }
     }
 }
