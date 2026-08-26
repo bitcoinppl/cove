@@ -108,7 +108,7 @@ struct CloudBackupDetailScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .presentationTransitionHost(presentationCoordinator)
         .task(enterDetail)
-        .onDisappear(perform: closeDetail)
+        .onDisappear(perform: clearDetailPresentation)
         .onChange(of: hasCloudBackupPresentationBlocker, initial: true) { _, active in
             cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: active)
         }
@@ -170,9 +170,8 @@ struct CloudBackupDetailScreen: View {
         )
     }
 
-    private func closeDetail() {
+    private func clearDetailPresentation() {
         presentationCoordinator.discardAll()
-        manager.dispatch(action: .closeDetail)
         cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: false)
     }
 }

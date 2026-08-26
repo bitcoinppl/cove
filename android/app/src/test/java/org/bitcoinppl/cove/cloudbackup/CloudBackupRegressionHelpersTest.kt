@@ -14,6 +14,7 @@ import org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason
 import org.bitcoinppl.cove_core.CloudBackupLifecycle
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
+import org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary
 import org.bitcoinppl.cove_core.CloudBackupPasskeyChoiceIntent
 import org.bitcoinppl.cove_core.CloudBackupPasskeyState
 import org.bitcoinppl.cove_core.CloudBackupProgress
@@ -359,9 +360,41 @@ class CloudBackupRegressionHelpersTest {
     }
 
     @Test
-    fun cloudOnlyAutoFetchOnlyRunsFromNotFetched() {
-        assertTrue(shouldFetchCloudOnly(CloudOnlyState.NotFetched))
-        assertFalse(shouldFetchCloudOnly(CloudOnlyState.Loading))
+    fun cloudOnlySectionStaysHiddenWhileInventoryIsPending() {
+        assertEquals(null, cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.NotFetched))
+        assertEquals(null, cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.Loading))
+        assertEquals(
+            null,
+            cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.Failed(error = "still syncing")),
+        )
+    }
+
+    @Test
+    fun otherBackupsSectionOnlyShowsWhenMissingWalletsAreFound() {
+        assertNull(cloudBackupVisibleOtherBackupsSummary(CloudBackupOtherBackupsState.NotChecked))
+        assertNull(cloudBackupVisibleOtherBackupsSummary(CloudBackupOtherBackupsState.Checking))
+        assertNull(
+            cloudBackupVisibleOtherBackupsSummary(
+                CloudBackupOtherBackupsState.LoadFailed(
+                    reason = CloudBackupInventoryIncompleteReason.PROVIDER_SYNC_PENDING,
+                ),
+            ),
+        )
+        assertNull(
+            cloudBackupVisibleOtherBackupsSummary(
+                CloudBackupOtherBackupsState.Loaded(
+                    summary = otherBackupsSummary(namespaceCount = 0u, walletCount = 0u),
+                ),
+            ),
+        )
+        assertEquals(
+            1u,
+            cloudBackupVisibleOtherBackupsSummary(
+                CloudBackupOtherBackupsState.Loaded(
+                    summary = otherBackupsSummary(namespaceCount = 1u, walletCount = 2u),
+                ),
+            )?.namespaceCount,
+        )
     }
 
     @Test
@@ -627,6 +660,16 @@ class CloudBackupRegressionHelpersTest {
         CloudBackupEnableContext(
             savedPasskeyConfirmation = SavedPasskeyConfirmationMode.MANUAL,
             verificationSource = CloudBackupVerificationSource.SETTINGS,
+        )
+
+    private fun otherBackupsSummary(
+        namespaceCount: UInt,
+        walletCount: UInt,
+    ): CloudBackupOtherBackupsSummary =
+        CloudBackupOtherBackupsSummary(
+            namespaceCount = namespaceCount,
+            walletCount = walletCount,
+            passkeyHints = emptyList(),
         )
 
     private fun cloudBackupManager(

@@ -30,10 +30,12 @@ import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
+import org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary
 import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
 import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
+import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 
@@ -75,8 +77,17 @@ internal fun pendingUploadConfirmationActionTitle(
     isBlockedOnAuthorization: Boolean,
 ): String? = if (isBlockedOnAuthorization) "Reconnect Google Drive" else null
 
-internal fun shouldFetchCloudOnly(cloudOnly: CloudOnlyState): Boolean =
-    cloudOnly is CloudOnlyState.NotFetched
+internal fun cloudBackupVisibleCloudOnlyWallets(
+    cloudOnly: CloudOnlyState,
+): List<CloudBackupWalletItem>? =
+    (cloudOnly as? CloudOnlyState.Loaded)?.wallets?.takeIf { it.isNotEmpty() }
+
+internal fun cloudBackupVisibleOtherBackupsSummary(
+    otherBackups: CloudBackupOtherBackupsState,
+): CloudBackupOtherBackupsSummary? =
+    (otherBackups as? CloudBackupOtherBackupsState.Loaded)
+        ?.summary
+        ?.takeIf { it.namespaceCount > 0u }
 
 internal fun shouldShowFallbackVerificationSection(
     bodyState: CloudBackupDetailBodyState?,
@@ -393,13 +404,7 @@ private fun DetailFormContent(
     syncHealth: CloudSyncHealth,
     manager: CloudBackupManager,
 ) {
-    val showCloudOnlySection =
-        when (val cloudOnly = manager.cloudOnly) {
-            is CloudOnlyState.NotFetched -> detail.cloudOnlyCount.toInt() > 0
-            is CloudOnlyState.Loading -> true
-            is CloudOnlyState.Loaded -> cloudOnly.wallets.isNotEmpty()
-            is CloudOnlyState.Failed -> true
-        }
+    val cloudOnlyWallets = cloudBackupVisibleCloudOnlyWallets(manager.cloudOnly)
 
     Column(verticalArrangement = Arrangement.spacedBy(CloudBackupDetailSectionSpacing)) {
         CloudBackupHeaderSection(lastSync = detail.lastSync, syncHealth = syncHealth)
@@ -412,37 +417,17 @@ private fun DetailFormContent(
             WalletSections(title = "Needs Sync", wallets = detail.needsSync)
         }
 
-        if (showCloudOnlySection) {
-            CloudOnlySection(manager = manager)
+        if (cloudOnlyWallets != null) {
+            CloudOnlySection(manager = manager, wallets = cloudOnlyWallets)
         }
 
-        when (val otherBackups = manager.otherBackupsState) {
-            is CloudBackupOtherBackupsState.NotChecked ->
-                OtherBackupsNotCheckedSection(
-                    onCheck = {
-                        manager.dispatch(CloudBackupManagerAction.RefreshOtherBackups)
-                    },
-                )
-            is CloudBackupOtherBackupsState.Checking -> OtherBackupsCheckingSection()
-            is CloudBackupOtherBackupsState.Loaded -> {
-                val summary = otherBackups.summary
-                if (summary.namespaceCount.toInt() > 0) {
-                    OtherBackupsSection(
-                        namespaceCount = summary.namespaceCount.toInt(),
-                        walletCount = summary.walletCount.toInt(),
-                        passkeySuffixes = summary.passkeyHints.map { it.nameSuffix },
-                        manager = manager,
-                    )
-                }
-            }
-            is CloudBackupOtherBackupsState.LoadFailed -> {
-                OtherBackupsLoadFailedSection(
-                    reason = otherBackups.reason,
-                    onRetry = {
-                        manager.dispatch(CloudBackupManagerAction.RefreshOtherBackups)
-                    },
-                )
-            }
+        cloudBackupVisibleOtherBackupsSummary(manager.otherBackupsState)?.let { summary ->
+            OtherBackupsSection(
+                namespaceCount = summary.namespaceCount.toInt(),
+                walletCount = summary.walletCount.toInt(),
+                passkeySuffixes = summary.passkeyHints.map { it.nameSuffix },
+                manager = manager,
+            )
         }
     }
 }

@@ -91,7 +91,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
             ICloudMetadataIndex.shared
         },
         defaultTimeout: TimeInterval = 60,
-        metadataListingTimeout: TimeInterval = 5,
+        metadataListingTimeout: TimeInterval = 15,
         readAttemptTimeout: TimeInterval = 5
     ) {
         self.containerURLProvider = containerURLProvider

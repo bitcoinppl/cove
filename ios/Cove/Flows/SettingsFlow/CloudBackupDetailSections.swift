@@ -6,13 +6,12 @@ struct DetailFormContent: View {
     let manager: CloudBackupManager
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
-    private var showCloudOnlySection: Bool {
-        switch manager.cloudOnly {
-        case .notFetched: detail.cloudOnlyCount > 0
-        case .loading: true
-        case let .loaded(wallets): !wallets.isEmpty
-        case .failed: true
+    private var cloudOnlyWallets: [CloudBackupWalletItem]? {
+        guard case let .loaded(wallets) = manager.cloudOnly, !wallets.isEmpty else {
+            return nil
         }
+
+        return wallets
     }
 
     var body: some View {
@@ -20,27 +19,21 @@ struct DetailFormContent: View {
         if !wallets.isEmpty {
             WalletSections(wallets: wallets)
         }
-        if showCloudOnlySection {
+        if let cloudOnlyWallets {
             CloudOnlySection(
+                wallets: cloudOnlyWallets,
                 manager: manager,
                 presentationCoordinator: presentationCoordinator
             )
         }
-        switch manager.otherBackupsState {
-        case .notChecked:
-            OtherBackupsNotCheckedSection(manager: manager)
-        case .checking:
-            OtherBackupsCheckingSection()
-        case let .loaded(summary):
-            if summary.namespaceCount > 0 {
-                OtherBackupsSection(
-                    summary: summary,
-                    manager: manager,
-                    presentationCoordinator: presentationCoordinator
-                )
-            }
-        case let .loadFailed(reason):
-            OtherBackupsLoadFailedSection(reason: reason, manager: manager)
+        if case let .loaded(summary) = manager.otherBackupsState,
+           summary.namespaceCount > 0
+        {
+            OtherBackupsSection(
+                summary: summary,
+                manager: manager,
+                presentationCoordinator: presentationCoordinator
+            )
         }
     }
 

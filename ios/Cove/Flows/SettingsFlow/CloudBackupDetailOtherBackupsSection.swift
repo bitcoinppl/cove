@@ -1,33 +1,5 @@
 import SwiftUI
 
-struct OtherBackupsNotCheckedSection: View {
-    let manager: CloudBackupManager
-
-    var body: some View {
-        Section(header: Text("Backups with Another Key")) {
-            Button("Check for Backups with Another Key") {
-                manager.dispatch(action: .refreshOtherBackups)
-            }
-
-            Text("This optional check searches iCloud Drive for backup sets protected by a different backup key.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-struct OtherBackupsCheckingSection: View {
-    var body: some View {
-        Section(header: Text("Backups with Another Key")) {
-            HStack(spacing: 12) {
-                ProgressView()
-                Text("Checking iCloud Drive...")
-            }
-            .foregroundStyle(.secondary)
-        }
-    }
-}
-
 struct OtherBackupsSection: View {
     let summary: CloudBackupOtherBackupsSummary
     let manager: CloudBackupManager
@@ -156,38 +128,6 @@ private struct OtherBackupsOperationLabel: View {
                 Image(systemName: systemImage)
             }
             Text(title)
-        }
-    }
-}
-
-struct OtherBackupsLoadFailedSection: View {
-    let reason: CloudBackupInventoryIncompleteReason
-    let manager: CloudBackupManager
-
-    private var message: String {
-        switch reason {
-        case .providerSyncPending:
-            "Cove could not check for backup sets made with another backup key because iCloud Drive is still syncing. The wallet backups shown above use your current backup key and remain available."
-        case .offline:
-            "Cove could not check for backup sets made with another backup key because this device is offline. The wallet backups shown above remain available."
-        case .authorizationRequired:
-            "Cove cannot check for backup sets made with another backup key. Turn on iCloud Drive for Cove, then check again."
-        case .providerUnavailable:
-            "Cove cannot check for backup sets made with another backup key because iCloud Drive is not available now. The wallet backups shown above remain available."
-        case .unknown:
-            "Cove could not check for backup sets made with another backup key. The wallet backups shown above remain available."
-        }
-    }
-
-    var body: some View {
-        Section(header: Text("Backups with Another Key")) {
-            Text(message)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Button("Check Again") {
-                manager.dispatch(action: .refreshOtherBackups)
-            }
         }
     }
 }
