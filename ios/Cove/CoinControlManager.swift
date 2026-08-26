@@ -15,6 +15,11 @@ private enum CoinControlManagerError: LocalizedError {
     typealias Message = CoinControlManagerReconcileMessage
     typealias Action = CoinControlManagerAction
 
+    private struct SelectionState {
+        var selected: Set<Utxo.ID> = []
+        var total = Amount.fromSat(sats: 0)
+    }
+
     private struct RustState {
         var rust: RustCoinControlManager?
         var isClosed = false
@@ -31,8 +36,7 @@ private enum CoinControlManagerError: LocalizedError {
     private(set) var sort: CoinControlListSort? = .some(.date(.descending))
 
     var search: String = ""
-    var totalSelected = Amount.fromSat(sats: 0)
-    var selected: Set<Utxo.ID> = []
+    private var selection = SelectionState()
     var utxos: [Utxo]
     var lockStateLoadFailed: Bool
     var unit: Unit = .sat
@@ -57,14 +61,14 @@ private enum CoinControlManagerError: LocalizedError {
     @ObservationIgnored
     var selectedBinding: Binding<Set<Utxo.ID>> {
         Binding(
-            get: { self.selected },
+            get: { self.selection.selected },
             set: {
                 let visibleIds = Set(self.utxos.map(\.id))
                 let visibleSpendableIds = Set(self.utxos.filter(\.spendable).map(\.id))
-                let selectedOutsideVisibleSearch = self.selected.subtracting(visibleIds)
+                let selectedOutsideVisibleSearch = self.selection.selected.subtracting(visibleIds)
                 let selected = selectedOutsideVisibleSearch.union($0.intersection(visibleSpendableIds))
 
-                self.selected = selected
+                self.selection.selected = selected
                 self.dispatch(.notifySelectedUtxosChanged(Array(selected)))
             }
         )
@@ -129,6 +133,14 @@ private enum CoinControlManagerError: LocalizedError {
         rust?.selectedUtxos() ?? []
     }
 
+    var selected: Set<Utxo.ID> {
+        selection.selected
+    }
+
+    var totalSelected: Amount {
+        selection.total
+    }
+
     public var totalSelectedAmount: String {
         displayAmount(self.totalSelected)
     }
@@ -171,8 +183,12 @@ private enum CoinControlManagerError: LocalizedError {
             withAnimation { self.search = search }
         case let .updateSelectedUtxos(utxos: selected, totalSelected):
             updateSendFlowManager()
-            self.selected = Set(selected)
-            withAnimation { self.totalSelected = totalSelected }
+            withAnimation {
+                self.selection = SelectionState(
+                    selected: Set(selected),
+                    total: totalSelected
+                )
+            }
         case let .updateUnit(unit):
             withAnimation { self.unit = unit }
         case let .updateLockStateLoadFailed(failed):
