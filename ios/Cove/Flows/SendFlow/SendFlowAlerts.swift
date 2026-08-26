@@ -3,6 +3,7 @@ import SwiftUI
 enum SendFlowConfirmAlertState: Equatable {
     case sent(WalletId)
     case broadcastError(String)
+    case payjoinCancellationError(String)
 }
 
 struct SendFlowErrorAlertContext {
@@ -77,6 +78,17 @@ extension SendFlowConfirmAlertState: TaggedAlertPresentable {
                 actions: {
                     Button("OK") {
                         context.sendState.wrappedValue = .idle
+                        context.dismissAlert()
+                    }
+                }
+            ).eraseToAny()
+
+        case let .payjoinCancellationError(error):
+            AlertBuilder(
+                title: "Unable to Cancel Payjoin",
+                message: error,
+                actions: {
+                    Button("OK") {
                         context.dismissAlert()
                     }
                 }

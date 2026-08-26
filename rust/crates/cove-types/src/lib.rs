@@ -3,6 +3,7 @@ uniffi::setup_scaffolding!();
 mod address_index;
 mod block_size;
 mod chain_position;
+mod payjoin;
 mod wallet_id;
 
 pub mod address;
@@ -25,6 +26,7 @@ pub use confirm::{ConfirmDetails, ConfirmDetailsError, InputOutputDetails, Split
 
 pub use chain_position::ChainPosition;
 pub use network::Network;
+pub use payjoin::{PayjoinEndpoint, PayjoinIntent, PayjoinSessionId};
 pub use wallet_id::WalletId;
 
 pub use transaction::out_point::OutPoint;

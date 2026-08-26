@@ -283,8 +283,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
                     id: WalletId(),
                     manager: manager,
                     details: confirmDetailsPreviewNew(),
-                    input: .unsigned,
-                    payjoinEndpoint: nil
+                    input: .unsigned(mode: .standard)
                 )
                 .environment(AppManager.shared)
                 .environment(AuthManager.shared)
@@ -317,8 +316,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
                     id: WalletId(),
                     manager: manager,
                     details: confirmDetailsPreviewNew(),
-                    input: .unsigned,
-                    payjoinEndpoint: nil
+                    input: .unsigned(mode: .standard)
                 )
                 .environment(AppManager.shared)
                 .environment(AuthManager.shared)

@@ -37,7 +37,7 @@ use crate::{
     keychain::{Keychain, KeychainError},
     label_manager::LabelManager,
     psbt::Psbt,
-    router::Route,
+    router::{Route, UnsignedPaymentMode},
     transaction::{
         Amount, Transaction, TransactionDetailsPresentation, TxId, Unit, ffi::BitcoinTransaction,
         unsigned_transaction::UnsignedTransaction,
@@ -55,7 +55,7 @@ use crate::{
 };
 
 use cove_types::confirm::{ConfirmDetails, SplitOutput};
-use cove_types::{confirm::AddressAndAmount, fees::FeeRateOptions};
+use cove_types::{PayjoinSessionId, confirm::AddressAndAmount, fees::FeeRateOptions};
 
 use super::{
     coin_control_manager::RustCoinControlManager,
@@ -98,8 +98,23 @@ pub enum WalletManagerReconcileMessage {
     ReceiveAddressError(String),
     ReceiveAddressClosed(u64),
 
-    PayjoinTxBroadcast,
-    PayjoinPollingStarted { deadline_secs: u64 },
+    PayjoinStatusChanged(PayjoinStatus),
+}
+
+/// The terminal transaction selected for a Payjoin payment
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum PayjoinBroadcastOutcome {
+    Proposal,
+    Fallback,
+}
+
+/// The latest wallet-owned state for one Payjoin payment
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum PayjoinStatus {
+    Negotiating { session_id: PayjoinSessionId },
+    Polling { session_id: PayjoinSessionId, deadline_secs: u64 },
+    Broadcast { session_id: PayjoinSessionId, outcome: PayjoinBroadcastOutcome },
+    Failed { session_id: PayjoinSessionId, message: String },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -373,6 +388,12 @@ pub enum WalletManagerError {
 
     #[error("{0}")]
     PayjoinSessionError(String),
+
+    #[error("payjoin cancellation failed: {0}")]
+    PayjoinCancellationFailed(String),
+
+    #[error("payjoin session {requested} does not own the active session {active}")]
+    PayjoinSessionMismatch { requested: PayjoinSessionId, active: PayjoinSessionId },
 
     #[error(transparent)]
     Converter(#[from] ConverterError),
@@ -787,12 +808,12 @@ impl RustWalletManager {
     pub async fn initiate_payment(
         &self,
         psbt: Arc<Psbt>,
-        payjoin_endpoint: Option<String>,
+        mode: UnsignedPaymentMode,
     ) -> Result<(), Error> {
         self.ensure_ledger_ready_for_spend()?;
 
         let psbt = Arc::unwrap_or_clone(psbt);
-        call!(self.actor.initiate_payment(psbt.into(), payjoin_endpoint))
+        call!(self.actor.initiate_payment(psbt.into(), mode))
             .await
             .map_err(|_| Error::ActorNotFound)??;
 
@@ -825,8 +846,8 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub async fn cancel_payjoin(&self) -> Result<(), Error> {
-        call!(self.actor.cancel_payjoin()).await.unwrap()?;
+    pub async fn cancel_payjoin(&self, session_id: PayjoinSessionId) -> Result<(), Error> {
+        call!(self.actor.cancel_payjoin(session_id)).await.map_err(|_| Error::ActorNotFound)??;
         let _ = self.force_wallet_scan().await;
         Ok(())
     }

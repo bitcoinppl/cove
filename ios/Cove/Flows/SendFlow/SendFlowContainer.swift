@@ -204,8 +204,7 @@ private struct SendFlowRouteView: View {
                 id: confirm.id,
                 manager: manager,
                 details: confirm.details,
-                input: confirm.input,
-                payjoinEndpoint: confirm.payjoinEndpoint
+                input: confirm.input
             )
         case let .hardwareExport(id: id, details: details):
             SendFlowHardwareScreen(id: id, manager: manager, details: details)

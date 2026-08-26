@@ -356,8 +356,8 @@ object RouteHelpers {
     fun sendConfirm(
         id: WalletId,
         details: ConfirmDetails,
-        payjoinEndpoint: String? = null,
-    ): Route = RouteFactory().sendConfirm(id, details, payjoinEndpoint)
+        mode: UnsignedPaymentMode = UnsignedPaymentMode.Standard,
+    ): Route = RouteFactory().sendConfirm(id, details, mode)
 
     fun sendConfirmSignedTransaction(
         id: WalletId,

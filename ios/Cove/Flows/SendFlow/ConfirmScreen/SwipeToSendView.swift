@@ -13,7 +13,7 @@ private let swipeToSendMinimumTrailingTextPadding: CGFloat = 16
 enum SendState: Hashable, Equatable {
     case idle
     case sending
-    case payjoinWaiting(deadlineSecs: UInt64)
+    case payjoinWaiting(sessionId: PayjoinSessionId, deadlineSecs: UInt64)
     case sent
     case error(String)
 }

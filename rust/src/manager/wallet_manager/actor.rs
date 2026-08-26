@@ -57,7 +57,39 @@ use self::scan::{
     RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, ScanRequestOrder, WalletScanActor,
     WalletScanEvent, WalletScanEventKind, should_update_full_scan_metadata,
 };
-use super::{SingleOrMany, WalletManagerReconcileMessage};
+use super::{PayjoinBroadcastOutcome, PayjoinStatus, SingleOrMany, WalletManagerReconcileMessage};
+use cove_types::PayjoinSessionId;
+
+#[derive(Debug)]
+pub(crate) enum ActivePayjoin {
+    Negotiating { session_id: PayjoinSessionId, actor: Addr<PayjoinActor> },
+    Broadcasting { session_id: PayjoinSessionId, outcome: PayjoinBroadcastOutcome },
+    RecoveryBlocked { session_id: PayjoinSessionId },
+}
+
+impl ActivePayjoin {
+    pub(crate) fn session_id(&self) -> &PayjoinSessionId {
+        match self {
+            Self::Negotiating { session_id, .. }
+            | Self::Broadcasting { session_id, .. }
+            | Self::RecoveryBlocked { session_id } => session_id,
+        }
+    }
+
+    pub(crate) fn is_broadcasting(
+        &self,
+        session_id: &PayjoinSessionId,
+        outcome: PayjoinBroadcastOutcome,
+    ) -> bool {
+        matches!(
+            self,
+            Self::Broadcasting {
+                session_id: active_id,
+                outcome: active_outcome,
+            } if active_id == session_id && *active_outcome == outcome
+        )
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct WalletActor {
@@ -81,7 +113,7 @@ pub(crate) struct WalletActor {
     receive_address_refresh_timer: Option<AbortableTask<()>>,
     scan_actor: Option<Addr<WalletScanActor>>,
     scan_generation: WalletScanGeneration,
-    payjoin_actor: Option<Addr<PayjoinActor>>,
+    pub(crate) payjoin: Option<ActivePayjoin>,
 
     // cached values, source of truth is the redb database saved with wallet metadata
     last_scan_finished: Option<Duration>,
@@ -141,10 +173,20 @@ impl Actor for WalletActor {
                 self.send(WalletManagerReconcileMessage::NodeConnectionFailed(error_string));
             }
 
-            Error::SigningError(_) | Error::BroadcastError(_) | Error::PayjoinSessionError(_) => {
+            Error::SigningError(_) | Error::BroadcastError(_) => {
                 self.send(WalletManagerReconcileMessage::SendFlowError(
                     SendFlowErrorAlert::SignAndBroadcast(error.to_string()),
                 ));
+            }
+
+            Error::PayjoinSessionError(_)
+            | Error::PayjoinCancellationFailed(_)
+            | Error::PayjoinSessionMismatch { .. } => {
+                if let Some(session_id) = self.active_payjoin_session_id().cloned() {
+                    self.send_payjoin_failure(session_id, error.to_string());
+                } else {
+                    self.send(WalletManagerReconcileMessage::WalletError(error));
+                }
             }
 
             Error::GetConfirmDetailsError(_) => {
@@ -426,7 +468,7 @@ impl WalletActor {
             receive_address_refresh_timer: None,
             scan_actor: None,
             scan_generation: WalletScanGeneration::INITIAL,
-            payjoin_actor: None,
+            payjoin: None,
             db,
         }
     }
@@ -438,56 +480,137 @@ impl WalletActor {
 
     /// Resumes a persisted payjoin session from a previous app run, if one exists
     pub async fn resume_payjoin_session(&mut self) -> ActorResult<()> {
-        if self.payjoin_actor.is_some() {
+        if self.payjoin.is_some() {
             return Produces::ok(());
         }
 
         match resume_session(self.db.clone(), self.addr.clone()) {
             SessionResumption::None => {}
 
-            SessionResumption::Resume(actor) => {
-                self.payjoin_actor = Some(spawn_actor(*actor));
+            SessionResumption::Resume(actor) => self.spawn_payjoin_actor(*actor),
+
+            SessionResumption::BroadcastStoredProposal { session_id, proposal_tx } => {
+                self.payjoin = Some(ActivePayjoin::Broadcasting {
+                    session_id: session_id.clone(),
+                    outcome: PayjoinBroadcastOutcome::Proposal,
+                });
+                send!(self.addr.handle_payjoin_proposal_broadcast(session_id, proposal_tx));
             }
 
-            SessionResumption::BroadcastStoredProposal { proposal_tx } => {
-                send!(self.addr.handle_payjoin_proposal_broadcast(proposal_tx));
+            SessionResumption::SignRecoveredProposal { session_id, proposal_psbt, fallback_tx } => {
+                self.payjoin =
+                    Some(ActivePayjoin::RecoveryBlocked { session_id: session_id.clone() });
+                send!(self.addr.handle_recovered_payjoin_success(
+                    session_id,
+                    proposal_psbt,
+                    fallback_tx
+                ));
             }
 
-            SessionResumption::SignRecoveredProposal { proposal_psbt, fallback_tx } => {
-                send!(self.addr.handle_recovered_payjoin_success(proposal_psbt, fallback_tx));
+            SessionResumption::BroadcastFallback { session_id, fallback_tx } => {
+                self.payjoin = Some(ActivePayjoin::Broadcasting {
+                    session_id: session_id.clone(),
+                    outcome: PayjoinBroadcastOutcome::Fallback,
+                });
+                send!(self.addr.handle_payjoin_fallback(session_id, fallback_tx));
             }
 
-            SessionResumption::BroadcastFallback { fallback_tx } => {
-                send!(self.addr.handle_payjoin_fallback(fallback_tx));
+            SessionResumption::ReportError { session_id: Some(session_id), message } => {
+                self.payjoin =
+                    Some(ActivePayjoin::RecoveryBlocked { session_id: session_id.clone() });
+                self.send_payjoin_failure(session_id, message);
             }
 
-            SessionResumption::ReportError { message } => {
-                send!(self.addr.notify_payjoin_error(message));
+            SessionResumption::ReportError { session_id: None, message } => {
+                self.send(WalletManagerReconcileMessage::WalletError(Error::PayjoinSessionError(
+                    message,
+                )));
             }
         }
 
         Produces::ok(())
     }
 
-    pub async fn notify_payjoin_error(&mut self, msg: String) -> ActorResult<()> {
-        self.send(WalletManagerReconcileMessage::SendFlowError(
-            SendFlowErrorAlert::SignAndBroadcast(msg),
-        ));
+    pub async fn notify_payjoin_error(
+        &mut self,
+        session_id: PayjoinSessionId,
+        message: String,
+    ) -> ActorResult<()> {
+        if !self.is_active_payjoin(&session_id) {
+            return Produces::ok(());
+        }
+
+        self.payjoin = Some(ActivePayjoin::RecoveryBlocked { session_id: session_id.clone() });
+        self.send_payjoin_failure(session_id, message);
         Produces::ok(())
     }
 
-    pub async fn cancel_payjoin(&mut self) -> ActorResult<Result<(), Error>> {
-        if let Some(actor) = self.payjoin_actor.take()
-            && let Ok(Some(fallback_tx)) = call!(actor.cancel_and_fallback()).await
-        {
-            send!(self.addr.handle_payjoin_fallback(fallback_tx));
+    pub async fn cancel_payjoin(
+        &mut self,
+        requested_id: PayjoinSessionId,
+    ) -> ActorResult<Result<(), Error>> {
+        let Some(active) = self.payjoin.take() else {
+            return Produces::ok(Ok(()));
+        };
+
+        let ActivePayjoin::Negotiating { session_id, actor } = active else {
+            let active_id = active.session_id().clone();
+            self.payjoin = Some(active);
+
+            return if active_id == requested_id {
+                Produces::ok(Ok(()))
+            } else {
+                Produces::ok(Err(Error::PayjoinSessionMismatch {
+                    requested: requested_id,
+                    active: active_id,
+                }))
+            };
+        };
+
+        if session_id != requested_id {
+            self.payjoin =
+                Some(ActivePayjoin::Negotiating { session_id: session_id.clone(), actor });
+            return Produces::ok(Err(Error::PayjoinSessionMismatch {
+                requested: requested_id,
+                active: session_id,
+            }));
         }
 
-        Produces::ok(Ok(()))
+        match call!(actor.cancel_and_fallback()).await {
+            Ok(Some(fallback_tx)) => {
+                self.payjoin = Some(ActivePayjoin::Broadcasting {
+                    session_id: session_id.clone(),
+                    outcome: PayjoinBroadcastOutcome::Fallback,
+                });
+                send!(self.addr.handle_payjoin_fallback(session_id, fallback_tx));
+                Produces::ok(Ok(()))
+            }
+
+            Ok(None) => {
+                self.payjoin = Some(ActivePayjoin::RecoveryBlocked { session_id });
+                Produces::ok(Ok(()))
+            }
+
+            Err(error) => {
+                self.payjoin = Some(ActivePayjoin::Negotiating { session_id, actor });
+                Produces::ok(Err(error).map_err_str(Error::PayjoinCancellationFailed))
+            }
+        }
     }
 
-    pub async fn notify_payjoin_polling_started(&mut self, deadline_secs: u64) -> ActorResult<()> {
-        self.send(WalletManagerReconcileMessage::PayjoinPollingStarted { deadline_secs });
+    pub async fn notify_payjoin_polling_started(
+        &mut self,
+        session_id: PayjoinSessionId,
+        deadline_secs: u64,
+    ) -> ActorResult<()> {
+        if !self.is_active_payjoin(&session_id) {
+            return Produces::ok(());
+        }
+
+        self.send(WalletManagerReconcileMessage::PayjoinStatusChanged(PayjoinStatus::Polling {
+            session_id,
+            deadline_secs,
+        }));
         Produces::ok(())
     }
 
@@ -861,14 +984,23 @@ impl WalletActor {
         match terminal_payjoin_authority {
             Some(authority) => {
                 let mut payjoin_quiesced = true;
-                if let Some(actor) = self.payjoin_actor.take()
-                    && let Err(error) =
-                        call!(actor.cancel_and_fallback_for_terminal_shutdown(authority.clone()))
+                if let Some(active) = self.payjoin.take() {
+                    match active {
+                        ActivePayjoin::Negotiating { session_id, actor } => {
+                            if let Err(error) = call!(
+                                actor.cancel_and_fallback_for_terminal_shutdown(authority.clone())
+                            )
                             .await
-                {
-                    first_error.get_or_insert_with(|| error.to_string());
-                    self.payjoin_actor = Some(actor);
-                    payjoin_quiesced = false;
+                            {
+                                first_error.get_or_insert_with(|| error.to_string());
+                                self.payjoin =
+                                    Some(ActivePayjoin::Negotiating { session_id, actor });
+                                payjoin_quiesced = false;
+                            }
+                        }
+
+                        terminal => self.payjoin = Some(terminal),
+                    }
                 }
 
                 if payjoin_quiesced {
@@ -889,21 +1021,28 @@ impl WalletActor {
                 }
             }
             None => {
-                if let Some(actor) = self.payjoin_actor.take() {
-                    let terminal_fallback = match call!(actor.cancel_and_fallback()).await {
-                        Ok(fallback) => fallback,
-                        Err(error) => {
-                            first_error.get_or_insert_with(|| error.to_string());
-                            self.payjoin_actor = Some(actor);
-                            None
-                        }
-                    };
+                if let Some(active) = self.payjoin.take() {
+                    match active {
+                        ActivePayjoin::Negotiating { session_id, actor } => {
+                            let terminal_fallback = match call!(actor.cancel_and_fallback()).await {
+                                Ok(fallback) => fallback,
+                                Err(error) => {
+                                    first_error.get_or_insert_with(|| error.to_string());
+                                    self.payjoin =
+                                        Some(ActivePayjoin::Negotiating { session_id, actor });
+                                    None
+                                }
+                            };
 
-                    if let Some(fallback) = terminal_fallback
-                        && let Err(error) =
-                            self.broadcast_payjoin_terminal_for_shutdown(fallback).await
-                    {
-                        first_error.get_or_insert_with(|| error.to_string());
+                            if let Some(fallback) = terminal_fallback
+                                && let Err(error) =
+                                    self.broadcast_payjoin_terminal_for_shutdown(fallback).await
+                            {
+                                first_error.get_or_insert_with(|| error.to_string());
+                            }
+                        }
+
+                        terminal => self.payjoin = Some(terminal),
                     }
                 }
             }
@@ -1464,6 +1603,29 @@ fn ledger_ready_for_spend(completed_initial_scan: bool) -> Result<(), Error> {
 }
 
 impl WalletActor {
+    pub(crate) fn active_payjoin_session_id(&self) -> Option<&PayjoinSessionId> {
+        self.payjoin.as_ref().map(ActivePayjoin::session_id)
+    }
+
+    pub(crate) fn is_active_payjoin(&self, session_id: &PayjoinSessionId) -> bool {
+        self.active_payjoin_session_id() == Some(session_id)
+    }
+
+    pub(crate) fn is_active_payjoin_broadcast(
+        &self,
+        session_id: &PayjoinSessionId,
+        outcome: PayjoinBroadcastOutcome,
+    ) -> bool {
+        self.payjoin.as_ref().is_some_and(|active| active.is_broadcasting(session_id, outcome))
+    }
+
+    pub(crate) fn send_payjoin_failure(&self, session_id: PayjoinSessionId, message: String) {
+        self.send(WalletManagerReconcileMessage::PayjoinStatusChanged(PayjoinStatus::Failed {
+            session_id,
+            message,
+        }));
+    }
+
     fn send(&self, msg: WalletManagerReconcileMessage) {
         match &msg {
             WalletManagerReconcileMessage::WalletBalanceChanged(balance) => {
@@ -1762,6 +1924,7 @@ mod tests {
     use cove_device::keychain::Keychain;
     use cove_tokio::FutureTimeoutExt as _;
     use cove_types::{
+        PayjoinSessionId,
         fees::{FeeRateOption, FeeRateOptions, FeeSpeed},
         network::Network as CoveNetwork,
     };
@@ -1801,6 +1964,7 @@ mod tests {
             TransactionLockState, WalletManagerReconcileMessage, WalletScanStatus, WalletSnapshot,
         },
         node::Node,
+        router::UnsignedPaymentMode,
         transaction_watcher::TransactionWatcherEvent,
         wallet::{
             Address, Wallet, WalletAddressType,
@@ -3082,13 +3246,18 @@ mod tests {
         let terminal_tx = test_broadcast_transaction();
         let persister =
             crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
-        persister.create_session(&terminal_tx).unwrap();
-        actor.payjoin_actor = Some(spawn_actor(
-            crate::manager::wallet_manager::payjoin::test_support::terminal_actor(
-                persister,
-                terminal_tx,
+        let session_id = PayjoinSessionId::generate();
+        persister.create_session(&terminal_tx, session_id.clone()).unwrap();
+        actor.payjoin = Some(super::ActivePayjoin::Negotiating {
+            session_id: session_id.clone(),
+            actor: spawn_actor(
+                crate::manager::wallet_manager::payjoin::test_support::terminal_actor(
+                    persister,
+                    terminal_tx,
+                    session_id,
+                ),
             ),
-        ));
+        });
         actor.db = db.clone();
 
         let (authority, preparation) =
@@ -3098,7 +3267,7 @@ mod tests {
         drop(preparation);
         failed_server.server.abort();
 
-        assert!(actor.payjoin_actor.is_none(), "the failed broadcast leaves no child actor");
+        assert!(actor.payjoin.is_none(), "the failed broadcast leaves no active child actor");
         assert_eq!(
             db.get_payjoin_sender_session().unwrap().unwrap().pending_action,
             Some(crate::database::wallet_data::PendingAction::BroadcastFallback),
@@ -3106,6 +3275,79 @@ mod tests {
         );
 
         restore_default_bitcoin_node();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cancel_payjoin_keeps_child_when_fallback_commit_fails() {
+        crate::database::test_support::init_test_database();
+        crate::test_support::ensure_tokio_runtime();
+
+        let wallet = Wallet::preview_new_wallet();
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor = new_test_wallet_actor(wallet, sender);
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+        let persister =
+            crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
+        let session_id = PayjoinSessionId::generate();
+
+        actor.payjoin = Some(super::ActivePayjoin::Negotiating {
+            session_id: session_id.clone(),
+            actor: spawn_actor(
+                crate::manager::wallet_manager::payjoin::test_support::terminal_actor(
+                    persister,
+                    test_broadcast_transaction(),
+                    session_id.clone(),
+                ),
+            ),
+        });
+        actor.db = db;
+
+        let outcome = actor_value(actor.cancel_payjoin(session_id).await).await;
+
+        assert!(matches!(outcome, Err(super::Error::PayjoinCancellationFailed(_))));
+        assert!(
+            matches!(actor.payjoin, Some(super::ActivePayjoin::Negotiating { .. })),
+            "the Payjoin child must remain so cancellation can be retried"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cancel_payjoin_rejects_another_session_without_losing_the_active_child() {
+        crate::database::test_support::init_test_database();
+        crate::test_support::ensure_tokio_runtime();
+
+        let wallet = Wallet::preview_new_wallet();
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor = new_test_wallet_actor(wallet, sender);
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+        let persister =
+            crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
+        let active_id = PayjoinSessionId::generate();
+        let requested_id = PayjoinSessionId::generate();
+
+        actor.payjoin = Some(super::ActivePayjoin::Negotiating {
+            session_id: active_id.clone(),
+            actor: spawn_actor(
+                crate::manager::wallet_manager::payjoin::test_support::terminal_actor(
+                    persister,
+                    test_broadcast_transaction(),
+                    active_id.clone(),
+                ),
+            ),
+        });
+        actor.db = db;
+
+        let outcome = actor_value(actor.cancel_payjoin(requested_id.clone()).await).await;
+
+        assert_eq!(
+            outcome,
+            Err(super::Error::PayjoinSessionMismatch {
+                requested: requested_id,
+                active: active_id.clone(),
+            })
+        );
+        assert_eq!(actor.active_payjoin_session_id(), Some(&active_id));
+        assert!(matches!(actor.payjoin, Some(super::ActivePayjoin::Negotiating { .. })));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -3121,7 +3363,7 @@ mod tests {
         let terminal_tx = test_broadcast_transaction();
         let persister =
             crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
-        persister.create_session(&terminal_tx).unwrap();
+        persister.create_session(&terminal_tx, PayjoinSessionId::generate()).unwrap();
         persister.set_pending_fallback().unwrap();
         actor.db = db.clone();
 
@@ -3142,7 +3384,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn payjoin_uri_completes_via_normal_broadcast_when_gated() {
+    async fn standard_payment_completes_via_normal_broadcast() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
 
         let _ = rustls::crypto::ring::default_provider().install_default();
@@ -3175,11 +3417,9 @@ mod tests {
 
         let addr = spawn_actor(actor);
 
-        let result = call!(
-            addr.initiate_payment(psbt, Some("https://payjoin.example.com/endpoint".to_string()))
-        )
-        .await
-        .expect("initiate_payment actor responds");
+        let result = call!(addr.initiate_payment(psbt, UnsignedPaymentMode::Standard))
+            .await
+            .expect("initiate_payment actor responds");
 
         tokio::time::sleep(Duration::from_millis(200)).await;
 
@@ -4344,13 +4584,13 @@ mod tests {
         };
 
         crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone())
-            .create_session(&fallback_tx)
+            .create_session(&fallback_tx, PayjoinSessionId::generate())
             .unwrap();
 
         actor.db = db;
 
         let empty_psbt = bitcoin::Psbt::from_unsigned_tx(fallback_tx).unwrap();
-        let result = actor.initiate_payment(empty_psbt, None).await;
+        let result = actor.initiate_payment(empty_psbt, UnsignedPaymentMode::Standard).await;
         let outcome = actor_value(result).await;
 
         assert!(matches!(&outcome, Err(super::Error::PayjoinSessionError(_))));
@@ -4378,7 +4618,7 @@ mod tests {
 
         let persister =
             crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
-        persister.create_session(&terminal_tx).unwrap();
+        persister.create_session(&terminal_tx, PayjoinSessionId::generate()).unwrap();
         persister.set_pending_fallback().unwrap();
 
         actor.db = db;
@@ -4390,7 +4630,7 @@ mod tests {
             output: vec![],
         })
         .unwrap();
-        let result = actor.initiate_payment(dummy_psbt, None).await;
+        let result = actor.initiate_payment(dummy_psbt, UnsignedPaymentMode::Standard).await;
         let outcome = actor_value(result).await;
 
         let session = actor.db.get_payjoin_sender_session().expect("db query succeeded");
@@ -4417,13 +4657,14 @@ mod tests {
 
         let persister =
             crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone());
-        persister.create_session(&terminal_tx).unwrap();
+        let session_id = PayjoinSessionId::generate();
+        persister.create_session(&terminal_tx, session_id).unwrap();
         persister.set_pending_proposal(&terminal_tx).unwrap();
 
         let (addr, _receiver) = spawn_test_wallet_actor(wallet);
         call!(addr.set_test_wallet_data_db(db.clone())).await.expect("actor responds");
 
-        call!(addr.handle_payjoin_proposal_broadcast(terminal_tx)).await.expect("actor responds");
+        call!(addr.resume_payjoin_session()).await.expect("actor responds");
 
         for _ in 0..50 {
             let session = db.get_payjoin_sender_session().expect("db query succeeded");
@@ -4455,11 +4696,14 @@ mod tests {
             output: vec![],
         };
 
+        let session_id = PayjoinSessionId::generate();
         crate::manager::wallet_manager::payjoin::PayjoinSessionPersister::new(db.clone())
-            .create_session(&fallback_tx)
+            .create_session(&fallback_tx, session_id.clone())
             .unwrap();
 
         actor.db = db;
+        actor.payjoin =
+            Some(super::ActivePayjoin::RecoveryBlocked { session_id: session_id.clone() });
 
         let proposal_psbt = bitcoin::Psbt::from_unsigned_tx(bitcoin::Transaction {
             version: bitcoin::transaction::Version::TWO,
@@ -4469,7 +4713,8 @@ mod tests {
         })
         .unwrap();
 
-        let result = actor.handle_recovered_payjoin_success(proposal_psbt, fallback_tx).await;
+        let result =
+            actor.handle_recovered_payjoin_success(session_id, proposal_psbt, fallback_tx).await;
         actor_value(result).await;
 
         let session = actor.db.get_payjoin_sender_session().expect("db query succeeded");

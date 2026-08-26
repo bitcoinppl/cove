@@ -3,6 +3,7 @@ use std::sync::Arc;
 use parking_lot::{Mutex, MutexGuard};
 
 use cove_types::{
+    PayjoinEndpoint,
     amount::Amount,
     fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
     utxo::UtxoList,
@@ -51,7 +52,7 @@ pub struct SendFlowManagerState {
 
     pub fee_selection: Option<FeeSelection>,
 
-    pub payjoin_endpoint: Option<String>,
+    pub payjoin_endpoint: Option<Arc<PayjoinEndpoint>>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
