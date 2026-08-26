@@ -1223,78 +1223,21 @@ impl CloudBackupReducerState {
         let detail_refresh_in_flight =
             self.configured.detail_refresh == DetailRefreshActivity::InFlight;
 
-        match (&mut self.configured.detail, cloud_only) {
-            (CloudBackupDetailState::Complete { state }, cloud_only) => {
-                state.cloud_only = cloud_only;
-            }
-            (CloudBackupDetailState::Checking { retained }, CloudOnlyState::Loaded { wallets }) => {
-                let Some(state) = retained.as_mut() else {
-                    return;
-                };
+        match &mut self.configured.detail {
+            CloudBackupDetailState::Complete { state } => state.cloud_only = cloud_only,
+            CloudBackupDetailState::Checking { retained } => {
+                let Some(state) = retained.as_mut() else { return };
 
-                state.cloud_only = CloudOnlyState::Loaded { wallets };
+                state.cloud_only = cloud_only;
                 if !detail_refresh_in_flight && let Some(state) = retained.take() {
                     self.configured.detail = CloudBackupDetailState::Complete { state };
                 }
             }
-            (detail, CloudOnlyState::Loading) => {
-                let mut retained = match detail {
-                    CloudBackupDetailState::Complete { state } => Some(state.clone()),
-                    CloudBackupDetailState::Checking { retained }
-                    | CloudBackupDetailState::Failed { retained, .. } => retained.clone(),
-                    CloudBackupDetailState::NotLoaded => None,
-                };
-                if let Some(state) = &mut retained {
-                    state.cloud_only = CloudOnlyState::Loading;
-                }
-                *detail = CloudBackupDetailState::Checking { retained };
+            CloudBackupDetailState::Failed { retained: Some(state), .. } => {
+                state.cloud_only = cloud_only;
             }
-            (
-                CloudBackupDetailState::Failed { retained, .. },
-                failed @ CloudOnlyState::Failed { .. },
-            ) => {
-                if let Some(state) = retained {
-                    state.cloud_only = failed;
-                }
-            }
-            (detail, CloudOnlyState::Failed { error }) => {
-                let mut retained = match detail {
-                    CloudBackupDetailState::Complete { state } => Some(state.clone()),
-                    CloudBackupDetailState::Checking { retained }
-                    | CloudBackupDetailState::Failed { retained, .. } => retained.clone(),
-                    CloudBackupDetailState::NotLoaded => None,
-                };
-                if let Some(state) = &mut retained {
-                    state.cloud_only = CloudOnlyState::Failed { error: error.clone() };
-                }
-
-                if detail_refresh_in_flight {
-                    *detail = CloudBackupDetailState::Checking { retained };
-                } else {
-                    *detail = CloudBackupDetailState::Failed {
-                        reason: CloudBackupInventoryIncompleteReason::Unknown,
-                        error,
-                        retained,
-                    };
-                }
-            }
-            (detail, CloudOnlyState::NotFetched) => {
-                if detail_refresh_in_flight {
-                    if let CloudBackupDetailState::Checking { retained: Some(state) } = detail {
-                        state.cloud_only = CloudOnlyState::NotFetched;
-                    }
-                } else {
-                    *detail = CloudBackupDetailState::NotLoaded;
-                }
-            }
-            (CloudBackupDetailState::Failed { retained: Some(state), .. }, loaded) => {
-                state.cloud_only = loaded;
-            }
-            (CloudBackupDetailState::NotLoaded, CloudOnlyState::Loaded { .. })
-            | (
-                CloudBackupDetailState::Failed { retained: None, .. },
-                CloudOnlyState::Loaded { .. },
-            ) => {}
+            CloudBackupDetailState::NotLoaded
+            | CloudBackupDetailState::Failed { retained: None, .. } => {}
         }
     }
 
@@ -1992,6 +1935,34 @@ mod tests {
         assert_eq!(
             configured.restore_all,
             CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
+        );
+    }
+
+    #[test]
+    fn supplemental_cloud_only_failure_does_not_fail_primary_inventory() {
+        let mut model = configured_model_with_cloud_only(Vec::new());
+
+        model
+            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+                CloudOnlyState::Loading,
+            ))
+            .unwrap();
+        model
+            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+                CloudOnlyState::Failed { error: "provider is still syncing".into() },
+            ))
+            .unwrap();
+
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+        let CloudBackupDetailState::Complete { state } = configured.detail else {
+            panic!("expected primary inventory to remain complete");
+        };
+
+        assert_eq!(
+            state.cloud_only,
+            CloudOnlyState::Failed { error: "provider is still syncing".into() }
         );
     }
 

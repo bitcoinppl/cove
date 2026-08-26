@@ -43,10 +43,10 @@ impl RustCloudBackupManager {
         let namespaces = self
             .other_backup_namespaces(cloud, &current_namespace, BlockingCloudStep::DetailRefresh)
             .await?;
-        let passkey_hints = self.passkey_hints_for_namespaces(cloud, &namespaces).await;
 
         let mut namespace_count = 0;
         let mut wallet_count = 0;
+        let mut visible_namespaces = Vec::new();
 
         for namespace in &namespaces {
             let record_ids = match cloud.list_wallet_backups(namespace.clone()).await {
@@ -62,14 +62,20 @@ impl RustCloudBackupManager {
                 }
             };
 
-            namespace_count += 1;
             let unrecovered_wallet_count = record_ids
                 .iter()
                 .filter(|record_id| !local_wallet_record_ids.contains(*record_id))
                 .count() as u32;
+            if unrecovered_wallet_count == 0 {
+                continue;
+            }
 
+            namespace_count += 1;
             wallet_count += unrecovered_wallet_count;
+            visible_namespaces.push(namespace.clone());
         }
+
+        let passkey_hints = self.passkey_hints_for_namespaces(cloud, &visible_namespaces).await;
 
         Ok(CloudBackupOtherBackupsSummary { namespace_count, wallet_count, passkey_hints })
     }

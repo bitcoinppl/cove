@@ -18,9 +18,6 @@ pub(crate) struct DetailRefreshClaim {
 pub(crate) struct DetailResultClaim(u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct OtherBackupsScanClaim(u64);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum DetailRefreshPlan {
     Start(DetailRefreshClaim),
     Wait { owner: u64, delay: Duration },
@@ -53,14 +50,6 @@ impl DetailRefreshCoordinator {
 
         self.owner = self.owner.wrapping_add(1);
         self.is_open = true;
-        self.in_flight = None;
-        self.trailing_requested = false;
-        self.timer_scheduled = false;
-    }
-
-    pub(super) fn close(&mut self) {
-        self.owner = self.owner.wrapping_add(1);
-        self.is_open = false;
         self.in_flight = None;
         self.trailing_requested = false;
         self.timer_scheduled = false;
@@ -151,8 +140,6 @@ pub(super) struct DetailWorkflow {
     runtime_passkey_authorization: Option<RuntimePasskeyAuthorization>,
     next_result_generation: u64,
     newest_result_generation: Option<u64>,
-    next_other_backups_generation: u64,
-    other_backups_scan: Option<OtherBackupsScanClaim>,
 }
 
 impl Default for DetailWorkflow {
@@ -164,8 +151,6 @@ impl Default for DetailWorkflow {
             runtime_passkey_authorization: None,
             next_result_generation: 0,
             newest_result_generation: None,
-            next_other_backups_generation: 0,
-            other_backups_scan: None,
         }
     }
 }
@@ -175,31 +160,8 @@ impl DetailWorkflow {
         self.refresh.open();
     }
 
-    pub(super) fn close(&mut self) -> bool {
-        self.refresh.close();
-        self.other_backups_scan.take().is_some()
-    }
-
-    pub(super) fn start_user_requested_other_backups_scan(
-        &mut self,
-    ) -> Option<OtherBackupsScanClaim> {
-        if !self.refresh.is_open {
-            return None;
-        }
-
-        let claim = OtherBackupsScanClaim(self.next_other_backups_generation);
-        self.next_other_backups_generation = self.next_other_backups_generation.wrapping_add(1);
-        self.other_backups_scan = Some(claim);
-        Some(claim)
-    }
-
-    pub(super) fn complete_other_backups_scan(&mut self, claim: OtherBackupsScanClaim) -> bool {
-        if !self.refresh.is_open || self.other_backups_scan != Some(claim) {
-            return false;
-        }
-
-        self.other_backups_scan = None;
-        true
+    pub(super) fn is_open(&self) -> bool {
+        self.refresh.is_open
     }
 
     pub(super) fn request_refresh(&mut self) -> DetailRefreshPlan {
@@ -353,45 +315,6 @@ mod tests {
     }
 
     #[test]
-    fn stale_and_closed_owner_completions_are_ignored() {
-        let mut coordinator = DetailRefreshCoordinator::default();
-        coordinator.open();
-        let DetailRefreshPlan::Start(stale) = coordinator.request(Duration::ZERO) else {
-            panic!("expected refresh to start");
-        };
-
-        coordinator.close();
-        assert!(!coordinator.is_active(stale));
-        assert!(!coordinator.complete(stale, Duration::from_secs(1)).apply);
-
-        coordinator.open();
-        assert!(!coordinator.is_active(stale));
-        assert!(!coordinator.complete(stale, Duration::from_secs(2)).apply);
-    }
-
-    #[test]
-    fn closing_invalidates_a_scheduled_trailing_refresh() {
-        let mut coordinator = DetailRefreshCoordinator::default();
-        coordinator.open();
-        let DetailRefreshPlan::Start(first) = coordinator.request(Duration::ZERO) else {
-            panic!("expected refresh to start");
-        };
-        let owner = first.owner;
-        assert_eq!(coordinator.request(Duration::from_secs(1)), DetailRefreshPlan::Queued);
-        assert!(matches!(
-            coordinator.complete(first, Duration::from_secs(1)).next,
-            DetailRefreshPlan::Wait { .. }
-        ));
-
-        coordinator.close();
-
-        assert_eq!(
-            coordinator.timer_elapsed(owner, Duration::from_secs(5)),
-            DetailRefreshPlan::Ignored
-        );
-    }
-
-    #[test]
     fn newest_started_detail_result_wins() {
         let mut workflow = DetailWorkflow::default();
         let older = workflow.start_operation_result();
@@ -415,30 +338,5 @@ mod tests {
 
         assert!(!completion.apply);
         assert!(matches!(completion.next, DetailRefreshPlan::Wait { .. }));
-    }
-
-    #[test]
-    fn user_requested_other_backup_scan_replaces_the_previous_claim() {
-        let mut workflow = DetailWorkflow::default();
-        workflow.open();
-
-        let previous = workflow.start_user_requested_other_backups_scan().unwrap();
-        let current = workflow.start_user_requested_other_backups_scan().unwrap();
-
-        assert!(!workflow.complete_other_backups_scan(previous));
-        assert!(workflow.complete_other_backups_scan(current));
-        assert!(!workflow.close());
-    }
-
-    #[test]
-    fn closing_detail_reports_and_invalidates_a_running_other_backup_scan() {
-        let mut workflow = DetailWorkflow::default();
-
-        assert_eq!(workflow.start_user_requested_other_backups_scan(), None);
-        workflow.open();
-        let claim = workflow.start_user_requested_other_backups_scan().unwrap();
-
-        assert!(workflow.close());
-        assert!(!workflow.complete_other_backups_scan(claim));
     }
 }

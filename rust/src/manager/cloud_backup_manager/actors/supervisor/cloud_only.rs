@@ -1,14 +1,37 @@
+use cove_device::cloud_storage::CloudStorageClient;
+
 use super::*;
+use crate::manager::cloud_backup_manager::CloudOnlyState;
 
 impl CloudBackupSupervisor {
-    pub(crate) fn begin_cloud_only_fetch_request(&mut self) {
-        let Some(manager) = self.manager() else { return };
+    pub(crate) fn begin_background_cloud_only_fetch_if_needed(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+    ) {
+        if self.active_cloud_only_fetch_request.is_some()
+            || !matches!(
+                manager.state.read().cloud_only(),
+                CloudOnlyState::NotFetched | CloudOnlyState::Failed { .. }
+            )
+        {
+            return;
+        }
+
+        let cloud = CloudStorage::global_silent_client();
+        self.begin_cloud_only_fetch(manager, cloud);
+    }
+
+    fn begin_cloud_only_fetch(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        cloud: CloudStorageClient,
+    ) {
         let request_id = self.next_request_id();
         self.active_cloud_only_fetch_request = Some(request_id);
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Started);
 
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.do_fetch_cloud_only_wallets().await;
+            let result = manager.do_fetch_cloud_only_wallets_with_client(cloud).await;
             send!(addr.complete_cloud_only_fetch_request(request_id, result));
         });
     }

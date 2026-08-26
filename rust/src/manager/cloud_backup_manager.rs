@@ -215,7 +215,6 @@ pub enum CloudBackupManagerAction {
     RepairPasskey,
     RepairPasskeyNoDiscovery,
     SyncUnsynced,
-    FetchCloudOnly,
     RestoreCloudWallet(RecordId),
     StartRestoreAll,
     RetryRestoreAllRemaining,
@@ -227,9 +226,7 @@ pub enum CloudBackupManagerAction {
     DisableCloudBackup,
     KeepCloudBackupEnabled,
     RefreshDetail,
-    RefreshOtherBackups,
     EnterDetail,
-    CloseDetail,
     PromptEnablePasskeyChoice(CloudBackupEnableContext),
     AcceptEnablePrompt(CloudBackupEnablePromptChoice),
 }
@@ -1096,6 +1093,11 @@ impl RustCloudBackupManager {
         if !self.has_in_flight_operation() {
             self.refresh_pending_upload_verification_state();
         }
+    }
+
+    /// Start silent supplemental inventory checks for this app process
+    pub fn start_background_inventory_discovery(&self) {
+        send!(self.supervisor.start_background_inventory_discovery());
     }
 
     pub fn cloud_storage_did_change(&self) {

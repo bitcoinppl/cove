@@ -8638,6 +8638,11 @@ public protocol RustCloudBackupManagerProtocol: AnyObject, Sendable {
 
     func resumePendingCloudUploadVerification()
 
+    /**
+     * Start silent supplemental inventory checks for this app process
+     */
+    func startBackgroundInventoryDiscovery()
+
     func state()  -> CloudBackupState
 
     /**
@@ -8935,6 +8940,17 @@ open func reconcileDriveAccountSwitch(platformState: DriveAccountSwitchPlatformS
 open func resumePendingCloudUploadVerification()  {try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+
+    /**
+     * Start silent supplemental inventory checks for this app process
+     */
+open func startBackgroundInventoryDiscovery()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustcloudbackupmanager_start_background_inventory_discovery(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
@@ -24287,7 +24303,6 @@ public enum CloudBackupManagerAction: Equatable, Hashable {
     case repairPasskey
     case repairPasskeyNoDiscovery
     case syncUnsynced
-    case fetchCloudOnly
     case restoreCloudWallet(RecordId
     )
     case startRestoreAll
@@ -24301,9 +24316,7 @@ public enum CloudBackupManagerAction: Equatable, Hashable {
     case disableCloudBackup
     case keepCloudBackupEnabled
     case refreshDetail
-    case refreshOtherBackups
     case enterDetail
-    case closeDetail
     case promptEnablePasskeyChoice(CloudBackupEnableContext
     )
     case acceptEnablePrompt(CloudBackupEnablePromptChoice
@@ -24370,42 +24383,36 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
 
         case 18: return .syncUnsynced
 
-        case 19: return .fetchCloudOnly
-
-        case 20: return .restoreCloudWallet(try FfiConverterTypeRecordId.read(from: &buf)
+        case 19: return .restoreCloudWallet(try FfiConverterTypeRecordId.read(from: &buf)
         )
 
-        case 21: return .startRestoreAll
+        case 20: return .startRestoreAll
 
-        case 22: return .retryRestoreAllRemaining
+        case 21: return .retryRestoreAllRemaining
 
-        case 23: return .cancelRestoreAll
+        case 22: return .cancelRestoreAll
 
-        case 24: return .deleteCloudWallet(try FfiConverterTypeRecordId.read(from: &buf)
+        case 23: return .deleteCloudWallet(try FfiConverterTypeRecordId.read(from: &buf)
         )
 
-        case 25: return .deleteUndecryptableWalletBackups
+        case 24: return .deleteUndecryptableWalletBackups
 
-        case 26: return .recoverOtherBackups
+        case 25: return .recoverOtherBackups
 
-        case 27: return .deleteOtherBackups
+        case 26: return .deleteOtherBackups
 
-        case 28: return .disableCloudBackup
+        case 27: return .disableCloudBackup
 
-        case 29: return .keepCloudBackupEnabled
+        case 28: return .keepCloudBackupEnabled
 
-        case 30: return .refreshDetail
+        case 29: return .refreshDetail
 
-        case 31: return .refreshOtherBackups
+        case 30: return .enterDetail
 
-        case 32: return .enterDetail
-
-        case 33: return .closeDetail
-
-        case 34: return .promptEnablePasskeyChoice(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
+        case 31: return .promptEnablePasskeyChoice(try FfiConverterTypeCloudBackupEnableContext.read(from: &buf)
         )
 
-        case 35: return .acceptEnablePrompt(try FfiConverterTypeCloudBackupEnablePromptChoice.read(from: &buf)
+        case 32: return .acceptEnablePrompt(try FfiConverterTypeCloudBackupEnablePromptChoice.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -24493,75 +24500,63 @@ public struct FfiConverterTypeCloudBackupManagerAction: FfiConverterRustBuffer {
             writeInt(&buf, Int32(18))
 
 
-        case .fetchCloudOnly:
-            writeInt(&buf, Int32(19))
-
-
         case let .restoreCloudWallet(v1):
-            writeInt(&buf, Int32(20))
+            writeInt(&buf, Int32(19))
             FfiConverterTypeRecordId.write(v1, into: &buf)
 
 
         case .startRestoreAll:
-            writeInt(&buf, Int32(21))
+            writeInt(&buf, Int32(20))
 
 
         case .retryRestoreAllRemaining:
-            writeInt(&buf, Int32(22))
+            writeInt(&buf, Int32(21))
 
 
         case .cancelRestoreAll:
-            writeInt(&buf, Int32(23))
+            writeInt(&buf, Int32(22))
 
 
         case let .deleteCloudWallet(v1):
-            writeInt(&buf, Int32(24))
+            writeInt(&buf, Int32(23))
             FfiConverterTypeRecordId.write(v1, into: &buf)
 
 
         case .deleteUndecryptableWalletBackups:
-            writeInt(&buf, Int32(25))
+            writeInt(&buf, Int32(24))
 
 
         case .recoverOtherBackups:
-            writeInt(&buf, Int32(26))
+            writeInt(&buf, Int32(25))
 
 
         case .deleteOtherBackups:
-            writeInt(&buf, Int32(27))
+            writeInt(&buf, Int32(26))
 
 
         case .disableCloudBackup:
-            writeInt(&buf, Int32(28))
+            writeInt(&buf, Int32(27))
 
 
         case .keepCloudBackupEnabled:
-            writeInt(&buf, Int32(29))
+            writeInt(&buf, Int32(28))
 
 
         case .refreshDetail:
-            writeInt(&buf, Int32(30))
-
-
-        case .refreshOtherBackups:
-            writeInt(&buf, Int32(31))
+            writeInt(&buf, Int32(29))
 
 
         case .enterDetail:
-            writeInt(&buf, Int32(32))
-
-
-        case .closeDetail:
-            writeInt(&buf, Int32(33))
+            writeInt(&buf, Int32(30))
 
 
         case let .promptEnablePasskeyChoice(v1):
-            writeInt(&buf, Int32(34))
+            writeInt(&buf, Int32(31))
             FfiConverterTypeCloudBackupEnableContext.write(v1, into: &buf)
 
 
         case let .acceptEnablePrompt(v1):
-            writeInt(&buf, Int32(35))
+            writeInt(&buf, Int32(32))
             FfiConverterTypeCloudBackupEnablePromptChoice.write(v1, into: &buf)
 
         }
@@ -48027,6 +48022,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification() != 24590) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcloudbackupmanager_start_background_inventory_discovery() != 61634) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcloudbackupmanager_state() != 8780) {

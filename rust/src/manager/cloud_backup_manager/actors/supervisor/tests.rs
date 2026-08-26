@@ -3623,7 +3623,7 @@ async fn restore_all_cancellation_keeps_claim_until_record_boundary() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn closing_detail_does_not_cancel_restore_all() {
+async fn supplemental_inventory_does_not_cancel_restore_all() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     let mut supervisor = CloudBackupSupervisor::new(
@@ -3642,7 +3642,7 @@ async fn closing_detail_does_not_cancel_restore_all() {
         cancellation: cancellation.clone(),
     });
 
-    supervisor.close_detail().await.unwrap();
+    supervisor.ensure_supplemental_inventory_discovery(manager.clone());
 
     assert!(!cancellation.load(Ordering::Acquire));
     assert_eq!(supervisor.active_operation, Some(claim));
@@ -3650,40 +3650,38 @@ async fn closing_detail_does_not_cancel_restore_all() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn closing_detail_resets_an_invalidated_other_backups_scan() {
+async fn supplemental_inventory_scan_is_owned_by_the_supervisor() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     let mut supervisor = CloudBackupSupervisor::new(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    supervisor.detail_workflow.open();
-    supervisor.detail_workflow.start_user_requested_other_backups_scan().unwrap();
+    let claim = OtherBackupsScanClaim(42);
+    supervisor.active_other_backups_scan = Some(claim);
     manager.apply_other_backups_state(CloudBackupOtherBackupsState::Checking);
 
-    supervisor.close_detail().await.unwrap();
-
+    assert_eq!(supervisor.active_other_backups_scan, Some(claim));
     assert_eq!(
         manager.state.read().other_backups_state(),
-        CloudBackupOtherBackupsState::NotChecked
+        CloudBackupOtherBackupsState::Checking
     );
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn closing_detail_preserves_a_completed_other_backups_scan() {
+async fn completed_other_backups_scan_remains_cached() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     let mut supervisor = CloudBackupSupervisor::new(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    supervisor.detail_workflow.open();
     let loaded = CloudBackupOtherBackupsState::Loaded {
         summary: CloudBackupOtherBackupsSummary::default(),
     };
     manager.apply_other_backups_state(loaded.clone());
 
-    supervisor.close_detail().await.unwrap();
+    supervisor.ensure_supplemental_inventory_discovery(manager.clone());
 
     assert_eq!(manager.state.read().other_backups_state(), loaded);
 }

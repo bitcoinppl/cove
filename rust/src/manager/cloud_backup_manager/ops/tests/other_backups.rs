@@ -136,6 +136,33 @@ async fn other_backup_summary_counts_only_wallets_missing_from_local_wallets() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn other_backup_summary_hides_namespaces_without_missing_wallets() {
+    let _guard = async_test_lock().lock().await;
+    cove_tokio::init();
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let metadata = xpub_only_wallet_metadata();
+    let local_record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+    persist_xpub_wallets(vec![metadata]);
+
+    let other_master_key = cove_cspp::master_key::MasterKey::generate();
+    let other_namespace = other_master_key.namespace_id();
+    globals.cloud.set_master_key_backup(other_namespace.clone(), vec![1, 2, 3]);
+    globals
+        .cloud
+        .set_wallet_files(other_namespace, vec![wallet_filename_from_record_id(&local_record_id)]);
+
+    let summary =
+        manager.other_backup_summary(&CloudStorage::global_explicit_client()).await.unwrap();
+
+    assert_eq!(summary.namespace_count, 0);
+    assert_eq!(summary.wallet_count, 0);
+    assert!(summary.passkey_hints.is_empty());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn other_backup_summary_fails_closed_when_wallet_listing_is_missing() {
     let _guard = async_test_lock().lock().await;
     cove_tokio::init();

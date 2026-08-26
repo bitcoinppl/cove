@@ -1565,6 +1565,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification(
     ): Short
+    external fun uniffi_cove_checksum_method_rustcloudbackupmanager_start_background_inventory_discovery(
+    ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_state(
     ): Short
     external fun uniffi_cove_checksum_method_rustcloudbackupmanager_sync_persisted_state(
@@ -2760,6 +2762,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_reconcile_drive_account_switch(`ptr`: Long,`platformState`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_rustcloudbackupmanager_start_background_inventory_discovery(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustcloudbackupmanager_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4727,6 +4731,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification() != 24590.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_start_background_inventory_discovery() != 61634.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustcloudbackupmanager_state() != 8780.toShort()) {
@@ -21136,6 +21143,11 @@ public interface RustCloudBackupManagerInterface {
 
     fun `resumePendingCloudUploadVerification`()
 
+    /**
+     * Start silent supplemental inventory checks for this app process
+     */
+    fun `startBackgroundInventoryDiscovery`()
+
     fun `state`(): CloudBackupState
 
     /**
@@ -21550,6 +21562,21 @@ open class RustCloudBackupManager: Disposable, AutoCloseable, RustCloudBackupMan
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_resume_pending_cloud_upload_verification(
+        it,
+        _status)
+}
+    }
+
+
+
+
+    /**
+     * Start silent supplemental inventory checks for this app process
+     */override fun `startBackgroundInventoryDiscovery`()
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustcloudbackupmanager_start_background_inventory_discovery(
         it,
         _status)
 }
@@ -41901,9 +41928,6 @@ sealed class CloudBackupManagerAction {
     object SyncUnsynced : CloudBackupManagerAction()
 
 
-    object FetchCloudOnly : CloudBackupManagerAction()
-
-
     data class RestoreCloudWallet(
         val v1: org.bitcoinppl.cove_core.RecordId) : CloudBackupManagerAction()
 
@@ -41949,13 +41973,7 @@ sealed class CloudBackupManagerAction {
     object RefreshDetail : CloudBackupManagerAction()
 
 
-    object RefreshOtherBackups : CloudBackupManagerAction()
-
-
     object EnterDetail : CloudBackupManagerAction()
-
-
-    object CloseDetail : CloudBackupManagerAction()
 
 
     data class PromptEnablePasskeyChoice(
@@ -42020,29 +42038,26 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
             16 -> CloudBackupManagerAction.RepairPasskey
             17 -> CloudBackupManagerAction.RepairPasskeyNoDiscovery
             18 -> CloudBackupManagerAction.SyncUnsynced
-            19 -> CloudBackupManagerAction.FetchCloudOnly
-            20 -> CloudBackupManagerAction.RestoreCloudWallet(
+            19 -> CloudBackupManagerAction.RestoreCloudWallet(
                 FfiConverterTypeRecordId.read(buf),
                 )
-            21 -> CloudBackupManagerAction.StartRestoreAll
-            22 -> CloudBackupManagerAction.RetryRestoreAllRemaining
-            23 -> CloudBackupManagerAction.CancelRestoreAll
-            24 -> CloudBackupManagerAction.DeleteCloudWallet(
+            20 -> CloudBackupManagerAction.StartRestoreAll
+            21 -> CloudBackupManagerAction.RetryRestoreAllRemaining
+            22 -> CloudBackupManagerAction.CancelRestoreAll
+            23 -> CloudBackupManagerAction.DeleteCloudWallet(
                 FfiConverterTypeRecordId.read(buf),
                 )
-            25 -> CloudBackupManagerAction.DeleteUndecryptableWalletBackups
-            26 -> CloudBackupManagerAction.RecoverOtherBackups
-            27 -> CloudBackupManagerAction.DeleteOtherBackups
-            28 -> CloudBackupManagerAction.DisableCloudBackup
-            29 -> CloudBackupManagerAction.KeepCloudBackupEnabled
-            30 -> CloudBackupManagerAction.RefreshDetail
-            31 -> CloudBackupManagerAction.RefreshOtherBackups
-            32 -> CloudBackupManagerAction.EnterDetail
-            33 -> CloudBackupManagerAction.CloseDetail
-            34 -> CloudBackupManagerAction.PromptEnablePasskeyChoice(
+            24 -> CloudBackupManagerAction.DeleteUndecryptableWalletBackups
+            25 -> CloudBackupManagerAction.RecoverOtherBackups
+            26 -> CloudBackupManagerAction.DeleteOtherBackups
+            27 -> CloudBackupManagerAction.DisableCloudBackup
+            28 -> CloudBackupManagerAction.KeepCloudBackupEnabled
+            29 -> CloudBackupManagerAction.RefreshDetail
+            30 -> CloudBackupManagerAction.EnterDetail
+            31 -> CloudBackupManagerAction.PromptEnablePasskeyChoice(
                 FfiConverterTypeCloudBackupEnableContext.read(buf),
                 )
-            35 -> CloudBackupManagerAction.AcceptEnablePrompt(
+            32 -> CloudBackupManagerAction.AcceptEnablePrompt(
                 FfiConverterTypeCloudBackupEnablePromptChoice.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -42163,12 +42178,6 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 4UL
             )
         }
-        is CloudBackupManagerAction.FetchCloudOnly -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
         is CloudBackupManagerAction.RestoreCloudWallet -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -42237,19 +42246,7 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 4UL
             )
         }
-        is CloudBackupManagerAction.RefreshOtherBackups -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
         is CloudBackupManagerAction.EnterDetail -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
-        is CloudBackupManagerAction.CloseDetail -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
@@ -42350,75 +42347,63 @@ public object FfiConverterTypeCloudBackupManagerAction : FfiConverterRustBuffer<
                 buf.putInt(18)
                 Unit
             }
-            is CloudBackupManagerAction.FetchCloudOnly -> {
-                buf.putInt(19)
-                Unit
-            }
             is CloudBackupManagerAction.RestoreCloudWallet -> {
-                buf.putInt(20)
+                buf.putInt(19)
                 FfiConverterTypeRecordId.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.StartRestoreAll -> {
-                buf.putInt(21)
+                buf.putInt(20)
                 Unit
             }
             is CloudBackupManagerAction.RetryRestoreAllRemaining -> {
-                buf.putInt(22)
+                buf.putInt(21)
                 Unit
             }
             is CloudBackupManagerAction.CancelRestoreAll -> {
-                buf.putInt(23)
+                buf.putInt(22)
                 Unit
             }
             is CloudBackupManagerAction.DeleteCloudWallet -> {
-                buf.putInt(24)
+                buf.putInt(23)
                 FfiConverterTypeRecordId.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.DeleteUndecryptableWalletBackups -> {
-                buf.putInt(25)
+                buf.putInt(24)
                 Unit
             }
             is CloudBackupManagerAction.RecoverOtherBackups -> {
-                buf.putInt(26)
+                buf.putInt(25)
                 Unit
             }
             is CloudBackupManagerAction.DeleteOtherBackups -> {
-                buf.putInt(27)
+                buf.putInt(26)
                 Unit
             }
             is CloudBackupManagerAction.DisableCloudBackup -> {
-                buf.putInt(28)
+                buf.putInt(27)
                 Unit
             }
             is CloudBackupManagerAction.KeepCloudBackupEnabled -> {
-                buf.putInt(29)
+                buf.putInt(28)
                 Unit
             }
             is CloudBackupManagerAction.RefreshDetail -> {
-                buf.putInt(30)
-                Unit
-            }
-            is CloudBackupManagerAction.RefreshOtherBackups -> {
-                buf.putInt(31)
+                buf.putInt(29)
                 Unit
             }
             is CloudBackupManagerAction.EnterDetail -> {
-                buf.putInt(32)
-                Unit
-            }
-            is CloudBackupManagerAction.CloseDetail -> {
-                buf.putInt(33)
+                buf.putInt(30)
                 Unit
             }
             is CloudBackupManagerAction.PromptEnablePasskeyChoice -> {
-                buf.putInt(34)
+                buf.putInt(31)
                 FfiConverterTypeCloudBackupEnableContext.write(value.v1, buf)
                 Unit
             }
             is CloudBackupManagerAction.AcceptEnablePrompt -> {
-                buf.putInt(35)
+                buf.putInt(32)
                 FfiConverterTypeCloudBackupEnablePromptChoice.write(value.v1, buf)
                 Unit
             }

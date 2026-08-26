@@ -85,9 +85,15 @@ impl RustCloudBackupManager {
     pub(crate) async fn do_fetch_cloud_only_wallets(
         &self,
     ) -> Result<Vec<CloudBackupWalletItem>, CloudBackupError> {
+        self.do_fetch_cloud_only_wallets_with_client(CloudStorage::global_explicit_client()).await
+    }
+
+    pub(crate) async fn do_fetch_cloud_only_wallets_with_client(
+        &self,
+        cloud: CloudStorageClient,
+    ) -> Result<Vec<CloudBackupWalletItem>, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::FetchCloudOnly)?;
         let namespace = self.current_namespace_id()?;
-        let cloud = CloudStorage::global_explicit_client();
         let wallet_record_ids =
             cloud.list_wallet_backups(namespace.clone()).await.map_err(|error| {
                 blocking_cloud_error(

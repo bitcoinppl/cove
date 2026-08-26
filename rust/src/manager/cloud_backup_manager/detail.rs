@@ -213,7 +213,6 @@ impl RustCloudBackupManager {
                 CLOUD_BACKUP_MANAGER.clone().spawn_repair_passkey(true);
             }
             A::SyncUnsynced => CLOUD_BACKUP_MANAGER.clone().spawn_sync(),
-            A::FetchCloudOnly => CLOUD_BACKUP_MANAGER.clone().spawn_fetch_cloud_only(),
             A::RestoreCloudWallet(record_id) => {
                 if self.detail_inventory_is_ready() {
                     CLOUD_BACKUP_MANAGER.clone().spawn_restore_cloud_wallet(record_id);
@@ -268,9 +267,7 @@ impl RustCloudBackupManager {
             }
             A::KeepCloudBackupEnabled => CLOUD_BACKUP_MANAGER.keep_cloud_backup_enabled(),
             A::RefreshDetail => CLOUD_BACKUP_MANAGER.clone().spawn_refresh_detail(),
-            A::RefreshOtherBackups => send!(self.supervisor.refresh_other_backups()),
             A::EnterDetail => CLOUD_BACKUP_MANAGER.clone().spawn_enter_detail(),
-            A::CloseDetail => CLOUD_BACKUP_MANAGER.clone().close_detail(),
             A::PromptEnablePasskeyChoice(context) => {
                 self.present_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::Enable(
                     context, None,
@@ -347,10 +344,6 @@ impl RustCloudBackupManager {
         send!(self.supervisor.start_sync_operation());
     }
 
-    fn spawn_fetch_cloud_only(self: std::sync::Arc<Self>) {
-        send!(self.supervisor.start_cloud_only_fetch_request());
-    }
-
     fn spawn_restore_cloud_wallet(self: std::sync::Arc<Self>, record_id: super::RecordId) {
         send!(self.supervisor.start_restore_cloud_wallet_operation(record_id.into()));
     }
@@ -405,10 +398,6 @@ impl RustCloudBackupManager {
 
     fn spawn_enter_detail(self: std::sync::Arc<Self>) {
         send!(self.supervisor.start_enter_detail());
-    }
-
-    fn close_detail(self: std::sync::Arc<Self>) {
-        send!(self.supervisor.close_detail());
     }
 
     fn confirm_saved_passkey(&self) {
