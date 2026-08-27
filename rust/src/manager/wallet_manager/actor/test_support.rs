@@ -11,6 +11,7 @@ use parking_lot::RwLock;
 use tokio::{
     io::{AsyncReadExt as _, AsyncWriteExt as _},
     net::TcpListener,
+    sync::Notify,
     task::JoinHandle,
 };
 
@@ -46,11 +47,12 @@ impl WalletActor {
 
 pub(crate) struct BroadcastEsploraNode {
     pub(crate) broadcast_requests: Arc<AtomicUsize>,
+    pub(crate) broadcast_requested: Arc<Notify>,
     pub(crate) server: JoinHandle<()>,
 }
 
 pub(crate) struct PendingBroadcastEsploraNode {
-    pub(crate) broadcast_requests: Arc<AtomicUsize>,
+    pub(crate) broadcast_requested: Arc<Notify>,
     pub(crate) release: tokio::sync::watch::Sender<bool>,
     pub(crate) server: JoinHandle<()>,
 }
@@ -129,10 +131,13 @@ pub(crate) async fn set_broadcast_esplora_node(broadcast_status: u16) -> Broadca
 
     let broadcast_requests = Arc::new(AtomicUsize::new(0));
     let broadcast_counter = broadcast_requests.clone();
+    let broadcast_requested = Arc::new(Notify::new());
+    let broadcast_notification = broadcast_requested.clone();
     let server = tokio::spawn(async move {
         loop {
             let Ok((mut stream, _)) = listener.accept().await else { return };
             let broadcast_counter = broadcast_counter.clone();
+            let broadcast_notification = broadcast_notification.clone();
 
             tokio::spawn(async move {
                 let mut request = [0; 8192];
@@ -141,6 +146,7 @@ pub(crate) async fn set_broadcast_esplora_node(broadcast_status: u16) -> Broadca
 
                 let body = if request.starts_with("POST /tx ") {
                     broadcast_counter.fetch_add(1, Ordering::SeqCst);
+                    broadcast_notification.notify_one();
                     "broadcast"
                 } else {
                     "1"
@@ -158,7 +164,7 @@ pub(crate) async fn set_broadcast_esplora_node(broadcast_status: u16) -> Broadca
         }
     });
 
-    BroadcastEsploraNode { broadcast_requests, server }
+    BroadcastEsploraNode { broadcast_requests, broadcast_requested, server }
 }
 
 pub(crate) async fn set_pending_broadcast_esplora_node() -> PendingBroadcastEsploraNode {
@@ -175,13 +181,13 @@ pub(crate) async fn set_pending_broadcast_esplora_node() -> PendingBroadcastEspl
         .set_selected_node(&node)
         .expect("test node config is saved");
 
-    let broadcast_requests = Arc::new(AtomicUsize::new(0));
-    let broadcast_counter = broadcast_requests.clone();
+    let broadcast_requested = Arc::new(Notify::new());
+    let broadcast_notification = broadcast_requested.clone();
     let (release, release_request) = tokio::sync::watch::channel(false);
     let server = tokio::spawn(async move {
         loop {
             let Ok((mut stream, _)) = listener.accept().await else { return };
-            let broadcast_counter = broadcast_counter.clone();
+            let broadcast_notification = broadcast_notification.clone();
             let release_request = release_request.clone();
 
             tokio::spawn(async move {
@@ -190,7 +196,7 @@ pub(crate) async fn set_pending_broadcast_esplora_node() -> PendingBroadcastEspl
                 let request = String::from_utf8_lossy(&request[..bytes_read]);
                 let is_broadcast = request.starts_with("POST /tx ");
                 if is_broadcast {
-                    broadcast_counter.fetch_add(1, Ordering::SeqCst);
+                    broadcast_notification.notify_one();
                     let mut release_request = release_request.clone();
 
                     while !*release_request.borrow() {
@@ -211,24 +217,13 @@ pub(crate) async fn set_pending_broadcast_esplora_node() -> PendingBroadcastEspl
         }
     });
 
-    PendingBroadcastEsploraNode { broadcast_requests, release, server }
+    PendingBroadcastEsploraNode { broadcast_requested, release, server }
 }
 
-pub(crate) async fn wait_for_broadcast_request_count(
-    broadcast_requests: &Arc<AtomicUsize>,
-    count: usize,
-) {
-    tokio::time::timeout(std::time::Duration::from_secs(2), async {
-        loop {
-            if broadcast_requests.load(Ordering::SeqCst) >= count {
-                return;
-            }
-
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("broadcast request count is reached");
+pub(crate) async fn wait_for_broadcast_request(broadcast_requested: &Notify) {
+    tokio::time::timeout(std::time::Duration::from_secs(10), broadcast_requested.notified())
+        .await
+        .expect("broadcast request reaches the test node");
 }
 
 pub(crate) fn restore_default_bitcoin_node() {

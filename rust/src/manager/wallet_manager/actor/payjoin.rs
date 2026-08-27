@@ -783,7 +783,7 @@ mod tests {
                 actor_value, mark_wallet_ledger_ready, new_test_wallet_actor,
                 new_test_wallet_actor_with_db, restore_default_bitcoin_node,
                 set_broadcast_esplora_node, set_pending_broadcast_esplora_node,
-                test_broadcast_transaction, test_keychain, wait_for_broadcast_request_count,
+                test_broadcast_transaction, test_keychain, wait_for_broadcast_request,
             },
             payjoin::{PayjoinSessionPersister, test_support::terminal_actor},
         },
@@ -849,7 +849,7 @@ mod tests {
 
         let (authority, preparation) = begin_wallet_deletion(db.id.clone());
         actor_value(actor.quiesce_for_terminal_shutdown(authority).await).await;
-        wait_for_broadcast_request_count(&failed_server.broadcast_requests, 1).await;
+        wait_for_broadcast_request(&failed_server.broadcast_requested).await;
         drop(preparation);
         failed_server.server.abort();
 
@@ -947,7 +947,7 @@ mod tests {
         )
         .await
         .expect("destructive quiesce does not wait for a pending node request");
-        wait_for_broadcast_request_count(&pending_server.broadcast_requests, 1).await;
+        wait_for_broadcast_request(&pending_server.broadcast_requested).await;
 
         pending_server.release.send(true).expect("pending broadcast request is listening");
         drop(preparation);
