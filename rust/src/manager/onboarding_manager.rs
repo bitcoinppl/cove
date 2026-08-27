@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{fmt, sync::Arc, time::Duration};
 
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
@@ -105,7 +105,7 @@ pub enum OnboardingCloudRestoreState {
     Inconclusive,
 }
 
-#[derive(Debug, Clone, Default, uniffi::Record)]
+#[derive(Clone, Default, uniffi::Record)]
 pub struct OnboardingState {
     pub step: OnboardingStep,
     pub branch: Option<OnboardingBranch>,
@@ -119,6 +119,26 @@ pub struct OnboardingState {
     pub cloud_restore_alert_visible: bool,
     pub restore_state: OnboardingRestoreState,
     pub error_message: Option<String>,
+}
+
+impl fmt::Debug for OnboardingState {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("OnboardingState")
+            .field("step", &self.step)
+            .field("branch", &self.branch)
+            .field("created_words", &format_args!("<redacted len={}>", self.created_words.len()))
+            .field("cloud_backup_enabled", &self.cloud_backup_enabled)
+            .field("secret_words_saved", &self.secret_words_saved)
+            .field("cloud_restore_state", &self.cloud_restore_state)
+            .field("cloud_restore_message", &self.cloud_restore_message)
+            .field("cloud_restore_provider_hint", &self.cloud_restore_provider_hint)
+            .field("should_offer_cloud_restore", &self.should_offer_cloud_restore)
+            .field("cloud_restore_alert_visible", &self.cloud_restore_alert_visible)
+            .field("restore_state", &self.restore_state)
+            .field("error_message", &self.error_message)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, uniffi::Enum)]
@@ -182,7 +202,7 @@ pub enum OnboardingAction {
 
 type Message = OnboardingReconcileMessage;
 
-#[derive(Debug, Clone, uniffi::Enum)]
+#[derive(Clone, uniffi::Enum)]
 pub enum OnboardingReconcileMessage {
     Step(OnboardingStep),
     Branch(Option<OnboardingBranch>),
@@ -197,6 +217,81 @@ pub enum OnboardingReconcileMessage {
     RestoreStateChanged(OnboardingRestoreState),
     ErrorMessageChanged(Option<String>),
     Complete,
+}
+
+impl fmt::Debug for OnboardingReconcileMessage {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Step(step) => formatter.debug_tuple("Step").field(step).finish(),
+            Self::Branch(branch) => formatter.debug_tuple("Branch").field(branch).finish(),
+            Self::CreatedWords(words) => formatter
+                .debug_tuple("CreatedWords")
+                .field(&format_args!("<redacted len={}>", words.len()))
+                .finish(),
+            Self::CloudBackupEnabled(enabled) => {
+                formatter.debug_tuple("CloudBackupEnabled").field(enabled).finish()
+            }
+            Self::SecretWordsSaved(saved) => {
+                formatter.debug_tuple("SecretWordsSaved").field(saved).finish()
+            }
+            Self::CloudRestoreState(state) => {
+                formatter.debug_tuple("CloudRestoreState").field(state).finish()
+            }
+            Self::CloudRestoreMessageChanged(message) => {
+                formatter.debug_tuple("CloudRestoreMessageChanged").field(message).finish()
+            }
+            Self::CloudRestoreProviderHintChanged(hint) => {
+                formatter.debug_tuple("CloudRestoreProviderHintChanged").field(hint).finish()
+            }
+            Self::ShouldOfferCloudRestore(should_offer) => {
+                formatter.debug_tuple("ShouldOfferCloudRestore").field(should_offer).finish()
+            }
+            Self::CloudRestoreAlertVisible(visible) => {
+                formatter.debug_tuple("CloudRestoreAlertVisible").field(visible).finish()
+            }
+            Self::RestoreStateChanged(state) => {
+                formatter.debug_tuple("RestoreStateChanged").field(state).finish()
+            }
+            Self::ErrorMessageChanged(message) => {
+                formatter.debug_tuple("ErrorMessageChanged").field(message).finish()
+            }
+            Self::Complete => formatter.write_str("Complete"),
+        }
+    }
+}
+
+impl OnboardingAction {
+    const fn kind(&self) -> &'static str {
+        match self {
+            Self::ContinueSetup => "ContinueSetup",
+            Self::CheckCloudRestoreAgain => "CheckCloudRestoreAgain",
+            Self::ContinueFromWelcome => "ContinueFromWelcome",
+            Self::SelectHasBitcoin { .. } => "SelectHasBitcoin",
+            Self::SelectStorage { .. } => "SelectStorage",
+            Self::CreateSoftwareWallet => "CreateSoftwareWallet",
+            Self::ContinueWalletCreation => "ContinueWalletCreation",
+            Self::ShowSecretWords => "ShowSecretWords",
+            Self::SecretWordsSaved => "SecretWordsSaved",
+            Self::OpenCloudBackup => "OpenCloudBackup",
+            Self::CloudBackupEnabled => "CloudBackupEnabled",
+            Self::SkipCloudBackup => "SkipCloudBackup",
+            Self::ContinueFromBackup => "ContinueFromBackup",
+            Self::ContinueFromExchangeFunding => "ContinueFromExchangeFunding",
+            Self::SoftwareImportCompleted { .. } => "SoftwareImportCompleted",
+            Self::HardwareImportCompleted { .. } => "HardwareImportCompleted",
+            Self::OpenCloudRestore => "OpenCloudRestore",
+            Self::DismissCloudRestoreAlert => "DismissCloudRestoreAlert",
+            Self::StartRestore => "StartRestore",
+            Self::RetryRestore => "RetryRestore",
+            Self::SkipRestore => "SkipRestore",
+            Self::ContinueWithoutCloudRestore => "ContinueWithoutCloudRestore",
+            Self::ContinueFromRestoreComplete => "ContinueFromRestoreComplete",
+            Self::AcceptTerms => "AcceptTerms",
+            Self::Back => "Back",
+            Self::BeginCloudBackupEnable => "BeginCloudBackupEnable",
+            Self::ContinueFromCloudBackupSuccess => "ContinueFromCloudBackupSuccess",
+        }
+    }
 }
 
 #[uniffi::export(callback_interface)]
@@ -310,7 +405,7 @@ impl RustOnboardingManager {
     }
 
     pub fn dispatch(&self, action: OnboardingAction) {
-        info!("Onboarding: dispatch action={action:?}");
+        info!("Onboarding: dispatch action={}", action.kind());
 
         let command =
             self.mutate_state(|state, deferred| state.apply_user_action(action, deferred));
@@ -625,6 +720,45 @@ mod tests {
     use super::flow_state::CloudBackupFlow;
     use super::*;
     use crate::wallet::metadata::WalletMode;
+
+    #[test]
+    fn onboarding_debug_output_redacts_created_words() {
+        let flow = preview_created_wallet_flow(OnboardingBranch::NewUser);
+        let created_words = flow.created_words.clone();
+        let state =
+            OnboardingState { created_words: created_words.clone(), ..OnboardingState::default() };
+        let message = OnboardingReconcileMessage::CreatedWords(created_words);
+        let flow_debug = format!("{:?}", FlowState::BackupWallet(flow.clone()));
+        let event_debug = format!("{:?}", InternalEvent::WalletCreated { flow });
+        let state_debug = format!("{state:?}");
+        let message_debug = format!("{message:?}");
+
+        for debug in [flow_debug, event_debug, state_debug, message_debug] {
+            assert!(debug.contains("<redacted len=12>"), "debug output: {debug}");
+            assert!(!debug.contains("abandon"), "debug output: {debug}");
+            assert!(!debug.contains("about"), "debug output: {debug}");
+        }
+    }
+
+    #[test]
+    fn duplicate_secret_words_saved_is_idempotent() {
+        let mut flow =
+            FlowState::SecretWords(preview_created_wallet_flow(OnboardingBranch::NewUser));
+
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::SecretWordsSaved),
+            TransitionCommand::None
+        );
+        assert_eq!(
+            apply_action(&mut flow, OnboardingAction::SecretWordsSaved),
+            TransitionCommand::None
+        );
+
+        assert!(matches!(
+            flow,
+            FlowState::BackupWallet(CreatedWalletFlow { secret_words_saved: true, .. })
+        ));
+    }
 
     #[test]
     fn continue_from_backup_requires_a_saved_backup_method() {

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use tracing::warn;
 
@@ -34,7 +34,7 @@ pub(crate) enum TermsContext {
     SelectWallet { wallet_id: WalletId, post_onboarding: PostOnboardingDestination },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct CreatedWalletFlow {
     pub(crate) branch: OnboardingBranch,
     pub(crate) wallet_id: WalletId,
@@ -44,6 +44,22 @@ pub(crate) struct CreatedWalletFlow {
     pub(crate) word_validator: Arc<WordValidator>,
     pub(crate) cloud_backup_enabled: bool,
     pub(crate) secret_words_saved: bool,
+}
+
+impl fmt::Debug for CreatedWalletFlow {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CreatedWalletFlow")
+            .field("branch", &self.branch)
+            .field("wallet_id", &self.wallet_id)
+            .field("network", &self.network)
+            .field("wallet_mode", &self.wallet_mode)
+            .field("created_words", &format_args!("<redacted len={}>", self.created_words.len()))
+            .field("word_validator", &self.word_validator)
+            .field("cloud_backup_enabled", &self.cloud_backup_enabled)
+            .field("secret_words_saved", &self.secret_words_saved)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -130,6 +146,23 @@ pub(crate) enum InternalEvent {
     WalletCreated { flow: CreatedWalletFlow },
     WalletCreationFailed { branch: OnboardingBranch, error: String },
     CompletionFailed { error: String },
+}
+
+impl InternalEvent {
+    const fn kind(&self) -> &'static str {
+        match self {
+            Self::CloudCheckRequested => "CloudCheckRequested",
+            Self::OfflineCloudCheckRetryRequested => "OfflineCloudCheckRetryRequested",
+            Self::CloudCheckFinished { .. } => "CloudCheckFinished",
+            Self::RestoreProgress { .. } => "RestoreProgress",
+            Self::RestoreComplete { .. } => "RestoreComplete",
+            Self::RestoreNoBackupFound { .. } => "RestoreNoBackupFound",
+            Self::RestoreFailed { .. } => "RestoreFailed",
+            Self::WalletCreated { .. } => "WalletCreated",
+            Self::WalletCreationFailed { .. } => "WalletCreationFailed",
+            Self::CompletionFailed { .. } => "CompletionFailed",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -440,6 +473,30 @@ impl InternalState {
 }
 
 impl FlowState {
+    const fn kind(&self) -> &'static str {
+        match self {
+            Self::CloudCheck { .. } => "CloudCheck",
+            Self::RestoreOffer { .. } => "RestoreOffer",
+            Self::RestoreOffline { .. } => "RestoreOffline",
+            Self::RestoreUnavailable { .. } => "RestoreUnavailable",
+            Self::Restoring { .. } => "Restoring",
+            Self::RestoreComplete { .. } => "RestoreComplete",
+            Self::RestoreFailed { .. } => "RestoreFailed",
+            Self::Welcome { .. } => "Welcome",
+            Self::BitcoinChoice { .. } => "BitcoinChoice",
+            Self::StorageChoice { .. } => "StorageChoice",
+            Self::CreatingWallet(_) => "CreatingWallet",
+            Self::BackupWallet(_) => "BackupWallet",
+            Self::CloudBackup(_) => "CloudBackup",
+            Self::CloudBackupSuccess(_) => "CloudBackupSuccess",
+            Self::SecretWords(_) => "SecretWords",
+            Self::ExchangeFunding(_) => "ExchangeFunding",
+            Self::HardwareImport => "HardwareImport",
+            Self::SoftwareImport { .. } => "SoftwareImport",
+            Self::Terms { .. } => "Terms",
+        }
+    }
+
     pub(crate) fn terms(context: TermsContext, progress: Option<OnboardingProgress>) -> Self {
         Self::Terms { context, error_message: None, progress }
     }
@@ -517,6 +574,11 @@ impl FlowState {
             }
             (Self::SecretWords(mut flow), OnboardingAction::SecretWordsSaved) => {
                 flow.secret_words_saved = true;
+                (Self::BackupWallet(flow), TransitionCommand::None)
+            }
+            (Self::BackupWallet(flow), OnboardingAction::SecretWordsSaved)
+                if flow.secret_words_saved =>
+            {
                 (Self::BackupWallet(flow), TransitionCommand::None)
             }
             (Self::BackupWallet(flow), OnboardingAction::OpenCloudBackup) => {
@@ -740,7 +802,7 @@ impl FlowState {
                 (Self::BackupWallet(flow), TransitionCommand::None)
             }
             (state, action) => {
-                warn!("Onboarding: invalid action={action:?} flow={state:?}");
+                warn!("Onboarding: invalid action={} flow={}", action.kind(), state.kind());
                 (state, TransitionCommand::None)
             }
         };
@@ -881,7 +943,7 @@ impl FlowState {
                 Self::Terms { context, error_message: Some(error), progress }
             }
             (state, event) => {
-                warn!("Onboarding: invalid event={event:?} flow={state:?}");
+                warn!("Onboarding: invalid event={} flow={}", event.kind(), state.kind());
                 state
             }
         };

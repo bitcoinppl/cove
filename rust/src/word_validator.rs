@@ -1,11 +1,22 @@
+use std::fmt;
+
 use bip39::Mnemonic;
 use rand::seq::SliceRandom as _;
 
 use crate::mnemonic::NumberOfBip39Words;
 
-#[derive(Debug, Clone, uniffi::Object)]
+#[derive(Clone, uniffi::Object)]
 pub struct WordValidator {
     words: Vec<&'static str>,
+}
+
+impl fmt::Debug for WordValidator {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("WordValidator")
+            .field("words", &format_args!("<redacted len={}>", self.words.len()))
+            .finish()
+    }
 }
 
 impl WordValidator {
@@ -102,6 +113,17 @@ impl WordValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn debug_output_redacts_words() {
+        let mnemonic = Mnemonic::parse(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .expect("test mnemonic is valid");
+        let validator = WordValidator::new(mnemonic);
+        let debug = format!("{validator:?}");
+        assert_eq!(debug, "WordValidator { words: <redacted len=12> }");
+    }
 
     fn validate_possible_words_result(validator: &WordValidator, word_position: u8) {
         let possible_words = validator.possible_words(word_position);
