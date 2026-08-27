@@ -16,7 +16,7 @@ use crate::{
 };
 
 use cove_macros::impl_default_for;
-use cove_types::{ConfirmDetails, WalletId, utxo::Utxo};
+use cove_types::{ConfirmDetails, PayjoinIntent, WalletId, utxo::Utxo};
 use derive_more::From;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -114,14 +114,20 @@ pub struct SendRouteConfirmArgs {
     pub id: WalletId,
     pub details: Arc<ConfirmDetails>,
     pub input: SendConfirmationInput,
-    pub payjoin_endpoint: Option<String>,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum SendConfirmationInput {
-    Unsigned,
+    Unsigned { mode: UnsignedPaymentMode },
     SignedTransaction(Arc<BitcoinTransaction>),
     SignedPsbt(Arc<Psbt>),
+}
+
+/// The protocol used to send an unsigned hot-wallet payment
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
+pub enum UnsignedPaymentMode {
+    Standard,
+    Payjoin { intent: PayjoinIntent },
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -365,14 +371,10 @@ impl RouteFactory {
         &self,
         id: WalletId,
         details: Arc<ConfirmDetails>,
-        payjoin_endpoint: Option<String>,
+        mode: UnsignedPaymentMode,
     ) -> Route {
-        let args = SendRouteConfirmArgs {
-            id,
-            details,
-            input: SendConfirmationInput::Unsigned,
-            payjoin_endpoint,
-        };
+        let args =
+            SendRouteConfirmArgs { id, details, input: SendConfirmationInput::Unsigned { mode } };
 
         let send = SendRoute::Confirm(args);
         Route::Send(send)
@@ -388,7 +390,6 @@ impl RouteFactory {
             id,
             details,
             input: SendConfirmationInput::SignedTransaction(transaction),
-            payjoin_endpoint: None,
         };
 
         let send = SendRoute::Confirm(args);
@@ -401,12 +402,8 @@ impl RouteFactory {
         details: Arc<ConfirmDetails>,
         psbt: Arc<Psbt>,
     ) -> Route {
-        let args = SendRouteConfirmArgs {
-            id,
-            details,
-            input: SendConfirmationInput::SignedPsbt(psbt),
-            payjoin_endpoint: None,
-        };
+        let args =
+            SendRouteConfirmArgs { id, details, input: SendConfirmationInput::SignedPsbt(psbt) };
 
         let send = SendRoute::Confirm(args);
         Route::Send(send)

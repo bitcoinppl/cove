@@ -3280,6 +3280,118 @@ public func FfiConverterTypeOutPoint_lower(_ value: OutPoint) -> UInt64 {
 
 
 
+/**
+ * A BIP-77 v2 endpoint that passed Payjoin URI validation
+ */
+public protocol PayjoinEndpointProtocol: AnyObject, Sendable {
+
+}
+/**
+ * A BIP-77 v2 endpoint that passed Payjoin URI validation
+ */
+open class PayjoinEndpoint: PayjoinEndpointProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_cove_types_fn_clone_payjoinendpoint(self.handle, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_cove_types_fn_free_payjoinendpoint(handle, $0) }
+    }
+
+
+
+
+
+
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePayjoinEndpoint: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = PayjoinEndpoint
+
+    public static func lift(_ handle: UInt64) throws -> PayjoinEndpoint {
+        return PayjoinEndpoint(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: PayjoinEndpoint) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PayjoinEndpoint {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: PayjoinEndpoint, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinEndpoint_lift(_ handle: UInt64) throws -> PayjoinEndpoint {
+    return try FfiConverterTypePayjoinEndpoint.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinEndpoint_lower(_ value: PayjoinEndpoint) -> UInt64 {
+    return FfiConverterTypePayjoinEndpoint.lower(value)
+}
+
+
+
+
+
+
 public protocol PsbtProtocol: AnyObject, Sendable {
 
     /**
@@ -4553,12 +4665,12 @@ public func FfiConverterTypeBlockSizeLast_lower(_ value: BlockSizeLast) -> RustB
 }
 
 
-public struct PayJoinParams: Equatable, Hashable {
-    public var endpoint: String
+public struct PayJoinParams {
+    public var endpoint: PayjoinEndpoint
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(endpoint: String) {
+    public init(endpoint: PayjoinEndpoint) {
         self.endpoint = endpoint
     }
 
@@ -4578,12 +4690,12 @@ public struct FfiConverterTypePayJoinParams: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PayJoinParams {
         return
             try PayJoinParams(
-                endpoint: FfiConverterString.read(from: &buf)
+                endpoint: FfiConverterTypePayjoinEndpoint.read(from: &buf)
         )
     }
 
     public static func write(_ value: PayJoinParams, into buf: inout [UInt8]) {
-        FfiConverterString.write(value.endpoint, into: &buf)
+        FfiConverterTypePayjoinEndpoint.write(value.endpoint, into: &buf)
     }
 }
 
@@ -4600,6 +4712,99 @@ public func FfiConverterTypePayJoinParams_lift(_ buf: RustBuffer) throws -> PayJ
 #endif
 public func FfiConverterTypePayJoinParams_lower(_ value: PayJoinParams) -> RustBuffer {
     return FfiConverterTypePayJoinParams.lower(value)
+}
+
+
+/**
+ * The immutable data that identifies and starts one Payjoin payment
+ */
+public struct PayjoinIntent: Equatable, Hashable {
+    /**
+     * The stable identity of this payment attempt
+     */
+    public var sessionId: PayjoinSessionId
+    /**
+     * The validated receiver endpoint
+     */
+    public var endpoint: PayjoinEndpoint
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The stable identity of this payment attempt
+         */sessionId: PayjoinSessionId,
+        /**
+         * The validated receiver endpoint
+         */endpoint: PayjoinEndpoint) {
+        self.sessionId = sessionId
+        self.endpoint = endpoint
+    }
+
+
+
+
+// The local Rust `Eq` implementation - only `eq` is used.
+public static func == (self: PayjoinIntent, other: PayjoinIntent) -> Bool {
+    return try!  FfiConverterBool.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_types_fn_method_payjoinintent_uniffi_trait_eq_eq(
+            FfiConverterTypePayjoinIntent_lower(self),
+        FfiConverterTypePayjoinIntent_lower(other),uniffiCallStatus
+    )
+}
+    )
+}
+// The local Rust `Hash` implementation
+public func hash(into hasher: inout Hasher) {
+    let val = try!  FfiConverterUInt64.lift(
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_types_fn_method_payjoinintent_uniffi_trait_hash(
+            FfiConverterTypePayjoinIntent_lower(self),uniffiCallStatus
+    )
+}
+    )
+    hasher.combine(val)
+}
+}
+
+#if compiler(>=6)
+extension PayjoinIntent: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePayjoinIntent: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PayjoinIntent {
+        return
+            try PayjoinIntent(
+                sessionId: FfiConverterTypePayjoinSessionId.read(from: &buf),
+                endpoint: FfiConverterTypePayjoinEndpoint.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PayjoinIntent, into buf: inout [UInt8]) {
+        FfiConverterTypePayjoinSessionId.write(value.sessionId, into: &buf)
+        FfiConverterTypePayjoinEndpoint.write(value.endpoint, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinIntent_lift(_ buf: RustBuffer) throws -> PayjoinIntent {
+    return try FfiConverterTypePayjoinIntent.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinIntent_lower(_ value: PayjoinIntent) -> RustBuffer {
+    return FfiConverterTypePayjoinIntent.lower(value)
 }
 
 
@@ -6259,6 +6464,46 @@ public func FfiConverterTypeFfiOpacity_lift(_ value: UInt8) throws -> FfiOpacity
 #endif
 public func FfiConverterTypeFfiOpacity_lower(_ value: FfiOpacity) -> UInt8 {
     return FfiConverterTypeFfiOpacity.lower(value)
+}
+
+
+
+public typealias PayjoinSessionId = String
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePayjoinSessionId: FfiConverter {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PayjoinSessionId {
+        return try FfiConverterString.read(from: &buf)
+    }
+
+    public static func write(_ value: PayjoinSessionId, into buf: inout [UInt8]) {
+        return FfiConverterString.write(value, into: &buf)
+    }
+
+    public static func lift(_ value: RustBuffer) throws -> PayjoinSessionId {
+        return try FfiConverterString.lift(value)
+    }
+
+    public static func lower(_ value: PayjoinSessionId) -> RustBuffer {
+        return FfiConverterString.lower(value)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinSessionId_lift(_ value: RustBuffer) throws -> PayjoinSessionId {
+    return try FfiConverterTypePayjoinSessionId.lift(value)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePayjoinSessionId_lower(_ value: PayjoinSessionId) -> RustBuffer {
+    return FfiConverterTypePayjoinSessionId.lower(value)
 }
 
 

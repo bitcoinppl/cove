@@ -3,10 +3,10 @@ use std::sync::Arc;
 use crate::{
     app::AppAction,
     manager::deferred_dispatch::DeferredDispatch,
-    router::RouteFactory,
+    router::{RouteFactory, UnsignedPaymentMode},
     wallet::{Address, metadata::WalletType},
 };
-use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee};
+use cove_types::{PayjoinIntent, amount::Amount, fees::FeeRateOptionWithTotalFee};
 
 use super::{EnterMode, Message, RustSendFlowManager, SendFlowAlertState, SendFlowError};
 
@@ -141,9 +141,9 @@ impl RustSendFlowManager {
 
         self.reconciler.send(Message::UpdateFocusField(None));
 
-        let (wallet_type, wallet_id) = {
+        let (wallet_type, wallet_id, payjoin_endpoint) = {
             let state = self.state.lock();
-            (state.metadata.wallet_type, state.metadata.id.clone())
+            (state.metadata.wallet_type, state.metadata.id.clone(), state.payjoin_endpoint.clone())
         };
 
         let me = self.clone();
@@ -190,7 +190,14 @@ impl RustSendFlowManager {
 
             // update the route send the frontend to the proper next screen
             let next_route = match wallet_type {
-                WalletType::Hot => RouteFactory::new().send_confirm(wallet_id, details, None),
+                WalletType::Hot => {
+                    let payment_mode =
+                        payjoin_endpoint.map_or(UnsignedPaymentMode::Standard, |endpoint| {
+                            UnsignedPaymentMode::Payjoin { intent: PayjoinIntent::new(endpoint) }
+                        });
+
+                    RouteFactory::new().send_confirm(wallet_id, details, payment_mode)
+                }
                 WalletType::Cold | WalletType::XpubOnly => {
                     RouteFactory::new().send_hardware_export(wallet_id, details)
                 }

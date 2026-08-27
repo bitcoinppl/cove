@@ -88,6 +88,8 @@ import org.bitcoinppl.cove_core.types.FfiConverterTypeFfiColor
 import org.bitcoinppl.cove_core.types.FfiConverterTypeFfiColorScheme
 import org.bitcoinppl.cove_core.types.FfiConverterTypeNetwork
 import org.bitcoinppl.cove_core.types.FfiConverterTypeOutPoint
+import org.bitcoinppl.cove_core.types.FfiConverterTypePayjoinIntent
+import org.bitcoinppl.cove_core.types.FfiConverterTypePayjoinSessionId
 import org.bitcoinppl.cove_core.types.FfiConverterTypePsbt
 import org.bitcoinppl.cove_core.types.FfiConverterTypeQrDensity
 import org.bitcoinppl.cove_core.types.FfiConverterTypeSentAndReceived
@@ -100,6 +102,8 @@ import org.bitcoinppl.cove_core.types.FfiConverterTypeUtxoType
 import org.bitcoinppl.cove_core.types.FfiConverterTypeWalletId
 import org.bitcoinppl.cove_core.types.Network
 import org.bitcoinppl.cove_core.types.OutPoint
+import org.bitcoinppl.cove_core.types.PayjoinIntent
+import org.bitcoinppl.cove_core.types.PayjoinSessionId
 import org.bitcoinppl.cove_core.types.Psbt
 import org.bitcoinppl.cove_core.types.QrDensity
 import org.bitcoinppl.cove_core.types.SentAndReceived
@@ -138,6 +142,8 @@ import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferFfiColor
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferFfiColorScheme
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferNetwork
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferOutPoint
+import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferPayjoinIntent
+import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferPayjoinSessionId
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferPsbt
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferQrDensity
 import org.bitcoinppl.cove_core.types.RustBuffer as RustBufferSentAndReceived
@@ -1701,6 +1707,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction(
     ): Short
+    external fun uniffi_cove_checksum_method_rustwalletmanager_cancel_payjoin(
+    ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_convert_from_fiat_string(
     ): Short
     external fun uniffi_cove_checksum_method_rustwalletmanager_current_block_height(
@@ -2969,6 +2977,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustwalletmanager_broadcast_transaction(`ptr`: Long,`signedTransaction`: Long,
     ): Long
+    external fun uniffi_cove_fn_method_rustwalletmanager_cancel_payjoin(`ptr`: Long,`sessionId`: RustBufferPayjoinSessionId.ByValue,
+    ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_convert_from_fiat_string(`ptr`: Long,`fiatAmount`: RustBuffer.ByValue,`prices`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_current_block_height(`ptr`: Long,
@@ -3007,7 +3017,7 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_rustwalletmanager_initial_state(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_rustwalletmanager_initiate_payment(`ptr`: Long,`psbt`: Long,`payjoinEndpoint`: RustBuffer.ByValue,
+    external fun uniffi_cove_fn_method_rustwalletmanager_initiate_payment(`ptr`: Long,`psbt`: Long,`mode`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_rustwalletmanager_label_manager(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
@@ -3199,7 +3209,7 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_send(`ptr`: Long,`send`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_routefactory_send_confirm(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`payjoinEndpoint`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_routefactory_send_confirm(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`mode`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_routefactory_send_confirm_signed_psbt(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`details`: Long,`psbt`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4933,6 +4943,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_broadcast_transaction() != 50937.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_cancel_payjoin() != 3414.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_convert_from_fiat_string() != 26279.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4990,7 +5003,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_initial_state() != 46436.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 13212.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_initiate_payment() != 23416.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_label_manager() != 23571.toShort()) {
@@ -5212,7 +5225,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_routefactory_send() != 19857.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm() != 6786.toShort()) {
+    if (lib.uniffi_cove_checksum_method_routefactory_send_confirm() != 4948.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_routefactory_send_confirm_signed_psbt() != 63483.toShort()) {
@@ -19798,7 +19811,7 @@ public interface RouteFactoryInterface {
 
     fun `send`(`send`: SendRoute): Route
 
-    fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails, `payjoinEndpoint`: kotlin.String?): Route
+    fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails, `mode`: UnsignedPaymentMode): Route
 
     fun `sendConfirmSignedPsbt`(`id`: WalletId, `details`: ConfirmDetails, `psbt`: Psbt): Route
 
@@ -20172,7 +20185,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
     }
 
 
-    override fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails, `payjoinEndpoint`: kotlin.String?): Route {
+    override fun `sendConfirm`(`id`: WalletId, `details`: ConfirmDetails, `mode`: UnsignedPaymentMode): Route {
             return FfiConverterTypeRoute.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -20181,7 +20194,7 @@ open class RouteFactory: Disposable, AutoCloseable, RouteFactoryInterface
 
         FfiConverterTypeWalletId.lower(`id`),
         FfiConverterTypeConfirmDetails.lower(`details`),
-        FfiConverterOptionalString.lower(`payjoinEndpoint`),_status)
+        FfiConverterTypeUnsignedPaymentMode.lower(`mode`),_status)
 }
     }
     )
@@ -24450,6 +24463,8 @@ public interface RustWalletManagerInterface {
 
     suspend fun `broadcastTransaction`(`signedTransaction`: BitcoinTransaction)
 
+    suspend fun `cancelPayjoin`(`sessionId`: PayjoinSessionId)
+
     fun `convertFromFiatString`(`fiatAmount`: kotlin.String, `prices`: PriceResponse): Amount
 
     suspend fun `currentBlockHeight`(): kotlin.UInt
@@ -24515,7 +24530,7 @@ public interface RustWalletManagerInterface {
     /**
      * Send entry point for unsigned hot wallet PSBTs
      */
-    suspend fun `initiatePayment`(`psbt`: Psbt, `payjoinEndpoint`: kotlin.String?)
+    suspend fun `initiatePayment`(`psbt`: Psbt, `mode`: UnsignedPaymentMode)
 
     fun `labelManager`(): LabelManager
 
@@ -24862,6 +24877,29 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
                 uniffiHandle,
 
         FfiConverterTypeBitcoinTransaction.lower(`signedTransaction`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
+        // lift function
+        { Unit },
+
+        // Error FFI converter
+        WalletManagerException.ErrorHandler,
+    )
+    }
+
+
+    @Throws(WalletManagerException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `cancelPayjoin`(`sessionId`: PayjoinSessionId) {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_rustwalletmanager_cancel_payjoin(
+                uniffiHandle,
+
+        FfiConverterTypePayjoinSessionId.lower(`sessionId`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
@@ -25237,14 +25275,14 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
      */
     @Throws(WalletManagerException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `initiatePayment`(`psbt`: Psbt, `payjoinEndpoint`: kotlin.String?) {
+    override suspend fun `initiatePayment`(`psbt`: Psbt, `mode`: UnsignedPaymentMode) {
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_rustwalletmanager_initiate_payment(
                 uniffiHandle,
 
         FfiConverterTypePsbt.lower(`psbt`),
-        FfiConverterOptionalString.lower(`payjoinEndpoint`),
+        FfiConverterTypeUnsignedPaymentMode.lower(`mode`),
             )
         },
         { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
@@ -35605,8 +35643,6 @@ data class SendRouteConfirmArgs (
     var `details`: ConfirmDetails
     ,
     var `input`: SendConfirmationInput
-    ,
-    var `payjoinEndpoint`: kotlin.String?
 
 ): Disposable{
 
@@ -35620,8 +35656,7 @@ data class SendRouteConfirmArgs (
     Disposable.destroy(
         this.`id`,
         this.`details`,
-        this.`input`,
-        this.`payjoinEndpoint`
+        this.`input`
     )
     }
 
@@ -35637,22 +35672,19 @@ public object FfiConverterTypeSendRouteConfirmArgs: FfiConverterRustBuffer<SendR
             FfiConverterTypeWalletId.read(buf),
             FfiConverterTypeConfirmDetails.read(buf),
             FfiConverterTypeSendConfirmationInput.read(buf),
-            FfiConverterOptionalString.read(buf),
         )
     }
 
     override fun allocationSize(value: SendRouteConfirmArgs) = (
             FfiConverterTypeWalletId.allocationSize(value.`id`) +
             FfiConverterTypeConfirmDetails.allocationSize(value.`details`) +
-            FfiConverterTypeSendConfirmationInput.allocationSize(value.`input`) +
-            FfiConverterOptionalString.allocationSize(value.`payjoinEndpoint`)
+            FfiConverterTypeSendConfirmationInput.allocationSize(value.`input`)
     )
 
     override fun write(value: SendRouteConfirmArgs, buf: ByteBuffer) {
             FfiConverterTypeWalletId.write(value.`id`, buf)
             FfiConverterTypeConfirmDetails.write(value.`details`, buf)
             FfiConverterTypeSendConfirmationInput.write(value.`input`, buf)
-            FfiConverterOptionalString.write(value.`payjoinEndpoint`, buf)
     }
 }
 
@@ -54388,6 +54420,189 @@ public object FfiConverterTypeOtherBackupsOperation : FfiConverterRustBuffer<Oth
 
 
 
+/**
+ * The terminal transaction selected for a Payjoin payment
+ */
+
+enum class PayjoinBroadcastOutcome {
+
+    PROPOSAL,
+    FALLBACK;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePayjoinBroadcastOutcome: FfiConverterRustBuffer<PayjoinBroadcastOutcome> {
+    override fun read(buf: ByteBuffer) = try {
+        PayjoinBroadcastOutcome.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: PayjoinBroadcastOutcome) = 4UL
+
+    override fun write(value: PayjoinBroadcastOutcome, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * The latest wallet-owned state for one Payjoin payment
+ */
+sealed class PayjoinStatus {
+
+    data class Negotiating(
+        val `sessionId`: org.bitcoinppl.cove_core.types.PayjoinSessionId) : PayjoinStatus()
+
+    {
+
+
+        companion object
+    }
+
+    data class Polling(
+        val `sessionId`: org.bitcoinppl.cove_core.types.PayjoinSessionId,
+        val `deadlineSecs`: kotlin.ULong) : PayjoinStatus()
+
+    {
+
+
+        companion object
+    }
+
+    data class Broadcast(
+        val `sessionId`: org.bitcoinppl.cove_core.types.PayjoinSessionId,
+        val `outcome`: org.bitcoinppl.cove_core.PayjoinBroadcastOutcome) : PayjoinStatus()
+
+    {
+
+
+        companion object
+    }
+
+    data class Failed(
+        val `sessionId`: org.bitcoinppl.cove_core.types.PayjoinSessionId,
+        val `message`: kotlin.String) : PayjoinStatus()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePayjoinStatus : FfiConverterRustBuffer<PayjoinStatus>{
+    override fun read(buf: ByteBuffer): PayjoinStatus {
+        return when(buf.getInt()) {
+            1 -> PayjoinStatus.Negotiating(
+                FfiConverterTypePayjoinSessionId.read(buf),
+                )
+            2 -> PayjoinStatus.Polling(
+                FfiConverterTypePayjoinSessionId.read(buf),
+                FfiConverterULong.read(buf),
+                )
+            3 -> PayjoinStatus.Broadcast(
+                FfiConverterTypePayjoinSessionId.read(buf),
+                FfiConverterTypePayjoinBroadcastOutcome.read(buf),
+                )
+            4 -> PayjoinStatus.Failed(
+                FfiConverterTypePayjoinSessionId.read(buf),
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: PayjoinStatus): ULong = when(value) {
+        is PayjoinStatus.Negotiating -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypePayjoinSessionId.allocationSize(value.`sessionId`)
+            )
+        }
+        is PayjoinStatus.Polling -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypePayjoinSessionId.allocationSize(value.`sessionId`)
+                + FfiConverterULong.allocationSize(value.`deadlineSecs`)
+            )
+        }
+        is PayjoinStatus.Broadcast -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypePayjoinSessionId.allocationSize(value.`sessionId`)
+                + FfiConverterTypePayjoinBroadcastOutcome.allocationSize(value.`outcome`)
+            )
+        }
+        is PayjoinStatus.Failed -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypePayjoinSessionId.allocationSize(value.`sessionId`)
+                + FfiConverterString.allocationSize(value.`message`)
+            )
+        }
+    }
+
+    override fun write(value: PayjoinStatus, buf: ByteBuffer) {
+        when(value) {
+            is PayjoinStatus.Negotiating -> {
+                buf.putInt(1)
+                FfiConverterTypePayjoinSessionId.write(value.`sessionId`, buf)
+                Unit
+            }
+            is PayjoinStatus.Polling -> {
+                buf.putInt(2)
+                FfiConverterTypePayjoinSessionId.write(value.`sessionId`, buf)
+                FfiConverterULong.write(value.`deadlineSecs`, buf)
+                Unit
+            }
+            is PayjoinStatus.Broadcast -> {
+                buf.putInt(3)
+                FfiConverterTypePayjoinSessionId.write(value.`sessionId`, buf)
+                FfiConverterTypePayjoinBroadcastOutcome.write(value.`outcome`, buf)
+                Unit
+            }
+            is PayjoinStatus.Failed -> {
+                buf.putInt(4)
+                FfiConverterTypePayjoinSessionId.write(value.`sessionId`, buf)
+                FfiConverterString.write(value.`message`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 sealed class PendingOrConfirmed {
 
     data class Pending(
@@ -56254,8 +56469,14 @@ public object FfiConverterTypeSeedQrError : FfiConverterRustBuffer<SeedQrExcepti
 
 sealed class SendConfirmationInput: Disposable  {
 
-    object Unsigned : SendConfirmationInput()
+    data class Unsigned(
+        val `mode`: org.bitcoinppl.cove_core.UnsignedPaymentMode) : SendConfirmationInput()
 
+    {
+
+
+        companion object
+    }
 
     data class SignedTransaction(
         val v1: org.bitcoinppl.cove_core.BitcoinTransaction) : SendConfirmationInput()
@@ -56280,7 +56501,12 @@ sealed class SendConfirmationInput: Disposable  {
     @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
     override fun destroy() {
         when(this) {
-            is SendConfirmationInput.Unsigned -> {// Nothing to destroy
+            is SendConfirmationInput.Unsigned -> {
+
+    Disposable.destroy(
+        this.`mode`
+    )
+
             }
             is SendConfirmationInput.SignedTransaction -> {
 
@@ -56313,7 +56539,9 @@ sealed class SendConfirmationInput: Disposable  {
 public object FfiConverterTypeSendConfirmationInput : FfiConverterRustBuffer<SendConfirmationInput>{
     override fun read(buf: ByteBuffer): SendConfirmationInput {
         return when(buf.getInt()) {
-            1 -> SendConfirmationInput.Unsigned
+            1 -> SendConfirmationInput.Unsigned(
+                FfiConverterTypeUnsignedPaymentMode.read(buf),
+                )
             2 -> SendConfirmationInput.SignedTransaction(
                 FfiConverterTypeBitcoinTransaction.read(buf),
                 )
@@ -56329,6 +56557,7 @@ public object FfiConverterTypeSendConfirmationInput : FfiConverterRustBuffer<Sen
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypeUnsignedPaymentMode.allocationSize(value.`mode`)
             )
         }
         is SendConfirmationInput.SignedTransaction -> {
@@ -56351,6 +56580,7 @@ public object FfiConverterTypeSendConfirmationInput : FfiConverterRustBuffer<Sen
         when(value) {
             is SendConfirmationInput.Unsigned -> {
                 buf.putInt(1)
+                FfiConverterTypeUnsignedPaymentMode.write(value.`mode`, buf)
                 Unit
             }
             is SendConfirmationInput.SignedTransaction -> {
@@ -61460,6 +61690,82 @@ public object FfiConverterTypeTrickPinError : FfiConverterRustBuffer<TrickPinExc
 
 
 
+/**
+ * The protocol used to send an unsigned hot-wallet payment
+ */
+sealed class UnsignedPaymentMode {
+
+    object Standard : UnsignedPaymentMode()
+
+
+    data class Payjoin(
+        val `intent`: org.bitcoinppl.cove_core.types.PayjoinIntent) : UnsignedPaymentMode()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUnsignedPaymentMode : FfiConverterRustBuffer<UnsignedPaymentMode>{
+    override fun read(buf: ByteBuffer): UnsignedPaymentMode {
+        return when(buf.getInt()) {
+            1 -> UnsignedPaymentMode.Standard
+            2 -> UnsignedPaymentMode.Payjoin(
+                FfiConverterTypePayjoinIntent.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: UnsignedPaymentMode): ULong = when(value) {
+        is UnsignedPaymentMode.Standard -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+            )
+        }
+        is UnsignedPaymentMode.Payjoin -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypePayjoinIntent.allocationSize(value.`intent`)
+            )
+        }
+    }
+
+    override fun write(value: UnsignedPaymentMode, buf: ByteBuffer) {
+        when(value) {
+            is UnsignedPaymentMode.Standard -> {
+                buf.putInt(1)
+                Unit
+            }
+            is UnsignedPaymentMode.Payjoin -> {
+                buf.putInt(2)
+                FfiConverterTypePayjoinIntent.write(value.`intent`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 
 
 sealed class UnsignedTransactionsTableException: kotlin.Exception() {
@@ -64111,6 +64417,24 @@ sealed class WalletManagerException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    class PayjoinCancellationFailed(
+
+        val v1: kotlin.String
+        ) : WalletManagerException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    class PayjoinSessionMismatch(
+
+        val `requested`: PayjoinSessionId,
+
+        val `active`: PayjoinSessionId
+        ) : WalletManagerException() {
+        override val message
+            get() = "requested=${ `requested` }, active=${ `active` }"
+    }
+
     class Converter(
 
         val v1: ConverterException
@@ -64316,42 +64640,49 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
             28 -> WalletManagerException.PayjoinSessionException(
                 FfiConverterString.read(buf),
                 )
-            29 -> WalletManagerException.Converter(
+            29 -> WalletManagerException.PayjoinCancellationFailed(
+                FfiConverterString.read(buf),
+                )
+            30 -> WalletManagerException.PayjoinSessionMismatch(
+                FfiConverterTypePayjoinSessionId.read(buf),
+                FfiConverterTypePayjoinSessionId.read(buf),
+                )
+            31 -> WalletManagerException.Converter(
                 FfiConverterTypeConverterError.read(buf),
                 )
-            30 -> WalletManagerException.UnknownException(
+            32 -> WalletManagerException.UnknownException(
                 FfiConverterString.read(buf),
                 )
-            31 -> WalletManagerException.PsbtFinalizeException(
+            33 -> WalletManagerException.PsbtFinalizeException(
                 FfiConverterString.read(buf),
                 )
-            32 -> WalletManagerException.GetHistoricalPricesException(
+            34 -> WalletManagerException.GetHistoricalPricesException(
                 FfiConverterString.read(buf),
                 )
-            33 -> WalletManagerException.CsvCreationException(
+            35 -> WalletManagerException.CsvCreationException(
                 FfiConverterString.read(buf),
                 )
-            34 -> WalletManagerException.AddUtxosException(
+            36 -> WalletManagerException.AddUtxosException(
                 FfiConverterString.read(buf),
                 )
-            35 -> WalletManagerException.OutputLabelsException(
+            37 -> WalletManagerException.OutputLabelsException(
                 FfiConverterString.read(buf),
                 )
-            36 -> WalletManagerException.DatabaseCorruption(
+            38 -> WalletManagerException.DatabaseCorruption(
                 FfiConverterTypeWalletId.read(buf),
                 FfiConverterString.read(buf),
                 )
-            37 -> WalletManagerException.PendingUnsignedTransactionsLoadException(
+            39 -> WalletManagerException.PendingUnsignedTransactionsLoadException(
                 FfiConverterString.read(buf),
                 )
-            38 -> WalletManagerException.ReceiveAddressException(
+            40 -> WalletManagerException.ReceiveAddressException(
                 FfiConverterString.read(buf),
                 )
-            39 -> WalletManagerException.ManagerClosed()
-            40 -> WalletManagerException.WalletLifecycle(
+            41 -> WalletManagerException.ManagerClosed()
+            42 -> WalletManagerException.WalletLifecycle(
                 FfiConverterTypeWalletLifecycleFailure.read(buf),
                 )
-            41 -> WalletManagerException.AddressTypeSwitchCommittedWithRecoveryPending(
+            43 -> WalletManagerException.AddressTypeSwitchCommittedWithRecoveryPending(
                 FfiConverterTypeWalletAddressType.read(buf),
                 FfiConverterSequenceTypeAddressTypeSwitchRecoveryFailure.read(buf),
                 )
@@ -64494,6 +64825,17 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterString.allocationSize(value.v1)
+            )
+            is WalletManagerException.PayjoinCancellationFailed -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
+            )
+            is WalletManagerException.PayjoinSessionMismatch -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterTypePayjoinSessionId.allocationSize(value.`requested`)
+                + FfiConverterTypePayjoinSessionId.allocationSize(value.`active`)
             )
             is WalletManagerException.Converter -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -64700,68 +65042,79 @@ public object FfiConverterTypeWalletManagerError : FfiConverterRustBuffer<Wallet
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.Converter -> {
+            is WalletManagerException.PayjoinCancellationFailed -> {
                 buf.putInt(29)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.PayjoinSessionMismatch -> {
+                buf.putInt(30)
+                FfiConverterTypePayjoinSessionId.write(value.`requested`, buf)
+                FfiConverterTypePayjoinSessionId.write(value.`active`, buf)
+                Unit
+            }
+            is WalletManagerException.Converter -> {
+                buf.putInt(31)
                 FfiConverterTypeConverterError.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.UnknownException -> {
-                buf.putInt(30)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is WalletManagerException.PsbtFinalizeException -> {
-                buf.putInt(31)
-                FfiConverterString.write(value.v1, buf)
-                Unit
-            }
-            is WalletManagerException.GetHistoricalPricesException -> {
                 buf.putInt(32)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.CsvCreationException -> {
+            is WalletManagerException.PsbtFinalizeException -> {
                 buf.putInt(33)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.AddUtxosException -> {
+            is WalletManagerException.GetHistoricalPricesException -> {
                 buf.putInt(34)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.OutputLabelsException -> {
+            is WalletManagerException.CsvCreationException -> {
                 buf.putInt(35)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerException.DatabaseCorruption -> {
+            is WalletManagerException.AddUtxosException -> {
                 buf.putInt(36)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.OutputLabelsException -> {
+                buf.putInt(37)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is WalletManagerException.DatabaseCorruption -> {
+                buf.putInt(38)
                 FfiConverterTypeWalletId.write(value.`id`, buf)
                 FfiConverterString.write(value.`error`, buf)
                 Unit
             }
             is WalletManagerException.PendingUnsignedTransactionsLoadException -> {
-                buf.putInt(37)
+                buf.putInt(39)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.ReceiveAddressException -> {
-                buf.putInt(38)
+                buf.putInt(40)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.ManagerClosed -> {
-                buf.putInt(39)
+                buf.putInt(41)
                 Unit
             }
             is WalletManagerException.WalletLifecycle -> {
-                buf.putInt(40)
+                buf.putInt(42)
                 FfiConverterTypeWalletLifecycleFailure.write(value.v1, buf)
                 Unit
             }
             is WalletManagerException.AddressTypeSwitchCommittedWithRecoveryPending -> {
-                buf.putInt(41)
+                buf.putInt(43)
                 FfiConverterTypeWalletAddressType.write(value.`addressType`, buf)
                 FfiConverterSequenceTypeAddressTypeSwitchRecoveryFailure.write(value.`failures`, buf)
                 Unit
@@ -64958,8 +65311,14 @@ sealed class WalletManagerReconcileMessage: Disposable  {
         companion object
     }
 
-    object PayjoinTxBroadcast : WalletManagerReconcileMessage()
+    data class PayjoinStatusChanged(
+        val v1: org.bitcoinppl.cove_core.PayjoinStatus) : WalletManagerReconcileMessage()
 
+    {
+
+
+        companion object
+    }
 
 
 
@@ -65108,7 +65467,12 @@ sealed class WalletManagerReconcileMessage: Disposable  {
     )
 
             }
-            is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {// Nothing to destroy
+            is WalletManagerReconcileMessage.PayjoinStatusChanged -> {
+
+    Disposable.destroy(
+        this.v1
+    )
+
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
     }
@@ -65188,7 +65552,9 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
             21 -> WalletManagerReconcileMessage.ReceiveAddressClosed(
                 FfiConverterULong.read(buf),
                 )
-            22 -> WalletManagerReconcileMessage.PayjoinTxBroadcast
+            22 -> WalletManagerReconcileMessage.PayjoinStatusChanged(
+                FfiConverterTypePayjoinStatus.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -65340,10 +65706,11 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 + FfiConverterULong.allocationSize(value.v1)
             )
         }
-        is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {
+        is WalletManagerReconcileMessage.PayjoinStatusChanged -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterTypePayjoinStatus.allocationSize(value.v1)
             )
         }
     }
@@ -65454,8 +65821,9 @@ public object FfiConverterTypeWalletManagerReconcileMessage : FfiConverterRustBu
                 FfiConverterULong.write(value.v1, buf)
                 Unit
             }
-            is WalletManagerReconcileMessage.PayjoinTxBroadcast -> {
+            is WalletManagerReconcileMessage.PayjoinStatusChanged -> {
                 buf.putInt(22)
+                FfiConverterTypePayjoinStatus.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -69357,6 +69725,8 @@ public typealias FfiConverterTypeTimestamp = FfiConverterULong
 
 
 
+
+
 object KeychainExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<KeychainException> {
     override fun lift(error_buf: RustBuffer.ByValue): KeychainException =
         org.bitcoinppl.cove_core.device.KeychainException.ErrorHandler.lift(
@@ -69422,6 +69792,8 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
             }
         )
 }
+
+
 
 
 

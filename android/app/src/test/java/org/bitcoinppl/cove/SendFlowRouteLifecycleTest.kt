@@ -5,6 +5,7 @@ import org.bitcoinppl.cove_core.SendConfirmationInput
 import org.bitcoinppl.cove_core.SendRoute
 import org.bitcoinppl.cove_core.SendRouteConfirmArgs
 import org.bitcoinppl.cove_core.SettingsRoute
+import org.bitcoinppl.cove_core.UnsignedPaymentMode
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 import org.bitcoinppl.cove_core.types.NoHandle
 import org.junit.Assert.assertFalse
@@ -106,8 +107,7 @@ class SendFlowRouteLifecycleTest {
                 SendRouteConfirmArgs(
                     id = "wallet-a",
                     details = ConfirmDetails(NoHandle),
-                    input = SendConfirmationInput.Unsigned,
-                    payjoinEndpoint = null,
+                    input = SendConfirmationInput.Unsigned(UnsignedPaymentMode.Standard),
                 ),
             )
 

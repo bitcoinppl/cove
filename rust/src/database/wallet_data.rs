@@ -17,7 +17,7 @@ use crate::{
     wallet::{WalletAddressType, metadata::WalletId},
 };
 use cove_common::consts::{WALLET_DATA_DIR, wallet_data_dir_path};
-use cove_types::redb::Json;
+use cove_types::{PayjoinSessionId, redb::Json};
 
 use ahash::AHashMap as HashMap;
 
@@ -116,11 +116,10 @@ pub enum PendingAction {
 /// Event log for an in-flight payjoin sender session, allowing it to survive app restarts
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct PayjoinSenderSession {
+    pub session_id: PayjoinSessionId,
+    pub created_at_secs: u64,
     pub events: Vec<String>,
     pub fallback_tx: TransactionBytes,
-    #[serde(default)]
-    pub created_at_secs: Option<u64>,
-    #[serde(default)]
     pub pending_action: Option<PendingAction>,
 }
 
@@ -920,9 +919,10 @@ mod tests {
         let wallet_id = WalletId::preview_new_random();
         let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
         let session = PayjoinSenderSession {
+            session_id: PayjoinSessionId::generate(),
+            created_at_secs: 1,
             events: vec![r#"{"PostedOriginalPsbt":[]}"#.to_string()],
             fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
-            created_at_secs: None,
             pending_action: None,
         };
 
@@ -932,13 +932,29 @@ mod tests {
     }
 
     #[test]
+    fn payjoin_sender_session_requires_an_identity() {
+        let session = PayjoinSenderSession {
+            session_id: PayjoinSessionId::generate(),
+            created_at_secs: 1,
+            events: Vec::new(),
+            fallback_tx: Vec::new().into(),
+            pending_action: None,
+        };
+        let mut value = serde_json::to_value(session).unwrap();
+        value.as_object_mut().unwrap().remove("session_id");
+
+        assert!(serde_json::from_value::<PayjoinSenderSession>(value).is_err());
+    }
+
+    #[test]
     fn delete_payjoin_sender_session_clears_session() {
         let wallet_id = WalletId::preview_new_random();
         let (db, _tmp) = test_support::new_test_wallet_data_db(wallet_id);
         let session = PayjoinSenderSession {
+            session_id: PayjoinSessionId::generate(),
+            created_at_secs: 1,
             events: vec![r#"{"Closed":"Failure"}"#.to_string()],
             fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
-            created_at_secs: None,
             pending_action: None,
         };
 

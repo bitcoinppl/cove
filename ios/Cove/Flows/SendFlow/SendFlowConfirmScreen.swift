@@ -20,7 +20,6 @@ struct SendFlowConfirmScreen: View {
     @State var manager: WalletManager
     let details: ConfirmDetails
     let input: SendConfirmationInput
-    let payjoinEndpoint: String?
 
     let prices: PriceResponse? = nil
 
@@ -54,6 +53,14 @@ struct SendFlowConfirmScreen: View {
         SendFlowConfirmAlertContext(presenter: presenter, sendState: $sendState)
     }
 
+    private var payjoinIntent: PayjoinIntent? {
+        guard case let .unsigned(mode) = input,
+              case let .payjoin(intent) = mode
+        else { return nil }
+
+        return intent
+    }
+
     var body: some View {
         if case let .signedPsbt(psbt) = input, finalizedTransaction == nil {
             SendFlowFinalizePsbtView(
@@ -77,8 +84,15 @@ struct SendFlowConfirmScreen: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.coveBg)
+            .overlay(alignment: .bottom) {
+                if case let .payjoinWaiting(_, deadline) = sendState {
+                    PayjoinWaitingBanner(deadlineSecs: deadline, onCancel: cancelPayjoin)
+                        .padding(.bottom, sendConfirmationFooterHeight + 16)
+                }
+            }
             .onDisappear(perform: handleDisappear)
-            .onChange(of: manager.payjoinTxBroadcast, payjoinBroadcastChanged)
+            .onAppear { applyPayjoinStatus(manager.payjoinStatus) }
+            .onChange(of: manager.payjoinStatus, payjoinStatusChanged)
             .onChange(of: manager.sendFlowErrorAlert, sendFlowErrorChanged)
             .presentingAlert(
                 presenter.confirmationAlertStateBinding,
@@ -101,27 +115,83 @@ struct SendFlowConfirmScreen: View {
         if sinceLocked < 5 { auth.lockState = .unlocked }
     }
 
-    private func payjoinBroadcastChanged(_: UUID?, _ uuid: UUID?) {
-        // UUID changes each time so this fires reliably across multiple sends
-        guard uuid != nil, case .sending = sendState else { return }
+    private func payjoinStatusChanged(_: PayjoinStatus?, _ status: PayjoinStatus?) {
+        applyPayjoinStatus(status)
+    }
 
-        sendState = .sent
-        presenter.confirmationAlertState = .init(.sent(id))
-        auth.unlock()
+    private func applyPayjoinStatus(_ status: PayjoinStatus?) {
+        guard let status, let intent = payjoinIntent else { return }
+
+        switch status {
+        case let .negotiating(sessionId):
+            guard sessionId == intent.sessionId else { return }
+            sendState = .sending
+
+        case let .polling(sessionId, deadlineSecs):
+            guard sessionId == intent.sessionId else { return }
+            sendState = .payjoinWaiting(sessionId: sessionId, deadlineSecs: deadlineSecs)
+
+        case let .broadcast(sessionId, _):
+            guard sessionId == intent.sessionId else { return }
+            sendState = .sent
+            presenter.confirmationAlertState = .init(.sent(id))
+            auth.unlock()
+
+        case let .failed(sessionId, message):
+            guard sessionId == intent.sessionId else { return }
+            sendState = .payjoinFailed(message)
+            presenter.confirmationAlertState = .init(.payjoinFailed(message))
+        }
+    }
+
+    private func cancelPayjoin() {
+        guard let intent = payjoinIntent,
+              case let .payjoinWaiting(sessionId, deadlineSecs) = sendState,
+              sessionId == intent.sessionId
+        else { return }
+
+        sendState = .sending
+        Task {
+            do {
+                try await manager.cancelPayjoin(sessionId: intent.sessionId)
+            } catch let error as WalletManagerError {
+                sendState = .payjoinWaiting(
+                    sessionId: sessionId,
+                    deadlineSecs: deadlineSecs
+                )
+                presenter.confirmationAlertState = .init(
+                    .payjoinCancellationError(error.description)
+                )
+            } catch {
+                sendState = .payjoinWaiting(
+                    sessionId: sessionId,
+                    deadlineSecs: deadlineSecs
+                )
+                presenter.confirmationAlertState = .init(
+                    .payjoinCancellationError(error.localizedDescription)
+                )
+            }
+        }
     }
 
     private func sendFlowErrorChanged(
         _: TaggedItem<SendFlowErrorAlert>?,
         _ alert: TaggedItem<SendFlowErrorAlert>?
     ) {
-        // payjoin broadcast failure arrives via reconcile, so unblock the sending UI here
-        guard let alert, case .sending = sendState else { return }
+        guard payjoinIntent == nil else { return }
 
-        let errorMessage =
-            switch alert.item {
-            case let .signAndBroadcast(error): error
-            case let .confirmDetails(error): error
-            }
+        switch sendState {
+        case .sending, .payjoinWaiting: break
+        default: return
+        }
+        guard let alert else { return }
+
+        let errorMessage: String = switch alert.item {
+        case let .signAndBroadcast(error):
+            error
+        case let .confirmDetails(error):
+            error
+        }
 
         sendState = .error(errorMessage)
         manager.sendFlowErrorAlert = nil
@@ -139,13 +209,10 @@ struct SendFlowConfirmScreen: View {
                     throw SendConfirmationError.unfinalizedSignedPsbt
                 }
                 try await manager.broadcastTransaction(finalizedTransaction)
-            case .unsigned:
-                try await manager.initiatePayment(
-                    psbt: details.psbt(),
-                    payjoinEndpoint: payjoinEndpoint
-                )
-                // for payjoin, stay in .sending until PayjoinTxBroadcast reconciles
-                if payjoinEndpoint == nil {
+            case let .unsigned(mode):
+                try await manager.initiatePayment(psbt: details.psbt(), mode: mode)
+                // for Payjoin, stay in sending until the terminal status reconciles
+                if payjoinIntent == nil {
                     sendState = .sent
                     presenter.confirmationAlertState = .init(.sent(id))
                     auth.unlock()
@@ -512,8 +579,7 @@ private enum SendConfirmationError: LocalizedError {
                                     id: WalletId(),
                                     manager: manager,
                                     details: confirmDetailsPreviewNew(),
-                                    input: .unsigned,
-                                    payjoinEndpoint: nil
+                                    input: .unsigned(mode: .standard)
                                 )
                                 .environment(AppManager.shared)
                                 .environment(AuthManager.shared)
@@ -541,8 +607,7 @@ private enum SendConfirmationError: LocalizedError {
             id: WalletId(),
             manager: WalletManager(preview: .only),
             details: confirmDetailsPreviewNew(),
-            input: .unsigned,
-            payjoinEndpoint: nil
+            input: .unsigned(mode: .standard)
         )
         .environment(AppManager.shared)
         .environment(AuthManager.shared)
@@ -552,5 +617,38 @@ private enum SendConfirmationError: LocalizedError {
                 manager: WalletManager(preview: .only)
             )
         )
+    }
+}
+
+private struct PayjoinWaitingBanner: View {
+    let deadlineSecs: UInt64
+    let onCancel: () -> Void
+
+    @State private var remainingSecs: Int = 0
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Waiting for receiver")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+            Text("\(remainingSecs / 60):\(String(format: "%02d", remainingSecs % 60)) remaining")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button("Cancel and send normally", action: onCancel)
+                .font(.subheadline)
+        }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 16)
+        .task {
+            while !Task.isCancelled {
+                let now = UInt64(Date().timeIntervalSince1970)
+                remainingSecs = max(0, Int(deadlineSecs) - Int(now))
+                if remainingSecs <= 0 { break }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
     }
 }

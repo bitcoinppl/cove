@@ -43,11 +43,36 @@ sealed interface SendState {
 
     data object Sending : SendState
 
+    data class PayjoinWaiting(
+        val sessionId: PayjoinSessionId,
+        val deadlineSecs: ULong,
+    ) : SendState
+
     data object Sent : SendState
 
     data class Error(
         val message: String,
     ) : SendState
+
+    data class PayjoinFailed(
+        val message: String,
+    ) : SendState
+}
+
+private sealed interface SendConfirmationAlert {
+    data object Sent : SendConfirmationAlert
+
+    data class SendFailed(
+        val message: String,
+    ) : SendConfirmationAlert
+
+    data class PayjoinFailed(
+        val message: String,
+    ) : SendConfirmationAlert
+
+    data class PayjoinCancellationFailed(
+        val message: String,
+    ) : SendConfirmationAlert
 }
 
 /** send flow container - manages WalletManager + SendFlowManager lifecycle */
@@ -452,12 +477,12 @@ private fun SendFlowRouteToScreen(
         is SendRoute.Confirm -> {
             val details = sendRoute.v1.details
             val input = sendRoute.v1.input
-            val payjoinEndpoint = sendRoute.v1.payjoinEndpoint
+            val unsignedMode = (input as? SendConfirmationInput.Unsigned)?.mode
+            val payjoinIntent = (unsignedMode as? UnsignedPaymentMode.Payjoin)?.intent
 
             var sendState by remember { mutableStateOf<SendState>(SendState.Idle) }
             var finalizedTransaction by remember { mutableStateOf<BitcoinTransaction?>(null) }
-            var showSuccessAlert by remember { mutableStateOf(false) }
-            var showErrorAlert by remember { mutableStateOf(false) }
+            var confirmationAlert by remember { mutableStateOf<SendConfirmationAlert?>(null) }
             val scope = rememberCoroutineScope()
 
             // lock on appear for hot wallets
@@ -468,27 +493,51 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
-            // show success UI on payjoin broadcast; TaggedItem key changes each time so
-            // no manual reset is needed even if the user sends multiple payjoin transactions
-            LaunchedEffect(walletManager.payjoinTxBroadcast) {
-                if (walletManager.payjoinTxBroadcast != null && sendState == SendState.Sending) {
-                    sendState = SendState.Sent
-                    showSuccessAlert = true
-                    Auth.unlock()
+            // restore and apply only the status owned by this confirmation
+            LaunchedEffect(walletManager.payjoinStatus) {
+                val intent = payjoinIntent ?: return@LaunchedEffect
+                when (val status = walletManager.payjoinStatus) {
+                    is PayjoinStatus.Negotiating -> {
+                        if (status.sessionId != intent.sessionId) return@LaunchedEffect
+                        sendState = SendState.Sending
+                    }
+
+                    is PayjoinStatus.Polling -> {
+                        if (status.sessionId != intent.sessionId) return@LaunchedEffect
+                        sendState = SendState.PayjoinWaiting(status.sessionId, status.deadlineSecs)
+                    }
+
+                    is PayjoinStatus.Broadcast -> {
+                        if (status.sessionId != intent.sessionId) return@LaunchedEffect
+                        sendState = SendState.Sent
+                        confirmationAlert = SendConfirmationAlert.Sent
+                        Auth.unlock()
+                    }
+
+                    is PayjoinStatus.Failed -> {
+                        if (status.sessionId != intent.sessionId) return@LaunchedEffect
+                        sendState = SendState.PayjoinFailed(status.message)
+                        confirmationAlert = SendConfirmationAlert.PayjoinFailed(status.message)
+                    }
+
+                    null -> Unit
                 }
             }
 
-            // payjoin broadcast failure arrives via sendFlowErrorAlert reconcile (not the
-            // catch block), so unblock the UI from Sending and show the error alert
+            // handle non-Payjoin signing and broadcast errors for this confirmation
             LaunchedEffect(walletManager.sendFlowErrorAlert) {
-                if (walletManager.sendFlowErrorAlert != null && sendState == SendState.Sending) {
+                if (payjoinIntent != null) return@LaunchedEffect
+
+                val isWaiting =
+                    sendState == SendState.Sending || sendState is SendState.PayjoinWaiting
+                if (walletManager.sendFlowErrorAlert != null && isWaiting) {
                     val message =
                         when (val alert = walletManager.sendFlowErrorAlert!!.item) {
                             is SendFlowErrorAlert.SignAndBroadcast -> alert.v1
                             is SendFlowErrorAlert.ConfirmDetails -> alert.v1
                         }
                     sendState = SendState.Error(message)
-                    showErrorAlert = true
+                    confirmationAlert = SendConfirmationAlert.SendFailed(message)
                 }
             }
 
@@ -569,75 +618,120 @@ private fun SendFlowRouteToScreen(
                                             ?: error("Unable to finalize transaction")
                                     walletManager.broadcastTransaction(txnToBroadcast)
                                 }
-                                SendConfirmationInput.Unsigned -> {
-                                    walletManager.initiatePayment(details.psbt(), payjoinEndpoint)
-                                    // for payjoin, stay in Sending — PayjoinTxBroadcast reconcile triggers success UI
-                                    if (payjoinEndpoint != null) return@launch
+                                is SendConfirmationInput.Unsigned -> {
+                                    walletManager.initiatePayment(
+                                        details.psbt(),
+                                        input.mode,
+                                    )
+                                    // for Payjoin, stay in Sending until the terminal status arrives
+                                    if (payjoinIntent != null) return@launch
                                 }
                             }
                             sendState = SendState.Sent
-                            showSuccessAlert = true
+                            confirmationAlert = SendConfirmationAlert.Sent
                             Auth.unlock()
                         } catch (e: WalletManagerException) {
-                            sendState = SendState.Error(e.message ?: "Unknown error")
-                            showErrorAlert = true
+                            val message = e.message ?: "Unknown error"
+                            sendState = SendState.Error(message)
+                            confirmationAlert = SendConfirmationAlert.SendFailed(message)
                         } catch (e: Exception) {
-                            sendState = SendState.Error(e.message ?: "Unknown error")
-                            showErrorAlert = true
+                            val message = e.message ?: "Unknown error"
+                            sendState = SendState.Error(message)
+                            confirmationAlert = SendConfirmationAlert.SendFailed(message)
+                        }
+                    }
+                },
+                onCancelPayjoin = {
+                    payjoinIntent?.let { intent ->
+                        val waitingState = sendState as? SendState.PayjoinWaiting ?: return@let
+                        if (waitingState.sessionId != intent.sessionId) return@let
+
+                        sendState = SendState.Sending
+                        scope.launch {
+                            try {
+                                walletManager.cancelPayjoin(intent.sessionId)
+                            } catch (e: WalletManagerException) {
+                                sendState = waitingState
+                                confirmationAlert =
+                                    SendConfirmationAlert.PayjoinCancellationFailed(
+                                        e.message ?: "Unknown error",
+                                    )
+                            } catch (e: Exception) {
+                                sendState = waitingState
+                                confirmationAlert =
+                                    SendConfirmationAlert.PayjoinCancellationFailed(
+                                        e.message ?: "Unknown error",
+                                    )
+                            }
                         }
                     }
                 },
             )
 
-            // success alert dialog
-            if (showSuccessAlert) {
-                AlertDialog(
-                    onDismissRequest = {
-                        showSuccessAlert = false
+            when (val alert = confirmationAlert) {
+                SendConfirmationAlert.Sent -> {
+                    val dismiss = {
+                        confirmationAlert = null
                         app.loadAndReset(Route.SelectedWallet(walletManager.id))
-                    },
-                    title = { Text("Success") },
-                    text = { Text("Transaction sent successfully!") },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                showSuccessAlert = false
-                                app.loadAndReset(Route.SelectedWallet(walletManager.id))
-                            },
-                        ) {
-                            Text("OK")
-                        }
-                    },
-                )
-            }
-
-            // error alert dialog
-            if (showErrorAlert) {
-                AlertDialog(
-                    onDismissRequest = {
-                        showErrorAlert = false
-                        sendState = SendState.Idle
-                    },
-                    title = { Text("Error") },
-                    text = {
-                        val errorMessage =
-                            when (val state = sendState) {
-                                is SendState.Error -> state.message
-                                else -> "Failed to send transaction"
+                    }
+                    AlertDialog(
+                        onDismissRequest = dismiss,
+                        title = { Text("Success") },
+                        text = { Text("Transaction sent successfully!") },
+                        confirmButton = {
+                            TextButton(onClick = dismiss) {
+                                Text("OK")
                             }
-                        Text(errorMessage)
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                showErrorAlert = false
-                                sendState = SendState.Idle
-                            },
-                        ) {
-                            Text("OK")
-                        }
-                    },
-                )
+                        },
+                    )
+                }
+
+                is SendConfirmationAlert.SendFailed -> {
+                    val dismiss = {
+                        confirmationAlert = null
+                        sendState = SendState.Idle
+                    }
+                    AlertDialog(
+                        onDismissRequest = dismiss,
+                        title = { Text("Error") },
+                        text = { Text(alert.message) },
+                        confirmButton = {
+                            TextButton(onClick = dismiss) {
+                                Text("OK")
+                            }
+                        },
+                    )
+                }
+
+                is SendConfirmationAlert.PayjoinFailed -> {
+                    val dismiss = { confirmationAlert = null }
+                    AlertDialog(
+                        onDismissRequest = dismiss,
+                        title = { Text("Payjoin payment paused") },
+                        text = { Text(alert.message) },
+                        confirmButton = {
+                            TextButton(onClick = dismiss) {
+                                Text("OK")
+                            }
+                        },
+                    )
+                }
+
+                is SendConfirmationAlert.PayjoinCancellationFailed -> {
+                    val dismiss = { confirmationAlert = null }
+                    AlertDialog(
+                        onDismissRequest = dismiss,
+                        title = { Text("Unable to cancel Payjoin") },
+                        text = { Text(alert.message) },
+                        confirmButton = {
+                            TextButton(onClick = dismiss) {
+                                Text("OK")
+                            }
+                        },
+                    )
+                }
+
+                null -> Unit
             }
         }
         is SendRoute.HardwareExport -> {

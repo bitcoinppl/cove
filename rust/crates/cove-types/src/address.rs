@@ -18,7 +18,7 @@ use payjoin::UriExt as _;
 use serde::Deserialize;
 use strum::IntoEnumIterator as _;
 
-use crate::{Network, amount::Amount, transaction::TransactionDirection};
+use crate::{Network, PayjoinEndpoint, amount::Amount, transaction::TransactionDirection};
 
 #[derive(
     Debug,
@@ -57,7 +57,7 @@ pub struct AddressInfoWithDerivation {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Record)]
 pub struct PayJoinParams {
-    pub endpoint: String,
+    pub endpoint: Arc<PayjoinEndpoint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, uniffi::Object)]
@@ -233,7 +233,7 @@ fn parse_bitcoin_uri(input: &str) -> Result<ParsedBitcoinUri, Error> {
         // Extract payjoin params if present
         let payjoin = match checked.check_pj_supported() {
             Ok(pj_uri) => {
-                let endpoint = pj_uri.extras.endpoint();
+                let endpoint = PayjoinEndpoint::from_validated(pj_uri.extras.endpoint());
                 Some(PayJoinParams { endpoint })
             }
             Err(_) => None,
@@ -654,7 +654,7 @@ mod tests {
         assert_eq!(parsed.address, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm");
         assert_eq!(parsed.amount, Some(Amount::from_btc(0.001).unwrap()));
         let pj = parsed.payjoin.as_ref().unwrap();
-        assert!(pj.endpoint.to_lowercase().contains("payjo.in"));
+        assert!(pj.endpoint.as_str().to_lowercase().contains("payjo.in"));
     }
 
     #[test]
@@ -694,7 +694,7 @@ mod tests {
         let address_with_network = AddressWithNetwork::try_new(&a).unwrap();
 
         let pj = address_with_network.payjoin.as_ref().unwrap();
-        assert!(pj.endpoint.to_lowercase().contains("payjo.in"));
+        assert!(pj.endpoint.as_str().to_lowercase().contains("payjo.in"));
         assert_eq!(address_with_network.amount, Some(Amount::from_btc(0.001).unwrap()));
     }
 
