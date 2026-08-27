@@ -19,6 +19,7 @@ use payjoin::{
     },
 };
 use rand::seq::SliceRandom as _;
+use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{debug, error, warn};
@@ -324,6 +325,21 @@ async fn try_ohttp_relays<C>(
     Err(last_err)
 }
 
+// cancels the network work when the wallet-owned session deadline expires
+async fn run_until_deadline<T>(deadline: Instant, work: impl Future<Output = T>) -> Option<T> {
+    tokio::time::timeout_at(deadline.into(), work).await.ok()
+}
+
+async fn wait_before_poll_retry(deadline: Instant) -> bool {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return false;
+    }
+
+    tokio::time::sleep(Duration::from_secs(2).min(remaining)).await;
+    Instant::now() < deadline
+}
+
 // returns the index of the single external (recipient) output, or Err for batch/self-send PSBTs
 fn recipient_output_index(psbt: &Psbt) -> Result<usize> {
     let external: Vec<_> = psbt
@@ -412,6 +428,7 @@ async fn do_poll(
     addr: WeakAddr<PayjoinActor>,
     polling_sender: V2Sender<PollingForProposal>,
     persister: PayjoinSessionPersister,
+    deadline: Instant,
 ) {
     let client = match cove_http::new_client() {
         Ok(c) => c,
@@ -425,20 +442,31 @@ async fn do_poll(
     // polls are long-polling: the directory holds the connection open until a
     // proposal arrives or its own timeout fires, so allow slightly more than
     // the server-side timeout to avoid racing it
-    let (poll_response, poll_ctx) =
-        match try_ohttp_relays(&client, Duration::from_secs(35), |relay| {
+    let poll_result = run_until_deadline(
+        deadline,
+        try_ohttp_relays(&client, Duration::from_secs(35), |relay| {
             polling_sender.create_poll_request(relay).map_err(|e| eyre::eyre!("{e:?}"))
-        })
-        .await
-        {
-            Ok(pair) => pair,
-            Err(e) => {
-                warn!("payjoin poll: all relays failed, retrying: {e}");
-                tokio::time::sleep(Duration::from_secs(2)).await;
+        }),
+    )
+    .await;
+
+    let (poll_response, poll_ctx) = match poll_result {
+        Some(Ok(pair)) if Instant::now() < deadline => pair,
+        Some(Ok(_)) | None => {
+            debug!("payjoin poll: session deadline reached");
+            send!(addr.complete_with_fallback_msg());
+            return;
+        }
+        Some(Err(e)) => {
+            warn!("payjoin poll: all relays failed, retrying: {e}");
+            if wait_before_poll_retry(deadline).await {
                 send!(addr.begin_next_poll_msg());
-                return;
+            } else {
+                send!(addr.complete_with_fallback_msg());
             }
-        };
+            return;
+        }
+    };
 
     match polling_sender.process_response(&poll_response, poll_ctx).save(&persister) {
         Ok(OptionalTransitionOutcome::Progress(proposal_psbt)) => {
@@ -659,14 +687,14 @@ impl PayjoinActor {
 
         // if the session deadline has passed, broadcast the fallback immediately
         // clone so the original stays in self.session, allowing retry if all relays fail this tick
-        let polling_sender = match &self.session {
+        let (polling_sender, deadline) = match &self.session {
             PayjoinSession::Polling { polling_sender, deadline } => {
                 if Instant::now() >= *deadline {
                     self.complete_with_fallback();
                     return Produces::ok(());
                 }
 
-                polling_sender.clone()
+                (polling_sender.clone(), *deadline)
             }
             _ => {
                 warn!("payjoin begin_poll called in unexpected state");
@@ -675,7 +703,7 @@ impl PayjoinActor {
         };
 
         let persister = self.persister.clone();
-        self.addr.send_fut_with(|addr| do_poll(addr, polling_sender, persister));
+        self.addr.send_fut_with(|addr| do_poll(addr, polling_sender, persister, deadline));
 
         Produces::ok(())
     }
@@ -1252,6 +1280,22 @@ mod tests {
             let formatted = format!("{btc:.8}");
             assert_eq!(formatted, expected, "sats={sats}");
         }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn deadline_cancels_in_flight_poll_work() {
+        let result = run_until_deadline(Instant::now(), std::future::pending::<()>()).await;
+
+        assert!(result.is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn work_completed_before_deadline_is_returned() {
+        let deadline = Instant::now() + Duration::from_secs(1);
+
+        let result = run_until_deadline(deadline, std::future::ready(42)).await;
+
+        assert_eq!(result, Some(42));
     }
 
     #[test]
