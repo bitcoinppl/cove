@@ -16,6 +16,7 @@ enum SendState: Hashable, Equatable {
     case payjoinWaiting(sessionId: PayjoinSessionId, deadlineSecs: UInt64)
     case sent
     case error(String)
+    case payjoinFailed(String)
 }
 
 struct SwipeToSendView: View {
@@ -214,7 +215,9 @@ private struct SwipeToSendStatus: View {
             case .sent:
                 SwipeToSendSentStatus()
             case .error:
-                SwipeToSendErrorStatus(sendState: $sendState)
+                SwipeToSendErrorStatus(sendState: $sendState, resetsToIdle: true)
+            case .payjoinFailed:
+                SwipeToSendErrorStatus(sendState: $sendState, resetsToIdle: false)
             }
         }
         .foregroundStyle(.white)
@@ -244,6 +247,7 @@ private struct SwipeToSendSentStatus: View {
 
 private struct SwipeToSendErrorStatus: View {
     @Binding var sendState: SendState
+    let resetsToIdle: Bool
 
     var body: some View {
         HStack(spacing: 10) {
@@ -256,7 +260,11 @@ private struct SwipeToSendErrorStatus: View {
     }
 
     private func resetAfterDelay() {
+        guard resetsToIdle else { return }
+        let retryableError = sendState
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            guard sendState == retryableError else { return }
             sendState = .idle
         }
     }

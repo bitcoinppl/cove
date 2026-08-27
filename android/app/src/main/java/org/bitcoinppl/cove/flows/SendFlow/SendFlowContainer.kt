@@ -53,12 +53,20 @@ sealed interface SendState {
     data class Error(
         val message: String,
     ) : SendState
+
+    data class PayjoinFailed(
+        val message: String,
+    ) : SendState
 }
 
 private sealed interface SendConfirmationAlert {
     data object Sent : SendConfirmationAlert
 
     data class SendFailed(
+        val message: String,
+    ) : SendConfirmationAlert
+
+    data class PayjoinFailed(
         val message: String,
     ) : SendConfirmationAlert
 
@@ -508,8 +516,8 @@ private fun SendFlowRouteToScreen(
 
                     is PayjoinStatus.Failed -> {
                         if (status.sessionId != intent.sessionId) return@LaunchedEffect
-                        sendState = SendState.Error(status.message)
-                        confirmationAlert = SendConfirmationAlert.SendFailed(status.message)
+                        sendState = SendState.PayjoinFailed(status.message)
+                        confirmationAlert = SendConfirmationAlert.PayjoinFailed(status.message)
                     }
 
                     null -> Unit
@@ -686,6 +694,20 @@ private fun SendFlowRouteToScreen(
                     AlertDialog(
                         onDismissRequest = dismiss,
                         title = { Text("Error") },
+                        text = { Text(alert.message) },
+                        confirmButton = {
+                            TextButton(onClick = dismiss) {
+                                Text("OK")
+                            }
+                        },
+                    )
+                }
+
+                is SendConfirmationAlert.PayjoinFailed -> {
+                    val dismiss = { confirmationAlert = null }
+                    AlertDialog(
+                        onDismissRequest = dismiss,
+                        title = { Text("Payjoin payment paused") },
                         text = { Text(alert.message) },
                         confirmButton = {
                             TextButton(onClick = dismiss) {

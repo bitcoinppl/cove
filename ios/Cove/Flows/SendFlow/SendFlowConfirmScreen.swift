@@ -139,8 +139,8 @@ struct SendFlowConfirmScreen: View {
 
         case let .failed(sessionId, message):
             guard sessionId == intent.sessionId else { return }
-            sendState = .error(message)
-            presenter.confirmationAlertState = .init(.broadcastError(message))
+            sendState = .payjoinFailed(message)
+            presenter.confirmationAlertState = .init(.payjoinFailed(message))
         }
     }
 

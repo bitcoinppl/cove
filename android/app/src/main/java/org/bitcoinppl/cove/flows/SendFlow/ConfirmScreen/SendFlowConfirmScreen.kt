@@ -641,7 +641,9 @@ private fun SwipeToSendStub(
                     )
                 }
             }
-            is SendState.Error -> {
+            is SendState.Error,
+            is SendState.PayjoinFailed,
+            -> {
                 Row(
                     modifier = Modifier.align(Alignment.Center),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
