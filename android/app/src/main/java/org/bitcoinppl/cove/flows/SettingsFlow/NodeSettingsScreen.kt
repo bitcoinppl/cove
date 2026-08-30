@@ -231,7 +231,6 @@ fun NodeSettingsScreen(
             SettingsTopAppBar(
                 title = stringResource(R.string.title_settings_node),
                 onBack = { app.popRoute() },
-                modifier = Modifier.height(56.dp),
                 actions = {
                     if (isLoading) {
                         Box(
