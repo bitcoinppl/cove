@@ -1033,6 +1033,7 @@ fn restore_ohttp_relay_urls(
     Vec::new()
 }
 
+#[allow(dead_code)]
 fn wallet_name_from_backup(backup: &WalletBackup) -> String {
     if let Some(name) = backup.metadata.get("name").and_then(|v| v.as_str()) {
         return name.to_string();
@@ -1291,6 +1292,7 @@ mod tests {
                 color_scheme: None,
                 selected_nodes: Vec::new(),
                 custom_block_explorers: BTreeMap::new(),
+                ohttp_relay_urls: Vec::new(),
             },
         };
         let preparation = ImportPreparationState {
