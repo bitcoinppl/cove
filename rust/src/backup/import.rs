@@ -962,6 +962,7 @@ fn restore_settings(settings: &super::model::AppSettings) -> Result<(), BackupEr
     }
 
     errors.extend(restore_custom_block_explorers(config, &settings.custom_block_explorers));
+    errors.extend(restore_ohttp_relay_urls(config, &settings.ohttp_relay_urls));
 
     if errors.is_empty() {
         Ok(())
@@ -999,6 +1000,51 @@ fn restore_custom_block_explorers(
     }
 
     errors
+}
+
+fn restore_ohttp_relay_urls(
+    config: &GlobalConfigTable,
+    ohttp_relay_urls: &[String],
+) -> Vec<String> {
+    if ohttp_relay_urls.is_empty() {
+        return Vec::new();
+    }
+
+    let valid: Vec<String> = ohttp_relay_urls
+        .iter()
+        .filter(|url| !url.trim().is_empty())
+        .filter_map(|url| match GlobalConfigTable::parse_ohttp_relay_url(url.trim()) {
+            Ok(canonical) => Some(canonical),
+            Err(error) => {
+                warn!("skipping invalid ohttp relay url: {error}");
+                None
+            }
+        })
+        .collect();
+
+    if valid.is_empty() {
+        return Vec::new();
+    }
+
+    if let Err(error) = config.set_ohttp_relay_urls(valid) {
+        return vec![format!("ohttp relay urls: {error}")];
+    }
+
+    Vec::new()
+}
+
+#[allow(dead_code)]
+fn wallet_name_from_backup(backup: &WalletBackup) -> String {
+    if let Some(name) = backup.metadata.get("name").and_then(|v| v.as_str()) {
+        return name.to_string();
+    }
+
+    if let Some(id) = backup.metadata.get("id").and_then(|v| v.as_str()) {
+        return format!("(id: {id})");
+    }
+
+    warn!("wallet backup has no name or id in metadata: {}", backup.metadata);
+    "unknown".to_string()
 }
 
 #[cfg(test)]
@@ -1101,6 +1147,46 @@ mod tests {
             Some("https://existing.example/tx/{txid}")
         );
         assert_eq!(config.custom_block_explorer(Network::Signet), None);
+    }
+
+    #[test]
+    fn backup_import_restores_valid_ohttp_relay_urls() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, config) = test_config();
+
+        let errors = restore_ohttp_relay_urls(
+            &config,
+            &["https://relay1.example.com".to_string(), "https://relay2.example.com".to_string()],
+        );
+
+        assert!(errors.is_empty());
+        assert_eq!(
+            config.ohttp_relay_urls(),
+            vec!["https://relay1.example.com/", "https://relay2.example.com/"]
+        );
+    }
+
+    #[test]
+    fn backup_import_skips_invalid_ohttp_relay_urls_without_clearing_existing() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, config) = test_config();
+        config.set_ohttp_relay_urls(vec!["https://existing.example".to_string()]).unwrap();
+
+        let errors = restore_ohttp_relay_urls(&config, &["http://insecure.example".to_string()]);
+        assert!(errors.is_empty());
+        assert_eq!(config.ohttp_relay_urls(), vec!["https://existing.example/"]);
+
+        let errors = restore_ohttp_relay_urls(&config, &["   ".to_string()]);
+        assert!(errors.is_empty());
+        assert_eq!(config.ohttp_relay_urls(), vec!["https://existing.example/"]);
+
+        // mixed batch: valid URLs are kept and invalid ones are skipped
+        let errors = restore_ohttp_relay_urls(
+            &config,
+            &["https://valid.example".to_string(), "http://insecure.example".to_string()],
+        );
+        assert!(errors.is_empty());
+        assert_eq!(config.ohttp_relay_urls(), vec!["https://valid.example/"]);
     }
 
     fn test_config() -> (tempfile::TempDir, GlobalConfigTable) {
@@ -1206,6 +1292,7 @@ mod tests {
                 color_scheme: None,
                 selected_nodes: Vec::new(),
                 custom_block_explorers: BTreeMap::new(),
+                ohttp_relay_urls: Vec::new(),
             },
         };
         let preparation = ImportPreparationState {
