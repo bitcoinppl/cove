@@ -289,7 +289,7 @@ fn ohttp_relays() -> Vec<String> {
     if !custom.is_empty() {
         return custom;
     }
-    let mut relays: Vec<String> = OHTTP_RELAYS.iter().map(|s| s.to_string()).collect();
+    let mut relays: Vec<String> = OHTTP_RELAYS.iter().map(ToString::to_string).collect();
     relays.shuffle(&mut rand::rng());
     relays
 }
