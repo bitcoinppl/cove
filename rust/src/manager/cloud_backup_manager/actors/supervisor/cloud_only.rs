@@ -38,7 +38,7 @@ impl CloudBackupSupervisor {
 
     pub(crate) fn begin_restore_cloud_wallet_operation(&mut self, record_id: String) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         let Some(claim) = self
             .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet)
         else {
@@ -56,7 +56,7 @@ impl CloudBackupSupervisor {
 
     pub(crate) fn begin_delete_cloud_wallet_operation(&mut self, record_id: String) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         let Some(claim) = self
             .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::DeleteCloudWallet)
         else {
@@ -115,7 +115,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupPreparedCloudWalletDelete, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -152,7 +152,7 @@ impl CloudBackupSupervisor {
         record_id: String,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -190,7 +190,7 @@ impl CloudBackupSupervisor {
         record_id: String,
         result: Result<WalletRestoreOutcome, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
 

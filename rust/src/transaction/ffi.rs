@@ -7,7 +7,7 @@ use derive_more::{
 use jiff::ToSpan as _;
 use rand::RngExt as _;
 
-use crate::{multi_format::StringOrData, push_tx::PushTx};
+use crate::push_tx::PushTx;
 
 use super::*;
 
@@ -102,19 +102,6 @@ impl BitcoinTransaction {
         Self::try_from_str(&tx_hex)
     }
 
-    #[uniffi::constructor(name = "tryFromData")]
-    pub fn _try_from_data(data: Vec<u8>) -> Result<Self> {
-        Self::try_from_data(&data)
-    }
-
-    #[uniffi::constructor(name = "tryFromStringOrData")]
-    pub fn try_from_string_or_data(string_or_data: StringOrData) -> Result<Self> {
-        match string_or_data {
-            StringOrData::String(tx_hex) => Self::try_from_str(&tx_hex),
-            StringOrData::Data(tx_bytes) => Self::try_from_data(&tx_bytes),
-        }
-    }
-
     #[uniffi::constructor(name = "tryFromNfcMessage")]
     pub fn _try_from_nfc_message(nfc_message: Arc<NfcMessage>) -> Result<Self> {
         Self::try_from_nfc_message(&nfc_message)
@@ -128,11 +115,6 @@ impl BitcoinTransaction {
     #[uniffi::method]
     pub fn tx_id_hash(&self) -> String {
         self.tx_id().0.to_raw_hash().to_string()
-    }
-
-    #[uniffi::method]
-    pub fn normalize_tx_id(&self) -> String {
-        self.0.compute_ntxid().to_string()
     }
 }
 
@@ -155,12 +137,7 @@ impl ConfirmedTransaction {
 
     #[uniffi::method]
     pub fn label_opt(&self) -> Option<String> {
-        let label = self.labels.transaction_label()?;
-        if label.is_empty() {
-            return None;
-        }
-
-        Some(label.to_string())
+        super::non_empty_transaction_label(&self.labels)
     }
 
     #[uniffi::method]
@@ -176,11 +153,6 @@ impl ConfirmedTransaction {
     #[uniffi::method]
     pub fn confirmed_at_fmt(&self) -> String {
         self.confirmed_at.strftime("%B %d, %Y").to_string()
-    }
-
-    #[uniffi::method]
-    pub fn confirmed_at_fmt_with_time(&self) -> String {
-        self.confirmed_at.strftime("%B %e, %Y at %-I:%M %p").to_string()
     }
 
     #[uniffi::method]

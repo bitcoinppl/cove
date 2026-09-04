@@ -15,8 +15,7 @@ use crate::{
     Error, ProgressiveScanner, Result, ScanEvent,
     core::{
         KeychainScanResult, ScanAccumulator, SpkBatcher, StopGapTracker, confirmed_status,
-        insert_evicted_ats_from_expected, insert_prevout_txouts, insert_tx_status,
-        scan_update_for_keychain,
+        insert_evicted_ats_from_expected, insert_tx_status, scan_update_for_keychain,
     },
     event::{
         clone_full_scan_response, send_complete_async_unless_cancelled, send_progress,
@@ -330,18 +329,15 @@ fn insert_prevouts(
 ) {
     let prevouts =
         esplora_inputs.into_iter().filter_map(|vin| Some((vin.txid, vin.vout, vin.prevout?)));
-    insert_prevout_txouts(
-        update,
-        prevouts.map(|(prev_txid, prev_vout, prev_txout)| {
-            (
-                OutPoint::new(prev_txid, prev_vout),
-                TxOut {
-                    script_pubkey: prev_txout.scriptpubkey,
-                    value: Amount::from_sat(prev_txout.value),
-                },
-            )
-        }),
-    );
+    update.txouts.extend(prevouts.map(|(prev_txid, prev_vout, prev_txout)| {
+        (
+            OutPoint::new(prev_txid, prev_vout),
+            TxOut {
+                script_pubkey: prev_txout.scriptpubkey,
+                value: Amount::from_sat(prev_txout.value),
+            },
+        )
+    }));
 }
 
 async fn fetch_latest_blocks<S>(

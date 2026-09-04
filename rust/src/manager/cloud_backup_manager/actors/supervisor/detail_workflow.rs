@@ -6,7 +6,7 @@ use crate::manager::cloud_backup_manager::{
     VerificationState,
 };
 
-pub(super) const DETAIL_REFRESH_MINIMUM_INTERVAL: Duration = Duration::from_secs(5);
+pub(crate) const DETAIL_REFRESH_MINIMUM_INTERVAL: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct DetailRefreshClaim {
@@ -18,7 +18,7 @@ pub(crate) struct DetailRefreshClaim {
 pub(crate) struct DetailResultClaim(u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum DetailRefreshPlan {
+pub(crate) enum DetailRefreshPlan {
     Start(DetailRefreshClaim),
     Wait { owner: u64, delay: Duration },
     Queued,
@@ -26,9 +26,9 @@ pub(super) enum DetailRefreshPlan {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct DetailRefreshCompletion {
-    pub(super) apply: bool,
-    pub(super) next: DetailRefreshPlan,
+pub(crate) struct DetailRefreshCompletion {
+    pub(crate) apply: bool,
+    pub(crate) next: DetailRefreshPlan,
 }
 
 #[derive(Debug, Default)]
@@ -43,7 +43,7 @@ struct DetailRefreshCoordinator {
 }
 
 impl DetailRefreshCoordinator {
-    pub(super) fn open(&mut self) {
+    pub(crate) fn open(&mut self) {
         if self.is_open {
             return;
         }
@@ -55,7 +55,7 @@ impl DetailRefreshCoordinator {
         self.timer_scheduled = false;
     }
 
-    pub(super) fn request(&mut self, now: Duration) -> DetailRefreshPlan {
+    pub(crate) fn request(&mut self, now: Duration) -> DetailRefreshPlan {
         if !self.is_open {
             return DetailRefreshPlan::Ignored;
         }
@@ -78,7 +78,7 @@ impl DetailRefreshCoordinator {
         self.start(now)
     }
 
-    pub(super) fn timer_elapsed(&mut self, owner: u64, now: Duration) -> DetailRefreshPlan {
+    pub(crate) fn timer_elapsed(&mut self, owner: u64, now: Duration) -> DetailRefreshPlan {
         if !self.is_open || self.owner != owner || !self.timer_scheduled {
             return DetailRefreshPlan::Ignored;
         }
@@ -91,7 +91,7 @@ impl DetailRefreshCoordinator {
         self.request(now)
     }
 
-    pub(super) fn complete(
+    pub(crate) fn complete(
         &mut self,
         claim: DetailRefreshClaim,
         now: Duration,
@@ -111,7 +111,7 @@ impl DetailRefreshCoordinator {
         DetailRefreshCompletion { apply: true, next }
     }
 
-    pub(super) fn is_active(&self, claim: DetailRefreshClaim) -> bool {
+    pub(crate) fn is_active(&self, claim: DetailRefreshClaim) -> bool {
         self.is_open && claim.owner == self.owner && self.in_flight == Some(claim)
     }
 
@@ -132,7 +132,7 @@ impl DetailRefreshCoordinator {
 }
 
 #[derive(Debug)]
-pub(super) struct DetailWorkflow {
+pub(crate) struct DetailWorkflow {
     refresh: DetailRefreshCoordinator,
     clock: Instant,
     pending_verification_completion: Option<PendingVerificationCompletion>,
@@ -156,25 +156,25 @@ impl Default for DetailWorkflow {
 }
 
 impl DetailWorkflow {
-    pub(super) fn open(&mut self) {
+    pub(crate) fn open(&mut self) {
         self.refresh.open();
     }
 
-    pub(super) fn is_open(&self) -> bool {
+    pub(crate) fn is_open(&self) -> bool {
         self.refresh.is_open
     }
 
-    pub(super) fn request_refresh(&mut self) -> DetailRefreshPlan {
+    pub(crate) fn request_refresh(&mut self) -> DetailRefreshPlan {
         let plan = self.refresh.request(self.now());
         self.admit_refresh_plan(plan)
     }
 
-    pub(super) fn timer_elapsed(&mut self, owner: u64) -> DetailRefreshPlan {
+    pub(crate) fn timer_elapsed(&mut self, owner: u64) -> DetailRefreshPlan {
         let plan = self.refresh.timer_elapsed(owner, self.now());
         self.admit_refresh_plan(plan)
     }
 
-    pub(super) fn complete_refresh(
+    pub(crate) fn complete_refresh(
         &mut self,
         claim: DetailRefreshClaim,
     ) -> DetailRefreshCompletion {
@@ -184,26 +184,26 @@ impl DetailWorkflow {
         completion
     }
 
-    pub(super) fn is_refresh_active(&self, claim: DetailRefreshClaim) -> bool {
+    pub(crate) fn is_refresh_active(&self, claim: DetailRefreshClaim) -> bool {
         self.refresh.is_active(claim)
     }
 
-    pub(super) fn is_latest_refresh(&self, claim: DetailRefreshClaim) -> bool {
+    pub(crate) fn is_latest_refresh(&self, claim: DetailRefreshClaim) -> bool {
         self.is_latest_result(DetailResultClaim(claim.generation))
     }
 
-    pub(super) fn start_operation_result(&mut self) -> DetailResultClaim {
+    pub(crate) fn start_operation_result(&mut self) -> DetailResultClaim {
         let claim = DetailResultClaim(self.next_result_generation);
         self.next_result_generation = self.next_result_generation.wrapping_add(1);
         self.newest_result_generation = Some(claim.0);
         claim
     }
 
-    pub(super) fn is_latest_result(&self, claim: DetailResultClaim) -> bool {
+    pub(crate) fn is_latest_result(&self, claim: DetailResultClaim) -> bool {
         self.newest_result_generation == Some(claim.0)
     }
 
-    pub(super) fn entry_plan(&self, manager: &RustCloudBackupManager) -> DetailEntryPlan {
+    pub(crate) fn entry_plan(&self, manager: &RustCloudBackupManager) -> DetailEntryPlan {
         let state = manager.state.read();
         if !matches!(state.status(), CloudBackupStatus::Enabled) {
             return DetailEntryPlan::RefreshOnly;
@@ -233,19 +233,19 @@ impl DetailWorkflow {
         DetailEntryPlan::StartPasskeyVerification { force_discoverable: true }
     }
 
-    pub(super) fn cache_pending_completion(&mut self, completion: PendingVerificationCompletion) {
+    pub(crate) fn cache_pending_completion(&mut self, completion: PendingVerificationCompletion) {
         self.pending_verification_completion = Some(completion);
     }
 
-    pub(super) fn clear_pending_completion(&mut self) {
+    pub(crate) fn clear_pending_completion(&mut self) {
         self.pending_verification_completion = None;
     }
 
-    pub(super) fn set_authorization(&mut self, authorization: RuntimePasskeyAuthorization) {
+    pub(crate) fn set_authorization(&mut self, authorization: RuntimePasskeyAuthorization) {
         self.runtime_passkey_authorization = Some(authorization);
     }
 
-    pub(super) fn clear_authorization(&mut self) {
+    pub(crate) fn clear_authorization(&mut self) {
         self.runtime_passkey_authorization = None;
     }
 

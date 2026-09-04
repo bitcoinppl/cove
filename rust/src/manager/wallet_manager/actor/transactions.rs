@@ -260,7 +260,7 @@ impl WalletActor {
             slow: self.fee_option_with_total_fee(
                 fee_rate_options.slow,
                 amount,
-                address.clone(),
+                address,
                 &spend_policy,
             )?,
             custom: None,
@@ -637,6 +637,8 @@ impl WalletActor {
         self.start_broadcast_transaction(transaction)
     }
 
+    // the actor callers return this through `call!`, whose contract is the nested `Result`
+    #[allow(clippy::unnecessary_wraps)]
     fn start_broadcast_transaction(
         &mut self,
         transaction: BdkTransaction,

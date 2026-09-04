@@ -1,4 +1,4 @@
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::Duration;
 
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use bdk_wallet::{
@@ -63,9 +63,12 @@ impl WalletActor {
                 request_id,
                 now,
                 derivation_index,
-            } => {
-                self.deferred_open_cached_receive_address(cache, request_id, now, derivation_index)
-            }
+            } => Ok(self.deferred_open_cached_receive_address(
+                cache,
+                request_id,
+                now,
+                derivation_index,
+            )),
         }
     }
 
@@ -103,7 +106,7 @@ impl WalletActor {
         request_id: u64,
         now: u64,
         derivation_index: u32,
-    ) -> ActorResult<()> {
+    ) -> Produces<()> {
         let (node, graph, sync_request) = self.receive_address_sync_inputs(derivation_index);
         let address =
             self.wallet.bdk.peek_address(KeychainKind::External, derivation_index).address;
@@ -140,7 +143,7 @@ impl WalletActor {
             let _ = reply.send(Produces::Value(()));
         });
 
-        Ok(Produces::Deferred(receiver))
+        Produces::Deferred(receiver)
     }
 
     async fn finish_open_receive_address_after_activity_check(
@@ -655,5 +658,5 @@ impl WalletActor {
 }
 
 fn current_epoch_secs() -> u64 {
-    UNIX_EPOCH.elapsed().unwrap_or_default().as_secs()
+    cove_util::time::unix_timestamp_secs().unwrap_or_default()
 }

@@ -4,21 +4,18 @@ use cove_util::format::NumberFormatter as _;
 
 use crate::{
     database::Database,
-    fiat::{
-        FiatCurrency,
-        client::{FIAT_CLIENT, PriceResponse},
-    },
+    fiat::{FiatCurrency, client::PriceResponse},
     transaction::{Amount, SentAndReceived, TransactionDirection},
     wallet::amount_display,
 };
 
-use super::{Error, RustWalletManager};
+use super::RustWalletManager;
 
-#[uniffi::export(async_runtime = "tokio")]
+#[uniffi::export]
 impl RustWalletManager {
     #[uniffi::method]
     pub fn selected_fiat_currency(&self) -> FiatCurrency {
-        Database::global().global_config.fiat_currency().unwrap_or_default()
+        Database::global().global_config.selected_fiat_currency()
     }
 
     /// Sync method using cached prices, returns None if no cached prices
@@ -127,22 +124,6 @@ impl RustWalletManager {
     ) -> String {
         let fiat = self.convert_to_fiat(amount, prices);
         self.display_fiat_amount(fiat, with_suffix)
-    }
-
-    #[uniffi::method]
-    pub async fn sent_and_received_fiat(
-        &self,
-        sent_and_received: Arc<SentAndReceived>,
-    ) -> Result<f64, Error> {
-        let amount = sent_and_received.amount();
-        let currency = self.selected_fiat_currency();
-
-        let fiat =
-            FIAT_CLIENT.current_value_in_currency(amount, currency).await.map_err(|error| {
-                Error::FiatError(format!("unable to get fiat value for amount: {error}"))
-            })?;
-
-        Ok(fiat)
     }
 
     #[uniffi::method]

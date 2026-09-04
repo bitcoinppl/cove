@@ -686,7 +686,7 @@ fn cloud_restore_snapshot(
 
     let existing_xpub = Keychain::global()
         .get_wallet_xpub(&metadata.id)
-        .map_err(|error| BackupError::Keychain(format!("cloud restore xpub: {error}")))?;
+        .map_err_prefix("cloud restore xpub", BackupError::Keychain)?;
 
     if existing_xpub.is_some() && existing_xpub != expected_xpub {
         return Err(BackupError::WalletIdOccupied(metadata.id.clone()));
@@ -888,9 +888,8 @@ fn restore_descriptor_wallet_inner_prepared(
 }
 
 fn import_labels(id: &WalletId, jsonl: &str) -> Result<(), BackupError> {
-    let manager = LabelManager::try_new(id.clone())
-        .map_err(|error| BackupError::Restore(error.to_string()))?;
-    manager.import(jsonl).map_err(|e| BackupError::Restore(e.to_string()))
+    let manager = LabelManager::try_new(id.clone()).map_err_str(BackupError::Restore)?;
+    manager.import(jsonl).map_err_str(BackupError::Restore)
 }
 
 pub(crate) fn restore_wallet_labels(
@@ -907,10 +906,8 @@ pub(crate) fn restore_wallet_labels(
     let import_result = match behavior {
         LabelRestoreBehavior::MarkCloudBackupDirty => import_labels(wallet_id, jsonl),
         LabelRestoreBehavior::PreserveCloudBackupClean => {
-            manager.map_err(|error| BackupError::Restore(error.to_string())).and_then(|manager| {
-                manager
-                    .import_without_cloud_backup_dirty(jsonl)
-                    .map_err(|error| BackupError::Restore(error.to_string()))
+            manager.map_err_str(BackupError::Restore).and_then(|manager| {
+                manager.import_without_cloud_backup_dirty(jsonl).map_err_str(BackupError::Restore)
             })
         }
     };
@@ -1107,7 +1104,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let db = Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());
         let write_txn = db.begin_write().unwrap();
-        let table = GlobalConfigTable::new(db.clone(), &write_txn);
+        let table = GlobalConfigTable::new(db, &write_txn);
         write_txn.commit().unwrap();
 
         (tmp, table)

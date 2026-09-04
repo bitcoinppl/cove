@@ -12,6 +12,7 @@ use super::{
     load_master_key_for_cloud_action,
 };
 use crate::database::Database;
+use crate::manager::cloud_backup_manager::actors::restore::lookup_wallet_backup;
 use crate::manager::cloud_backup_manager::wallets::{
     WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
@@ -137,9 +138,7 @@ impl RustCloudBackupManager {
 
         let mut items = Vec::new();
         let mut lookups = stream::iter(
-            orphan_ids
-                .into_iter()
-                .map(|record_id| Self::lookup_wallet_backup(reader.clone(), record_id)),
+            orphan_ids.into_iter().map(|record_id| lookup_wallet_backup(reader.clone(), record_id)),
         )
         .buffered(CLOUD_BACKUP_IO_CONCURRENCY);
 

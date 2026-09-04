@@ -1341,7 +1341,7 @@ mod tests {
         let wallet_generation = WalletScanGeneration::INITIAL;
         let (first_generation, first_cancel_token) =
             scan_actor.start_scan_generation(wallet_generation);
-        let first_token_observer = first_cancel_token.clone();
+        let first_token_observer = first_cancel_token;
 
         let (second_generation, second_cancel_token) =
             scan_actor.start_scan_generation(wallet_generation.next());

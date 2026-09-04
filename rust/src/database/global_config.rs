@@ -20,6 +20,7 @@ use crate::{
 
 use super::{Error, error::SerdeError};
 use crate::string_config_accessor;
+use cove_util::result_ext::ResultExt as _;
 
 pub const TABLE: TableDefinition<&'static str, String> = TableDefinition::new("global_config");
 
@@ -140,12 +141,6 @@ impl GlobalConfigTable {
     string_config_accessor!(priv_hashed_pin_code, GlobalConfigKey::HashedPinCode, String);
 
     string_config_accessor!(pub locked_at, GlobalConfigKey::LockedAt, u64);
-
-    // string_config_accessor!(
-    //     pub auth_type,
-    //     GlobalConfigKey::AuthType,
-    //     AuthType
-    // );
 }
 
 impl GlobalConfigTable {
@@ -232,6 +227,13 @@ impl GlobalConfigTable {
     }
 }
 
+impl GlobalConfigTable {
+    /// The selected fiat currency, falling back to the default when none is saved
+    pub fn selected_fiat_currency(&self) -> FiatCurrency {
+        self.fiat_currency().unwrap_or_default()
+    }
+}
+
 #[uniffi::export]
 impl GlobalConfigTable {
     pub fn select_wallet(&self, id: WalletId) -> Result<()> {
@@ -299,8 +301,7 @@ impl GlobalConfigTable {
 
     pub fn set_selected_node(&self, node: &Node) -> Result<()> {
         let network = node.network;
-        let node_json = serde_json::to_string(node)
-            .map_err(|error| SerdeError::SerializationError(error.to_string()))?;
+        let node_json = serde_json::to_string(node).map_err_str(SerdeError::SerializationError)?;
 
         let selected_node_key = GlobalConfigKey::SelectedNode(network);
 
@@ -395,7 +396,7 @@ impl GlobalConfigTable {
 
     #[uniffi::method(name = "selectedFiatCurrency")]
     fn _selected_fiat_currency(&self) -> FiatCurrency {
-        self.fiat_currency().unwrap_or_default()
+        self.selected_fiat_currency()
     }
 
     #[uniffi::method(name = "authType")]
@@ -406,11 +407,6 @@ impl GlobalConfigTable {
     #[uniffi::method(name = "colorScheme")]
     pub fn _color_scheme(&self) -> ColorSchemeSelection {
         self.color_scheme().unwrap_or_default()
-    }
-
-    #[uniffi::method(name = "setColorScheme")]
-    pub fn _set_color_scheme(&self, color_scheme: ColorSchemeSelection) -> Result<()> {
-        self.set_color_scheme(color_scheme)
     }
 
     pub fn hashed_pin_code(&self) -> Result<String> {
@@ -434,37 +430,28 @@ impl GlobalConfigTable {
     }
 
     pub(crate) fn get(&self, key: GlobalConfigKey) -> Result<Option<String>> {
-        let read_txn =
-            self.db.begin_read().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let read_txn = self.db.begin_read().map_err_str(Error::DatabaseAccess)?;
 
-        let table =
-            read_txn.open_table(TABLE).map_err(|error| Error::TableAccess(error.to_string()))?;
+        let table = read_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
         let key: &'static str = key.into();
-        let value = table
-            .get(key)
-            .map_err(|error| GlobalConfigTableError::Read(error.to_string()))?
-            .map(|value| value.value());
+        let value =
+            table.get(key).map_err_str(GlobalConfigTableError::Read)?.map(|value| value.value());
 
         Ok(value)
     }
 
     pub(crate) fn set(&self, key: GlobalConfigKey, value: String) -> Result<()> {
-        let write_txn =
-            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
         {
-            let mut table = write_txn
-                .open_table(TABLE)
-                .map_err(|error| Error::TableAccess(error.to_string()))?;
+            let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
             let key: &'static str = key.into();
-            table
-                .insert(key, value)
-                .map_err(|error| GlobalConfigTableError::Save(error.to_string()))?;
+            table.insert(key, value).map_err_str(GlobalConfigTableError::Save)?;
         }
 
-        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
 
         Updater::send_update(Update::DatabaseUpdated);
 
@@ -472,19 +459,16 @@ impl GlobalConfigTable {
     }
 
     pub fn delete(&self, key: GlobalConfigKey) -> Result<()> {
-        let write_txn =
-            self.db.begin_write().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
         {
-            let mut table = write_txn
-                .open_table(TABLE)
-                .map_err(|error| Error::TableAccess(error.to_string()))?;
+            let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
             let key: &'static str = key.into();
-            table.remove(key).map_err(|error| GlobalConfigTableError::Save(error.to_string()))?;
+            table.remove(key).map_err_str(GlobalConfigTableError::Save)?;
         }
 
-        write_txn.commit().map_err(|error| Error::DatabaseAccess(error.to_string()))?;
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
 
         Updater::send_update(Update::DatabaseUpdated);
 
@@ -729,7 +713,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let db = std::sync::Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());
         let write_txn = db.begin_write().unwrap();
-        let table = super::GlobalConfigTable::new(db.clone(), &write_txn);
+        let table = super::GlobalConfigTable::new(db, &write_txn);
         write_txn.commit().unwrap();
 
         (tmp, table)

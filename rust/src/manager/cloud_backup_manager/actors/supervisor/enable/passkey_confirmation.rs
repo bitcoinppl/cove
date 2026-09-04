@@ -30,7 +30,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: CloudBackupSavedPasskeyConfirmation,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -92,10 +92,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         mode: SavedPasskeyConfirmationMode,
     ) -> bool {
-        let Some(addr) = self.addr() else {
-            warn!("Could not schedule enable saved-passkey wait without supervisor addr");
-            return false;
-        };
+        let addr = self.addr();
 
         cove_tokio::task::spawn(async move {
             delay_before_new_passkey_auth().await;
@@ -122,7 +119,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         retry: SavedPasskeyConfirmationRetry,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -168,11 +165,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         pending: PendingEnableSession,
     ) -> bool {
-        let Some(addr) = self.addr() else {
-            self.pending_enable_session = Some(pending);
-            warn!("Could not confirm saved passkey without supervisor addr");
-            return false;
-        };
+        let addr = self.addr();
 
         manager.apply_enable_state(CloudBackupEnableState::ConfirmingSavedPasskey);
         addr.send_fut_with(move |addr| async move {

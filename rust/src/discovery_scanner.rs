@@ -639,12 +639,11 @@ impl WalletDiscoveryWorker {
         client_builder: NodeClientBuilder,
     ) -> Result<Self, WalletScannerError> {
         debug!("creating wallet discovery scanner for {id}, type: {wallet_type}");
-        let db = WalletDataDb::new_or_existing(id.clone())
-            .map_err(|error| WalletError::LoadError(error.to_string()))?;
+        let db = WalletDataDb::new_or_existing(id).map_err_str(WalletError::LoadError)?;
 
         let scan_info = db
             .get_scan_state(wallet_type)
-            .map_err(|error| WalletError::LoadError(error.to_string()))?
+            .map_err_str(WalletError::LoadError)?
             .map(|scan_state| match scan_state {
                 ScanState::Scanning(info) => info,
                 ScanState::Completed => {
@@ -778,7 +777,7 @@ impl Wallets {
             )
             .network(network)
             .create_wallet_no_persist()
-            .map_err(|error| WalletError::BdkError(error.to_string()))?;
+            .map_err_str(WalletError::BdkError)?;
 
             wallets[index(type_)] = Some((type_, wallet));
         }

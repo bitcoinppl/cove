@@ -120,10 +120,6 @@ impl PersistedCloudBackupState {
         matches!(self.status(), PersistedCloudBackupStatus::Unverified)
     }
 
-    pub fn is_passkey_missing(&self) -> bool {
-        matches!(self.status(), PersistedCloudBackupStatus::PasskeyMissing)
-    }
-
     pub fn last_sync(&self) -> Option<u64> {
         self.configured().and_then(|configured| configured.sync.last_sync)
     }

@@ -139,7 +139,7 @@ pub(crate) const CLOUD_BACKUP_IO_CONCURRENCY: usize = 4;
 type Message = CloudBackupReconcileMessage;
 
 pub(crate) fn current_timestamp() -> u64 {
-    jiff::Timestamp::now().as_second().try_into().unwrap_or(0)
+    cove_util::time::unix_timestamp_secs().unwrap_or(0)
 }
 
 #[derive(Debug, Default)]
@@ -433,7 +433,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn current_status(&self) -> CloudBackupStatus {
-        self.state.read().status().clone()
+        self.state.read().status()
     }
 
     fn apply_local_reset_projection(&self) {
@@ -1220,16 +1220,6 @@ impl RustCloudBackupManager {
             | CloudBackupLifecycle::PendingEnableRecovery(_)
             | CloudBackupLifecycle::Failed(_) => CloudBackupOnboardingCompletionReadiness::NotReady,
         }
-    }
-
-    /// Whether the persisted cloud backup state is unverified
-    pub fn is_cloud_backup_unverified(&self) -> bool {
-        Self::load_persisted_state().is_unverified()
-    }
-
-    /// Whether the persisted cloud backup passkey is missing
-    pub fn is_cloud_backup_passkey_missing(&self) -> bool {
-        Self::load_persisted_state().is_passkey_missing()
     }
 
     pub fn has_pending_cloud_upload_verification(&self) -> bool {

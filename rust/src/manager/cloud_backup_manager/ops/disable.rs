@@ -1,3 +1,4 @@
+use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -177,7 +178,8 @@ impl RustCloudBackupManager {
 
     fn ensure_disable_can_start(&self) -> Result<(), CloudBackupError> {
         let state = self.state.read();
-        if let Some(operation) = state.active_operation().map(|claim| claim.operation())
+        if let Some(operation) =
+            state.active_operation().map(CloudBackupExclusiveOperationClaim::operation)
             && operation != CloudBackupExclusiveOperation::Disable
         {
             return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));

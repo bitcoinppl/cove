@@ -41,11 +41,6 @@ impl FiatAmount {
     }
 }
 
-#[uniffi::export]
-fn fiat_amount_preview_new() -> FiatAmount {
-    FiatAmount::preview_new()
-}
-
 impl Eq for FiatAmount {}
 impl PartialEq for FiatAmount {
     fn eq(&self, other: &Self) -> bool {

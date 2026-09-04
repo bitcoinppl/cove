@@ -6,7 +6,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -53,10 +53,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         context: CloudBackupEnableContext,
     ) {
-        let Some(addr) = self.addr() else {
-            warn!("Could not schedule create-new enable passkey without supervisor addr");
-            return;
-        };
+        let addr = self.addr();
 
         addr.send_fut_with(move |addr| async move {
             let result = manager.prepare_create_new_enable_passkey(context).await;
@@ -69,7 +66,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePasskeyPreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -111,7 +108,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupNoDiscoveryEnablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -154,10 +151,7 @@ impl CloudBackupSupervisor {
         context: CloudBackupEnableContext,
         flow: EnablePasskeyRegistrationFlow,
     ) {
-        let Some(addr) = self.addr() else {
-            warn!("Could not schedule enable passkey registration without supervisor addr");
-            return;
-        };
+        let addr = self.addr();
 
         addr.send_fut_with(move |addr| async move {
             let result = manager.prepare_new_enable_passkey_for_confirmation(context, flow).await;
@@ -170,7 +164,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePasskeyRegistration, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -287,10 +281,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         ready: CloudBackupReadyEnableUpload,
     ) {
-        let Some(addr) = self.addr() else {
-            warn!("Could not schedule enable upload without supervisor addr");
-            return;
-        };
+        let addr = self.addr();
 
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         cove_tokio::task::spawn(async move {
@@ -304,7 +295,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupUploadedEnableBackup, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -412,7 +403,7 @@ impl CloudBackupSupervisor {
         finalization: EnableUploadFinalization,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -475,7 +466,7 @@ impl CloudBackupSupervisor {
         }
 
         self.detail_workflow.set_authorization(RuntimePasskeyAuthorization {
-            namespace_id: namespace_id.clone(),
+            namespace_id,
             credential_id: passkey.credential_id.clone(),
             prf_salt: passkey.prf_salt,
         });

@@ -221,7 +221,7 @@ impl RustCoinControlManager {
                 self.reconciler.send(Message::UpdateSearch(String::new()));
             }
             Action::ToggleSelectAll => {
-                self.clone().toggle_select_all();
+                self.toggle_select_all();
             }
             Action::ToggleUnit => {
                 let new_unit = {
@@ -488,7 +488,7 @@ mod tests {
 
         let selection_changed = {
             let mut state = manager.state.lock();
-            state.selected_utxos = vec![locked.clone(), unlocked.clone()];
+            state.selected_utxos = vec![locked, unlocked.clone()];
             state.load_utxo_labels()
         };
 

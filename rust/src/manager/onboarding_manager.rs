@@ -549,7 +549,7 @@ impl RustOnboardingManager {
     }
 
     fn is_restore_attempt_current(state: &Arc<RwLock<InternalState>>, attempt_id: u64) -> bool {
-        state.read().is_restore_attempt_current(attempt_id)
+        state.read().flow.is_restore_attempt_current(attempt_id)
     }
 
     fn apply_restore_event(
@@ -558,7 +558,7 @@ impl RustOnboardingManager {
         event: InternalEvent,
     ) -> bool {
         Self::mutate_state_fields(state, reconciler, |state, deferred| {
-            let was_current_restore_attempt = state.is_restore_event_current(&event);
+            let was_current_restore_attempt = state.flow.is_restore_event_current(&event);
             state.apply_event(event, deferred);
             was_current_restore_attempt
         })
@@ -1384,120 +1384,87 @@ mod tests {
     }
 
     #[test]
-    fn welcome_continues_to_bitcoin_choice() {
-        let mut flow = FlowState::Welcome { error_message: None };
-        let mut restore_offer_allowed = true;
+    fn user_actions_navigate_between_onboarding_screens() {
+        struct Case {
+            start: FlowState,
+            restore_offer_allowed: bool,
+            action: OnboardingAction,
+            expects_no_command: bool,
+            reaches: fn(&FlowState) -> bool,
+        }
 
-        let command = flow.apply_user_action(
-            OnboardingAction::ContinueFromWelcome,
-            CloudRestoreDiscovery::Checking,
-            &mut restore_offer_allowed,
-            None,
-        );
-
-        assert_eq!(command, TransitionCommand::None);
-        assert!(matches!(flow, FlowState::BitcoinChoice { error_message: None }));
-        assert!(restore_offer_allowed);
-    }
-
-    #[test]
-    fn existing_bitcoin_choice_goes_directly_to_storage_choice() {
-        let mut flow = FlowState::BitcoinChoice { error_message: None };
-        let mut restore_offer_allowed = true;
-
-        let command = flow.apply_user_action(
-            OnboardingAction::SelectHasBitcoin { has_bitcoin: true },
-            CloudRestoreDiscovery::Checking,
-            &mut restore_offer_allowed,
-            None,
-        );
-
-        assert_eq!(command, TransitionCommand::None);
-        assert!(matches!(flow, FlowState::StorageChoice { error_message: None }));
-        assert!(restore_offer_allowed);
-    }
-
-    #[test]
-    fn selecting_hardware_wallet_goes_to_hardware_import() {
-        let mut flow = FlowState::StorageChoice { error_message: None };
-        let mut restore_offer_allowed = true;
-
-        let command = flow.apply_user_action(
-            OnboardingAction::SelectStorage {
-                selection: OnboardingStorageSelection::HardwareWallet,
+        let cases = [
+            Case {
+                start: FlowState::Welcome { error_message: None },
+                restore_offer_allowed: true,
+                action: OnboardingAction::ContinueFromWelcome,
+                expects_no_command: true,
+                reaches: |flow| matches!(flow, FlowState::BitcoinChoice { error_message: None }),
             },
-            CloudRestoreDiscovery::Checking,
-            &mut restore_offer_allowed,
-            None,
-        );
-
-        assert_eq!(command, TransitionCommand::None);
-        assert!(matches!(flow, FlowState::HardwareImport));
-        assert!(restore_offer_allowed);
-    }
-
-    #[test]
-    fn selecting_software_wallet_goes_to_software_import() {
-        let mut flow = FlowState::StorageChoice { error_message: None };
-        let mut restore_offer_allowed = true;
-
-        let command = flow.apply_user_action(
-            OnboardingAction::SelectStorage {
-                selection: OnboardingStorageSelection::SoftwareWallet,
+            Case {
+                start: FlowState::BitcoinChoice { error_message: None },
+                restore_offer_allowed: true,
+                action: OnboardingAction::SelectHasBitcoin { has_bitcoin: true },
+                expects_no_command: true,
+                reaches: |flow| matches!(flow, FlowState::StorageChoice { error_message: None }),
             },
-            CloudRestoreDiscovery::Checking,
-            &mut restore_offer_allowed,
-            None,
-        );
+            Case {
+                start: FlowState::StorageChoice { error_message: None },
+                restore_offer_allowed: true,
+                action: OnboardingAction::SelectStorage {
+                    selection: OnboardingStorageSelection::HardwareWallet,
+                },
+                expects_no_command: true,
+                reaches: |flow| matches!(flow, FlowState::HardwareImport),
+            },
+            Case {
+                start: FlowState::StorageChoice { error_message: None },
+                restore_offer_allowed: true,
+                action: OnboardingAction::SelectStorage {
+                    selection: OnboardingStorageSelection::SoftwareWallet,
+                },
+                expects_no_command: true,
+                reaches: |flow| matches!(flow, FlowState::SoftwareImport { error_message: None }),
+            },
+            Case {
+                start: FlowState::StorageChoice { error_message: Some("create failed".into()) },
+                restore_offer_allowed: true,
+                action: OnboardingAction::Back,
+                expects_no_command: false,
+                reaches: |flow| matches!(flow, FlowState::BitcoinChoice { error_message: None }),
+            },
+            Case {
+                start: FlowState::HardwareImport,
+                restore_offer_allowed: false,
+                action: OnboardingAction::Back,
+                expects_no_command: false,
+                reaches: |flow| matches!(flow, FlowState::StorageChoice { error_message: None }),
+            },
+            Case {
+                start: FlowState::SoftwareImport { error_message: Some("create failed".into()) },
+                restore_offer_allowed: false,
+                action: OnboardingAction::Back,
+                expects_no_command: false,
+                reaches: |flow| matches!(flow, FlowState::StorageChoice { error_message: None }),
+            },
+        ];
 
-        assert_eq!(command, TransitionCommand::None);
-        assert!(matches!(flow, FlowState::SoftwareImport { error_message: None }));
-        assert!(restore_offer_allowed);
-    }
+        for case in cases {
+            let mut flow = case.start;
+            let mut restore_offer_allowed = case.restore_offer_allowed;
+            let command = flow.apply_user_action(
+                case.action,
+                CloudRestoreDiscovery::Checking,
+                &mut restore_offer_allowed,
+                None,
+            );
 
-    #[test]
-    fn storage_choice_back_returns_to_bitcoin_choice() {
-        let mut flow = FlowState::StorageChoice { error_message: Some("create failed".into()) };
-        let mut restore_offer_allowed = true;
-
-        flow.apply_user_action(
-            OnboardingAction::Back,
-            CloudRestoreDiscovery::Checking,
-            &mut restore_offer_allowed,
-            None,
-        );
-
-        assert!(matches!(flow, FlowState::BitcoinChoice { error_message: None }));
-    }
-
-    #[test]
-    fn hardware_back_returns_to_storage_choice() {
-        let mut flow = FlowState::HardwareImport;
-        let mut restore_offer_allowed = false;
-
-        flow.apply_user_action(
-            OnboardingAction::Back,
-            CloudRestoreDiscovery::Checking,
-            &mut restore_offer_allowed,
-            None,
-        );
-
-        assert!(matches!(flow, FlowState::StorageChoice { error_message: None }));
-    }
-
-    #[test]
-    fn software_back_returns_to_storage_choice() {
-        let mut flow = FlowState::SoftwareImport { error_message: Some("create failed".into()) };
-        let mut restore_offer_allowed = false;
-
-        flow.apply_user_action(
-            OnboardingAction::Back,
-            CloudRestoreDiscovery::Checking,
-            &mut restore_offer_allowed,
-            None,
-        );
-
-        assert!(matches!(flow, FlowState::StorageChoice { error_message: None }));
+            if case.expects_no_command {
+                assert_eq!(command, TransitionCommand::None);
+                assert!(restore_offer_allowed);
+            }
+            assert!((case.reaches)(&flow), "unexpected flow state: {flow:?}");
+        }
     }
 
     #[test]

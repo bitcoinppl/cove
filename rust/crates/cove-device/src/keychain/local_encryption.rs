@@ -78,7 +78,7 @@ mod tests {
     use super::{CRYPTOR_NAME, KEY_NAME};
     use crate::keychain::{
         KeychainAccess as _, KeychainError,
-        test_support::{FailSecondSave, MockKeychain, keychain},
+        test_support::{MockKeychain, keychain},
     };
 
     #[test]
@@ -110,8 +110,8 @@ mod tests {
 
     #[test]
     fn purge_removes_both_entries() {
-        let access = std::sync::Arc::new(MockKeychain::default());
-        let keychain = keychain(SharedMock(access.clone()));
+        let access = MockKeychain::default();
+        let keychain = keychain(access.clone());
         keychain.create_local_encryption_key().unwrap();
         keychain.purge_local_encryption_key();
 
@@ -121,30 +121,9 @@ mod tests {
 
     #[test]
     fn create_cleans_up_on_second_save_failure() {
-        let keychain = keychain(FailSecondSave::default());
+        let keychain = keychain(MockKeychain::failing_save_attempt(2));
 
         assert_eq!(keychain.create_local_encryption_key(), Err(KeychainError::Save));
         assert!(keychain.get_local_encryption_key().unwrap().is_none());
-    }
-
-    #[derive(Debug)]
-    struct SharedMock(std::sync::Arc<MockKeychain>);
-
-    impl crate::keychain::KeychainAccess for SharedMock {
-        fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-            self.0.save(key, value)
-        }
-
-        fn get(&self, key: String) -> Option<String> {
-            self.0.get(key)
-        }
-
-        fn delete(&self, key: String) -> bool {
-            self.0.delete(key)
-        }
-
-        fn delete_all_wallet_items(&self) -> Result<(), KeychainError> {
-            self.0.delete_all_wallet_items()
-        }
     }
 }

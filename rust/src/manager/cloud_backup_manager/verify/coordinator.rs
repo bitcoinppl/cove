@@ -95,7 +95,7 @@ impl CloudBackupVerificationCoordinator {
             presentation: Some(CloudBackupVerificationPresentation::Completed { source }),
             verification: Some(VerificationState::Verified(report.clone())),
             recovery: Some(RecoveryState::Idle),
-            detail: report.detail.clone(),
+            detail: report.detail,
             refresh_sync_health: true,
             ..CloudBackupVerificationEffect::default()
         }
@@ -109,7 +109,7 @@ impl CloudBackupVerificationCoordinator {
             presentation: Some(CloudBackupVerificationPresentation::Completed { source }),
             verification: Some(VerificationState::NeedsAttention(report.clone())),
             recovery: Some(RecoveryState::Idle),
-            detail: report.detail.clone(),
+            detail: report.detail,
             refresh_sync_health: true,
             ..CloudBackupVerificationEffect::default()
         }

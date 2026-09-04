@@ -60,7 +60,7 @@ impl RustCloudBackupManager {
             PendingVerificationUploadsReadiness::TerminalFailure(error) => {
                 self.apply_failed_verification(DeepVerificationFailure::retry(
                     error,
-                    completion.report().detail.clone(),
+                    completion.report().detail,
                     None,
                 ));
                 self.clear_pending_verification_completion();
@@ -101,7 +101,7 @@ impl RustCloudBackupManager {
     fn expire_pending_verification_completion(&self, completion: PendingVerificationCompletion) {
         self.apply_failed_verification(DeepVerificationFailure::retry(
             "cloud backup upload confirmation expired; start verification again",
-            completion.report().detail.clone(),
+            completion.report().detail,
             None,
         ));
         self.clear_pending_verification_completion();
@@ -334,9 +334,9 @@ impl RustCloudBackupManager {
             Some(CloudBackupDetailResult::SuccessWithAuthority { detail, .. }) => Some(detail),
             Some(CloudBackupDetailResult::AccessError(error)) => {
                 warn!("Pending verification: failed to refresh detail: {error}");
-                completion.report().detail.clone()
+                completion.report().detail
             }
-            None => completion.report().detail.clone(),
+            None => completion.report().detail,
         }
     }
 
@@ -345,7 +345,7 @@ impl RustCloudBackupManager {
         completion: &PendingVerificationCompletion,
         message: impl Into<String>,
     ) -> DeepVerificationFailure {
-        DeepVerificationFailure::retry(message, completion.report().detail.clone(), None)
+        DeepVerificationFailure::retry(message, completion.report().detail, None)
     }
 
     pub(crate) fn apply_verified_report(&self, report: DeepVerificationReport) {

@@ -37,7 +37,7 @@ impl RustSendFlowManager {
             });
         }
 
-        let handler = BtcOnChangeHandler::new(state.clone());
+        let handler = BtcOnChangeHandler::new(state);
         let changes = handler.on_change(&old, &new);
         trace!("btc_on_change_handler changes: {changes:?}");
 
@@ -161,7 +161,7 @@ impl RustSendFlowManager {
         debug!("selected_fee_rate_changed: {fee_rate:?}");
         let mut sender = self.reconciler.deferred_sender();
         if let Some(options) = self.fee_rate_options() {
-            let selection = FeeSelection::new(options, fee_rate.clone());
+            let selection = FeeSelection::new(options, fee_rate);
             {
                 let mut state = self.state.lock();
                 if state.fee_selection.as_ref() != Some(&selection) {
@@ -301,11 +301,11 @@ impl RustSendFlowManager {
             let unit = self.state.lock().metadata.selected_unit;
             match (amount, unit) {
                 (Some(amount), BitcoinUnit::Sat) => {
-                    let entering_btc_amount = amount.as_sats().thousands_int().to_string();
+                    let entering_btc_amount = amount.as_sats().thousands_int();
                     self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
                 }
                 (Some(amount_sats), BitcoinUnit::Btc) => {
-                    let entering_btc_amount = amount_sats.as_btc().thousands().to_string();
+                    let entering_btc_amount = amount_sats.as_btc().thousands();
                     self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
                 }
                 _ => {}
@@ -465,7 +465,7 @@ impl RustSendFlowManager {
                     BitcoinUnit::Sat => amount.sats_string(),
                 };
 
-                self.set_and_send_entering_btc_amount(amount_fmt.clone(), &mut sender);
+                self.set_and_send_entering_btc_amount(amount_fmt, &mut sender);
             }
 
             FiatOrBtc::Fiat => {
@@ -474,7 +474,7 @@ impl RustSendFlowManager {
                 let fiat_amount_fmt =
                     format!("{}{}", currency.symbol(), fiat_amount.thousands_fiat(),);
 
-                self.set_and_send_entering_fiat_amount(fiat_amount_fmt.clone(), &mut sender);
+                self.set_and_send_entering_fiat_amount(fiat_amount_fmt, &mut sender);
             }
         }
     }

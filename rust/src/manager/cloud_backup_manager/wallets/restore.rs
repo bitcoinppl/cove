@@ -439,7 +439,7 @@ mod tests {
             "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM"
                 .into(),
         );
-        let wallet = DownloadedWalletBackup { metadata: metadata.clone(), entry };
+        let wallet = DownloadedWalletBackup { metadata, entry };
         let mut session = WalletRestoreSession::new(ExistingWalletIdentitySet::default());
         let duplicate_key = wallet.duplicate_key().unwrap();
 

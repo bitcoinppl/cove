@@ -175,8 +175,7 @@ impl Redactor {
             let run_start = cursor + run_start_offset;
             output.push_str(&token[cursor..run_start]);
 
-            let run_len =
-                token[run_start..].bytes().take_while(|byte| byte.is_ascii_hexdigit()).count();
+            let run_len = token[run_start..].bytes().take_while(u8::is_ascii_hexdigit).count();
             let run_end = run_start + run_len;
 
             if run_len >= TXID_HEX_LEN {

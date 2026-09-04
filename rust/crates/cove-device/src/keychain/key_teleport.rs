@@ -64,7 +64,7 @@ mod tests {
     use super::{CRYPTOR_KEY, SESSION_KEY};
     use crate::keychain::{
         KeychainError,
-        test_support::{FailSecondSave, MockKeychain, keychain},
+        test_support::{MockKeychain, keychain},
     };
 
     #[test]
@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn save_cleans_up_on_second_save_failure() {
-        let keychain = keychain(FailSecondSave::default());
+        let keychain = keychain(MockKeychain::failing_save_attempt(2));
 
         assert_eq!(keychain.save_key_teleport_receive_session("session"), Err(KeychainError::Save));
         assert!(keychain.get_key_teleport_receive_session().unwrap().is_none());

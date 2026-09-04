@@ -257,10 +257,8 @@ pub fn card_pubkey_to_full_ident(card_pubkey: &[u8]) -> Result<String, Signature
     Ok(full_ident)
 }
 
-// Helper for creating message digests
 fn message_digest(message: &[u8]) -> Message {
-    let hash = Hash::hash(message);
-    Message::from_digest_slice(hash.as_ref()).expect("hash is 32 bytes")
+    Message::from_digest(Hash::hash(message).to_byte_array())
 }
 
 #[cfg(test)]

@@ -10,6 +10,7 @@ use reqwest::{
 use serde::Deserialize;
 
 use super::DiagnosticsUploadReport;
+use cove_util::result_ext::ResultExt as _;
 
 const PRODUCTION_UPLOAD_URL: &str = "https://diagnostics.covebitcoinwallet.com/reports";
 // this identifies public mobile clients and must not be trusted as an authorization credential
@@ -335,8 +336,7 @@ fn encrypted_gzipped_json(
 fn production_recipient(
     encryption_key: DiagnosticsEncryptionKey,
 ) -> Result<x25519::Recipient, UploadError> {
-    x25519::Recipient::from_str(encryption_key.recipient)
-        .map_err(|error| UploadError::InvalidRecipient(error.to_string()))
+    x25519::Recipient::from_str(encryption_key.recipient).map_err_str(UploadError::InvalidRecipient)
 }
 
 fn upload_url() -> String {

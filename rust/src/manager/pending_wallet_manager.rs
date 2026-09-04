@@ -108,18 +108,8 @@ impl RustPendingWalletManager {
     }
 
     #[uniffi::method]
-    pub fn number_of_words_count(&self) -> u8 {
-        self.state.read().number_of_words.to_word_count() as u8
-    }
-
-    #[uniffi::method]
     pub fn bip_39_words(&self) -> Vec<String> {
         self.state.read().wallet.words()
-    }
-
-    #[uniffi::method]
-    pub fn card_indexes(&self) -> u8 {
-        self.state.read().number_of_words.to_word_count() as u8 / 6
     }
 
     #[uniffi::method]

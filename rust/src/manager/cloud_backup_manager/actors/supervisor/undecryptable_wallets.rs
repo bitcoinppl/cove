@@ -3,7 +3,7 @@ use super::*;
 impl CloudBackupSupervisor {
     pub(crate) fn begin_delete_undecryptable_wallet_backups_operation(&mut self) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         let Some(claim) = self.begin_exclusive_operation(
             &manager,
             CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
@@ -22,7 +22,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -53,7 +53,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<u32, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {

@@ -605,9 +605,9 @@ impl CloudBackupWriteSupervisor {
             manager
                 .mark_wallet_uploaded_pending_confirmation_if_revision_current(
                     namespace_id,
-                    wallet.wallet_id().clone(),
-                    wallet.record_id().to_owned(),
-                    wallet.revision_hash().to_owned(),
+                    wallet.wallet_id.clone(),
+                    wallet.record_id.clone(),
+                    wallet.revision_hash.clone(),
                     uploaded_at,
                 )
                 .await?;

@@ -19,22 +19,6 @@ use super::{
 
 #[uniffi::export(async_runtime = "tokio")]
 impl RustWalletManager {
-    #[uniffi::method]
-    pub async fn create_transactions_with_fiat_export(&self) -> Result<String, Error> {
-        self.ensure_active()?;
-        let fiat_currency = Database::global().global_config.fiat_currency().unwrap_or_default();
-
-        let txns_with_prices = call!(self.actor.txns_with_prices())
-            .await
-            .map_err(|_| Error::ActorNotFound)?
-            .map_err_str(Error::TransactionsRetrievalError)?;
-
-        let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
-        let csv = report.create_csv().map_err_str(Error::CsvCreationError)?;
-
-        Ok(csv.into_string())
-    }
-
     /// Export labels for share with conditional loading popup
     #[uniffi::method]
     pub async fn export_labels_for_share(&self) -> Result<LabelExportResult, LabelManagerError> {
@@ -149,8 +133,7 @@ impl RustWalletManager {
                 .map_err_str(Error::GetHistoricalPricesError)?;
 
             cove_tokio::task::spawn_blocking(move || {
-                let fiat_currency =
-                    Database::global().global_config.fiat_currency().unwrap_or_default();
+                let fiat_currency = Database::global().global_config.selected_fiat_currency();
                 let report = HistoricalFiatPriceReport::new(fiat_currency, txns_with_prices);
                 let csv = report.create_csv().map_err_str(Error::CsvCreationError)?;
 
@@ -180,7 +163,7 @@ fn get_public_descriptor_content(metadata: &WalletMetadata) -> Result<String, Er
     use cove_bdk::descriptor_ext::DescriptorExt;
 
     let (external, internal) = authoritative_public_descriptors(metadata)
-        .map_err(|error| Error::UnknownError(format!("failed to load wallet: {error}")))?;
+        .map_err_prefix("failed to load wallet", Error::UnknownError)?;
 
     Ok(DescriptorExt::to_export_string(&external, &internal))
 }

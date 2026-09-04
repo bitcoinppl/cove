@@ -517,14 +517,14 @@ impl RustSendFlowManager {
             Action::SelectFeeRate(fee_rate) => self.selected_fee_rate_changed(fee_rate),
 
             Action::SelectMaxSend => {
-                let me = self.clone();
+                let me = self;
                 cove_tokio::task::spawn(async move { me.select_max_send_report_error().await });
             }
 
             Action::ClearSendAmount => self.clear_send_amount(),
             Action::ClearAddress => self.clear_address(),
             Action::RefreshWalletBalance => {
-                let me = self.clone();
+                let me = self;
                 cove_tokio::task::spawn(async move {
                     me.get_wallet_balance().await;
                     me.get_or_update_fee_rate_options().await;

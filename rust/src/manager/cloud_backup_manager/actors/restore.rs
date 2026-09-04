@@ -107,7 +107,7 @@ fn merge_namespace_matches(accumulated: &mut Vec<NamespaceMatch>, discovered: Ve
     }
 }
 
-async fn lookup_wallet_backup(
+pub(crate) async fn lookup_wallet_backup(
     reader: WalletBackupReader,
     record_id: String,
 ) -> (String, Result<WalletBackupLookup<DownloadedWalletBackup>, CloudBackupError>) {

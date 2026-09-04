@@ -280,7 +280,10 @@ alias wtest := watch-test
 [group('lint')]
 [working-directory('rust')]
 lint-rust *flags="":
-    cargo clippy --locked --all-targets --all-features -- -D warnings {{ flags }}
+    cargo clippy --locked --all-targets --all-features -- -D warnings \
+        -D clippy::redundant_clone \
+        -D clippy::redundant_closure_for_method_calls \
+        -D clippy::unnecessary_wraps {{ flags }}
 
 # [bounded] Lint Android code
 [group('lint')]

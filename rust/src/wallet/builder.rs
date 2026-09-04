@@ -30,7 +30,7 @@ use super::{
     metadata,
     metadata::{
         DiscoveryState, HardwareWalletMetadata, WalletBirthday, WalletId, WalletMetadata,
-        WalletType, tap_signer_import_birthday,
+        WalletType, tap_signer_birthday,
     },
 };
 
@@ -326,8 +326,7 @@ impl WalletBuilder {
         metadata.origin = descriptors.origin().ok();
         metadata.master_fingerprint = Some(Arc::new(fingerprint));
         metadata.wallet_type = WalletType::Cold;
-        metadata.birthday =
-            birthday.or_else(|| tap_signer_import_birthday(network, derive.birth_height));
+        metadata.birthday = birthday.or_else(|| tap_signer_birthday(network, derive.birth_height));
 
         // make sure its not already imported
         check_for_duplicate_wallet(network, mode, fingerprint)?;

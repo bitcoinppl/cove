@@ -87,10 +87,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_number_formatter() {
-        let number = 20_000;
-        let formatted = number.thousands_fiat();
-        assert_eq!(formatted, "20,000.00");
+    fn thousands_fiat_always_shows_two_decimals() {
+        let cases = [
+            (0.0, "0.00"),
+            (20_000.0, "20,000.00"),
+            (1_234.5, "1,234.50"),
+            (1_234.56, "1,234.56"),
+            (1_234.567, "1,234.56"),
+            (0.5, "0.50"),
+        ];
+
+        for (number, expected) in cases {
+            assert_eq!(number.thousands_fiat(), expected, "{number}");
+        }
     }
 
     #[test]

@@ -269,7 +269,7 @@ mod tests {
     };
     use crate::keychain::{
         KeychainAccess as _, KeychainError,
-        test_support::{FailingKeychain, MockKeychain, keychain, wallet_id},
+        test_support::{MockKeychain, keychain, wallet_id},
     };
     use cove_util::encryption::Cryptor;
 
@@ -338,7 +338,7 @@ mod tests {
         let cryptor_key = mnemonic_cryptor_key_name(&id);
 
         for failing_key in [value_key.clone(), cryptor_key.clone()] {
-            let access = FailingKeychain::default();
+            let access = MockKeychain::default();
             access.fail_save_for(failing_key);
             let keychain = keychain(access.clone());
 
@@ -360,7 +360,7 @@ mod tests {
 
     #[test]
     fn untagged_mnemonic_remains_readable() {
-        let access = FailingKeychain::default();
+        let access = MockKeychain::default();
         let id = wallet_id();
         let expected = mnemonic();
         let mut cryptor = Cryptor::new();
@@ -441,7 +441,7 @@ mod tests {
 
     #[test]
     fn uses_exact_wallet_mnemonic_key_names() {
-        let access = FailingKeychain::default();
+        let access = MockKeychain::default();
         let id = wallet_id();
         let keychain = keychain(access.clone());
         keychain.save_wallet_key(&id, mnemonic()).unwrap();
@@ -454,7 +454,7 @@ mod tests {
 
     #[test]
     fn mnemonic_is_readable_by_legacy_logic() {
-        let access = FailingKeychain::default();
+        let access = MockKeychain::default();
         let id = wallet_id();
         let expected = mnemonic();
         let keychain = keychain(access.clone());
@@ -469,7 +469,7 @@ mod tests {
 
     #[test]
     fn xpriv_is_tagged_under_wallet_mnemonic_keys() {
-        let access = FailingKeychain::default();
+        let access = MockKeychain::default();
         let id = wallet_id();
         let expected = xpriv();
         let keychain = keychain(access.clone());

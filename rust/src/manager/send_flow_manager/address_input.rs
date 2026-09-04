@@ -54,7 +54,7 @@ impl RustSendFlowManager {
             state.address = address.clone();
             state.payjoin_endpoint = payjoin_endpoint;
         }
-        sender.queue(Message::UpdateAddress(address.clone()));
+        sender.queue(Message::UpdateAddress(address));
 
         // if both address and amount are valid, then clear the focus field, if amount is invalid, then focus on amount
         if self.validate_address_internal(false) {

@@ -328,7 +328,7 @@ impl VerificationSession {
     ) -> Result<Self, CloudBackupError> {
         let keychain = Keychain::global().clone();
         let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
-        let cspp = cove_cspp::Cspp::new(keychain.clone());
+        let cspp = cove_cspp::Cspp::new(keychain);
         let local_master_key = cspp.load_master_key_from_store().map_err(|source| {
             CloudBackupError::internal_context("load local master key", source)
         })?;
@@ -682,7 +682,7 @@ impl VerificationSession {
             Ok(read_pass) => read_pass,
             Err(error) => {
                 return CloudBackupDeepVerificationStep::Complete(
-                    self.local_inventory_retry_result(&error),
+                    self.cloud_backup_retry_result("failed to load local wallet inventory", &error),
                 );
             }
         };
@@ -703,7 +703,7 @@ impl VerificationSession {
         let unsynced = match inventory_result {
             Ok(inventory) => {
                 let detail = inventory.build_detail();
-                self.report.detail = Some(detail.clone());
+                self.report.detail = Some(detail);
                 if inventory.has_unknown_remote_wallets() {
                     return CloudBackupDeepVerificationStep::Complete(
                         self.retry_result(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE),
@@ -715,7 +715,7 @@ impl VerificationSession {
 
             Err(error) => {
                 return CloudBackupDeepVerificationStep::Complete(
-                    self.local_inventory_retry_result(&error),
+                    self.cloud_backup_retry_result("failed to load local wallet inventory", &error),
                 );
             }
         };
@@ -750,27 +750,30 @@ impl VerificationSession {
             .iter()
             .map(|wallet| {
                 PendingVerificationUpload::new(
-                    wallet.record_id().to_owned(),
-                    wallet.revision_hash().to_owned(),
+                    wallet.record_id.clone(),
+                    wallet.revision_hash.clone(),
                 )
             })
             .collect::<Vec<_>>();
 
         let mut updated_ids = self.wallet_record_ids.clone().unwrap_or_default();
         updated_ids
-            .extend(uploaded.uploaded_wallets().iter().map(|wallet| wallet.record_id().to_owned()));
+            .extend(uploaded.uploaded_wallets().iter().map(|wallet| wallet.record_id.clone()));
         updated_ids.sort();
         updated_ids.dedup();
 
-        let remote_wallet_truth =
-            match self.manager.load_remote_wallet_truth(&updated_ids, self.cloud.clone()).await {
-                Ok(remote_wallet_truth) => remote_wallet_truth,
-                Err(error) => {
-                    return CloudBackupDeepVerificationAutoSyncCompletion::complete(
-                        self.remote_truth_retry_result(&error),
-                    );
-                }
-            };
+        let remote_wallet_truth = match self
+            .manager
+            .load_remote_wallet_truth(&updated_ids, self.cloud.clone())
+            .await
+        {
+            Ok(remote_wallet_truth) => remote_wallet_truth,
+            Err(error) => {
+                return CloudBackupDeepVerificationAutoSyncCompletion::complete(
+                    self.cloud_backup_retry_result("failed to refresh remote wallet truth", &error),
+                );
+            }
+        };
 
         self.manager.cleanup_confirmed_pending_blobs(&remote_wallet_truth);
 
@@ -793,7 +796,10 @@ impl VerificationSession {
                 Ok(inventory) => inventory,
                 Err(error) => {
                     return CloudBackupDeepVerificationAutoSyncCompletion::complete(
-                        self.local_inventory_retry_result(&error),
+                        self.cloud_backup_retry_result(
+                            "failed to load local wallet inventory",
+                            &error,
+                        ),
                     );
                 }
             };
@@ -918,14 +924,6 @@ impl VerificationSession {
 
     fn detail(&self) -> Option<CloudBackupDetail> {
         self.report.detail.clone()
-    }
-
-    fn local_inventory_retry_result(&self, error: &CloudBackupError) -> DeepVerificationResult {
-        self.cloud_backup_retry_result("failed to load local wallet inventory", error)
-    }
-
-    fn remote_truth_retry_result(&self, error: &CloudBackupError) -> DeepVerificationResult {
-        self.cloud_backup_retry_result("failed to refresh remote wallet truth", error)
     }
 
     /// Builds a retryable verification failure while preserving the latest backup detail for UI recovery prompts

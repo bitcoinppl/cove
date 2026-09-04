@@ -8,26 +8,14 @@ use crate::wallet::metadata::WalletId;
 /// Uploaded wallet metadata needed to mark local sync state after remote success
 #[derive(Debug, Clone)]
 pub(crate) struct CloudBackupUploadedWallet {
-    wallet_id: WalletId,
-    record_id: String,
-    revision_hash: String,
+    pub(crate) wallet_id: WalletId,
+    pub(crate) record_id: String,
+    pub(crate) revision_hash: String,
 }
 
 impl CloudBackupUploadedWallet {
     pub(crate) fn new(wallet_id: WalletId, record_id: String, revision_hash: String) -> Self {
         Self { wallet_id, record_id, revision_hash }
-    }
-
-    pub(crate) fn wallet_id(&self) -> &WalletId {
-        &self.wallet_id
-    }
-
-    pub(crate) fn record_id(&self) -> &str {
-        &self.record_id
-    }
-
-    pub(crate) fn revision_hash(&self) -> &str {
-        &self.revision_hash
     }
 }
 

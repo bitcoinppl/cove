@@ -417,7 +417,7 @@ impl RustCloudBackupManager {
                 self.apply_needs_attention_report(report);
             }
             DeepVerificationResult::AwaitingUploadConfirmation(report) => {
-                if let Some(detail) = report.detail.clone() {
+                if let Some(detail) = report.detail {
                     self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
                 }
                 self.apply_verification_effect(
@@ -566,7 +566,7 @@ impl RustCloudBackupManager {
             }
         }
 
-        let detail = self.state.read().detail().clone();
+        let detail = self.state.read().detail();
         *self.cloud_only_detail_snapshot.write() = detail;
         self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
             CloudOnlyState::Loaded { wallets },
@@ -627,7 +627,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn clear_cloud_only_restore_failures(&self, record_ids: &[String]) {
-        let mut cloud_only = self.state.read().cloud_only().clone();
+        let mut cloud_only = self.state.read().cloud_only();
         if let CloudOnlyState::Loaded { wallets } = &mut cloud_only {
             for wallet in wallets {
                 if record_ids.contains(&wallet.record_id) {
@@ -639,7 +639,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn apply_cloud_only_restore_failure(&self, record_id: String, error: String) {
-        let mut cloud_only = self.state.read().cloud_only().clone();
+        let mut cloud_only = self.state.read().cloud_only();
         if let CloudOnlyState::Loaded { wallets } = &mut cloud_only
             && let Some(wallet) = wallets.iter_mut().find(|wallet| wallet.record_id == record_id)
         {
@@ -730,7 +730,7 @@ impl RustCloudBackupManager {
             self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
         }
 
-        let mut cloud_only = self.state.read().cloud_only().clone();
+        let mut cloud_only = self.state.read().cloud_only();
         if let CloudOnlyState::Loaded { wallets } = &mut cloud_only {
             wallets.retain(|wallet| wallet.record_id != record_id);
         }

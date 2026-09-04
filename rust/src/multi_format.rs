@@ -505,7 +505,7 @@ mod tests {
         // test that metadata (name, note, date) is handled gracefully
         let entropy = vec![0xaa; 16];
         let crypto_seed = cove_ur::CryptoSeed::with_metadata(
-            entropy.clone(),
+            entropy,
             Some("Test Wallet".to_string()),
             Some("Test note".to_string()),
             Some(1234567890),

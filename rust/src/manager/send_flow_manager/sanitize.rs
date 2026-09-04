@@ -41,7 +41,7 @@ fn strip_tokens(input: &str, tokens: &[&str]) -> Option<String> {
         }
     }
 
-    if work.chars().any(|c| c.is_alphabetic()) {
+    if work.chars().any(char::is_alphabetic) {
         return None;
     }
 
@@ -54,7 +54,7 @@ fn strip_tokens(input: &str, tokens: &[&str]) -> Option<String> {
 /// BTC/SAT/SATS or other unrecognized alphabetic characters are present —
 /// those should not be accepted into a fiat amount field.
 pub fn sanitize_fiat_amount(input: &str) -> Option<String> {
-    if !input.chars().any(|c| c.is_alphabetic()) {
+    if !input.chars().any(char::is_alphabetic) {
         return Some(input.to_string());
     }
     strip_tokens(input, &fiat_tokens())
@@ -66,7 +66,7 @@ pub fn sanitize_fiat_amount(input: &str) -> Option<String> {
 /// symbols/codes or other unrecognized alphabetic characters are present —
 /// those should not be accepted into a BTC amount field.
 pub fn sanitize_btc_amount(input: &str) -> Option<String> {
-    if !input.chars().any(|c| c.is_alphabetic()) {
+    if !input.chars().any(char::is_alphabetic) {
         return Some(input.to_string());
     }
     strip_tokens(input, BTC_TOKENS)

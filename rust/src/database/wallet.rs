@@ -733,7 +733,7 @@ mod tests {
 
         table.save_all_wallets(first.network, first.wallet_mode, original).unwrap();
 
-        let requested_ids = vec![third.id.clone(), first.id.clone(), second.id.clone()];
+        let requested_ids = vec![third.id, first.id.clone(), second.id];
         let reordered = table.reorder(first.network, first.wallet_mode, requested_ids).unwrap();
         let persisted = table.get_all(first.network, first.wallet_mode).unwrap();
 
@@ -747,7 +747,7 @@ mod tests {
         let first = wallet("first");
         let second = wallet("second");
         let third = wallet("third");
-        let original = vec![first.clone(), second.clone(), third.clone()];
+        let original = vec![first.clone(), second, third.clone()];
 
         table.save_all_wallets(first.network, first.wallet_mode, original.clone()).unwrap();
 
@@ -760,7 +760,7 @@ mod tests {
         assert_eq!(wallet_ids(&returned), wallet_ids(&original));
 
         let unknown = wallet("unknown");
-        let unknown_id = vec![third.id.clone(), first.id.clone(), unknown.id.clone()];
+        let unknown_id = vec![third.id, first.id.clone(), unknown.id];
         let returned = table.reorder(first.network, first.wallet_mode, unknown_id).unwrap();
         let persisted = table.get_all(first.network, first.wallet_mode).unwrap();
 
@@ -774,7 +774,7 @@ mod tests {
         let first = wallet("first");
         let second = wallet("second");
         let third = wallet("third");
-        let original = vec![first.clone(), second.clone(), third.clone()];
+        let original = vec![first.clone(), second, third];
 
         table.save_all_wallets(first.network, first.wallet_mode, original.clone()).unwrap();
 
@@ -797,9 +797,9 @@ mod tests {
 
         table.save_all_wallets(first.network, first.wallet_mode, original).unwrap();
 
-        let requested_ids = vec![third.id.clone(), first.id.clone(), second.id.clone()];
+        let requested_ids = vec![third.id, first.id.clone(), second.id];
         table.reorder(first.network, first.wallet_mode, requested_ids).unwrap();
-        table.save_new_wallet_metadata_with_backup_behavior(fourth.clone(), false).unwrap();
+        table.save_new_wallet_metadata_with_backup_behavior(fourth, false).unwrap();
         let persisted = table.get_all(first.network, first.wallet_mode).unwrap();
 
         assert_eq!(names(&persisted), ["third", "first", "second", "fourth"]);
@@ -857,7 +857,7 @@ mod tests {
 
         table.save_all_wallets(first.network, first.wallet_mode, original).unwrap();
 
-        let requested_ids = vec![third.id.clone(), first.id.clone(), second.id.clone()];
+        let requested_ids = vec![third.id.clone(), first.id.clone(), second.id];
         table.reorder(first.network, first.wallet_mode, requested_ids).unwrap();
 
         let mut renamed_first = first.clone();

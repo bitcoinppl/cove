@@ -112,7 +112,7 @@ pub(crate) fn record_bootstrap_failure(error: &AppInitError) {
     let wallet_migration_failures = LAST_WALLET_MIGRATION_FAILURES.lock().clone();
 
     let failure = LastBootstrapFailure {
-        timestamp: timestamp(),
+        timestamp: crate::diagnostics::timestamp(),
         category,
         message: error.to_string(),
         step: super::bootstrap_progress(),
@@ -156,7 +156,7 @@ pub(crate) fn text_report() -> String {
 
 pub(crate) fn text_report_for_paths(root_dir: &Path, wallet_dir: &Path) -> String {
     let mut report = String::new();
-    let generated_at = timestamp();
+    let generated_at = crate::diagnostics::timestamp();
     let step = super::bootstrap_progress();
     let active_progress = super::migration::active_migration()
         .map(|migration| migration.progress())
@@ -614,10 +614,6 @@ fn sorted_dirs(path: &Path) -> std::io::Result<Vec<PathBuf>> {
 
 fn format_progress(progress: Option<(u32, u32)>) -> String {
     progress.map(|(current, total)| format!("{current}/{total}")).unwrap_or_else(|| "none".into())
-}
-
-fn timestamp() -> String {
-    jiff::Timestamp::now().to_string()
 }
 
 #[cfg(test)]

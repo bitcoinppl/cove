@@ -3,7 +3,7 @@ use super::*;
 impl CloudBackupSupervisor {
     pub(crate) fn begin_enable_operation(&mut self, context: CloudBackupEnableContext) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         let Some(claim) =
             self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Enable)
         else {
@@ -78,7 +78,7 @@ impl CloudBackupSupervisor {
         context: CloudBackupEnableContext,
     ) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         let Some(claim) = self
             .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::EnableNoDiscovery)
         else {
@@ -128,7 +128,7 @@ impl CloudBackupSupervisor {
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
 
         manager.apply_recovery_state(RecoveryState::Recovering(RecoveryAction::ReinitializeBackup));
 

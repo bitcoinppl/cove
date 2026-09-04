@@ -648,7 +648,7 @@ fn destructive_preparation_keeps_normal_close_persistence_available() {
     ));
 
     let persistence = coordinator
-        .begin_persistence_operation(wallet_id.clone())
+        .begin_persistence_operation(wallet_id)
         .expect("ordinary close persistence remains available");
     drop(persistence);
 
@@ -708,12 +708,8 @@ fn cancelled_attempt_cannot_authorize_retry() {
         Box::leak(Box::new(WalletLifecycleCoordinator::default()));
     let wallet_id = crate::wallet::metadata::WalletId::preview_new_random();
     let intent = DestructiveIntent::Delete(wallet_id.clone());
-    let blocked = coordinator.finish_blocked_attempt(
-        intent.clone(),
-        vec![],
-        ShutdownDeadlineTier::Initial,
-        None,
-    );
+    let blocked =
+        coordinator.finish_blocked_attempt(intent, vec![], ShutdownDeadlineTier::Initial, None);
     let WalletLifecycleFailure::ShutdownBlocked { attempt_id, .. } = blocked else {
         panic!("expected blocked attempt");
     };

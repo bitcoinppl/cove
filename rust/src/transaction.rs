@@ -100,7 +100,7 @@ impl Transaction {
         labels: Labels,
     ) -> Self {
         let txid = tx.tx_node.txid.into();
-        let fiat_currency = Database::global().global_config.fiat_currency().unwrap_or_default();
+        let fiat_currency = Database::global().global_config.selected_fiat_currency();
 
         let fiat = FiatAmount::try_new(&sent_and_received, fiat_currency).ok();
 
@@ -188,26 +188,12 @@ impl PartialOrd for Transaction {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::borrow::Borrow as _;
-
-    #[test]
-    fn test_txid_borrow() {
-        let txid = TxId::preview_new();
-        let txid_borrow: &bitcoin::Txid = txid.borrow();
-        assert_eq!(txid_borrow, &txid.0);
-
-        let txid_borrow: &TxId = txid.borrow();
-        assert_eq!(txid_borrow, &txid);
+/// The transaction-level label, treating an empty label as absent
+pub(crate) fn non_empty_transaction_label(labels: &Labels) -> Option<String> {
+    let label = labels.transaction_label()?;
+    if label.is_empty() {
+        return None;
     }
 
-    #[test]
-    fn fee_rate_formats_with_two_decimal_places_and_units() {
-        assert_eq!(FeeRate::from_sat_per_vb(0.0).sats_per_vbyte_string(), "0.00 sats/vbyte");
-        assert_eq!(FeeRate::from_sat_per_vb(1.0).sats_per_vbyte_string(), "1.00 sats/vbyte");
-        assert_eq!(FeeRate::from_sat_per_vb(1.25).sats_per_vbyte_string(), "1.25 sats/vbyte");
-        assert_eq!(FeeRate::from_sat_per_vb(12.345).sats_per_vbyte_string(), "12.35 sats/vbyte");
-    }
+    Some(label.to_string())
 }

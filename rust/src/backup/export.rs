@@ -79,10 +79,9 @@ impl BackupExporter {
                             }
                         },
                         WalletType::Cold => {
-                            let is_tap_signer = metadata
-                                .hardware_metadata
-                                .as_ref()
-                                .is_some_and(|hw| hw.is_tap_signer());
+                            let is_tap_signer = metadata.hardware_metadata.as_ref().is_some_and(
+                                crate::wallet::metadata::HardwareWalletMetadata::is_tap_signer,
+                            );
 
                             if is_tap_signer {
                                 match self.keychain.get_tap_signer_backup(id) {
@@ -146,7 +145,7 @@ impl BackupExporter {
         Ok(backups)
     }
 
-    fn gather_settings(&mut self) -> Result<AppSettings, BackupError> {
+    fn gather_settings(&mut self) -> AppSettings {
         let selected_network = self.get_config(GlobalConfigKey::SelectedNetwork);
         let selected_fiat_currency = self.get_config(GlobalConfigKey::SelectedFiatCurrency);
         let color_scheme = self.get_config(GlobalConfigKey::ColorScheme);
@@ -160,13 +159,13 @@ impl BackupExporter {
 
         let custom_block_explorers = gather_custom_block_explorers(&self.db.global_config);
 
-        Ok(AppSettings {
+        AppSettings {
             selected_network,
             selected_fiat_currency,
             color_scheme,
             selected_nodes,
             custom_block_explorers,
-        })
+        }
     }
 
     fn get_config(&mut self, key: GlobalConfigKey) -> Option<String> {
@@ -217,14 +216,14 @@ pub async fn export_all(password: String) -> Result<BackupResult, BackupError> {
 
     let mut exporter = BackupExporter::new();
     let wallets = exporter.gather_wallets().await?;
-    let settings = exporter.gather_settings()?;
+    let settings = exporter.gather_settings();
 
     let payload = BackupPayload::try_new(wallets, settings)?;
 
     let json = serde_json::to_vec(&payload).map_err_str(BackupError::Serialization)?;
     let json = Zeroizing::new(json);
 
-    let compressed = crypto::compress(&json)?;
+    let compressed = crypto::compress(&json);
     let compressed = Zeroizing::new(compressed);
 
     let encrypted = crypto::encrypt(&compressed, &password)?;
@@ -297,7 +296,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let db = Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());
         let write_txn = db.begin_write().unwrap();
-        let table = GlobalConfigTable::new(db.clone(), &write_txn);
+        let table = GlobalConfigTable::new(db, &write_txn);
         write_txn.commit().unwrap();
 
         (tmp, table)

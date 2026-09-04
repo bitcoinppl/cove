@@ -73,10 +73,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn apply_model_event(&self, event: CloudBackupStateReducerEvent) -> bool {
-        let effects = match self.state.write().apply_event(event) {
-            Ok(effects) => effects,
-            Err(rejection) => match rejection {},
-        };
+        let effects = self.state.write().apply_event(event);
 
         self.send_model_effects(effects);
         true
@@ -101,10 +98,7 @@ impl RustCloudBackupManager {
         }
 
         let event = CloudBackupStateReducerEvent::RuntimeStatusReconciled(status);
-        let effects = match self.state.write().apply_event(event) {
-            Ok(effects) => effects,
-            Err(rejection) => match rejection {},
-        };
+        let effects = self.state.write().apply_event(event);
         let status_changed = effects.status_changed;
         self.send_model_effects(effects);
 
@@ -196,10 +190,7 @@ impl RustCloudBackupManager {
             metadata: verification_metadata,
             should_prompt: should_prompt_verification,
         };
-        let effects = match self.state.write().apply_event(event) {
-            Ok(effects) => effects,
-            Err(rejection) => match rejection {},
-        };
+        let effects = self.state.write().apply_event(event);
         let decision_pending = effects.verification_decision_pending;
         let presentation_changed = effects.verification_presentation_changed;
         self.send_model_effects(effects);

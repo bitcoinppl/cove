@@ -4,7 +4,7 @@ use bdk_wallet::{
     coin_selection::{CoinSelectionResult, Excess, InsufficientFunds},
 };
 
-/// From: BDK
+/// Vendored from bdk_wallet 3.0.0 coin selection, which does not export it
 ///
 /// # Errors
 /// Returns `InsufficientFunds` if the selected UTXOs cannot cover the target amount plus fees
@@ -53,7 +53,7 @@ pub fn select_sorted_utxos(
     Ok(CoinSelectionResult { selected, fee_amount, excess })
 }
 
-/// From: BDK
+/// Vendored from bdk_wallet 3.0.0 coin selection, which does not export it
 /// Decide if change can be created
 ///
 /// - `remaining_amount`: the amount in which the selected coins exceed the target amount
@@ -63,7 +63,7 @@ pub fn select_sorted_utxos(
 /// # Panics
 /// Panics if converting drain output length to virtual bytes overflows
 #[must_use]
-pub fn decide_change(remaining_amount: Amount, fee_rate: FeeRate, drain_script: &Script) -> Excess {
+fn decide_change(remaining_amount: Amount, fee_rate: FeeRate, drain_script: &Script) -> Excess {
     let drain_output_len = serialize(drain_script).len() + 8usize;
     let change_fee =
         fee_rate * Weight::from_vb(drain_output_len as u64).expect("overflow occurred");

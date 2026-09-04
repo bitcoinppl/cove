@@ -15,6 +15,7 @@ use super::{
     KeyTeleportAlert, KeyTeleportPassword, KeyTeleportSendReady, RustKeyTeleportManager,
     model::{Phase, SendPhase, StateMachine},
 };
+use cove_util::result_ext::ResultExt as _;
 
 pub(crate) struct SendWorkflow<'a>(&'a RustKeyTeleportManager);
 
@@ -149,8 +150,7 @@ impl SendWorkflow<'_> {
         }
         .map_err(|_| KeyTeleportAlert::InvalidPayload)?;
 
-        let response =
-            sender.send(payload).map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
+        let response = sender.send(payload).map_err_str(KeyTeleportAlert::Protocol)?;
         let state = KeyTeleportSendReady {
             selected_wallet: wallet,
             packet: Arc::new(KeyTeleportSenderPacket::from(response.packet)),

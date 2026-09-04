@@ -73,11 +73,7 @@ impl CloudBackupSupervisor {
             }
         };
         let (ready_sender, ready_receiver) = tokio::sync::oneshot::channel();
-        let Some(addr) = self.addr() else {
-            return Produces::ok(Err(CloudBackupDriveAccountSwitchError::Internal(
-                "cloud backup supervisor stopped".into(),
-            )));
-        };
+        let addr = self.addr();
         addr.send_fut_with(move |addr| async move {
             let drained = receiver.await.is_ok();
             send!(addr.complete_drive_account_switch_write_drain(
@@ -103,7 +99,7 @@ impl CloudBackupSupervisor {
             Self::drive_account_switch()
                 .is_some_and(|transition| transition.transition_id == transition_id)
         });
-        if self.active_operation.claim() != Some(claim) || !transition_is_current {
+        if !self.active_operation.is_current(claim) || !transition_is_current {
             let _ = ready_sender.send(Err(CloudBackupDriveAccountSwitchError::InvalidTransition));
             return Produces::ok(());
         }

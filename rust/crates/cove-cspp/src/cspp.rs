@@ -101,7 +101,7 @@ impl<S: CsppStore> Cspp<S> {
         }
 
         // slow path: acquire init lock for double-checked initialization
-        let _guard = INIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         // re-check cache after acquiring lock
         if let Some(bytes) = MASTER_KEY_CACHE.load().as_deref() {
@@ -136,7 +136,7 @@ impl<S: CsppStore> Cspp<S> {
     /// the plaintext key from being accidentally exposed if other code enumerates
     /// keychain entries — it must be explicitly decrypted to be read
     pub fn save_master_key(&self, master_key: &MasterKey) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         if self.load_promotion_journal()?.is_some() {
             return Err(CsppError::InvalidData(
@@ -149,7 +149,7 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Saves a fresh master key in an isolated slot without changing active storage or cache
     pub fn save_staged_master_key(&self, master_key: &MasterKey) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         if self.load_promotion_journal()?.is_some() {
             return Err(CsppError::InvalidData(
@@ -225,7 +225,7 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Discards an unpromoted staged master key
     pub fn discard_staged_master_key(&self) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         if self.load_promotion_journal()?.is_some() {
             return Err(CsppError::InvalidData(
@@ -241,7 +241,7 @@ impl<S: CsppStore> Cspp<S> {
     /// This operation is idempotent. A caller must separately commit or roll back
     /// the promotion after its own durable state has been finalized
     pub fn promote_staged_master_key(&self) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let journal = match self.load_promotion_journal()? {
             Some(journal) => journal,
@@ -290,7 +290,7 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Commits an installed promotion and removes its staged and rollback material
     pub fn commit_master_key_promotion(&self) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let Some(journal) = self.load_promotion_journal()? else {
             if self.read_staged_entries().is_absent() {
@@ -321,7 +321,7 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Reactivates the prior master key while retaining staged promotion material for retry
     pub fn restore_prior_master_key_for_retry(&self) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let Some(journal) = self.load_promotion_journal()? else {
             if matches!(self.master_key_promotion_status()?, MasterKeyPromotionStatus::Staged) {
@@ -354,7 +354,7 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Restores the exact active entries captured before promotion
     pub fn rollback_master_key_promotion(&self) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let Some(journal) = self.load_promotion_journal()? else {
             return self.restore_staged_entries(&StoredMasterKeyEntries::default());
@@ -417,7 +417,7 @@ impl<S: CsppStore> Cspp<S> {
         expected_staged_namespace: &str,
         expected_prior_namespace: Option<&str>,
     ) -> Result<MasterKeyPromotionEvidence, CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(|error| error.into_inner());
+        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let status = self.master_key_promotion_status()?;
         let staged_matches_expected = self
             .load_staged_master_key()?

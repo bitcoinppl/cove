@@ -11,7 +11,7 @@ use crate::bdk_store::sqlite_auxiliary_path;
 /// Checkpoint WAL data into the main DB file before removing auxiliary files
 ///
 /// Prevents losing uncheckpointed writes when recovery artifacts trigger cleanup
-pub(super) fn checkpoint_and_clean_auxiliary_files(db_path: &Path) {
+pub(crate) fn checkpoint_and_clean_auxiliary_files(db_path: &Path) {
     if !db_path.exists() {
         // no main DB file — auxiliaries are definitely stale
         clean_auxiliary_files(db_path);
@@ -49,7 +49,7 @@ pub(super) fn checkpoint_and_clean_auxiliary_files(db_path: &Path) {
     }
 }
 
-pub(super) fn rename_auxiliary_files(source_path: &Path, destination_path: &Path) -> Result<()> {
+pub(crate) fn rename_auxiliary_files(source_path: &Path, destination_path: &Path) -> Result<()> {
     for suffix in ["wal", "shm"] {
         let source_aux_path = sqlite_auxiliary_path(source_path, suffix);
         if !source_aux_path.exists() {
@@ -68,7 +68,7 @@ pub(super) fn rename_auxiliary_files(source_path: &Path, destination_path: &Path
     Ok(())
 }
 
-pub(super) fn finalize_sqlite_bundle_move(
+pub(crate) fn finalize_sqlite_bundle_move(
     source_path: &Path,
     destination_path: &Path,
 ) -> Result<()> {
@@ -81,7 +81,7 @@ pub(super) fn finalize_sqlite_bundle_move(
     rename_auxiliary_files(source_path, destination_path)
 }
 
-pub(super) fn recover_interrupted_bdk_migrations_in_dir(dir: &Path) -> Result<()> {
+pub(crate) fn recover_interrupted_bdk_migrations_in_dir(dir: &Path) -> Result<()> {
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -106,7 +106,7 @@ pub(super) fn recover_interrupted_bdk_migrations_in_dir(dir: &Path) -> Result<()
     Ok(())
 }
 
-pub(super) fn recovery_target_path(path: &Path) -> Option<PathBuf> {
+pub(crate) fn recovery_target_path(path: &Path) -> Option<PathBuf> {
     let name = path.file_name().and_then(|n| n.to_str())?;
     if !name.starts_with("bdk_wallet_sqlite_") {
         return None;
@@ -128,7 +128,7 @@ pub(super) fn recovery_target_path(path: &Path) -> Option<PathBuf> {
     None
 }
 
-pub(super) fn recover_at_path(db_path: &Path) -> Result<()> {
+pub(crate) fn recover_at_path(db_path: &Path) -> Result<()> {
     let bak_path = db_path.with_extension("db.bak");
     let tmp_path = db_path.with_extension("db.enc.tmp");
 
@@ -193,7 +193,7 @@ pub(super) fn recover_at_path(db_path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn clean_auxiliary_files(db_path: &Path) {
+pub(crate) fn clean_auxiliary_files(db_path: &Path) {
     for suffix in ["wal", "shm"] {
         let aux_path = sqlite_auxiliary_path(db_path, suffix);
         crate::database::migration::log_remove_file(&aux_path);

@@ -321,14 +321,6 @@ impl InternalState {
         }
     }
 
-    pub(crate) fn is_restore_event_current(&self, event: &InternalEvent) -> bool {
-        self.flow.is_restore_event_current(event)
-    }
-
-    pub(crate) fn is_restore_attempt_current(&self, attempt_id: u64) -> bool {
-        self.flow.is_restore_attempt_current(attempt_id)
-    }
-
     fn prepare_offline_cloud_check_retry(
         &mut self,
         deferred: &mut DeferredSender<Message>,
@@ -591,9 +583,7 @@ impl FlowState {
             }
             (state @ Self::CloudBackup(_), OnboardingAction::BeginCloudBackupEnable) => (
                 state,
-                TransitionCommand::BeginCloudBackupEnable {
-                    discovery: cloud_restore_discovery.clone(),
-                },
+                TransitionCommand::BeginCloudBackupEnable { discovery: cloud_restore_discovery },
             ),
             (
                 Self::CloudBackup(CloudBackupFlow::CreatedWallet(mut flow)),

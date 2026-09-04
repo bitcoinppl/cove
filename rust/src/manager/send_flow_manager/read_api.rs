@@ -112,9 +112,9 @@ impl RustSendFlowManager {
         match selected_unit {
             BitcoinUnit::Btc => {
                 let string = send_amount.as_btc().thousands();
-                if string.contains('e') { send_amount.btc_string() } else { string.to_string() }
+                if string.contains('e') { send_amount.btc_string() } else { string }
             }
-            BitcoinUnit::Sat => send_amount.as_sats().thousands_int().to_string(),
+            BitcoinUnit::Sat => send_amount.as_sats().thousands_int(),
         }
     }
 
@@ -131,7 +131,7 @@ impl RustSendFlowManager {
             .amount_fiat
             .unwrap_or_else(|| send_amount.as_btc().ceil() * (btc_price_in_fiat as f64));
 
-        self.display_fiat_amount(send_amount_in_fiat, true).to_string()
+        self.display_fiat_amount(send_amount_in_fiat, true)
     }
 
     #[uniffi::method]

@@ -11,7 +11,6 @@ use std::{
 use backon::{ConstantBuilder, Retryable as _};
 
 use crate::{
-    auth::AuthType,
     color_scheme::ColorSchemeSelection,
     database::{Database, error::DatabaseError},
     fee_client::{FEE_CLIENT, FeeResponse},
@@ -454,51 +453,6 @@ impl FfiApp {
         crate::build::git_branch()
     }
 
-    pub fn debug_or_release(&self) -> String {
-        if !crate::build::is_release() {
-            return "DEBUG".to_string();
-        }
-
-        if crate::build::profile() == "release-smaller"
-            || crate::build::profile() == "release-speed"
-        {
-            return String::new();
-        }
-
-        crate::build::profile()
-    }
-
-    pub fn email_mailto(&self, ios: String) -> String {
-        let version = self.version();
-        let hash = crate::build::git_short_hash();
-
-        let email = "feedback@covebitcoinwallet.com";
-        let subject = format!("Cove Feedback ({version})");
-        let body = format!("Issue Description: \nversion:{version}\nhash:{hash}\niOS: {ios}\n");
-
-        format!("mailto:{email}?subject{subject}&body={body}")
-    }
-
-    /// Get the auth type for the app
-    pub fn auth_type(&self) -> AuthType {
-        Database::global()
-            .global_config
-            .auth_type()
-            .tap_err(|error| {
-                error!("unable to get auth type: {error:?}");
-            })
-            .unwrap_or_default()
-    }
-
-    /// Get the selected wallet
-    pub fn go_to_selected_wallet(&self) -> Option<WalletId> {
-        let selected_wallet = Database::global().global_config.selected_wallet()?;
-
-        self.reset_default_route_to(Route::SelectedWallet(selected_wallet.clone()));
-
-        Some(selected_wallet)
-    }
-
     /// Check if there's any wallets
     pub fn has_wallets(&self) -> bool {
         self.num_wallets() > 0
@@ -578,11 +532,6 @@ impl FfiApp {
     /// check if the router has any routes to go back to
     pub fn can_go_back(&self) -> bool {
         !self.state().router.routes.is_empty()
-    }
-
-    /// check if the router is at the root route (no routes to go back to)
-    pub fn is_at_root(&self) -> bool {
-        self.state().router.routes.is_empty()
     }
 
     pub fn network(&self) -> Network {

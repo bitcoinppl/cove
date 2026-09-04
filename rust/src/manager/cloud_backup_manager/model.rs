@@ -25,7 +25,7 @@ pub(crate) use self::events::{
     CloudBackupAcceptedEnablePrompt, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim, CloudBackupLifecycleEffect,
     CloudBackupRestoreAllRuntimeState, CloudBackupStateReducerEffects,
-    CloudBackupStateReducerEvent, CloudBackupStateReducerEventRejection,
+    CloudBackupStateReducerEvent,
 };
 pub use self::state_types::{
     CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupDetailState,
@@ -1370,7 +1370,7 @@ impl CloudBackupStateReducer {
     pub(crate) fn apply_event(
         &mut self,
         event: CloudBackupStateReducerEvent,
-    ) -> Result<CloudBackupStateReducerEffects, CloudBackupStateReducerEventRejection> {
+    ) -> CloudBackupStateReducerEffects {
         let previous_status = self.state.status();
         let previous_lifecycle = self.state.public_lifecycle();
         let previous_presentation = self.state.verification_presentation.clone();
@@ -1575,7 +1575,7 @@ impl CloudBackupStateReducer {
             &mut effects,
         );
 
-        Ok(effects)
+        effects
     }
 
     pub(crate) fn accept_enable_prompt(
@@ -1794,20 +1794,16 @@ mod tests {
                 CloudSyncHealth::Unknown,
             ),
         };
-        model
-            .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-                detail: Some((
-                    test_detail(wallets.len() as u32),
-                    CloudBackupInventoryAuthority::ProviderConfirmed,
-                )),
-                reset_cloud_only: false,
-            })
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
-                CloudOnlyState::Loaded { wallets },
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+            detail: Some((
+                test_detail(wallets.len() as u32),
+                CloudBackupInventoryAuthority::ProviderConfirmed,
+            )),
+            reset_cloud_only: false,
+        });
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+            CloudOnlyState::Loaded { wallets },
+        ));
         model
     }
 
@@ -1847,19 +1843,17 @@ mod tests {
         ];
         let mut checking = configured_model_with_cloud_only(wallets.clone());
 
-        checking.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted).unwrap();
+        checking.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted);
         assert_eq!(
             restore_all_state(&checking),
             CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
         );
 
         let mut failed = configured_model_with_cloud_only(wallets);
-        failed
-            .apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
-                reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
-                error: "provider unavailable".into(),
-            })
-            .unwrap();
+        failed.apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
+            reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
+            error: "provider unavailable".into(),
+        });
         assert_eq!(
             restore_all_state(&failed),
             CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 },
@@ -1877,16 +1871,12 @@ mod tests {
             cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
         ];
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
-                CloudOnlyState::Loading,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
-                CloudOnlyState::Loaded { wallets: loaded_wallets.clone() },
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+            CloudOnlyState::Loading,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+            CloudOnlyState::Loaded { wallets: loaded_wallets.clone() },
+        ));
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
@@ -1913,17 +1903,13 @@ mod tests {
             cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
         ];
 
-        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted).unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
-                CloudOnlyState::Loading,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
-                CloudOnlyState::Loaded { wallets: loaded_wallets.clone() },
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted);
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+            CloudOnlyState::Loading,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+            CloudOnlyState::Loaded { wallets: loaded_wallets.clone() },
+        ));
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
@@ -1942,16 +1928,12 @@ mod tests {
     fn supplemental_cloud_only_failure_does_not_fail_primary_inventory() {
         let mut model = configured_model_with_cloud_only(Vec::new());
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
-                CloudOnlyState::Loading,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
-                CloudOnlyState::Failed { error: "provider is still syncing".into() },
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+            CloudOnlyState::Loading,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+            CloudOnlyState::Failed { error: "provider is still syncing".into() },
+        ));
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
@@ -1976,27 +1958,19 @@ mod tests {
         let other_backups_failure =
             OtherBackupsOperation::Failed { error: "recovery failed".into() };
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::CloudOnlyOperationResolved(
-                CloudOnlyOperation::Operating { record_id: "wallet-1".into() },
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
-                OtherBackupsOperation::Recovering,
-            ))
-            .unwrap();
-        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted).unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::CloudOnlyOperationResolved(
-                cloud_only_failure.clone(),
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
-                other_backups_failure.clone(),
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyOperationResolved(
+            CloudOnlyOperation::Operating { record_id: "wallet-1".into() },
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
+            OtherBackupsOperation::Recovering,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted);
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyOperationResolved(
+            cloud_only_failure.clone(),
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
+            other_backups_failure.clone(),
+        ));
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
@@ -2007,22 +1981,16 @@ mod tests {
         assert_eq!(retained.cloud_only_operation, cloud_only_failure);
         assert_eq!(retained.other_backups_operation, other_backups_failure);
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
-                reason: CloudBackupInventoryIncompleteReason::Offline,
-                error: "provider offline".into(),
-            })
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::CloudOnlyOperationResolved(
-                CloudOnlyOperation::Idle,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
-                OtherBackupsOperation::Deleted,
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
+            reason: CloudBackupInventoryIncompleteReason::Offline,
+            error: "provider offline".into(),
+        });
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyOperationResolved(
+            CloudOnlyOperation::Idle,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
+            OtherBackupsOperation::Deleted,
+        ));
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
@@ -2038,23 +2006,19 @@ mod tests {
     #[test]
     fn deleted_other_backups_invalidates_loaded_inventory() {
         let mut model = configured_model_with_cloud_only(Vec::new());
-        model
-            .apply_event(CloudBackupStateReducerEvent::OtherBackupsStateResolved(
-                CloudBackupOtherBackupsState::Loaded {
-                    summary: CloudBackupOtherBackupsSummary {
-                        namespace_count: 1,
-                        wallet_count: 2,
-                        passkey_hints: Vec::new(),
-                    },
+        model.apply_event(CloudBackupStateReducerEvent::OtherBackupsStateResolved(
+            CloudBackupOtherBackupsState::Loaded {
+                summary: CloudBackupOtherBackupsSummary {
+                    namespace_count: 1,
+                    wallet_count: 2,
+                    passkey_hints: Vec::new(),
                 },
-            ))
-            .unwrap();
+            },
+        ));
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
-                OtherBackupsOperation::Deleted,
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::OtherBackupsOperationResolved(
+            OtherBackupsOperation::Deleted,
+        ));
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
@@ -2070,9 +2034,7 @@ mod tests {
             cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
         ]);
 
-        model
-            .apply_event(operation_event(CloudBackupExclusiveOperation::RestoreCloudWallet, 1))
-            .unwrap();
+        model.apply_event(operation_event(CloudBackupExclusiveOperation::RestoreCloudWallet, 1));
 
         assert_eq!(
             restore_all_state(&model),
@@ -2088,24 +2050,22 @@ mod tests {
             CloudBackupWalletStatus::DeletedFromDevice,
         )]);
 
-        model.apply_event(CloudBackupStateReducerEvent::RestoreAllRetryRequired).unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RestoreAllRetryRequired);
         assert_eq!(
             restore_all_state(&model),
             CloudBackupRestoreAllState::RetryAvailable { wallet_count: 1 },
         );
 
-        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted).unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted);
         assert_eq!(
             restore_all_state(&model),
             CloudBackupRestoreAllState::RetryAvailable { wallet_count: 1 },
         );
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-                detail: Some((detail, CloudBackupInventoryAuthority::ProviderConfirmed)),
-                reset_cloud_only: false,
-            })
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+            detail: Some((detail, CloudBackupInventoryAuthority::ProviderConfirmed)),
+            reset_cloud_only: false,
+        });
         assert_eq!(
             restore_all_state(&model),
             CloudBackupRestoreAllState::RetryAvailable { wallet_count: 1 },
@@ -2122,42 +2082,32 @@ mod tests {
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
             1,
         );
-        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim)).unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::RestoreAllStarted { claim, total: 2 })
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
-                claim,
-                completed: 1,
-                current_wallet_name: Some("Savings".into()),
-            })
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
-                claim,
-                completed: 0,
-                current_wallet_name: Some("Regressed".into()),
-            })
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RestoreAllStarted { claim, total: 2 });
+        model.apply_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
+            claim,
+            completed: 1,
+            current_wallet_name: Some("Savings".into()),
+        });
+        model.apply_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
+            claim,
+            completed: 0,
+            current_wallet_name: Some("Regressed".into()),
+        });
         let stale_claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
             0,
         );
-        model
-            .apply_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
-                claim: stale_claim,
-                completed: 2,
-                current_wallet_name: Some("Stale".into()),
-            })
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RestoreAllCancellationRequested(stale_claim))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RestoreAllCancellationRequested(claim))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RestoreAllProgressed {
+            claim: stale_claim,
+            completed: 2,
+            current_wallet_name: Some("Stale".into()),
+        });
+        model.apply_event(CloudBackupStateReducerEvent::RestoreAllCancellationRequested(
+            stale_claim,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::RestoreAllCancellationRequested(claim));
 
         assert_eq!(
             restore_all_state(&model),
@@ -2169,12 +2119,10 @@ mod tests {
             },
         );
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::RestoreAllFinished {
-                claim,
-                retry_remaining: false,
-            })
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RestoreAllFinished {
+            claim,
+            retry_remaining: false,
+        });
         assert_eq!(
             restore_all_state(&model),
             CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
@@ -2191,18 +2139,14 @@ mod tests {
         };
         let detail = test_detail(2);
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-                detail: Some((detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed)),
-                reset_cloud_only: false,
-            })
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
-                reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
-                error: "iCloud unavailable".into(),
-            })
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+            detail: Some((detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed)),
+            reset_cloud_only: false,
+        });
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
+            reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
+            error: "iCloud unavailable".into(),
+        });
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
@@ -2229,15 +2173,13 @@ mod tests {
         };
         let detail = test_detail(2);
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-                detail: Some((detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed)),
-                reset_cloud_only: false,
-            })
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+            detail: Some((detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed)),
+            reset_cloud_only: false,
+        });
         assert!(model.detail_inventory_is_complete());
 
-        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted).unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshStarted);
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
@@ -2262,11 +2204,9 @@ mod tests {
         };
         let provisional = test_detail(1);
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::DetailRefreshProvisional(
-                provisional.clone(),
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshProvisional(
+            provisional.clone(),
+        ));
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
@@ -2290,15 +2230,13 @@ mod tests {
             ),
         };
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-                detail: Some((
-                    test_detail(1),
-                    CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
-                )),
-                reset_cloud_only: false,
-            })
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+            detail: Some((
+                test_detail(1),
+                CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
+            )),
+            reset_cloud_only: false,
+        });
 
         assert!(!model.detail_inventory_is_complete());
         assert!(model.detail_inventory_is_ready());
@@ -2314,15 +2252,11 @@ mod tests {
         };
         let retained = test_detail(3);
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-                detail: Some((retained.clone(), CloudBackupInventoryAuthority::ProviderConfirmed)),
-                reset_cloud_only: false,
-            })
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::DetailRefreshProvisional(test_detail(0)))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+            detail: Some((retained.clone(), CloudBackupInventoryAuthority::ProviderConfirmed)),
+            reset_cloud_only: false,
+        });
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshProvisional(test_detail(0)));
 
         assert_eq!(model.state.detail(), Some(retained));
         assert!(!model.detail_inventory_is_complete());
@@ -2337,12 +2271,10 @@ mod tests {
             ),
         };
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
-                reason: CloudBackupInventoryIncompleteReason::Offline,
-                error: "Drive unavailable".into(),
-            })
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
+            reason: CloudBackupInventoryIncompleteReason::Offline,
+            error: "Drive unavailable".into(),
+        });
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
             panic!("expected configured lifecycle");
@@ -2447,16 +2379,12 @@ mod tests {
     fn enabling_carries_enable_step_and_progress() {
         let mut model = CloudBackupStateReducer::default();
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(
-                CloudBackupEnableState::UploadingBackup,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::EnableProgressReported(Some(
-                CloudBackupProgress { completed: 1, total: 2 },
-            )))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::EnableFlowAdvanced(
+            CloudBackupEnableState::UploadingBackup,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::EnableProgressReported(Some(
+            CloudBackupProgress { completed: 1, total: 2 },
+        )));
 
         assert_eq!(
             model.public_state().lifecycle,
@@ -2469,20 +2397,15 @@ mod tests {
     #[test]
     fn enable_operation_enters_enabling_and_clears_restore_progress() {
         let mut model = CloudBackupStateReducer::default();
-        model.apply_event(operation_event(CloudBackupExclusiveOperation::Restore, 1)).unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(
-                CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Restore, 1),
-            ))
-            .unwrap();
+        model.apply_event(operation_event(CloudBackupExclusiveOperation::Restore, 1));
+        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::Enabled,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(
+            CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Restore, 1),
+        ));
 
-        let effects =
-            model.apply_event(operation_event(CloudBackupExclusiveOperation::Enable, 2)).unwrap();
+        let effects = model.apply_event(operation_event(CloudBackupExclusiveOperation::Enable, 2));
 
         assert_eq!(model.status(), CloudBackupStatus::Enabling);
         assert_eq!(model.snapshot().progress, None);
@@ -2505,14 +2428,12 @@ mod tests {
             CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 1);
         let mut model = CloudBackupStateReducer::default();
 
-        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim)).unwrap();
-        model.apply_event(CloudBackupStateReducerEvent::EnableContextStarted(context)).unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
+        model.apply_event(CloudBackupStateReducerEvent::EnableContextStarted(context));
 
-        let configured_effects = model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
+        let configured_effects = model.apply_event(
+            CloudBackupStateReducerEvent::RuntimeStatusReconciled(CloudBackupStatus::Enabled),
+        );
 
         assert_eq!(configured_effects.enable_completed, None);
         assert!(matches!(
@@ -2521,17 +2442,15 @@ mod tests {
         ));
         assert_eq!(model.status(), CloudBackupStatus::Enabling);
 
-        let finished_effects = model
-            .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim))
-            .unwrap();
+        let finished_effects =
+            model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim));
 
         assert_eq!(finished_effects.enable_completed, Some(context));
         assert!(finished_effects.status_changed);
         assert_eq!(model.status(), CloudBackupStatus::Enabled);
 
-        let repeated_effects = model
-            .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim))
-            .unwrap();
+        let repeated_effects =
+            model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim));
 
         assert_eq!(repeated_effects.enable_completed, None);
     }
@@ -2582,10 +2501,9 @@ mod tests {
         {
             let mut model = CloudBackupStateReducer::default();
             model
-                .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(initial_status))
-                .unwrap();
+                .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(initial_status));
 
-            let effects = model.apply_event(operation_event(operation, index as u64)).unwrap();
+            let effects = model.apply_event(operation_event(operation, index as u64));
 
             assert_eq!(model.status(), expected_status);
             assert!(effects.status_changed);
@@ -2608,14 +2526,11 @@ mod tests {
         for (index, operation) in cases.into_iter().enumerate() {
             let mut model = CloudBackupStateReducer::default();
             model
-                .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(active_claim))
-                .unwrap();
+                .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(active_claim));
             let next_claim = CloudBackupExclusiveOperationClaim::new(operation, index as u64 + 2);
 
-            let result = model
-                .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(next_claim));
+            model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(next_claim));
 
-            assert!(result.is_ok());
             assert_eq!(model.active_operation(), Some(next_claim));
         }
     }
@@ -2623,13 +2538,11 @@ mod tests {
     #[test]
     fn runtime_disabled_reconcile_finishes_disabling_lifecycle_view() {
         let mut model = CloudBackupStateReducer::default();
-        model.apply_event(operation_event(CloudBackupExclusiveOperation::Disable, 1)).unwrap();
+        model.apply_event(operation_event(CloudBackupExclusiveOperation::Disable, 1));
 
-        let effects = model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Disabled,
-            ))
-            .unwrap();
+        let effects = model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::Disabled,
+        ));
 
         assert_eq!(model.public_state().lifecycle, CloudBackupLifecycle::Disabled);
         assert_eq!(effect_lifecycle(&effects), Some(&CloudBackupLifecycle::Disabled));
@@ -2643,18 +2556,10 @@ mod tests {
         let current_claim =
             CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Disable, 2);
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(stale_claim))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(stale_claim))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(current_claim))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(stale_claim))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(stale_claim));
+        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(stale_claim));
+        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(current_claim));
+        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(stale_claim));
 
         assert_eq!(model.active_operation(), Some(current_claim));
         assert_eq!(model.status(), CloudBackupStatus::Disabling);
@@ -2663,17 +2568,14 @@ mod tests {
     #[test]
     fn configured_model_events_emit_effects_and_refresh_lifecycle() {
         let mut model = CloudBackupStateReducer::default();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::Enabled,
+        ));
 
-        let effects = model
-            .apply_event(CloudBackupStateReducerEvent::PendingUploadVerificationReconciled(
+        let effects =
+            model.apply_event(CloudBackupStateReducerEvent::PendingUploadVerificationReconciled(
                 PendingUploadVerificationState::BlockedOnAuthorization,
-            ))
-            .unwrap();
+            ));
 
         assert_eq!(
             model.snapshot().pending_upload_verification,
@@ -2704,20 +2606,14 @@ mod tests {
     #[test]
     fn blocked_pending_upload_authorization_survives_sync_resolution() {
         let mut model = CloudBackupStateReducer::default();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::PendingUploadVerificationReconciled(
-                PendingUploadVerificationState::BlockedOnAuthorization,
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::Enabled,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::PendingUploadVerificationReconciled(
+            PendingUploadVerificationState::BlockedOnAuthorization,
+        ));
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::SyncStateResolved(SyncState::Syncing))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::SyncStateResolved(SyncState::Syncing));
 
         let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
             panic!("enabled backup should project configured lifecycle");
@@ -2734,16 +2630,13 @@ mod tests {
         let mut model = CloudBackupStateReducer::default();
         let claim =
             CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 1);
-        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim)).unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
 
-        let runtime_effects = model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
-        let effects = model
-            .apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim))
-            .unwrap();
+        let runtime_effects = model.apply_event(
+            CloudBackupStateReducerEvent::RuntimeStatusReconciled(CloudBackupStatus::Enabled),
+        );
+        let effects =
+            model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim));
 
         assert!(matches!(
             runtime_effects.lifecycle,
@@ -2756,25 +2649,16 @@ mod tests {
     #[test]
     fn runtime_enabled_preserves_disable_failed_signal() {
         let mut model = CloudBackupStateReducer::default();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
-                CloudBackupDisableOutcome::Failed {
-                    message: "blocked".into(),
-                    can_keep_enabled: true,
-                },
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::Enabled,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
+            CloudBackupDisableOutcome::Failed { message: "blocked".into(), can_keep_enabled: true },
+        ));
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::Enabled,
+        ));
 
         let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
             panic!("enabled backup should project configured lifecycle");
@@ -2791,25 +2675,16 @@ mod tests {
     #[test]
     fn returned_to_idle_clears_disable_failed_signal() {
         let mut model = CloudBackupStateReducer::default();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
-                CloudBackupDisableOutcome::Failed {
-                    message: "blocked".into(),
-                    can_keep_enabled: true,
-                },
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::Enabled,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
+            CloudBackupDisableOutcome::Failed { message: "blocked".into(), can_keep_enabled: true },
+        ));
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
-                CloudBackupDisableOutcome::ReturnedToIdle,
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
+            CloudBackupDisableOutcome::ReturnedToIdle,
+        ));
 
         let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
             panic!("enabled backup should project configured lifecycle");
@@ -2820,22 +2695,16 @@ mod tests {
     #[test]
     fn disable_started_clears_configured_prompt() {
         let mut model = CloudBackupStateReducer::default();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::PasskeyChoicePromptSet(
-                CloudBackupPasskeyChoiceIntent::RepairPasskey,
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::Enabled,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::PasskeyChoicePromptSet(
+            CloudBackupPasskeyChoiceIntent::RepairPasskey,
+        ));
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
-                CloudBackupDisableOutcome::Started,
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
+            CloudBackupDisableOutcome::Started,
+        ));
 
         let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
             panic!("enabled backup should project configured lifecycle");
@@ -2855,17 +2724,13 @@ mod tests {
             detail: None,
         };
         let mut model = CloudBackupStateReducer::default();
-        model
-            .apply_event(CloudBackupStateReducerEvent::VerificationStateResolved(
-                VerificationState::Verified(report.clone()),
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::VerificationStateResolved(
+            VerificationState::Verified(report.clone()),
+        ));
 
-        let effects = model
-            .apply_event(CloudBackupStateReducerEvent::VerificationStateResolved(
-                VerificationState::Verified(report),
-            ))
-            .unwrap();
+        let effects = model.apply_event(CloudBackupStateReducerEvent::VerificationStateResolved(
+            VerificationState::Verified(report),
+        ));
 
         assert_eq!(effects, CloudBackupStateReducerEffects::default());
     }
@@ -2875,10 +2740,8 @@ mod tests {
         let progress = CloudBackupRestoreFlow::Downloading { completed: 1, total: 3 };
         let mut model = CloudBackupStateReducer::default();
 
-        model.apply_event(operation_event(CloudBackupExclusiveOperation::Restore, 1)).unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RestoreProgressReported(progress.clone()))
-            .unwrap();
+        model.apply_event(operation_event(CloudBackupExclusiveOperation::Restore, 1));
+        model.apply_event(CloudBackupStateReducerEvent::RestoreProgressReported(progress.clone()));
 
         assert_eq!(model.public_state().lifecycle, CloudBackupLifecycle::Restoring(progress));
     }
@@ -2887,11 +2750,9 @@ mod tests {
     fn stray_enable_progress_does_not_enter_enabling() {
         let mut model = CloudBackupStateReducer::default();
 
-        let effects = model
-            .apply_event(CloudBackupStateReducerEvent::EnableProgressReported(Some(
-                CloudBackupProgress { completed: 1, total: 2 },
-            )))
-            .unwrap();
+        let effects = model.apply_event(CloudBackupStateReducerEvent::EnableProgressReported(
+            Some(CloudBackupProgress { completed: 1, total: 2 }),
+        ));
 
         assert_eq!(model.public_state().lifecycle, CloudBackupLifecycle::Disabled);
         assert_eq!(effects, CloudBackupStateReducerEffects::default());
@@ -2901,11 +2762,9 @@ mod tests {
     fn stray_restore_progress_does_not_enter_restoring() {
         let mut model = CloudBackupStateReducer::default();
 
-        let effects = model
-            .apply_event(CloudBackupStateReducerEvent::RestoreProgressReported(
-                CloudBackupRestoreFlow::Downloading { completed: 1, total: 3 },
-            ))
-            .unwrap();
+        let effects = model.apply_event(CloudBackupStateReducerEvent::RestoreProgressReported(
+            CloudBackupRestoreFlow::Downloading { completed: 1, total: 3 },
+        ));
 
         assert_eq!(model.public_state().lifecycle, CloudBackupLifecycle::Disabled);
         assert_eq!(effects, CloudBackupStateReducerEffects::default());
@@ -2923,24 +2782,16 @@ mod tests {
         };
         let mut model = CloudBackupStateReducer::default();
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::VerificationStateResolved(
-                VerificationState::Verified(report),
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::SyncStateResolved(SyncState::Syncing))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::PendingUploadVerificationReconciled(
-                PendingUploadVerificationState::Confirming,
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::Enabled,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::VerificationStateResolved(
+            VerificationState::Verified(report),
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::SyncStateResolved(SyncState::Syncing));
+        model.apply_event(CloudBackupStateReducerEvent::PendingUploadVerificationReconciled(
+            PendingUploadVerificationState::Confirming,
+        ));
 
         let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
             panic!("enabled backup should project configured lifecycle");
@@ -2954,11 +2805,9 @@ mod tests {
     #[test]
     fn passkey_missing_projects_missing_or_repairing() {
         let mut missing = CloudBackupStateReducer::default();
-        missing
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::PasskeyMissing,
-            ))
-            .unwrap();
+        missing.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::PasskeyMissing,
+        ));
 
         let CloudBackupLifecycle::Configured(state) = missing.public_state().lifecycle else {
             panic!("passkey-missing backup should still be configured");
@@ -2969,11 +2818,9 @@ mod tests {
         );
 
         let mut repairing = CloudBackupStateReducer::default();
-        repairing
-            .apply_event(CloudBackupStateReducerEvent::RecoveryStateResolved(
-                RecoveryState::Recovering(RecoveryAction::RepairPasskey),
-            ))
-            .unwrap();
+        repairing.apply_event(CloudBackupStateReducerEvent::RecoveryStateResolved(
+            RecoveryState::Recovering(RecoveryAction::RepairPasskey),
+        ));
 
         let CloudBackupLifecycle::Configured(state) = repairing.public_state().lifecycle else {
             panic!("repairing backup should still be configured");
@@ -2987,25 +2834,20 @@ mod tests {
     #[test]
     fn verification_flags_event_opens_decision_prompt() {
         let mut model = CloudBackupStateReducer::default();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::VerificationPresentationReconciled(
-                CloudBackupVerificationPresentation::Hidden {
-                    source: Some(CloudBackupVerificationSource::Settings),
-                },
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::Enabled,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::VerificationPresentationReconciled(
+            CloudBackupVerificationPresentation::Hidden {
+                source: Some(CloudBackupVerificationSource::Settings),
+            },
+        ));
 
-        let effects = model
-            .apply_event(CloudBackupStateReducerEvent::VerificationFlagsReconciled {
+        let effects =
+            model.apply_event(CloudBackupStateReducerEvent::VerificationFlagsReconciled {
                 metadata: CloudBackupVerificationMetadata::NeedsVerification,
                 should_prompt: true,
-            })
-            .unwrap();
+            });
 
         assert!(effects.verification_presentation_changed);
         assert_eq!(
@@ -3024,32 +2866,25 @@ mod tests {
     #[test]
     fn verification_flags_event_dismisses_stale_decision_prompt() {
         let mut model = CloudBackupStateReducer::default();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::VerificationFlagsReconciled {
-                metadata: CloudBackupVerificationMetadata::NeedsVerification,
-                should_prompt: true,
-            })
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::VerificationPresentationReconciled(
-                CloudBackupVerificationPresentation::NeedsDecision {
-                    reason: CloudBackupVerificationReason::BackupChanged,
-                    source: CloudBackupVerificationSource::RootPrompt,
-                },
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::Enabled,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::VerificationFlagsReconciled {
+            metadata: CloudBackupVerificationMetadata::NeedsVerification,
+            should_prompt: true,
+        });
+        model.apply_event(CloudBackupStateReducerEvent::VerificationPresentationReconciled(
+            CloudBackupVerificationPresentation::NeedsDecision {
+                reason: CloudBackupVerificationReason::BackupChanged,
+                source: CloudBackupVerificationSource::RootPrompt,
+            },
+        ));
 
-        let effects = model
-            .apply_event(CloudBackupStateReducerEvent::VerificationFlagsReconciled {
+        let effects =
+            model.apply_event(CloudBackupStateReducerEvent::VerificationFlagsReconciled {
                 metadata: CloudBackupVerificationMetadata::Verified(42),
                 should_prompt: false,
-            })
-            .unwrap();
+            });
 
         assert!(effects.verification_presentation_changed);
         assert_eq!(
@@ -3063,27 +2898,21 @@ mod tests {
     #[test]
     fn pending_upload_refresh_tracks_decision_pending_without_duplicate_presentation() {
         let mut model = CloudBackupStateReducer::default();
-        model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::Enabled,
-            ))
-            .unwrap();
-        model
-            .apply_event(CloudBackupStateReducerEvent::VerificationFlagsReconciled {
+        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::Enabled,
+        ));
+        model.apply_event(CloudBackupStateReducerEvent::VerificationFlagsReconciled {
+            metadata: CloudBackupVerificationMetadata::NeedsVerification,
+            should_prompt: true,
+        });
+
+        let effects = model.apply_event(
+            CloudBackupStateReducerEvent::PendingUploadVerificationAndFlagsReconciled {
+                pending: PendingUploadVerificationState::Idle,
                 metadata: CloudBackupVerificationMetadata::NeedsVerification,
                 should_prompt: true,
-            })
-            .unwrap();
-
-        let effects = model
-            .apply_event(
-                CloudBackupStateReducerEvent::PendingUploadVerificationAndFlagsReconciled {
-                    pending: PendingUploadVerificationState::Idle,
-                    metadata: CloudBackupVerificationMetadata::NeedsVerification,
-                    should_prompt: true,
-                },
-            )
-            .unwrap();
+            },
+        );
 
         assert!(effects.verification_decision_pending);
         assert!(!effects.verification_presentation_changed);
@@ -3098,12 +2927,10 @@ mod tests {
         };
         let mut model = CloudBackupStateReducer::default();
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
-                context: CloudBackupEnableContext::settings_manual(),
-                passkey_hint: Some(hint.clone()),
-            })
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
+            context: CloudBackupEnableContext::settings_manual(),
+            passkey_hint: Some(hint.clone()),
+        });
 
         assert_eq!(
             model.snapshot().root_prompt,
@@ -3130,12 +2957,10 @@ mod tests {
         let context = CloudBackupEnableContext::settings_manual();
         let mut model = CloudBackupStateReducer::default();
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
-                context,
-                passkey_hint: None,
-            })
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::ExistingBackupFoundPromptSet {
+            context,
+            passkey_hint: None,
+        });
 
         let (accepted, effects) =
             model.accept_enable_prompt(CloudBackupEnablePromptChoice::CreateNew);
@@ -3160,9 +2985,7 @@ mod tests {
         let intent = CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(context, None);
         let mut model = CloudBackupStateReducer::default();
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::PasskeyChoicePromptSet(intent.clone()))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::PasskeyChoicePromptSet(intent.clone()));
 
         let expected_lifecycle = CloudBackupLifecycle::Enabling(
             CloudBackupEnableFlow::AwaitingPasskeyChoice(intent.clone()),
@@ -3188,11 +3011,9 @@ mod tests {
         let context = CloudBackupEnableContext::settings_manual();
         let mut model = CloudBackupStateReducer::default();
 
-        model
-            .apply_event(CloudBackupStateReducerEvent::PasskeyChoicePromptSet(
-                CloudBackupPasskeyChoiceIntent::Enable(context, None),
-            ))
-            .unwrap();
+        model.apply_event(CloudBackupStateReducerEvent::PasskeyChoicePromptSet(
+            CloudBackupPasskeyChoiceIntent::Enable(context, None),
+        ));
 
         let (accepted, effects) =
             model.accept_enable_prompt(CloudBackupEnablePromptChoice::UseExisting);
@@ -3215,11 +3036,9 @@ mod tests {
     fn root_prompt_is_derived_from_configured_state() {
         let mut model = CloudBackupStateReducer::default();
 
-        let effects = model
-            .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-                CloudBackupStatus::PasskeyMissing,
-            ))
-            .unwrap();
+        let effects = model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
+            CloudBackupStatus::PasskeyMissing,
+        ));
 
         assert_eq!(model.snapshot().root_prompt, CloudBackupRootPrompt::MissingPasskeyReminder);
         assert!(matches!(

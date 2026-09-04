@@ -444,7 +444,7 @@ mod tests {
         assert_eq!(state.last_verification_requested_at(), Some(12));
         assert_eq!(state.last_verification_dismissed_at(), Some(13));
 
-        let clear_store = store.clone();
+        let clear_store = store;
         race_with_held_state_mutation(
             Arc::clone(&db),
             |state| assert!(state.record_successful_sync(30, 9)),
@@ -468,7 +468,7 @@ mod tests {
         db.cloud_backup_state.set(&passkey_missing_state()).unwrap();
         let store = CloudBackupStore::new(&db);
         let marker = PersistedRestoreAllMarker { namespace_id: "namespace-1".into() };
-        let marker_for_write = marker.clone();
+        let marker_for_write = marker;
         let marker_store = store.clone();
         race_with_held_state_mutation(
             Arc::clone(&db),
@@ -529,7 +529,7 @@ mod tests {
             move || assert!(clear_store.clear_restore_all_marker().unwrap()),
         );
 
-        let marker_store = store.clone();
+        let marker_store = store;
         marker_store.persist_restore_all_marker("namespace-2".into()).unwrap();
         race_with_held_state_mutation(
             Arc::clone(&db),

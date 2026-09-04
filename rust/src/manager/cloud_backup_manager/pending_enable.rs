@@ -198,9 +198,11 @@ pub(crate) struct PendingSavedPasskeySessionMaterial {
 }
 
 /// Tracks passkey material created during enable before the flow fully completes
-#[allow(dead_code)]
 pub(crate) enum PendingEnableSession {
     /// A new passkey and master key are staged while the user confirms Create New Backup
+    // no production path stages this session yet: the existing-backup prompt is presented
+    // without material and confirmation re-creates it, so only the resume paths read it
+    #[allow(dead_code)]
     AwaitingForceNewConfirmation(PendingEnableSessionMaterial),
     /// Upload already started and should retry with the same staged passkey material
     RetryUpload(PendingEnableSessionMaterial),

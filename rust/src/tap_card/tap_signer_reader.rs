@@ -26,8 +26,7 @@ use crate::{
     network::Network,
     psbt::Psbt,
     wallet::metadata::{
-        TAP_SIGNER_ANNOUNCEMENT_HEIGHT, WalletBirthday, tap_signer_setup_birthday,
-        valid_birth_height,
+        TAP_SIGNER_ANNOUNCEMENT_HEIGHT, WalletBirthday, tap_signer_birthday, valid_birth_height,
     },
 };
 
@@ -816,7 +815,7 @@ impl fmt::Debug for SetupCmdResponse {
 
 /// Build the completed setup response, falling back to the TAPSIGNER announcement height
 fn setup_complete_response(backup: Vec<u8>, derive_info: DeriveInfo) -> SetupCmdResponse {
-    let birthday = tap_signer_setup_birthday(derive_info.network, derive_info.birth_height)
+    let birthday = tap_signer_birthday(derive_info.network, derive_info.birth_height)
         .unwrap_or(WalletBirthday::BlockHeight(TAP_SIGNER_ANNOUNCEMENT_HEIGHT));
 
     SetupCmdResponse::Complete(TapSignerSetupComplete { backup, derive_info, birthday })

@@ -12,7 +12,7 @@ use jiff::Timestamp;
 
 use crate::{
     database::Database,
-    fiat::{FiatCurrency, client::FIAT_CLIENT, historical::HistoricalPrice},
+    fiat::{client::FIAT_CLIENT, historical::HistoricalPrice},
     historical_price_service::HistoricalPriceService,
     transaction::{TransactionDirection, Unit},
 };
@@ -344,7 +344,10 @@ impl TransactionDetails {
 
         task::spawn(async move {
             FIAT_CLIENT
-                .current_value_in_currency(amount, currency())
+                .current_value_in_currency(
+                    amount,
+                    Database::global().global_config.selected_fiat_currency(),
+                )
                 .await
                 .map_err_str(Error::FiatAmount)
         })
@@ -361,7 +364,10 @@ impl TransactionDetails {
     #[uniffi::method]
     pub fn amount_fiat_fmt_cached(&self) -> Option<String> {
         let amount = self.amount();
-        let fiat = FIAT_CLIENT.value_in_currency_cached(amount, currency())?;
+        let fiat = FIAT_CLIENT.value_in_currency_cached(
+            amount,
+            Database::global().global_config.selected_fiat_currency(),
+        )?;
         Some(fiat_amount_fmt(fiat))
     }
 
@@ -376,7 +382,10 @@ impl TransactionDetails {
         let fee = self.fee.ok_or_else(|| Error::Fee("No fee".to_string()))?;
         let fiat = task::spawn(async move {
             FIAT_CLIENT
-                .current_value_in_currency(fee, currency())
+                .current_value_in_currency(
+                    fee,
+                    Database::global().global_config.selected_fiat_currency(),
+                )
                 .await
                 .map_err_str(Error::FiatAmount)
         })
@@ -389,7 +398,10 @@ impl TransactionDetails {
     #[uniffi::method]
     pub fn fee_fiat_fmt_cached(&self) -> Option<String> {
         let fee = self.fee?;
-        let fiat = FIAT_CLIENT.value_in_currency_cached(fee, currency())?;
+        let fiat = FIAT_CLIENT.value_in_currency_cached(
+            fee,
+            Database::global().global_config.selected_fiat_currency(),
+        )?;
         Some(fiat_amount_fmt(fiat))
     }
 
@@ -420,7 +432,10 @@ impl TransactionDetails {
 
         let fiat = task::spawn(async move {
             FIAT_CLIENT
-                .current_value_in_currency(amount, currency())
+                .current_value_in_currency(
+                    amount,
+                    Database::global().global_config.selected_fiat_currency(),
+                )
                 .await
                 .map_err_str(Error::FiatAmount)
         })
@@ -433,7 +448,10 @@ impl TransactionDetails {
     #[uniffi::method]
     pub fn sent_sans_fee_fiat_fmt_cached(&self) -> Option<String> {
         let amount = self.sent_sans_fee()?;
-        let fiat = FIAT_CLIENT.value_in_currency_cached(amount, currency())?;
+        let fiat = FIAT_CLIENT.value_in_currency_cached(
+            amount,
+            Database::global().global_config.selected_fiat_currency(),
+        )?;
         Some(fiat_amount_fmt(fiat))
     }
 
@@ -486,12 +504,7 @@ impl TransactionDetails {
 
     #[uniffi::method]
     pub fn transaction_label(&self) -> Option<String> {
-        let label = self.labels.transaction_label()?;
-        if label.is_empty() {
-            return None;
-        }
-
-        Some(label.to_string())
+        super::non_empty_transaction_label(&self.labels)
     }
 
     #[uniffi::method]
@@ -519,7 +532,8 @@ impl TransactionDetails {
         let db = Database::global().historical_prices();
         let price_record = db.get_price_for_block(self.network, block_number).ok()??;
         let price = HistoricalPrice::from(price_record);
-        let currency_price = price.for_currency(currency())?;
+        let currency_price =
+            price.for_currency(Database::global().global_config.selected_fiat_currency())?;
 
         let fiat_value = self.amount().as_btc() * currency_price as f64;
         Some(fmt_historical_fiat(fiat_value))
@@ -541,7 +555,7 @@ impl TransactionDetails {
 
         let network = self.network;
         let amount_btc = self.amount().as_btc();
-        let currency = currency();
+        let currency = Database::global().global_config.selected_fiat_currency();
 
         let currency_price = task::spawn(async move {
             let service = HistoricalPriceService::new();
@@ -628,15 +642,10 @@ impl TransactionDetails {
     }
 }
 
-/// MARK: local helpers
-fn currency() -> FiatCurrency {
-    Database::global().global_config.fiat_currency().unwrap_or_default()
-}
-
 fn fiat_amount_fmt(amount: f64) -> String {
     let amount_fmt = amount.thousands_fiat();
 
-    let currency = currency();
+    let currency = Database::global().global_config.selected_fiat_currency();
     let symbol = currency.symbol();
     let suffix = currency.suffix();
 
@@ -646,7 +655,7 @@ fn fiat_amount_fmt(amount: f64) -> String {
 fn fmt_historical_fiat(amount: f64) -> String {
     let amount_fmt = amount.thousands_fiat();
 
-    let currency = currency();
+    let currency = Database::global().global_config.selected_fiat_currency();
     let symbol = currency.symbol();
     let suffix = currency.suffix();
 
@@ -662,7 +671,7 @@ mod tests {
     /// Mirrors the detection logic in `try_new`: returns `true` when any input
     /// sequence signals opt-in RBF (nSequence < 0xFFFFFFFE, per BIP 125).
     fn compute_is_rbf_signaling(sequences: &[Sequence]) -> bool {
-        sequences.iter().any(|seq| seq.is_rbf())
+        sequences.iter().any(bitcoin::Sequence::is_rbf)
     }
 
     #[test]

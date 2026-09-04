@@ -365,16 +365,12 @@ impl QrScanner {
             }
 
             Self::InProgress(MultiQr::Bbqr(bbqr)) => {
-                let qr = qr
-                    .into_string()
-                    .map_err(|error| MultiQrError::RecoverableFrame(error.to_string()))?;
+                let qr = qr.into_string().map_err_str(MultiQrError::RecoverableFrame)?;
                 Self::scan_bbqr_part(bbqr, &qr)?
             }
 
             Self::InProgress(MultiQr::Ur(ur)) => {
-                let qr = qr
-                    .into_string()
-                    .map_err(|error| MultiQrError::RecoverableFrame(error.to_string()))?;
+                let qr = qr.into_string().map_err_str(MultiQrError::RecoverableFrame)?;
                 Self::scan_ur_part(ur, &qr)?
             }
 
@@ -489,11 +485,9 @@ impl QrScanner {
     fn scan_ur_part(ur: &mut UrInProgress, qr: &str) -> Result<ScanResult, MultiQrError> {
         use cove_ur::UrError;
 
-        let parsed_ur =
-            Ur::parse(qr).map_err(|error| MultiQrError::RecoverableFrame(error.to_string()))?;
-        let foundation_ur = parsed_ur
-            .to_foundation_ur()
-            .map_err(|error| MultiQrError::RecoverableFrame(error.to_string()))?;
+        let parsed_ur = Ur::parse(qr).map_err_str(MultiQrError::RecoverableFrame)?;
+        let foundation_ur =
+            parsed_ur.to_foundation_ur().map_err_str(MultiQrError::RecoverableFrame)?;
         if let Err(error) = ur.decoder.receive(foundation_ur) {
             return Err(MultiQrError::RecoverableFrame(error.to_string()));
         }

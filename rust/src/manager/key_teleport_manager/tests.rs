@@ -278,7 +278,7 @@ fn stale_phase_generation_cannot_commit_after_clear_end_or_restart() {
     let manager = RustKeyTeleportManager::new();
 
     let before_clear = manager.current_generation();
-    manager.clone().handle_action(Action::Clear).unwrap();
+    manager.handle_action(Action::Clear).unwrap();
     assert!(!manager.set_phase_if_current(before_clear, Phase::Receive(ReceivePhase::Error)));
 
     manager.start_receive().unwrap();
@@ -936,7 +936,7 @@ fn send_eligibility_requires_hot_wallet_with_keychain_secret() {
 
     assert!(!is_send_eligible(&hot_wallet).unwrap());
 
-    Keychain::global().save_wallet_key(&hot_wallet.id, mnemonic.clone()).unwrap();
+    Keychain::global().save_wallet_key(&hot_wallet.id, mnemonic).unwrap();
     assert!(is_send_eligible(&hot_wallet).unwrap());
 
     let unsupported_mnemonic = Mnemonic::from_entropy(&[0_u8; 20]).unwrap();

@@ -239,8 +239,10 @@ fn build_cold_wallet_secret(
     metadata: &WalletMetadata,
     id: &crate::wallet::metadata::WalletId,
 ) -> Result<CloudWalletSecret, CloudBackupError> {
-    let is_tap_signer =
-        metadata.hardware_metadata.as_ref().is_some_and(|hardware| hardware.is_tap_signer());
+    let is_tap_signer = metadata
+        .hardware_metadata
+        .as_ref()
+        .is_some_and(crate::wallet::metadata::HardwareWalletMetadata::is_tap_signer);
 
     if !is_tap_signer {
         return Ok(CloudWalletSecret::WatchOnly);
@@ -280,10 +282,7 @@ fn prepare_cloud_labels(labels_jsonl: &str) -> Result<PreparedCloudLabels, Cloud
     let labels_zstd_jsonl = if labels_jsonl.is_empty() {
         None
     } else {
-        Some(
-            crate::backup::crypto::compress(labels_jsonl.as_bytes())
-                .map_err(|source| CloudBackupError::internal_context("compress labels", source))?,
-        )
+        Some(crate::backup::crypto::compress(labels_jsonl.as_bytes()))
     };
 
     Ok(PreparedCloudLabels {

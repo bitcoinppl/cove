@@ -366,7 +366,7 @@ fn render_preview_with_user_description(preview_text: &str, user_description: &s
     text
 }
 
-fn timestamp() -> String {
+pub(crate) fn timestamp() -> String {
     jiff::Timestamp::now().to_string()
 }
 
@@ -513,8 +513,7 @@ mod tests {
         );
 
         let preview = report.preview_text_for_description(Some(description.clone()));
-        let upload =
-            report.upload_report(report.redacted_user_description(Some(description.clone())));
+        let upload = report.upload_report(report.redacted_user_description(Some(description)));
         let json = serde_json::to_string(&upload).unwrap();
 
         assert!(preview.contains("## User description"));

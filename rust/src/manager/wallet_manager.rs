@@ -148,6 +148,7 @@ pub enum WalletScanStatus {
     ScanningPendingProgress(WalletScanPhase),
 }
 
+/// Alert shapes the platforms present for wallet-level failures; Rust defines the type and iOS raises it
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletErrorAlert {
     NodeConnectionFailed(String),
@@ -707,15 +708,6 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub async fn get_fee_options(&self) -> Result<FeeRateOptions, Error> {
-        self.ensure_active()?;
-        let fee_client = &FEE_CLIENT;
-        let fees = fee_client.fetch_and_get_fees().await.map_err(WalletManagerFeesError::from)?;
-
-        fees.fee_rate_options().map_err_str(Error::FeesError)
-    }
-
-    #[uniffi::method]
     pub async fn first_address(&self) -> Result<AddressInfo, Error> {
         self.ensure_active()?;
         let address_info = call!(self.actor.address_at(0))
@@ -821,17 +813,6 @@ impl RustWalletManager {
         self.force_wallet_scan().await?;
 
         Ok(())
-    }
-
-    #[uniffi::method]
-    pub async fn current_block_height(&self) -> Result<u32, Error> {
-        self.ensure_active()?;
-        let height = call!(self.actor.get_height(false))
-            .await
-            .map_err(|_| Error::GetHeightError)?
-            .map_err(|_| Error::GetHeightError)?;
-
-        Ok(height as u32)
     }
 
     #[uniffi::method]
@@ -1263,7 +1244,7 @@ impl RustWalletManager {
         let actor = task::spawn_actor(wallet_actor);
 
         Self {
-            id: metadata.id.clone(),
+            id: metadata.id,
             actor,
             metadata: shared_metadata,
             reconciler: channel,
@@ -1323,10 +1304,9 @@ fn downgrade_and_notify_if_needed(
     updated.wallet_type = WalletType::WatchOnly;
     updated.hardware_metadata = None;
 
-    let updated =
-        Database::global().wallets.update_wallet_metadata(updated.clone()).map_err(|e| {
-            Error::UnknownError(format!("failed to persist watch-only downgrade for {id}: {e}",))
-        })?;
+    let updated = Database::global().wallets.update_wallet_metadata(updated).map_err(|e| {
+        Error::UnknownError(format!("failed to persist watch-only downgrade for {id}: {e}",))
+    })?;
 
     deferred.queue(Message::HotWalletKeyMissing(updated.id.clone()));
     Ok(updated)

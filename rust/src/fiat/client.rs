@@ -59,7 +59,7 @@ pub struct PriceResponse {
 #[uniffi::export]
 impl PriceResponse {
     pub fn get(&self) -> u64 {
-        let currency = Database::global().global_config.fiat_currency().unwrap_or_default();
+        let currency = Database::global().global_config.selected_fiat_currency();
 
         self.get_for_currency(currency)
     }
@@ -276,15 +276,6 @@ pub async fn fetch_and_update_prices_if_needed() -> Result<()> {
     update_prices(prices)?;
 
     Ok(())
-}
-
-#[uniffi::export(name = "updatePricesIfNeeded")]
-async fn _ffi_update_prices_if_needed() {
-    use tracing::error;
-
-    if let Err(error) = crate::fiat::client::fetch_and_update_prices_if_needed().await {
-        error!("unable to update prices: {error:?}");
-    }
 }
 
 #[cfg(test)]

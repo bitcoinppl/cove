@@ -237,14 +237,6 @@ impl WordVerifyStateMachine {
         let inner = self.0.read();
         inner.validator.is_complete(inner.word_number)
     }
-
-    /// Reset to a specific word number (useful for going back)
-    pub fn reset_to_word(&self, word_number: u8) {
-        let mut inner = self.0.write();
-        inner.state = WordCheckState::None;
-        inner.is_correct = None;
-        inner.word_number = word_number;
-    }
 }
 
 #[cfg(test)]
@@ -275,7 +267,7 @@ mod tests {
         let correct_word =
             possible.iter().find(|w| validator.is_word_correct(w.to_string(), 1)).unwrap().clone();
 
-        let transition = sm.select_word(correct_word.clone());
+        let transition = sm.select_word(correct_word);
 
         assert!(matches!(transition.new_state, WordCheckState::Checking { .. }));
         assert!(!transition.should_advance_word);
@@ -310,7 +302,7 @@ mod tests {
     #[test]
     fn test_incorrect_word_flow() {
         let validator = create_test_validator();
-        let sm = WordVerifyStateMachine::new(validator.clone(), 1);
+        let sm = WordVerifyStateMachine::new(validator, 1);
 
         // select an incorrect word
         sm.select_word("wrongword".to_string());

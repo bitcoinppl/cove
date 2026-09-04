@@ -6,7 +6,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnableRecoveryCompletion, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -34,7 +34,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnableRecoveryPreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -54,16 +54,7 @@ impl CloudBackupSupervisor {
                     return Produces::ok(());
                 }
 
-                let Some(addr) = self.addr() else {
-                    self.fail_enable_recovery_before_commit(
-                        &manager,
-                        claim,
-                        CloudBackupError::Internal(
-                            "could not schedule enable recovery completion".into(),
-                        ),
-                    );
-                    return Produces::ok(());
-                };
+                let addr = self.addr();
 
                 let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
                 addr.send_fut_with(move |addr| async move {
@@ -141,7 +132,7 @@ impl CloudBackupSupervisor {
         finalization: EnableRecoveryFinalization,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {

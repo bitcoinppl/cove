@@ -88,7 +88,7 @@ pub(crate) fn parse_key_teleport_string(
         .or_else(|_| Packet::from_bbqr_part(trimmed))
         .map_err(|_| KeyTeleportParseError::Unrecognized)?;
 
-    parse_packet(packet)
+    Ok(parse_packet(packet))
 }
 
 pub(crate) fn parse_key_teleport_bbqr_payload(
@@ -109,7 +109,7 @@ pub(crate) fn parse_key_teleport_bbqr_payload(
         _ => return Err(KeyTeleportParseError::Unrecognized),
     };
 
-    parse_packet(packet)
+    Ok(parse_packet(packet))
 }
 
 pub(crate) fn parse_key_teleport_input(
@@ -125,17 +125,17 @@ pub(crate) fn parse_key_teleport_input(
     }
 }
 
-fn parse_packet(packet: Packet) -> Result<ParsedKeyTeleport, KeyTeleportParseError> {
+fn parse_packet(packet: Packet) -> ParsedKeyTeleport {
     match packet {
         Packet::Receiver(packet) => {
-            Ok(ParsedKeyTeleport::Receiver(Arc::new(KeyTeleportReceiverPacket::from(packet))))
+            ParsedKeyTeleport::Receiver(Arc::new(KeyTeleportReceiverPacket::from(packet)))
         }
 
         Packet::Sender(packet) => {
-            Ok(ParsedKeyTeleport::Sender(Arc::new(KeyTeleportSenderPacket::from(packet))))
+            ParsedKeyTeleport::Sender(Arc::new(KeyTeleportSenderPacket::from(packet)))
         }
 
-        Packet::Psbt(_) => Ok(ParsedKeyTeleport::UnsupportedPsbt),
+        Packet::Psbt(_) => ParsedKeyTeleport::UnsupportedPsbt,
     }
 }
 

@@ -104,7 +104,7 @@ impl WordValidator {
         assert!(preview);
 
         let number_of_words = number_of_words.unwrap_or(NumberOfBip39Words::Twelve);
-        let mnemonic = number_of_words.generate_mnemonic().clone();
+        let mnemonic = number_of_words.generate_mnemonic();
 
         Self::new(mnemonic)
     }
@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn test_possible_words_random_mnemonic() {
         let mnemonic = NumberOfBip39Words::Twelve.generate_mnemonic();
-        let validator = WordValidator::new(mnemonic.clone());
+        let validator = WordValidator::new(mnemonic);
 
         for word_position in 1..=12u8 {
             validate_possible_words_result(&validator, word_position);
@@ -166,17 +166,6 @@ mod tests {
     }
 
     #[test]
-    fn test_possible_words_bacon_mnemonic_manual() {
-        let bacon_words = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon boil";
-        let mnemonic = Mnemonic::parse(bacon_words).expect("should parse bacon words");
-        let validator = WordValidator::new(mnemonic);
-
-        let possible_words = validator.possible_words(6);
-        assert_eq!(possible_words.len(), 12, "Should always return exactly 12 words");
-        assert!(possible_words.contains(&"bacon".to_string()));
-    }
-
-    #[test]
     fn test_possible_words_duplicate_words() {
         let duplicate_words = ["bacon"; 24].join(" ");
         let mnemonic = Mnemonic::parse(duplicate_words).expect("should parse duplicate words");
@@ -188,19 +177,9 @@ mod tests {
     }
 
     #[test]
-    fn test_with_random_mnemonic() {
-        let mnemonic = NumberOfBip39Words::Twelve.generate_mnemonic();
-        let validator = WordValidator::new(mnemonic.clone());
-
-        for word_position in 1..=12u8 {
-            validate_possible_words_result(&validator, word_position);
-        }
-    }
-
-    #[test]
     fn test_possible_words_edge_cases() {
         let mnemonic = NumberOfBip39Words::Twelve.generate_mnemonic();
-        let validator = WordValidator::new(mnemonic.clone());
+        let validator = WordValidator::new(mnemonic);
 
         assert_eq!(validator.possible_words(0).len(), 0, "Should return empty for word position 0");
         assert_eq!(
@@ -218,7 +197,7 @@ mod tests {
     #[test]
     fn test_is_word_correct() {
         let mnemonic = NumberOfBip39Words::Twelve.generate_mnemonic();
-        let validator = WordValidator::new(mnemonic.clone());
+        let validator = WordValidator::new(mnemonic);
 
         for (i, word) in validator.words.iter().enumerate() {
             let word_position = (i + 1) as u8;

@@ -758,7 +758,7 @@ impl WalletActor {
     #[into_actor_result]
     pub async fn txns_with_prices(&mut self) -> Result<Vec<(ConfirmedTransaction, Option<f32>)>> {
         let network = self.wallet.network;
-        let fiat_currency = Database::global().global_config.fiat_currency().unwrap_or_default();
+        let fiat_currency = Database::global().global_config.selected_fiat_currency();
 
         let confirmed_transactions = self
             .do_transactions()

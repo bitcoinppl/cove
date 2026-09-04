@@ -264,6 +264,11 @@ impl ActiveOperation {
         }
     }
 
+    /// Whether `claim` still owns the active operation, so completions for superseded claims are ignored
+    fn is_current(&self, claim: CloudBackupExclusiveOperationClaim) -> bool {
+        self.claim() == Some(claim)
+    }
+
     fn start_standard(&mut self, claim: CloudBackupExclusiveOperationClaim) {
         self.0 = Some(ActiveOperationRun::Standard(claim));
     }
@@ -351,8 +356,8 @@ impl CloudBackupSupervisor {
         self.manager.upgrade()
     }
 
-    fn addr(&self) -> Option<Addr<Self>> {
-        Some(self.addr.upgrade())
+    fn addr(&self) -> Addr<Self> {
+        self.addr.upgrade()
     }
 
     async fn delete_prepared_cloud_wallet_for_operation(
@@ -445,7 +450,7 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
 
@@ -468,7 +473,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         error: CloudBackupError,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
 
@@ -481,7 +486,7 @@ impl CloudBackupSupervisor {
     }
 
     fn restore_operation_is_current(&self, claim: CloudBackupExclusiveOperationClaim) -> bool {
-        self.active_operation.claim() == Some(claim)
+        self.active_operation.is_current(claim)
             && claim.operation() == CloudBackupExclusiveOperation::Restore
     }
 
@@ -942,7 +947,7 @@ impl CloudBackupSupervisor {
         detail_claim: DetailResultClaim,
         result: Option<CloudBackupDetailResult>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -977,9 +982,8 @@ impl CloudBackupSupervisor {
         let plan = self.detail_workflow.entry_plan(&manager);
         match plan {
             DetailEntryPlan::StartPasskeyVerification { force_discoverable } => {
-                if let Some(addr) = self.addr() {
-                    send!(addr.start_verification(force_discoverable));
-                }
+                let addr = self.addr();
+                send!(addr.start_verification(force_discoverable));
                 return Produces::ok(());
             }
             DetailEntryPlan::UseFreshEnableProof(authorization) => {
@@ -1022,12 +1026,12 @@ impl CloudBackupSupervisor {
     }
 
     fn schedule_other_backups_scan(&mut self, manager: Arc<RustCloudBackupManager>) {
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         let claim = OtherBackupsScanClaim(self.next_request_id());
         self.active_other_backups_scan = Some(claim);
 
         manager.apply_other_backups_state(CloudBackupOtherBackupsState::Checking);
-        let scan_manager = manager.clone();
+        let scan_manager = manager;
         addr.send_fut_with(move |addr| async move {
             let cloud = CloudStorage::global_silent_client();
             let state = scan_manager.other_backup_state(&cloud).await;
@@ -1110,7 +1114,7 @@ impl CloudBackupSupervisor {
 
     pub async fn start_restore_from_cloud_backup(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        let Some(addr) = self.addr() else { return Produces::ok(()) };
+        let addr = self.addr();
         let Some(claim) =
             self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore)
         else {
@@ -1154,7 +1158,7 @@ impl CloudBackupSupervisor {
         sender: flume::Sender<CloudBackupRestoreEvent>,
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
-        let Some(addr) = self.addr() else { return Produces::ok(()) };
+        let addr = self.addr();
         let Some(claim) =
             self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore)
         else {
@@ -1219,7 +1223,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        let status = manager.state.read().status().clone();
+        let status = manager.state.read().status();
         if !matches!(status, CloudBackupStatus::Restoring) {
             return Produces::ok(());
         }
@@ -1279,7 +1283,7 @@ pub(crate) mod test_support {
 
         pub async fn new_restore_operation(&mut self) -> ActorResult<RestoreOperation> {
             let manager = self.manager().expect("cloud backup manager exists");
-            let addr = self.addr().expect("cloud backup supervisor address exists");
+            let addr = self.addr();
             if let Some(claim) = self.active_operation.take_claim() {
                 manager.project_exclusive_operation_finished(claim);
             }

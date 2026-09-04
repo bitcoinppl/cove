@@ -33,12 +33,16 @@ impl Fingerprint {
 
     #[uniffi::method]
     pub fn as_uppercase(&self) -> String {
-        self.0.to_string().to_ascii_uppercase()
+        let mut fingerprint = self.0.to_string();
+        fingerprint.make_ascii_uppercase();
+        fingerprint
     }
 
     #[uniffi::method]
     pub fn as_lowercase(&self) -> String {
-        self.0.to_string().to_ascii_lowercase()
+        let mut fingerprint = self.0.to_string();
+        fingerprint.make_ascii_lowercase();
+        fingerprint
     }
 }
 

@@ -62,7 +62,7 @@ pub struct Database {
 impl Database {
     #[uniffi::constructor(name = "new")]
     pub fn new() -> Arc<Self> {
-        Self::global().clone()
+        Self::global()
     }
 
     pub fn wallets(&self) -> WalletsTable {
@@ -163,7 +163,7 @@ impl Database {
         let cloud_blob_sync_states = CloudBlobSyncStateTable::new(main_db_arc.clone(), &write_txn);
         let unsigned_transactions = UnsignedTransactionsTable::new(main_db_arc.clone(), &write_txn);
         let historical_prices = HistoricalPriceTable::new(main_db_arc.clone(), &write_txn);
-        let diagnostics_reports = DiagnosticsReportsTable::new(main_db_arc.clone(), &write_txn);
+        let diagnostics_reports = DiagnosticsReportsTable::new(main_db_arc, &write_txn);
 
         write_txn.commit()?;
 

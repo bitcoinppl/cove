@@ -392,6 +392,8 @@ fn fetch_tip_and_latest_blocks(
     Ok((new_tip, new_blocks))
 }
 
+// the esplora scanner has a fallible counterpart with the same shape, so both stay `Result`
+#[allow(clippy::unnecessary_wraps)]
 fn chain_update(
     mut tip: CheckPoint,
     latest_blocks: &BTreeMap<u32, BlockHash>,
