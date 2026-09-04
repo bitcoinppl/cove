@@ -206,9 +206,6 @@ internal fun ConfirmedTransactionWidget(
     val lockState = transactionLockStateForRow(txId, manager)
     val showsLockedTreatment = lockState.showsLockedTransactionTreatment
 
-    fun privateShow(text: String, placeholder: String = "••••••"): String =
-        if (sensitiveVisible) text else placeholder
-
     val iconBackground =
         if (showsLockedTreatment) {
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
@@ -287,7 +284,7 @@ internal fun ConfirmedTransactionWidget(
                 fontWeight = FontWeight.Medium,
             )
             AutoSizeText(
-                text = privateShow(date),
+                text = privateShow(sensitiveVisible, date),
                 color = dateColor,
                 maxFontSize = 12.sp,
                 minimumScaleFactor = 0.90f,
@@ -310,13 +307,13 @@ internal fun ConfirmedTransactionWidget(
                     secondaryText
                 }
             Text(
-                text = privateShow(amount),
+                text = privateShow(sensitiveVisible, amount),
                 color = amountColor,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Normal,
             )
             Text(
-                text = privateShow(secondaryAmount),
+                text = privateShow(sensitiveVisible, secondaryAmount),
                 color = secondaryAmountColor,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Normal,
@@ -342,9 +339,6 @@ internal fun UnconfirmedTransactionWidget(
     val txId = transaction.v1.id()
     val lockState = transactionLockStateForRow(txId, manager)
     val showsLockedTreatment = lockState.showsLockedTransactionTreatment
-
-    fun privateShow(text: String, placeholder: String = "••••••"): String =
-        if (sensitiveVisible) text else placeholder
 
     val iconBackground =
         if (showsLockedTreatment) {
@@ -442,13 +436,13 @@ internal fun UnconfirmedTransactionWidget(
                     secondaryText.copy(alpha = 0.65f)
                 }
             Text(
-                text = privateShow(amount),
+                text = privateShow(sensitiveVisible, amount),
                 color = amountColor,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Normal,
             )
             Text(
-                text = privateShow(secondaryAmount),
+                text = privateShow(sensitiveVisible, secondaryAmount),
                 color = secondaryAmountColor,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Normal,
@@ -509,9 +503,6 @@ internal fun UnsignedTransactionWidget(
         fiatAmount = null
         fiatAmount = manager.amountInFiatCached(txn.spendingAmount())
     }
-
-    fun privateShow(text: String, placeholder: String = "••••••"): String =
-        if (sensitiveVisible) text else placeholder
 
     val iconBackground = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.75f)
     val iconForeground = MaterialTheme.colorScheme.inverseOnSurface
@@ -616,13 +607,13 @@ internal fun UnsignedTransactionWidget(
 
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = privateShow(formattedAmount),
+                    text = privateShow(sensitiveVisible, formattedAmount),
                     color = primaryText,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Normal,
                 )
                 Text(
-                    text = privateShow(secondaryAmount),
+                    text = privateShow(sensitiveVisible, secondaryAmount),
                     color = secondaryText,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Normal,
@@ -661,3 +652,6 @@ internal fun UnsignedTransactionWidget(
         }
     }
 }
+
+private fun privateShow(sensitiveVisible: Boolean, text: String, placeholder: String = "••••••"): String =
+    if (sensitiveVisible) text else placeholder

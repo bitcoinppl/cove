@@ -688,49 +688,8 @@ private fun backupErrorMessage(error: Throwable): String {
     // a non-BackupException carries an arbitrary Throwable.message, which must never reach the user
     if (error !is BackupException) return "Backup operation failed"
 
-    return backupFileErrorMessage(error) ?: backupImportErrorMessage(error)
+    return error.userMessage()
 }
-
-// messages for reading and validating the backup file itself
-private fun backupFileErrorMessage(error: BackupException): String? =
-    when (error) {
-        is BackupException.PasswordTooShort -> "Password must be at least 20 characters"
-        is BackupException.DecryptionFailed -> "Wrong password or corrupted backup file"
-        is BackupException.InvalidFormat -> "Not a valid Cove backup file"
-        is BackupException.FileTooLarge -> "Backup file is too large (max 50 MB)"
-        is BackupException.UnsupportedVersion -> "Unsupported backup version, please update the app"
-        is BackupException.UnsupportedPayloadVersion -> "Unsupported backup payload, please update the app"
-        is BackupException.Truncated -> "Backup file is truncated or corrupted"
-        else -> null
-    }
-
-// messages for applying a validated backup to local wallet data
-private fun backupImportErrorMessage(error: BackupException): String =
-    when (error) {
-        is BackupException.Encryption,
-        is BackupException.Serialization,
-        is BackupException.Deserialization,
-        is BackupException.Gather,
-        is BackupException.Decompression,
-        -> "Cove could not finish importing this backup. Review it and try again."
-        is BackupException.Restore ->
-            "Cove could not restore local wallet data. Check available storage and try again."
-        is BackupException.Keychain ->
-            "Cove could not update secure wallet data. Check device security and try again."
-        is BackupException.Database ->
-            "Cove could not update local wallet data. Check available storage and try again."
-        is BackupException.WalletIdOccupied ->
-            "A wallet or restore operation is using existing local data. Close it and preview the backup again."
-        is BackupException.InvalidWalletId ->
-            "The backup contains an invalid wallet id and cannot be imported."
-        is BackupException.ImportApprovalStale ->
-            "Existing wallet data changed after the preview. Preview the backup again before importing."
-        is BackupException.ImportApprovalRequired ->
-            "This import needs cleanup approval. Preview the backup again and confirm the cleanup warning."
-        is BackupException.ImportApprovalUsed ->
-            "This import preview has already been used. Preview the backup again before importing."
-        else -> "Backup operation failed"
-    }
 
 private fun formatReport(report: BackupImportReport): String {
     val lines = mutableListOf<String>()

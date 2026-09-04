@@ -530,19 +530,6 @@ internal class TapSignerOperationRetryException(
     message: String,
 ) : Exception(message)
 
-internal enum class TapSignerFailureDisposition {
-    AUTHENTICATION,
-    OTHER,
-    CANCELLATION,
-}
-
-internal fun classifyTapSignerFailure(error: Throwable): TapSignerFailureDisposition =
-    when {
-        error is kotlinx.coroutines.CancellationException -> TapSignerFailureDisposition.CANCELLATION
-        isAuthError(error) -> TapSignerFailureDisposition.AUTHENTICATION
-        else -> TapSignerFailureDisposition.OTHER
-    }
-
 internal fun isAuthError(error: Throwable): Boolean =
     error is org.bitcoinppl.cove_core.TapSignerReaderException.TapSignerException &&
         error.v1 is org.bitcoinppl.cove_core.TransportException.CkTap &&

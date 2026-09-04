@@ -70,36 +70,6 @@ fun MaterialDivider(
     )
 }
 
-// Deprecated: Use MaterialDivider instead
-@Composable
-fun CustomSpacer(
-    height: Dp? = 1.dp,
-    paddingValues: PaddingValues,
-) {
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(height!!),
-    ) {
-        Spacer(
-            modifier =
-                Modifier
-                    .height(1.dp)
-                    .fillMaxWidth()
-                    .padding(paddingValues)
-                    .background(MaterialTheme.colorScheme.outlineVariant)
-                    .align(Alignment.CenterEnd),
-        )
-    }
-}
-
-@Preview
-@Composable
-fun CustomSpacerPreview() {
-    CustomSpacer(paddingValues = PaddingValues(start = 54.dp))
-}
-
 @Preview
 @Composable
 fun MaterialDividerPreview() {
@@ -189,53 +159,6 @@ fun KeyValueRow(
 
         trailingContent()
     }
-}
-
-@Composable
-fun InfoRow(
-    label: String,
-    text: String,
-) {
-    KeyValueRow(
-        label = label,
-        value = text,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp, bottom = 6.dp, start = 8.dp, end = 16.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    )
-}
-
-@Preview
-@Composable
-fun InfoRowPreview() {
-    InfoRow("Title Text", "Lorem ipsum")
-}
-
-@Composable
-fun ClickableInfoRow(
-    label: String,
-    text: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-) {
-    KeyValueRow(
-        label = label,
-        value = text,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp, bottom = 6.dp, start = 8.dp, end = 16.dp)
-                .clickable(true, onClick = onClick),
-        trailingContent = {
-            Icon(
-                imageVector = icon,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                contentDescription = "Forward",
-            )
-        },
-    )
 }
 
 @Composable

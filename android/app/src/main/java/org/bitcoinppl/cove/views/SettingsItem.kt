@@ -25,28 +25,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.R
 
-@Preview
-@Composable
-fun SettingsItemGo() {
-    SettingsItem(
-        title = "Text",
-        iconResId = R.drawable.icon_network,
-        onClick = { },
-    )
-}
-
-@Preview
-@Composable
-fun SettingsItemSwitch() {
-    SettingsItem(
-        title = "Text",
-        iconResId = R.drawable.icon_network,
-        isSwitch = true,
-        switchCheckedState = true,
-        onCheckChanged = { isChecked -> },
-    )
-}
-
 // Material Design 3 settings item using standard Material icons
 @Composable
 fun MaterialSettingsItem(
@@ -163,57 +141,4 @@ fun MaterialSettingsItemSwitchPreview() {
         switchCheckedState = true,
         onCheckChanged = {},
     )
-}
-
-// Deprecated: Use MaterialSettingsItem instead for Material Design compliance
-@Composable
-fun SettingsItem(
-    title: String,
-    iconResId: Int,
-    onClick: (() -> Unit)? = null,
-    isSwitch: Boolean = false,
-    switchCheckedState: Boolean = false,
-    onCheckChanged: ((Boolean) -> Unit)? = null,
-) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .then(
-                    if (onClick != null) {
-                        Modifier.clickable(onClick = onClick)
-                    } else {
-                        Modifier
-                    },
-                ).padding(vertical = 4.dp, horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        RoundRectImage(
-            painter = painterResource(id = iconResId),
-            cornerRadius = 8.dp,
-        )
-
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp),
-        )
-
-        if (isSwitch) {
-            ThemedSwitch(
-                isChecked = switchCheckedState,
-                onCheckChanged = onCheckChanged ?: {},
-            )
-        } else {
-            Icon(
-                modifier = Modifier.size(40.dp),
-                imageVector = Icons.AutoMirrored.Default.KeyboardArrowRight,
-                contentDescription = "Go",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
 }

@@ -432,7 +432,6 @@ fun BackupExportScreen(
 }
 
 private fun backupExportErrorMessage(e: Exception): String = when (e) {
-    is BackupException.PasswordTooShort -> "Password must be at least 20 characters"
-    is BackupException -> e.message?.takeIf { it.isNotEmpty() } ?: "Backup export failed"
+    is BackupException -> e.userMessage()
     else -> e.message ?: "Unknown error"
 }

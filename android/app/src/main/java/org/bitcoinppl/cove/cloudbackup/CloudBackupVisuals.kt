@@ -416,20 +416,6 @@ internal fun CloudBackupSimpleActionCard(
 }
 
 @Composable
-private fun LoadingRow(
-    text: String,
-) {
-    Row(
-        modifier = Modifier.padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        CircularProgressIndicator(modifier = Modifier.width(20.dp).height(20.dp), strokeWidth = 2.dp)
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(text)
-    }
-}
-
-@Composable
 internal fun ErrorInlineMessage(
     message: String,
     modifier: Modifier = Modifier,

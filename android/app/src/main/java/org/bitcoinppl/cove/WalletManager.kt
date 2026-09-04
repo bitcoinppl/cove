@@ -163,7 +163,6 @@ class WalletManager :
         }
 
     // errors
-    var errorAlert by mutableStateOf<WalletErrorAlert?>(null)
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
     var labelRefreshFailed by mutableStateOf<TaggedItem<Unit>?>(null)
         private set
@@ -336,14 +335,6 @@ class WalletManager :
                     manager?.close() ?: bootstrap.close()
                 }
             }
-        }
-
-        // create from xpub
-        fun fromXpub(xpub: String): WalletManager {
-            val rust = RustWalletManager.tryNewFromXpub(xpub)
-            val initialState = rust.initialState()
-            android.util.Log.d("WalletManager", "Initialized WalletManager from xpub")
-            return WalletManager(initialState.metadata.id, rust, initialState)
         }
 
         // create from TapSigner
@@ -591,12 +582,6 @@ class WalletManager :
         }
     }
 
-    suspend fun deleteUnsignedTransactionAsync(txnId: TxId) {
-        withRustSuspend {
-            deleteUnsignedTransaction(txnId)
-        }
-    }
-
     suspend fun splitTransactionOutputs(outputs: List<AddressAndAmount>): SplitOutput =
         withRustSuspend {
             splitTransactionOutputs(outputs)
@@ -629,12 +614,7 @@ class WalletManager :
             displayConfirmationCount(confirmations)
         }
 
-    fun amountFmt(amount: Amount): String =
-        when (walletMetadata?.selectedUnit) {
-            BitcoinUnit.BTC -> amount.btcString()
-            BitcoinUnit.SAT -> amount.satsString()
-            else -> amount.satsString()
-        }
+    fun amountFmt(amount: Amount): String = amount.fmtString(walletMetadata?.selectedUnit ?: BitcoinUnit.SAT)
 
     fun displayAmount(amount: Amount, showUnit: Boolean = true): String {
         return walletDisplayAmount(requiredWalletMetadata, amount, showUnit)
@@ -679,12 +659,7 @@ class WalletManager :
 
     fun amountInFiatCached(amount: Amount): Double? = walletAmountInFiatCached(amount)
 
-    fun amountFmtUnit(amount: Amount): String =
-        when (walletMetadata?.selectedUnit) {
-            BitcoinUnit.BTC -> amount.btcStringWithUnit()
-            BitcoinUnit.SAT -> amount.satsStringWithUnit()
-            else -> amount.satsStringWithUnit()
-        }
+    fun amountFmtUnit(amount: Amount): String = amount.fmtStringWithUnit(walletMetadata?.selectedUnit ?: BitcoinUnit.SAT)
 
     suspend fun transactionDetails(txId: TxId): TransactionDetailsPresentation {
         transactionDetailsPresentations[txId]?.let { return it }
@@ -931,7 +906,6 @@ class WalletManager :
             }
 
             is WalletManagerReconcileMessage.NodeConnectionFailed -> {
-                errorAlert = WalletErrorAlert.NodeConnectionFailed(message.v1)
                 logError(message.v1)
             }
 
