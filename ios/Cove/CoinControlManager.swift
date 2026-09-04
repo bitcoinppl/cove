@@ -197,16 +197,7 @@ private enum CoinControlManagerError: LocalizedError {
     }
 
     func displayAmount(_ amount: Amount, showUnit: Bool = true) -> String {
-        switch (unit, showUnit) {
-        case (.btc, true):
-            amount.btcStringWithUnit()
-        case (.btc, false):
-            amount.btcString()
-        case (.sat, true):
-            amount.satsStringWithUnit()
-        case (.sat, false):
-            amount.satsString()
-        }
+        showUnit ? amount.fmtStringWithUnit(unit: unit) : amount.fmtString(unit: unit)
     }
 
     func reloadLabels() async {

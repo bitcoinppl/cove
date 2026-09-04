@@ -277,7 +277,7 @@ struct BackupExportView: View {
                 await MainActor.run {
                     tempFileURL = nil
                     isExporting = false
-                    errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                    errorMessage = (error as? BackupError)?.userMessage() ?? error.localizedDescription
                 }
             }
         }

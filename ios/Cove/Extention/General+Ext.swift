@@ -9,21 +9,6 @@ import CoveCore
 import Foundation
 import SwiftUI
 
-extension Double {
-    func btcFmt(maxDecimals: Int = 10) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.minimumFractionDigits = maxDecimals
-        formatter.maximumFractionDigits = maxDecimals
-        formatter.usesGroupingSeparator = false
-        return formatter.string(from: NSNumber(value: self))!
-    }
-
-    func btcFmtWithUnit() -> String {
-        btcFmt() + " BTC"
-    }
-}
-
 extension FeeSpeed {
     var string: String {
         self.description

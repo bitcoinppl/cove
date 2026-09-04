@@ -107,7 +107,6 @@ struct HotWalletImportScreen: View {
     }
 
     @State var manager: ImportWalletManager = .init()
-    @State private var validator: WordValidator? = nil
 
     @State var enteredWords: [[String]] = [[]]
     @State var filteredSuggestions: [String] = []
@@ -119,8 +118,6 @@ struct HotWalletImportScreen: View {
     // qr code scanning
     @Environment(\.dismiss) var dismiss
     @State private var scanner = QrScanner()
-    @State private var scannedCode: TaggedString?
-    @State private var scanComplete: Bool = false
     @State private var scanError: TaggedString?
 
     // nfc scanning
@@ -539,11 +536,6 @@ struct KeyboardToolbarShapeModifier: ViewModifier {
             content
         }
     }
-}
-
-private struct DuplicateWalletItem: Identifiable {
-    var id: UUID
-    var walletId: WalletId
 }
 
 #Preview("12 Words") {

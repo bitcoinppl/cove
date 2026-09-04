@@ -17,10 +17,6 @@ extension SignedTransactionOrPsbt {
         try signedTransactionOrPsbtTryParse(input: input)
     }
 
-    static func tryFromBytes(data: Data) throws -> SignedTransactionOrPsbt {
-        try signedTransactionOrPsbtTryFromBytes(data: data)
-    }
-
     func sendConfirmRoute(id: WalletId, details: ConfirmDetails) -> Route {
         switch self {
         case let .transaction(transaction):

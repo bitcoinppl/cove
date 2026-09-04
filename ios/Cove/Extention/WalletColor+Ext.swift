@@ -44,43 +44,6 @@ extension WalletColor {
         }
     }
 
-    func all() -> [WalletColor] {
-        [
-            .red,
-            .blue,
-            .green,
-            .yellow,
-            .orange,
-            .purple,
-            .pink,
-        ]
-    }
-
-    func toCardColors() -> [Color] {
-        switch self {
-        case .red:
-            return [.red, .red.opacity(0.99)]
-        case .blue:
-            return [.blue, .blue.opacity(0.99)]
-        case .green:
-            return [.green, .green.opacity(0.99)]
-        case .yellow:
-            return [.yellow, .yellow.opacity(0.99)]
-        case .orange:
-            return [.orange, .orange.opacity(0.99)]
-        case .purple:
-            return [.purple, .purple.opacity(0.99)]
-        case .pink:
-            return [.pink, .pink.opacity(0.99)]
-        case let .custom(r, g, b):
-            let color = customToColor(r: r, g: g, b: b)
-            return [color, color.opacity(0.99)]
-        default:
-            let color = toColor()
-            return [color, color.opacity(0.99)]
-        }
-    }
-
     func toColor() -> Color {
         if let standardColor {
             return standardColor
@@ -148,28 +111,6 @@ extension FfiColor {
 }
 
 extension Color {
-    func toWalletColor() -> WalletColor {
-        switch self {
-        case .red:
-            return .red
-        case .blue:
-            return .blue
-        case .green:
-            return .green
-        case .yellow:
-            return .yellow
-        case .orange:
-            return .orange
-        case .purple:
-            return .purple
-        case .pink:
-            return .pink
-        case let color:
-            let (red, green, blue, _) = color.getRGB()
-            return .custom(r: UInt8(red), g: UInt8(green), b: UInt8(blue))
-        }
-    }
-
     func addOpacity(_ opacity: FfiOpacity) -> Color {
         if opacity == 100 {
             return self

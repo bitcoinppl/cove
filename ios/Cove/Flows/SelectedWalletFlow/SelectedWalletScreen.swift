@@ -8,11 +8,6 @@
 import SwiftUI
 import SwiftUIIntrospect
 
-struct ExportingBackup: Equatable {
-    var tapSigner: TapSigner
-    var backup: Data
-}
-
 enum SelectedWalletPresentationState: Equatable {
     case receive
     case chooseAddressType([FoundAddress])
@@ -43,12 +38,8 @@ struct SelectedWalletScreen: View {
 
     @State private var presentationState: TaggedItem<SelectedWalletPresentationState>? = nil
 
-    @State private var showingCopiedPopup = true
     @State private var shouldShowNavBar = false
     @State private var cloudBackupManager = CloudBackupManager.shared
-
-    /// import / export
-    @State var exportingBackup: ExportingBackup? = nil
 
     @State private var scannedLabels: TaggedItem<MultiFormat>? = nil
     @State private var pendingRenameNavigationTask: Task<Void, Never>? = nil

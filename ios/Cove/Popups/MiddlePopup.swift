@@ -18,7 +18,7 @@ struct MiddlePopup: CenterPopup {
     var message: String?
     var buttonText: String = "OK"
     var onClose: () -> Void = {}
-    @State var swipeToDismiss = true
+    let swipeToDismiss = true
 
     var body: some View {
         MiddlePopupView(state: state, dismiss: { Task { await dismissLastPopup() } }, heading: heading, message: message, buttonText: buttonText, onClose: onClose)

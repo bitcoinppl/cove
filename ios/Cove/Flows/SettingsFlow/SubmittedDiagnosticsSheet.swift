@@ -246,7 +246,7 @@ private struct SubmittedDiagnosticsRow: View {
                 .accessibilityLabel("Copy Report ID")
             }
 
-            Text(Self.formattedDate(record.submittedAt))
+            Text(Date.formattedTimestamp(record.submittedAt))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
@@ -258,12 +258,6 @@ private struct SubmittedDiagnosticsRow: View {
             }
         }
         .padding(.vertical, 4)
-    }
-
-    private static func formattedDate(_ timestamp: UInt64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
-
-        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 

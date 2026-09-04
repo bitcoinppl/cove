@@ -341,10 +341,6 @@ enum WalletManagerPreview {
         }
     }
 
-    private var amountFormatter: AmountFormatter {
-        AmountFormatter(metadata: walletMetadata)
-    }
-
     var hasTransactions: Bool {
         switch loadState {
         case .loading: false
@@ -495,37 +491,37 @@ enum WalletManagerPreview {
     }
 
     func amountFmt(_ amount: Amount) -> String {
-        amountFormatter.amountFmt(amount)
+        amount.fmtString(unit: walletMetadata.selectedUnit)
     }
 
     func displayAmount(_ amount: Amount, showUnit: Bool = true) -> String {
-        amountFormatter.displayAmount(amount, showUnit: showUnit)
+        walletDisplayAmount(metadata: walletMetadata, amount: amount, showUnit: showUnit)
     }
 
     func displayAmountPendingFmt(_ amount: Amount) -> String? {
-        amountFormatter.displayAmountPendingFmt(amount)
+        walletDisplayAmountPendingFmt(metadata: walletMetadata, amount: amount)
     }
 
     func displayAmountWithDirection(
         _ amount: Amount,
         direction: TransactionDirection
     ) -> String {
-        amountFormatter.displayAmountWithDirection(amount, direction: direction)
+        walletDisplayAmountWithDirection(metadata: walletMetadata, amount: amount, direction: direction)
     }
 
     func displaySentAndReceivedAmount(_ sentAndReceived: SentAndReceived) -> String {
-        amountFormatter.displaySentAndReceivedAmount(sentAndReceived)
+        walletDisplaySentAndReceivedAmount(metadata: walletMetadata, sentAndReceived: sentAndReceived)
     }
 
     func displayFiatAmount(_ amount: Double, withSuffix: Bool = true) -> String {
-        amountFormatter.displayFiatAmount(amount, withSuffix: withSuffix)
+        walletDisplayFiatAmount(metadata: walletMetadata, amount: amount, withSuffix: withSuffix)
     }
 
     func displayFiatAmountPendingFmt(
         _ amount: Double,
         withSuffix: Bool = true
     ) -> String? {
-        amountFormatter.displayFiatAmountPendingFmt(amount, withSuffix: withSuffix)
+        walletDisplayFiatAmountPendingFmt(metadata: walletMetadata, amount: amount, withSuffix: withSuffix)
     }
 
     func displayFiatAmountWithDirection(
@@ -533,15 +529,16 @@ enum WalletManagerPreview {
         direction: TransactionDirection,
         withSuffix: Bool = true
     ) -> String {
-        amountFormatter.displayFiatAmountWithDirection(
-            amount,
+        walletDisplayFiatAmountWithDirection(
+            metadata: walletMetadata,
+            amount: amount,
             direction: direction,
             withSuffix: withSuffix
         )
     }
 
     func amountInFiatCached(_ amount: Amount) -> Double? {
-        amountFormatter.amountInFiatCached(amount)
+        walletAmountInFiatCached(amount: amount)
     }
 
     func displayConfirmationCount(_ confirmations: UInt32) -> String {
@@ -551,7 +548,7 @@ enum WalletManagerPreview {
     }
 
     func amountFmtUnit(_ amount: Amount) -> String {
-        amountFormatter.amountFmtUnit(amount)
+        amount.fmtStringWithUnit(unit: walletMetadata.selectedUnit)
     }
 
     func transactionDetails(for txId: TxId) async throws -> TransactionDetailsPresentation {

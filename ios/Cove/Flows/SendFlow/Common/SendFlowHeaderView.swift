@@ -21,15 +21,7 @@ struct SendFlowHeaderView: View {
     }
 
     private var balanceString: String {
-        if !metadata.sensitiveVisible {
-            return "••••••"
-        }
-
-        // btc or sats
-        return switch metadata.selectedUnit {
-        case .btc: amount.btcString()
-        case .sat: amount.satsString()
-        }
+        walletDisplayAmount(metadata: metadata, amount: amount, showUnit: false)
     }
 
     var body: some View {

@@ -38,28 +38,6 @@ extension String {
         self = network.description
     }
 
-    func removingLeadingZeros() -> String {
-        guard self != "0" else { return self }
-        if contains(".") {
-            if hasSuffix("0") {
-                return normalizeZero()
-            } else {
-                return self
-            }
-        }
-
-        let int = Int(self) ?? 0
-        return String(int)
-    }
-
-    func normalizeZero() -> String {
-        let pattern = "^0+\\.0$"
-        if range(of: pattern, options: .regularExpression) != nil {
-            return "0.0"
-        }
-        return self
-    }
-
     func addressSpacedOut() -> String {
         addressStringSpacedOut(address: self)
     }

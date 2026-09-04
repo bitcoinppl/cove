@@ -15,7 +15,6 @@ struct NodeSelectionView: View {
     @State private var selectedNodeName: String
     @State private var nodeList: [NodeSelection]
 
-    @State private var nodeIsChecking = false
     @State private var customNodeName: String = ""
     @State private var customUrl: String = ""
 
