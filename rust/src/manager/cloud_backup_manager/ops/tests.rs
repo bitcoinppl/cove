@@ -281,29 +281,6 @@ async fn run_reinitialize_backup_operation(
     run_enable_operation(manager, TestEnableOperation::ReinitializeBackup).await
 }
 
-async fn restore_from_local_master_key_fallback<S>(
-    cloud: &CloudStorageClient,
-    store: &S,
-    cspp: &cove_cspp::Cspp<S>,
-) -> Result<(cove_cspp::master_key::MasterKey, String), CloudBackupError>
-where
-    S: cove_cspp::CsppStore,
-    S::Error: std::fmt::Display,
-{
-    let (master_key, namespace_id) = try_restore_from_local_master_key(cloud, cspp)
-        .await?
-        .ok_or(CloudBackupError::PasskeyMismatch)?;
-    store
-        .save(
-            crate::manager::cloud_backup_manager::keychain::CSPP_NAMESPACE_ID_KEY.into(),
-            namespace_id.to_owned(),
-        )
-        .map_err(|source| {
-            CloudBackupError::Internal(format!("save namespace_id: {source}").into())
-        })?;
-    Ok((master_key, namespace_id))
-}
-
 fn platform_authorization_failed() -> PasskeyError {
     PasskeyError::RequestFailed {
         operation: PasskeyOperation::DiscoverAssertion,
@@ -327,7 +304,9 @@ async fn run_disable_cloud_backup(manager: &Arc<RustCloudBackupManager>) {
     call!(manager.supervisor.start_disable_operation()).await.expect("start disable operation");
     wait_for_test_condition(Duration::from_secs(2), "disable operation finishes", || {
         !matches!(
-            manager.projected_exclusive_operation().map(|claim| claim.operation()),
+            manager
+                .projected_exclusive_operation()
+                .map(crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim::operation),
             Some(CloudBackupExclusiveOperation::Disable)
         )
     })
@@ -348,7 +327,9 @@ async fn run_recreate_manifest(manager: &Arc<RustCloudBackupManager>) {
         .expect("start recreate-manifest operation");
     wait_for_test_condition(Duration::from_secs(8), "recreate-manifest operation finishes", || {
         !matches!(
-            manager.projected_exclusive_operation().map(|claim| claim.operation()),
+            manager
+                .projected_exclusive_operation()
+                .map(crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim::operation),
             Some(CloudBackupExclusiveOperation::RecreateManifest)
         )
     })
@@ -361,7 +342,9 @@ async fn run_repair_passkey_operation(manager: &Arc<RustCloudBackupManager>, no_
         .expect("start repair-passkey operation");
     wait_for_test_condition(Duration::from_secs(8), "repair-passkey operation finishes", || {
         !matches!(
-            manager.projected_exclusive_operation().map(|claim| claim.operation()),
+            manager
+                .projected_exclusive_operation()
+                .map(crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim::operation),
             Some(CloudBackupExclusiveOperation::RepairPasskey)
         )
     })
@@ -372,7 +355,9 @@ async fn confirm_saved_passkey_session(manager: &Arc<RustCloudBackupManager>) {
     call!(manager.supervisor.confirm_saved_passkey()).await.expect("confirm saved passkey");
     for _ in 0..500 {
         if !matches!(
-            manager.projected_exclusive_operation().map(|claim| claim.operation()),
+            manager
+                .projected_exclusive_operation()
+                .map(crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim::operation),
             Some(CloudBackupExclusiveOperation::Enable)
         ) {
             return;
@@ -396,12 +381,6 @@ fn disable_failure_message(manager: &RustCloudBackupManager) -> String {
     };
 
     message
-}
-
-mod cove_tokio {
-    pub(crate) fn init() {
-        super::ensure_cloud_backup_test_tokio_runtime();
-    }
 }
 
 fn init_manager() -> Arc<RustCloudBackupManager> {

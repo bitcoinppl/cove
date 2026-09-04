@@ -10,6 +10,8 @@ use cove_bdk_progressive_scan::{ProgressiveScanner, ScanEvent};
 use tokio_util::sync::CancellationToken;
 
 const USED_ADDRESS: &str = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
+// a real mainnet address nobody controls; if it ever receives funds the two
+// unused-address tests break permanently because they require an empty scan
 const UNUSED_ADDRESS: &str = "bc1q0g0vn4yqyk0zjwxw0zv5pltyyczty004zc9g7r";
 
 #[tokio::test]

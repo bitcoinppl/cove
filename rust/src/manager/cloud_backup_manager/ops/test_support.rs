@@ -90,7 +90,6 @@ impl cove_cspp::CsppStore for MockStoreHandle {
 type MockDiscoverResult = Result<(Vec<u8>, Vec<u8>), PasskeyError>;
 type MockPasskeyActionResults = Arc<Mutex<VecDeque<Result<Vec<u8>, PasskeyError>>>>;
 type MockPasskeyCreateResult = Arc<Mutex<Option<Result<PasskeyRegistrationResult, PasskeyError>>>>;
-type MockPasskeyPresenceResults = Arc<Mutex<VecDeque<PasskeyCredentialPresence>>>;
 #[derive(Debug, Default)]
 struct MockCloudState {
     wallet_files: HashMap<String, Vec<String>>,
@@ -826,7 +825,6 @@ pub(crate) struct MockPasskeyProviderImpl {
     create_count: Arc<Mutex<usize>>,
     authenticate_count: Arc<Mutex<usize>>,
     discover_count: Arc<Mutex<usize>>,
-    presence_results: MockPasskeyPresenceResults,
     authenticated_credential_ids: Arc<Mutex<Vec<Vec<u8>>>>,
 }
 
@@ -838,7 +836,6 @@ impl MockPasskeyProviderImpl {
         *self.create_count.lock() = 0;
         *self.authenticate_count.lock() = 0;
         *self.discover_count.lock() = 0;
-        self.presence_results.lock().clear();
         self.authenticated_credential_ids.lock().clear();
     }
 
@@ -958,7 +955,7 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         _rp_id: String,
         _credential_id: Vec<u8>,
     ) -> PasskeyCredentialPresence {
-        self.presence_results.lock().pop_front().unwrap_or(PasskeyCredentialPresence::Present)
+        PasskeyCredentialPresence::Present
     }
 }
 
@@ -1230,20 +1227,7 @@ pub(crate) fn configure_enabled_cloud_backup(
     wallet_count: u32,
 ) {
     reset_cloud_backup_test_state(manager, globals);
-
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let namespace = master_key.namespace_id();
-    let keychain = Keychain::global();
-    CloudBackupKeychain::new(keychain.clone()).save_namespace_id(&namespace).unwrap();
-    cove_cspp::Cspp::new(keychain.clone()).save_master_key(&master_key).unwrap();
-
-    manager
-        .persist_cloud_backup_state(
-            &persisted_enabled_cloud_backup_state(Some(wallet_count)),
-            "set cloud backup enabled for test",
-        )
-        .unwrap();
-    manager.sync_persisted_state();
+    enable_cloud_backup_without_reset(manager, wallet_count);
 }
 
 pub(crate) fn enable_cloud_backup_without_reset(
@@ -1373,7 +1357,7 @@ pub(crate) fn wallet_entry_with_labels(
         .map(|jsonl| jsonl.lines().filter(|line| !line.trim().is_empty()).count() as u32)
         .unwrap_or_default();
     let labels_zstd_jsonl =
-        labels_jsonl.map(|jsonl| crate::backup::crypto::compress(jsonl.as_bytes()).unwrap());
+        labels_jsonl.map(|jsonl| crate::backup::crypto::compress(jsonl.as_bytes()));
     let labels_hash = labels_jsonl
         .filter(|jsonl| !jsonl.is_empty())
         .map(|jsonl| hex::encode(sha2::Sha256::digest(jsonl.as_bytes())));

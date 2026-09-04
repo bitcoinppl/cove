@@ -3,7 +3,6 @@ use super::*;
 #[tokio::test(flavor = "current_thread")]
 async fn fetch_cloud_only_wallets_surfaces_unsupported_versions() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -37,7 +36,6 @@ async fn fetch_cloud_only_wallets_surfaces_unsupported_versions() {
 #[tokio::test(flavor = "current_thread")]
 async fn detail_reports_other_backup_namespaces() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -96,7 +94,6 @@ async fn detail_reports_other_backup_namespaces() {
 #[tokio::test(flavor = "current_thread")]
 async fn other_backup_summary_counts_only_wallets_missing_from_local_wallets() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -138,7 +135,6 @@ async fn other_backup_summary_counts_only_wallets_missing_from_local_wallets() {
 #[tokio::test(flavor = "current_thread")]
 async fn other_backup_summary_hides_namespaces_without_missing_wallets() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -165,7 +161,6 @@ async fn other_backup_summary_hides_namespaces_without_missing_wallets() {
 #[tokio::test(flavor = "current_thread")]
 async fn other_backup_summary_fails_closed_when_wallet_listing_is_missing() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -187,7 +182,6 @@ async fn other_backup_summary_fails_closed_when_wallet_listing_is_missing() {
 #[tokio::test(flavor = "current_thread")]
 async fn detail_refresh_keeps_current_detail_when_other_namespace_inspection_fails() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -221,7 +215,6 @@ async fn detail_refresh_keeps_current_detail_when_other_namespace_inspection_fai
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_keeps_current_passkey_metadata() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -289,7 +282,6 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_current_namespace_not_found_fails_closed_without_source_delete() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -339,7 +331,6 @@ async fn recover_other_backups_current_namespace_not_found_fails_closed_without_
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_keeps_partially_moved_namespace() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -402,7 +393,6 @@ async fn recover_other_backups_keeps_partially_moved_namespace() {
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_keeps_namespace_when_current_upload_fails() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -445,7 +435,6 @@ async fn recover_other_backups_keeps_namespace_when_current_upload_fails() {
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_returns_offline_when_wallet_download_is_offline() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -497,7 +486,6 @@ async fn recover_other_backups_returns_offline_when_wallet_download_is_offline()
 #[tokio::test(flavor = "current_thread")]
 async fn recover_other_backups_returns_offline_when_namespace_inspection_is_offline() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -535,7 +523,6 @@ async fn recover_other_backups_returns_offline_when_namespace_inspection_is_offl
 #[tokio::test(flavor = "current_thread")]
 async fn delete_other_backups_removes_only_non_current_namespaces() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -571,7 +558,6 @@ async fn delete_other_backups_removes_only_non_current_namespaces() {
 #[tokio::test(flavor = "current_thread")]
 async fn delete_other_backups_returns_offline_when_namespace_inspection_is_offline() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);

@@ -20,7 +20,6 @@ fn mark_undecryptable_backups_reported(manager: &RustCloudBackupManager, decrypt
 #[tokio::test(flavor = "current_thread")]
 async fn undecryptable_deletion_rechecks_and_deletes_only_cloud_only_crypto_failures() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);

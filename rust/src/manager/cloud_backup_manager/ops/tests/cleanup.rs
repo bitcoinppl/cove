@@ -6,14 +6,25 @@ struct CleanupTestSource {
     revision_hash: Option<String>,
 }
 
+/// What the cleanup job must have done before a test inspects the source namespace
+enum CleanupWait {
+    ActiveNamespaceInspected,
+    SourceNamespaceDeleted,
+    SourceDeleteAttempted,
+}
+
 async fn enqueue_cleanup_for_test(
     manager: &RustCloudBackupManager,
+    globals: &TestGlobals,
     active_namespace: &str,
     active_master_key: &cove_cspp::master_key::MasterKey,
     source: CleanupTestSource,
-    wait_message: &str,
-    mut wait_condition: impl FnMut() -> bool,
+    wait: CleanupWait,
 ) {
+    let source_namespace = source.namespace.clone();
+    let list_attempts_before =
+        globals.cloud.list_wallet_files_attempt_count_for_namespace(active_namespace);
+    let delete_attempts_before = globals.cloud.delete_namespace_attempt_count();
     call!(manager.supervisor.enqueue_cleanup_for_test(CloudBackupCleanupJob {
         cloud: CloudStorage::global_explicit_client(),
         active_namespace_id: active_namespace.to_owned(),
@@ -29,13 +40,29 @@ async fn enqueue_cleanup_for_test(
     .await
     .expect("enqueue cleanup");
 
-    wait_for_test_condition(Duration::from_secs(1), wait_message, &mut wait_condition).await;
+    let (message, mut condition): (&str, Box<dyn FnMut() -> bool>) = match wait {
+        CleanupWait::ActiveNamespaceInspected => (
+            "cleanup should inspect active namespace",
+            Box::new(|| {
+                globals.cloud.list_wallet_files_attempt_count_for_namespace(active_namespace)
+                    > list_attempts_before
+            }),
+        ),
+        CleanupWait::SourceNamespaceDeleted => (
+            "cleanup should delete source namespace",
+            Box::new(|| !globals.cloud.has_namespace(&source_namespace)),
+        ),
+        CleanupWait::SourceDeleteAttempted => (
+            "cleanup should attempt source namespace delete",
+            Box::new(|| globals.cloud.delete_namespace_attempt_count() > delete_attempts_before),
+        ),
+    };
+    wait_for_test_condition(Duration::from_secs(1), message, &mut condition).await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn cleanup_deletes_source_namespace_after_active_record_proof() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -63,6 +90,7 @@ async fn cleanup_deletes_source_namespace_after_active_record_proof() {
 
     enqueue_cleanup_for_test(
         &manager,
+        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -70,8 +98,7 @@ async fn cleanup_deletes_source_namespace_after_active_record_proof() {
             record_id,
             revision_hash: Some("matching-revision".into()),
         },
-        "cleanup should delete source namespace",
-        || !globals.cloud.has_namespace(&source_namespace),
+        CleanupWait::SourceNamespaceDeleted,
     )
     .await;
 
@@ -81,7 +108,6 @@ async fn cleanup_deletes_source_namespace_after_active_record_proof() {
 #[tokio::test(flavor = "current_thread")]
 async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -90,8 +116,6 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
     let active_namespace = active_master_key.namespace_id();
     let source_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     let record_id = "missing-record".to_string();
-    let active_namespace_list_attempt_count =
-        globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace);
     globals.cloud.set_wallet_files(
         source_namespace.clone(),
         vec![wallet_filename_from_record_id(&record_id)],
@@ -99,6 +123,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
 
     enqueue_cleanup_for_test(
         &manager,
+        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -106,11 +131,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
             record_id,
             revision_hash: Some("expected-revision".into()),
         },
-        "cleanup should inspect active namespace",
-        || {
-            globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace)
-                > active_namespace_list_attempt_count
-        },
+        CleanupWait::ActiveNamespaceInspected,
     )
     .await;
 
@@ -120,7 +141,6 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_missing() {
 #[tokio::test(flavor = "current_thread")]
 async fn cleanup_keeps_source_namespace_when_active_record_is_undecryptable() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -146,11 +166,10 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_undecryptable() {
         source_namespace.clone(),
         vec![wallet_filename_from_record_id(&record_id)],
     );
-    let active_namespace_list_attempt_count =
-        globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace);
 
     enqueue_cleanup_for_test(
         &manager,
+        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -158,11 +177,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_undecryptable() {
             record_id,
             revision_hash: Some("expected-revision".into()),
         },
-        "cleanup should inspect active namespace",
-        || {
-            globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace)
-                > active_namespace_list_attempt_count
-        },
+        CleanupWait::ActiveNamespaceInspected,
     )
     .await;
 
@@ -172,7 +187,6 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_undecryptable() {
 #[tokio::test(flavor = "current_thread")]
 async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -197,11 +211,10 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
         source_namespace.clone(),
         vec![wallet_filename_from_record_id(&record_id)],
     );
-    let active_namespace_list_attempt_count =
-        globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace);
 
     enqueue_cleanup_for_test(
         &manager,
+        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -209,11 +222,7 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
             record_id,
             revision_hash: Some("expected-revision".into()),
         },
-        "cleanup should inspect active namespace",
-        || {
-            globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace)
-                > active_namespace_list_attempt_count
-        },
+        CleanupWait::ActiveNamespaceInspected,
     )
     .await;
 
@@ -223,7 +232,6 @@ async fn cleanup_keeps_source_namespace_when_active_record_is_unsupported() {
 #[tokio::test(flavor = "current_thread")]
 async fn cleanup_keeps_source_namespace_when_active_revision_mismatches() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -248,11 +256,10 @@ async fn cleanup_keeps_source_namespace_when_active_revision_mismatches() {
         source_namespace.clone(),
         vec![wallet_filename_from_record_id(&record_id)],
     );
-    let active_namespace_list_attempt_count =
-        globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace);
 
     enqueue_cleanup_for_test(
         &manager,
+        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -260,11 +267,7 @@ async fn cleanup_keeps_source_namespace_when_active_revision_mismatches() {
             record_id,
             revision_hash: Some("expected-revision".into()),
         },
-        "cleanup should inspect active namespace",
-        || {
-            globals.cloud.list_wallet_files_attempt_count_for_namespace(&active_namespace)
-                > active_namespace_list_attempt_count
-        },
+        CleanupWait::ActiveNamespaceInspected,
     )
     .await;
 
@@ -274,7 +277,6 @@ async fn cleanup_keeps_source_namespace_when_active_revision_mismatches() {
 #[tokio::test(flavor = "current_thread")]
 async fn cleanup_keeps_source_namespace_when_delete_fails() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -300,10 +302,10 @@ async fn cleanup_keeps_source_namespace_when_delete_fails() {
         vec![wallet_filename_from_record_id(&record_id)],
     );
     globals.cloud.fail_delete_namespace("delete failed");
-    let delete_attempt_count = globals.cloud.delete_namespace_attempt_count();
 
     enqueue_cleanup_for_test(
         &manager,
+        globals,
         &active_namespace,
         &active_master_key,
         CleanupTestSource {
@@ -311,8 +313,7 @@ async fn cleanup_keeps_source_namespace_when_delete_fails() {
             record_id,
             revision_hash: Some("expected-revision".into()),
         },
-        "cleanup should attempt source namespace delete",
-        || globals.cloud.delete_namespace_attempt_count() > delete_attempt_count,
+        CleanupWait::SourceDeleteAttempted,
     )
     .await;
 
