@@ -31,63 +31,63 @@ pub(crate) struct DetailRefreshCompletion {
     pub(crate) next: DetailRefreshPlan,
 }
 
+/// Where the detail refresh cycle is; the variants replace the flags that used to be kept
+/// consistent by hand
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum RefreshPhase {
+    #[default]
+    Closed,
+    Idle,
+    InFlight {
+        claim: DetailRefreshClaim,
+        trailing_requested: bool,
+    },
+    /// A rate-limit timer is scheduled and a trailing refresh is waiting on it
+    WaitingTimer,
+}
+
 #[derive(Debug, Default)]
 struct DetailRefreshCoordinator {
     owner: u64,
-    is_open: bool,
     next_generation: u64,
-    in_flight: Option<DetailRefreshClaim>,
-    trailing_requested: bool,
-    timer_scheduled: bool,
+    phase: RefreshPhase,
     last_started_at: Option<Duration>,
 }
 
 impl DetailRefreshCoordinator {
     pub(crate) fn open(&mut self) {
-        if self.is_open {
+        if self.phase != RefreshPhase::Closed {
             return;
         }
 
         self.owner = self.owner.wrapping_add(1);
-        self.is_open = true;
-        self.in_flight = None;
-        self.trailing_requested = false;
-        self.timer_scheduled = false;
+        self.phase = RefreshPhase::Idle;
     }
 
     pub(crate) fn request(&mut self, now: Duration) -> DetailRefreshPlan {
-        if !self.is_open {
-            return DetailRefreshPlan::Ignored;
-        }
-
-        if self.in_flight.is_some() {
-            self.trailing_requested = true;
-            return DetailRefreshPlan::Queued;
-        }
-
-        if let Some(delay) = self.rate_limit_delay(now) {
-            self.trailing_requested = true;
-            if self.timer_scheduled {
-                return DetailRefreshPlan::Queued;
+        match &mut self.phase {
+            RefreshPhase::Closed => DetailRefreshPlan::Ignored,
+            RefreshPhase::InFlight { trailing_requested, .. } => {
+                *trailing_requested = true;
+                DetailRefreshPlan::Queued
             }
-
-            self.timer_scheduled = true;
-            return DetailRefreshPlan::Wait { owner: self.owner, delay };
+            RefreshPhase::WaitingTimer => DetailRefreshPlan::Queued,
+            RefreshPhase::Idle => match self.rate_limit_delay(now) {
+                Some(delay) => {
+                    self.phase = RefreshPhase::WaitingTimer;
+                    DetailRefreshPlan::Wait { owner: self.owner, delay }
+                }
+                None => self.start(now),
+            },
         }
-
-        self.start(now)
     }
 
     pub(crate) fn timer_elapsed(&mut self, owner: u64, now: Duration) -> DetailRefreshPlan {
-        if !self.is_open || self.owner != owner || !self.timer_scheduled {
+        if self.phase != RefreshPhase::WaitingTimer || self.owner != owner {
             return DetailRefreshPlan::Ignored;
         }
 
-        self.timer_scheduled = false;
-        if !self.trailing_requested {
-            return DetailRefreshPlan::Ignored;
-        }
-
+        self.phase = RefreshPhase::Idle;
         self.request(now)
     }
 
@@ -96,30 +96,38 @@ impl DetailRefreshCoordinator {
         claim: DetailRefreshClaim,
         now: Duration,
     ) -> DetailRefreshCompletion {
-        if !self.is_open || self.in_flight != Some(claim) || claim.owner != self.owner {
+        if !self.is_active(claim) {
             return DetailRefreshCompletion { apply: false, next: DetailRefreshPlan::Ignored };
         }
 
-        self.in_flight = None;
-        let next = if self.trailing_requested {
-            self.trailing_requested = false;
-            self.request(now)
-        } else {
-            DetailRefreshPlan::Ignored
-        };
+        let trailing_requested =
+            matches!(self.phase, RefreshPhase::InFlight { trailing_requested: true, .. });
+        self.phase = RefreshPhase::Idle;
+        let next = if trailing_requested { self.request(now) } else { DetailRefreshPlan::Ignored };
 
         DetailRefreshCompletion { apply: true, next }
     }
 
+    pub(crate) fn is_open(&self) -> bool {
+        self.phase != RefreshPhase::Closed
+    }
+
+    /// Re-key the in-flight refresh to the claim that carries the shared result generation
+    fn replace_in_flight_claim(&mut self, claim: DetailRefreshClaim) {
+        if let RefreshPhase::InFlight { claim: in_flight, .. } = &mut self.phase {
+            *in_flight = claim;
+        }
+    }
+
     pub(crate) fn is_active(&self, claim: DetailRefreshClaim) -> bool {
-        self.is_open && claim.owner == self.owner && self.in_flight == Some(claim)
+        claim.owner == self.owner
+            && matches!(self.phase, RefreshPhase::InFlight { claim: in_flight, .. } if in_flight == claim)
     }
 
     fn start(&mut self, now: Duration) -> DetailRefreshPlan {
         let claim = DetailRefreshClaim { owner: self.owner, generation: self.next_generation };
         self.next_generation = self.next_generation.wrapping_add(1);
-        self.in_flight = Some(claim);
-        self.trailing_requested = false;
+        self.phase = RefreshPhase::InFlight { claim, trailing_requested: false };
         self.last_started_at = Some(now);
 
         DetailRefreshPlan::Start(claim)
@@ -161,7 +169,7 @@ impl DetailWorkflow {
     }
 
     pub(crate) fn is_open(&self) -> bool {
-        self.refresh.is_open
+        self.refresh.is_open()
     }
 
     pub(crate) fn request_refresh(&mut self) -> DetailRefreshPlan {
@@ -277,7 +285,7 @@ impl DetailWorkflow {
 
         let result_claim = self.start_operation_result();
         let claim = DetailRefreshClaim { owner: claim.owner, generation: result_claim.0 };
-        self.refresh.in_flight = Some(claim);
+        self.refresh.replace_in_flight_claim(claim);
 
         DetailRefreshPlan::Start(claim)
     }

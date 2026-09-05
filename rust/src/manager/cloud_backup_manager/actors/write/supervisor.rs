@@ -180,12 +180,12 @@ struct CloudBackupWriteDrainWaiter {
 #[derive(Debug)]
 struct CloudBackupWriteAdmissionCheck {
     active_blocker: Option<CloudBackupWriteBlocker>,
-    persisted_blocker: Option<Option<CloudBackupWriteBlocker>>,
+    persisted_blocker: std::cell::OnceCell<Option<CloudBackupWriteBlocker>>,
 }
 
 impl CloudBackupWriteAdmissionCheck {
     fn new(active_blocker: Option<CloudBackupWriteBlocker>) -> Self {
-        Self { active_blocker, persisted_blocker: None }
+        Self { active_blocker, persisted_blocker: std::cell::OnceCell::new() }
     }
 
     fn writes_allowed(
@@ -196,9 +196,8 @@ impl CloudBackupWriteAdmissionCheck {
             return if blocker.allows(context) { Ok(()) } else { Err(blocked_writes_error()) };
         }
 
-        let persisted_blocker = *self
-            .persisted_blocker
-            .get_or_insert_with(CloudBackupWriteSupervisor::persisted_blocker);
+        let persisted_blocker =
+            *self.persisted_blocker.get_or_init(CloudBackupWriteSupervisor::persisted_blocker);
 
         if persisted_blocker.is_some_and(|blocker| !blocker.allows(context)) {
             return Err(blocked_writes_error());

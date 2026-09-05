@@ -1204,10 +1204,12 @@ impl RustWalletManager {
     }
 }
 
-const PREVIEW_FULL_SCAN_COMPLETED_AT: u64 = u64::MAX;
-
+/// Preview wallets are never scanned, so they are marked as scanned now to count as ready
 fn preview_ledger_ready_metadata(mut metadata: WalletMetadata) -> WalletMetadata {
-    metadata.internal.performed_full_scan_at.get_or_insert(PREVIEW_FULL_SCAN_COMPLETED_AT);
+    metadata
+        .internal
+        .performed_full_scan_at
+        .get_or_insert_with(cove_util::time::unix_timestamp_secs_or_zero);
     metadata
 }
 
@@ -1334,9 +1336,9 @@ mod tests {
     use bitcoin::Amount;
 
     use super::{
-        Balance, BalancePresentation, Error, PREVIEW_FULL_SCAN_COMPLETED_AT, RustWalletManager,
-        WalletLedgerState, WalletLoadState, WalletManagerError, WalletScanPhase,
-        WalletScanProgress, WalletScanStatus, WalletSnapshot, initial_state_from_snapshot,
+        Balance, BalancePresentation, Error, RustWalletManager, WalletLedgerState, WalletLoadState,
+        WalletManagerError, WalletScanPhase, WalletScanProgress, WalletScanStatus, WalletSnapshot,
+        initial_state_from_snapshot,
         initial_state_from_snapshot_with_pending_unsigned_transactions, ledger_state,
         preview_ledger_ready_metadata,
     };
@@ -1412,7 +1414,7 @@ mod tests {
     fn preview_wallet_metadata_is_ledger_ready_for_spend() {
         let metadata = preview_ledger_ready_metadata(WalletMetadata::preview_new());
 
-        assert_eq!(metadata.internal.performed_full_scan_at, Some(PREVIEW_FULL_SCAN_COMPLETED_AT));
+        assert!(metadata.internal.performed_full_scan_at.is_some());
         assert_eq!(
             WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle),
             WalletLedgerState::Complete

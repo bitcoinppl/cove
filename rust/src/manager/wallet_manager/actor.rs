@@ -1310,7 +1310,7 @@ impl WalletActor {
         let now = UNIX_EPOCH.elapsed().unwrap_or_default();
 
         self.apply_metadata_patch(WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
-            last_scan_finished: Some(Some(now)),
+            last_scan_finished: Some(now),
             ..Default::default()
         }))?;
         self.last_scan_finished = Some(now);
@@ -1320,7 +1320,7 @@ impl WalletActor {
 
     fn record_full_scan_performed(&mut self, completed_at: u64) -> Result<(), Error> {
         self.apply_metadata_patch(WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
-            performed_full_scan_at: Some(Some(completed_at)),
+            performed_full_scan_at: Some(completed_at),
             ..Default::default()
         }))?;
 

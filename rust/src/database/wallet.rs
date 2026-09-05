@@ -90,11 +90,12 @@ pub(crate) struct WalletUserMetadataPatch {
 }
 
 #[derive(Debug, Clone, Default)]
+/// Internal metadata fields to overwrite; `None` keeps the stored value
 pub(crate) struct WalletInternalMetadataPatch {
-    pub address_index: Option<Option<cove_types::AddressIndex>>,
-    pub last_scan_finished: Option<Option<Duration>>,
-    pub last_height_fetched: Option<Option<cove_types::BlockSizeLast>>,
-    pub performed_full_scan_at: Option<Option<u64>>,
+    pub address_index: Option<cove_types::AddressIndex>,
+    pub last_scan_finished: Option<Duration>,
+    pub last_height_fetched: Option<cove_types::BlockSizeLast>,
+    pub performed_full_scan_at: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -157,19 +158,19 @@ impl WalletMetadataPatch {
             }
             Self::Internal(patch) => {
                 if let Some(address_index) = &patch.address_index {
-                    metadata.internal.address_index = address_index.clone();
+                    metadata.internal.address_index = Some(address_index.clone());
                 }
 
                 if let Some(last_scan_finished) = patch.last_scan_finished {
-                    metadata.internal.last_scan_finished = last_scan_finished;
+                    metadata.internal.last_scan_finished = Some(last_scan_finished);
                 }
 
                 if let Some(last_height_fetched) = patch.last_height_fetched {
-                    metadata.internal.last_height_fetched = last_height_fetched;
+                    metadata.internal.last_height_fetched = Some(last_height_fetched);
                 }
 
                 if let Some(performed_full_scan_at) = patch.performed_full_scan_at {
-                    metadata.internal.performed_full_scan_at = performed_full_scan_at;
+                    metadata.internal.performed_full_scan_at = Some(performed_full_scan_at);
                 }
             }
         }
@@ -953,7 +954,7 @@ mod tests {
                         network,
                         mode,
                         WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
-                            performed_full_scan_at: Some(Some(42)),
+                            performed_full_scan_at: Some(42),
                             ..Default::default()
                         }),
                     )
@@ -1019,7 +1020,7 @@ mod tests {
                         network,
                         mode,
                         WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
-                            last_scan_finished: Some(Some(Duration::from_secs(7))),
+                            last_scan_finished: Some(Duration::from_secs(7)),
                             ..Default::default()
                         }),
                     )
@@ -1102,7 +1103,7 @@ mod tests {
                 stored.network,
                 stored.wallet_mode,
                 WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
-                    address_index: Some(Some(address_index.clone())),
+                    address_index: Some(address_index.clone()),
                     ..Default::default()
                 }),
             )

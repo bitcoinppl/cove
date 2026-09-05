@@ -660,16 +660,20 @@ fn hash_wallet_data_entry(relative_path: &Path) -> String {
     hash_os_str(relative_path.as_os_str())
 }
 
+/// How a guarded restore ended; while unset, dropping the guard rolls the restore back
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RestoreOutcome {
+    Committed,
+    RolledBack,
+}
+
 /// Durable restore journal. The marker contains no secrets and no absolute paths
 pub(crate) struct RestoreMarkerGuard {
     metadata: WalletMetadata,
     lease: Option<WalletRestoreLease>,
     marker: PersistedRestoreMarker,
     marker_path: PathBuf,
-    cleanup_attempted: bool,
-    cleanup_complete: bool,
-    metadata_committed: bool,
-    rolled_back: bool,
+    outcome: Option<RestoreOutcome>,
 }
 
 impl RestoreMarkerGuard {
@@ -694,10 +698,7 @@ impl RestoreMarkerGuard {
             lease: Some(lease),
             marker,
             marker_path,
-            cleanup_attempted: false,
-            cleanup_complete: false,
-            metadata_committed: false,
-            rolled_back: false,
+            outcome: None,
         })
     }
 
@@ -716,11 +717,9 @@ impl RestoreMarkerGuard {
             return Ok(());
         }
 
-        self.cleanup_attempted = true;
         self.marker.phase = RestoreMarkerPhase::CleanupInProgress;
         write_marker(&self.marker_path, &self.marker)?;
         remove_markerless_artifacts(&self.lease().id, &snapshot)?;
-        self.cleanup_complete = true;
         self.marker.phase = RestoreMarkerPhase::CleanupComplete;
         write_marker(&self.marker_path, &self.marker)
     }
@@ -729,25 +728,25 @@ impl RestoreMarkerGuard {
     pub(crate) fn commit(mut self) -> Vec<String> {
         // metadata is the durable commit record
         // once it exists, never roll it back merely because marker cleanup is unavailable
-        self.metadata_committed = true;
+        self.outcome = Some(RestoreOutcome::Committed);
         let mut warnings = Vec::new();
         if let Err(error) = remove_marker(&self.marker_path) {
             warnings.push(format!("restore marker cleanup is pending: {error}"));
         }
 
-        self.rolled_back = true;
         self.lease.take();
         warnings
     }
 
     pub(crate) fn rollback(&mut self) -> Vec<String> {
-        if self.metadata_committed || self.rolled_back {
+        if self.outcome.is_some() {
             return Vec::new();
         }
 
-        self.rolled_back = true;
+        self.outcome = Some(RestoreOutcome::RolledBack);
         let mut failures = Vec::new();
-        let initial_snapshot = if self.cleanup_complete {
+        let cleanup_complete = matches!(self.marker.phase, RestoreMarkerPhase::CleanupComplete);
+        let initial_snapshot = if cleanup_complete {
             RestoreArtifactSnapshot::default()
         } else {
             self.initial_snapshot().clone()
@@ -768,7 +767,9 @@ impl RestoreMarkerGuard {
         );
         rollback_metadata(&self.metadata, &initial_snapshot, &mut failures);
 
-        if failures.is_empty() && (!self.cleanup_attempted || self.cleanup_complete) {
+        let cleanup_in_progress =
+            matches!(self.marker.phase, RestoreMarkerPhase::CleanupInProgress);
+        if failures.is_empty() && !cleanup_in_progress {
             if let Err(error) = remove_marker(&self.marker_path) {
                 failures.push(error.to_string());
             }
@@ -782,7 +783,7 @@ impl RestoreMarkerGuard {
 
 impl Drop for RestoreMarkerGuard {
     fn drop(&mut self) {
-        if self.metadata_committed || self.rolled_back {
+        if self.outcome.is_some() {
             return;
         }
 

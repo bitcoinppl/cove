@@ -343,7 +343,7 @@ impl WalletActor {
         if let Some(address_index) = address_index_update {
             self.apply_metadata_patch(WalletMetadataPatch::Internal(
                 WalletInternalMetadataPatch {
-                    address_index: Some(Some(address_index)),
+                    address_index: Some(address_index),
                     ..Default::default()
                 },
             ))?;

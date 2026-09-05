@@ -263,20 +263,20 @@ impl InternalState {
             return TransitionCommand::None;
         }
 
-        let restore_attempt_id =
-            if matches!(action, OnboardingAction::StartRestore | OnboardingAction::RetryRestore) {
-                let attempt_id = self.next_restore_attempt_id;
-                self.next_restore_attempt_id = self.next_restore_attempt_id.wrapping_add(1);
-                Some(attempt_id)
-            } else {
-                None
-            };
+        // ids are only compared for equality, so allocating one per action is harmless
+        let restore_attempt_id = self.next_restore_attempt_id;
+        self.next_restore_attempt_id = self.next_restore_attempt_id.wrapping_add(1);
         let command = self.flow.apply_user_action(
             action.clone(),
             self.cloud_restore_discovery.clone(),
-            &mut self.restore_offer_allowed,
             restore_attempt_id,
         );
+        // creating a wallet or declining the restore ends the cloud restore offer for this session
+        if matches!(command, TransitionCommand::CreateWallet(_))
+            || matches!(action, OnboardingAction::SkipRestore)
+        {
+            self.restore_offer_allowed = false;
+        }
         let command = if command == TransitionCommand::RequestCloudCheck {
             self.cloud_restore_discovery = CloudRestoreDiscovery::Checking;
             self.request_cloud_check()
@@ -497,8 +497,7 @@ impl FlowState {
         &mut self,
         action: OnboardingAction,
         cloud_restore_discovery: CloudRestoreDiscovery,
-        restore_offer_allowed: &mut bool,
-        restore_attempt_id: Option<u64>,
+        restore_attempt_id: u64,
     ) -> TransitionCommand {
         let current = std::mem::replace(self, Self::Welcome { error_message: None });
 
@@ -522,23 +521,17 @@ impl FlowState {
             (
                 Self::BitcoinChoice { .. },
                 OnboardingAction::SelectHasBitcoin { has_bitcoin: false },
-            ) => {
-                *restore_offer_allowed = false;
-                (
-                    Self::BitcoinChoice { error_message: None },
-                    TransitionCommand::CreateWallet(OnboardingBranch::NewUser),
-                )
-            }
+            ) => (
+                Self::BitcoinChoice { error_message: None },
+                TransitionCommand::CreateWallet(OnboardingBranch::NewUser),
+            ),
             (
                 Self::StorageChoice { .. },
                 OnboardingAction::SelectStorage { selection: OnboardingStorageSelection::Exchange },
-            ) => {
-                *restore_offer_allowed = false;
-                (
-                    Self::StorageChoice { error_message: None },
-                    TransitionCommand::CreateWallet(OnboardingBranch::Exchange),
-                )
-            }
+            ) => (
+                Self::StorageChoice { error_message: None },
+                TransitionCommand::CreateWallet(OnboardingBranch::Exchange),
+            ),
             (
                 Self::StorageChoice { .. },
                 OnboardingAction::SelectStorage {
@@ -551,13 +544,10 @@ impl FlowState {
                     selection: OnboardingStorageSelection::SoftwareWallet,
                 },
             ) => (Self::SoftwareImport { error_message: None }, TransitionCommand::None),
-            (Self::SoftwareImport { .. }, OnboardingAction::CreateSoftwareWallet) => {
-                *restore_offer_allowed = false;
-                (
-                    Self::SoftwareImport { error_message: None },
-                    TransitionCommand::CreateWallet(OnboardingBranch::SoftwareCreate),
-                )
-            }
+            (Self::SoftwareImport { .. }, OnboardingAction::CreateSoftwareWallet) => (
+                Self::SoftwareImport { error_message: None },
+                TransitionCommand::CreateWallet(OnboardingBranch::SoftwareCreate),
+            ),
             (Self::CreatingWallet(flow), OnboardingAction::ContinueWalletCreation) => {
                 (Self::BackupWallet(flow), TransitionCommand::None)
             }
@@ -723,15 +713,13 @@ impl FlowState {
                 OnboardingAction::DismissCloudRestoreAlert,
             ) => (state, TransitionCommand::None),
             (Self::RestoreOffer { origin, .. }, OnboardingAction::StartRestore) => {
-                let attempt_id =
-                    restore_attempt_id.expect("restore attempt id required for StartRestore");
+                let attempt_id = restore_attempt_id;
                 (
                     Self::Restoring { origin, attempt_id, flow: CloudBackupRestoreFlow::Finding },
                     TransitionCommand::StartRestore { attempt_id },
                 )
             }
             (Self::RestoreOffer { origin, .. }, OnboardingAction::SkipRestore) => {
-                *restore_offer_allowed = false;
                 (origin.flow_state(), TransitionCommand::None)
             }
             (Self::RestoreOffer { origin, .. }, OnboardingAction::Back) => {
@@ -745,15 +733,13 @@ impl FlowState {
                 OnboardingAction::ContinueWithoutCloudRestore,
             ) => (origin.flow_state(), TransitionCommand::None),
             (Self::RestoreFailed { origin, .. }, OnboardingAction::RetryRestore) => {
-                let attempt_id =
-                    restore_attempt_id.expect("restore attempt id required for RetryRestore");
+                let attempt_id = restore_attempt_id;
                 (
                     Self::Restoring { origin, attempt_id, flow: CloudBackupRestoreFlow::Finding },
                     TransitionCommand::StartRestore { attempt_id },
                 )
             }
             (Self::RestoreFailed { origin, .. }, OnboardingAction::SkipRestore) => {
-                *restore_offer_allowed = false;
                 (origin.flow_state(), TransitionCommand::None)
             }
             (
