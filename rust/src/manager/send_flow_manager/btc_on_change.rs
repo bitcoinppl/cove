@@ -19,7 +19,7 @@ pub struct Changeset {
     pub entering_amount_btc: Option<String>,
     pub amount_btc: Option<Amount>,
     pub amount_fiat: Option<f64>,
-    pub max_selected: Option<Option<Amount>>,
+    pub clear_max_selected: bool,
 }
 
 impl BtcOnChangeHandler {
@@ -146,7 +146,7 @@ impl BtcOnChangeHandler {
             && &amount < max
         {
             // clear the max selected
-            changeset.max_selected = Some(None);
+            changeset.clear_max_selected = true;
         }
 
         // set the amount

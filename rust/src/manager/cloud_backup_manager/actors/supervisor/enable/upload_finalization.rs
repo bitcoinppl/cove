@@ -193,26 +193,6 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub(crate) fn finish_awaiting_force_new_confirmation_if_present(
-        &mut self,
-        manager: Arc<RustCloudBackupManager>,
-        claim: CloudBackupExclusiveOperationClaim,
-    ) -> bool {
-        let Some(context) = self
-            .pending_enable_session
-            .as_ref()
-            .filter(|session| session.is_awaiting_force_new_confirmation())
-            .map(PendingEnableSession::context)
-        else {
-            return false;
-        };
-
-        manager.present_existing_backup_found_prompt(context, None);
-        manager.clear_enable_progress(CloudBackupStatus::Disabled);
-        self.finish_enable_operation(manager, claim);
-        true
-    }
-
     pub(crate) fn accept_registered_enable_passkey(
         &mut self,
         manager: &RustCloudBackupManager,
@@ -240,9 +220,8 @@ impl CloudBackupSupervisor {
         &mut self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
-        selection: PendingEnableUploadSelection,
     ) -> Result<bool, CloudBackupError> {
-        let Some(ready) = self.take_ready_enable_upload(selection)? else {
+        let Some(ready) = self.take_ready_enable_upload()? else {
             return Ok(false);
         };
 
@@ -253,19 +232,12 @@ impl CloudBackupSupervisor {
 
     pub(crate) fn take_ready_enable_upload(
         &mut self,
-        selection: PendingEnableUploadSelection,
     ) -> Result<Option<CloudBackupReadyEnableUpload>, CloudBackupError> {
         let Some(pending) = self.pending_enable_session.take() else {
             return Ok(None);
         };
-        let should_use = match selection {
-            PendingEnableUploadSelection::RetryOnly => pending.is_retry_upload(),
-            PendingEnableUploadSelection::RetryOrForceNewConfirmation => {
-                pending.is_retry_upload() || pending.is_awaiting_force_new_confirmation()
-            }
-        };
 
-        if !should_use {
+        if !pending.is_retry_upload() {
             self.pending_enable_session = Some(pending);
             return Ok(None);
         }

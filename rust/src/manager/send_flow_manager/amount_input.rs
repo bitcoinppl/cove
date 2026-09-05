@@ -41,22 +41,15 @@ impl RustSendFlowManager {
         let changes = handler.on_change(&old, &new);
         trace!("btc_on_change_handler changes: {changes:?}");
 
-        let btc_on_change::Changeset { entering_amount_btc, max_selected, amount_btc, amount_fiat } =
-            changes;
+        let btc_on_change::Changeset {
+            entering_amount_btc,
+            clear_max_selected,
+            amount_btc,
+            amount_fiat,
+        } = changes;
 
-        match max_selected {
-            Some(Some(max)) => {
-                let max = Arc::new(max);
-                self.state.lock().max_selected = Some(max.clone());
-                sender.queue(Message::SetMaxSelected(max));
-            }
-            Some(None) => {
-                let was_max_selected = self.state.lock().max_selected.take().is_some();
-                if was_max_selected {
-                    sender.queue(Message::UnsetMaxSelected);
-                }
-            }
-            None => {}
+        if clear_max_selected {
+            self.unset_max_selected(&mut sender);
         }
 
         if let Some(amount) = amount_btc {
@@ -118,7 +111,7 @@ impl RustSendFlowManager {
             entering_fiat_amount,
             fiat_value,
             btc_amount,
-            max_selected,
+            clear_max_selected,
         } = result;
 
         if let Some(entering_fiat_amount) = entering_fiat_amount {
@@ -144,14 +137,18 @@ impl RustSendFlowManager {
             self.schedule_fee_rate_update();
         }
 
-        if max_selected == Some(None) {
-            let was_max_selected = self.state.lock().max_selected.take().is_some();
-            if was_max_selected {
-                sender.queue(Message::UnsetMaxSelected);
-            }
+        if clear_max_selected {
+            self.unset_max_selected(&mut sender);
         }
 
         Some(())
+    }
+
+    fn unset_max_selected(&self, sender: &mut DeferredSender) {
+        let was_max_selected = self.state.lock().max_selected.take().is_some();
+        if was_max_selected {
+            sender.queue(Message::UnsetMaxSelected);
+        }
     }
 
     pub(crate) fn selected_fee_rate_changed(

@@ -107,8 +107,6 @@ pub(crate) use self::ops::{
     CloudBackupSavedPasskeyConfirmation, CloudBackupUploadedEnableBackup,
     EnablePasskeyRegistrationFlow,
 };
-#[cfg(test)]
-pub(crate) use self::pending_enable::PendingEnableSessionMaterial;
 pub(crate) use self::pending_enable::{
     PENDING_ENABLE_JOURNAL_VERSION, PendingEnableCoordinator, PendingEnableJournal,
     PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,

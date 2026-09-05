@@ -363,13 +363,19 @@ impl PersistedCloudBackupState {
         &mut self,
         account_switch: PersistedDriveAccountSwitch,
     ) -> bool {
-        let Self::Configured(_) = self else { return false };
-        let Self::Configured(configured) = std::mem::take(self) else { unreachable!() };
-
-        *self = Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
-            PersistedDriveAccountSwitchState { configured, transition: account_switch },
-        ));
-        true
+        match std::mem::take(self) {
+            Self::Configured(configured) => {
+                *self =
+                    Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
+                        PersistedDriveAccountSwitchState { configured, transition: account_switch },
+                    ));
+                true
+            }
+            other => {
+                *self = other;
+                false
+            }
+        }
     }
 
     pub(crate) fn set_drive_account_switch_phase(
@@ -395,24 +401,18 @@ impl PersistedCloudBackupState {
         &mut self,
         transition_id: DriveAccountSwitchId,
     ) -> bool {
-        let Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
-            account_switch,
-        )) = self
-        else {
-            return false;
-        };
-        if account_switch.transition.transition_id != transition_id {
-            return false;
+        match std::mem::take(self) {
+            Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
+                account_switch,
+            )) if account_switch.transition.transition_id == transition_id => {
+                *self = Self::Configured(account_switch.configured);
+                true
+            }
+            other => {
+                *self = other;
+                false
+            }
         }
-
-        let Self::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(
-            account_switch,
-        )) = std::mem::take(self)
-        else {
-            unreachable!()
-        };
-        *self = Self::Configured(account_switch.configured);
-        true
     }
 
     pub(crate) fn begin_disabling(
@@ -421,21 +421,26 @@ impl PersistedCloudBackupState {
         disable_generation: u64,
         started_at: u64,
     ) -> bool {
-        let Self::Configured(_) = self else { return false };
-        let Self::Configured(configured) = std::mem::take(self) else { unreachable!() };
-
-        *self = Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(
-            PersistedDisablingCloudBackup {
-                previous_configured: configured,
-                namespace_id,
-                disable_generation,
-                started_at,
-                delete_started_at: None,
-                last_error: None,
-                retry_after: None,
-            },
-        ));
-        true
+        match std::mem::take(self) {
+            Self::Configured(configured) => {
+                *self = Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(
+                    PersistedDisablingCloudBackup {
+                        previous_configured: configured,
+                        namespace_id,
+                        disable_generation,
+                        started_at,
+                        delete_started_at: None,
+                        last_error: None,
+                        retry_after: None,
+                    },
+                ));
+                true
+            }
+            other => {
+                *self = other;
+                false
+            }
+        }
     }
 
     pub(crate) fn disabling_transition(disabling: PersistedDisablingCloudBackup) -> Self {
@@ -443,21 +448,18 @@ impl PersistedCloudBackupState {
     }
 
     pub(crate) fn restore_configured_after_disable(&mut self, disable_generation: u64) -> bool {
-        let Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling)) = self
-        else {
-            return false;
-        };
-        if disabling.disable_generation != disable_generation {
-            return false;
+        match std::mem::take(self) {
+            Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling))
+                if disabling.disable_generation == disable_generation =>
+            {
+                *self = Self::Configured(disabling.previous_configured);
+                true
+            }
+            other => {
+                *self = other;
+                false
+            }
         }
-
-        let Self::ExclusiveTransition(PersistedCloudBackupTransition::Disabling(disabling)) =
-            std::mem::take(self)
-        else {
-            unreachable!()
-        };
-        *self = Self::Configured(disabling.previous_configured);
-        true
     }
 
     pub(crate) fn update_disabling(&mut self, update: &PersistedDisablingCloudBackup) -> bool {

@@ -57,9 +57,7 @@ use crate::manager::cloud_backup_manager::{
     PendingUploadVerificationState, PendingVerificationCompletion, PendingVerificationUpload,
     RecoveryAction, SavedPasskeyConfirmationMode, VerificationState,
 };
-use crate::manager::cloud_backup_manager::{
-    CloudBackupStatus, PendingEnableSessionMaterial, UnpersistedPrfKey,
-};
+use crate::manager::cloud_backup_manager::{CloudBackupStatus, UnpersistedPrfKey};
 use crate::manager::cloud_backup_manager::{
     SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE,
     cspp_exports::cspp_master_key_record_id,
@@ -76,16 +74,6 @@ use crate::wallet::{
     metadata::{WalletMetadata, WalletMode, WalletType},
 };
 use bip39::Mnemonic;
-
-fn pending_enable_awaiting_confirmation(
-    master_key: cove_cspp::master_key::MasterKey,
-    passkey: UnpersistedPrfKey,
-    context: CloudBackupEnableContext,
-) -> PendingEnableSession {
-    PendingEnableSession::AwaitingForceNewConfirmation(PendingEnableSessionMaterial::new(
-        master_key, passkey, context,
-    ))
-}
 
 fn current_disable_generation() -> Option<u64> {
     RustCloudBackupManager::load_persisted_state()

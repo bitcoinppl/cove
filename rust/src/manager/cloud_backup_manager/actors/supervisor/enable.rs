@@ -8,12 +8,6 @@ mod start;
 mod upload_finalization;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PendingEnableUploadSelection {
-    RetryOnly,
-    RetryOrForceNewConfirmation,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SavedPasskeyConfirmationRetry {
     Manual,
     Automatic,

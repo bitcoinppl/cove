@@ -1,6 +1,6 @@
 use super::*;
 use super::enable::{
-    EnableRecoveryFinalization, EnableUploadFinalization, PendingEnableUploadSelection,
+    EnableRecoveryFinalization, EnableUploadFinalization,
 };
 use super::verification::DeepVerificationContinuation;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
@@ -25,7 +25,6 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery, CloudBackupStore,
     CloudBackupSettingsRowStatus, CloudOnlyState, PendingEnableJournal,
     PendingEnableNamespaceOwnership, PendingEnableJournalPhase, PendingEnablePasskeyMetadata,
-    PendingEnableSessionMaterial,
 };
 use crate::manager::deferred_sender::SingleOrMany;
 use crate::network::Network;
@@ -362,17 +361,6 @@ fn enable_recovery_completion_debug_redacts_nested_items() {
     assert!(!debug.contains("pending-wallet-record-secret"), "{debug}");
     assert!(!debug.contains("pending-wallet-revision-secret"), "{debug}");
     assert!(!debug.contains("cleanup-namespace-secret"), "{debug}");
-}
-
-fn awaiting_force_new_session(
-    master_key: cove_cspp::master_key::MasterKey,
-    passkey: UnpersistedPrfKey,
-) -> PendingEnableSession {
-    PendingEnableSession::AwaitingForceNewConfirmation(PendingEnableSessionMaterial::new(
-        master_key,
-        passkey,
-        CloudBackupEnableContext::settings_manual(),
-    ))
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1628,7 +1616,7 @@ async fn supervisor_consumes_retry_pending_enable_upload() {
     ));
 
     let ready = supervisor
-        .take_ready_enable_upload(PendingEnableUploadSelection::RetryOnly)
+        .take_ready_enable_upload()
         .unwrap()
         .unwrap();
 
@@ -1637,52 +1625,7 @@ async fn supervisor_consumes_retry_pending_enable_upload() {
     assert!(supervisor.pending_enable_session.is_none());
 }
 
-#[tokio::test(flavor = "current_thread")]
-async fn supervisor_preserves_force_new_confirmation_for_plain_enable_retry() {
-    let _guard = async_test_lock().lock().await;
-    let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
-        Arc::downgrade(&manager),
-        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
-    );
-    let master_key = cove_cspp::master_key::MasterKey::generate();
 
-    supervisor.pending_enable_session =
-        Some(awaiting_force_new_session(master_key, test_enable_passkey(vec![1, 2, 3])));
-
-    let ready =
-        supervisor.take_ready_enable_upload(PendingEnableUploadSelection::RetryOnly).unwrap();
-
-    assert!(ready.is_none());
-    assert!(supervisor.pending_enable_session.is_some());
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn supervisor_consumes_force_new_confirmation_upload_for_force_new() {
-    let _guard = async_test_lock().lock().await;
-    let manager = test_supervisor_manager();
-    let mut supervisor = CloudBackupSupervisor::new(
-        Arc::downgrade(&manager),
-        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
-    );
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let expected_namespace = master_key.namespace_id();
-    let expected_credential_id = vec![1, 2, 3];
-
-    supervisor.pending_enable_session = Some(awaiting_force_new_session(
-        master_key,
-        test_enable_passkey(expected_credential_id.clone()),
-    ));
-
-    let ready = supervisor
-        .take_ready_enable_upload(PendingEnableUploadSelection::RetryOrForceNewConfirmation)
-        .unwrap()
-        .unwrap();
-
-    assert_eq!(ready.master_key.namespace_id(), expected_namespace);
-    assert_eq!(ready.passkey.credential_id, expected_credential_id);
-    assert!(supervisor.pending_enable_session.is_none());
-}
 
 
 
