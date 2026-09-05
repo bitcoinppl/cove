@@ -1,3 +1,4 @@
+use crate::fiat::FiatCurrency;
 use std::sync::Arc;
 
 use crate::{fiat::client::PriceResponse, transaction::FeeRate, wallet::Address};
@@ -203,22 +204,13 @@ impl RustSendFlowManager {
             FiatOrBtc::Fiat => {
                 if let Some(price) = btc_price_in_fiat {
                     let currency = self.state.lock().selected_fiat_currency;
-                    let amount_fiat = amount.as_btc() * (price as f64);
-
-                    let enterting_amount_fiat =
-                        format!("{}{}", currency.symbol(), amount_fiat.thousands_fiat());
-
-                    self.set_and_send_entering_fiat_amount(enterting_amount_fiat, &mut sender);
+                    let entering_fiat_amount = fiat_entry_text(fiat_value(amount, price), currency);
+                    self.set_and_send_entering_fiat_amount(entering_fiat_amount, &mut sender);
                 }
             }
 
             FiatOrBtc::Btc => {
-                let amount_string = match unit {
-                    BitcoinUnit::Btc => amount.btc_string(),
-                    BitcoinUnit::Sat => amount.as_sats().thousands_int(),
-                };
-
-                self.set_and_send_entering_btc_amount(amount_string, &mut sender);
+                self.set_and_send_entering_btc_amount(btc_entry_text(amount, unit), &mut sender);
             }
         }
 
@@ -238,7 +230,7 @@ impl RustSendFlowManager {
         }
 
         if let Some(price) = btc_price_in_fiat {
-            let amount_fiat = amount.as_btc() * (price as f64);
+            let amount_fiat = fiat_value(amount, price);
             self.state.lock().amount_fiat = Some(amount_fiat);
             sender.queue(Message::UpdateAmountFiat(amount_fiat));
         }
@@ -288,8 +280,7 @@ impl RustSendFlowManager {
 
             if let Some(amount_fiat) = amount_fiat {
                 let currency = self.state.lock().selected_fiat_currency;
-                let entering_fiat_amount =
-                    format!("{}{}", currency.symbol(), amount_fiat.thousands_fiat());
+                let entering_fiat_amount = fiat_entry_text(amount_fiat, currency);
 
                 self.state.lock().entering_fiat_amount = entering_fiat_amount.clone();
                 sender.queue(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
@@ -407,15 +398,12 @@ impl RustSendFlowManager {
         }
 
         // if its already empty clear everything
-        {
+        let nothing_entered = {
             let state = self.state.lock();
-            let amount_is_empty = state.amount_sats.is_none();
-            let entering_btc_amount_is_empty = state.entering_btc_amount.is_empty();
-            drop(state);
-
-            if entering_btc_amount_is_empty || amount_is_empty {
-                return self.clear_send_amount();
-            }
+            state.amount_sats.is_none() || state.entering_btc_amount.is_empty()
+        };
+        if nothing_entered {
+            return self.clear_send_amount();
         }
 
         // if we are entering fiat, then we don't need to update the entering field
@@ -427,16 +415,8 @@ impl RustSendFlowManager {
             return;
         };
 
-        match new {
-            BitcoinUnit::Btc => {
-                let amount_string = Amount::from_sat(amount_sats).btc_string();
-                self.set_and_send_entering_btc_amount(amount_string, &mut sender);
-            }
-            BitcoinUnit::Sat => {
-                let amount_string = amount_sats.thousands_int();
-                self.set_and_send_entering_btc_amount(amount_string, &mut sender);
-            }
-        }
+        let entering_btc_amount = btc_entry_text(Amount::from_sat(amount_sats), new);
+        self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
     }
 
     pub(crate) fn handle_btc_or_fiat_changed(
@@ -455,23 +435,16 @@ impl RustSendFlowManager {
 
         match new_value {
             FiatOrBtc::Btc => {
-                let amount = Amount::from_sat(amount_sats);
-
-                let amount_fmt = match self.state.lock().metadata.selected_unit {
-                    BitcoinUnit::Btc => amount.btc_string(),
-                    BitcoinUnit::Sat => amount.sats_string(),
-                };
-
-                self.set_and_send_entering_btc_amount(amount_fmt, &mut sender);
+                let unit = self.state.lock().metadata.selected_unit;
+                let entering_btc_amount = btc_entry_text(Amount::from_sat(amount_sats), unit);
+                self.set_and_send_entering_btc_amount(entering_btc_amount, &mut sender);
             }
 
             FiatOrBtc::Fiat => {
                 let currency = self.state.lock().selected_fiat_currency;
                 let fiat_amount = self.state.lock().amount_fiat.unwrap_or_default();
-                let fiat_amount_fmt =
-                    format!("{}{}", currency.symbol(), fiat_amount.thousands_fiat(),);
-
-                self.set_and_send_entering_fiat_amount(fiat_amount_fmt, &mut sender);
+                let entering_fiat_amount = fiat_entry_text(fiat_amount, currency);
+                self.set_and_send_entering_fiat_amount(entering_fiat_amount, &mut sender);
             }
         }
     }
@@ -486,7 +459,7 @@ impl RustSendFlowManager {
             return;
         };
 
-        let amount_fiat = Amount::from_sat(amount).as_btc() * (btc_price_in_fiat as f64);
+        let amount_fiat = fiat_value(Amount::from_sat(amount), btc_price_in_fiat);
         self.state.lock().amount_fiat = Some(amount_fiat);
         self.reconciler.send(Message::UpdateAmountFiat(amount_fiat));
     }
@@ -524,4 +497,21 @@ impl RustSendFlowManager {
             deferred_sender.queue(Message::UpdateEnteringFiatAmount(new_entering_fiat_amount));
         }
     }
+}
+
+/// The text shown in the bitcoin amount field for a committed amount in the selected unit
+fn btc_entry_text(amount: Amount, unit: BitcoinUnit) -> String {
+    match unit {
+        BitcoinUnit::Btc => amount.btc_string(),
+        BitcoinUnit::Sat => amount.as_sats().thousands_int(),
+    }
+}
+
+/// The text shown in the fiat amount field, symbol first
+fn fiat_entry_text(amount_fiat: f64, currency: FiatCurrency) -> String {
+    format!("{}{}", currency.symbol(), amount_fiat.thousands_fiat())
+}
+
+fn fiat_value(amount: Amount, btc_price_in_fiat: u64) -> f64 {
+    amount.as_btc() * btc_price_in_fiat as f64
 }
