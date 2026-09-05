@@ -111,7 +111,7 @@ where
         let (tx_update, last_active_indices) = scan.into_response_parts();
         let chain_update = match tip_and_latest_blocks {
             Some((chain_tip, latest_blocks)) => {
-                Some(chain_update(chain_tip, &latest_blocks, tx_update.anchors.iter().cloned())?)
+                Some(chain_update(chain_tip, &latest_blocks, tx_update.anchors.iter().cloned()))
             }
             None => None,
         };
@@ -239,7 +239,7 @@ where
                     chain_tip.clone(),
                     latest_blocks,
                     partial_update.anchors.iter().cloned(),
-                )?),
+                )),
                 None => None,
             };
             let scan_update = scan_update_for_keychain(
@@ -392,13 +392,11 @@ fn fetch_tip_and_latest_blocks(
     Ok((new_tip, new_blocks))
 }
 
-// the esplora scanner has a fallible counterpart with the same shape, so both stay `Result`
-#[allow(clippy::unnecessary_wraps)]
 fn chain_update(
     mut tip: CheckPoint,
     latest_blocks: &BTreeMap<u32, BlockHash>,
     anchors: impl Iterator<Item = (ConfirmationBlockTime, Txid)>,
-) -> std::result::Result<CheckPoint, electrum_client::Error> {
+) -> CheckPoint {
     for (anchor, _txid) in anchors {
         let height = anchor.block_id.height;
         if tip.get(height).is_none() && height <= tip.height() {
@@ -409,7 +407,7 @@ fn chain_update(
             tip = tip.insert(BlockId { hash, height });
         }
     }
-    Ok(tip)
+    tip
 }
 
 #[cfg(test)]
@@ -1143,8 +1141,7 @@ mod tests {
             confirmation_time: 123,
         };
 
-        let update = chain_update(tip, &latest_blocks, [(anchor, txid(9))].into_iter())
-            .expect("chain update succeeds");
+        let update = chain_update(tip, &latest_blocks, [(anchor, txid(9))].into_iter());
 
         assert_eq!(update.get(2).map(|checkpoint| checkpoint.hash()), Some(anchor_hash));
     }

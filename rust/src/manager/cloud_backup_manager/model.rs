@@ -1050,7 +1050,7 @@ impl CloudBackupReducerState {
             VerificationState::NeedsAttention(report) => {
                 CloudBackupVerificationState::NeedsAttention {
                     report,
-                    checked_at: Some(crate::manager::cloud_backup_manager::current_timestamp()),
+                    checked_at: Some(cove_util::time::unix_timestamp_secs_or_zero()),
                 }
             }
             VerificationState::PasskeyConfirmed => CloudBackupVerificationState::Verified {

@@ -653,5 +653,4 @@ internal fun UnsignedTransactionWidget(
     }
 }
 
-private fun privateShow(sensitiveVisible: Boolean, text: String, placeholder: String = "••••••"): String =
-    if (sensitiveVisible) text else placeholder
+private fun privateShow(sensitiveVisible: Boolean, text: String): String = if (sensitiveVisible) text else "••••••"

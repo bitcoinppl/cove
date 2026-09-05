@@ -179,7 +179,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn persist_verification_result(&self, result: &DeepVerificationResult) {
-        let verified_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let verified_at = cove_util::time::unix_timestamp_secs_or_zero();
         let persisted =
             self.mutate_persisted_cloud_backup_state("persist verification state", |state| {
                 if matches!(
@@ -226,7 +226,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn mark_verification_required_after_wallet_change(&self) {
-        let requested_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let requested_at = cove_util::time::unix_timestamp_secs_or_zero();
         let persisted = self.mutate_persisted_cloud_backup_state(
             "mark cloud backup unverified after wallet change",
             |state| {

@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 uniffi = { workspace = true, features = ["build", "cli"] }
+
+[lints]
+workspace = true

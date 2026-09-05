@@ -40,24 +40,35 @@ async fn enqueue_cleanup_for_test(
     .await
     .expect("enqueue cleanup");
 
-    let (message, mut condition): (&str, Box<dyn FnMut() -> bool>) = match wait {
-        CleanupWait::ActiveNamespaceInspected => (
-            "cleanup should inspect active namespace",
-            Box::new(|| {
-                globals.cloud.list_wallet_files_attempt_count_for_namespace(active_namespace)
-                    > list_attempts_before
-            }),
-        ),
-        CleanupWait::SourceNamespaceDeleted => (
-            "cleanup should delete source namespace",
-            Box::new(|| !globals.cloud.has_namespace(&source_namespace)),
-        ),
-        CleanupWait::SourceDeleteAttempted => (
-            "cleanup should attempt source namespace delete",
-            Box::new(|| globals.cloud.delete_namespace_attempt_count() > delete_attempts_before),
-        ),
-    };
-    wait_for_test_condition(Duration::from_secs(1), message, &mut condition).await;
+    match wait {
+        CleanupWait::ActiveNamespaceInspected => {
+            wait_for_test_condition(
+                Duration::from_secs(1),
+                "cleanup should inspect active namespace",
+                &mut || {
+                    globals.cloud.list_wallet_files_attempt_count_for_namespace(active_namespace)
+                        > list_attempts_before
+                },
+            )
+            .await;
+        }
+        CleanupWait::SourceNamespaceDeleted => {
+            wait_for_test_condition(
+                Duration::from_secs(1),
+                "cleanup should delete source namespace",
+                &mut || !globals.cloud.has_namespace(&source_namespace),
+            )
+            .await;
+        }
+        CleanupWait::SourceDeleteAttempted => {
+            wait_for_test_condition(
+                Duration::from_secs(1),
+                "cleanup should attempt source namespace delete",
+                &mut || globals.cloud.delete_namespace_attempt_count() > delete_attempts_before,
+            )
+            .await;
+        }
+    }
 }
 
 #[tokio::test(flavor = "current_thread")]

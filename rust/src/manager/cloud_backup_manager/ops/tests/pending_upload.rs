@@ -99,7 +99,7 @@ async fn start_verification_with_pending_upload_consumes_prompt_decision() {
             &namespace_id,
             CloudBackupRecordKey::Wallet(metadata.id, record_id),
             "pending-revision".into(),
-            crate::manager::cloud_backup_manager::current_timestamp(),
+            cove_util::time::unix_timestamp_secs_or_zero(),
         )
         .unwrap();
     assert_eq!(manager.model_snapshot().root_prompt, CloudBackupRootPrompt::Verification);
@@ -443,7 +443,7 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
             &namespace_id,
             CloudBackupRecordKey::Wallet(metadata.id, record_id.clone()),
             prepared.revision_hash.clone(),
-            crate::manager::cloud_backup_manager::current_timestamp(),
+            cove_util::time::unix_timestamp_secs_or_zero(),
         )
         .unwrap();
     manager

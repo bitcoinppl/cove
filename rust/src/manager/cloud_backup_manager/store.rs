@@ -39,7 +39,7 @@ impl CloudBackupStore {
         wallet_count: u32,
         completion: PersistedPendingVerificationCompletion,
     ) -> Result<(), CloudBackupError> {
-        let now = crate::manager::cloud_backup_manager::current_timestamp();
+        let now = cove_util::time::unix_timestamp_secs_or_zero();
         let mutation = self
             .0
             .cloud_backup_state
@@ -225,7 +225,7 @@ impl CloudBackupStore {
         &self,
         wallet_count: u32,
     ) -> Result<(), CloudBackupError> {
-        let now = crate::manager::cloud_backup_manager::current_timestamp();
+        let now = cove_util::time::unix_timestamp_secs_or_zero();
         let mutation = self
             .0
             .cloud_backup_state

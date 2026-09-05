@@ -1363,9 +1363,9 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_select_wallet(
     ): Short
-    external fun uniffi_cove_checksum_method_globalconfigtable_selectedfiatcurrency(
-    ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_selected_block_explorer_option(
+    ): Short
+    external fun uniffi_cove_checksum_method_globalconfigtable_selected_fiat_currency(
     ): Short
     external fun uniffi_cove_checksum_method_globalconfigtable_selected_network(
     ): Short
@@ -2427,9 +2427,9 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_select_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_method_globalconfigtable_selectedfiatcurrency(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_selected_block_explorer_option(`ptr`: Long,`network`: RustBufferNetwork.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_globalconfigtable_selected_fiat_currency(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtable_selected_network(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBufferNetwork.ByValue
@@ -4308,10 +4308,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_globalconfigtable_select_wallet() != 33046.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_selectedfiatcurrency() != 11234.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_selected_block_explorer_option() != 31659.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_selected_block_explorer_option() != 31659.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_selected_fiat_currency() != 49300.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_selected_network() != 17475.toShort()) {
@@ -13910,9 +13910,12 @@ public interface GlobalConfigTableInterface {
 
     fun `selectWallet`(`id`: WalletId)
 
-    fun `selectedFiatCurrency`(): FiatCurrency
-
     fun `selectedBlockExplorerOption`(`network`: Network): BlockExplorerOption
+
+    /**
+     * The selected fiat currency, falling back to the default when none is saved
+     */
+    fun `selectedFiatCurrency`(): FiatCurrency
 
     fun `selectedNetwork`(): Network
 
@@ -14231,19 +14234,6 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
 
 
 
-    override fun `selectedFiatCurrency`(): FiatCurrency {
-            return FfiConverterTypeFiatCurrency.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_globalconfigtable_selectedfiatcurrency(
-        it,
-        _status)
-}
-    }
-    )
-    }
-
-
     override fun `selectedBlockExplorerOption`(`network`: Network): BlockExplorerOption {
             return FfiConverterTypeBlockExplorerOption.lift(
     callWithHandle {
@@ -14252,6 +14242,22 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
         it,
 
         FfiConverterTypeNetwork.lower(`network`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * The selected fiat currency, falling back to the default when none is saved
+     */override fun `selectedFiatCurrency`(): FiatCurrency {
+            return FfiConverterTypeFiatCurrency.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_globalconfigtable_selected_fiat_currency(
+        it,
+        _status)
 }
     }
     )

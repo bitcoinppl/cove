@@ -306,7 +306,7 @@ async fn run_disable_cloud_backup(manager: &Arc<RustCloudBackupManager>) {
         !matches!(
             manager
                 .projected_exclusive_operation()
-                .map(crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim::operation),
+                .map(CloudBackupExclusiveOperationClaim::operation),
             Some(CloudBackupExclusiveOperation::Disable)
         )
     })
@@ -329,7 +329,7 @@ async fn run_recreate_manifest(manager: &Arc<RustCloudBackupManager>) {
         !matches!(
             manager
                 .projected_exclusive_operation()
-                .map(crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim::operation),
+                .map(CloudBackupExclusiveOperationClaim::operation),
             Some(CloudBackupExclusiveOperation::RecreateManifest)
         )
     })
@@ -344,7 +344,7 @@ async fn run_repair_passkey_operation(manager: &Arc<RustCloudBackupManager>, no_
         !matches!(
             manager
                 .projected_exclusive_operation()
-                .map(crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim::operation),
+                .map(CloudBackupExclusiveOperationClaim::operation),
             Some(CloudBackupExclusiveOperation::RepairPasskey)
         )
     })
@@ -357,7 +357,7 @@ async fn confirm_saved_passkey_session(manager: &Arc<RustCloudBackupManager>) {
         if !matches!(
             manager
                 .projected_exclusive_operation()
-                .map(crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim::operation),
+                .map(CloudBackupExclusiveOperationClaim::operation),
             Some(CloudBackupExclusiveOperation::Enable)
         ) {
             return;
@@ -431,7 +431,7 @@ fn persist_pending_master_key_confirmation(namespace_id: String, revision_hash: 
             PersistedCloudBlobState::UploadedPendingConfirmation(
                 CloudBlobUploadedPendingConfirmationState {
                     revision_hash: revision_hash.into(),
-                    uploaded_at: crate::manager::cloud_backup_manager::current_timestamp(),
+                    uploaded_at: cove_util::time::unix_timestamp_secs_or_zero(),
                     attempt_count: 0,
                     last_checked_at: None,
                 },

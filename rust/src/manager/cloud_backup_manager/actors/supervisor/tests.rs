@@ -1,6 +1,3 @@
-use std::future::Future;
-use std::pin::Pin;
-
 use super::*;
 use super::enable::{
     EnableRecoveryFinalization, EnableUploadFinalization, PendingEnableUploadSelection,
@@ -20,7 +17,7 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
 };
 use crate::manager::cloud_backup_manager::reconcile::CloudBackupReconcileMessage;
 use crate::manager::cloud_backup_manager::wallets::{
-    StagedPrfKey, UnpersistedPrfKey, WalletRestoreOutcome,
+    StagedPrfKey, UnpersistedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetail, CloudBackupInventoryAuthority, CloudBackupLifecycle,
@@ -77,13 +74,6 @@ fn test_staged_passkey(credential_id: Vec<u8>) -> StagedPrfKey {
     StagedPrfKey { prf_salt: [9; 32], credential_id, provider_hint: None }
 }
 
-fn test_runtime_passkey_authorization() -> RuntimePasskeyAuthorization {
-    RuntimePasskeyAuthorization {
-        namespace_id: VALID_NAMESPACE_ID.into(),
-        credential_id: vec![1, 2, 3],
-        prf_salt: [9; 32],
-    }
-}
 
 fn prepare_restore_all_marker(manager: &RustCloudBackupManager) {
     Database::global()
@@ -757,7 +747,7 @@ async fn drive_account_switch_restart_keeps_fence_for_mismatched_platform_transi
         Some(&transition)
     );
     assert_eq!(
-        supervisor.active_operation.claim().and_then(crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim::drive_account_switch_id),
+        supervisor.active_operation.claim().and_then(CloudBackupExclusiveOperationClaim::drive_account_switch_id),
         None
     );
     assert!(manager.reconciler.receiver().try_iter().any(|messages| match messages {
@@ -778,13 +768,6 @@ async fn drive_account_switch_restart_keeps_fence_for_mismatched_platform_transi
     }));
 }
 
-/// Whether a completion is being replayed with the superseded claim or the live one
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ClaimRole {
-    Stale,
-    Current,
-}
-
 fn begin_exclusive(
     operation: CloudBackupExclusiveOperation,
 ) -> impl FnOnce(&mut CloudBackupSupervisor, &Arc<RustCloudBackupManager>) -> CloudBackupExclusiveOperationClaim
@@ -794,16 +777,13 @@ fn begin_exclusive(
 
 /// Replays one completion handler with a stale claim and then the live claim, so a handler that
 /// skips the claim check clears the operation on the stale call and fails here
-async fn assert_completion_ignores_stale_claim<F>(
-    begin: impl FnOnce(&mut CloudBackupSupervisor, &Arc<RustCloudBackupManager>) -> CloudBackupExclusiveOperationClaim,
-    mut complete: F,
-) where
-    F: for<'a> FnMut(
-        &'a mut CloudBackupSupervisor,
-        CloudBackupExclusiveOperationClaim,
-        ClaimRole,
-    ) -> Pin<Box<dyn Future<Output = ()> + 'a>>,
-{
+async fn assert_completion_ignores_stale_claim(
+    begin: impl FnOnce(
+        &mut CloudBackupSupervisor,
+        &Arc<RustCloudBackupManager>,
+    ) -> CloudBackupExclusiveOperationClaim,
+    mut complete: impl AsyncFnMut(&mut CloudBackupSupervisor, CloudBackupExclusiveOperationClaim),
+) {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     let mut supervisor = CloudBackupSupervisor::new(
@@ -814,12 +794,12 @@ async fn assert_completion_ignores_stale_claim<F>(
     let current = begin(&mut supervisor, &manager);
     let stale = CloudBackupExclusiveOperationClaim::new(current.operation(), u64::MAX);
 
-    complete(&mut supervisor, stale, ClaimRole::Stale).await;
+    complete(&mut supervisor, stale).await;
 
     assert_eq!(supervisor.active_operation, Some(current));
     assert_eq!(manager.projected_exclusive_operation(), Some(current));
 
-    complete(&mut supervisor, current, ClaimRole::Current).await;
+    complete(&mut supervisor, current).await;
 
     assert_eq!(supervisor.active_operation, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
@@ -827,109 +807,80 @@ async fn assert_completion_ignores_stale_claim<F>(
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_exclusive_operation_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), async |supervisor, claim| {
             supervisor.complete_exclusive_operation(claim).await.unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_delete_cloud_wallet_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::DeleteCloudWallet), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::DeleteCloudWallet), async |supervisor, claim| {
             supervisor
                 .complete_delete_cloud_wallet(claim, "wallet-record".into(), Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_restore_cloud_wallet_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RestoreCloudWallet), |supervisor, claim, role| {
-        Box::pin(async move {
-            let outcome = match role {
-                ClaimRole::Stale => Ok(WalletRestoreOutcome::Restored { labels_warning: None }),
-                ClaimRole::Current => Err(CloudBackupError::Internal("completion".into())),
-            };
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RestoreCloudWallet), async |supervisor, claim| {
+            let outcome = Err(CloudBackupError::Internal("completion".into()));
             supervisor
                 .complete_restore_cloud_wallet(claim, "wallet-record".into(), outcome)
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_repair_passkey_wrapper_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RepairPasskey), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RepairPasskey), async |supervisor, claim| {
             supervisor.complete_repair_passkey_wrapper(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_repair_passkey_finalization_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RepairPasskey), |supervisor, claim, role| {
-        Box::pin(async move {
-            let finalization = match role {
-                ClaimRole::Stale => Ok(CloudBackupPasskeyRepairFinalization { wallet_count: 2 }),
-                ClaimRole::Current => Err(CloudBackupError::Internal("completion".into())),
-            };
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RepairPasskey), async |supervisor, claim| {
+            let finalization = Err(CloudBackupError::Internal("completion".into()));
             supervisor.complete_repair_passkey_finalization(claim, finalization).await.unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_repair_passkey_wrapper_upload_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RepairPasskey), |supervisor, claim, role| {
-        Box::pin(async move {
-            let upload = match role {
-                ClaimRole::Stale => Ok((
-                    CloudBackupUploadedPasskeyWrapperRepair { namespace_id: "stale".into() },
-                    test_runtime_passkey_authorization(),
-                )),
-                ClaimRole::Current => Err(CloudBackupError::Internal("completion".into())),
-            };
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RepairPasskey), async |supervisor, claim| {
+            let upload = Err(CloudBackupError::Internal("completion".into()));
             supervisor.complete_repair_passkey_wrapper_upload(claim, upload).await.unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_recreate_manifest_recovery_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RecreateManifest), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RecreateManifest), async |supervisor, claim| {
             supervisor.complete_recreate_manifest_recovery(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_recreate_manifest_finalization_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RecreateManifest), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RecreateManifest), async |supervisor, claim| {
             supervisor.complete_recreate_manifest_finalization(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RecreateManifest), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RecreateManifest), async |supervisor, claim| {
             supervisor
                 .complete_verification(
                     Some(claim),
@@ -940,15 +891,13 @@ async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_wrapper_repair_upload_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), async |supervisor, claim| {
             let continuation = DeepVerificationContinuation::Manual {
                 force_discoverable: true,
                 attempt: VerificationAttempt::Initial,
@@ -957,15 +906,13 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_upload_comple
                 .complete_deep_verification_wrapper_repair_upload(claim, continuation, Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_wrapper_repair_resume_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), async |supervisor, claim| {
             let continuation = DeepVerificationContinuation::Manual {
                 force_discoverable: true,
                 attempt: VerificationAttempt::Initial,
@@ -978,15 +925,13 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_resume_comple
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_auto_sync_upload_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), async |supervisor, claim| {
             let continuation = DeepVerificationContinuation::Manual {
                 force_discoverable: true,
                 attempt: VerificationAttempt::Initial,
@@ -999,15 +944,13 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_upload_completion(
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_auto_sync_finalization_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), async |supervisor, claim| {
             let continuation = DeepVerificationContinuation::Manual {
                 force_discoverable: true,
                 attempt: VerificationAttempt::Initial,
@@ -1020,15 +963,13 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_finalization_compl
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_deep_verification_auto_sync_resume_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerificationRepair), async |supervisor, claim| {
             let continuation = DeepVerificationContinuation::Manual {
                 force_discoverable: true,
                 attempt: VerificationAttempt::Initial,
@@ -1043,25 +984,21 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_resume_completion(
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_reinitialize_backup_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::ReinitializeBackup), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::ReinitializeBackup), async |supervisor, claim| {
             supervisor.complete_enable_preparation(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_reinitialize_verification_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::ReinitializeBackup), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::ReinitializeBackup), async |supervisor, claim| {
             supervisor
                 .complete_verification(
                     Some(claim),
@@ -1072,15 +1009,13 @@ async fn supervisor_ignores_stale_reinitialize_verification_completion() {
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_saved_passkey_confirmation_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), async |supervisor, claim| {
             supervisor
                 .complete_saved_passkey_confirmation(
                     claim,
@@ -1090,15 +1025,13 @@ async fn supervisor_ignores_stale_saved_passkey_confirmation_completion() {
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_enable_passkey_registration_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::EnableForceNew), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::EnableForceNew), async |supervisor, claim| {
             supervisor
                 .complete_enable_passkey_registration(
                     claim,
@@ -1106,15 +1039,13 @@ async fn supervisor_ignores_stale_enable_passkey_registration_completion() {
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_enable_preparation_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), async |supervisor, claim| {
             supervisor
                 .complete_enable_preparation(
                     claim,
@@ -1125,15 +1056,13 @@ async fn supervisor_ignores_stale_enable_preparation_completion() {
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_create_new_enable_passkey_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), async |supervisor, claim| {
             supervisor
                 .complete_create_new_enable_passkey(
                     claim,
@@ -1141,29 +1070,22 @@ async fn supervisor_ignores_stale_create_new_enable_passkey_completion() {
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_enable_recovery_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), async |supervisor, claim| {
             supervisor.complete_enable_recovery(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_enable_recovery_finalization_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), |supervisor, claim, role| {
-        Box::pin(async move {
-            let namespace_id: String = match role {
-                ClaimRole::Stale => "stale-namespace".into(),
-                ClaimRole::Current => "current-namespace".into(),
-            };
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), async |supervisor, claim| {
+            let namespace_id: String = "current-namespace".into();
             supervisor
                 .complete_enable_recovery_finalization(
                     claim,
@@ -1180,25 +1102,21 @@ async fn supervisor_ignores_stale_enable_recovery_finalization_completion() {
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_enable_recovery_preparation_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), async |supervisor, claim| {
             supervisor.complete_enable_recovery_preparation(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_no_discovery_enable_preparation_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::EnableNoDiscovery), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::EnableNoDiscovery), async |supervisor, claim| {
             supervisor
                 .complete_no_discovery_enable_preparation(
                     claim,
@@ -1209,25 +1127,21 @@ async fn supervisor_ignores_stale_no_discovery_enable_preparation_completion() {
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_enable_upload_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), async |supervisor, claim| {
             supervisor.complete_enable_upload(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_enable_upload_finalization_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Enable), async |supervisor, claim| {
             supervisor
                 .complete_enable_upload_finalization(
                     claim,
@@ -1236,56 +1150,47 @@ async fn supervisor_ignores_stale_enable_upload_finalization_completion() {
                 )
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_disable_preparation_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
             supervisor.complete_disable_preparation(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_disable_blocker_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
             supervisor
                 .complete_disable_blocker_check(claim, test_disabling_state(), Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_disable_delete_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
             supervisor
                 .complete_disable_namespace_delete(claim, test_disabling_state(), Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_disable_local_cleanup_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::Disable), async |supervisor, claim| {
             supervisor
                 .complete_disable_local_cleanup(claim, test_disabling_state(), Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
-        })
     })
     .await;
 }
@@ -1300,20 +1205,16 @@ async fn supervisor_ignores_stale_recover_other_backups_completion() {
                 CloudBackupOtherBackupsOutcome::Recovering,
             )
             .unwrap()
-        }, |supervisor, claim, _| {
-        Box::pin(async move {
+        }, async |supervisor, claim| {
             supervisor.complete_recover_other_backups(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
-        })
     })
     .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_delete_cloud_wallet_preparation_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::DeleteCloudWallet), |supervisor, claim, _| {
-        Box::pin(async move {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::DeleteCloudWallet), async |supervisor, claim| {
             supervisor.complete_delete_cloud_wallet_preparation(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
-        })
     })
     .await;
 }
@@ -1328,10 +1229,8 @@ async fn supervisor_ignores_stale_delete_other_backups_completion() {
                 CloudBackupOtherBackupsOutcome::Deleting,
             )
             .unwrap()
-        }, |supervisor, claim, _| {
-        Box::pin(async move {
+        }, async |supervisor, claim| {
             supervisor.complete_delete_other_backups(claim, Err(CloudBackupError::Internal("completion".into()))).await.unwrap();
-        })
     })
     .await;
 }

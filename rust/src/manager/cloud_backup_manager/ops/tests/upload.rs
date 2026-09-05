@@ -518,7 +518,7 @@ async fn upload_wallet_if_dirty_skips_fresh_uploading_state() {
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     persist_uploading_blob_state(
         metadata.id.clone(),
-        crate::manager::cloud_backup_manager::current_timestamp(),
+        cove_util::time::unix_timestamp_secs_or_zero(),
     );
 
     manager.do_upload_wallet_if_dirty(&metadata.id).await.unwrap();

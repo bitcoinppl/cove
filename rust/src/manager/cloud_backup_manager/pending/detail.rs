@@ -249,7 +249,7 @@ impl RustCloudBackupManager {
             }
         };
 
-        let confirmed_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let confirmed_at = cove_util::time::unix_timestamp_secs_or_zero();
         let mut updated = false;
 
         for state in states {

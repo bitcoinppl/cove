@@ -4817,9 +4817,12 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func selectWallet(id: WalletId) throws
 
-    func selectedFiatCurrency()  -> FiatCurrency
-
     func selectedBlockExplorerOption(network: Network)  -> BlockExplorerOption
+
+    /**
+     * The selected fiat currency, falling back to the default when none is saved
+     */
+    func selectedFiatCurrency()  -> FiatCurrency
 
     func selectedNetwork()  -> Network
 
@@ -5024,21 +5027,24 @@ open func selectWallet(id: WalletId)throws   {try rustCallWithError(FfiConverter
 }
 }
 
-open func selectedFiatCurrency() -> FiatCurrency  {
-    return try!  FfiConverterTypeFiatCurrency_lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_globalconfigtable_selectedfiatcurrency(
-            self.uniffiCloneHandle(),uniffiCallStatus
-    )
-})
-}
-
 open func selectedBlockExplorerOption(network: Network) -> BlockExplorerOption  {
     return try!  FfiConverterTypeBlockExplorerOption_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_globalconfigtable_selected_block_explorer_option(
             self.uniffiCloneHandle(),
         FfiConverterTypeNetwork_lower(network),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * The selected fiat currency, falling back to the default when none is saved
+     */
+open func selectedFiatCurrency() -> FiatCurrency  {
+    return try!  FfiConverterTypeFiatCurrency_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_globalconfigtable_selected_fiat_currency(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -47317,10 +47323,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_select_wallet() != 33046) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_globalconfigtable_selectedfiatcurrency() != 11234) {
+    if (uniffi_cove_checksum_method_globalconfigtable_selected_block_explorer_option() != 31659) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_globalconfigtable_selected_block_explorer_option() != 31659) {
+    if (uniffi_cove_checksum_method_globalconfigtable_selected_fiat_currency() != 49300) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_selected_network() != 17475) {

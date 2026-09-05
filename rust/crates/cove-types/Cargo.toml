@@ -73,3 +73,6 @@ tap = { workspace = true }
 
 [build-dependencies]
 uniffi = { workspace = true, features = ["build"] }
+
+[lints]
+workspace = true

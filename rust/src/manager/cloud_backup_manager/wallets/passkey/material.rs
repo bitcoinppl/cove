@@ -323,7 +323,7 @@ fn passkey_provider_hint(
         PasskeyRegistrationPlatform::Ios => BackupPasskeyRegistrationPlatform::Ios,
         PasskeyRegistrationPlatform::Android => BackupPasskeyRegistrationPlatform::Android,
     };
-    let registered_at = crate::manager::cloud_backup_manager::current_timestamp();
+    let registered_at = cove_util::time::unix_timestamp_secs_or_zero();
 
     debug!(
         "Captured passkey provider hint aaguid={} registered_platform={registered_platform:?} registered_at={registered_at} name_suffix={name_suffix}",

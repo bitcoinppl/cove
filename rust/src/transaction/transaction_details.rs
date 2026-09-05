@@ -12,7 +12,7 @@ use jiff::Timestamp;
 
 use crate::{
     database::Database,
-    fiat::{client::FIAT_CLIENT, historical::HistoricalPrice},
+    fiat::{FiatCurrency, client::FIAT_CLIENT, historical::HistoricalPrice},
     historical_price_service::HistoricalPriceService,
     transaction::{TransactionDirection, Unit},
 };
@@ -342,12 +342,10 @@ impl TransactionDetails {
     pub async fn amount_fiat(&self) -> Result<f64, Error> {
         let amount = self.amount();
 
+        let currency = selected_currency();
         task::spawn(async move {
             FIAT_CLIENT
-                .current_value_in_currency(
-                    amount,
-                    Database::global().global_config.selected_fiat_currency(),
-                )
+                .current_value_in_currency(amount, currency)
                 .await
                 .map_err_str(Error::FiatAmount)
         })
@@ -358,17 +356,15 @@ impl TransactionDetails {
     #[uniffi::method]
     pub async fn amount_fiat_fmt(&self) -> Result<String, Error> {
         let amount = self.amount_fiat().await?;
-        Ok(fiat_amount_fmt(amount))
+        Ok(fiat_amount_fmt(amount, selected_currency()))
     }
 
     #[uniffi::method]
     pub fn amount_fiat_fmt_cached(&self) -> Option<String> {
         let amount = self.amount();
-        let fiat = FIAT_CLIENT.value_in_currency_cached(
-            amount,
-            Database::global().global_config.selected_fiat_currency(),
-        )?;
-        Some(fiat_amount_fmt(fiat))
+        let currency = selected_currency();
+        let fiat = FIAT_CLIENT.value_in_currency_cached(amount, currency)?;
+        Some(fiat_amount_fmt(fiat, currency))
     }
 
     #[uniffi::method]
@@ -380,29 +376,25 @@ impl TransactionDetails {
     #[uniffi::method]
     pub async fn fee_fiat_fmt(&self) -> Result<String, Error> {
         let fee = self.fee.ok_or_else(|| Error::Fee("No fee".to_string()))?;
+        let currency = selected_currency();
         let fiat = task::spawn(async move {
             FIAT_CLIENT
-                .current_value_in_currency(
-                    fee,
-                    Database::global().global_config.selected_fiat_currency(),
-                )
+                .current_value_in_currency(fee, currency)
                 .await
                 .map_err_str(Error::FiatAmount)
         })
         .await
         .map_err_prefix("task failed", Error::FiatAmount)??;
 
-        Ok(fiat_amount_fmt(fiat))
+        Ok(fiat_amount_fmt(fiat, currency))
     }
 
     #[uniffi::method]
     pub fn fee_fiat_fmt_cached(&self) -> Option<String> {
         let fee = self.fee?;
-        let fiat = FIAT_CLIENT.value_in_currency_cached(
-            fee,
-            Database::global().global_config.selected_fiat_currency(),
-        )?;
-        Some(fiat_amount_fmt(fiat))
+        let currency = selected_currency();
+        let fiat = FIAT_CLIENT.value_in_currency_cached(fee, currency)?;
+        Some(fiat_amount_fmt(fiat, currency))
     }
 
     #[uniffi::method]
@@ -430,29 +422,26 @@ impl TransactionDetails {
     pub async fn sent_sans_fee_fiat_fmt(&self) -> Result<String, Error> {
         let amount = self.sent_sans_fee().ok_or_else(|| Error::Fee("No fee".to_string()))?;
 
+        let currency = selected_currency();
+
         let fiat = task::spawn(async move {
             FIAT_CLIENT
-                .current_value_in_currency(
-                    amount,
-                    Database::global().global_config.selected_fiat_currency(),
-                )
+                .current_value_in_currency(amount, currency)
                 .await
                 .map_err_str(Error::FiatAmount)
         })
         .await
         .map_err_prefix("task failed", Error::FiatAmount)??;
 
-        Ok(fiat_amount_fmt(fiat))
+        Ok(fiat_amount_fmt(fiat, currency))
     }
 
     #[uniffi::method]
     pub fn sent_sans_fee_fiat_fmt_cached(&self) -> Option<String> {
         let amount = self.sent_sans_fee()?;
-        let fiat = FIAT_CLIENT.value_in_currency_cached(
-            amount,
-            Database::global().global_config.selected_fiat_currency(),
-        )?;
-        Some(fiat_amount_fmt(fiat))
+        let currency = selected_currency();
+        let fiat = FIAT_CLIENT.value_in_currency_cached(amount, currency)?;
+        Some(fiat_amount_fmt(fiat, currency))
     }
 
     #[uniffi::method]
@@ -532,11 +521,11 @@ impl TransactionDetails {
         let db = Database::global().historical_prices();
         let price_record = db.get_price_for_block(self.network, block_number).ok()??;
         let price = HistoricalPrice::from(price_record);
-        let currency_price =
-            price.for_currency(Database::global().global_config.selected_fiat_currency())?;
+        let currency = selected_currency();
+        let currency_price = price.for_currency(currency)?;
 
         let fiat_value = self.amount().as_btc() * currency_price as f64;
-        Some(fmt_historical_fiat(fiat_value))
+        Some(fmt_historical_fiat(fiat_value, currency))
     }
 
     /// Historical fiat value at time of transaction - async version (fetches from API if not cached)
@@ -555,7 +544,7 @@ impl TransactionDetails {
 
         let network = self.network;
         let amount_btc = self.amount().as_btc();
-        let currency = Database::global().global_config.selected_fiat_currency();
+        let currency = selected_currency();
 
         let currency_price = task::spawn(async move {
             let service = HistoricalPriceService::new();
@@ -567,7 +556,7 @@ impl TransactionDetails {
         .ok_or_else(|| Error::FiatAmount("no price for currency".into()))?;
 
         let fiat_value = amount_btc * currency_price as f64;
-        Ok(fmt_historical_fiat(fiat_value))
+        Ok(fmt_historical_fiat(fiat_value, currency))
     }
 }
 
@@ -642,20 +631,16 @@ impl TransactionDetails {
     }
 }
 
-fn fiat_amount_fmt(amount: f64) -> String {
-    let amount_fmt = amount.thousands_fiat();
-
-    let currency = Database::global().global_config.selected_fiat_currency();
-    let symbol = currency.symbol();
-    let suffix = currency.suffix();
-
-    format!("≈ {symbol}{amount_fmt} {suffix}")
+fn selected_currency() -> FiatCurrency {
+    Database::global().global_config.selected_fiat_currency()
 }
 
-fn fmt_historical_fiat(amount: f64) -> String {
-    let amount_fmt = amount.thousands_fiat();
+fn fiat_amount_fmt(amount: f64, currency: FiatCurrency) -> String {
+    format!("≈ {}", fmt_historical_fiat(amount, currency))
+}
 
-    let currency = Database::global().global_config.selected_fiat_currency();
+fn fmt_historical_fiat(amount: f64, currency: FiatCurrency) -> String {
+    let amount_fmt = amount.thousands_fiat();
     let symbol = currency.symbol();
     let suffix = currency.suffix();
 

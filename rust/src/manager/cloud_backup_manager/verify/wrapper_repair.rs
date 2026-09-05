@@ -228,7 +228,7 @@ impl WrapperRepairOperation {
 
         let credentials = self.credentials(strategy).await?;
 
-        let uploaded_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let uploaded_at = cove_util::time::unix_timestamp_secs_or_zero();
         let encrypted_backup = master_key_crypto::encrypt_master_key_with_remote_metadata(
             local_master_key,
             &credentials.prf_key,

@@ -11,6 +11,11 @@ name = "cove"
 members = ["crates/*", "xtask"]
 
 ## MARK: WORKSPACE DEPENDENCIES
+[workspace.lints.clippy]
+redundant_clone = "deny"
+redundant_closure_for_method_calls = "deny"
+unnecessary_wraps = "deny"
+
 [workspace.dependencies]
 # bindings
 uniffi = { git = "https://github.com/mozilla/uniffi-rs", rev = "42e834a4371547d9da47fd06e34062a91fa25b57", features = ["tokio"] }
@@ -332,3 +337,6 @@ opt-level = 3             # Optimize for speed
 [profile.release-smaller]
 inherits = "release-base"
 opt-level = 'z'           # Optimize for size.
+
+[lints]
+workspace = true

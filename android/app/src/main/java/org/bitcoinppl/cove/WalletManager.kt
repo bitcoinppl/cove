@@ -614,7 +614,11 @@ class WalletManager :
             displayConfirmationCount(confirmations)
         }
 
-    fun amountFmt(amount: Amount): String = amount.fmtString(walletMetadata?.selectedUnit ?: BitcoinUnit.SAT)
+    // metadata is absent until the wallet loads; sats is the unit shown until then
+    private val selectedUnit: BitcoinUnit
+        get() = walletMetadata?.selectedUnit ?: BitcoinUnit.SAT
+
+    fun amountFmt(amount: Amount): String = amount.fmtString(selectedUnit)
 
     fun displayAmount(amount: Amount, showUnit: Boolean = true): String {
         return walletDisplayAmount(requiredWalletMetadata, amount, showUnit)
@@ -659,7 +663,7 @@ class WalletManager :
 
     fun amountInFiatCached(amount: Amount): Double? = walletAmountInFiatCached(amount)
 
-    fun amountFmtUnit(amount: Amount): String = amount.fmtStringWithUnit(walletMetadata?.selectedUnit ?: BitcoinUnit.SAT)
+    fun amountFmtUnit(amount: Amount): String = amount.fmtStringWithUnit(selectedUnit)
 
     suspend fun transactionDetails(txId: TxId): TransactionDetailsPresentation {
         transactionDetailsPresentations[txId]?.let { return it }

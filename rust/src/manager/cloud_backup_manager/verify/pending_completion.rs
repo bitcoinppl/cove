@@ -47,7 +47,7 @@ impl RustCloudBackupManager {
         let Some(completion) = self.pending_verification_completion() else { return };
 
         if completion.is_expired(
-            crate::manager::cloud_backup_manager::current_timestamp(),
+            cove_util::time::unix_timestamp_secs_or_zero(),
             PENDING_VERIFICATION_COMPLETION_TTL_SECONDS,
         ) {
             self.expire_pending_verification_completion(completion);

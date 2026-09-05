@@ -20,3 +20,6 @@ derive_more = { workspace = true, features = ["display"] }
 
 # Uniffi for FFI
 uniffi = { workspace = true, features = ["tokio"] }
+
+[lints]
+workspace = true

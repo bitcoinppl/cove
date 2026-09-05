@@ -141,7 +141,7 @@ impl ActiveReceiveSession {
         Self {
             id: ReceiveSessionId::new(),
             receiver: ReceiverSession::new(),
-            created_at_secs: now_secs(),
+            created_at_secs: cove_util::time::unix_timestamp_secs_or_zero(),
             network: scope.network,
             wallet_mode: scope.wallet_mode,
         }
@@ -177,7 +177,8 @@ impl ActiveReceiveSession {
     }
 
     pub(crate) fn is_expired(&self) -> bool {
-        now_secs().saturating_sub(self.created_at_secs) >= RECEIVE_SESSION_TTL.as_secs()
+        cove_util::time::unix_timestamp_secs_or_zero().saturating_sub(self.created_at_secs)
+            >= RECEIVE_SESSION_TTL.as_secs()
     }
 
     pub(crate) fn ensure_current_scope(&self) -> Result<(), KeyTeleportAlert> {
@@ -299,7 +300,8 @@ impl PersistedReceiveSession {
     }
 
     fn is_expired(&self) -> bool {
-        now_secs().saturating_sub(self.created_at_secs) >= RECEIVE_SESSION_TTL.as_secs()
+        cove_util::time::unix_timestamp_secs_or_zero().saturating_sub(self.created_at_secs)
+            >= RECEIVE_SESSION_TTL.as_secs()
     }
 
     fn scope(&self) -> ReceiveScope {
@@ -364,8 +366,4 @@ fn delete_receive_session_if_matches_unlocked(
     }
 
     delete_receive_session_unlocked()
-}
-
-fn now_secs() -> u64 {
-    cove_util::time::unix_timestamp_secs().unwrap_or_default()
 }

@@ -165,7 +165,7 @@ async fn build_wallet_entry(
     )?;
 
     let content_revision_hash = revision_payload.content_revision_hash()?;
-    let updated_at = crate::manager::cloud_backup_manager::current_timestamp();
+    let updated_at = cove_util::time::unix_timestamp_secs_or_zero();
 
     Ok(WalletEntry {
         wallet_id: id.to_string(),

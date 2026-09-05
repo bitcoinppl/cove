@@ -40,3 +40,6 @@ zeroize = { workspace = true }
 
 # cbor
 minicbor = { workspace = true }
+
+[lints]
+workspace = true

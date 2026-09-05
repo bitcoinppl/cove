@@ -318,7 +318,7 @@ async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisti
         PersistedCloudBackupStatus::Enabled
     );
     assert_eq!(
-        manager.projected_exclusive_operation().map(crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim::operation),
+        manager.projected_exclusive_operation().map(CloudBackupExclusiveOperationClaim::operation),
         Some(CloudBackupExclusiveOperation::RecreateManifest)
     );
     manager.project_exclusive_operation_finished(claim);

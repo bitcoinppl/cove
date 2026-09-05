@@ -452,7 +452,7 @@ impl RestoreOperation {
         self.save_keychain_state(master_key, passkey, active.namespace_id.clone()).await?;
 
         let enabled_state = PersistedCloudBackupState::configured_after_restore(
-            crate::manager::cloud_backup_manager::current_timestamp(),
+            cove_util::time::unix_timestamp_secs_or_zero(),
             wallet_count,
         );
         self.persist_cloud_backup_state(

@@ -600,7 +600,7 @@ impl CloudBackupWriteSupervisor {
         namespace_id: &str,
         uploaded_wallets: &[CloudBackupUploadedWallet],
     ) -> Result<(), CloudBackupError> {
-        let uploaded_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let uploaded_at = cove_util::time::unix_timestamp_secs_or_zero();
         for wallet in uploaded_wallets {
             manager
                 .mark_wallet_uploaded_pending_confirmation_if_revision_current(

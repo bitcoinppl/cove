@@ -227,13 +227,6 @@ impl GlobalConfigTable {
     }
 }
 
-impl GlobalConfigTable {
-    /// The selected fiat currency, falling back to the default when none is saved
-    pub fn selected_fiat_currency(&self) -> FiatCurrency {
-        self.fiat_currency().unwrap_or_default()
-    }
-}
-
 #[uniffi::export]
 impl GlobalConfigTable {
     pub fn select_wallet(&self, id: WalletId) -> Result<()> {
@@ -394,9 +387,9 @@ impl GlobalConfigTable {
         self.delete(GlobalConfigKey::CustomBlockExplorer(network))
     }
 
-    #[uniffi::method(name = "selectedFiatCurrency")]
-    fn _selected_fiat_currency(&self) -> FiatCurrency {
-        self.selected_fiat_currency()
+    /// The selected fiat currency, falling back to the default when none is saved
+    pub fn selected_fiat_currency(&self) -> FiatCurrency {
+        self.fiat_currency().unwrap_or_default()
     }
 
     #[uniffi::method(name = "authType")]

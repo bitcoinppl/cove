@@ -185,8 +185,8 @@ impl UnconfirmedTransaction {
 
     #[uniffi::method]
     pub fn label(&self) -> String {
-        if let Some(label) = self.labels.transaction_label() {
-            return label.to_string();
+        if let Some(label) = super::non_empty_transaction_label(&self.labels) {
+            return label;
         }
 
         match &self.sent_and_received.direction {

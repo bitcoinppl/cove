@@ -138,10 +138,6 @@ pub(crate) const CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE: &str = concat!(
 pub(crate) const CLOUD_BACKUP_IO_CONCURRENCY: usize = 4;
 type Message = CloudBackupReconcileMessage;
 
-pub(crate) fn current_timestamp() -> u64 {
-    cove_util::time::unix_timestamp_secs().unwrap_or(0)
-}
-
 #[derive(Debug, Default)]
 struct CloudBackupRuntimeOwnership {
     manager_initialized: bool,
@@ -859,7 +855,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn dismiss_verification_prompt_impl(&self) -> Result<(), CloudBackupError> {
-        let dismissed_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let dismissed_at = cove_util::time::unix_timestamp_secs_or_zero();
         self.mutate_persisted_cloud_backup_state(
             "persist cloud backup prompt dismissal",
             |state| state.dismiss_verification_request(dismissed_at),
