@@ -1,3 +1,4 @@
+use super::{CloseRetryId, RegistrationId};
 use std::{
     sync::{
         Arc,
@@ -55,7 +56,7 @@ fn register_preview_wallet(
     coordinator: &'static WalletLifecycleCoordinator,
 ) -> (
     crate::wallet::metadata::WalletId,
-    u64,
+    RegistrationId,
     crate::manager::wallet_manager::RustWalletManager,
     super::WalletActorRegistration,
 ) {
@@ -71,7 +72,10 @@ fn register_preview_wallet(
     (wallet_id, registration_id, manager, registration)
 }
 
-fn mark_ordinary_closing(coordinator: &WalletLifecycleCoordinator, registration_id: u64) {
+fn mark_ordinary_closing(
+    coordinator: &WalletLifecycleCoordinator,
+    registration_id: RegistrationId,
+) {
     let mut data = coordinator.data.lock();
     let actors = data.actors.get_mut(&registration_id).expect("registration exists");
     actors.state = RegistrationState::OrdinaryClosing;
@@ -313,7 +317,7 @@ async fn ordinary_close_retry_waits_for_failed_destructive_phase_to_release() {
         let actors = data.actors.get(&registration_id).expect("registration remains pending");
         assert_eq!(actors.state, RegistrationState::OrdinaryClosePending);
         assert_eq!(actors.ordinary_close_retry, Some(retry_id));
-        assert_eq!(actors.next_ordinary_close_retry_id, 1);
+        assert_eq!(actors.next_ordinary_close_retry_id.0, 1);
     }
 
     drop(targets);
@@ -339,7 +343,7 @@ async fn ordinary_close_retry_waits_for_failed_destructive_phase_to_release() {
 
 async fn wait_for_registration_removal(
     coordinator: &'static WalletLifecycleCoordinator,
-    registration_id: u64,
+    registration_id: RegistrationId,
 ) {
     tokio::time::timeout(Duration::from_secs(2), async {
         loop {
@@ -382,8 +386,8 @@ async fn lease_drop_before_destructive_claim_survives_blocked_shutdown() {
         let data = coordinator.data.lock();
         let actors = data.actors.get(&registration_id).expect("registration remains owned");
         assert_eq!(actors.state, RegistrationState::OrdinaryClosePending);
-        assert_eq!(actors.ordinary_close_retry, Some(0));
-        assert_eq!(actors.next_ordinary_close_retry_id, 1);
+        assert_eq!(actors.ordinary_close_retry, Some(CloseRetryId(0)));
+        assert_eq!(actors.next_ordinary_close_retry_id.0, 1);
     }
     assert!(lifecycle.ensure_active().is_err());
 
@@ -392,7 +396,7 @@ async fn lease_drop_before_destructive_claim_survives_blocked_shutdown() {
         let data = coordinator.data.lock();
         let actors = data.actors.get(&registration_id).expect("registration remains owned");
         assert_eq!(actors.state, RegistrationState::OrdinaryClosePending);
-        assert_eq!(actors.ordinary_close_retry, Some(0));
+        assert_eq!(actors.ordinary_close_retry, Some(CloseRetryId(0)));
     }
 
     let DestructiveClaim::Claimed(targets) = coordinator
@@ -467,13 +471,13 @@ async fn lease_drop_after_destructive_claim_updates_failed_resume_target() {
         coordinator.data.lock().actors.get(&registration_id).map(|actors| (
             actors.state,
             actors.ordinary_close_retry,
-            actors.next_ordinary_close_retry_id
+            actors.next_ordinary_close_retry_id.0
         )),
         Some((
             RegistrationState::DestructiveClosing {
                 resume: ResumedRegistrationState::OrdinaryClosePending,
             },
-            Some(0),
+            Some(CloseRetryId(0)),
             1,
         ))
     );
