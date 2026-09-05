@@ -21,11 +21,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupDisablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -158,11 +154,7 @@ impl CloudBackupSupervisor {
         disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
         let Some(disabling) = manager.current_disabling_if_current(&disabling) else {
@@ -224,11 +216,7 @@ impl CloudBackupSupervisor {
         disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -275,11 +263,7 @@ impl CloudBackupSupervisor {
         disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 

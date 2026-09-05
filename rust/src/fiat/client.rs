@@ -204,14 +204,8 @@ pub async fn init_prices() -> Result<()> {
     debug!("init_prices");
     let fiat_client = &FIAT_CLIENT;
 
-    let prices = (|| fiat_client.get_or_fetch_prices())
-        .retry(
-            ExponentialBuilder::default()
-                .with_min_delay(Duration::from_millis(10))
-                .with_max_delay(Duration::from_secs(5))
-                .with_max_times(20),
-        )
-        .await;
+    let prices =
+        (|| fiat_client.get_or_fetch_prices()).retry(crate::retry::network_fetch_backoff()).await;
 
     match prices {
         Ok(prices) => {

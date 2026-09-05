@@ -9,7 +9,7 @@ use crate::{
     app::reconcile::{AppStateReconcileMessage, Updater},
     auth::{AuthPin, AuthType},
     database::{self, Database},
-    manager::{deferred_sender::SingleOrMany, reconcile_channel::ReconcileChannel},
+    manager::reconcile_channel::ReconcileChannel,
     wallet::metadata::WalletMode,
 };
 
@@ -156,14 +156,7 @@ impl RustAuthManager {
     }
 
     pub fn listen_for_updates(&self, reconciler: Box<dyn AuthManagerReconciler>) {
-        self.reconciler.listen(move |field| match field {
-            SingleOrMany::Single(message) => reconciler.reconcile(message),
-            SingleOrMany::Many(messages) => {
-                for message in messages {
-                    reconciler.reconcile(message);
-                }
-            }
-        });
+        self.reconciler.listen_sink(reconciler);
     }
 
     /// Get the auth type for the app
@@ -542,3 +535,8 @@ pub trait AuthManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     /// Tells the frontend to reconcile the manager changes
     fn reconcile(&self, message: AuthManagerReconcileMessage);
 }
+
+crate::manager::reconcile_channel::impl_reconcile_sink!(
+    dyn AuthManagerReconciler,
+    AuthManagerReconcileMessage
+);

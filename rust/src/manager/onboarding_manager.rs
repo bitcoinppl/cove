@@ -30,7 +30,7 @@ use crate::{
     word_validator::WordValidator,
 };
 
-use super::deferred_sender::{DeferredSender, MessageSender, SingleOrMany};
+use super::deferred_sender::{DeferredSender, MessageSender};
 use super::reconcile_channel::ReconcileChannel;
 
 mod cloud_restore;
@@ -299,6 +299,11 @@ pub trait OnboardingManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     fn reconcile(&self, message: OnboardingReconcileMessage);
 }
 
+crate::manager::reconcile_channel::impl_reconcile_sink!(
+    dyn OnboardingManagerReconciler,
+    OnboardingReconcileMessage
+);
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum CloudCheckOutcome {
     BackupFound(Option<CloudRestoreProviderHint>),
@@ -382,14 +387,7 @@ impl RustOnboardingManager {
     }
 
     pub fn listen_for_updates(&self, reconciler: Box<dyn OnboardingManagerReconciler>) {
-        self.reconciler.listen(move |field| match field {
-            SingleOrMany::Single(message) => reconciler.reconcile(message),
-            SingleOrMany::Many(messages) => {
-                for message in messages {
-                    reconciler.reconcile(message);
-                }
-            }
-        });
+        self.reconciler.listen_sink(reconciler);
     }
 
     pub fn state(&self) -> OnboardingState {

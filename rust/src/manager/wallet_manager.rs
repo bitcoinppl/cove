@@ -266,6 +266,8 @@ pub trait WalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     fn reconcile_many(&self, messages: Vec<Message>);
 }
 
+crate::manager::reconcile_channel::impl_reconcile_sink!(dyn WalletManagerReconciler, Message, many);
+
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustWalletManager {
     pub id: WalletId,
@@ -1061,10 +1063,7 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
-        self.reconciler.listen(move |field| match field {
-            SingleOrMany::Single(message) => reconciler.reconcile(message),
-            SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
-        });
+        self.reconciler.listen_sink(reconciler);
     }
 
     /// Finalize a signed PSBT

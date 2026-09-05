@@ -356,6 +356,26 @@ impl CloudBackupSupervisor {
         self.manager.upgrade()
     }
 
+    /// The manager, only while `claim` still owns the active operation
+    ///
+    /// A dropped manager also ends the operation, so its claim is cleared here instead of at
+    /// every completion handler
+    fn current(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) -> Option<Arc<RustCloudBackupManager>> {
+        if !self.active_operation.is_current(claim) {
+            return None;
+        }
+
+        let manager = self.manager();
+        if manager.is_none() {
+            self.active_operation.clear();
+        }
+
+        manager
+    }
+
     fn addr(&self) -> Addr<Self> {
         self.addr.upgrade()
     }
@@ -947,11 +967,7 @@ impl CloudBackupSupervisor {
         detail_claim: DetailResultClaim,
         result: Option<CloudBackupDetailResult>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 

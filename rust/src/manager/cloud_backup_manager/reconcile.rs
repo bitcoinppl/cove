@@ -1,7 +1,5 @@
 use cove_device::cloud_storage::CloudSyncHealth;
 
-use crate::manager::deferred_sender::SingleOrMany;
-
 use super::model::{CloudBackupStateReducerEffects, CloudBackupStateReducerEvent};
 use super::verify::coordinator::{
     CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
@@ -59,6 +57,11 @@ pub enum CloudBackupReconcileMessage {
 pub trait CloudBackupManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     fn reconcile(&self, message: CloudBackupReconcileMessage);
 }
+
+crate::manager::reconcile_channel::impl_reconcile_sink!(
+    dyn CloudBackupManagerReconciler,
+    CloudBackupReconcileMessage
+);
 
 type Message = CloudBackupReconcileMessage;
 
@@ -228,13 +231,6 @@ impl RustCloudBackupManager {
 #[uniffi::export]
 impl RustCloudBackupManager {
     pub fn listen_for_updates(&self, reconciler: Box<dyn CloudBackupManagerReconciler>) {
-        self.reconciler.listen(move |field| match field {
-            SingleOrMany::Single(message) => reconciler.reconcile(message),
-            SingleOrMany::Many(messages) => {
-                for message in messages {
-                    reconciler.reconcile(message);
-                }
-            }
-        });
+        self.reconciler.listen_sink(reconciler);
     }
 }

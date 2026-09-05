@@ -4,6 +4,7 @@ use std::{
     time::Duration,
 };
 
+use crate::database::global_config::SelectedWalletTarget;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
@@ -229,8 +230,8 @@ pub enum FiatOrBtc {
 
 impl WalletMetadata {
     pub fn new(name: impl Into<String>, fingerprint: Option<impl Into<Arc<Fingerprint>>>) -> Self {
-        let network = Database::global().global_config.selected_network();
-        let wallet_mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode: wallet_mode } =
+            Database::global().global_config.wallet_target();
 
         Self {
             id: WalletId::new(),

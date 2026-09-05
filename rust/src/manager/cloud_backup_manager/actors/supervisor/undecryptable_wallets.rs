@@ -22,11 +22,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupPreparedUndecryptableWalletDeletion, CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -53,11 +49,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<u32, CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 

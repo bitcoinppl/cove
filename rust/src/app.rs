@@ -3,6 +3,7 @@
 pub mod alert_state;
 pub mod reconcile;
 
+use crate::database::global_config::SelectedWalletTarget;
 use std::{
     sync::Arc,
     time::{Duration, UNIX_EPOCH},
@@ -21,7 +22,6 @@ use crate::{
     keychain::{Keychain, KeychainError},
     manager::cloud_backup_manager::{CLOUD_BACKUP_MANAGER, CloudBackupKeychain},
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
-    manager::deferred_sender::SingleOrMany,
     manager::key_teleport_manager::RustKeyTeleportManager,
     manager::reconcile_channel::ReconcileChannel,
     network::Network,
@@ -347,14 +347,7 @@ impl App {
     }
 
     pub fn listen_for_updates(&self, updater: Box<dyn FfiReconcile>) {
-        self.reconcile.listen(move |field| match field {
-            SingleOrMany::Single(message) => updater.reconcile(message),
-            SingleOrMany::Many(messages) => {
-                for message in messages {
-                    updater.reconcile(message);
-                }
-            }
-        });
+        self.reconcile.listen_sink(updater);
     }
 
     pub fn get_state(&self) -> AppState {
@@ -382,8 +375,8 @@ impl FfiApp {
         tap_signer: &cove_tap_card::TapSigner,
     ) -> Option<WalletMetadata> {
         let ident = &tap_signer.card_ident;
-        let network = Database::global().global_config.selected_network();
-        let mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode } =
+            Database::global().global_config.wallet_target();
 
         match Database::global().wallets().find_by_tap_signer_ident(ident, network, mode) {
             Ok(result) => result,
@@ -465,8 +458,8 @@ impl FfiApp {
 
     /// Number of wallets
     pub fn num_wallets(&self) -> u16 {
-        let network = Database::global().global_config.selected_network();
-        let mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode } =
+            Database::global().global_config.wallet_target();
         Database::global().wallets().len(network, mode).unwrap_or(0)
     }
 

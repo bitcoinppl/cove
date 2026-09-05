@@ -6,11 +6,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnableRecoveryCompletion, CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -34,11 +30,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnableRecoveryPreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -132,11 +124,7 @@ impl CloudBackupSupervisor {
         finalization: EnableRecoveryFinalization,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 

@@ -7,7 +7,7 @@ use std::{
 };
 
 use arc_swap::ArcSwap;
-use backon::{ExponentialBuilder, Retryable as _};
+use backon::Retryable as _;
 use eyre::{Context as _, Result};
 use once_cell::sync::OnceCell;
 use tracing::{debug, error, warn};
@@ -418,14 +418,8 @@ pub async fn init_and_update_fees() {
     }
 
     // fetch from network
-    let result = (|| FEE_CLIENT.fetch_and_get_fees())
-        .retry(
-            ExponentialBuilder::default()
-                .with_min_delay(Duration::from_millis(10))
-                .with_max_delay(Duration::from_secs(5))
-                .with_max_times(20),
-        )
-        .await;
+    let result =
+        (|| FEE_CLIENT.fetch_and_get_fees()).retry(crate::retry::network_fetch_backoff()).await;
 
     match result {
         Ok(_) => {}

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::database::global_config::SelectedWalletTarget;
 use bdk_wallet::KeychainKind;
 use bdk_wallet::bitcoin::bip32::Xpub;
 use bdk_wallet::miniscript::descriptor::ShInner;
@@ -188,8 +189,7 @@ impl WalletBuilder {
     fn build_from_pubport(pubport: pubport::Format) -> Result<Wallet, WalletError> {
         let keychain = Keychain::global();
         let database = Database::global();
-        let network = database.global_config.selected_network();
-        let mode = database.global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode } = database.global_config.wallet_target();
 
         let id = WalletId::new();
         let mut metadata = WalletMetadata::new_for_hardware(id.clone(), "", None);

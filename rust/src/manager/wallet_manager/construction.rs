@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::database::global_config::SelectedWalletTarget;
 use act_zero::Addr;
 use cove_tokio::task::{self, spawn_actor};
 use cove_util::result_ext::ResultExt as _;
@@ -64,8 +65,8 @@ impl RustWalletManager {
         let construction = WalletLifecycleCoordinator::global().begin_construction(id.clone())?;
         let channel = ReconcileChannel::new(10);
 
-        let network = Database::global().global_config.selected_network();
-        let mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode } =
+            Database::global().global_config.wallet_target();
 
         let mut deferred = channel.deferred_sender();
 

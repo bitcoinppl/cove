@@ -6,11 +6,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -66,11 +62,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePasskeyPreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -108,11 +100,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupNoDiscoveryEnablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -164,11 +152,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePasskeyRegistration, CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -267,11 +251,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupUploadedEnableBackup, CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -375,11 +355,7 @@ impl CloudBackupSupervisor {
         finalization: EnableUploadFinalization,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if !self.active_operation.is_current(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 

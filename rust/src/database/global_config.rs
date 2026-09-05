@@ -712,3 +712,16 @@ mod tests {
         (tmp, table)
     }
 }
+
+/// The network and wallet mode that together select which wallets are in scope
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SelectedWalletTarget {
+    pub network: Network,
+    pub mode: WalletMode,
+}
+
+impl GlobalConfigTable {
+    pub fn wallet_target(&self) -> SelectedWalletTarget {
+        SelectedWalletTarget { network: self.selected_network(), mode: self.wallet_mode() }
+    }
+}

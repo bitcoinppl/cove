@@ -1,3 +1,4 @@
+use crate::database::global_config::SelectedWalletTarget;
 use bip39::{Language, Mnemonic};
 use cove_device::keychain::WalletSecret;
 use cove_util::result_ext::ResultExt as _;
@@ -157,8 +158,8 @@ impl RustImportWalletManager {
         let mnemonic = Mnemonic::parse_in_normalized(Language::English, &words)
             .map_err_str(ImportWalletError::InvalidWordGroup)?;
 
-        let network = Database::global().global_config.selected_network();
-        let mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode } =
+            Database::global().global_config.wallet_target();
 
         import_mnemonic_with_target(mnemonic, network, mode)
     }

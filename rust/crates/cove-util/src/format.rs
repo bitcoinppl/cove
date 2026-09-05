@@ -33,32 +33,13 @@ impl<T: Numeric> NumberFormatter for T {
     }
 
     fn thousands_fiat(self) -> String {
-        if self.is_zero() {
-            return "0.00".to_string();
-        }
+        let fixed = format!("{:.2}", self.to_f64());
+        let (sign, unsigned) = fixed.strip_prefix('-').map_or(("", fixed.as_str()), |n| ("-", n));
+        let (whole, _, cents) = split_at_decimal_point(unsigned);
+        let grouped =
+            whole.parse::<u64>().map_or_else(|_| whole.to_string(), NumberFormatter::thousands_int);
 
-        let mut f = numfmt::Formatter::new()
-            .separator(',')
-            .unwrap()
-            .precision(numfmt::Precision::Decimals(2));
-
-        let fmt = f.fmt(self);
-
-        // HACK: actually make sure we always have 2 decimals
-        let last_index = fmt.len() - 1;
-        match memchr::memchr(b'.', fmt.as_bytes()) {
-            Some(decimal_index) => {
-                let decimals = last_index - decimal_index;
-                match decimals {
-                    0 => format!("{fmt}00"),
-                    1 => format!("{fmt}0"),
-                    2 => fmt.to_string(),
-                    _ => fmt[0..decimal_index + 2].to_string(),
-                }
-            }
-
-            None => format!("{fmt}.00"),
-        }
+        format!("{sign}{grouped}.{cents}")
     }
 }
 
@@ -93,7 +74,7 @@ mod tests {
             (20_000.0, "20,000.00"),
             (1_234.5, "1,234.50"),
             (1_234.56, "1,234.56"),
-            (1_234.567, "1,234.56"),
+            (1_234.567, "1,234.57"),
             (0.5, "0.50"),
         ];
 

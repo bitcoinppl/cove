@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use crate::database::global_config::SelectedWalletTarget;
 use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata, TableDefinition};
 use tracing::{debug, warn};
 
@@ -206,8 +207,8 @@ pub struct WalletsTable {
 #[uniffi::export]
 impl WalletsTable {
     pub fn is_empty(&self) -> Result<bool, Error> {
-        let network = Database::global().global_config.selected_network();
-        let wallet_mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode: wallet_mode } =
+            Database::global().global_config.wallet_target();
 
         let table = self.read_table()?;
         if table.is_empty()? {
@@ -245,8 +246,8 @@ impl WalletsTable {
 
     /// Returns wallets in persisted user-facing display order
     pub fn all(&self) -> Result<Vec<WalletMetadata>, Error> {
-        let network = Database::global().global_config.selected_network();
-        let wallet_mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode: wallet_mode } =
+            Database::global().global_config.wallet_target();
 
         debug!("getting all wallets for {network}");
         let wallets = self.get_all(network, wallet_mode)?;
@@ -273,8 +274,8 @@ impl WalletsTable {
     ///
     /// Cloud restore can only preserve the restored Vec order; reorder is local database state
     pub fn reorder_wallets(&self, wallet_ids: Vec<WalletId>) -> Result<Vec<WalletMetadata>, Error> {
-        let network = Database::global().global_config.selected_network();
-        let wallet_mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode: wallet_mode } =
+            Database::global().global_config.wallet_target();
 
         self.reorder(network, wallet_mode, wallet_ids)
     }
@@ -478,8 +479,8 @@ impl WalletsTable {
     }
 
     pub fn delete(&self, id: &WalletId) -> Result<(), Error> {
-        let network = Database::global().global_config.selected_network();
-        let mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode } =
+            Database::global().global_config.wallet_target();
 
         self.delete_inner(network, mode, id)
     }

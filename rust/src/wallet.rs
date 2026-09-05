@@ -7,6 +7,7 @@ pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;
 
+use crate::database::global_config::SelectedWalletTarget;
 use std::{str::FromStr as _, sync::Arc};
 
 use crate::{
@@ -207,8 +208,8 @@ impl Wallet {
 
     /// Try to load an existing wallet from the persisted bdk wallet filestore
     pub fn try_load_persisted(id: WalletId) -> Result<Self, WalletError> {
-        let network = Database::global().global_config.selected_network();
-        let mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode } =
+            Database::global().global_config.wallet_target();
 
         // keep deletion from starting between the store load and descriptor healing
         let operation = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
