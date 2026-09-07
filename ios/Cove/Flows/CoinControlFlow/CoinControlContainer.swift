@@ -74,7 +74,11 @@ private struct CoinControlLoadedView: View {
             let rustManager = try await walletManager.newCoinControlManager()
             guard !Task.isCancelled else { return }
 
-            let manager = CoinControlManager(rustManager)
+            let manager = CoinControlManager(
+                rustManager,
+                sendFlowManager: app.sendFlowManager
+            )
+
             self.manager = manager
             app.setCoinControlManager(manager)
         } catch {

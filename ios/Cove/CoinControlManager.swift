@@ -31,6 +31,10 @@ private enum CoinControlManagerError: LocalizedError {
     @ObservationIgnored
     private let rustBridge = DispatchQueue(label: "cove.CoinControlManager.rustbridge", qos: .userInitiated)
 
+    /// AppManager owns the linked send flow and may release it before coin control closes
+    @ObservationIgnored
+    private weak var sendFlowManager: SendFlowManager?
+
     let id: WalletId
 
     private(set) var sort: CoinControlListSort? = .some(.date(.descending))
@@ -74,8 +78,12 @@ private enum CoinControlManagerError: LocalizedError {
         )
     }
 
-    public init(_ rust: RustCoinControlManager) {
+    public init(
+        _ rust: RustCoinControlManager,
+        sendFlowManager: SendFlowManager? = nil
+    ) {
         self.id = rust.id()
+        self.sendFlowManager = sendFlowManager
 
         self.utxos = rust.utxos()
         self.lockStateLoadFailed = rust.lockStateLoadFailed()
@@ -150,20 +158,20 @@ private enum CoinControlManagerError: LocalizedError {
     }
 
     public func continuePressed() {
-        guard let sfm = AppManager.shared.sendFlowManager else { return }
+        guard let sendFlowManager else { return }
         self.updateSendFlowManagerTask?.cancel()
         self.updateSendFlowManagerTask = nil
 
-        sfm.dispatch(.setCoinControlMode(selectedUtxos()))
+        sendFlowManager.dispatch(.setCoinControlMode(selectedUtxos()))
     }
 
     private func updateSendFlowManager() {
-        guard let sfm = AppManager.shared.sendFlowManager else { return }
+        guard let sendFlowManager else { return }
         self.updateSendFlowManagerTask?.cancel()
         self.updateSendFlowManagerTask = Task {
             try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled else { return }
-            sfm.dispatch(.setCoinControlMode(selectedUtxos()))
+            sendFlowManager.dispatch(.setCoinControlMode(selectedUtxos()))
         }
     }
 
