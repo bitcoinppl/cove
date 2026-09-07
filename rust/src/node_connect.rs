@@ -3,6 +3,7 @@ use url::Url;
 
 use crate::{database::Database, network::Network, node::Node};
 use cove_macros::impl_default_for;
+use cove_util::result_ext::ResultExt as _;
 use eyre::{Context, eyre};
 
 pub const BITCOIN_ESPLORA: [(&str, &str); 1] =
@@ -78,7 +79,7 @@ impl NodeSelector {
             let mut node_selection_list =
                 node_list.into_iter().map(NodeSelection::Preset).collect::<Vec<NodeSelection>>();
 
-            node_selection_list.push(NodeSelection::Custom(selected_node.clone()));
+            node_selection_list.push(NodeSelection::Custom(selected_node));
             node_selection_list
         };
 
@@ -118,14 +119,14 @@ impl NodeSelector {
         Database::global()
             .global_config
             .set_selected_node(&node)
-            .map_err(|error| NodeSelectorError::SetSelectedNodeError(error.to_string()))?;
+            .map_err_str(NodeSelectorError::SetSelectedNodeError)?;
 
         Ok(node)
     }
 
     #[uniffi::method]
     pub async fn check_selected_node(&self, node: Node) -> Result<(), Error> {
-        node.check_url().await.map_err(|error| Error::NodeAccessError(format!("{error:?}")))?;
+        node.check_url().await.map_err_debug(Error::NodeAccessError)?;
 
         Ok(())
     }
@@ -140,8 +141,7 @@ impl NodeSelector {
     ) -> Result<Node, Error> {
         let node_type = name.to_ascii_lowercase();
 
-        let url =
-            parse_node_url(&url).map_err(|error| Error::ParseNodeUrlError(error.to_string()))?;
+        let url = parse_node_url(&url).map_err_str(Error::ParseNodeUrlError)?;
 
         if !url.domain().unwrap_or_default().contains('.') {
             return Err(Error::ParseNodeUrlError("invalid url, no domain".to_string()));
@@ -178,7 +178,7 @@ impl NodeSelector {
         Database::global()
             .global_config
             .set_selected_node(&node)
-            .map_err(|error| Error::SetSelectedNodeError(error.to_string()))?;
+            .map_err_str(Error::SetSelectedNodeError)?;
 
         Ok(())
     }
@@ -284,29 +284,5 @@ fn parse_node_url(url: &str) -> eyre::Result<Url> {
 impl NodeSelection {
     fn to_node(&self) -> Node {
         self.clone().into()
-    }
-}
-
-#[uniffi::export]
-fn default_node_selection() -> NodeSelection {
-    let network = Database::global().global_config.selected_network();
-
-    match network {
-        Network::Bitcoin => {
-            let (name, url) = BITCOIN_ELECTRUM[0];
-            NodeSelection::Preset(Node::new_electrum(name.to_string(), url.to_string(), network))
-        }
-        Network::Testnet => {
-            let (name, url) = TESTNET_ESPLORA[0];
-            NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
-        }
-        Network::Signet => {
-            let (name, url) = SIGNET_ESPLORA[0];
-            NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
-        }
-        Network::Testnet4 => {
-            let (name, url) = TESTNET4_ESPLORA[0];
-            NodeSelection::Preset(Node::new_esplora(name.to_string(), url.to_string(), network))
-        }
     }
 }

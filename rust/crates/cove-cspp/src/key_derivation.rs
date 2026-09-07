@@ -60,16 +60,24 @@ fn derive_key(master_key: &[u8; 32], info: &[u8]) -> [u8; 32] {
 mod tests {
     use super::*;
 
+    // expected values computed with an independent HKDF-SHA256 implementation
     #[test]
-    fn deterministic_derivation() {
+    fn derivation_matches_known_answers() {
         let master_key = [42u8; 32];
-        let key1 = derive_sensitive_data_key(&master_key);
-        let key2 = derive_sensitive_data_key(&master_key);
-        assert_eq!(key1, key2);
 
-        let key1 = derive_critical_data_key(&master_key);
-        let key2 = derive_critical_data_key(&master_key);
-        assert_eq!(key1, key2);
+        assert_eq!(
+            hex::encode(derive_critical_data_key(&master_key)),
+            "b57e5273d2a58ca5549fc01e5acac44cc24bb1399c613eb5c34fd0866b08a4ea"
+        );
+        assert_eq!(
+            hex::encode(derive_sensitive_data_key(&master_key)),
+            "936c7916a7a39599e864f7e73188c34a7ffbea3c4f4e2316ca4156d4b7c9e6ee"
+        );
+        assert_eq!(derive_namespace_id(&master_key), "09de28c398e0c687af61e0aef0dc89d4");
+        assert_eq!(
+            hex::encode(derive_wallet_key(&derive_critical_data_key(&master_key), &[1u8; 32])),
+            "eb3944dbae57e6adf6de34b4cd27d6c2a1de965ea367afe33ecd7a46e182315a"
+        );
     }
 
     #[test]
@@ -107,15 +115,6 @@ mod tests {
         let salt_b = [2u8; 32];
 
         assert_ne!(derive_wallet_key(&critical, &salt_a), derive_wallet_key(&critical, &salt_b));
-    }
-
-    #[test]
-    fn namespace_id_is_deterministic() {
-        let master_key = [42u8; 32];
-        let id1 = derive_namespace_id(&master_key);
-        let id2 = derive_namespace_id(&master_key);
-        assert_eq!(id1, id2);
-        assert_eq!(id1.len(), 32); // 16 bytes hex-encoded = 32 chars
     }
 
     #[test]

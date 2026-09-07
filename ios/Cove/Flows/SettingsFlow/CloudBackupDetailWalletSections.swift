@@ -101,16 +101,11 @@ private struct WalletBackupMetadata: View {
                 IconLabel("tag", "\(labelCount) labels")
             }
             if let backupUpdatedAt = item.backupUpdatedAt {
-                IconLabel("clock", formatDate(backupUpdatedAt))
+                IconLabel("clock", Date.formattedTimestamp(backupUpdatedAt))
             }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
-    }
-
-    private func formatDate(_ timestamp: UInt64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
-        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 

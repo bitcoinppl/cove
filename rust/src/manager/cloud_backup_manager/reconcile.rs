@@ -1,7 +1,5 @@
 use cove_device::cloud_storage::CloudSyncHealth;
 
-use crate::manager::deferred_sender::SingleOrMany;
-
 use super::model::{CloudBackupStateReducerEffects, CloudBackupStateReducerEvent};
 use super::verify::coordinator::{
     CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
@@ -60,6 +58,11 @@ pub trait CloudBackupManagerReconciler: Send + Sync + std::fmt::Debug + 'static 
     fn reconcile(&self, message: CloudBackupReconcileMessage);
 }
 
+crate::manager::reconcile_channel::impl_reconcile_sink!(
+    dyn CloudBackupManagerReconciler,
+    CloudBackupReconcileMessage
+);
+
 type Message = CloudBackupReconcileMessage;
 
 impl RustCloudBackupManager {
@@ -73,10 +76,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn apply_model_event(&self, event: CloudBackupStateReducerEvent) -> bool {
-        let effects = match self.state.write().apply_event(event) {
-            Ok(effects) => effects,
-            Err(rejection) => match rejection {},
-        };
+        let effects = self.state.write().apply_event(event);
 
         self.send_model_effects(effects);
         true
@@ -101,10 +101,7 @@ impl RustCloudBackupManager {
         }
 
         let event = CloudBackupStateReducerEvent::RuntimeStatusReconciled(status);
-        let effects = match self.state.write().apply_event(event) {
-            Ok(effects) => effects,
-            Err(rejection) => match rejection {},
-        };
+        let effects = self.state.write().apply_event(event);
         let status_changed = effects.status_changed;
         self.send_model_effects(effects);
 
@@ -196,10 +193,7 @@ impl RustCloudBackupManager {
             metadata: verification_metadata,
             should_prompt: should_prompt_verification,
         };
-        let effects = match self.state.write().apply_event(event) {
-            Ok(effects) => effects,
-            Err(rejection) => match rejection {},
-        };
+        let effects = self.state.write().apply_event(event);
         let decision_pending = effects.verification_decision_pending;
         let presentation_changed = effects.verification_presentation_changed;
         self.send_model_effects(effects);
@@ -237,13 +231,6 @@ impl RustCloudBackupManager {
 #[uniffi::export]
 impl RustCloudBackupManager {
     pub fn listen_for_updates(&self, reconciler: Box<dyn CloudBackupManagerReconciler>) {
-        self.reconciler.listen(move |field| match field {
-            SingleOrMany::Single(message) => reconciler.reconcile(message),
-            SingleOrMany::Many(messages) => {
-                for message in messages {
-                    reconciler.reconcile(message);
-                }
-            }
-        });
+        self.reconciler.listen_sink(reconciler);
     }
 }

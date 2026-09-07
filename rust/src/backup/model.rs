@@ -521,7 +521,7 @@ mod tests {
         let payload = sample_payload();
 
         let json = serde_json::to_vec(&payload).unwrap();
-        let compressed = crate::backup::crypto::compress(&json).unwrap();
+        let compressed = crate::backup::crypto::compress(&json);
         let decompressed = crate::backup::crypto::decompress(&compressed).unwrap();
         let decoded: BackupPayload = serde_json::from_slice(&decompressed).unwrap();
 

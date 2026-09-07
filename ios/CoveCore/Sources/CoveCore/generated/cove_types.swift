@@ -6394,14 +6394,6 @@ public func allNetworks() -> [Network]  {
     )
 })
 }
-public func networkToString(network: Network) -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_types_fn_func_network_to_string(
-        FfiConverterTypeNetwork_lower(network),uniffiCallStatus
-    )
-})
-}
 public func allUnits() -> [BitcoinUnit]  {
     return try!  FfiConverterSequenceTypeBitcoinUnit.lift(try! rustCall() {
         uniffiCallStatus in
@@ -6465,9 +6457,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_all_networks() != 5848) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_types_checksum_func_network_to_string() != 41610) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_all_units() != 35208) {

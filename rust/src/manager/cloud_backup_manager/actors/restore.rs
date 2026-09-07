@@ -107,7 +107,57 @@ fn merge_namespace_matches(accumulated: &mut Vec<NamespaceMatch>, discovered: Ve
     }
 }
 
-async fn lookup_wallet_backup(
+/// A downloaded wallet backup paired with the record id it was listed under
+type DownloadedWalletRecord = (String, DownloadedWalletBackup);
+
+/// What the apply phase found, keyed by the first namespace that produced each outcome
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RestoreResolution {
+    Restored { namespace_index: usize },
+    OnlyDuplicates { namespace_index: usize },
+    Nothing,
+}
+
+impl RestoreResolution {
+    fn restored(self, namespace_index: usize) -> Self {
+        match self {
+            Self::Restored { .. } => self,
+            Self::OnlyDuplicates { .. } | Self::Nothing => Self::Restored { namespace_index },
+        }
+    }
+
+    fn skipped_duplicate(self, namespace_index: usize) -> Self {
+        match self {
+            Self::Nothing => Self::OnlyDuplicates { namespace_index },
+            Self::Restored { .. } | Self::OnlyDuplicates { .. } => self,
+        }
+    }
+}
+
+/// List the wallet records of each namespace and count them for download progress
+async fn list_namespace_wallets(
+    cloud: &CloudStorageClient,
+    namespaces: Vec<RestorableNamespace>,
+) -> Result<(Vec<(RestorableNamespace, Vec<String>)>, u32), CloudBackupError> {
+    let mut namespace_wallets = Vec::with_capacity(namespaces.len());
+    let mut listed_wallet_count = 0;
+
+    for namespace in namespaces {
+        let wallet_record_ids =
+            cloud.list_wallet_backups(namespace.namespace_id.clone()).await.map_err(|error| {
+                blocking_cloud_error(
+                    BlockingCloudStep::Restore,
+                    CloudBackupError::cloud_storage_context("list wallet backups", error),
+                )
+            })?;
+        listed_wallet_count += wallet_record_ids.len() as u32;
+        namespace_wallets.push((namespace, wallet_record_ids));
+    }
+
+    Ok((namespace_wallets, listed_wallet_count))
+}
+
+pub(crate) async fn lookup_wallet_backup(
     reader: WalletBackupReader,
     record_id: String,
 ) -> (String, Result<WalletBackupLookup<DownloadedWalletBackup>, CloudBackupError>) {
@@ -233,13 +283,52 @@ impl RestoreOperation {
         self.send_restore_progress(CloudBackupRestoreFlow::Finding).await?;
 
         let cloud = CloudStorage::global_explicit_client();
-        let keychain = Keychain::global();
-        let cspp = cove_cspp::Cspp::new(keychain.clone());
+        let restorable_namespaces = self.discover_restorable_namespaces(&cloud).await?;
 
-        // passkey matching first, local master key as fallback
+        self.ensure_current().await?;
+        let (namespace_wallets, listed_wallet_count) =
+            list_namespace_wallets(&cloud, restorable_namespaces).await?;
+
+        let mut report = CloudBackupRestoreReport {
+            wallets_restored: 0,
+            wallets_failed: 0,
+            failed_wallet_errors: Vec::new(),
+            labels_failed_wallet_names: Vec::new(),
+            labels_failed_errors: Vec::new(),
+        };
+        let downloaded_wallets = self
+            .download_namespace_wallets(
+                &cloud,
+                &namespace_wallets,
+                listed_wallet_count,
+                &mut report,
+            )
+            .await?;
+        let resolution = self.apply_downloaded_wallets(&downloaded_wallets, &mut report).await?;
+
+        if matches!(resolution, RestoreResolution::Nothing) && report.wallets_failed > 0 {
+            self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
+            return Err(CloudBackupError::Internal("all wallets failed to restore".into()));
+        }
+
+        let restored_status =
+            self.resolve_restored_status(manager, resolution, &namespace_wallets).await?;
+
+        self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
+        self.apply_status(restored_status).await?;
+
+        info!("Cloud backup restore complete");
+        Ok(report)
+    }
+
+    /// Passkey matching first, with the local master key as the fallback
+    async fn discover_restorable_namespaces(
+        &self,
+        cloud: &CloudStorageClient,
+    ) -> Result<Vec<RestorableNamespace>, CloudBackupError> {
         let passkey = PasskeyAccess::global();
-        let restorable_namespaces = match self.restore_via_passkey_matching(&cloud, passkey).await {
-            Ok(matches) => matches
+        match self.restore_via_passkey_matching(cloud, passkey).await {
+            Ok(matches) => Ok(matches
                 .into_iter()
                 .map(|matched| RestorableNamespace {
                     namespace_id: matched.namespace_id,
@@ -249,57 +338,34 @@ impl RestoreOperation {
                         prf_salt: matched.prf_salt,
                     }),
                 })
-                .collect::<Vec<_>>(),
+                .collect()),
             Err(CloudBackupError::PasskeyDiscoveryCancelled) => {
                 info!("Restore: passkey discovery cancelled");
-                return Err(CloudBackupError::PasskeyDiscoveryCancelled);
+                Err(CloudBackupError::PasskeyDiscoveryCancelled)
             }
             Err(error @ (CloudBackupError::PasskeyMismatch | CloudBackupError::NoBackupFound)) => {
                 info!(
                     "Restore: passkey matching found no restore, trying local master key fallback"
                 );
-                let (master_key, namespace_id) = try_restore_from_local_master_key(&cloud, &cspp)
+                let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+                let (master_key, namespace_id) = try_restore_from_local_master_key(cloud, &cspp)
                     .await
                     .map_err(|error| blocking_cloud_error(BlockingCloudStep::Restore, error))?
                     .ok_or(error)?;
-                vec![RestorableNamespace { namespace_id, master_key, passkey: None }]
+                Ok(vec![RestorableNamespace { namespace_id, master_key, passkey: None }])
             }
-            Err(error) => return Err(error),
-        };
-
-        self.ensure_current().await?;
-        let mut namespace_wallets = Vec::with_capacity(restorable_namespaces.len());
-        let mut listed_wallet_count = 0;
-
-        for namespace in restorable_namespaces {
-            let wallet_record_ids =
-                match cloud.list_wallet_backups(namespace.namespace_id.clone()).await {
-                    Ok(wallet_record_ids) => wallet_record_ids,
-                    Err(error) => {
-                        return Err(blocking_cloud_error(
-                            BlockingCloudStep::Restore,
-                            CloudBackupError::cloud_storage_context("list wallet backups", error),
-                        ));
-                    }
-                };
-            listed_wallet_count += wallet_record_ids.len() as u32;
-            namespace_wallets.push((namespace, wallet_record_ids));
+            Err(error) => Err(error),
         }
+    }
 
-        let mut report = CloudBackupRestoreReport {
-            wallets_restored: 0,
-            wallets_failed: 0,
-            failed_wallet_errors: Vec::new(),
-            labels_failed_wallet_names: Vec::new(),
-            labels_failed_errors: Vec::new(),
-        };
-
-        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
-            .map_err(|source| {
-                CloudBackupError::internal_context("collect wallet identities", source)
-            })?;
-
-        let mut restore_session = WalletRestoreSession::new(existing_identities);
+    /// Download every listed wallet, tagging each with the index of its namespace
+    async fn download_namespace_wallets(
+        &self,
+        cloud: &CloudStorageClient,
+        namespace_wallets: &[(RestorableNamespace, Vec<String>)],
+        listed_wallet_count: u32,
+        report: &mut CloudBackupRestoreReport,
+    ) -> Result<Vec<(usize, DownloadedWalletRecord)>, CloudBackupError> {
         let mut downloaded_wallets = Vec::new();
         let mut download_progress =
             RestoreDownloadProgress { completed: 0, total: listed_wallet_count };
@@ -325,7 +391,7 @@ impl RestoreOperation {
                     &reader,
                     &namespace.namespace_id,
                     wallet_record_ids,
-                    &mut report,
+                    report,
                     &mut download_progress,
                 )
                 .await?;
@@ -335,7 +401,23 @@ impl RestoreOperation {
             );
         }
 
+        Ok(downloaded_wallets)
+    }
+
+    /// Restore the downloaded wallets locally and say which namespace, if any, proved usable
+    async fn apply_downloaded_wallets(
+        &self,
+        downloaded_wallets: &[(usize, DownloadedWalletRecord)],
+        report: &mut CloudBackupRestoreReport,
+    ) -> Result<RestoreResolution, CloudBackupError> {
+        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
+            .map_err(|source| {
+                CloudBackupError::internal_context("collect wallet identities", source)
+            })?;
+        let mut restore_session = WalletRestoreSession::new(existing_identities);
         let restore_total = downloaded_wallets.len() as u32;
+        let mut resolution = RestoreResolution::Nothing;
+
         self.send_restore_progress(restore_progress_flow(
             RestoreProgressPhase::Restoring,
             0,
@@ -343,16 +425,13 @@ impl RestoreOperation {
         ))
         .await?;
 
-        let mut first_success_namespace_index = None;
-        let mut first_duplicate_namespace_index = None;
-        let mut skipped_duplicate_count = 0;
         for (index, (namespace_index, (_record_id, wallet))) in
             downloaded_wallets.iter().enumerate()
         {
             self.ensure_current().await?;
             match restore_session.restore_downloaded(wallet) {
                 Ok(WalletRestoreOutcome::Restored { labels_warning }) => {
-                    first_success_namespace_index.get_or_insert(*namespace_index);
+                    resolution = resolution.restored(*namespace_index);
                     report.wallets_restored += 1;
                     if let Some(warning) = labels_warning {
                         report.labels_failed_wallet_names.push(warning.wallet_name);
@@ -362,8 +441,7 @@ impl RestoreOperation {
                     }
                 }
                 Ok(WalletRestoreOutcome::SkippedDuplicate) => {
-                    first_duplicate_namespace_index.get_or_insert(*namespace_index);
-                    skipped_duplicate_count += 1;
+                    resolution = resolution.skipped_duplicate(*namespace_index);
                 }
                 Err(CloudBackupError::Cancelled) => return Err(CloudBackupError::Cancelled),
                 Err(error) => {
@@ -381,55 +459,50 @@ impl RestoreOperation {
             .await?;
         }
 
-        if report.wallets_restored == 0 && report.wallets_failed > 0 && skipped_duplicate_count == 0
-        {
-            self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
-            return Err(CloudBackupError::Internal("all wallets failed to restore".into()));
-        }
+        Ok(resolution)
+    }
 
-        let restored_namespace = first_success_namespace_index
-            .and_then(|index| namespace_wallets.get(index))
-            .map(|(namespace, _)| namespace);
-        let duplicate_namespace = first_duplicate_namespace_index
-            .and_then(|index| namespace_wallets.get(index))
-            .map(|(namespace, _)| namespace);
+    /// Pick the cloud backup status to end on and activate the namespace it came from
+    async fn resolve_restored_status(
+        &self,
+        manager: &RustCloudBackupManager,
+        resolution: RestoreResolution,
+        namespace_wallets: &[(RestorableNamespace, Vec<String>)],
+    ) -> Result<CloudBackupStatus, CloudBackupError> {
+        let namespace_at =
+            |index: usize| namespace_wallets.get(index).map(|(namespace, _)| namespace);
+        match resolution {
+            RestoreResolution::Restored { namespace_index } => {
+                if let Some(active) = namespace_at(namespace_index) {
+                    self.activate_restored_namespace(manager, active).await?;
+                }
 
-        let restored_status = match restored_namespace {
-            Some(active) => {
-                self.activate_restored_namespace(manager, active).await?;
-
-                CloudBackupStatus::Enabled
+                Ok(CloudBackupStatus::Enabled)
             }
 
-            None if skipped_duplicate_count > 0 => {
+            RestoreResolution::OnlyDuplicates { namespace_index } => {
                 let state = RustCloudBackupManager::load_persisted_state();
                 if matches!(state, PersistedCloudBackupState::Disabled)
-                    && let Some(active) = duplicate_namespace
+                    && let Some(active) = namespace_at(namespace_index)
                 {
                     self.activate_restored_namespace(manager, active).await?;
 
-                    CloudBackupStatus::Enabled
-                } else {
-                    RustCloudBackupManager::runtime_status_for(&state)
+                    return Ok(CloudBackupStatus::Enabled);
                 }
+
+                Ok(RustCloudBackupManager::runtime_status_for(&state))
             }
 
-            None => {
+            RestoreResolution::Nothing => {
                 self.persist_cloud_backup_state(
                     PersistedCloudBackupState::default(),
                     "persist empty restored cloud backup state".into(),
                 )
                 .await?;
 
-                CloudBackupStatus::Disabled
+                Ok(CloudBackupStatus::Disabled)
             }
-        };
-
-        self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
-        self.apply_status(restored_status).await?;
-
-        info!("Cloud backup restore complete");
-        Ok(report)
+        }
     }
 
     async fn send_restore_progress(
@@ -452,7 +525,7 @@ impl RestoreOperation {
         self.save_keychain_state(master_key, passkey, active.namespace_id.clone()).await?;
 
         let enabled_state = PersistedCloudBackupState::configured_after_restore(
-            crate::manager::cloud_backup_manager::current_timestamp(),
+            cove_util::time::unix_timestamp_secs_or_zero(),
             wallet_count,
         );
         self.persist_cloud_backup_state(

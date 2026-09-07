@@ -120,7 +120,7 @@ class AndroidCloudStorageAccessTest {
         }
 
     @Test
-    fun scP05SilentAuthoritativeEmptySnapshotCompletesWithoutRetryOrConsent() =
+    fun silentAuthoritativeEmptySnapshotCompletesWithoutRetryOrConsent() =
         runBlocking {
             MockDriveServer().use { server ->
                 val namespace = "0123456789abcdef0123456789abcdef"

@@ -7,10 +7,6 @@
 
 import SwiftUI
 
-let lowSendWarningSatsU = ffiLowSendWarningSats()
-let lowSendWarningAmount = ffiLowSendWarningAmount()
-let lowSendWarningSats = Int(lowSendWarningSatsU)
-
 let conservativeDustLimitSatsU = ffiConservativeDustLimitSats()
 let conservativeDustLimitAmount = ffiConservativeDustLimitAmount()
 let conservativeDustLimitSats = Int(conservativeDustLimitSatsU)

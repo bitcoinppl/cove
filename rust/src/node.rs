@@ -24,7 +24,6 @@ use cove_types::network::Network;
 pub enum ApiType {
     Esplora,
     Electrum,
-    Rpc,
 }
 
 #[derive(

@@ -306,19 +306,8 @@ impl RouteFactory {
         Route::NewWallet(NewWalletRoute::HotWallet(route))
     }
 
-    pub const fn hot_wallet_import_from_scan(&self) -> Route {
-        Route::NewWallet(NewWalletRoute::HotWallet(HotWalletRoute::Import(
-            NumberOfBip39Words::Twelve,
-            ImportType::Manual,
-        )))
-    }
-
     pub const fn secret_words(&self, wallet_id: WalletId) -> Route {
         Route::SecretWords(wallet_id)
-    }
-
-    pub fn cold_wallet_import(&self, route: ColdWalletRoute) -> Route {
-        route.into()
     }
 
     pub fn qr_import(&self) -> Route {
@@ -440,15 +429,6 @@ impl RouteFactory {
 
     pub const fn wallet_settings(&self, id: WalletId, route: WalletSettingsRoute) -> Route {
         Route::Settings(SettingsRoute::Wallet { id, route })
-    }
-}
-
-impl Route {
-    pub fn to_debug_log(&self) -> String {
-        match self {
-            Self::Send(send_route) => format!("SendRoute: {send_route:?}"),
-            other => format!("{other:?}"),
-        }
     }
 }
 

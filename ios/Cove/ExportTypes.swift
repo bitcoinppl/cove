@@ -71,3 +71,9 @@ enum ExportError: Error {
     case encodingFailed
     case exportFailed
 }
+
+extension UTType {
+    static var jsonl: UTType {
+        UTType(exportedAs: "public.jsonl")
+    }
+}

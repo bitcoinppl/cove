@@ -25,7 +25,7 @@ use tracing::debug;
 
 use crate::node::{Node, NodeConnectionIdentity};
 
-use super::{ApiType, client_builder::NodeClientBuilder};
+use super::ApiType;
 
 const ELECTRUM_BATCH_SIZE: usize = 10;
 const ESPLORA_BATCH_SIZE: usize = 1;
@@ -116,19 +116,9 @@ impl NodeClient {
                 let client = electrum::ElectrumClient::new_from_node(node).await?;
                 NodeClientBackend::Electrum(client)
             }
-
-            ApiType::Rpc => {
-                // TODO: implement rpc check, with auth
-                todo!()
-            }
         };
 
         Ok(Self { connection_identity: node.connection_identity(), backend })
-    }
-
-    pub async fn try_from_builder(builder: &NodeClientBuilder) -> Result<Self, Error> {
-        let node_client = Self::new_with_options(&builder.node, builder.options).await?;
-        Ok(node_client)
     }
 
     pub async fn new_with_options(node: &Node, options: NodeClientOptions) -> Result<Self, Error> {
@@ -142,11 +132,6 @@ impl NodeClient {
                 let client =
                     electrum::ElectrumClient::new_from_node_and_options(node, options).await?;
                 NodeClientBackend::Electrum(client)
-            }
-
-            ApiType::Rpc => {
-                // TODO: implement rpc check, with auth
-                todo!()
             }
         };
 

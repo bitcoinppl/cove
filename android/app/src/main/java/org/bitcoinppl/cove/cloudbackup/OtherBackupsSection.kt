@@ -29,71 +29,8 @@ import org.bitcoinppl.cove.views.MaterialSection
 import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
-import org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.OtherBackupsOperation
-
-@Composable
-internal fun OtherBackupsNotCheckedSection(onCheck: () -> Unit) {
-    SectionHeader("Backups with Another Key", modifier = Modifier.padding(horizontal = 16.dp))
-    MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
-        MaterialSettingsItem(
-            title = "Check for Backups with Another Key",
-            subtitle = "This optional check searches Google Drive for backup sets protected by a different backup key.",
-            onClick = onCheck,
-            leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
-        )
-    }
-}
-
-@Composable
-internal fun OtherBackupsCheckingSection() {
-    SectionHeader("Backups with Another Key", modifier = Modifier.padding(horizontal = 16.dp))
-    MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
-        MaterialSettingsItem(
-            title = "Checking Google Drive...",
-            subtitle = "Searching for backup sets protected by a different backup key",
-            onClick = null,
-            leadingContent = {
-                CircularProgressIndicator(modifier = Modifier.width(20.dp).height(20.dp))
-            },
-        )
-    }
-}
-
-@Composable
-internal fun OtherBackupsLoadFailedSection(
-    reason: CloudBackupInventoryIncompleteReason,
-    onRetry: () -> Unit,
-) {
-    val message =
-        when (reason) {
-            CloudBackupInventoryIncompleteReason.PROVIDER_SYNC_PENDING ->
-                "Cove could not check for backup sets made with another backup key because Google Drive is still syncing. The wallet backups shown above use your current backup key and remain available."
-            CloudBackupInventoryIncompleteReason.OFFLINE ->
-                "Cove could not check for backup sets made with another backup key because this device is offline. The wallet backups shown above remain available."
-            CloudBackupInventoryIncompleteReason.AUTHORIZATION_REQUIRED ->
-                "Cove cannot check for backup sets made with another backup key. Reconnect Google Drive, then check again."
-            CloudBackupInventoryIncompleteReason.PROVIDER_UNAVAILABLE ->
-                "Cove cannot check for backup sets made with another backup key because Google Drive is not available now. The wallet backups shown above remain available."
-            CloudBackupInventoryIncompleteReason.UNKNOWN ->
-                "Cove could not check for backup sets made with another backup key. The wallet backups shown above remain available."
-        }
-
-    SectionHeader("Backups with Another Key", modifier = Modifier.padding(horizontal = 16.dp))
-    MaterialSection(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Column {
-            Text(
-                text = message,
-                style = MaterialTheme.typography.caption,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            )
-            MaterialDivider()
-            TextButton(onClick = onRetry) { Text("Check Again") }
-        }
-    }
-}
 
 @Composable
 internal fun OtherBackupsSection(

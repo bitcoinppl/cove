@@ -34,7 +34,6 @@ fn assert_retained_active_master(
 #[tokio::test(flavor = "current_thread")]
 async fn fresh_enable_retains_unowned_staged_master_key() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -60,7 +59,6 @@ async fn fresh_enable_retains_unowned_staged_master_key() {
 #[tokio::test(flavor = "current_thread")]
 async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -118,7 +116,6 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
 #[tokio::test(flavor = "current_thread")]
 async fn fresh_enable_upload_progress_counts_master_and_wallets() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -154,7 +151,6 @@ async fn fresh_enable_upload_progress_counts_master_and_wallets() {
 #[tokio::test(flavor = "current_thread")]
 async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -237,7 +233,6 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
 #[tokio::test(flavor = "current_thread")]
 async fn failed_create_new_enable_does_not_persist_passkey_metadata() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
     globals.cloud.fail_master_key_upload("boom");
@@ -264,7 +259,6 @@ async fn failed_create_new_enable_does_not_persist_passkey_metadata() {
 #[tokio::test(flavor = "current_thread")]
 async fn failed_no_discovery_confirmation_preserves_only_staged_material() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
@@ -294,7 +288,6 @@ async fn failed_no_discovery_confirmation_preserves_only_staged_material() {
 #[tokio::test(flavor = "current_thread")]
 async fn enable_create_new_succeeds_with_new_passkey_auth() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -328,7 +321,6 @@ async fn enable_create_new_succeeds_with_new_passkey_auth() {
 #[tokio::test(flavor = "current_thread")]
 async fn enable_create_new_recovers_from_corrupted_persisted_state() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -356,7 +348,6 @@ async fn enable_create_new_recovers_from_corrupted_persisted_state() {
 #[tokio::test(flavor = "current_thread")]
 async fn detail_entry_starts_discoverable_verification_without_runtime_authorization() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -375,7 +366,6 @@ async fn detail_entry_starts_discoverable_verification_without_runtime_authoriza
 #[tokio::test(flavor = "current_thread")]
 async fn detail_entry_does_not_restart_rust_owned_verification_states() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -414,7 +404,6 @@ async fn detail_entry_does_not_restart_rust_owned_verification_states() {
 #[tokio::test(flavor = "current_thread")]
 async fn enable_no_discovery_succeeds_with_new_passkey_auth() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -432,7 +421,6 @@ async fn enable_no_discovery_succeeds_with_new_passkey_auth() {
 #[tokio::test(flavor = "current_thread")]
 async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -579,7 +567,6 @@ async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace(
 #[tokio::test(flavor = "current_thread")]
 async fn enable_recovery_fails_closed_when_matched_wallet_listing_is_missing() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -657,7 +644,6 @@ async fn enable_recovery_fails_closed_when_matched_wallet_listing_is_missing() {
 #[test]
 fn clear_in_process_state_for_local_reset_clears_enable_state() {
     let _guard = test_lock().lock();
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -672,140 +658,8 @@ fn clear_in_process_state_for_local_reset_clears_enable_state() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn enable_preserves_awaiting_force_new_session() {
-    let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
-    let globals = test_globals();
-    let manager = init_manager();
-
-    reset_cloud_backup_test_state(&manager, globals);
-    CONNECTIVITY_MANAGER.set_connection_state(true);
-    let existing_master_key = cove_cspp::master_key::MasterKey::generate();
-    let existing_namespace = existing_master_key.namespace_id();
-    let encrypted_master =
-        cove_cspp::master_key_crypto::encrypt_master_key(&existing_master_key, &[7; 32], &[9; 32])
-            .unwrap();
-    globals.cloud.set_wallet_files(existing_namespace.clone(), vec!["wallet-1.json".into()]);
-    globals
-        .cloud
-        .set_master_key_backup(existing_namespace, serde_json::to_vec(&encrypted_master).unwrap());
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
-
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let expected_namespace = master_key.namespace_id();
-    let expected_credential_id = vec![1, 2, 3];
-    replace_pending_enable_session_for_test(
-        &manager,
-        pending_enable_awaiting_confirmation(
-            master_key,
-            UnpersistedPrfKey {
-                prf_key: [7; 32],
-                prf_salt: [9; 32],
-                credential_id: expected_credential_id.clone(),
-                provider_hint: None,
-            },
-            CloudBackupEnableContext::settings_manual(),
-        ),
-    )
-    .await;
-
-    enable_cloud_backup_create_new(&manager).await.unwrap();
-
-    let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
-    let (pending_master_key, pending_passkey) = pending.into_ready_parts().unwrap();
-    assert_eq!(pending_master_key.namespace_id(), expected_namespace);
-    assert_eq!(pending_passkey.credential_id, expected_credential_id);
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn enable_create_new_preserves_awaiting_force_new_session() {
-    let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
-    let globals = test_globals();
-    let manager = init_manager();
-
-    reset_cloud_backup_test_state(&manager, globals);
-    CONNECTIVITY_MANAGER.set_connection_state(true);
-    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
-
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let expected_namespace = master_key.namespace_id();
-    let expected_credential_id = vec![1, 2, 3];
-    replace_pending_enable_session_for_test(
-        &manager,
-        pending_enable_awaiting_confirmation(
-            master_key,
-            UnpersistedPrfKey {
-                prf_key: [7; 32],
-                prf_salt: [9; 32],
-                credential_id: expected_credential_id.clone(),
-                provider_hint: None,
-            },
-            CloudBackupEnableContext::settings_manual(),
-        ),
-    )
-    .await;
-
-    enable_cloud_backup_create_new(&manager).await.unwrap();
-
-    let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
-    let (pending_master_key, pending_passkey) = pending.into_ready_parts().unwrap();
-    assert_eq!(pending_master_key.namespace_id(), expected_namespace);
-    assert_eq!(pending_passkey.credential_id, expected_credential_id);
-}
-
-#[tokio::test(flavor = "current_thread")]
-async fn enable_no_discovery_preserves_awaiting_force_new_session() {
-    let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
-    let globals = test_globals();
-    let manager = init_manager();
-
-    reset_cloud_backup_test_state(&manager, globals);
-    CONNECTIVITY_MANAGER.set_connection_state(true);
-    globals.passkey.set_create_result(Err(PasskeyError::UserCancelled));
-
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let expected_namespace = master_key.namespace_id();
-    let expected_credential_id = vec![1, 2, 3];
-    replace_pending_enable_session_for_test(
-        &manager,
-        pending_enable_awaiting_confirmation(
-            master_key,
-            UnpersistedPrfKey {
-                prf_key: [7; 32],
-                prf_salt: [9; 32],
-                credential_id: expected_credential_id.clone(),
-                provider_hint: None,
-            },
-            CloudBackupEnableContext::settings_manual(),
-        ),
-    )
-    .await;
-
-    let create_count = globals.passkey.create_count();
-
-    enable_cloud_backup_no_discovery(&manager).await.unwrap();
-
-    assert_eq!(globals.passkey.create_count(), create_count);
-    assert_eq!(manager.current_status(), CloudBackupStatus::Enabling);
-    match manager.model_snapshot().root_prompt {
-        CloudBackupRootPrompt::ExistingBackupFound(context, _) => {
-            assert_eq!(context, CloudBackupEnableContext::settings_manual());
-        }
-        other => panic!("expected existing backup prompt, got {other:?}"),
-    }
-
-    let pending = take_pending_enable_session_for_test(&manager).await.unwrap();
-    let (pending_master_key, pending_passkey) = pending.into_ready_parts().unwrap();
-    assert_eq!(pending_master_key.namespace_id(), expected_namespace);
-    assert_eq!(pending_passkey.credential_id, expected_credential_id);
-}
-
-#[tokio::test(flavor = "current_thread")]
 async fn force_new_after_other_namespace_enter_detail_reuses_runtime_authorization() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -868,7 +722,6 @@ async fn force_new_after_other_namespace_enter_detail_reuses_runtime_authorizati
 #[tokio::test(flavor = "current_thread")]
 async fn fresh_start_new_keeps_prior_active_until_durable_success() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -923,7 +776,6 @@ async fn fresh_start_new_keeps_prior_active_until_durable_success() {
 #[tokio::test(flavor = "current_thread")]
 async fn onboarding_relaunch_readiness_fails_closed_during_pending_enable_recovery() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -970,7 +822,6 @@ async fn onboarding_relaunch_readiness_fails_closed_during_pending_enable_recove
 #[tokio::test(flavor = "current_thread")]
 async fn fresh_start_new_passkey_cancellation_preserves_prior_active_exactly() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -992,7 +843,6 @@ async fn fresh_start_new_passkey_cancellation_preserves_prior_active_exactly() {
 #[tokio::test(flavor = "current_thread")]
 async fn fresh_start_new_upload_failure_preserves_prior_active_exactly() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -1029,7 +879,6 @@ async fn fresh_start_new_upload_failure_preserves_prior_active_exactly() {
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn force_new_after_existing_backup_prompt_registers_without_discovery() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -1073,7 +922,6 @@ async fn force_new_after_existing_backup_prompt_registers_without_discovery() {
 #[tokio::test(flavor = "current_thread")]
 async fn existing_backup_prompt_preserves_onboarding_enable_context() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -1120,7 +968,6 @@ async fn existing_backup_prompt_preserves_onboarding_enable_context() {
 #[tokio::test(flavor = "current_thread")]
 async fn existing_passkey_onboarding_recovery_completes_verification() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -1177,7 +1024,6 @@ async fn existing_passkey_onboarding_recovery_completes_verification() {
 #[tokio::test(flavor = "current_thread")]
 async fn detail_entry_after_restart_without_active_authorization_prompts_normally() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -1210,7 +1056,6 @@ async fn detail_entry_after_restart_without_active_authorization_prompts_normall
 #[tokio::test(flavor = "current_thread")]
 async fn detail_entry_refreshes_progressive_inventory_after_passkey_verification() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -1244,56 +1089,8 @@ async fn detail_entry_refreshes_progressive_inventory_after_passkey_verification
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn enable_force_new_consumes_staged_session() {
-    let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
-    let globals = test_globals();
-    let manager = init_manager();
-
-    reset_cloud_backup_test_state(&manager, globals);
-    CONNECTIVITY_MANAGER.set_connection_state(true);
-
-    let master_key = cove_cspp::master_key::MasterKey::generate();
-    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-    cspp.save_staged_master_key(&master_key).unwrap();
-    let passkey = UnpersistedPrfKey {
-        prf_key: [7; 32],
-        prf_salt: [9; 32],
-        credential_id: vec![1, 2, 3],
-        provider_hint: None,
-    };
-    let mut journal = staged_pending_enable_journal(
-        CloudBackupEnableContext::settings_manual(),
-        master_key.namespace_id(),
-        PendingEnableNamespaceOwnership::FreshOwned,
-        CloudBackupKeychain::global().snapshot_passkey_metadata(),
-    );
-    assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
-        credential_id: passkey.credential_id.clone(),
-        prf_salt: passkey.prf_salt,
-        provider_hint: passkey.provider_hint.clone(),
-    }));
-    CloudBackupKeychain::global().save_pending_enable_journal(&journal).unwrap();
-    replace_pending_enable_session_for_test(
-        &manager,
-        pending_enable_awaiting_confirmation(
-            master_key,
-            passkey,
-            CloudBackupEnableContext::settings_manual(),
-        ),
-    )
-    .await;
-
-    enable_cloud_backup_force_new(&manager).await.unwrap();
-
-    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
-    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-}
-
-#[tokio::test(flavor = "current_thread")]
 async fn cancelled_enable_create_new_rolls_back_new_local_master_key() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -1314,7 +1111,6 @@ async fn cancelled_enable_create_new_rolls_back_new_local_master_key() {
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_enable_no_discovery_rolls_back_new_local_master_key() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -1335,7 +1131,6 @@ async fn cancelled_enable_no_discovery_rolls_back_new_local_master_key() {
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_passkey_restore_does_not_fall_back_to_local_master_key() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 

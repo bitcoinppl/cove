@@ -1,12 +1,8 @@
 package org.bitcoinppl.cove.views
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -17,7 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -31,7 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -68,36 +62,6 @@ fun MaterialDivider(
         modifier = Modifier.padding(start = indent),
         color = MaterialTheme.colorScheme.outlineVariant,
     )
-}
-
-// Deprecated: Use MaterialDivider instead
-@Composable
-fun CustomSpacer(
-    height: Dp? = 1.dp,
-    paddingValues: PaddingValues,
-) {
-    Box(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(height!!),
-    ) {
-        Spacer(
-            modifier =
-                Modifier
-                    .height(1.dp)
-                    .fillMaxWidth()
-                    .padding(paddingValues)
-                    .background(MaterialTheme.colorScheme.outlineVariant)
-                    .align(Alignment.CenterEnd),
-        )
-    }
-}
-
-@Preview
-@Composable
-fun CustomSpacerPreview() {
-    CustomSpacer(paddingValues = PaddingValues(start = 54.dp))
 }
 
 @Preview
@@ -189,53 +153,6 @@ fun KeyValueRow(
 
         trailingContent()
     }
-}
-
-@Composable
-fun InfoRow(
-    label: String,
-    text: String,
-) {
-    KeyValueRow(
-        label = label,
-        value = text,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp, bottom = 6.dp, start = 8.dp, end = 16.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    )
-}
-
-@Preview
-@Composable
-fun InfoRowPreview() {
-    InfoRow("Title Text", "Lorem ipsum")
-}
-
-@Composable
-fun ClickableInfoRow(
-    label: String,
-    text: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-) {
-    KeyValueRow(
-        label = label,
-        value = text,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp, bottom = 6.dp, start = 8.dp, end = 16.dp)
-                .clickable(true, onClick = onClick),
-        trailingContent = {
-            Icon(
-                imageVector = icon,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                contentDescription = "Forward",
-            )
-        },
-    )
 }
 
 @Composable

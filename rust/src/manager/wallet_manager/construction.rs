@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::database::global_config::SelectedWalletTarget;
 use act_zero::Addr;
 use cove_tokio::task::{self, spawn_actor};
 use cove_util::result_ext::ResultExt as _;
@@ -64,8 +65,8 @@ impl RustWalletManager {
         let construction = WalletLifecycleCoordinator::global().begin_construction(id.clone())?;
         let channel = ReconcileChannel::new(10);
 
-        let network = Database::global().global_config.selected_network();
-        let mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode } =
+            Database::global().global_config.wallet_target();
 
         let mut deferred = channel.deferred_sender();
 
@@ -115,7 +116,7 @@ impl RustWalletManager {
         let actor = task::spawn_actor(wallet_actor);
 
         let discovery_scanner =
-            start_discovery_scanner(metadata.clone(), actor.clone(), channel.raw_sender());
+            start_discovery_scanner(metadata, actor.clone(), channel.raw_sender());
 
         let (actor_registration, lifecycle) =
             construction.register(id.clone(), actor.clone(), discovery_scanner.clone());
@@ -161,7 +162,7 @@ impl RustWalletManager {
             .map_err(|source| WalletManagerDatabaseCorruptionError::new(id.clone(), source))?;
         let actor = task::spawn_actor(wallet_actor);
         let discovery_scanner =
-            start_discovery_scanner(metadata.clone(), actor.clone(), channel.raw_sender());
+            start_discovery_scanner(metadata, actor.clone(), channel.raw_sender());
         let (actor_registration, lifecycle) =
             construction.register(id.clone(), actor.clone(), discovery_scanner.clone());
         let label_manager = label_manager.with_lifecycle(lifecycle.clone()).into();
@@ -191,15 +192,11 @@ impl RustWalletManager {
         let construction = WalletLifecycleCoordinator::global().begin_unscoped_construction()?;
         let channel = ReconcileChannel::new(100);
 
-        let wallet = Wallet::try_new_persisted_from_tap_signer(
-            tap_signer.clone(),
-            derive_info,
-            backup,
-            birthday,
-        )?;
+        let wallet =
+            Wallet::try_new_persisted_from_tap_signer(tap_signer, derive_info, backup, birthday)?;
         let id = wallet.id.clone();
         let metadata = wallet.metadata.clone();
-        let shared_metadata = Arc::new(RwLock::new(metadata.clone()));
+        let shared_metadata = Arc::new(RwLock::new(metadata));
         let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::database(id.clone());
 

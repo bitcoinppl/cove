@@ -365,7 +365,7 @@ impl RustCloudBackupManager {
         let uploading_state =
             current_state.with_state(PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
                 revision_hash: prepared.revision_hash.clone(),
-                started_at: crate::manager::cloud_backup_manager::current_timestamp(),
+                started_at: cove_util::time::unix_timestamp_secs_or_zero(),
             }));
 
         let wrote_uploading = Database::global()
@@ -378,7 +378,7 @@ impl RustCloudBackupManager {
             return Ok(());
         }
 
-        let uploaded_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let uploaded_at = cove_util::time::unix_timestamp_secs_or_zero();
         let completion = CloudBackupWriteCompletion::mark_uploaded_pending_confirmation_if_current(
             uploading_state.clone(),
             prepared.revision_hash.clone(),
@@ -475,7 +475,7 @@ impl RustCloudBackupManager {
 
         let dirty_state =
             current_state.with_state(PersistedCloudBlobState::Dirty(CloudBlobDirtyState {
-                changed_at: crate::manager::cloud_backup_manager::current_timestamp(),
+                changed_at: cove_util::time::unix_timestamp_secs_or_zero(),
             }));
         let wrote_dirty = Database::global()
             .cloud_blob_sync_states
@@ -585,7 +585,7 @@ impl RustCloudBackupManager {
     }
 
     fn is_stale_uploading_state(started_at: u64) -> bool {
-        let now: u64 = crate::manager::cloud_backup_manager::current_timestamp();
+        let now: u64 = cove_util::time::unix_timestamp_secs_or_zero();
         now.saturating_sub(started_at) >= STALE_UPLOADING_RETRY_THRESHOLD_SECS
     }
 

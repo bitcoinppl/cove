@@ -461,7 +461,7 @@ mod tests {
 
         assert_eq!(inventory.sync_status_for_wallet(&wallet), CloudBackupWalletStatus::Dirty);
         assert!(!inventory.has_unknown_remote_wallets());
-        assert_eq!(inventory.upload_candidate_wallets(), vec![wallet.metadata.clone()]);
+        assert_eq!(inventory.upload_candidate_wallets(), vec![wallet.metadata]);
     }
 
     #[test]
@@ -495,7 +495,7 @@ mod tests {
         };
 
         assert_eq!(inventory.sync_status_for_wallet(&wallet), CloudBackupWalletStatus::Failed);
-        assert_eq!(inventory.upload_candidate_wallets(), vec![wallet.metadata.clone()]);
+        assert_eq!(inventory.upload_candidate_wallets(), vec![wallet.metadata]);
     }
 
     #[test]
@@ -515,7 +515,7 @@ mod tests {
         let inventory = CloudWalletInventory {
             last_sync: None,
             local_wallets: vec![wallet_a.clone(), wallet_b.clone()],
-            cloud_wallet_record_ids: HashSet::from([wallet_a.record_id.clone()]),
+            cloud_wallet_record_ids: HashSet::from([wallet_a.record_id]),
             sync_states_by_record_id: HashMap::new(),
             remote_wallet_truth: RemoteWalletTruth::default(),
             strict_cloud_presence: true,

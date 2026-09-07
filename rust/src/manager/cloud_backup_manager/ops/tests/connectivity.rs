@@ -3,7 +3,6 @@ use super::*;
 #[tokio::test(flavor = "current_thread")]
 async fn connectivity_reconnect_preserves_failed_wallet_upload_health() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -36,9 +35,8 @@ async fn connectivity_reconnect_preserves_failed_wallet_upload_health() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn connectivity_reconnect_reports_clean_health_when_failed_wallet_uploads_are_gone() {
+async fn connectivity_reconnect_reports_no_files_when_nothing_was_uploaded() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -51,7 +49,6 @@ async fn connectivity_reconnect_reports_clean_health_when_failed_wallet_uploads_
 #[tokio::test(flavor = "current_thread")]
 async fn reconnect_retries_verification_after_offline_failure() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -79,7 +76,6 @@ async fn reconnect_retries_verification_after_offline_failure() {
 #[tokio::test(flavor = "current_thread")]
 async fn connected_connectivity_failure_retries_detail_refresh_once() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -99,7 +95,6 @@ async fn connected_connectivity_failure_retries_detail_refresh_once() {
 #[tokio::test(flavor = "current_thread")]
 async fn manual_detail_refresh_recovers_after_automatic_retry_fails() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -132,7 +127,6 @@ async fn manual_detail_refresh_recovers_after_automatic_retry_fails() {
 #[tokio::test(flavor = "current_thread")]
 async fn provider_signal_does_not_reopen_a_ready_detail_inventory() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 1);
@@ -162,7 +156,6 @@ async fn provider_signal_does_not_reopen_a_ready_detail_inventory() {
     ));
     assert_eq!(globals.cloud.list_wallet_files_snapshot_attempt_count(), active_snapshot_attempts);
 
-    call!(manager.supervisor.close_detail()).await.unwrap();
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(complete_detail));
     let snapshot_attempts = globals.cloud.list_wallet_files_snapshot_attempt_count();
 
@@ -180,7 +173,6 @@ async fn provider_signal_does_not_reopen_a_ready_detail_inventory() {
 #[tokio::test(flavor = "current_thread")]
 async fn connected_connectivity_failure_retries_verification_once() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -201,7 +193,6 @@ async fn connected_connectivity_failure_retries_verification_once() {
 #[tokio::test(flavor = "current_thread")]
 async fn unknown_connectivity_does_not_block_verification() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -221,7 +212,6 @@ async fn unknown_connectivity_does_not_block_verification() {
 #[tokio::test(flavor = "current_thread")]
 async fn non_connectivity_verification_failure_does_not_retry_on_reconnect() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -252,7 +242,6 @@ async fn non_connectivity_verification_failure_does_not_retry_on_reconnect() {
 #[test]
 fn reset_cloud_backup_test_state_clears_state_before_reconnect() {
     let _guard = test_lock().lock();
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -290,7 +279,6 @@ fn reset_cloud_backup_test_state_clears_state_before_reconnect() {
 #[tokio::test(flavor = "current_thread")]
 async fn startup_resume_skips_non_retryable_failed_wallet_uploads() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
     clear_wallet_upload_runtime_for_test_async(&manager).await;
@@ -328,7 +316,6 @@ async fn startup_resume_skips_non_retryable_failed_wallet_uploads() {
 #[tokio::test(flavor = "current_thread")]
 async fn startup_resume_retries_authorization_failed_wallet_uploads() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
     clear_wallet_upload_runtime_for_test_async(&manager).await;
@@ -366,7 +353,6 @@ async fn startup_resume_retries_authorization_failed_wallet_uploads() {
 #[tokio::test(flavor = "current_thread")]
 async fn cloud_storage_change_retries_authorization_failed_wallet_uploads() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
     clear_wallet_upload_runtime_for_test_async(&manager).await;
@@ -396,7 +382,6 @@ async fn cloud_storage_change_retries_authorization_failed_wallet_uploads() {
 #[tokio::test(flavor = "current_thread")]
 async fn startup_resume_retries_interrupted_uploading_wallets() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
     clear_wallet_upload_runtime_for_test_async(&manager).await;

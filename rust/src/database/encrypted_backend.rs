@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use arc_swap::ArcSwapOption;
+use cove_util::result_ext::ResultExt as _;
 use tracing::error;
 
 /// Typed marker for unsupported database version errors, embedded inside `io::Error`
@@ -395,7 +396,7 @@ fn io_err_to_db_error(path: &str, e: io::Error) -> super::error::DatabaseError {
             version: v.0,
         });
     }
-    if e.get_ref().is_some_and(|inner| inner.is::<HmacMismatch>()) {
+    if e.get_ref().is_some_and(<dyn std::error::Error + Send + Sync>::is::<HmacMismatch>) {
         return DatabaseError::HeaderIntegrity { path: path.to_string(), error: e.to_string() };
     }
 
@@ -418,7 +419,7 @@ impl EncryptedBackend {
         let ciphertext = self
             .cipher
             .encrypt(&nonce, Payload { msg: plaintext, aad: &aad })
-            .map_err(|e| io::Error::other(format!("encryption failed: {e}")))?;
+            .map_err_prefix("encryption failed", io::Error::other)?;
 
         let mut out = Vec::with_capacity(NONCE_LEN + ciphertext.len());
         out.extend_from_slice(&nonce);
@@ -912,7 +913,9 @@ pub(crate) mod tests {
 
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.get_ref().is_some_and(|inner| inner.is::<HmacMismatch>()));
+        assert!(
+            err.get_ref().is_some_and(<dyn std::error::Error + Send + Sync>::is::<HmacMismatch>)
+        );
     }
 
     #[test]
@@ -1039,7 +1042,9 @@ pub(crate) mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
-        assert!(err.get_ref().is_some_and(|inner| inner.is::<HmacMismatch>()));
+        assert!(
+            err.get_ref().is_some_and(<dyn std::error::Error + Send + Sync>::is::<HmacMismatch>)
+        );
     }
 
     #[test]
@@ -1087,7 +1092,11 @@ pub(crate) mod tests {
         let result = EncryptedBackend::open(&path, &key);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.get_ref().is_some_and(|inner| inner.is::<UnsupportedDatabaseVersion>()));
+        assert!(
+            err.get_ref().is_some_and(
+                <dyn std::error::Error + Send + Sync>::is::<UnsupportedDatabaseVersion>
+            )
+        );
     }
 
     #[test]

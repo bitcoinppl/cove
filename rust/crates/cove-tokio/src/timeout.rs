@@ -8,11 +8,6 @@ pub trait FutureTimeoutExt: Future + Sized {
     fn with_timeout(self, dur: Duration) -> time::Timeout<Self> {
         time::timeout(dur, self)
     }
-
-    /// Wrap this future in a timeout that ends at an absolute deadline.
-    fn with_deadline(self, deadline: time::Instant) -> time::Timeout<Self> {
-        time::timeout_at(deadline, self)
-    }
 }
 
 impl<F: Future> FutureTimeoutExt for F {}

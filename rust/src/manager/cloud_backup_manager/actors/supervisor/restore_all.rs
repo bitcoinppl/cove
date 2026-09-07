@@ -44,7 +44,7 @@ impl CloudBackupSupervisor {
 
     pub(crate) fn begin_restore_all_operation(&mut self, retry: bool) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         let frozen_wallets = manager.restore_all_eligible_wallets();
         let frozen_count = frozen_wallets.len() as u32;
         let projected_state = manager.projected_restore_all_state();

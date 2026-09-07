@@ -20,6 +20,7 @@ use cove_common::consts::{WALLET_DATA_DIR, wallet_data_dir_path};
 use cove_types::redb::Json;
 
 use ahash::AHashMap as HashMap;
+use cove_util::result_ext::ResultExt as _;
 
 pub static DATABASE_CONNECTIONS: Lazy<RwLock<HashMap<WalletId, Arc<redb::Database>>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
@@ -297,10 +298,7 @@ impl WalletDataDb {
     fn get(&self, key: WalletDataKey) -> Result<Option<WalletData>> {
         let table = self.read_table()?;
 
-        let value = table
-            .get(key.as_str())
-            .map_err(|error| Error::Read(error.to_string()))?
-            .map(|value| value.value());
+        let value = table.get(key.as_str()).map_err_str(Error::Read)?.map(|value| value.value());
 
         Ok(value)
     }
@@ -328,7 +326,7 @@ impl WalletDataDb {
                 error: error.to_string(),
             })?;
 
-            table.insert(key.as_str(), value).map_err(|error| Error::Save(error.to_string()))?;
+            table.insert(key.as_str(), value).map_err_str(Error::Save)?;
         }
 
         write_txn.commit().map_err(|error| Error::DatabaseAccess {
@@ -357,7 +355,7 @@ impl WalletDataDb {
                 error: error.to_string(),
             })?;
 
-            table.remove(key.as_str()).map_err(|error| Error::Save(error.to_string()))?;
+            table.remove(key.as_str()).map_err_str(Error::Save)?;
         }
 
         write_txn.commit().map_err(|error| Error::DatabaseAccess {

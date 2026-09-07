@@ -80,7 +80,6 @@ impl HistoricalFiatPriceReport {
         // write each row
         // skip the header row because we wrote a custom one
         for row in rows {
-            let row = row?;
             csv.serialize(row)?;
         }
 
@@ -89,7 +88,7 @@ impl HistoricalFiatPriceReport {
         Ok(Csv(csv))
     }
 
-    fn create_row(&self, txn: &(ConfirmedTransaction, Option<f32>)) -> Result<Row, csv::Error> {
+    fn create_row(&self, txn: &(ConfirmedTransaction, Option<f32>)) -> Row {
         let (txn, fiat_price) = txn;
         let fiat_price = *fiat_price;
 
@@ -129,7 +128,7 @@ impl HistoricalFiatPriceReport {
                 format!("{rounded:.2}")
             });
 
-        let row = Row {
+        Row {
             tx_id: txn.id(),
             date_time_utc: txn.confirmed_at.to_string(),
             date_time_local: datetime_local_string,
@@ -139,8 +138,6 @@ impl HistoricalFiatPriceReport {
             sats_amount,
             fiat_price,
             txn_direction,
-        };
-
-        Ok(row)
+        }
     }
 }

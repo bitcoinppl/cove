@@ -16,3 +16,6 @@ bdk_wallet = { workspace = true }
 
 # rand
 rand = { workspace = true }
+
+[lints]
+workspace = true

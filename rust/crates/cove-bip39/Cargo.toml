@@ -10,3 +10,6 @@ rand = { workspace = true }
 thiserror = { workspace = true }
 
 num-bigint = { workspace = true }
+
+[lints]
+workspace = true

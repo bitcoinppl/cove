@@ -414,6 +414,7 @@ class CloudBackupManager private constructor(
             runCatching {
                 withRust {
                     syncPersistedState()
+                    startBackgroundInventoryDiscovery()
                 }
             }
                 .onSuccess { didSync ->

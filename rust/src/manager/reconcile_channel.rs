@@ -1,9 +1,46 @@
 use std::sync::Arc;
 
 use flume::{Receiver, Sender};
-use tracing::error;
+use tracing::{error, trace};
 
 use crate::manager::deferred_sender::{DebugSend, DeferredSender, MessageSender, SingleOrMany};
+
+/// A UniFFI reconciler callback viewed as a message sink
+///
+/// Reconcilers that lack a batch method fall back to delivering messages one at a time
+pub trait ReconcileSink<M>: Send + 'static {
+    fn reconcile(&self, message: M);
+
+    fn reconcile_many(&self, messages: Vec<M>) {
+        for message in messages {
+            self.reconcile(message);
+        }
+    }
+}
+
+/// Implements [`ReconcileSink`] for a boxed UniFFI reconciler trait object; pass `many` when the
+/// callback trait has its own `reconcile_many`
+macro_rules! impl_reconcile_sink {
+    ($reconciler:ty, $message:ty) => {
+        impl $crate::manager::reconcile_channel::ReconcileSink<$message> for Box<$reconciler> {
+            fn reconcile(&self, message: $message) {
+                <$reconciler>::reconcile(self.as_ref(), message);
+            }
+        }
+    };
+    ($reconciler:ty, $message:ty, many) => {
+        impl $crate::manager::reconcile_channel::ReconcileSink<$message> for Box<$reconciler> {
+            fn reconcile(&self, message: $message) {
+                <$reconciler>::reconcile(self.as_ref(), message);
+            }
+
+            fn reconcile_many(&self, messages: Vec<$message>) {
+                <$reconciler>::reconcile_many(self.as_ref(), messages);
+            }
+        }
+    };
+}
+pub(crate) use impl_reconcile_sink;
 
 /// Shared reconcile-channel plumbing used by every manager
 ///
@@ -63,8 +100,27 @@ impl<M: DebugSend> ReconcileChannel<M> {
         self.receiver.clone()
     }
 
+    /// Forward every message to `sink` from a dedicated OS thread
+    pub fn listen_sink(&self, sink: impl ReconcileSink<M>) {
+        self.listen(move |field| match field {
+            SingleOrMany::Single(message) => sink.reconcile(message),
+            SingleOrMany::Many(messages) => sink.reconcile_many(messages),
+        });
+    }
+
+    /// Forward every message to `sink` from a tokio task
+    pub fn listen_sink_async(&self, sink: impl ReconcileSink<M>) {
+        self.listen_async(move |field| {
+            trace!("reconcile: {field:?}");
+            match field {
+                SingleOrMany::Single(message) => sink.reconcile(message),
+                SingleOrMany::Many(messages) => sink.reconcile_many(messages),
+            }
+        });
+    }
+
     /// Spawn a dedicated OS thread that forwards each received message to `handler`
-    pub fn listen(&self, mut handler: impl FnMut(SingleOrMany<M>) + Send + 'static) {
+    fn listen(&self, mut handler: impl FnMut(SingleOrMany<M>) + Send + 'static) {
         let receiver = self.receiver.clone();
         std::thread::spawn(move || {
             while let Ok(field) = receiver.recv() {
@@ -74,7 +130,7 @@ impl<M: DebugSend> ReconcileChannel<M> {
     }
 
     /// Spawn a tokio task that forwards each received message to `handler`
-    pub fn listen_async(&self, mut handler: impl FnMut(SingleOrMany<M>) + Send + 'static) {
+    fn listen_async(&self, mut handler: impl FnMut(SingleOrMany<M>) + Send + 'static) {
         let receiver = self.receiver.clone();
         cove_tokio::task::spawn(async move {
             while let Ok(field) = receiver.recv_async().await {

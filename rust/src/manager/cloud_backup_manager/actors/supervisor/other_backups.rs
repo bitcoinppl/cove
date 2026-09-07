@@ -3,7 +3,7 @@ use super::*;
 impl CloudBackupSupervisor {
     pub(crate) fn begin_recover_other_backups_operation(&mut self) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         let Some(claim) = Self::begin_other_backups_operation(
             self,
             &manager,
@@ -21,7 +21,7 @@ impl CloudBackupSupervisor {
 
     pub(crate) fn begin_delete_other_backups_operation(&mut self) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         let Some(claim) = Self::begin_other_backups_operation(
             self,
             &manager,
@@ -63,12 +63,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupRestoreReport, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -102,12 +97,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -138,12 +128,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -172,12 +157,7 @@ impl CloudBackupSupervisor {
         detail_claim: DetailResultClaim,
         result: Option<CloudBackupDetailResult>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 

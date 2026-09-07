@@ -110,8 +110,7 @@ pub fn encrypt(plaintext: &[u8], password: &str) -> Result<Vec<u8>, BackupError>
     let cipher = XChaCha20Poly1305::new((&*key).into());
     let nonce = XNonce::generate();
 
-    let ciphertext =
-        cipher.encrypt(&nonce, plaintext).map_err(|e| BackupError::Encryption(e.to_string()))?;
+    let ciphertext = cipher.encrypt(&nonce, plaintext).map_err_str(BackupError::Encryption)?;
 
     let payload_len: u32 = ciphertext
         .len()
@@ -148,8 +147,8 @@ pub fn validate_header(data: &[u8]) -> Result<(), BackupError> {
 }
 
 /// Compress data using zstd
-pub fn compress(data: &[u8]) -> Result<Vec<u8>, BackupError> {
-    Ok(ruzstd::encoding::compress_to_vec(data, ruzstd::encoding::CompressionLevel::Fastest))
+pub fn compress(data: &[u8]) -> Vec<u8> {
+    ruzstd::encoding::compress_to_vec(data, ruzstd::encoding::CompressionLevel::Fastest)
 }
 
 /// 10 MB — wallet backups are realistically a few MB at most
@@ -298,7 +297,7 @@ mod tests {
     #[test]
     fn compress_decompress_round_trip() {
         let original = b"hello world hello world hello world";
-        let compressed = compress(original).unwrap();
+        let compressed = compress(original);
         let decompressed = decompress(&compressed).unwrap();
         assert_eq!(&*decompressed, original);
     }

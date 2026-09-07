@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use bdk_wallet::chain::{
     BlockId, CheckPoint, ConfirmationBlockTime, Indexed, TxUpdate,
-    bitcoin::{OutPoint, TxOut, Txid},
+    bitcoin::{OutPoint, Txid},
     spk_client::SpkWithExpectedTxids,
 };
 
@@ -213,13 +213,6 @@ pub(crate) fn prevout_fetch_plan(update: &TxUpdate<ConfirmationBlockTime>) -> Ve
     }
 
     outpoints
-}
-
-pub(crate) fn insert_prevout_txouts(
-    update: &mut TxUpdate<ConfirmationBlockTime>,
-    prevouts: impl IntoIterator<Item = (OutPoint, TxOut)>,
-) {
-    update.txouts.extend(prevouts);
 }
 
 #[cfg(test)]

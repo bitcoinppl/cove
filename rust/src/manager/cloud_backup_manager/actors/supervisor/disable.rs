@@ -3,7 +3,7 @@ use super::*;
 impl CloudBackupSupervisor {
     pub(crate) fn begin_disable_operation(&mut self) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         let Some(claim) =
             self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
         else {
@@ -21,11 +21,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupDisablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -75,7 +71,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         blocker: CloudBackupWriteBlocker,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
@@ -107,7 +103,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
 
@@ -158,11 +154,7 @@ impl CloudBackupSupervisor {
         disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
         let Some(disabling) = manager.current_disabling_if_current(&disabling) else {
@@ -172,8 +164,7 @@ impl CloudBackupSupervisor {
 
         if let Err(error) = result {
             let message = error.reader_message();
-            if let Err(error) = manager.rollback_disable_before_delete(&disabling, message.clone())
-            {
+            if let Err(error) = manager.rollback_disable_before_delete(&disabling, message) {
                 self.fail_disable_operation(
                     &manager,
                     claim,
@@ -225,11 +216,7 @@ impl CloudBackupSupervisor {
         disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -276,11 +263,7 @@ impl CloudBackupSupervisor {
         disabling: crate::database::cloud_backup::PersistedDisablingCloudBackup,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -310,7 +293,7 @@ impl CloudBackupSupervisor {
             warn!("Failed to lift cloud backup disable fence: {error}");
         }
 
-        if self.active_operation.claim() != Some(claim) {
+        if !self.active_operation.is_current(claim) {
             return Produces::ok(());
         }
 

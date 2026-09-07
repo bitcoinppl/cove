@@ -12,16 +12,6 @@ pub(crate) fn master_key_wrapper_revision_hash(bytes: &[u8]) -> String {
 }
 
 #[uniffi::export]
-pub fn cspp_master_key_filename() -> String {
-    cove_cspp::backup_data::master_key_filename()
-}
-
-#[uniffi::export]
-pub fn cspp_wallet_filename_from_record_id(record_id: String) -> String {
-    cove_cspp::backup_data::wallet_filename_from_record_id(&record_id)
-}
-
-#[uniffi::export]
 pub fn cspp_master_key_directory() -> String {
     cove_cspp::backup_data::remote_layout::MASTER_KEY_DIRECTORY.to_string()
 }

@@ -136,21 +136,6 @@ class CoinControlManager internal constructor(
             buttonPresentation(key)
         }
 
-    /**
-     * get button arrow icon based on sort state
-     */
-    fun buttonArrow(key: CoinControlListSortKey): String? =
-        when (val presentation = buttonPresentation(key)) {
-            is ButtonPresentation.Selected -> {
-                when (presentation.v1) {
-                    ListSortDirection.ASCENDING -> "arrow_upward"
-                    ListSortDirection.DESCENDING -> "arrow_downward"
-                }
-            }
-            is ButtonPresentation.NotSelected -> null
-            null -> null
-        }
-
     val totalSelectedAmount: String
         get() = displayAmount(totalSelected)
 
@@ -224,13 +209,7 @@ class CoinControlManager internal constructor(
     }
 
     fun displayAmount(amount: Amount, showUnit: Boolean = true): String =
-        when (unit to showUnit) {
-            BitcoinUnit.BTC to true -> amount.btcStringWithUnit()
-            BitcoinUnit.BTC to false -> amount.btcString()
-            BitcoinUnit.SAT to true -> amount.satsStringWithUnit()
-            BitcoinUnit.SAT to false -> amount.satsString()
-            else -> amount.satsStringWithUnit()
-        }
+        if (showUnit) amount.fmtStringWithUnit(unit) else amount.fmtString(unit)
 
     suspend fun reloadLabels() {
         withRustOrSuspend(Unit) {

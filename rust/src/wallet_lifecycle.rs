@@ -136,6 +136,44 @@ enum DestructiveIntent {
     FullWipe,
 }
 
+/// Process-local id of one registered actor set
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, derive_more::From)]
+struct RegistrationId(u64);
+
+/// Process-local id of one reserved destructive preparation
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, derive_more::From)]
+struct PreparationId(u64);
+
+/// Process-local id of one armed ordinary-close retry
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, derive_more::From)]
+struct CloseRetryId(u64);
+
+/// Wrapping counter that hands out one kind of id, so the kinds cannot be mixed up
+#[derive(Debug)]
+struct IdCounter<T>(u64, std::marker::PhantomData<T>);
+
+impl<T> PartialEq for IdCounter<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<T> Eq for IdCounter<T> {}
+
+impl<T> Default for IdCounter<T> {
+    fn default() -> Self {
+        Self(0, std::marker::PhantomData)
+    }
+}
+
+impl<T: From<u64>> IdCounter<T> {
+    fn next(&mut self) -> T {
+        let id = self.0;
+        self.0 = self.0.wrapping_add(1);
+        T::from(id)
+    }
+}
+
 #[derive(Debug)]
 struct RegisteredActors {
     wallet_id: WalletId,
@@ -143,8 +181,8 @@ struct RegisteredActors {
     discovery: Option<Addr<WalletDiscoveryScanner>>,
     lifecycle: WalletManagerLifecycleToken,
     state: RegistrationState,
-    ordinary_close_retry: Option<u64>,
-    next_ordinary_close_retry_id: u64,
+    ordinary_close_retry: Option<CloseRetryId>,
+    next_ordinary_close_retry_id: IdCounter<CloseRetryId>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -189,7 +227,7 @@ impl DestructiveIntent {
 
 #[derive(Debug)]
 struct OrdinaryCloseTarget {
-    registration_id: u64,
+    registration_id: RegistrationId,
     wallet: Addr<WalletActor>,
     discovery: Option<Addr<WalletDiscoveryScanner>>,
     deadline_tier: ShutdownDeadlineTier,
@@ -237,7 +275,7 @@ fn cache_clear_after_ordinary_close(
 
 #[derive(Debug)]
 struct DestructiveCloseTarget {
-    registration_id: u64,
+    registration_id: RegistrationId,
     wallet_id: WalletId,
     wallet: Addr<WalletActor>,
     discovery: Option<Addr<WalletDiscoveryScanner>>,
@@ -258,15 +296,15 @@ struct CoordinatorData {
     active_constructions: usize,
     constructing_wallets: HashSet<WalletId>,
     active_persistence_operations: usize,
-    next_registration_id: u64,
-    actors: HashMap<u64, RegisteredActors>,
+    next_registration_id: IdCounter<RegistrationId>,
+    actors: HashMap<RegistrationId, RegisteredActors>,
     retries: HashMap<ShutdownAttemptId, DestructiveIntent>,
-    next_preparation_id: u64,
+    next_preparation_id: IdCounter<PreparationId>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 struct PendingPreparation {
-    id: u64,
+    id: PreparationId,
     intent: DestructiveIntent,
     tier: ShutdownDeadlineTier,
     retry: Option<ShutdownAttemptId>,
@@ -286,10 +324,10 @@ impl Default for CoordinatorData {
             active_constructions: 0,
             constructing_wallets: HashSet::new(),
             active_persistence_operations: 0,
-            next_registration_id: 0,
+            next_registration_id: IdCounter::default(),
             actors: HashMap::new(),
             retries: HashMap::new(),
-            next_preparation_id: 0,
+            next_preparation_id: IdCounter::default(),
         }
     }
 }
@@ -673,8 +711,7 @@ impl WalletLifecycleCoordinator {
 
         Self::validate_preparation_attempt(&data, &intent, tier, retry)?;
 
-        let id = data.next_preparation_id;
-        data.next_preparation_id = data.next_preparation_id.wrapping_add(1);
+        let id = data.next_preparation_id.next();
         data.pending_preparation =
             Some(PendingPreparation { id, intent, tier, retry: retry.cloned() });
 
@@ -703,7 +740,7 @@ impl WalletLifecycleCoordinator {
 
     async fn enter_reserved_preparation(
         &self,
-        reservation_id: u64,
+        reservation_id: PreparationId,
     ) -> Result<CoordinatorPhase, WalletLifecycleFailure> {
         loop {
             let notified = self.changed.notified();
@@ -725,7 +762,7 @@ impl WalletLifecycleCoordinator {
 
     fn try_enter_reserved_preparation(
         data: &mut CoordinatorData,
-        reservation_id: u64,
+        reservation_id: PreparationId,
     ) -> Result<ReservedPreparationTransition, WalletLifecycleFailure> {
         let Some(pending) = data
             .pending_preparation
@@ -765,7 +802,7 @@ impl WalletLifecycleCoordinator {
         Ok(ReservedPreparationTransition::Entered(phase))
     }
 
-    fn release_preparation_reservation(&self, reservation_id: u64) {
+    fn release_preparation_reservation(&self, reservation_id: PreparationId) {
         let mut data = self.data.lock();
         if data.pending_preparation.as_ref().is_some_and(|pending| pending.id == reservation_id) {
             data.pending_preparation = None;
@@ -990,7 +1027,7 @@ impl WalletLifecycleCoordinator {
 
     fn restore_after_failed_destructive_quiesce(
         &self,
-        registration_id: u64,
+        registration_id: RegistrationId,
     ) -> Option<ResumedRegistrationState> {
         let mut data = self.data.lock();
         let actors = data.actors.get_mut(&registration_id)?;
@@ -1033,7 +1070,7 @@ impl WalletLifecycleCoordinator {
     }
 
     fn ordinary_close_target(
-        registration_id: u64,
+        registration_id: RegistrationId,
         actors: &RegisteredActors,
         deadline_tier: ShutdownDeadlineTier,
     ) -> OrdinaryCloseTarget {
@@ -1045,7 +1082,7 @@ impl WalletLifecycleCoordinator {
         }
     }
 
-    fn close_registration(&'static self, registration_id: u64) {
+    fn close_registration(&'static self, registration_id: RegistrationId) {
         let action = {
             let mut data = self.data.lock();
             Self::close_registration_locked(&mut data, registration_id)
@@ -1067,7 +1104,7 @@ impl WalletLifecycleCoordinator {
 
     fn close_registration_locked(
         data: &mut CoordinatorData,
-        registration_id: u64,
+        registration_id: RegistrationId,
     ) -> RegistrationCloseAction {
         let phase = data.phase.clone();
         let Some(actors) = data.actors.get_mut(&registration_id) else {
@@ -1163,7 +1200,7 @@ impl WalletLifecycleCoordinator {
         });
     }
 
-    fn arm_ordinary_close_retry(&'static self, registration_id: u64) {
+    fn arm_ordinary_close_retry(&'static self, registration_id: RegistrationId) {
         let Some(retry_id) = self.reserve_ordinary_close_retry(registration_id) else {
             return;
         };
@@ -1171,7 +1208,10 @@ impl WalletLifecycleCoordinator {
         self.spawn_ordinary_close_retry(registration_id, retry_id);
     }
 
-    fn reserve_ordinary_close_retry(&self, registration_id: u64) -> Option<u64> {
+    fn reserve_ordinary_close_retry(
+        &self,
+        registration_id: RegistrationId,
+    ) -> Option<CloseRetryId> {
         let mut data = self.data.lock();
         let actors = data.actors.get_mut(&registration_id)?;
         if !matches!(
@@ -1185,16 +1225,15 @@ impl WalletLifecycleCoordinator {
             return None;
         }
 
-        let retry_id = actors.next_ordinary_close_retry_id;
-        actors.next_ordinary_close_retry_id = actors.next_ordinary_close_retry_id.wrapping_add(1);
+        let retry_id = actors.next_ordinary_close_retry_id.next();
         actors.ordinary_close_retry = Some(retry_id);
         Some(retry_id)
     }
 
     fn try_claim_ordinary_close_retry(
         &self,
-        registration_id: u64,
-        retry_id: u64,
+        registration_id: RegistrationId,
+        retry_id: CloseRetryId,
     ) -> OrdinaryCloseRetryClaim {
         let mut data = self.data.lock();
         let phase = data.phase.clone();
@@ -1234,7 +1273,11 @@ impl WalletLifecycleCoordinator {
         }
     }
 
-    fn spawn_ordinary_close_retry(&'static self, registration_id: u64, retry_id: u64) {
+    fn spawn_ordinary_close_retry(
+        &'static self,
+        registration_id: RegistrationId,
+        retry_id: CloseRetryId,
+    ) {
         cove_tokio::task::spawn(async move {
             tokio::time::sleep(ORDINARY_CLOSE_RETRY_BACKOFF).await;
 
@@ -1252,7 +1295,11 @@ impl WalletLifecycleCoordinator {
         });
     }
 
-    fn finish_ordinary_close(&'static self, registration_id: u64, outcome: OrdinaryCloseOutcome) {
+    fn finish_ordinary_close(
+        &'static self,
+        registration_id: RegistrationId,
+        outcome: OrdinaryCloseOutcome,
+    ) {
         let (clear_wallet, schedule_retry) = {
             let mut data = self.data.lock();
             let Some(actors) = data.actors.get_mut(&registration_id) else {
@@ -1316,8 +1363,7 @@ impl WalletConstructionPermit {
         let lifecycle = WalletManagerLifecycleToken::new();
         let registration_id = {
             let mut data = self.coordinator.data.lock();
-            let registration_id = data.next_registration_id;
-            data.next_registration_id = data.next_registration_id.wrapping_add(1);
+            let registration_id = data.next_registration_id.next();
             data.actors.insert(
                 registration_id,
                 RegisteredActors {
@@ -1327,7 +1373,7 @@ impl WalletConstructionPermit {
                     lifecycle: lifecycle.clone(),
                     state: RegistrationState::Active,
                     ordinary_close_retry: None,
-                    next_ordinary_close_retry_id: 0,
+                    next_ordinary_close_retry_id: IdCounter::default(),
                 },
             );
             if let Some(wallet_id) = &self.expected_wallet_id {
@@ -1411,7 +1457,7 @@ impl Drop for WalletPersistenceOperation {
 
 #[derive(Debug)]
 enum PreparationOwnership {
-    Reserved { id: u64 },
+    Reserved { id: PreparationId },
     Entered { phase: CoordinatorPhase },
     Transferred,
 }
@@ -1458,7 +1504,7 @@ impl Drop for PreparationReservation {
 
 #[derive(Debug)]
 struct WalletActorRegistrationInner {
-    registration_id: u64,
+    registration_id: RegistrationId,
 }
 
 impl Drop for WalletActorRegistrationInner {

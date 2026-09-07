@@ -1,5 +1,6 @@
 use std::{str::FromStr as _, sync::Arc};
 
+use crate::database::global_config::SelectedWalletTarget;
 use cove_device::keychain::{Keychain, WalletSecret};
 use keyteleport::{NumericCode, Payload, SenderSession};
 
@@ -15,6 +16,7 @@ use super::{
     KeyTeleportAlert, KeyTeleportPassword, KeyTeleportSendReady, RustKeyTeleportManager,
     model::{Phase, SendPhase, StateMachine},
 };
+use cove_util::result_ext::ResultExt as _;
 
 pub(crate) struct SendWorkflow<'a>(&'a RustKeyTeleportManager);
 
@@ -149,8 +151,7 @@ impl SendWorkflow<'_> {
         }
         .map_err(|_| KeyTeleportAlert::InvalidPayload)?;
 
-        let response =
-            sender.send(payload).map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
+        let response = sender.send(payload).map_err_str(KeyTeleportAlert::Protocol)?;
         let state = KeyTeleportSendReady {
             selected_wallet: wallet,
             packet: Arc::new(KeyTeleportSenderPacket::from(response.packet)),
@@ -181,8 +182,7 @@ pub(crate) fn is_send_eligible_wallet_id(wallet_id: &WalletId) -> bool {
 
 fn eligible_wallets() -> Result<Vec<WalletMetadata>, KeyTeleportAlert> {
     let database = Database::global();
-    let network = database.global_config.selected_network();
-    let mode = database.global_config.wallet_mode();
+    let SelectedWalletTarget { network, mode } = database.global_config.wallet_target();
     let wallets = database.wallets.get_all(network, mode)?;
     let mut eligible = Vec::new();
 
@@ -204,8 +204,7 @@ fn eligible_wallets() -> Result<Vec<WalletMetadata>, KeyTeleportAlert> {
 
 fn eligible_wallet_by_id(wallet_id: &WalletId) -> Result<WalletMetadata, KeyTeleportAlert> {
     let database = Database::global();
-    let network = database.global_config.selected_network();
-    let mode = database.global_config.wallet_mode();
+    let SelectedWalletTarget { network, mode } = database.global_config.wallet_target();
     let wallet = database
         .wallets
         .get(wallet_id, network, mode)?
@@ -220,8 +219,7 @@ fn eligible_wallet_by_id(wallet_id: &WalletId) -> Result<WalletMetadata, KeyTele
 
 fn current_send_wallet(wallet_id: &WalletId) -> Result<WalletMetadata, KeyTeleportAlert> {
     let database = Database::global();
-    let network = database.global_config.selected_network();
-    let mode = database.global_config.wallet_mode();
+    let SelectedWalletTarget { network, mode } = database.global_config.wallet_target();
     let wallet = database
         .wallets
         .get(wallet_id, network, mode)?

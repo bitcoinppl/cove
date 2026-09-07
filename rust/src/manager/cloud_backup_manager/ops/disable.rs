@@ -1,3 +1,4 @@
+use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
@@ -51,7 +52,7 @@ impl RustCloudBackupManager {
         let disabling = match Self::load_persisted_state() {
             PersistedCloudBackupState::Configured(configured) => {
                 let namespace_id = self.current_namespace_id()?;
-                let now = crate::manager::cloud_backup_manager::current_timestamp();
+                let now = cove_util::time::unix_timestamp_secs_or_zero();
                 let disabling = PersistedDisablingCloudBackup {
                     previous_configured: configured,
                     namespace_id,
@@ -166,8 +167,7 @@ impl RustCloudBackupManager {
             return Ok(None);
         };
 
-        disabling.delete_started_at =
-            Some(crate::manager::cloud_backup_manager::current_timestamp());
+        disabling.delete_started_at = Some(cove_util::time::unix_timestamp_secs_or_zero());
         disabling.last_error = None;
         disabling.retry_after = None;
         self.persist_disabling_state(&disabling, "persist cloud backup delete start")?;
@@ -177,7 +177,8 @@ impl RustCloudBackupManager {
 
     fn ensure_disable_can_start(&self) -> Result<(), CloudBackupError> {
         let state = self.state.read();
-        if let Some(operation) = state.active_operation().map(|claim| claim.operation())
+        if let Some(operation) =
+            state.active_operation().map(CloudBackupExclusiveOperationClaim::operation)
             && operation != CloudBackupExclusiveOperation::Disable
         {
             return Err(CloudBackupError::RecoveryRequired(DISABLE_BLOCKING_MESSAGE.into()));
@@ -270,7 +271,7 @@ impl RustCloudBackupManager {
     ) -> Result<(), CloudBackupError> {
         disabling.last_error = Some(message);
         disabling.retry_after =
-            Some(crate::manager::cloud_backup_manager::current_timestamp().saturating_add(5));
+            Some(cove_util::time::unix_timestamp_secs_or_zero().saturating_add(5));
         self.persist_disabling_state(&disabling, "persist cloud backup disable failure")
     }
 

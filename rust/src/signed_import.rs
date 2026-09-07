@@ -162,16 +162,6 @@ impl SignedTransactionOrPsbt {
         }
     }
 
-    /// Returns true if this is a signed PSBT
-    pub const fn is_psbt(&self) -> bool {
-        matches!(self, Self::SignedPsbt(_))
-    }
-
-    /// Returns true if this is a finalized transaction
-    pub const fn is_transaction(&self) -> bool {
-        matches!(self, Self::Transaction(_))
-    }
-
     /// Get the inner transaction if this is a Transaction variant
     pub fn transaction(&self) -> Option<Arc<BitcoinTransaction>> {
         match self {
@@ -215,18 +205,6 @@ impl SignedTransactionOrPsbt {
         self.tx_id()
     }
 
-    /// Returns true if this is a signed PSBT
-    #[uniffi::method(name = "isPsbt")]
-    pub const fn ffi_is_psbt(&self) -> bool {
-        self.is_psbt()
-    }
-
-    /// Returns true if this is a finalized transaction
-    #[uniffi::method(name = "isTransaction")]
-    pub fn ffi_is_transaction(&self) -> bool {
-        self.is_transaction()
-    }
-
     /// Get the inner transaction (returns None if PSBT)
     #[uniffi::method(name = "transaction")]
     pub fn ffi_transaction(&self) -> Option<Arc<BitcoinTransaction>> {
@@ -262,7 +240,7 @@ mod tests {
     fn test_parse_signed_psbt_hex() {
         let result = SignedTransactionOrPsbt::try_parse(&hex::encode(make_signed_psbt_bytes()));
         assert!(result.is_ok(), "{result:?}");
-        assert!(result.unwrap().is_psbt());
+        assert!(matches!(result.unwrap(), SignedTransactionOrPsbt::SignedPsbt(_)));
     }
 
     #[test]
@@ -270,27 +248,29 @@ mod tests {
         let base64 = BASE64_STANDARD.encode(make_signed_psbt_bytes());
         let result = SignedTransactionOrPsbt::try_parse(&base64);
         assert!(result.is_ok(), "{result:?}");
-        assert!(result.unwrap().is_psbt());
+        assert!(matches!(result.unwrap(), SignedTransactionOrPsbt::SignedPsbt(_)));
     }
 
     #[test]
     fn test_parse_signed_psbt_bytes() {
         let result = SignedTransactionOrPsbt::try_from_bytes(&make_signed_psbt_bytes());
         assert!(result.is_ok(), "{result:?}");
-        assert!(result.unwrap().is_psbt());
+        assert!(matches!(result.unwrap(), SignedTransactionOrPsbt::SignedPsbt(_)));
     }
 
     #[test]
     fn test_tx_id_from_signed_psbt() {
         let parsed = SignedTransactionOrPsbt::try_from_bytes(&make_signed_psbt_bytes()).unwrap();
-        let _tx_id = parsed.tx_id();
+        assert_eq!(
+            parsed.tx_id().to_string(),
+            "82efd652d7ab1197f01a5f4d9a30cb4c68bb79ab6fec58dfa1bf112291d1617b"
+        );
     }
 
     #[test]
     fn test_psbt_accessors() {
         let parsed = SignedTransactionOrPsbt::try_from_bytes(&make_signed_psbt_bytes()).unwrap();
-        assert!(parsed.is_psbt());
-        assert!(!parsed.is_transaction());
+        assert!(matches!(parsed, SignedTransactionOrPsbt::SignedPsbt(_)));
         assert!(parsed.psbt().is_some());
         assert!(parsed.transaction().is_none());
     }
@@ -300,7 +280,7 @@ mod tests {
         let padded = format!("  {}  ", hex::encode(make_signed_psbt_bytes()));
         let result = SignedTransactionOrPsbt::try_parse(&padded);
         assert!(result.is_ok(), "{result:?}");
-        assert!(result.unwrap().is_psbt());
+        assert!(matches!(result.unwrap(), SignedTransactionOrPsbt::SignedPsbt(_)));
     }
 
     #[test]

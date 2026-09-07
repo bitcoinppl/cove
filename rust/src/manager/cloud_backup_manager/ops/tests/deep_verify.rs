@@ -4,7 +4,6 @@ use crate::manager::cloud_backup_manager::GENERIC_CLOUD_BACKUP_ERROR_MESSAGE;
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_authenticates_before_loading_wallet_inventory() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -28,7 +27,6 @@ async fn deep_verify_authenticates_before_loading_wallet_inventory() {
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_corrupted_persisted_state_short_circuits() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -54,7 +52,6 @@ async fn deep_verify_corrupted_persisted_state_short_circuits() {
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_fails_when_auto_sync_upload_fails() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
@@ -82,7 +79,6 @@ async fn deep_verify_fails_when_auto_sync_upload_fails() {
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_persists_partial_auto_sync_upload_before_later_wallet_fails() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let first_wallet = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
@@ -127,7 +123,6 @@ async fn deep_verify_persists_partial_auto_sync_upload_before_later_wallet_fails
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_confirms_upload_directly_when_metadata_listing_is_stale() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
@@ -153,7 +148,6 @@ async fn deep_verify_confirms_upload_directly_when_metadata_listing_is_stale() {
 #[tokio::test(flavor = "current_thread")]
 async fn manual_verification_clears_interactive_state_when_awaiting_upload_confirmation() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
@@ -188,7 +182,6 @@ async fn manual_verification_clears_interactive_state_when_awaiting_upload_confi
 #[tokio::test(flavor = "current_thread")]
 async fn manual_verification_repairs_missing_master_key_wrapper_through_supervisor() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -225,7 +218,6 @@ async fn manual_verification_repairs_missing_master_key_wrapper_through_supervis
 #[tokio::test(flavor = "current_thread")]
 async fn manual_verification_loads_wallet_inventory_before_wrapper_repair() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -264,7 +256,6 @@ async fn manual_verification_loads_wallet_inventory_before_wrapper_repair() {
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_repairs_stale_local_master_key_before_recreate_manifest() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -317,7 +308,6 @@ async fn deep_verify_repairs_stale_local_master_key_before_recreate_manifest() {
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_reads_each_wallet_backup_once() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -392,7 +382,6 @@ async fn deep_verify_reads_each_wallet_backup_once() {
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_preserves_unsupported_remote_wallet_backups() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
@@ -425,7 +414,6 @@ async fn deep_verify_preserves_unsupported_remote_wallet_backups() {
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_retries_when_remote_wallet_truth_is_unknown() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
@@ -461,7 +449,6 @@ async fn deep_verify_retries_when_remote_wallet_truth_is_unknown() {
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_succeeds_after_auto_sync_relist_confirms_wallet() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
@@ -494,7 +481,6 @@ async fn deep_verify_succeeds_after_auto_sync_relist_confirms_wallet() {
 #[tokio::test(flavor = "current_thread")]
 async fn deep_verify_awaits_upload_confirmation_when_remote_revision_is_stale() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);

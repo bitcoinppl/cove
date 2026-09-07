@@ -242,8 +242,8 @@ impl Wallet {
             in_memory_wallet(&self.id, &old_descriptors, self.network)?;
         let (new_placeholder_bdk, new_placeholder_storage) =
             in_memory_wallet(&self.id, &descriptors, self.network)?;
-        drop(std::mem::replace(&mut self.bdk, old_placeholder_bdk));
-        drop(std::mem::replace(&mut self.storage, old_placeholder_storage));
+        self.bdk = old_placeholder_bdk;
+        self.storage = old_placeholder_storage;
 
         // activation is one atomic rename: a crash leaves either the old or the
         // new store on disk, and wallet load heals metadata to match what it finds

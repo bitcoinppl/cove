@@ -695,8 +695,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_types_checksum_func_all_networks(
     ): Short
-    external fun uniffi_cove_types_checksum_func_network_to_string(
-    ): Short
     external fun uniffi_cove_types_checksum_func_all_units(
     ): Short
     external fun uniffi_cove_types_checksum_func_previewnewutxolist(
@@ -1323,8 +1321,6 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_func_all_networks(uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_types_fn_func_network_to_string(`network`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_func_all_units(uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_func_previewnewutxolist(`outputCount`: Byte,`changeCount`: Byte,uniffi_out_err: UniffiRustCallStatus,
@@ -1479,9 +1475,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_all_networks() != 5848.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_types_checksum_func_network_to_string() != 41610.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_all_units() != 35208.toShort()) {
@@ -11147,17 +11140,6 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
     UniffiLib.uniffi_cove_types_fn_func_all_networks(
 
         _status)
-}
-    )
-    }
-
- fun `networkToString`(`network`: Network): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_func_network_to_string(
-
-
-        FfiConverterTypeNetwork.lower(`network`),_status)
 }
     )
     }

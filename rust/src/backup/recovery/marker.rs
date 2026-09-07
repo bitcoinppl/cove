@@ -107,8 +107,8 @@ pub(crate) fn write_marker(
 
     ensure_directory(parent, "restore marker")?;
 
-    let bytes = serde_json::to_vec(marker)
-        .map_err(|error| BackupError::Serialization(format!("restore marker: {error}")))?;
+    let bytes =
+        serde_json::to_vec(marker).map_err_prefix("restore marker", BackupError::Serialization)?;
 
     if bytes.len() as u64 > MAX_MARKER_BYTES {
         return Err(BackupError::Restore("restore marker is too large".to_string()));
@@ -453,11 +453,11 @@ fn recover_marker(path: &Path) -> Result<(), MarkerRecoveryError> {
     }
 
     let id = WalletId::from(marker.wallet_id.clone());
-    let validated = ValidatedRestoreWalletId::validate(&id)
-        .map_err(|error| MarkerRecoveryError::Invalid(error.to_string()))?;
+    let validated =
+        ValidatedRestoreWalletId::validate(&id).map_err_str(MarkerRecoveryError::Invalid)?;
 
-    let expected_path = marker_path(&marker.operation_id)
-        .map_err(|error| MarkerRecoveryError::Invalid(error.to_string()))?;
+    let expected_path =
+        marker_path(&marker.operation_id).map_err_str(MarkerRecoveryError::Invalid)?;
 
     if expected_path != path {
         return Err(MarkerRecoveryError::Invalid(
@@ -470,13 +470,10 @@ fn recover_marker(path: &Path) -> Result<(), MarkerRecoveryError> {
         return Ok(());
     }
 
-    let _lock = RestoreFileLock::acquire(&validated)
-        .map_err(|error| MarkerRecoveryError::Retryable(error.to_string()))?;
+    let _lock = RestoreFileLock::acquire(&validated).map_err_str(MarkerRecoveryError::Retryable)?;
 
-    if metadata_exists(&validated)
-        .map_err(|error| MarkerRecoveryError::Retryable(error.to_string()))?
-    {
-        remove_marker(path).map_err(|error| MarkerRecoveryError::Retryable(error.to_string()))?;
+    if metadata_exists(&validated).map_err_str(MarkerRecoveryError::Retryable)? {
+        remove_marker(path).map_err_str(MarkerRecoveryError::Retryable)?;
         info!(wallet_id = %id, "removed committed restore marker during bootstrap recovery");
         return Ok(());
     }
@@ -484,7 +481,7 @@ fn recover_marker(path: &Path) -> Result<(), MarkerRecoveryError> {
     if marker.phase == RestoreMarkerPhase::CleanupInProgress {
         resume_interrupted_cleanup(&validated, &marker.initial)
             .map_err(MarkerRecoveryError::Retryable)?;
-        remove_marker(path).map_err(|error| MarkerRecoveryError::Retryable(error.to_string()))?;
+        remove_marker(path).map_err_str(MarkerRecoveryError::Retryable)?;
         info!(wallet_id = %id, "resumed interrupted restore cleanup during bootstrap recovery");
         return Ok(());
     }
@@ -495,7 +492,7 @@ fn recover_marker(path: &Path) -> Result<(), MarkerRecoveryError> {
         marker.phase == RestoreMarkerPhase::CleanupComplete,
     )
     .map_err(MarkerRecoveryError::Retryable)?;
-    remove_marker(path).map_err(|error| MarkerRecoveryError::Retryable(error.to_string()))?;
+    remove_marker(path).map_err_str(MarkerRecoveryError::Retryable)?;
     info!(wallet_id = %id, "recovered interrupted wallet restore");
     Ok(())
 }

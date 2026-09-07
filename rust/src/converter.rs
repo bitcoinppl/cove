@@ -87,13 +87,4 @@ impl Converter {
         let fiat_value = (fiat_value * 100.0).floor() / 100.0;
         Ok(fiat_value)
     }
-
-    pub fn remove_fiat_suffix(&self, fiat_amount: &str) -> String {
-        let currency_prefixes = FiatCurrency::all_symbols_as_chars();
-
-        fiat_amount
-            .chars()
-            .filter(|c| c.is_numeric() || *c == '.' || currency_prefixes.contains(c))
-            .collect::<String>()
-    }
 }

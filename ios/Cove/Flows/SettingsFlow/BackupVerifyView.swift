@@ -110,7 +110,7 @@ struct BackupVerifyView: View {
             } catch {
                 fileData = nil
                 fileName = nil
-                errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                errorMessage = (error as? BackupError)?.userMessage() ?? error.localizedDescription
             }
 
         case let .failure(error):
@@ -131,7 +131,7 @@ struct BackupVerifyView: View {
             } catch {
                 await MainActor.run {
                     isVerifying = false
-                    errorMessage = (error as? BackupError)?.description ?? error.localizedDescription
+                    errorMessage = (error as? BackupError)?.userMessage() ?? error.localizedDescription
                 }
             }
         }

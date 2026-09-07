@@ -135,28 +135,13 @@ impl From<&FiatCurrency> for &'static str {
 
 #[uniffi::export]
 impl FiatCurrency {
-    #[uniffi::method(name = "symbolString")]
-    fn ffi_symbol_string(&self) -> String {
-        self.symbol().to_string()
-    }
-
     #[uniffi::method(name = "emojiString")]
     fn ffi_emoji_string(&self) -> String {
         self.emoji().to_string()
-    }
-
-    #[uniffi::method(name = "suffixString")]
-    fn ffi_suffix_string(&self) -> String {
-        self.suffix().to_string()
     }
 }
 
 #[uniffi::export]
 fn all_fiat_currencies() -> Vec<FiatCurrency> {
     FiatCurrency::iter().collect()
-}
-
-#[uniffi::export]
-fn is_fiat_currency_symbol(symbol: &str) -> bool {
-    FiatCurrency::is_symbol(symbol)
 }

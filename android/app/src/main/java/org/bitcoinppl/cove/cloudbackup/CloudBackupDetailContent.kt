@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
@@ -24,18 +22,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
-import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
 import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
 import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
-import org.bitcoinppl.cove_core.CloudOnlyState
-import org.bitcoinppl.cove_core.device.CloudSyncHealth
 
 internal enum class CloudBackupDetailBodyState {
     UNSUPPORTED_PASSKEY_PROVIDER,
@@ -74,9 +67,6 @@ internal fun shouldShowPendingUploadConfirmationStatus(
 internal fun pendingUploadConfirmationActionTitle(
     isBlockedOnAuthorization: Boolean,
 ): String? = if (isBlockedOnAuthorization) "Reconnect Google Drive" else null
-
-internal fun shouldFetchCloudOnly(cloudOnly: CloudOnlyState): Boolean =
-    cloudOnly is CloudOnlyState.NotFetched
 
 internal fun shouldShowFallbackVerificationSection(
     bodyState: CloudBackupDetailBodyState?,
@@ -383,66 +373,6 @@ private fun MissingPasskeyContent(
 
         repairError?.let {
             ErrorInlineMessage(it)
-        }
-    }
-}
-
-@Composable
-private fun DetailFormContent(
-    detail: CloudBackupDetail,
-    syncHealth: CloudSyncHealth,
-    manager: CloudBackupManager,
-) {
-    val showCloudOnlySection =
-        when (val cloudOnly = manager.cloudOnly) {
-            is CloudOnlyState.NotFetched -> detail.cloudOnlyCount.toInt() > 0
-            is CloudOnlyState.Loading -> true
-            is CloudOnlyState.Loaded -> cloudOnly.wallets.isNotEmpty()
-            is CloudOnlyState.Failed -> true
-        }
-
-    Column(verticalArrangement = Arrangement.spacedBy(CloudBackupDetailSectionSpacing)) {
-        CloudBackupHeaderSection(lastSync = detail.lastSync, syncHealth = syncHealth)
-
-        if (detail.upToDate.isNotEmpty()) {
-            WalletSections(title = "Up to Date", wallets = detail.upToDate)
-        }
-
-        if (detail.needsSync.isNotEmpty()) {
-            WalletSections(title = "Needs Sync", wallets = detail.needsSync)
-        }
-
-        if (showCloudOnlySection) {
-            CloudOnlySection(manager = manager)
-        }
-
-        when (val otherBackups = manager.otherBackupsState) {
-            is CloudBackupOtherBackupsState.NotChecked ->
-                OtherBackupsNotCheckedSection(
-                    onCheck = {
-                        manager.dispatch(CloudBackupManagerAction.RefreshOtherBackups)
-                    },
-                )
-            is CloudBackupOtherBackupsState.Checking -> OtherBackupsCheckingSection()
-            is CloudBackupOtherBackupsState.Loaded -> {
-                val summary = otherBackups.summary
-                if (summary.namespaceCount.toInt() > 0) {
-                    OtherBackupsSection(
-                        namespaceCount = summary.namespaceCount.toInt(),
-                        walletCount = summary.walletCount.toInt(),
-                        passkeySuffixes = summary.passkeyHints.map { it.nameSuffix },
-                        manager = manager,
-                    )
-                }
-            }
-            is CloudBackupOtherBackupsState.LoadFailed -> {
-                OtherBackupsLoadFailedSection(
-                    reason = otherBackups.reason,
-                    onRetry = {
-                        manager.dispatch(CloudBackupManagerAction.RefreshOtherBackups)
-                    },
-                )
-            }
         }
     }
 }

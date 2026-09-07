@@ -14,7 +14,7 @@ struct HeaderSection: View {
                     .fontWeight(.semibold)
 
                 if let lastSync {
-                    Text("Last synced \(formatDate(lastSync))")
+                    Text("Last synced \(Date.formattedTimestamp(lastSync))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -24,11 +24,6 @@ struct HeaderSection: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
         }
-    }
-
-    private func formatDate(_ timestamp: UInt64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
-        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 

@@ -1,21 +1,44 @@
+use cove_device::cloud_storage::CloudStorageClient;
+
 use super::*;
+use crate::manager::cloud_backup_manager::CloudOnlyState;
 
 impl CloudBackupSupervisor {
-    pub(crate) fn begin_cloud_only_fetch_request(&mut self) {
-        let Some(manager) = self.manager() else { return };
+    pub(crate) fn begin_background_cloud_only_fetch_if_needed(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+    ) {
+        if self.active_cloud_only_fetch_request.is_some()
+            || !matches!(
+                manager.state.read().cloud_only(),
+                CloudOnlyState::NotFetched | CloudOnlyState::Failed { .. }
+            )
+        {
+            return;
+        }
+
+        let cloud = CloudStorage::global_silent_client();
+        self.begin_cloud_only_fetch(manager, cloud);
+    }
+
+    fn begin_cloud_only_fetch(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        cloud: CloudStorageClient,
+    ) {
         let request_id = self.next_request_id();
         self.active_cloud_only_fetch_request = Some(request_id);
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Started);
 
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.do_fetch_cloud_only_wallets().await;
+            let result = manager.do_fetch_cloud_only_wallets_with_client(cloud).await;
             send!(addr.complete_cloud_only_fetch_request(request_id, result));
         });
     }
 
     pub(crate) fn begin_restore_cloud_wallet_operation(&mut self, record_id: String) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         let Some(claim) = self
             .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet)
         else {
@@ -33,7 +56,7 @@ impl CloudBackupSupervisor {
 
     pub(crate) fn begin_delete_cloud_wallet_operation(&mut self, record_id: String) {
         let Some(manager) = self.manager() else { return };
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         let Some(claim) = self
             .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::DeleteCloudWallet)
         else {
@@ -92,11 +115,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupPreparedCloudWalletDelete, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -129,11 +148,7 @@ impl CloudBackupSupervisor {
         record_id: String,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -167,12 +182,7 @@ impl CloudBackupSupervisor {
         record_id: String,
         result: Result<WalletRestoreOutcome, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 

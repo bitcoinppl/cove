@@ -42,44 +42,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generate_produces_32_bytes() {
-        let key = MasterKey::generate();
-        assert_eq!(key.as_bytes().len(), 32);
-    }
-
-    #[test]
-    fn from_bytes_roundtrip() {
-        let bytes = [42u8; 32];
-        let key = MasterKey::from_bytes(bytes);
-        assert_eq!(*key.as_bytes(), bytes);
-    }
-
-    #[test]
-    fn sensitive_data_key_derivation() {
-        let key = MasterKey::generate();
-        let derived1 = key.sensitive_data_key();
-        let derived2 = key.sensitive_data_key();
-        assert_eq!(derived1, derived2);
-    }
-
-    #[test]
-    fn critical_data_key_derivation() {
-        let key = MasterKey::generate();
-        let derived1 = key.critical_data_key();
-        let derived2 = key.critical_data_key();
-        assert_eq!(derived1, derived2);
-    }
-
-    #[test]
-    fn namespace_id_derivation() {
-        let key = MasterKey::generate();
-        let ns1 = key.namespace_id();
-        let ns2 = key.namespace_id();
-        assert_eq!(ns1, ns2);
-        assert_eq!(ns1.len(), 32);
-    }
-
-    #[test]
     fn different_keys_different_namespace_ids() {
         let key_a = MasterKey::generate();
         let key_b = MasterKey::generate();

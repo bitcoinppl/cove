@@ -146,7 +146,7 @@ impl ElectrumClient {
             Err(error) => return Err(Error::ElectrumGetTransaction(error)),
         };
 
-        let tx_response: ElectrumTransactionResponse = serde_json::from_value(response.clone())
+        let tx_response: ElectrumTransactionResponse = serde_json::from_value(response)
             .map_err(|e| err(format!("failed to deserialize electrum response: {e:?}")))?;
 
         if tx_response.confirmations < 1 {

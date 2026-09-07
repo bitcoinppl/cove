@@ -9,7 +9,6 @@ enum DriveAccountSwitchReleaseForTest {
 async fn assert_drive_account_switch_release_resumes_dirty_wallet(
     release: DriveAccountSwitchReleaseForTest,
 ) {
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);

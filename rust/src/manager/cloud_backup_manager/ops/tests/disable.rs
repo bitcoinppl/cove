@@ -4,7 +4,6 @@ use crate::manager::cloud_backup_manager::GENERIC_CLOUD_BACKUP_ERROR_MESSAGE;
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_deletes_active_namespace_and_clears_local_cloud_state() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -36,7 +35,6 @@ async fn disable_cloud_backup_deletes_active_namespace_and_clears_local_cloud_st
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -67,7 +65,6 @@ async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespace() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -91,7 +88,6 @@ async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespa
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_uses_unique_generation_for_each_attempt() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -115,7 +111,6 @@ async fn disable_cloud_backup_uses_unique_generation_for_each_attempt() {
 #[tokio::test(flavor = "current_thread")]
 async fn keep_cloud_backup_enabled_clears_rolled_back_disable_failure() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -153,7 +148,6 @@ async fn keep_cloud_backup_enabled_clears_rolled_back_disable_failure() {
 #[tokio::test(flavor = "current_thread")]
 async fn keep_cloud_backup_enabled_resumes_dirty_wallet_marked_during_disable_fence() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -219,7 +213,6 @@ async fn keep_cloud_backup_enabled_resumes_dirty_wallet_marked_during_disable_fe
 #[tokio::test(flavor = "current_thread")]
 async fn keep_cloud_backup_enabled_preserves_configured_runtime_status() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 3);
@@ -246,7 +239,6 @@ async fn keep_cloud_backup_enabled_preserves_configured_runtime_status() {
 #[tokio::test(flavor = "current_thread")]
 async fn keep_cloud_backup_enabled_ignores_stale_disabling_generation() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -259,8 +251,8 @@ async fn keep_cloud_backup_enabled_ignores_stale_disabling_generation() {
     };
 
     let stale = PersistedDisablingCloudBackup {
-        previous_configured: previous_configured.clone(),
-        namespace_id: namespace_id.clone(),
+        previous_configured,
+        namespace_id,
         disable_generation: 10,
         started_at: 100,
         delete_started_at: None,
@@ -283,7 +275,6 @@ async fn keep_cloud_backup_enabled_ignores_stale_disabling_generation() {
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_blocks_other_namespaces_without_deleting_them() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -308,7 +299,6 @@ async fn disable_cloud_backup_blocks_other_namespaces_without_deleting_them() {
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisting_disabling() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -328,7 +318,7 @@ async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisti
         PersistedCloudBackupStatus::Enabled
     );
     assert_eq!(
-        manager.projected_exclusive_operation().map(|claim| claim.operation()),
+        manager.projected_exclusive_operation().map(CloudBackupExclusiveOperationClaim::operation),
         Some(CloudBackupExclusiveOperation::RecreateManifest)
     );
     manager.project_exclusive_operation_finished(claim);
@@ -337,7 +327,6 @@ async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisti
 #[tokio::test(flavor = "current_thread")]
 async fn disable_corrupted_persisted_state_fails_closed() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -371,7 +360,6 @@ async fn disable_corrupted_persisted_state_fails_closed() {
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -394,7 +382,6 @@ async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain(
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_not_found_listing_retries_then_fails_closed() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -425,7 +412,6 @@ async fn disable_cloud_backup_not_found_listing_retries_then_fails_closed() {
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_delete_not_found_finishes_cleanup() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -446,7 +432,6 @@ async fn disable_cloud_backup_delete_not_found_finishes_cleanup() {
 #[tokio::test(flavor = "current_thread")]
 async fn persisted_disabling_on_restart_resumes_to_disabled() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -494,7 +479,6 @@ async fn persisted_disabling_on_restart_resumes_to_disabled() {
 #[tokio::test(flavor = "current_thread")]
 async fn keep_cloud_backup_enabled_after_delete_failure_requires_existing_namespace() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);

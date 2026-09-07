@@ -94,11 +94,6 @@ impl SeedQr {
         Self::try_from_data(&data)
     }
 
-    #[uniffi::constructor]
-    pub fn new_from_str(qr: &str) -> Result<Self, Error> {
-        Self::try_from_str(qr)
-    }
-
     #[uniffi::method]
     pub fn get_words(&self) -> Vec<String> {
         self.words().map(std::string::ToString::to_string).collect()

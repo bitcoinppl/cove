@@ -1,7 +1,4 @@
-use std::{
-    fmt,
-    time::{Duration, UNIX_EPOCH},
-};
+use std::{fmt, time::Duration};
 
 use cove_device::keychain::Keychain;
 use keyteleport::ReceiverSession;
@@ -16,6 +13,7 @@ use crate::{
 };
 
 use super::{KeyTeleportAlert, KeyTeleportReceiveState};
+use cove_util::result_ext::ResultExt as _;
 
 const RECEIVE_SESSION_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 static RECEIVE_SESSION_STORAGE_LOCK: Mutex<()> = Mutex::new(());
@@ -143,7 +141,7 @@ impl ActiveReceiveSession {
         Self {
             id: ReceiveSessionId::new(),
             receiver: ReceiverSession::new(),
-            created_at_secs: now_secs(),
+            created_at_secs: cove_util::time::unix_timestamp_secs_or_zero(),
             network: scope.network,
             wallet_mode: scope.wallet_mode,
         }
@@ -163,7 +161,7 @@ impl ActiveReceiveSession {
 
     pub(crate) fn try_clone(&self) -> Result<Self, KeyTeleportAlert> {
         let receiver = ReceiverSession::from_private_key_bytes(self.receiver.private_key_bytes())
-            .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
+            .map_err_str(KeyTeleportAlert::Protocol)?;
 
         Ok(Self {
             id: self.id.clone(),
@@ -179,7 +177,8 @@ impl ActiveReceiveSession {
     }
 
     pub(crate) fn is_expired(&self) -> bool {
-        now_secs().saturating_sub(self.created_at_secs) >= RECEIVE_SESSION_TTL.as_secs()
+        cove_util::time::unix_timestamp_secs_or_zero().saturating_sub(self.created_at_secs)
+            >= RECEIVE_SESSION_TTL.as_secs()
     }
 
     pub(crate) fn ensure_current_scope(&self) -> Result<(), KeyTeleportAlert> {
@@ -187,10 +186,7 @@ impl ActiveReceiveSession {
     }
 
     pub(crate) fn receive_state(&self) -> Result<KeyTeleportReceiveState, KeyTeleportAlert> {
-        let request = self
-            .receiver_session()
-            .request()
-            .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()))?;
+        let request = self.receiver_session().request().map_err_str(KeyTeleportAlert::Protocol)?;
 
         Ok(KeyTeleportReceiveState {
             packet: std::sync::Arc::new(KeyTeleportReceiverPacket::from(request.packet)),
@@ -223,8 +219,8 @@ impl ReceiveSessionId {
     }
 
     fn parse(value: String) -> Result<Self, KeyTeleportAlert> {
-        let bytes = hex::decode(&value)
-            .map_err(|error| KeyTeleportAlert::Keychain(format!("invalid session id: {error}")))?;
+        let bytes =
+            hex::decode(&value).map_err_prefix("invalid session id", KeyTeleportAlert::Keychain)?;
 
         if bytes.len() != 16 {
             return Err(KeyTeleportAlert::Keychain("invalid receive session id length".into()));
@@ -270,14 +266,12 @@ impl Drop for PersistedReceiveSession {
 
 impl PersistedReceiveSession {
     fn save_unlocked(&self) -> Result<(), KeyTeleportAlert> {
-        let value = Zeroizing::new(
-            serde_json::to_string(self)
-                .map_err(|error| KeyTeleportAlert::Keychain(error.to_string()))?,
-        );
+        let value =
+            Zeroizing::new(serde_json::to_string(self).map_err_str(KeyTeleportAlert::Keychain)?);
 
         Keychain::global()
             .save_key_teleport_receive_session(&value)
-            .map_err(|error| KeyTeleportAlert::Keychain(error.to_string()))
+            .map_err_str(KeyTeleportAlert::Keychain)
     }
 
     fn session_id(&self) -> Result<ReceiveSessionId, KeyTeleportAlert> {
@@ -291,8 +285,7 @@ impl PersistedReceiveSession {
 
     fn receiver_session(&self) -> Result<ReceiverSession, KeyTeleportAlert> {
         let bytes = Zeroizing::new(
-            hex::decode(&self.private_key_hex)
-                .map_err(|error| KeyTeleportAlert::Keychain(error.to_string()))?,
+            hex::decode(&self.private_key_hex).map_err_str(KeyTeleportAlert::Keychain)?,
         );
         let mut private_key: [u8; 32] = bytes
             .as_slice()
@@ -300,14 +293,15 @@ impl PersistedReceiveSession {
             .map_err(|_| KeyTeleportAlert::Keychain("invalid receive private key length".into()))?;
 
         let session = ReceiverSession::from_private_key_bytes(private_key)
-            .map_err(|error| KeyTeleportAlert::Protocol(error.to_string()));
+            .map_err_str(KeyTeleportAlert::Protocol);
         private_key.zeroize();
 
         session
     }
 
     fn is_expired(&self) -> bool {
-        now_secs().saturating_sub(self.created_at_secs) >= RECEIVE_SESSION_TTL.as_secs()
+        cove_util::time::unix_timestamp_secs_or_zero().saturating_sub(self.created_at_secs)
+            >= RECEIVE_SESSION_TTL.as_secs()
     }
 
     fn scope(&self) -> ReceiveScope {
@@ -318,7 +312,7 @@ impl PersistedReceiveSession {
 fn load_receive_session_unlocked() -> Result<Option<PersistedReceiveSession>, KeyTeleportAlert> {
     let Some(value) = Keychain::global()
         .get_key_teleport_receive_session()
-        .map_err(|error| KeyTeleportAlert::Keychain(error.to_string()))?
+        .map_err_str(KeyTeleportAlert::Keychain)?
     else {
         return Ok(None);
     };
@@ -372,8 +366,4 @@ fn delete_receive_session_if_matches_unlocked(
     }
 
     delete_receive_session_unlocked()
-}
-
-fn now_secs() -> u64 {
-    UNIX_EPOCH.elapsed().unwrap_or_default().as_secs()
 }

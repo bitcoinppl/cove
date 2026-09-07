@@ -114,6 +114,10 @@ class CloudBackupRestoreAllProcessDeathFullLaunchTest {
         waitUntil("expected application bootstrap to complete after process death") {
             bootstrapProgress() == BootstrapStep.COMPLETE
         }
+        assertTrue(
+            "returning users should start silent cloud inventory discovery during bootstrap",
+            ScriptedCloudStorageAccess.awaitWalletListCount(expected = 1),
+        )
         openCloudBackup()
         waitUntil("expected authoritative Retry Remaining after process death") {
             CloudBackupManager.getInstance().isDetailInventoryComplete &&

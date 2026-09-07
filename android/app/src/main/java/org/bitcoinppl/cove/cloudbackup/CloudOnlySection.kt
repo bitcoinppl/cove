@@ -31,7 +31,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,7 +52,6 @@ import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupWalletStatus
 import org.bitcoinppl.cove_core.CloudOnlyOperation
-import org.bitcoinppl.cove_core.CloudOnlyState
 
 internal enum class CloudBackupRestoreAllActionKind {
     START,
@@ -152,6 +150,7 @@ internal fun cloudBackupRestoreAllManagerAction(
 @Composable
 internal fun CloudOnlySection(
     manager: CloudBackupManager,
+    wallets: List<CloudBackupWalletItem>,
 ) {
     var selectedWallet by remember { mutableStateOf<CloudBackupWalletItem?>(null) }
     var walletToDelete by remember { mutableStateOf<CloudBackupWalletItem?>(null) }
@@ -174,66 +173,39 @@ internal fun CloudOnlySection(
         icon = Icons.Default.PhoneAndroid,
         tint = cloudBackupVisualColors().primaryText,
     ) {
-        when (val cloudOnly = manager.cloudOnly) {
-            is CloudOnlyState.NotFetched -> {
-                LaunchedEffect(cloudOnly) {
-                    manager.dispatch(CloudBackupManagerAction.FetchCloudOnly)
-                }
-                CloudBackupProgressCard(
-                    title = "Loading wallets not on this device",
-                    message = "Checking Cloud Backup for wallets that are not local",
-                )
-            }
+        val operatingRecordId =
+            (manager.cloudOnlyOperation as? CloudOnlyOperation.Operating)?.recordId
 
-            is CloudOnlyState.Loading -> {
-                CloudBackupProgressCard(
-                    title = "Loading wallets not on this device",
-                    message = "Checking Cloud Backup for wallets that are not local",
-                )
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            CloudBackupRestoreAllControl(
+                state = manager.restoreAllState,
+                onAction = manager::dispatch,
+                onCancel = {
+                    manager.dispatch(CloudBackupManagerAction.CancelRestoreAll)
+                },
+            )
 
-            is CloudOnlyState.Loaded -> {
-                val operatingRecordId =
-                    (manager.cloudOnlyOperation as? CloudOnlyOperation.Operating)?.recordId
-
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    CloudBackupRestoreAllControl(
-                        state = manager.restoreAllState,
-                        onAction = manager::dispatch,
-                        onCancel = {
-                            manager.dispatch(CloudBackupManagerAction.CancelRestoreAll)
-                        },
-                    )
-
-                    WalletRowsCard(
-                        wallets = cloudOnly.wallets,
-                        onWalletClick = { selectedWallet = it },
-                        showChevron = false,
-                        operatingRecordId = operatingRecordId,
-                        rowsEnabled =
-                            operatingRecordId == null &&
-                                !manager.isRestoreAllRunning &&
-                                manager.isDetailInventoryReady,
-                    )
-                }
-            }
-
-            is CloudOnlyState.Failed -> {
-                ErrorInlineMessage(cloudOnly.error, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
-            }
+            WalletRowsCard(
+                wallets = wallets,
+                onWalletClick = { selectedWallet = it },
+                showChevron = false,
+                operatingRecordId = operatingRecordId,
+                rowsEnabled =
+                    operatingRecordId == null &&
+                        !manager.isRestoreAllRunning &&
+                        manager.isDetailInventoryReady,
+            )
         }
     }
 
-    if (manager.cloudOnly is CloudOnlyState.Loaded) {
-        when (val operation = manager.cloudOnlyOperation) {
-            is CloudOnlyOperation.Failed -> {
-                ErrorInlineMessage(operation.error, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
-            }
-            is CloudOnlyOperation.Warning -> {
-                ErrorInlineMessage(operation.message, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
-            }
-            else -> Unit
+    when (val operation = manager.cloudOnlyOperation) {
+        is CloudOnlyOperation.Failed -> {
+            ErrorInlineMessage(operation.error, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         }
+        is CloudOnlyOperation.Warning -> {
+            ErrorInlineMessage(operation.message, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+        }
+        else -> Unit
     }
 
     selectedWallet?.let { wallet ->

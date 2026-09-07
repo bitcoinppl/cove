@@ -4,7 +4,6 @@ use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 #[tokio::test(flavor = "current_thread")]
 async fn non_missing_discovery_failure_never_registers_enable_passkey() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
     globals.passkey.set_discover_result(Err(PasskeyError::RequestFailed {
@@ -25,7 +24,6 @@ async fn non_missing_discovery_failure_never_registers_enable_passkey() {
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_treats_missing_credential_as_no_match() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -52,7 +50,6 @@ async fn passkey_match_treats_missing_credential_as_no_match() {
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_treats_user_cancel_as_user_declined() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -79,7 +76,6 @@ async fn passkey_match_treats_user_cancel_as_user_declined() {
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_propagates_upload_state_authorization_required() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -112,7 +108,6 @@ async fn passkey_match_propagates_upload_state_authorization_required() {
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_propagates_master_wrapper_authorization_required() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -145,7 +140,6 @@ async fn passkey_match_propagates_master_wrapper_authorization_required() {
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_keeps_pending_upload_state_inconclusive() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -168,7 +162,6 @@ async fn passkey_match_keeps_pending_upload_state_inconclusive() {
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_keeps_transient_master_wrapper_failure_inconclusive() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -191,7 +184,6 @@ async fn passkey_match_keeps_transient_master_wrapper_failure_inconclusive() {
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_conclusive_mismatch_is_not_masked_by_another_namespace_failure() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -234,7 +226,6 @@ async fn passkey_match_conclusive_mismatch_is_not_masked_by_another_namespace_fa
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_pending_supported_candidate_outweighs_stale_mismatch() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -279,7 +270,6 @@ async fn passkey_match_pending_supported_candidate_outweighs_stale_mismatch() {
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_mixed_supported_and_unsupported_versions_returns_no_match() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -325,7 +315,6 @@ async fn passkey_match_mixed_supported_and_unsupported_versions_returns_no_match
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_discovery_propagates_unsupported_provider() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -355,7 +344,6 @@ async fn passkey_match_discovery_propagates_unsupported_provider() {
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_targeted_auth_propagates_unsupported_provider() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -400,7 +388,6 @@ async fn passkey_match_targeted_auth_propagates_unsupported_provider() {
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_allows_one_credential_to_match_multiple_namespaces() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -453,7 +440,6 @@ async fn passkey_match_allows_one_credential_to_match_multiple_namespaces() {
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_keeps_earlier_match_after_later_targeted_cancellation() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -507,7 +493,6 @@ async fn passkey_match_keeps_earlier_match_after_later_targeted_cancellation() {
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_session_authenticates_new_namespace_after_discovery_refresh() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -563,7 +548,6 @@ async fn passkey_match_session_authenticates_new_namespace_after_discovery_refre
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_session_retries_targeted_auth_failure_before_presentation() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -627,7 +611,6 @@ async fn passkey_match_session_retries_targeted_auth_failure_before_presentation
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_session_does_not_retry_targeted_auth_failure_after_presentation() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -686,7 +669,6 @@ async fn passkey_match_session_does_not_retry_targeted_auth_failure_after_presen
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_match_session_does_not_prompt_for_unchanged_wrapper() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
 
@@ -718,7 +700,6 @@ async fn passkey_match_session_does_not_prompt_for_unchanged_wrapper() {
 #[tokio::test(flavor = "current_thread")]
 async fn wrapper_repair_discovery_propagates_unsupported_provider() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     globals.reset();
     globals.passkey.set_discover_result(Err(PasskeyError::PrfUnsupportedProvider));
@@ -882,7 +863,7 @@ fn pending_enable_journal_rejects_out_of_order_or_conflicting_transitions() {
     assert!(journal.register_passkey(passkey.clone()));
     assert!(!journal.register_passkey(PendingEnablePasskeyMetadata {
         credential_id: vec![4, 5, 6],
-        ..passkey.clone()
+        ..passkey
     }));
     assert!(journal.mark_remote_writes_started());
     assert!(journal.mark_remote_writes_started());
@@ -994,7 +975,6 @@ fn clear_local_state_attempts_passkey_metadata_after_master_key_delete_failure()
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_repair_finalization_keeps_existing_count_when_wallet_refresh_fails() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 2);
@@ -1018,7 +998,6 @@ async fn passkey_repair_finalization_keeps_existing_count_when_wallet_refresh_fa
 #[tokio::test(flavor = "current_thread")]
 async fn passkey_repair_finalization_keeps_existing_count_when_wallet_listing_is_missing() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 2);
@@ -1046,7 +1025,6 @@ async fn passkey_repair_finalization_keeps_existing_count_when_wallet_listing_is
 #[tokio::test(flavor = "current_thread")]
 async fn wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 1);
@@ -1077,7 +1055,6 @@ async fn wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading() 
 #[tokio::test(flavor = "current_thread")]
 async fn wrapper_repair_fails_closed_when_wallet_listing_is_missing() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 1);
@@ -1096,7 +1073,6 @@ async fn wrapper_repair_fails_closed_when_wallet_listing_is_missing() {
 #[tokio::test(flavor = "current_thread")]
 async fn wrapper_repair_reports_failure_after_upload_when_passkey_persistence_fails() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);

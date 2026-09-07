@@ -11,10 +11,6 @@ macro_rules! impl_default_for {
 
 #[macro_export]
 macro_rules! new_type {
-    ($name:ident, String) => {
-        new_type!($name, String, std::any::type_name::<$name>());
-    };
-
     ($name:ident, String, $redb_type_name:expr) => {
         uniffi::custom_newtype!($name, String);
 
@@ -84,23 +80,5 @@ macro_rules! new_type {
                 ::redb::TypeName::new($redb_type_name)
             }
         }
-    };
-
-    ($name:ident, Vec<$type:ty>) => {
-        #[derive(
-            Clone,
-            Debug,
-            PartialEq,
-            ::derive_more::Deref,
-            ::derive_more::From,
-            ::derive_more::Into,
-            ::derive_more::AsRef,
-            ::derive_more::IntoIterator,
-            Hash,
-            Eq,
-            Ord,
-            PartialOrd,
-        )]
-        pub struct $name(Vec<$type>);
     };
 }

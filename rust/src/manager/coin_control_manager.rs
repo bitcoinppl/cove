@@ -18,11 +18,9 @@ use parking_lot::Mutex;
 
 use crate::{
     label_manager::{LabelManager, LabelManagerError},
-    manager::deferred_sender,
     wallet::metadata::WalletMetadata,
     wallet_lifecycle::WalletManagerLifecycleToken,
 };
-use tracing::trace;
 
 use super::reconcile_channel::ReconcileChannel;
 
@@ -31,7 +29,6 @@ type Action = CoinControlManagerAction;
 type State = state::CoinControlManagerState;
 type SortState = CoinControlListSortState;
 type Reconciler = dyn CoinControlManagerReconciler;
-type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 
 #[uniffi::export(callback_interface)]
 pub trait CoinControlManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
@@ -39,6 +36,12 @@ pub trait CoinControlManagerReconciler: Send + Sync + std::fmt::Debug + 'static 
     fn reconcile(&self, message: Message);
     fn reconcile_many(&self, messages: Vec<Message>);
 }
+
+crate::manager::reconcile_channel::impl_reconcile_sink!(
+    dyn CoinControlManagerReconciler,
+    Message,
+    many
+);
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustCoinControlManager {
@@ -199,13 +202,7 @@ impl RustCoinControlManager {
 
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
-        self.reconciler.listen_async(move |field| {
-            trace!("reconcile_receiver: {field:?}");
-            match field {
-                SingleOrMany::Single(message) => reconciler.reconcile(message),
-                SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
-            }
-        });
+        self.reconciler.listen_sink_async(reconciler);
     }
 
     /// Action from the frontend to change the state of the view model
@@ -221,7 +218,7 @@ impl RustCoinControlManager {
                 self.reconciler.send(Message::UpdateSearch(String::new()));
             }
             Action::ToggleSelectAll => {
-                self.clone().toggle_select_all();
+                self.toggle_select_all();
             }
             Action::ToggleUnit => {
                 let new_unit = {
@@ -488,7 +485,7 @@ mod tests {
 
         let selection_changed = {
             let mut state = manager.state.lock();
-            state.selected_utxos = vec![locked.clone(), unlocked.clone()];
+            state.selected_utxos = vec![locked, unlocked.clone()];
             state.load_utxo_labels()
         };
 
@@ -610,7 +607,9 @@ mod tests {
         manager.reload_labels().await.expect("labels reload");
 
         let message = manager.reconciler.receiver().recv_async().await.expect("reconcile message");
-        let SingleOrMany::Single(Message::UpdateUtxos(utxos)) = message else {
+        let crate::manager::deferred_sender::SingleOrMany::Single(Message::UpdateUtxos(utxos)) =
+            message
+        else {
             panic!("expected utxo update");
         };
 

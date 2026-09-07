@@ -335,7 +335,7 @@ impl RustCloudBackupManager {
         let total = store.wallet_count()?.saturating_add(1);
         self.report_enable_progress(CloudBackupProgress { completed: 0, total });
 
-        let uploaded_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let uploaded_at = cove_util::time::unix_timestamp_secs_or_zero();
         let encrypted_master = master_key_crypto::encrypt_master_key_with_remote_metadata(
             &ready.master_key,
             &ready.passkey.prf_key,

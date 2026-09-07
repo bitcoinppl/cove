@@ -28,7 +28,9 @@ impl RustWalletManager {
             .await
             .map_err(wallet_deletion_error)?;
 
-        self.finish_delete_wallet(wallet_id)
+        self.finish_delete_wallet(wallet_id);
+
+        Ok(())
     }
 
     pub(crate) async fn retry_delete_wallet_internal(
@@ -44,13 +46,12 @@ impl RustWalletManager {
         .await
         .map_err(wallet_deletion_error)?;
 
-        self.finish_delete_wallet(wallet_id)
+        self.finish_delete_wallet(wallet_id);
+
+        Ok(())
     }
 
-    fn finish_delete_wallet(
-        &self,
-        wallet_id: crate::wallet::metadata::WalletId,
-    ) -> Result<(), Error> {
+    fn finish_delete_wallet(&self, wallet_id: crate::wallet::metadata::WalletId) {
         let database = Database::global();
 
         Updater::send_update(Update::ClearCachedWalletManager(wallet_id.clone()));
@@ -73,8 +74,6 @@ impl RustWalletManager {
             // no wallets remaining, go to new wallet flow
             FfiApp::global().load_and_reset_default_route(Route::NewWallet(Default::default()));
         }
-
-        Ok(())
     }
 
     pub(crate) async fn set_wallet_type_internal(

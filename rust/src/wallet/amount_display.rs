@@ -95,7 +95,7 @@ pub fn wallet_display_fiat_amount(
     amount: f64,
     with_suffix: bool,
 ) -> String {
-    let currency = selected_fiat_currency();
+    let currency = Database::global().global_config.selected_fiat_currency();
     display_fiat_amount_with_currency(metadata.sensitive_visible, currency, amount, with_suffix)
 }
 
@@ -130,12 +130,8 @@ pub fn wallet_display_fiat_amount_with_direction(
 
 #[uniffi::export]
 pub fn wallet_amount_in_fiat_cached(amount: Arc<Amount>) -> Option<f64> {
-    let currency = selected_fiat_currency();
+    let currency = Database::global().global_config.selected_fiat_currency();
     FIAT_CLIENT.value_in_currency_cached(*amount, currency)
-}
-
-fn selected_fiat_currency() -> FiatCurrency {
-    Database::global().global_config.fiat_currency().unwrap_or_default()
 }
 
 pub(crate) fn display_fiat_amount_with_currency(

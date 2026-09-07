@@ -130,7 +130,7 @@ impl RustCloudBackupManager {
         issue: Option<CloudStorageIssue>,
         error: String,
     ) -> Result<bool, CloudBackupError> {
-        let failed_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let failed_at = cove_util::time::unix_timestamp_secs_or_zero();
 
         self.replace_blob_state_if_current(
             current_state,
@@ -149,7 +149,7 @@ impl RustCloudBackupManager {
         &self,
         current_state: &PersistedCloudBlobSyncState,
     ) -> Result<(), CloudBackupError> {
-        let changed_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
         let dirty_state = current_state
             .with_state(PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }));
 

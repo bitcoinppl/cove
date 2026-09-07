@@ -260,7 +260,7 @@ impl WalletActor {
             slow: self.fee_option_with_total_fee(
                 fee_rate_options.slow,
                 amount,
-                address.clone(),
+                address,
                 &spend_policy,
             )?,
             custom: None,
@@ -553,7 +553,7 @@ impl WalletActor {
             Err(error) => return Produces::ok(Err(error)),
         };
 
-        self.start_broadcast_transaction(transaction)
+        Ok(self.start_broadcast_transaction(transaction))
     }
 
     #[allow(dead_code)]
@@ -634,13 +634,13 @@ impl WalletActor {
             return Produces::ok(Err(error));
         }
 
-        self.start_broadcast_transaction(transaction)
+        Ok(self.start_broadcast_transaction(transaction))
     }
 
     fn start_broadcast_transaction(
         &mut self,
         transaction: BdkTransaction,
-    ) -> ActorResult<Result<(), Error>> {
+    ) -> Produces<Result<(), Error>> {
         let connection = self.deferred_node_connection();
         let (reply, receiver) = futures::channel::oneshot::channel();
 
@@ -651,7 +651,7 @@ impl WalletActor {
             let _ = reply.send(Produces::Value(result));
         });
 
-        Ok(Produces::Deferred(receiver))
+        Produces::Deferred(receiver)
     }
 
     async fn node_client_for_broadcast(&mut self) -> ActorResult<Result<NodeClient, Error>> {

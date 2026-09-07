@@ -6,10 +6,7 @@ use parking_lot::{Mutex, RwLock};
 use crate::{
     database::{self, Database},
     keychain::KeychainError,
-    manager::{
-        cloud_backup_manager::CLOUD_BACKUP_MANAGER, deferred_sender::SingleOrMany,
-        reconcile_channel::ReconcileChannel,
-    },
+    manager::{cloud_backup_manager::CLOUD_BACKUP_MANAGER, reconcile_channel::ReconcileChannel},
     mnemonic::{GroupedWord, MnemonicExt as _, NumberOfBip39Words, WordAccess as _},
     multi_format::MultiFormatError,
     pending_wallet::PendingWallet,
@@ -40,6 +37,11 @@ pub trait PendingWalletManagerReconciler: Send + Sync + std::fmt::Debug + 'stati
     /// Tells the frontend to reconcile the view model changes
     fn reconcile(&self, message: PendingWalletManagerReconcileMessage);
 }
+
+crate::manager::reconcile_channel::impl_reconcile_sink!(
+    dyn PendingWalletManagerReconciler,
+    PendingWalletManagerReconcileMessage
+);
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct RustPendingWalletManager {
@@ -108,18 +110,8 @@ impl RustPendingWalletManager {
     }
 
     #[uniffi::method]
-    pub fn number_of_words_count(&self) -> u8 {
-        self.state.read().number_of_words.to_word_count() as u8
-    }
-
-    #[uniffi::method]
     pub fn bip_39_words(&self) -> Vec<String> {
         self.state.read().wallet.words()
-    }
-
-    #[uniffi::method]
-    pub fn card_indexes(&self) -> u8 {
-        self.state.read().number_of_words.to_word_count() as u8 / 6
     }
 
     #[uniffi::method]
@@ -172,14 +164,7 @@ impl RustPendingWalletManager {
     // boilerplate methods
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<dyn PendingWalletManagerReconciler>) {
-        self.reconciler.listen(move |field| match field {
-            SingleOrMany::Single(message) => reconciler.reconcile(message),
-            SingleOrMany::Many(messages) => {
-                for message in messages {
-                    reconciler.reconcile(message);
-                }
-            }
-        });
+        self.reconciler.listen_sink(reconciler);
     }
 
     /// Action from the frontend to change the state of the view model

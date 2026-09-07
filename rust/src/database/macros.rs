@@ -3,10 +3,11 @@ macro_rules! string_config_accessor {
     (@impl $vis:vis, $fn_name:ident, $key:expr, $return_type:ty, $($update_variant:expr)?) => {
         $vis fn $fn_name(&self) -> Result<$return_type, Error> {
             use std::str::FromStr as _;
+use cove_util::result_ext::ResultExt as _;
 
             let Some(value) = self
                 .get($key)
-                .map_err(|error| Error::DatabaseAccess(error.to_string()))?
+                .map_err_str(Error::DatabaseAccess)?
             else {
                 return Ok(Default::default());
             };

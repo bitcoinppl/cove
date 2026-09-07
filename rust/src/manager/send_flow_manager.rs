@@ -68,7 +68,6 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 type Action = SendFlowManagerAction;
 type Message = SendFlowManagerReconcileMessage;
 type Reconciler = dyn SendFlowManagerReconciler;
-type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 type DeferredSender = deferred_sender::DeferredSender<Message>;
 
 const LOCK_STATE_LOAD_FAILED_ERROR_ID: &str = "send_flow_lock_state_load_failed";
@@ -87,6 +86,12 @@ pub trait SendFlowManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     fn reconcile(&self, message: Message);
     fn reconcile_many(&self, messages: Vec<Message>);
 }
+
+crate::manager::reconcile_channel::impl_reconcile_sink!(
+    dyn SendFlowManagerReconciler,
+    Message,
+    many
+);
 
 #[derive(Debug, uniffi::Object)]
 pub struct RustSendFlowManager {
@@ -221,13 +226,7 @@ impl RustSendFlowManager {
 impl RustSendFlowManager {
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
-        self.reconciler.listen_async(move |field| {
-            trace!("reconcile_receiver: {field:?}");
-            match field {
-                SingleOrMany::Single(message) => reconciler.reconcile(message),
-                SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
-            }
-        });
+        self.reconciler.listen_sink_async(reconciler);
     }
 
     // MARK: Validators
@@ -517,14 +516,14 @@ impl RustSendFlowManager {
             Action::SelectFeeRate(fee_rate) => self.selected_fee_rate_changed(fee_rate),
 
             Action::SelectMaxSend => {
-                let me = self.clone();
+                let me = self;
                 cove_tokio::task::spawn(async move { me.select_max_send_report_error().await });
             }
 
             Action::ClearSendAmount => self.clear_send_amount(),
             Action::ClearAddress => self.clear_address(),
             Action::RefreshWalletBalance => {
-                let me = self.clone();
+                let me = self;
                 cove_tokio::task::spawn(async move {
                     me.get_wallet_balance().await;
                     me.get_or_update_fee_rate_options().await;

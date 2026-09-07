@@ -758,7 +758,7 @@ impl WalletActor {
     #[into_actor_result]
     pub async fn txns_with_prices(&mut self) -> Result<Vec<(ConfirmedTransaction, Option<f32>)>> {
         let network = self.wallet.network;
-        let fiat_currency = Database::global().global_config.fiat_currency().unwrap_or_default();
+        let fiat_currency = Database::global().global_config.selected_fiat_currency();
 
         let confirmed_transactions = self
             .do_transactions()
@@ -1310,7 +1310,7 @@ impl WalletActor {
         let now = UNIX_EPOCH.elapsed().unwrap_or_default();
 
         self.apply_metadata_patch(WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
-            last_scan_finished: Some(Some(now)),
+            last_scan_finished: Some(now),
             ..Default::default()
         }))?;
         self.last_scan_finished = Some(now);
@@ -1320,7 +1320,7 @@ impl WalletActor {
 
     fn record_full_scan_performed(&mut self, completed_at: u64) -> Result<(), Error> {
         self.apply_metadata_patch(WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
-            performed_full_scan_at: Some(Some(completed_at)),
+            performed_full_scan_at: Some(completed_at),
             ..Default::default()
         }))?;
 
@@ -3479,6 +3479,8 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn cancelled_watcher_quiescence_keeps_every_watcher_owned_for_resume() {
+        // the actor opens its wallet database at the shared wallet-data root
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         let _ = rustls::crypto::ring::default_provider().install_default();
         crate::database::test_support::init_test_database();
         test_keychain();
@@ -3533,6 +3535,8 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn cancelled_or_failed_watcher_resume_retains_restart_ownership() {
+        // the actor opens its wallet database at the shared wallet-data root
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         let _ = rustls::crypto::ring::default_provider().install_default();
         crate::database::test_support::init_test_database();
         test_keychain();
@@ -4311,6 +4315,8 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn send_gate_retries_pending_terminal_action_and_rejects_new_send() {
+        // the actor opens its wallet database at the shared wallet-data root
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         crate::database::test_support::init_test_database();
         let mut wallet = Wallet::preview_new_wallet();
         mark_wallet_ledger_ready(&mut wallet);
@@ -4341,6 +4347,8 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn send_gate_clears_stale_session_when_terminal_tx_already_in_wallet() {
+        // the actor opens its wallet database at the shared wallet-data root
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         crate::database::test_support::init_test_database();
         crate::test_support::ensure_tokio_runtime();
         test_keychain();
@@ -4383,6 +4391,8 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn broadcast_payjoin_terminal_skips_rebroadcast_when_tx_already_in_wallet() {
+        // the actor opens its wallet database at the shared wallet-data root
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         crate::database::test_support::init_test_database();
         crate::test_support::ensure_tokio_runtime();
         let mut wallet = Wallet::preview_new_wallet();
@@ -4422,6 +4432,8 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn recovered_payjoin_signing_failure_retains_session_record() {
+        // the actor opens its wallet database at the shared wallet-data root
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
         crate::database::test_support::init_test_database();
         test_keychain();
         let mut wallet = Wallet::preview_new_wallet();

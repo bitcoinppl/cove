@@ -23,7 +23,7 @@ pub struct Changeset {
     pub entering_fiat_amount: Option<String>,
     pub fiat_value: Option<f64>,
     pub btc_amount: Option<Amount>,
-    pub max_selected: Option<Option<Amount>>,
+    pub clear_max_selected: bool,
 }
 
 impl Changeset {
@@ -32,7 +32,7 @@ impl Changeset {
             entering_fiat_amount: Some(symbol.to_string()),
             fiat_value: Some(0.0),
             btc_amount: Some(Amount::from_sat(0)),
-            max_selected: None,
+            clear_max_selected: false,
         }
     }
 }
@@ -113,26 +113,10 @@ impl FiatOnChangeHandler {
             });
         }
 
-        // if old value is the same as the new value, then we don't need to do anything
-        if old_value == new_value {
-            return Ok(Changeset {
-                entering_fiat_amount: sanitization_changed.then_some(old_value.to_string()),
-                ..Default::default()
-            });
-        }
-
         // don't allow adding more than 1 decimal point
         if number_of_decimal_points > 1 {
             return Ok(Changeset {
                 entering_fiat_amount: Some(old_value.to_string()),
-                ..Default::default()
-            });
-        }
-
-        // if the only change was formatting (adding ,) then we don't need to do anything
-        if old_value_raw == new_value_raw {
-            return Ok(Changeset {
-                entering_fiat_amount: sanitization_changed.then_some(old_value.to_string()),
                 ..Default::default()
             });
         }
@@ -188,7 +172,7 @@ impl FiatOnChangeHandler {
         if let Some(max_selected) = self.max_selected {
             let max_selected = max_selected.as_sats();
             if btc_amount.as_sats() < max_selected {
-                changes.max_selected = Some(None);
+                changes.clear_max_selected = true;
             }
         }
 

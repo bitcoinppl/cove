@@ -1,5 +1,5 @@
 use message_info::MessageInfo;
-use parser::{parse_message_info, stream::StreamExt};
+use parser::parse_message_info;
 use record::NdefRecord;
 use resume::ResumeError;
 use sha2::{Digest, Sha256};
@@ -103,7 +103,7 @@ impl NfcReader {
                     first_block_hash: get_first_block_hash(&data),
                 });
 
-                self.parse_incomplete(stream)
+                self.parse_incomplete(stream.as_ref().to_vec())
             }
 
             ParserState::Parsing(_) => self.parse_incomplete(data),
@@ -113,21 +113,16 @@ impl NfcReader {
     }
 
     #[allow(clippy::cast_possible_truncation)]
-    fn parse_incomplete<'a>(
-        &mut self,
-        data: impl StreamExt + 'a,
-    ) -> Result<ParseResult, NfcReaderError> {
+    fn parse_incomplete(&mut self, data: Vec<u8>) -> Result<ParseResult, NfcReaderError> {
         let ParserState::Parsing(parsing) = &mut self.state else { panic!("not in parsing state") };
 
         // need more data to parse the message
         if (parsing.needed as usize) >= data.len() {
             tracing::debug!("not enough data to parse message, continuing");
-            let left_over_bytes = data.to_vec();
 
-            // return incomplete
             let result = ParseResult::Incomplete(ParsingMessage {
                 message_info: parsing.message_info,
-                left_over_bytes,
+                left_over_bytes: data,
             });
 
             return Ok(result);
@@ -136,7 +131,7 @@ impl NfcReader {
         // have enough data to parse the message
         tracing::debug!("enough data to parse message, trying to parse");
 
-        let mut stream = data.to_stream();
+        let mut stream = parser::stream::new(&data);
         match parser::parse_ndef_records(&mut stream, &parsing.message_info) {
             Ok(result) => {
                 let result = ParseResult::Complete(parsing.message_info, result);
@@ -152,7 +147,7 @@ impl NfcReader {
 
                 let result = ParseResult::Incomplete(ParsingMessage {
                     message_info: parsing.message_info,
-                    left_over_bytes: data.to_vec(),
+                    left_over_bytes: data.clone(),
                 });
 
                 Ok(result)

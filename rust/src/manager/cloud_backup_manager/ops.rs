@@ -1,8 +1,6 @@
 use cove_device::cloud_storage::CloudStorageClient;
 use tracing::info;
 
-use super::wallets::{DownloadedWalletBackup, WalletBackupLookup, WalletBackupReader};
-
 use super::{
     BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, RustCloudBackupManager,
     blocking_cloud_error,
@@ -35,16 +33,6 @@ const CLOUD_ONLY_RESTORE_RECOVERY_MESSAGE: &str =
 const RECREATE_MANIFEST_RECOVERY_MESSAGE: &str =
     "Cloud backup needs verification before the backup index can be recreated";
 const UNSUPPORTED_CLOUD_ONLY_WALLET_NAME: &str = "Unsupported wallet backup";
-impl RustCloudBackupManager {
-    async fn lookup_wallet_backup(
-        reader: WalletBackupReader,
-        record_id: String,
-    ) -> (String, Result<WalletBackupLookup<DownloadedWalletBackup>, CloudBackupError>) {
-        let lookup = reader.lookup(&record_id).await;
-        (record_id, lookup)
-    }
-}
-
 pub(crate) async fn try_restore_from_local_master_key<S>(
     cloud: &CloudStorageClient,
     cspp: &cove_cspp::Cspp<S>,
@@ -118,5 +106,4 @@ where
 pub(crate) mod test_support;
 
 #[cfg(test)]
-#[allow(clippy::await_holding_lock)]
 mod tests;

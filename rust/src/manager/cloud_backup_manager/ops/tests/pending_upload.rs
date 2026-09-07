@@ -4,7 +4,6 @@ use crate::database::cloud_backup::CloudBlobConfirmedState;
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_state_changes_do_not_dismiss_verification_prompt() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 3);
@@ -37,7 +36,6 @@ async fn pending_upload_state_changes_do_not_dismiss_verification_prompt() {
 #[tokio::test(flavor = "current_thread")]
 async fn verification_prompt_restored_when_pending_upload_idle_hides_persisted_decision() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 3);
@@ -66,7 +64,6 @@ async fn verification_prompt_restored_when_pending_upload_idle_hides_persisted_d
 #[tokio::test(flavor = "current_thread")]
 async fn dismiss_verification_prompt_hides_pending_decision() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 3);
@@ -89,7 +86,6 @@ async fn dismiss_verification_prompt_hides_pending_decision() {
 #[tokio::test(flavor = "current_thread")]
 async fn start_verification_with_pending_upload_consumes_prompt_decision() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 3);
@@ -103,7 +99,7 @@ async fn start_verification_with_pending_upload_consumes_prompt_decision() {
             &namespace_id,
             CloudBackupRecordKey::Wallet(metadata.id, record_id),
             "pending-revision".into(),
-            crate::manager::cloud_backup_manager::current_timestamp(),
+            cove_util::time::unix_timestamp_secs_or_zero(),
         )
         .unwrap();
     assert_eq!(manager.model_snapshot().root_prompt, CloudBackupRootPrompt::Verification);
@@ -128,7 +124,6 @@ async fn start_verification_with_pending_upload_consumes_prompt_decision() {
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_blocks_on_cloud_authorization() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = global_manager();
     clear_wallet_upload_runtime_for_test_async(&manager).await;
@@ -155,7 +150,6 @@ async fn pending_upload_verification_blocks_on_cloud_authorization() {
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_preserves_newer_dirty_state() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -194,7 +188,6 @@ async fn pending_upload_verification_preserves_newer_dirty_state() {
 #[tokio::test(flavor = "current_thread")]
 async fn start_verification_dispatch_resumes_pending_upload_verification() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -243,7 +236,6 @@ async fn start_verification_dispatch_resumes_pending_upload_verification() {
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_finalizes_awaiting_deep_verify() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
@@ -288,7 +280,6 @@ async fn pending_upload_verification_finalizes_awaiting_deep_verify() {
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_keeps_master_key_wrapper_hash_mismatch_pending() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -327,7 +318,6 @@ async fn pending_upload_verification_keeps_master_key_wrapper_hash_mismatch_pend
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_does_not_read_locally_staged_master_key_as_remote() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -365,7 +355,6 @@ async fn pending_upload_verification_does_not_read_locally_staged_master_key_as_
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_expires_stale_completion() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -420,7 +409,6 @@ async fn pending_upload_verification_expires_stale_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 1);
@@ -455,7 +443,7 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
             &namespace_id,
             CloudBackupRecordKey::Wallet(metadata.id, record_id.clone()),
             prepared.revision_hash.clone(),
-            crate::manager::cloud_backup_manager::current_timestamp(),
+            cove_util::time::unix_timestamp_secs_or_zero(),
         )
         .unwrap();
     manager
@@ -498,7 +486,6 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_survives_restart() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
@@ -540,7 +527,6 @@ async fn pending_upload_verification_survives_restart() {
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_retries_until_expected_revision_is_readable() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
@@ -609,7 +595,6 @@ async fn pending_upload_verification_retries_until_expected_revision_is_readable
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_accepts_newer_revision_after_wallet_changes() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
@@ -661,7 +646,6 @@ async fn pending_upload_verification_accepts_newer_revision_after_wallet_changes
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_marks_invalid_wallet_json_failed() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
@@ -697,7 +681,6 @@ async fn pending_upload_verification_marks_invalid_wallet_json_failed() {
 #[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_marks_terminal_live_upload_failures_failed() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
@@ -740,7 +723,6 @@ async fn pending_upload_verification_marks_terminal_live_upload_failures_failed(
 #[tokio::test(flavor = "current_thread")]
 async fn terminally_failed_pending_upload_finishes_verification_without_waiting_for_ttl() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);

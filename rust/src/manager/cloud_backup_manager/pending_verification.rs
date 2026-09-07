@@ -6,7 +6,7 @@ use crate::database::cloud_backup::{
     PersistedWalletVerificationIssues,
 };
 
-use super::{CloudBackupWalletVerificationIssues, DeepVerificationReport, current_timestamp};
+use super::{CloudBackupWalletVerificationIssues, DeepVerificationReport};
 
 pub(crate) type PendingVerificationCompletion = PersistedPendingVerificationCompletion;
 pub(crate) type PendingVerificationUpload = PersistedPendingVerificationUpload;
@@ -21,7 +21,7 @@ impl PendingVerificationCompletion {
             report: PersistedDeepVerificationReport::from_deep_verification_report(&report),
             namespace_id,
             uploads,
-            created_at: Some(current_timestamp()),
+            created_at: Some(cove_util::time::unix_timestamp_secs_or_zero()),
         }
     }
 

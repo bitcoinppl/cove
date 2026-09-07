@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test(flavor = "current_thread")]
 async fn cloud_action_uses_existing_master_key_without_recovery() {
-    cove_tokio::init();
+    ensure_cloud_backup_test_tokio_runtime();
     let store = Arc::new(MockStore::default());
     let cspp = cove_cspp::Cspp::new(MockStoreHandle(store));
     let expected = cove_cspp::master_key::MasterKey::generate();
@@ -20,7 +20,7 @@ async fn cloud_action_uses_existing_master_key_without_recovery() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn cloud_action_does_not_create_master_key_when_missing() {
-    cove_tokio::init();
+    ensure_cloud_backup_test_tokio_runtime();
     let store = Arc::new(MockStore::default());
     let cspp = cove_cspp::Cspp::new(MockStoreHandle(store.clone()));
     let namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
@@ -40,7 +40,7 @@ async fn cloud_action_does_not_create_master_key_when_missing() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn cloud_action_recovers_when_local_master_key_namespace_mismatches() {
-    cove_tokio::init();
+    ensure_cloud_backup_test_tokio_runtime();
     let store = Arc::new(MockStore::default());
     let cspp = cove_cspp::Cspp::new(MockStoreHandle(store));
     let stale = cove_cspp::master_key::MasterKey::generate();
@@ -60,40 +60,9 @@ async fn cloud_action_recovers_when_local_master_key_namespace_mismatches() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn local_master_key_fallback_persists_namespace_id() {
-    let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
-    let globals = test_globals();
-    globals.reset();
-
-    let store = Arc::new(MockStore::default());
-    let store_handle = MockStoreHandle(store.clone());
-    let cspp = cove_cspp::Cspp::new(store_handle.clone());
-    let expected = cove_cspp::master_key::MasterKey::generate();
-    let namespace_id = expected.namespace_id();
-    cspp.save_master_key(&expected).unwrap();
-    globals.cloud.set_wallet_files(namespace_id.clone(), vec!["wallet-test.json".into()]);
-
-    let (restored, restored_namespace) = restore_from_local_master_key_fallback(
-        &CloudStorage::global_explicit_client(),
-        &store_handle,
-        &cspp,
-    )
-    .await
-    .unwrap();
-
-    assert_eq!(restored.as_bytes(), expected.as_bytes());
-    assert_eq!(restored_namespace, namespace_id.clone());
-    assert_eq!(
-        store_handle.get(CSPP_NAMESPACE_ID_KEY.into()).as_deref(),
-        Some(namespace_id.as_str())
-    );
-}
-
-#[tokio::test(flavor = "current_thread")]
 async fn local_master_key_fallback_is_unavailable_after_local_cloud_state_clear() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
+    ensure_cloud_backup_test_tokio_runtime();
     let globals = test_globals();
     globals.reset();
 

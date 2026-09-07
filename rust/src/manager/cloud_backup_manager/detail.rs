@@ -213,7 +213,6 @@ impl RustCloudBackupManager {
                 CLOUD_BACKUP_MANAGER.clone().spawn_repair_passkey(true);
             }
             A::SyncUnsynced => CLOUD_BACKUP_MANAGER.clone().spawn_sync(),
-            A::FetchCloudOnly => CLOUD_BACKUP_MANAGER.clone().spawn_fetch_cloud_only(),
             A::RestoreCloudWallet(record_id) => {
                 if self.detail_inventory_is_ready() {
                     CLOUD_BACKUP_MANAGER.clone().spawn_restore_cloud_wallet(record_id);
@@ -268,9 +267,7 @@ impl RustCloudBackupManager {
             }
             A::KeepCloudBackupEnabled => CLOUD_BACKUP_MANAGER.keep_cloud_backup_enabled(),
             A::RefreshDetail => CLOUD_BACKUP_MANAGER.clone().spawn_refresh_detail(),
-            A::RefreshOtherBackups => send!(self.supervisor.refresh_other_backups()),
             A::EnterDetail => CLOUD_BACKUP_MANAGER.clone().spawn_enter_detail(),
-            A::CloseDetail => CLOUD_BACKUP_MANAGER.clone().close_detail(),
             A::PromptEnablePasskeyChoice(context) => {
                 self.present_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::Enable(
                     context, None,
@@ -347,10 +344,6 @@ impl RustCloudBackupManager {
         send!(self.supervisor.start_sync_operation());
     }
 
-    fn spawn_fetch_cloud_only(self: std::sync::Arc<Self>) {
-        send!(self.supervisor.start_cloud_only_fetch_request());
-    }
-
     fn spawn_restore_cloud_wallet(self: std::sync::Arc<Self>, record_id: super::RecordId) {
         send!(self.supervisor.start_restore_cloud_wallet_operation(record_id.into()));
     }
@@ -407,10 +400,6 @@ impl RustCloudBackupManager {
         send!(self.supervisor.start_enter_detail());
     }
 
-    fn close_detail(self: std::sync::Arc<Self>) {
-        send!(self.supervisor.close_detail());
-    }
-
     fn confirm_saved_passkey(&self) {
         send!(self.supervisor.confirm_saved_passkey());
     }
@@ -428,7 +417,7 @@ impl RustCloudBackupManager {
                 self.apply_needs_attention_report(report);
             }
             DeepVerificationResult::AwaitingUploadConfirmation(report) => {
-                if let Some(detail) = report.detail.clone() {
+                if let Some(detail) = report.detail {
                     self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
                 }
                 self.apply_verification_effect(
@@ -577,7 +566,7 @@ impl RustCloudBackupManager {
             }
         }
 
-        let detail = self.state.read().detail().clone();
+        let detail = self.state.read().detail();
         *self.cloud_only_detail_snapshot.write() = detail;
         self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
             CloudOnlyState::Loaded { wallets },
@@ -638,7 +627,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn clear_cloud_only_restore_failures(&self, record_ids: &[String]) {
-        let mut cloud_only = self.state.read().cloud_only().clone();
+        let mut cloud_only = self.state.read().cloud_only();
         if let CloudOnlyState::Loaded { wallets } = &mut cloud_only {
             for wallet in wallets {
                 if record_ids.contains(&wallet.record_id) {
@@ -650,7 +639,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn apply_cloud_only_restore_failure(&self, record_id: String, error: String) {
-        let mut cloud_only = self.state.read().cloud_only().clone();
+        let mut cloud_only = self.state.read().cloud_only();
         if let CloudOnlyState::Loaded { wallets } = &mut cloud_only
             && let Some(wallet) = wallets.iter_mut().find(|wallet| wallet.record_id == record_id)
         {
@@ -741,7 +730,7 @@ impl RustCloudBackupManager {
             self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
         }
 
-        let mut cloud_only = self.state.read().cloud_only().clone();
+        let mut cloud_only = self.state.read().cloud_only();
         if let CloudOnlyState::Loaded { wallets } = &mut cloud_only {
             wallets.retain(|wallet| wallet.record_id != record_id);
         }

@@ -518,12 +518,6 @@ fun formatTimestamp(timestamp: ULong): String {
 }
 
 private fun backupVerifyErrorMessage(e: Exception): String = when (e) {
-    is BackupException.PasswordTooShort -> "Password must be at least 20 characters"
-    is BackupException.DecryptionFailed -> "Wrong password or corrupted backup file"
-    is BackupException.InvalidFormat -> "Not a valid Cove backup file"
-    is BackupException.FileTooLarge -> "Backup file is too large (max 50 MB)"
-    is BackupException.Truncated -> "Backup file is truncated or corrupted"
-    is BackupException.UnsupportedVersion -> "Unsupported backup version, please update the app"
-    is BackupException -> e.message?.takeIf { it.isNotEmpty() } ?: "Backup operation failed"
+    is BackupException -> e.userMessage()
     else -> e.message ?: "Unknown error"
 }

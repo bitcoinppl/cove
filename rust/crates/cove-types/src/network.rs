@@ -31,19 +31,8 @@ use strum::IntoEnumIterator;
 #[uniffi::export]
 impl Network {
     pub fn display_name(&self) -> String {
-        match self {
-            Self::Bitcoin => "Bitcoin",
-            Self::Testnet => "Testnet",
-            Self::Testnet4 => "Testnet4",
-            Self::Signet => "Signet",
-        }
-        .to_string()
+        self.to_string()
     }
-}
-
-#[uniffi::export]
-fn network_to_string(network: Network) -> String {
-    network.to_string()
 }
 
 #[uniffi::export]

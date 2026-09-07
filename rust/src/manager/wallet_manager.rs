@@ -148,6 +148,7 @@ pub enum WalletScanStatus {
     ScanningPendingProgress(WalletScanPhase),
 }
 
+/// Alert shapes the platforms present for wallet-level failures; Rust defines the type and iOS raises it
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletErrorAlert {
     NodeConnectionFailed(String),
@@ -264,6 +265,8 @@ pub trait WalletManagerReconciler: Send + Sync + std::fmt::Debug + 'static {
     fn reconcile(&self, message: Message);
     fn reconcile_many(&self, messages: Vec<Message>);
 }
+
+crate::manager::reconcile_channel::impl_reconcile_sink!(dyn WalletManagerReconciler, Message, many);
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustWalletManager {
@@ -707,15 +710,6 @@ impl RustWalletManager {
     }
 
     #[uniffi::method]
-    pub async fn get_fee_options(&self) -> Result<FeeRateOptions, Error> {
-        self.ensure_active()?;
-        let fee_client = &FEE_CLIENT;
-        let fees = fee_client.fetch_and_get_fees().await.map_err(WalletManagerFeesError::from)?;
-
-        fees.fee_rate_options().map_err_str(Error::FeesError)
-    }
-
-    #[uniffi::method]
     pub async fn first_address(&self) -> Result<AddressInfo, Error> {
         self.ensure_active()?;
         let address_info = call!(self.actor.address_at(0))
@@ -821,17 +815,6 @@ impl RustWalletManager {
         self.force_wallet_scan().await?;
 
         Ok(())
-    }
-
-    #[uniffi::method]
-    pub async fn current_block_height(&self) -> Result<u32, Error> {
-        self.ensure_active()?;
-        let height = call!(self.actor.get_height(false))
-            .await
-            .map_err(|_| Error::GetHeightError)?
-            .map_err(|_| Error::GetHeightError)?;
-
-        Ok(height as u32)
     }
 
     #[uniffi::method]
@@ -1080,10 +1063,7 @@ impl RustWalletManager {
 
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
-        self.reconciler.listen(move |field| match field {
-            SingleOrMany::Single(message) => reconciler.reconcile(message),
-            SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
-        });
+        self.reconciler.listen_sink(reconciler);
     }
 
     /// Finalize a signed PSBT
@@ -1224,10 +1204,12 @@ impl RustWalletManager {
     }
 }
 
-const PREVIEW_FULL_SCAN_COMPLETED_AT: u64 = u64::MAX;
-
+/// Preview wallets are never scanned, so they are marked as scanned now to count as ready
 fn preview_ledger_ready_metadata(mut metadata: WalletMetadata) -> WalletMetadata {
-    metadata.internal.performed_full_scan_at.get_or_insert(PREVIEW_FULL_SCAN_COMPLETED_AT);
+    metadata
+        .internal
+        .performed_full_scan_at
+        .get_or_insert_with(cove_util::time::unix_timestamp_secs_or_zero);
     metadata
 }
 
@@ -1263,7 +1245,7 @@ impl RustWalletManager {
         let actor = task::spawn_actor(wallet_actor);
 
         Self {
-            id: metadata.id.clone(),
+            id: metadata.id,
             actor,
             metadata: shared_metadata,
             reconciler: channel,
@@ -1323,10 +1305,9 @@ fn downgrade_and_notify_if_needed(
     updated.wallet_type = WalletType::WatchOnly;
     updated.hardware_metadata = None;
 
-    let updated =
-        Database::global().wallets.update_wallet_metadata(updated.clone()).map_err(|e| {
-            Error::UnknownError(format!("failed to persist watch-only downgrade for {id}: {e}",))
-        })?;
+    let updated = Database::global().wallets.update_wallet_metadata(updated).map_err(|e| {
+        Error::UnknownError(format!("failed to persist watch-only downgrade for {id}: {e}",))
+    })?;
 
     deferred.queue(Message::HotWalletKeyMissing(updated.id.clone()));
     Ok(updated)
@@ -1355,9 +1336,9 @@ mod tests {
     use bitcoin::Amount;
 
     use super::{
-        Balance, BalancePresentation, Error, PREVIEW_FULL_SCAN_COMPLETED_AT, RustWalletManager,
-        WalletLedgerState, WalletLoadState, WalletManagerError, WalletScanPhase,
-        WalletScanProgress, WalletScanStatus, WalletSnapshot, initial_state_from_snapshot,
+        Balance, BalancePresentation, Error, RustWalletManager, WalletLedgerState, WalletLoadState,
+        WalletManagerError, WalletScanPhase, WalletScanProgress, WalletScanStatus, WalletSnapshot,
+        initial_state_from_snapshot,
         initial_state_from_snapshot_with_pending_unsigned_transactions, ledger_state,
         preview_ledger_ready_metadata,
     };
@@ -1433,7 +1414,7 @@ mod tests {
     fn preview_wallet_metadata_is_ledger_ready_for_spend() {
         let metadata = preview_ledger_ready_metadata(WalletMetadata::preview_new());
 
-        assert_eq!(metadata.internal.performed_full_scan_at, Some(PREVIEW_FULL_SCAN_COMPLETED_AT));
+        assert!(metadata.internal.performed_full_scan_at.is_some());
         assert_eq!(
             WalletLedgerState::from_metadata_and_scan_status(&metadata, &WalletScanStatus::Idle),
             WalletLedgerState::Complete

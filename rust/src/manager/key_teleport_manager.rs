@@ -9,7 +9,6 @@ use std::{fmt, sync::Arc};
 use cove_device::keychain::KeychainError;
 use keyteleport::{Error as KeyTeleportError, NotesPayload, NotesRecord, TeleportPassword};
 use parking_lot::Mutex;
-use tracing::trace;
 
 use crate::{
     database,
@@ -21,7 +20,6 @@ use crate::{
     wallet_identity::PublicWalletIdentityError,
 };
 
-use super::deferred_sender::SingleOrMany;
 use controller::ManagerController;
 use model::ManagerModel;
 use receive::ReceiveWorkflow;
@@ -37,6 +35,12 @@ pub trait KeyTeleportManagerReconciler: Send + Sync + fmt::Debug + 'static {
     fn reconcile(&self, message: Message);
     fn reconcile_many(&self, messages: Vec<Message>);
 }
+
+crate::manager::reconcile_channel::impl_reconcile_sink!(
+    dyn KeyTeleportManagerReconciler,
+    Message,
+    many
+);
 
 #[derive(Debug, uniffi::Object)]
 pub struct RustKeyTeleportManager {
@@ -423,13 +427,7 @@ impl RustKeyTeleportManager {
 
     #[uniffi::method]
     pub fn listen_for_updates(&self, reconciler: Box<Reconciler>) {
-        self.reconciler.listen_async(move |field| {
-            trace!("KeyTeleport reconcile: {field:?}");
-            match field {
-                SingleOrMany::Single(message) => reconciler.reconcile(message),
-                SingleOrMany::Many(messages) => reconciler.reconcile_many(messages),
-            }
-        });
+        self.reconciler.listen_sink_async(reconciler);
     }
 
     #[uniffi::method]

@@ -78,12 +78,6 @@ fun CloudBackupScreen(
         manager.dispatch(CloudBackupManagerAction.EnterDetail)
     }
 
-    DisposableEffect(manager) {
-        onDispose {
-            manager.dispatch(CloudBackupManagerAction.CloseDetail)
-        }
-    }
-
     LaunchedEffect(manager, isLifecycleDisabled) {
         if (isReturningToSettingsAfterDisable) {
             app.popRoute()

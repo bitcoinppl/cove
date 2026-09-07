@@ -936,18 +936,3 @@ struct OnboardingAddressQr: View {
             .frame(maxWidth: .infinity)
     }
 }
-
-struct OnboardingErrorScreen: View {
-    let title: String
-    let message: String
-
-    var body: some View {
-        OnboardingPromptScreen(
-            icon: "exclamationmark.triangle",
-            title: title,
-            subtitle: message
-        ) {
-            EmptyView()
-        }
-    }
-}

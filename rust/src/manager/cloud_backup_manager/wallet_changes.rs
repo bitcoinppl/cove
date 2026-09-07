@@ -36,7 +36,7 @@ impl RustCloudBackupManager {
             return;
         };
 
-        let changed_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
         let record_id = wallet_record_id(wallet_id.as_ref());
         let sync_state = PersistedCloudBlobSyncState::wallet(
             namespace_id,
@@ -65,7 +65,7 @@ impl RustCloudBackupManager {
         I: IntoIterator<Item = WalletId>,
     {
         let namespace_id = self.current_namespace_id()?;
-        let changed_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
 
         for wallet_id in wallet_ids {
             let record_id = wallet_record_id(wallet_id.as_ref());
@@ -121,7 +121,7 @@ impl RustCloudBackupManager {
         &self,
         sync_state: &PersistedCloudBlobSyncState,
     ) -> bool {
-        let changed_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
 
         match self.replace_blob_state_if_current(
             sync_state,

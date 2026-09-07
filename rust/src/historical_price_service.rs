@@ -46,7 +46,8 @@ impl HistoricalPriceService {
             txns.iter().map(|txn| (txn.block_height(), txn.confirmed_at())).collect();
 
         let block_heights = {
-            let mut block_heights = txns.iter().map(|txn| txn.block_height()).collect::<Vec<u32>>();
+            let mut block_heights =
+                txns.iter().map(ConfirmedTransaction::block_height).collect::<Vec<u32>>();
 
             block_heights.sort_unstable();
             block_heights.dedup();

@@ -544,19 +544,6 @@ struct CorruptedWalletDeletionRetry: Equatable {
         }
     }
 
-    func closeSidebarAndOpenWalletSettings(_ id: WalletId) {
-        closeSidebarThenNavigate {
-            self.navigationCoordinator.pushRoutes(
-                RouteFactory().nestedWalletSettings(id: id),
-                router: &self.router,
-                isSidebarVisible: &self.isSidebarVisible,
-                advancesGeneration: false
-            ) { router in
-                self.managerCache.reconcileRouteOwnedManagers(router: router)
-            }
-        }
-    }
-
     func closeSidebarAndScanNfc() {
         closeSidebarThenNavigate {
             self.navigationCoordinator.scanNfc(advancesGeneration: false) {
@@ -850,10 +837,6 @@ extension AppManager {
 
     func clearKeyTeleportManager() {
         managerCache.clearKeyTeleportManager()
-    }
-
-    func canKeyTeleportSend(walletId: WalletId) -> Bool {
-        rust.canKeyTeleportSend(walletId: walletId)
     }
 
     @MainActor

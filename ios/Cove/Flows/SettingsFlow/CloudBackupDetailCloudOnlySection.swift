@@ -74,6 +74,7 @@ func cloudBackupRestoreAllPresentation(
 }
 
 struct CloudOnlySection: View {
+    let wallets: [CloudBackupWalletItem]
     let manager: CloudBackupManager
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
@@ -83,6 +84,7 @@ struct CloudOnlySection: View {
 
     var body: some View {
         CloudOnlyFormSection(
+            wallets: wallets,
             manager: manager,
             isOperating: isOperating,
             presentationCoordinator: presentationCoordinator
@@ -91,6 +93,7 @@ struct CloudOnlySection: View {
 }
 
 private struct CloudOnlyFormSection: View {
+    let wallets: [CloudBackupWalletItem]
     let manager: CloudBackupManager
     let isOperating: Bool
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
@@ -98,6 +101,7 @@ private struct CloudOnlyFormSection: View {
     var body: some View {
         Section(header: Text("Not on This Device")) {
             CloudOnlySectionContent(
+                wallets: wallets,
                 manager: manager,
                 isOperating: isOperating,
                 presentationCoordinator: presentationCoordinator
@@ -107,52 +111,34 @@ private struct CloudOnlyFormSection: View {
 }
 
 private struct CloudOnlySectionContent: View {
+    let wallets: [CloudBackupWalletItem]
     let manager: CloudBackupManager
     let isOperating: Bool
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     var body: some View {
-        switch manager.cloudOnly {
-        case .notFetched, .loading:
-            HStack {
-                ProgressView()
-                    .padding(.trailing, 8)
-                Text("Loading...")
+        CloudOnlyRestoreAllControl(manager: manager)
+
+        CloudOnlyWalletRows(
+            manager: manager,
+            wallets: wallets,
+            operatingRecordId: manager.cloudOnlyOperation.operatingRecordId,
+            isOperating: isOperating || manager.restoreAllState.isRunning
+                || !manager.isDetailInventoryReady,
+            presentationCoordinator: presentationCoordinator,
+            onRetryWallet: { item in
+                manager.dispatch(action: .restoreCloudWallet(item.recordId))
             }
-            .foregroundStyle(.secondary)
-            .task {
-                manager.dispatch(action: .fetchCloudOnly)
-            }
+        )
 
-        case let .loaded(wallets):
-            CloudOnlyRestoreAllControl(manager: manager)
-
-            CloudOnlyWalletRows(
-                manager: manager,
-                wallets: wallets,
-                operatingRecordId: manager.cloudOnlyOperation.operatingRecordId,
-                isOperating: isOperating || manager.restoreAllState.isRunning
-                    || !manager.isDetailInventoryReady,
-                presentationCoordinator: presentationCoordinator,
-                onRetryWallet: { item in
-                    manager.dispatch(action: .restoreCloudWallet(item.recordId))
-                }
-            )
-
-            if case let .failed(error) = manager.cloudOnlyOperation {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(Color.statusError)
-            } else if case let .warning(message: message, error: _) = manager.cloudOnlyOperation {
-                Text(message)
-                    .font(.caption)
-                    .foregroundStyle(Color.statusWarning)
-            }
-
-        case let .failed(error):
+        if case let .failed(error) = manager.cloudOnlyOperation {
             Text(error)
                 .font(.caption)
                 .foregroundStyle(Color.statusError)
+        } else if case let .warning(message: message, error: _) = manager.cloudOnlyOperation {
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(Color.statusWarning)
         }
     }
 }

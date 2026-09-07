@@ -107,8 +107,6 @@ pub(crate) use self::ops::{
     CloudBackupSavedPasskeyConfirmation, CloudBackupUploadedEnableBackup,
     EnablePasskeyRegistrationFlow,
 };
-#[cfg(test)]
-pub(crate) use self::pending_enable::PendingEnableSessionMaterial;
 pub(crate) use self::pending_enable::{
     PENDING_ENABLE_JOURNAL_VERSION, PendingEnableCoordinator, PendingEnableJournal,
     PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
@@ -137,10 +135,6 @@ pub(crate) const CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE: &str = concat!(
 );
 pub(crate) const CLOUD_BACKUP_IO_CONCURRENCY: usize = 4;
 type Message = CloudBackupReconcileMessage;
-
-pub(crate) fn current_timestamp() -> u64 {
-    jiff::Timestamp::now().as_second().try_into().unwrap_or(0)
-}
 
 #[derive(Debug, Default)]
 struct CloudBackupRuntimeOwnership {
@@ -215,7 +209,6 @@ pub enum CloudBackupManagerAction {
     RepairPasskey,
     RepairPasskeyNoDiscovery,
     SyncUnsynced,
-    FetchCloudOnly,
     RestoreCloudWallet(RecordId),
     StartRestoreAll,
     RetryRestoreAllRemaining,
@@ -227,9 +220,7 @@ pub enum CloudBackupManagerAction {
     DisableCloudBackup,
     KeepCloudBackupEnabled,
     RefreshDetail,
-    RefreshOtherBackups,
     EnterDetail,
-    CloseDetail,
     PromptEnablePasskeyChoice(CloudBackupEnableContext),
     AcceptEnablePrompt(CloudBackupEnablePromptChoice),
 }
@@ -436,7 +427,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn current_status(&self) -> CloudBackupStatus {
-        self.state.read().status().clone()
+        self.state.read().status()
     }
 
     fn apply_local_reset_projection(&self) {
@@ -862,7 +853,7 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn dismiss_verification_prompt_impl(&self) -> Result<(), CloudBackupError> {
-        let dismissed_at = crate::manager::cloud_backup_manager::current_timestamp();
+        let dismissed_at = cove_util::time::unix_timestamp_secs_or_zero();
         self.mutate_persisted_cloud_backup_state(
             "persist cloud backup prompt dismissal",
             |state| state.dismiss_verification_request(dismissed_at),
@@ -1098,6 +1089,11 @@ impl RustCloudBackupManager {
         }
     }
 
+    /// Start silent supplemental inventory checks for this app process
+    pub fn start_background_inventory_discovery(&self) {
+        send!(self.supervisor.start_background_inventory_discovery());
+    }
+
     pub fn cloud_storage_did_change(&self) {
         if self.cloud_backup_writes_blocked() {
             self.resume_persisted_disable_if_needed();
@@ -1218,16 +1214,6 @@ impl RustCloudBackupManager {
             | CloudBackupLifecycle::PendingEnableRecovery(_)
             | CloudBackupLifecycle::Failed(_) => CloudBackupOnboardingCompletionReadiness::NotReady,
         }
-    }
-
-    /// Whether the persisted cloud backup state is unverified
-    pub fn is_cloud_backup_unverified(&self) -> bool {
-        Self::load_persisted_state().is_unverified()
-    }
-
-    /// Whether the persisted cloud backup passkey is missing
-    pub fn is_cloud_backup_passkey_missing(&self) -> bool {
-        Self::load_persisted_state().is_passkey_missing()
     }
 
     pub fn has_pending_cloud_upload_verification(&self) -> bool {

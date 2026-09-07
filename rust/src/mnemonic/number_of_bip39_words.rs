@@ -22,10 +22,6 @@ impl NumberOfBip39Words {
         }
     }
 
-    pub const fn to_entropy_bytes(self) -> usize {
-        self.to_entropy_bits() / 8
-    }
-
     pub fn generate_mnemonic(self) -> Mnemonic {
         match self {
             Self::Twelve => {

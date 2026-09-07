@@ -167,7 +167,7 @@ fn recover_promoted_tmp_without_dest(paths: &DatabasePaths, rename_context: &str
 }
 
 /// Legacy recovery for old-style .bak/.enc.tmp files from the previous migration code
-pub(super) fn recover_legacy_at_path(db_path: &Path) -> Result<()> {
+pub(crate) fn recover_legacy_at_path(db_path: &Path) -> Result<()> {
     let extension = db_path.extension().and_then(std::ffi::OsStr::to_str).unwrap_or_default();
     let bak_path = db_path.with_extension(format!("{extension}.bak"));
     let tmp_path = db_path.with_extension(format!("{extension}.enc.tmp"));

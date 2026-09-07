@@ -3,7 +3,6 @@ use super::*;
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn registered_passkey_stages_confirmation_without_automatic_auth() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -31,7 +30,6 @@ async fn registered_passkey_stages_confirmation_without_automatic_auth() {
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn registered_passkey_confirmation_session_prevents_duplicate_create() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -60,7 +58,6 @@ async fn registered_passkey_confirmation_session_prevents_duplicate_create() {
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn normal_enable_preserves_registered_passkey_confirmation_session() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -91,7 +88,6 @@ async fn normal_enable_preserves_registered_passkey_confirmation_session() {
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn reinitialize_preserves_registered_passkey_confirmation_session() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -122,7 +118,6 @@ async fn reinitialize_preserves_registered_passkey_confirmation_session() {
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn force_new_preserves_registered_passkey_confirmation_session() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -153,7 +148,6 @@ async fn force_new_preserves_registered_passkey_confirmation_session() {
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn registered_passkey_stages_confirmation_without_duplicate_create() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -181,7 +175,6 @@ async fn registered_passkey_stages_confirmation_without_duplicate_create() {
 #[tokio::test(flavor = "current_thread")]
 async fn confirm_saved_passkey_reuses_original_credential_id() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -204,7 +197,6 @@ async fn confirm_saved_passkey_reuses_original_credential_id() {
 #[tokio::test(flavor = "current_thread")]
 async fn automatic_saved_passkey_confirmation_exhaustion_preserves_staged_session() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -235,7 +227,6 @@ async fn automatic_saved_passkey_confirmation_exhaustion_preserves_staged_sessio
 #[tokio::test(flavor = "current_thread")]
 async fn post_presentation_saved_passkey_failure_attempts_confirmation_once() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -267,7 +258,6 @@ async fn post_presentation_saved_passkey_failure_attempts_confirmation_once() {
 #[tokio::test(flavor = "current_thread")]
 async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -337,7 +327,6 @@ async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming
 #[tokio::test(flavor = "current_thread")]
 async fn cancelled_saved_passkey_confirmation_preserves_pending_session() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -363,7 +352,6 @@ async fn cancelled_saved_passkey_confirmation_preserves_pending_session() {
 #[tokio::test(flavor = "current_thread")]
 async fn unsupported_provider_saved_passkey_confirmation_fails_without_retry() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -472,7 +460,6 @@ fn assert_active_master_key(expected: &[u8; 32]) {
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_staged_preserves_prior_master_and_metadata() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -498,7 +485,6 @@ async fn discard_pending_enable_staged_preserves_prior_master_and_metadata() {
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_fresh_owned_remote_writes_delete_entire_namespace() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -531,7 +517,6 @@ async fn discard_pending_enable_fresh_owned_remote_writes_delete_entire_namespac
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_fresh_owned_treats_missing_namespace_as_deleted() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -552,7 +537,6 @@ async fn discard_pending_enable_fresh_owned_treats_missing_namespace_as_deleted(
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_remote_cleanup_failure_retains_session_and_journal() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -591,7 +575,6 @@ async fn discard_pending_enable_remote_cleanup_failure_retains_session_and_journ
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_recovered_existing_never_deletes_remote_namespace() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -621,7 +604,6 @@ async fn discard_pending_enable_recovered_existing_never_deletes_remote_namespac
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_unjournaled_session_never_deletes_or_clears_material() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -652,7 +634,6 @@ async fn discard_pending_enable_unjournaled_session_never_deletes_or_clears_mate
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_started_promotion_rolls_back_prior_state() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -689,7 +670,6 @@ async fn discard_pending_enable_started_promotion_rolls_back_prior_state() {
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_durable_completion_commits_without_remote_delete() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -743,7 +723,6 @@ async fn discard_pending_enable_durable_completion_commits_without_remote_delete
 #[tokio::test(flavor = "current_thread")]
 async fn committed_pending_enable_journal_cleanup_retries_without_restart() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 
@@ -775,7 +754,6 @@ async fn committed_pending_enable_journal_cleanup_retries_without_restart() {
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_local_cleanup_failure_retains_session_and_journal() {
     let _guard = async_test_lock().lock().await;
-    cove_tokio::init();
     let globals = test_globals();
     let manager = init_manager();
 

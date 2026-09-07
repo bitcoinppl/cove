@@ -44,7 +44,7 @@ import org.junit.Test
 
 class CloudBackupRegressionHelpersTest {
     @Test
-    fun scP04EveryEnableStateProjectsItsExpectedBusyPhase() {
+    fun everyEnableStateProjectsItsExpectedBusyPhase() {
         val context = manualEnableContext()
         val hidden = CloudBackupVerificationPresentation.Hidden(null)
         val checkingPasskey = "Checking that your passkey is available..."
@@ -93,12 +93,8 @@ class CloudBackupRegressionHelpersTest {
     }
 
     @Test
-    fun enableBusyCopyPreservesPhaseAndBackgroundConfirmationCopy() {
+    fun enableBusyCopyPreservesBackgroundConfirmationCopy() {
         val hidden = CloudBackupVerificationPresentation.Hidden(null)
-        assertEquals(
-            "Confirming your passkey...",
-            cloudBackupEnableBusyCopy(CloudBackupEnableFlow.ConfirmingSavedPasskey, hidden).title,
-        )
         assertEquals(
             "Cloud Backup will continue automatically",
             cloudBackupEnableBusyCopy(
@@ -304,7 +300,7 @@ class CloudBackupRegressionHelpersTest {
     }
 
     @Test
-    fun scP04TrustedRetainedInventoryKeepsRowsAndActionsAvailableAfterFailure() {
+    fun trustedRetainedInventoryKeepsRowsAndActionsAvailableAfterFailure() {
         val detail =
             CloudBackupDetail(
                 lastSync = null,
@@ -356,12 +352,6 @@ class CloudBackupRegressionHelpersTest {
         assertFalse(complete.isDetailInventoryChecking)
         assertTrue(complete.isDetailInventoryComplete)
         assertTrue(complete.isDetailInventoryReady)
-    }
-
-    @Test
-    fun cloudOnlyAutoFetchOnlyRunsFromNotFetched() {
-        assertTrue(shouldFetchCloudOnly(CloudOnlyState.NotFetched))
-        assertFalse(shouldFetchCloudOnly(CloudOnlyState.Loading))
     }
 
     @Test

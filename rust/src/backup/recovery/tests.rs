@@ -430,7 +430,7 @@ fn recovery_removes_marker_after_metadata_commit_without_cleaning_artifacts() {
     let validated = ValidatedRestoreWalletId::validate(&metadata.id).unwrap();
     let initial = RestoreArtifactSnapshot::capture(&validated).unwrap();
     let marker_path = write_test_marker(&metadata.id, &initial, RestoreMarkerPhase::Writing);
-    Database::global().wallets.save_restored_wallet_metadata(metadata.clone()).unwrap();
+    Database::global().wallets.save_restored_wallet_metadata(metadata).unwrap();
 
     recover_restore_markers().unwrap();
     assert!(!marker_path.exists());

@@ -290,6 +290,7 @@ extension CoveApplicationRoot {
         appManager.asyncRuntimeReady = true
         CloudConnectivityMonitor.shared.start()
         CloudBackupManager.shared.rust.syncPersistedState()
+        CloudBackupManager.shared.rust.startBackgroundInventoryDiscovery()
         self.bdkMigrationWarning = warning
         startInitData(appManager)
 

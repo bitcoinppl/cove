@@ -7,7 +7,6 @@
 #![allow(clippy::items_after_statements)]
 #![allow(clippy::doc_markdown)]
 #![allow(clippy::significant_drop_in_scrutinee)]
-#![allow(clippy::redundant_clone)]
 #![allow(clippy::struct_field_names)]
 #![allow(clippy::struct_excessive_bools)]
 #![allow(clippy::too_many_lines)]
@@ -25,9 +24,7 @@
 #![allow(clippy::match_wildcard_for_single_variants)]
 #![allow(clippy::map_unwrap_or)]
 #![allow(clippy::or_fun_call)]
-#![allow(clippy::unnecessary_wraps)]
 #![allow(clippy::needless_collect)]
-#![allow(clippy::redundant_closure_for_method_calls)]
 
 mod database;
 
@@ -66,6 +63,7 @@ mod push_tx;
 mod qr_scanner;
 mod receive_address_watcher;
 mod reporting;
+mod retry;
 mod seed_qr;
 mod send_flow;
 mod signed_import;

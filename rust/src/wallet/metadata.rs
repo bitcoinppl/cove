@@ -4,6 +4,7 @@ use std::{
     time::Duration,
 };
 
+use crate::database::global_config::SelectedWalletTarget;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
@@ -229,8 +230,8 @@ pub enum FiatOrBtc {
 
 impl WalletMetadata {
     pub fn new(name: impl Into<String>, fingerprint: Option<impl Into<Arc<Fingerprint>>>) -> Self {
-        let network = Database::global().global_config.selected_network();
-        let wallet_mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode: wallet_mode } =
+            Database::global().global_config.wallet_target();
 
         Self {
             id: WalletId::new(),
@@ -304,14 +305,6 @@ impl WalletMetadata {
         self.birthday = created_wallet_birthday(self.network);
     }
 
-    pub fn set_tap_signer_setup_birthday(&mut self, card_birth_height: Option<u64>) {
-        self.birthday = tap_signer_setup_birthday(self.network, card_birth_height);
-    }
-
-    pub fn set_tap_signer_import_birthday(&mut self, card_birth_height: Option<u64>) {
-        self.birthday = tap_signer_import_birthday(self.network, card_birth_height);
-    }
-
     pub fn matches_fingerprint(&self, fingerprint: Fingerprint) -> bool {
         let Some(wallet_fingerprint) = self.master_fingerprint.as_ref() else { return false };
         wallet_fingerprint.as_ref() == &fingerprint
@@ -351,11 +344,11 @@ pub fn created_wallet_birthday(network: Network) -> Option<WalletBirthday> {
     created_wallet_birthday_from_sources(
         network,
         cheap_current_block_height(network),
-        current_timestamp(),
+        cove_util::time::unix_timestamp_secs(),
     )
 }
 
-pub fn tap_signer_setup_birthday(
+pub fn tap_signer_birthday(
     network: Network,
     card_birth_height: Option<u64>,
 ) -> Option<WalletBirthday> {
@@ -363,19 +356,7 @@ pub fn tap_signer_setup_birthday(
         network,
         card_birth_height,
         cheap_current_block_height(network),
-        current_timestamp(),
-    )
-}
-
-pub fn tap_signer_import_birthday(
-    network: Network,
-    card_birth_height: Option<u64>,
-) -> Option<WalletBirthday> {
-    tap_signer_birthday_from_sources(
-        network,
-        card_birth_height,
-        cheap_current_block_height(network),
-        current_timestamp(),
+        cove_util::time::unix_timestamp_secs(),
     )
 }
 
@@ -405,10 +386,6 @@ fn tap_signer_birthday_from_sources(
 
 pub fn valid_birth_height(card_birth_height: Option<u64>) -> Option<u64> {
     card_birth_height.filter(|height| *height > 0)
-}
-
-fn current_timestamp() -> Option<u64> {
-    jiff::Timestamp::now().as_second().try_into().ok()
 }
 
 fn mainnet_cove_release_birthday(network: Network) -> Option<WalletBirthday> {

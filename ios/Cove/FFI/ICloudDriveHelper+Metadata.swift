@@ -482,30 +482,6 @@ extension ICloudDriveHelper {
         SyncHealthObserver(settleInterval: metadataSettleInterval, onChange: onChange)
     }
 
-    func logMetadataItems(
-        under parentDirectoryURL: URL,
-        reason: String,
-        focusName: String
-    ) async {
-        let resolvedParent = Self.resolvedPath(parentDirectoryURL.path)
-        do {
-            let records = try await metadataRecords(timeout: metadataListingTimeout)
-            let matchingRecords = records.filter { $0.resolvedPath.hasPrefix(resolvedParent + "/") }
-            Log.info(
-                "metadataItems: reason=\(reason) focus=\(focusName) parent=\(resolvedParent) count=\(matchingRecords.count)"
-            )
-            for record in matchingRecords {
-                Log.info(
-                    "metadataItems: name=\(record.name) path=\(record.resolvedPath) url=\(record.url.path)"
-                )
-            }
-        } catch {
-            Log.info(
-                "metadataItems: failed reason=\(reason) focus=\(focusName) parent=\(resolvedParent) error=\(error.localizedDescription)"
-            )
-        }
-    }
-
     func waitForMetadataItem(
         named name: String,
         parentDirectoryURL: URL,

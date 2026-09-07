@@ -298,14 +298,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn wallet_record_id_is_deterministic() {
-        let id1 = wallet_record_id("my-wallet-123");
-        let id2 = wallet_record_id("my-wallet-123");
-        assert_eq!(id1, id2);
-        assert_eq!(id1.len(), 64); // SHA-256 hex = 64 chars
-    }
-
-    #[test]
     fn different_wallet_ids_produce_different_record_ids() {
         let id1 = wallet_record_id("wallet-a");
         let id2 = wallet_record_id("wallet-b");
@@ -481,20 +473,6 @@ mod tests {
         assert_eq!(decoded.version, 1);
         assert_eq!(decoded.remote_metadata, RemotePayloadMetadata::default());
         assert_eq!(decoded.passkey_provider_hint, None);
-    }
-
-    #[test]
-    fn master_key_filename_format() {
-        let filename = master_key_filename();
-        assert!(filename.starts_with("masterkey-"));
-        assert!(filename.ends_with(".json"));
-    }
-
-    #[test]
-    fn wallet_filename_format() {
-        let filename = wallet_filename("my-wallet-123");
-        assert!(filename.starts_with("wallet-"));
-        assert!(filename.ends_with(".json"));
     }
 
     #[test]

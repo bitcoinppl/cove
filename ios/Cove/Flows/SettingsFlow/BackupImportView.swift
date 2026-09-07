@@ -514,36 +514,8 @@ private struct BackupImportConflictSummarySection: View {
 }
 
 private func safeBackupImportErrorMessage(_ error: Error) -> String {
-    guard let backupError = error as? BackupError else {
-        return "Cove could not import this backup. Check the file and password, then try again."
-    }
-
-    switch backupError {
-    case .PasswordTooShort:
-        return "The backup password is too short."
-    case .DecryptionFailed:
-        return "The backup password is incorrect, or the backup is damaged."
-    case .InvalidFormat:
-        return "The selected file is not a valid Cove backup."
-    case .FileTooLarge:
-        return "The backup file is too large."
-    case .UnsupportedVersion, .UnsupportedPayloadVersion:
-        return "This backup was created by a newer version of Cove. Update Cove and try again."
-    case .Truncated:
-        return "The backup file is incomplete. Select the original backup and try again."
-    case .ImportApprovalStale:
-        return "The existing wallet data changed while the import was waiting for approval. Review the backup again and try again."
-    case .ImportApprovalRequired:
-        return "This import needs approval before existing wallet data can be removed. Review the backup again and try again."
-    case .ImportApprovalUsed:
-        return "This import review has expired. Review the backup again and try again."
-    case .InvalidWalletId:
-        return "The backup contains an invalid wallet record and cannot be imported."
-    case .WalletIdOccupied:
-        return "A wallet changed while the import was waiting. Review the backup again and try again."
-    case .Encryption, .Serialization, .Deserialization, .Gather, .Restore, .Keychain, .Database, .Decompression:
-        return "Cove could not finish importing this backup. Review it and try again."
-    }
+    (error as? BackupError)?.userMessage()
+        ?? "Cove could not import this backup. Check the file and password, then try again."
 }
 
 class PasswordRetrievalDelegate: NSObject, ASAuthorizationControllerDelegate {

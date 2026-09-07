@@ -105,7 +105,6 @@ pub enum CloudBackupManagerAction {
     RepairPasskey,
     RepairPasskeyNoDiscovery,
     SyncUnsynced,
-    FetchCloudOnly,
     RestoreCloudWallet(RecordId),
     StartRestoreAll,
     RetryRestoreAllRemaining,
@@ -117,9 +116,7 @@ pub enum CloudBackupManagerAction {
     DisableCloudBackup,
     KeepCloudBackupEnabled,
     RefreshDetail,
-    RefreshOtherBackups,
     EnterDetail,
-    CloseDetail,
     PromptEnablePasskeyChoice(CloudBackupEnableContext),
     AcceptEnablePrompt(CloudBackupEnablePromptChoice),
 }

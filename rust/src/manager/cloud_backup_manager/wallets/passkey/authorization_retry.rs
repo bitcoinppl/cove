@@ -62,7 +62,7 @@ impl PlatformAuthorizationRetryPolicy {
     }
 }
 
-pub(super) fn is_pre_presentation_platform_authorization_failure(error: &PasskeyError) -> bool {
+pub(crate) fn is_pre_presentation_platform_authorization_failure(error: &PasskeyError) -> bool {
     matches!(
         error,
         PasskeyError::RequestFailed {

@@ -42,15 +42,9 @@ private struct BackupInfoSection: View {
 
     var body: some View {
         Section("Backup Info") {
-            LabeledContent("Created", value: formatDate(createdAt))
+            LabeledContent("Created", value: Date.formattedTimestamp(createdAt))
             LabeledContent("Wallets", value: "\(walletCount)")
         }
-    }
-
-    private func formatDate(_ timestamp: UInt64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
-
-        return date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 

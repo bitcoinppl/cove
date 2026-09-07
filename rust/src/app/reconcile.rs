@@ -67,6 +67,8 @@ pub trait FfiReconcile: Send + Sync + 'static {
     fn reconcile(&self, message: AppStateReconcileMessage);
 }
 
+crate::manager::reconcile_channel::impl_reconcile_sink!(dyn FfiReconcile, AppStateReconcileMessage);
+
 #[cfg(test)]
 pub(crate) mod test_support {
     use super::*;

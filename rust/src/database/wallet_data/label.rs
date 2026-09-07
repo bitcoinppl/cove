@@ -543,7 +543,7 @@ impl LabelsTable {
                 table.remove(key)?;
             }
             Label::Address(address) => {
-                let key = address.ref_.clone();
+                let key = address.ref_;
                 let mut table = write_txn.open_table(ADDRESS_TABLE)?;
                 table.remove(key)?;
             }

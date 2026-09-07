@@ -12,6 +12,7 @@ use super::{
     load_master_key_for_cloud_action,
 };
 use crate::database::Database;
+use crate::manager::cloud_backup_manager::actors::restore::lookup_wallet_backup;
 use crate::manager::cloud_backup_manager::wallets::{
     WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
@@ -85,9 +86,15 @@ impl RustCloudBackupManager {
     pub(crate) async fn do_fetch_cloud_only_wallets(
         &self,
     ) -> Result<Vec<CloudBackupWalletItem>, CloudBackupError> {
+        self.do_fetch_cloud_only_wallets_with_client(CloudStorage::global_explicit_client()).await
+    }
+
+    pub(crate) async fn do_fetch_cloud_only_wallets_with_client(
+        &self,
+        cloud: CloudStorageClient,
+    ) -> Result<Vec<CloudBackupWalletItem>, CloudBackupError> {
         self.ensure_cloud_connectivity(BlockingCloudStep::FetchCloudOnly)?;
         let namespace = self.current_namespace_id()?;
-        let cloud = CloudStorage::global_explicit_client();
         let wallet_record_ids =
             cloud.list_wallet_backups(namespace.clone()).await.map_err(|error| {
                 blocking_cloud_error(
@@ -131,9 +138,7 @@ impl RustCloudBackupManager {
 
         let mut items = Vec::new();
         let mut lookups = stream::iter(
-            orphan_ids
-                .into_iter()
-                .map(|record_id| Self::lookup_wallet_backup(reader.clone(), record_id)),
+            orphan_ids.into_iter().map(|record_id| lookup_wallet_backup(reader.clone(), record_id)),
         )
         .buffered(CLOUD_BACKUP_IO_CONCURRENCY);
 

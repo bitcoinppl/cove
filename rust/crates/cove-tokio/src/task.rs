@@ -22,7 +22,6 @@ where
     TOKIO.get().expect("tokio runtime not initialized").spawn(task)
 }
 
-#[allow(dead_code)]
 pub fn block_on<T>(task: T) -> T::Output
 where
     T: Future + Send + 'static,

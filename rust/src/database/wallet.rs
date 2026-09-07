@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use crate::database::global_config::SelectedWalletTarget;
 use redb::{ReadOnlyTable, ReadableTable as _, ReadableTableMetadata, TableDefinition};
 use tracing::{debug, warn};
 
@@ -89,11 +90,12 @@ pub(crate) struct WalletUserMetadataPatch {
 }
 
 #[derive(Debug, Clone, Default)]
+/// Internal metadata fields to overwrite; `None` keeps the stored value
 pub(crate) struct WalletInternalMetadataPatch {
-    pub address_index: Option<Option<cove_types::AddressIndex>>,
-    pub last_scan_finished: Option<Option<Duration>>,
-    pub last_height_fetched: Option<Option<cove_types::BlockSizeLast>>,
-    pub performed_full_scan_at: Option<Option<u64>>,
+    pub address_index: Option<cove_types::AddressIndex>,
+    pub last_scan_finished: Option<Duration>,
+    pub last_height_fetched: Option<cove_types::BlockSizeLast>,
+    pub performed_full_scan_at: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -156,19 +158,19 @@ impl WalletMetadataPatch {
             }
             Self::Internal(patch) => {
                 if let Some(address_index) = &patch.address_index {
-                    metadata.internal.address_index = address_index.clone();
+                    metadata.internal.address_index = Some(address_index.clone());
                 }
 
                 if let Some(last_scan_finished) = patch.last_scan_finished {
-                    metadata.internal.last_scan_finished = last_scan_finished;
+                    metadata.internal.last_scan_finished = Some(last_scan_finished);
                 }
 
                 if let Some(last_height_fetched) = patch.last_height_fetched {
-                    metadata.internal.last_height_fetched = last_height_fetched;
+                    metadata.internal.last_height_fetched = Some(last_height_fetched);
                 }
 
                 if let Some(performed_full_scan_at) = patch.performed_full_scan_at {
-                    metadata.internal.performed_full_scan_at = performed_full_scan_at;
+                    metadata.internal.performed_full_scan_at = Some(performed_full_scan_at);
                 }
             }
         }
@@ -206,8 +208,8 @@ pub struct WalletsTable {
 #[uniffi::export]
 impl WalletsTable {
     pub fn is_empty(&self) -> Result<bool, Error> {
-        let network = Database::global().global_config.selected_network();
-        let wallet_mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode: wallet_mode } =
+            Database::global().global_config.wallet_target();
 
         let table = self.read_table()?;
         if table.is_empty()? {
@@ -245,8 +247,8 @@ impl WalletsTable {
 
     /// Returns wallets in persisted user-facing display order
     pub fn all(&self) -> Result<Vec<WalletMetadata>, Error> {
-        let network = Database::global().global_config.selected_network();
-        let wallet_mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode: wallet_mode } =
+            Database::global().global_config.wallet_target();
 
         debug!("getting all wallets for {network}");
         let wallets = self.get_all(network, wallet_mode)?;
@@ -273,8 +275,8 @@ impl WalletsTable {
     ///
     /// Cloud restore can only preserve the restored Vec order; reorder is local database state
     pub fn reorder_wallets(&self, wallet_ids: Vec<WalletId>) -> Result<Vec<WalletMetadata>, Error> {
-        let network = Database::global().global_config.selected_network();
-        let wallet_mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode: wallet_mode } =
+            Database::global().global_config.wallet_target();
 
         self.reorder(network, wallet_mode, wallet_ids)
     }
@@ -478,8 +480,8 @@ impl WalletsTable {
     }
 
     pub fn delete(&self, id: &WalletId) -> Result<(), Error> {
-        let network = Database::global().global_config.selected_network();
-        let mode = Database::global().global_config.wallet_mode();
+        let SelectedWalletTarget { network, mode } =
+            Database::global().global_config.wallet_target();
 
         self.delete_inner(network, mode, id)
     }
@@ -733,7 +735,7 @@ mod tests {
 
         table.save_all_wallets(first.network, first.wallet_mode, original).unwrap();
 
-        let requested_ids = vec![third.id.clone(), first.id.clone(), second.id.clone()];
+        let requested_ids = vec![third.id, first.id.clone(), second.id];
         let reordered = table.reorder(first.network, first.wallet_mode, requested_ids).unwrap();
         let persisted = table.get_all(first.network, first.wallet_mode).unwrap();
 
@@ -747,7 +749,7 @@ mod tests {
         let first = wallet("first");
         let second = wallet("second");
         let third = wallet("third");
-        let original = vec![first.clone(), second.clone(), third.clone()];
+        let original = vec![first.clone(), second, third.clone()];
 
         table.save_all_wallets(first.network, first.wallet_mode, original.clone()).unwrap();
 
@@ -760,7 +762,7 @@ mod tests {
         assert_eq!(wallet_ids(&returned), wallet_ids(&original));
 
         let unknown = wallet("unknown");
-        let unknown_id = vec![third.id.clone(), first.id.clone(), unknown.id.clone()];
+        let unknown_id = vec![third.id, first.id.clone(), unknown.id];
         let returned = table.reorder(first.network, first.wallet_mode, unknown_id).unwrap();
         let persisted = table.get_all(first.network, first.wallet_mode).unwrap();
 
@@ -774,7 +776,7 @@ mod tests {
         let first = wallet("first");
         let second = wallet("second");
         let third = wallet("third");
-        let original = vec![first.clone(), second.clone(), third.clone()];
+        let original = vec![first.clone(), second, third];
 
         table.save_all_wallets(first.network, first.wallet_mode, original.clone()).unwrap();
 
@@ -797,9 +799,9 @@ mod tests {
 
         table.save_all_wallets(first.network, first.wallet_mode, original).unwrap();
 
-        let requested_ids = vec![third.id.clone(), first.id.clone(), second.id.clone()];
+        let requested_ids = vec![third.id, first.id.clone(), second.id];
         table.reorder(first.network, first.wallet_mode, requested_ids).unwrap();
-        table.save_new_wallet_metadata_with_backup_behavior(fourth.clone(), false).unwrap();
+        table.save_new_wallet_metadata_with_backup_behavior(fourth, false).unwrap();
         let persisted = table.get_all(first.network, first.wallet_mode).unwrap();
 
         assert_eq!(names(&persisted), ["third", "first", "second", "fourth"]);
@@ -857,7 +859,7 @@ mod tests {
 
         table.save_all_wallets(first.network, first.wallet_mode, original).unwrap();
 
-        let requested_ids = vec![third.id.clone(), first.id.clone(), second.id.clone()];
+        let requested_ids = vec![third.id.clone(), first.id.clone(), second.id];
         table.reorder(first.network, first.wallet_mode, requested_ids).unwrap();
 
         let mut renamed_first = first.clone();
@@ -952,7 +954,7 @@ mod tests {
                         network,
                         mode,
                         WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
-                            performed_full_scan_at: Some(Some(42)),
+                            performed_full_scan_at: Some(42),
                             ..Default::default()
                         }),
                     )
@@ -1018,7 +1020,7 @@ mod tests {
                         network,
                         mode,
                         WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
-                            last_scan_finished: Some(Some(Duration::from_secs(7))),
+                            last_scan_finished: Some(Duration::from_secs(7)),
                             ..Default::default()
                         }),
                     )
@@ -1101,7 +1103,7 @@ mod tests {
                 stored.network,
                 stored.wallet_mode,
                 WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
-                    address_index: Some(Some(address_index.clone())),
+                    address_index: Some(address_index.clone()),
                     ..Default::default()
                 }),
             )

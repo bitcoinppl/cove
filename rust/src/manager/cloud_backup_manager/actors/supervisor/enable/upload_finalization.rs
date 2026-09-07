@@ -6,11 +6,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -53,10 +49,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         context: CloudBackupEnableContext,
     ) {
-        let Some(addr) = self.addr() else {
-            warn!("Could not schedule create-new enable passkey without supervisor addr");
-            return;
-        };
+        let addr = self.addr();
 
         addr.send_fut_with(move |addr| async move {
             let result = manager.prepare_create_new_enable_passkey(context).await;
@@ -69,11 +62,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePasskeyPreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -111,11 +100,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupNoDiscoveryEnablePreparation, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -154,10 +139,7 @@ impl CloudBackupSupervisor {
         context: CloudBackupEnableContext,
         flow: EnablePasskeyRegistrationFlow,
     ) {
-        let Some(addr) = self.addr() else {
-            warn!("Could not schedule enable passkey registration without supervisor addr");
-            return;
-        };
+        let addr = self.addr();
 
         addr.send_fut_with(move |addr| async move {
             let result = manager.prepare_new_enable_passkey_for_confirmation(context, flow).await;
@@ -170,11 +152,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupEnablePasskeyRegistration, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -197,26 +175,6 @@ impl CloudBackupSupervisor {
         }
 
         Produces::ok(())
-    }
-
-    pub(crate) fn finish_awaiting_force_new_confirmation_if_present(
-        &mut self,
-        manager: Arc<RustCloudBackupManager>,
-        claim: CloudBackupExclusiveOperationClaim,
-    ) -> bool {
-        let Some(context) = self
-            .pending_enable_session
-            .as_ref()
-            .filter(|session| session.is_awaiting_force_new_confirmation())
-            .map(PendingEnableSession::context)
-        else {
-            return false;
-        };
-
-        manager.present_existing_backup_found_prompt(context, None);
-        manager.clear_enable_progress(CloudBackupStatus::Disabled);
-        self.finish_enable_operation(manager, claim);
-        true
     }
 
     pub(crate) fn accept_registered_enable_passkey(
@@ -246,9 +204,8 @@ impl CloudBackupSupervisor {
         &mut self,
         manager: Arc<RustCloudBackupManager>,
         claim: CloudBackupExclusiveOperationClaim,
-        selection: PendingEnableUploadSelection,
     ) -> Result<bool, CloudBackupError> {
-        let Some(ready) = self.take_ready_enable_upload(selection)? else {
+        let Some(ready) = self.take_ready_enable_upload()? else {
             return Ok(false);
         };
 
@@ -259,19 +216,12 @@ impl CloudBackupSupervisor {
 
     pub(crate) fn take_ready_enable_upload(
         &mut self,
-        selection: PendingEnableUploadSelection,
     ) -> Result<Option<CloudBackupReadyEnableUpload>, CloudBackupError> {
         let Some(pending) = self.pending_enable_session.take() else {
             return Ok(None);
         };
-        let should_use = match selection {
-            PendingEnableUploadSelection::RetryOnly => pending.is_retry_upload(),
-            PendingEnableUploadSelection::RetryOrForceNewConfirmation => {
-                pending.is_retry_upload() || pending.is_awaiting_force_new_confirmation()
-            }
-        };
 
-        if !should_use {
+        if !pending.is_retry_upload() {
             self.pending_enable_session = Some(pending);
             return Ok(None);
         }
@@ -287,10 +237,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         ready: CloudBackupReadyEnableUpload,
     ) {
-        let Some(addr) = self.addr() else {
-            warn!("Could not schedule enable upload without supervisor addr");
-            return;
-        };
+        let addr = self.addr();
 
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
         cove_tokio::task::spawn(async move {
@@ -304,11 +251,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         result: Result<CloudBackupUploadedEnableBackup, CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -412,11 +355,7 @@ impl CloudBackupSupervisor {
         finalization: EnableUploadFinalization,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
-        if self.active_operation.claim() != Some(claim) {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+        let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
@@ -475,7 +414,7 @@ impl CloudBackupSupervisor {
         }
 
         self.detail_workflow.set_authorization(RuntimePasskeyAuthorization {
-            namespace_id: namespace_id.clone(),
+            namespace_id,
             credential_id: passkey.credential_id.clone(),
             prf_salt: passkey.prf_salt,
         });

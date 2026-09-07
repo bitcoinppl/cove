@@ -344,7 +344,7 @@ impl WalletActor {
             BlockSizeLast { block_height: block_height as u64, last_seen: now };
 
         self.apply_metadata_patch(WalletMetadataPatch::Internal(WalletInternalMetadataPatch {
-            last_height_fetched: Some(Some(last_height_fetched)),
+            last_height_fetched: Some(last_height_fetched),
             ..Default::default()
         }))?;
 

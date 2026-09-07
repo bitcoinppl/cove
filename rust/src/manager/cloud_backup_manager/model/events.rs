@@ -166,10 +166,6 @@ pub(crate) enum CloudBackupStateReducerEvent {
     OtherBackupsStateResolved(crate::manager::cloud_backup_manager::CloudBackupOtherBackupsState),
 }
 
-/// Intentionally uninhabited marker because reducer events are currently total
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum CloudBackupStateReducerEventRejection {}
-
 /// Side effects the manager should emit after applying a reducer event
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct CloudBackupStateReducerEffects {

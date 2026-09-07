@@ -375,6 +375,10 @@ class MainActivity : FragmentActivity() {
                             val appInstance = AppManager.getInstance()
                             appInstance.asyncRuntimeReady = true
 
+                            // refresh persisted cloud state after bootstrap so returning users discover
+                            // cloud-only and other backups before opening Cloud Backup settings
+                            appInstance.cloudBackupManager.syncPersistedState()
+
                             runCatching {
                                 appInstance.cloudBackupManager.resumePendingCloudUploadVerification()
                             }.onFailure { error ->

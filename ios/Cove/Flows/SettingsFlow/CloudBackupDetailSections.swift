@@ -1,51 +1,108 @@
 import SwiftUI
 
+func cloudBackupVisibleCloudOnlyWallets(_ cloudOnly: CloudOnlyState) -> [CloudBackupWalletItem]? {
+    guard case let .loaded(wallets) = cloudOnly, !wallets.isEmpty else {
+        return nil
+    }
+
+    return wallets
+}
+
+func cloudBackupVisibleOtherBackupsSummary(
+    _ otherBackups: CloudBackupOtherBackupsState
+) -> CloudBackupOtherBackupsSummary? {
+    guard case let .loaded(summary) = otherBackups, summary.namespaceCount > 0 else {
+        return nil
+    }
+
+    return summary
+}
+
+func cloudBackupCloudOnlyFailureMessage(_ cloudOnly: CloudOnlyState) -> String? {
+    guard case let .failed(error) = cloudOnly else { return nil }
+    return error
+}
+
+func cloudBackupOtherBackupsFailureMessage(_ otherBackups: CloudBackupOtherBackupsState) -> String? {
+    guard case let .loadFailed(reason) = otherBackups else { return nil }
+
+    switch reason {
+    case .providerSyncPending:
+        return "Cove could not check for backups with another key because iCloud Drive is still syncing. Check again when syncing is complete."
+    case .offline:
+        return "Cove could not check for backups with another key because this device is offline. Connect to the internet, then check again."
+    case .authorizationRequired:
+        return "Cove cannot check for backups with another key. Turn on iCloud Drive for Cove, then check again."
+    case .providerUnavailable:
+        return "Cove cannot check for backups with another key because iCloud Drive is not available now. Try again later."
+    case .unknown:
+        return "Cove could not check for backups with another key. Try again."
+    }
+}
+
 struct DetailFormContent: View {
     let detail: CloudBackupDetail
     let syncHealth: CloudSyncHealth
     let manager: CloudBackupManager
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
-    private var showCloudOnlySection: Bool {
-        switch manager.cloudOnly {
-        case .notFetched: detail.cloudOnlyCount > 0
-        case .loading: true
-        case let .loaded(wallets): !wallets.isEmpty
-        case .failed: true
-        }
-    }
-
     var body: some View {
         HeaderSection(lastSync: detail.lastSync, syncHealth: syncHealth)
         if !wallets.isEmpty {
             WalletSections(wallets: wallets)
         }
-        if showCloudOnlySection {
+        if let cloudOnlyWallets = cloudBackupVisibleCloudOnlyWallets(manager.cloudOnly) {
             CloudOnlySection(
+                wallets: cloudOnlyWallets,
                 manager: manager,
                 presentationCoordinator: presentationCoordinator
             )
         }
-        switch manager.otherBackupsState {
-        case .notChecked:
-            OtherBackupsNotCheckedSection(manager: manager)
-        case .checking:
-            OtherBackupsCheckingSection()
-        case let .loaded(summary):
-            if summary.namespaceCount > 0 {
-                OtherBackupsSection(
-                    summary: summary,
-                    manager: manager,
-                    presentationCoordinator: presentationCoordinator
-                )
-            }
-        case let .loadFailed(reason):
-            OtherBackupsLoadFailedSection(reason: reason, manager: manager)
+        if let summary = cloudBackupVisibleOtherBackupsSummary(manager.otherBackupsState) {
+            OtherBackupsSection(
+                summary: summary,
+                manager: manager,
+                presentationCoordinator: presentationCoordinator
+            )
         }
+
+        SupplementalInventoryFailureSections(manager: manager)
     }
 
     private var wallets: [CloudBackupWalletItem] {
         detail.upToDate + detail.needsSync
+    }
+}
+
+private struct SupplementalInventoryFailureSections: View {
+    let manager: CloudBackupManager
+
+    var body: some View {
+        if let message = cloudBackupCloudOnlyFailureMessage(manager.cloudOnly) {
+            SupplementalInventoryFailureSection(title: "Not on This Device", message: message, manager: manager)
+        }
+
+        if let message = cloudBackupOtherBackupsFailureMessage(manager.otherBackupsState) {
+            SupplementalInventoryFailureSection(title: "Backups with Another Key", message: message, manager: manager)
+        }
+    }
+}
+
+private struct SupplementalInventoryFailureSection: View {
+    let title: String
+    let message: String
+    let manager: CloudBackupManager
+
+    var body: some View {
+        Section(header: Text(title)) {
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(Color.statusError)
+
+            Button("Check Again") {
+                manager.dispatch(action: .refreshDetail)
+            }
+        }
     }
 }
 

@@ -56,8 +56,8 @@ impl CloudBackupUploadWorker {
         self.manager.upgrade()
     }
 
-    fn addr(&self) -> Option<Addr<Self>> {
-        Some(self.addr.upgrade())
+    fn addr(&self) -> Addr<Self> {
+        self.addr.upgrade()
     }
 
     fn spawn_pending_upload_verification_loop_task(
@@ -106,7 +106,7 @@ impl CloudBackupUploadWorker {
         let task = DebouncedTask::new("cloud_wallet_backup_upload", delay);
         self.wallet_upload_debouncers.insert(wallet_id.clone(), task.clone());
 
-        let Some(addr) = self.addr() else { return };
+        let addr = self.addr();
         task.replace(async move {
             send!(addr.run_wallet_upload(wallet_id));
         });
@@ -145,7 +145,8 @@ impl CloudBackupUploadWorker {
 
         if sync_state.is_dirty() {
             self.reset_wallet_upload_retry_count(&wallet_id);
-            if let Some(addr) = self.addr() {
+            {
+                let addr = self.addr();
                 send!(addr.run_wallet_upload(wallet_id));
             }
             return;
@@ -182,7 +183,7 @@ impl CloudBackupUploadWorker {
         }
 
         if immediate {
-            let Some(addr) = self.addr() else { return Produces::ok(()) };
+            let addr = self.addr();
             send!(addr.run_wallet_upload(wallet_id));
             return Produces::ok(());
         }
@@ -308,7 +309,7 @@ impl CloudBackupUploadWorker {
             }
         };
 
-        let Some(addr) = self.addr() else { return Produces::ok(()) };
+        let addr = self.addr();
         let manager = self.manager();
         if manager.as_ref().is_some_and(|manager| manager.cloud_backup_writes_blocked()) {
             return Produces::ok(());

@@ -1,4 +1,4 @@
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::Duration;
 
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use bdk_wallet::{
@@ -63,14 +63,17 @@ impl WalletActor {
                 request_id,
                 now,
                 derivation_index,
-            } => {
-                self.deferred_open_cached_receive_address(cache, request_id, now, derivation_index)
-            }
+            } => Ok(self.deferred_open_cached_receive_address(
+                cache,
+                request_id,
+                now,
+                derivation_index,
+            )),
         }
     }
 
     fn open_receive_address_decision(&mut self) -> OpenReceiveAddressDecision {
-        let now = current_epoch_secs();
+        let now = cove_util::time::unix_timestamp_secs_or_zero();
 
         let cache = match self.receive_address_cache() {
             Ok(cache) => cache,
@@ -103,7 +106,7 @@ impl WalletActor {
         request_id: u64,
         now: u64,
         derivation_index: u32,
-    ) -> ActorResult<()> {
+    ) -> Produces<()> {
         let (node, graph, sync_request) = self.receive_address_sync_inputs(derivation_index);
         let address =
             self.wallet.bdk.peek_address(KeychainKind::External, derivation_index).address;
@@ -140,7 +143,7 @@ impl WalletActor {
             let _ = reply.send(Produces::Value(()));
         });
 
-        Ok(Produces::Deferred(receiver))
+        Produces::Deferred(receiver)
     }
 
     async fn finish_open_receive_address_after_activity_check(
@@ -284,14 +287,14 @@ impl WalletActor {
 
     fn do_create_new_receive_address(&mut self) -> Result<ReceiveAddressState, Error> {
         let request_id = self.receive_address.next_request_id();
-        let now = current_epoch_secs();
+        let now = cove_util::time::unix_timestamp_secs_or_zero();
         let state = self.new_receive_address_state(request_id, now, ReceiveAddressStatus::Fresh)?;
 
         Ok(state)
     }
 
     pub async fn refresh_expired_receive_address(&mut self, request_id: u64) -> ActorResult<()> {
-        let now = current_epoch_secs();
+        let now = cove_util::time::unix_timestamp_secs_or_zero();
         match self.receive_address.refresh_expired_decision(request_id, now) {
             RefreshExpiredAddressDecision::Rotate => {}
             RefreshExpiredAddressDecision::ReturnVisible(_)
@@ -340,7 +343,7 @@ impl WalletActor {
         if let Some(address_index) = address_index_update {
             self.apply_metadata_patch(WalletMetadataPatch::Internal(
                 WalletInternalMetadataPatch {
-                    address_index: Some(Some(address_index)),
+                    address_index: Some(address_index),
                     ..Default::default()
                 },
             ))?;
@@ -419,7 +422,10 @@ impl WalletActor {
             self.start_receive_address_watcher(state.request_id, state.address.info.index);
         }
 
-        self.schedule_receive_address_refresh(&state, current_epoch_secs());
+        self.schedule_receive_address_refresh(
+            &state,
+            cove_util::time::unix_timestamp_secs_or_zero(),
+        );
     }
 
     fn start_delayed_receive_address_activity_check(
@@ -652,8 +658,4 @@ impl WalletActor {
 
         true
     }
-}
-
-fn current_epoch_secs() -> u64 {
-    UNIX_EPOCH.elapsed().unwrap_or_default().as_secs()
 }

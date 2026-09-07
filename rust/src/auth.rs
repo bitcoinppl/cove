@@ -101,7 +101,7 @@ impl AuthPin {
 
         argon2
             .verify_password(pin.as_bytes(), &parsed_hash)
-            .map_err(|error| AuthError::VerificationFailed(format!("{error:?}")))
+            .map_err_debug(AuthError::VerificationFailed)
     }
 }
 

@@ -21,3 +21,6 @@ cove-util = { path = "../cove-util" }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+
+[lints]
+workspace = true

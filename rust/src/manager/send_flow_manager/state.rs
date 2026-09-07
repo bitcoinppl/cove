@@ -127,8 +127,7 @@ impl State {
 /// MARK: SendFlowManagerState
 impl SendFlowManagerState {
     pub fn new(metadata: WalletMetadata, balance: Arc<Balance>) -> Self {
-        let selected_fiat_currency =
-            Database::global().global_config.fiat_currency().unwrap_or_default();
+        let selected_fiat_currency = Database::global().global_config.selected_fiat_currency();
 
         let btc_price_in_fiat = App::global().prices().map(|prices| prices.get());
 

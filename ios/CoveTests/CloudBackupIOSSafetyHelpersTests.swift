@@ -136,6 +136,77 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         ))
     }
 
+    func testCloudBackupSupplementalSectionsRequireNonemptyLoadedInventory() {
+        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.notFetched))
+        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.loading))
+        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.failed(error: "cloud inventory failed")))
+        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [])))
+        XCTAssertEqual(
+            cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [cloudBackupTestWallet]))?.count,
+            1
+        )
+
+        let emptySummary = CloudBackupOtherBackupsSummary(
+            namespaceCount: 0,
+            walletCount: 0,
+            passkeyHints: []
+        )
+        let loadedSummary = CloudBackupOtherBackupsSummary(
+            namespaceCount: 1,
+            walletCount: 2,
+            passkeyHints: []
+        )
+
+        XCTAssertNil(cloudBackupVisibleOtherBackupsSummary(.notChecked))
+        XCTAssertNil(cloudBackupVisibleOtherBackupsSummary(.checking))
+        XCTAssertNil(cloudBackupVisibleOtherBackupsSummary(.loadFailed(reason: .offline)))
+        XCTAssertNil(cloudBackupVisibleOtherBackupsSummary(.loaded(summary: emptySummary)))
+        XCTAssertEqual(
+            cloudBackupVisibleOtherBackupsSummary(.loaded(summary: loadedSummary))?.namespaceCount,
+            1
+        )
+    }
+
+    func testCloudBackupSupplementalFailuresRemainVisibleWithoutWalletRows() {
+        XCTAssertEqual(
+            cloudBackupCloudOnlyFailureMessage(.failed(error: "Cloud inventory unavailable")),
+            "Cloud inventory unavailable"
+        )
+        XCTAssertNil(cloudBackupCloudOnlyFailureMessage(.notFetched))
+        XCTAssertNil(cloudBackupCloudOnlyFailureMessage(.loading))
+        XCTAssertNil(cloudBackupCloudOnlyFailureMessage(.loaded(wallets: [])))
+        XCTAssertNil(cloudBackupOtherBackupsFailureMessage(.notChecked))
+        XCTAssertNil(cloudBackupOtherBackupsFailureMessage(.checking))
+        XCTAssertNil(cloudBackupOtherBackupsFailureMessage(.loaded(summary: CloudBackupOtherBackupsSummary(
+            namespaceCount: 0,
+            walletCount: 0,
+            passkeyHints: []
+        ))))
+
+        for reason: CloudBackupInventoryIncompleteReason in [
+            .providerSyncPending, .offline, .authorizationRequired, .providerUnavailable, .unknown,
+        ] {
+            let message = cloudBackupOtherBackupsFailureMessage(.loadFailed(reason: reason))
+            XCTAssertNotNil(message)
+            XCTAssertTrue(message?.contains("another key") == true)
+        }
+    }
+
+    private var cloudBackupTestWallet: CloudBackupWalletItem {
+        CloudBackupWalletItem(
+            name: "Savings",
+            network: .bitcoin,
+            walletMode: nil,
+            walletType: nil,
+            fingerprint: nil,
+            labelCount: nil,
+            backupUpdatedAt: nil,
+            syncStatus: .confirmed,
+            restoreFailure: nil,
+            recordId: "wallet-record"
+        )
+    }
+
     func testWalletAccessibilityLabelCombinesIdentityStatusAndAction() {
         let item = CloudBackupWalletItem(
             name: "Savings",

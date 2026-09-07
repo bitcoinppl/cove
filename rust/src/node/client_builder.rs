@@ -12,7 +12,6 @@ pub struct NodeClientBuilder {
 }
 impl NodeClientBuilder {
     pub async fn build(&self) -> Result<NodeClient, Error> {
-        let node_client = NodeClient::try_from_builder(self).await?;
-        Ok(node_client)
+        NodeClient::new_with_options(&self.node, self.options).await
     }
 }

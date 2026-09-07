@@ -198,10 +198,7 @@ pub(crate) struct PendingSavedPasskeySessionMaterial {
 }
 
 /// Tracks passkey material created during enable before the flow fully completes
-#[allow(dead_code)]
 pub(crate) enum PendingEnableSession {
-    /// A new passkey and master key are staged while the user confirms Create New Backup
-    AwaitingForceNewConfirmation(PendingEnableSessionMaterial),
     /// Upload already started and should retry with the same staged passkey material
     RetryUpload(PendingEnableSessionMaterial),
     /// A registered passkey is staged until targeted PRF auth confirms it can be used
@@ -278,9 +275,7 @@ impl PendingEnableSession {
         CloudBackupError,
     > {
         match self {
-            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
-                Ok(material.into_parts())
-            }
+            Self::RetryUpload(material) => Ok(material.into_parts()),
             Self::AwaitingSavedPasskeyConfirmation(_) => Err(CloudBackupError::Internal(
                 "pending enable session did not contain authenticated passkey material".into(),
             )),
@@ -295,38 +290,28 @@ impl PendingEnableSession {
     > {
         match self {
             Self::AwaitingSavedPasskeyConfirmation(material) => Ok(material.into_parts()),
-            Self::AwaitingForceNewConfirmation(_) | Self::RetryUpload(_) => {
-                Err(CloudBackupError::Internal(
-                    "pending enable session did not contain staged passkey material".into(),
-                ))
-            }
+            Self::RetryUpload(_) => Err(CloudBackupError::Internal(
+                "pending enable session did not contain staged passkey material".into(),
+            )),
         }
     }
 
     pub(crate) fn namespace_id(&self) -> String {
         match self {
-            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
-                material.namespace_id()
-            }
+            Self::RetryUpload(material) => material.namespace_id(),
             Self::AwaitingSavedPasskeyConfirmation(material) => material.namespace_id(),
         }
     }
 
     pub(crate) fn context(&self) -> CloudBackupEnableContext {
         match self {
-            Self::AwaitingForceNewConfirmation(material) | Self::RetryUpload(material) => {
-                material.context()
-            }
+            Self::RetryUpload(material) => material.context(),
             Self::AwaitingSavedPasskeyConfirmation(material) => material.context(),
         }
     }
 
     pub(crate) fn is_retry_upload(&self) -> bool {
         matches!(self, Self::RetryUpload(_))
-    }
-
-    pub(crate) fn is_awaiting_force_new_confirmation(&self) -> bool {
-        matches!(self, Self::AwaitingForceNewConfirmation(_))
     }
 
     pub(crate) fn is_awaiting_saved_passkey_confirmation(&self) -> bool {
