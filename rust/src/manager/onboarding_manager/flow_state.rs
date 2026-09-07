@@ -465,7 +465,8 @@ impl InternalState {
 }
 
 impl FlowState {
-    const fn kind(&self) -> &'static str {
+    /// Returns a state label without wallet data or secret words
+    pub(crate) const fn kind(&self) -> &'static str {
         match self {
             Self::CloudCheck { .. } => "CloudCheck",
             Self::RestoreOffer { .. } => "RestoreOffer",

@@ -727,14 +727,21 @@ mod tests {
             OnboardingState { created_words: created_words.clone(), ..OnboardingState::default() };
         let message = OnboardingReconcileMessage::CreatedWords(created_words);
         let flow_debug = format!("{:?}", FlowState::BackupWallet(flow.clone()));
+        let secret_words_debug = format!("{:?}", FlowState::SecretWords(flow.clone()));
         let event_debug = format!("{:?}", InternalEvent::WalletCreated { flow });
         let state_debug = format!("{state:?}");
         let message_debug = format!("{message:?}");
 
-        for debug in [flow_debug, event_debug, state_debug, message_debug] {
-            assert!(debug.contains("<redacted len=12>"), "debug output: {debug}");
-            assert!(!debug.contains("abandon"), "debug output: {debug}");
-            assert!(!debug.contains("about"), "debug output: {debug}");
+        for (kind, debug) in [
+            ("BackupWallet", flow_debug),
+            ("SecretWords", secret_words_debug),
+            ("WalletCreated", event_debug),
+            ("OnboardingState", state_debug),
+            ("CreatedWords", message_debug),
+        ] {
+            assert!(debug.contains("<redacted len=12>"), "missing redaction for {kind}");
+            assert!(!debug.contains("abandon"), "secret word exposed by {kind}");
+            assert!(!debug.contains("about"), "secret word exposed by {kind}");
         }
     }
 
@@ -789,7 +796,7 @@ mod tests {
             FlowState::CloudBackup(CloudBackupFlow::SoftwareImport { wallet_id: id }) => {
                 assert_eq!(id, wallet_id)
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -809,7 +816,7 @@ mod tests {
             FlowState::CloudBackup(CloudBackupFlow::HardwareImport { wallet_id: id }) => {
                 assert_eq!(id, wallet_id)
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -831,7 +838,7 @@ mod tests {
             FlowState::CloudBackupSuccess(CloudBackupFlow::SoftwareImport { wallet_id: id }) => {
                 assert_eq!(id, wallet_id);
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -853,7 +860,7 @@ mod tests {
             FlowState::CloudBackupSuccess(CloudBackupFlow::HardwareImport { wallet_id: id }) => {
                 assert_eq!(id, wallet_id);
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -955,7 +962,7 @@ mod tests {
             FlowState::CloudBackup(CloudBackupFlow::SoftwareImport { wallet_id: id }) => {
                 assert_eq!(id, wallet_id)
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -982,7 +989,7 @@ mod tests {
             FlowState::CloudBackup(CloudBackupFlow::HardwareImport { wallet_id: id }) => {
                 assert_eq!(id, wallet_id)
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -1051,7 +1058,7 @@ mod tests {
             FlowState::CloudBackup(CloudBackupFlow::HardwareImport { wallet_id: id }) => {
                 assert_eq!(id, wallet_id)
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -1073,7 +1080,7 @@ mod tests {
             FlowState::CloudBackup(CloudBackupFlow::SoftwareImport { wallet_id: id }) => {
                 assert_eq!(id, wallet_id)
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -1102,7 +1109,7 @@ mod tests {
             } => {
                 assert_eq!(id, wallet_id)
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -1131,7 +1138,7 @@ mod tests {
             } => {
                 assert_eq!(id, wallet_id)
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -1314,7 +1321,7 @@ mod tests {
                     },
                 ..
             } => assert_eq!(id, wallet_id),
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -1343,7 +1350,7 @@ mod tests {
                     },
                 ..
             } => assert_eq!(id, wallet_id),
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -1399,7 +1406,8 @@ mod tests {
             if !goes_back {
                 assert_eq!(command, TransitionCommand::None);
             }
-            assert!(reaches(&flow), "unexpected flow state: {flow:?}");
+
+            assert!(reaches(&flow), "unexpected flow state kind: {}", flow.kind());
         }
     }
 
@@ -2581,7 +2589,7 @@ mod tests {
                 assert!(flow.secret_words_saved);
                 assert!(!flow.cloud_backup_enabled);
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -2610,7 +2618,7 @@ mod tests {
                 assert_eq!(flow.branch, OnboardingBranch::NewUser);
                 assert!(!flow.cloud_backup_enabled);
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -2664,7 +2672,7 @@ mod tests {
             FlowState::Terms { error_message: Some(error), .. } => {
                 assert_eq!(error, "selection failed")
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -2756,7 +2764,7 @@ mod tests {
                 assert_eq!(wallet_id, expected_wallet_id);
                 assert_eq!(*post_onboarding, expected_destination);
             }
-            other => panic!("unexpected flow state: {other:?}"),
+            other => panic!("unexpected flow state kind: {}", other.kind()),
         }
     }
 
@@ -2768,7 +2776,10 @@ mod tests {
             | (FlowState::SoftwareImport { error_message: None }, RestoreOrigin::SoftwareImport) => {
             }
             (flow, origin) => {
-                panic!("unexpected flow state after restore offer back: {flow:?} for {origin:?}")
+                panic!(
+                    "unexpected flow state kind after restore offer back: {} for {origin:?}",
+                    flow.kind()
+                )
             }
         }
     }
