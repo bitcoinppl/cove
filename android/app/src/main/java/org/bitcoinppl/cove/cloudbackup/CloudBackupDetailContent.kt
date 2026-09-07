@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
@@ -24,20 +22,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import org.bitcoinppl.cove_core.CloudBackupDetail
 import org.bitcoinppl.cove_core.CloudBackupDetailState
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
-import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
-import org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary
 import org.bitcoinppl.cove_core.CloudBackupPasskeyRepairState
 import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudBackupVerificationSource
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
-import org.bitcoinppl.cove_core.CloudBackupWalletItem
-import org.bitcoinppl.cove_core.CloudOnlyState
-import org.bitcoinppl.cove_core.device.CloudSyncHealth
 
 internal enum class CloudBackupDetailBodyState {
     UNSUPPORTED_PASSKEY_PROVIDER,
@@ -76,18 +67,6 @@ internal fun shouldShowPendingUploadConfirmationStatus(
 internal fun pendingUploadConfirmationActionTitle(
     isBlockedOnAuthorization: Boolean,
 ): String? = if (isBlockedOnAuthorization) "Reconnect Google Drive" else null
-
-internal fun cloudBackupVisibleCloudOnlyWallets(
-    cloudOnly: CloudOnlyState,
-): List<CloudBackupWalletItem>? =
-    (cloudOnly as? CloudOnlyState.Loaded)?.wallets?.takeIf { it.isNotEmpty() }
-
-internal fun cloudBackupVisibleOtherBackupsSummary(
-    otherBackups: CloudBackupOtherBackupsState,
-): CloudBackupOtherBackupsSummary? =
-    (otherBackups as? CloudBackupOtherBackupsState.Loaded)
-        ?.summary
-        ?.takeIf { it.namespaceCount > 0u }
 
 internal fun shouldShowFallbackVerificationSection(
     bodyState: CloudBackupDetailBodyState?,
@@ -394,40 +373,6 @@ private fun MissingPasskeyContent(
 
         repairError?.let {
             ErrorInlineMessage(it)
-        }
-    }
-}
-
-@Composable
-private fun DetailFormContent(
-    detail: CloudBackupDetail,
-    syncHealth: CloudSyncHealth,
-    manager: CloudBackupManager,
-) {
-    val cloudOnlyWallets = cloudBackupVisibleCloudOnlyWallets(manager.cloudOnly)
-
-    Column(verticalArrangement = Arrangement.spacedBy(CloudBackupDetailSectionSpacing)) {
-        CloudBackupHeaderSection(lastSync = detail.lastSync, syncHealth = syncHealth)
-
-        if (detail.upToDate.isNotEmpty()) {
-            WalletSections(title = "Up to Date", wallets = detail.upToDate)
-        }
-
-        if (detail.needsSync.isNotEmpty()) {
-            WalletSections(title = "Needs Sync", wallets = detail.needsSync)
-        }
-
-        if (cloudOnlyWallets != null) {
-            CloudOnlySection(manager = manager, wallets = cloudOnlyWallets)
-        }
-
-        cloudBackupVisibleOtherBackupsSummary(manager.otherBackupsState)?.let { summary ->
-            OtherBackupsSection(
-                namespaceCount = summary.namespaceCount.toInt(),
-                walletCount = summary.walletCount.toInt(),
-                passkeySuffixes = summary.passkeyHints.map { it.nameSuffix },
-                manager = manager,
-            )
         }
     }
 }
