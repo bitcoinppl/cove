@@ -118,6 +118,8 @@ fun UtxoListScreen(
         lockStateLoadFailed = manager.lockStateLoadFailed,
         totalSelectedAmount = manager.totalSelectedAmount,
         searchQuery = manager.search,
+        prices = app.prices,
+        fiatCurrency = app.selectedFiatCurrency,
         onBack = { app.popRoute() },
         onToggleUnit = {
             manager.dispatch(org.bitcoinppl.cove_core.CoinControlManagerAction.ToggleUnit)
@@ -183,6 +185,8 @@ private fun UtxoListScreenContent(
     lockStateLoadFailed: Boolean,
     totalSelectedAmount: String,
     searchQuery: String,
+    prices: org.bitcoinppl.cove_core.PriceResponse?,
+    fiatCurrency: org.bitcoinppl.cove_core.FiatCurrency,
     onBack: () -> Unit,
     onToggleUnit: () -> Unit,
     onToggle: (org.bitcoinppl.cove_core.types.Utxo) -> Unit,
@@ -352,8 +356,13 @@ private fun UtxoListScreenContent(
                         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                             utxos.forEachIndexed { index, utxo ->
                                 UtxoItemRow(
-                                    manager = manager,
                                     utxo = utxo,
+                                    amountText =
+                                        manager.displayAmountWithFiat(
+                                            utxo.amount,
+                                            prices,
+                                            fiatCurrency,
+                                        ),
                                     selected = utxo.spendable && selected.contains(utxo.id),
                                     onToggle = { onToggle(utxo) },
                                     onSetSpendability = {
@@ -461,8 +470,8 @@ private fun UtxoListScreenContent(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun UtxoItemRow(
-    manager: org.bitcoinppl.cove.CoinControlManager,
     utxo: org.bitcoinppl.cove_core.types.Utxo,
+    amountText: String,
     selected: Boolean,
     onToggle: () -> Unit,
     onSetSpendability: () -> Unit,
@@ -508,10 +517,12 @@ private fun UtxoItemRow(
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    manager.displayAmount(utxo.amount),
+                    amountText,
                     fontWeight = FontWeight.Normal,
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
