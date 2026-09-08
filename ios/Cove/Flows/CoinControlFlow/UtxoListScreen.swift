@@ -52,7 +52,6 @@ struct UtxoListScreen: View {
     }
 
     private func continueToSend() {
-        manager.continuePressed()
         navigate(
             RouteFactory()
                 .coinControlSend(

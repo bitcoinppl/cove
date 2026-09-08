@@ -74,11 +74,13 @@ private struct SendFlowLoadedView: View {
         )
     }
 
-    private func applyRouteArguments(to sendFlowManager: SendFlowManager) {
+    private func applyRouteArguments(to sendFlowManager: SendFlowManager) async {
         switch sendRoute {
         case let .setAmount(id: _, address: address, amount: amount):
             if let address { sendFlowManager.setAddress(address) }
             if let amount { sendFlowManager.setAmount(amount) }
+        case let .coinControlSetAmount(id: _, utxos: utxos):
+            await sendFlowManager.prepareCoinControl(utxos: utxos)
         default:
             ()
         }
@@ -99,7 +101,8 @@ private struct SendFlowLoadedView: View {
         let sendFlowManagerId = ObjectIdentifier(sendFlowManager)
 
         initializedSendFlowManagerId = nil
-        applyRouteArguments(to: sendFlowManager)
+        await applyRouteArguments(to: sendFlowManager)
+        guard !Task.isCancelled else { return }
 
         // rust handles alert + popRoute on failure
         if await sendFlowManager.waitForInit() {

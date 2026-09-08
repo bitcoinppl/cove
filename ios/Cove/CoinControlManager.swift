@@ -41,8 +41,6 @@ private enum CoinControlManagerError: LocalizedError {
     var lockStateLoadFailed: Bool
     var unit: Unit = .sat
 
-    private var updateSendFlowManagerTask: Task<Void, Never>? = nil
-
     private var rust: RustCoinControlManager? {
         rustState.withLock { $0.rust }
     }
@@ -93,8 +91,6 @@ private enum CoinControlManagerError: LocalizedError {
         guard takeRustForClose() != nil else { return }
 
         logger.debug("Closing CoinControlManager")
-        updateSendFlowManagerTask?.cancel()
-        updateSendFlowManagerTask = nil
     }
 
     private func takeRustForClose() -> RustCoinControlManager? {
@@ -149,24 +145,6 @@ private enum CoinControlManagerError: LocalizedError {
         Int(self.totalSelected.asSats())
     }
 
-    public func continuePressed() {
-        guard let sfm = AppManager.shared.sendFlowManager else { return }
-        self.updateSendFlowManagerTask?.cancel()
-        self.updateSendFlowManagerTask = nil
-
-        sfm.dispatch(.setCoinControlMode(selectedUtxos()))
-    }
-
-    private func updateSendFlowManager() {
-        guard let sfm = AppManager.shared.sendFlowManager else { return }
-        self.updateSendFlowManagerTask?.cancel()
-        self.updateSendFlowManagerTask = Task {
-            try? await Task.sleep(for: .milliseconds(100))
-            guard !Task.isCancelled else { return }
-            sfm.dispatch(.setCoinControlMode(selectedUtxos()))
-        }
-    }
-
     var canApplyReconcileMessages: Bool {
         rust != nil
     }
@@ -182,7 +160,6 @@ private enum CoinControlManagerError: LocalizedError {
         case let .updateSearch(search):
             withAnimation { self.search = search }
         case let .updateSelectedUtxos(utxos: selected, totalSelected):
-            updateSendFlowManager()
             withAnimation {
                 self.selection = SelectionState(
                     selected: Set(selected),

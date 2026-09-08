@@ -258,6 +258,22 @@ private enum SendFlowManagerAccessError: LocalizedError {
         return await rust.waitForInit()
     }
 
+    /// Applies the route-owned coin selection before the send screen becomes visible
+    func prepareCoinControl(utxos: [Utxo]) async {
+        await dispatchAndWait(.setCoinControlMode(utxos))
+    }
+
+    /// Waits until Rust synchronously handles an action, but not for tasks that the action starts
+    private func dispatchAndWait(_ action: Action) async {
+        dispatch(action)
+
+        await withCheckedContinuation { continuation in
+            rustBridge.async {
+                continuation.resume()
+            }
+        }
+    }
+
     func amountExceedsBalance() -> Bool {
         withRustOr(false) { $0.amountExceedsBalance() }
     }

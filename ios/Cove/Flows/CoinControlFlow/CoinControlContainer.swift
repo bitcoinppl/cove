@@ -75,6 +75,7 @@ private struct CoinControlLoadedView: View {
             guard !Task.isCancelled else { return }
 
             let manager = CoinControlManager(rustManager)
+
             self.manager = manager
             app.setCoinControlManager(manager)
         } catch {
