@@ -1,5 +1,6 @@
 @testable import Cove
 import CoveCore
+import os
 import XCTest
 
 final class WalletTransitionTests: XCTestCase {
@@ -425,6 +426,30 @@ final class WalletTransitionTests: XCTestCase {
     }
 
     @MainActor
+    func testPreparingCoinControlDispatchesRouteUtxosBeforeReturning() async {
+        let walletManager = WalletManager(preview: .only)
+        defer { walletManager.close() }
+
+        let rustManager = TestSendFlowRustManager(walletId: walletManager.id)
+        let presenter = SendFlowPresenter(
+            routing: TestSendFlowRouting(),
+            manager: walletManager
+        )
+        let manager = SendFlowManager(rustManager, presenter: presenter)
+        defer { manager.close() }
+
+        let utxos = RustCoinControlManager.previewNew(outputCount: 2, changeCount: 0).utxos()
+        await manager.prepareCoinControl(utxos: utxos)
+
+        guard case let .setCoinControlMode(dispatchedUtxos)? = rustManager.actions.last else {
+            XCTFail("expected coin-control route preparation")
+            return
+        }
+
+        XCTAssertEqual(dispatchedUtxos, utxos)
+    }
+
+    @MainActor
     func testWalletCacheClearInvalidatesMatchingRetainedSendFlowManagers() throws {
         let (walletManager, retainedManager) = try makeSendFlowManager()
         defer { walletManager.close() }
@@ -474,6 +499,11 @@ private final class TestSendFlowRouting: SendFlowRouting {
 
 private final class TestSendFlowRustManager: SendFlowRustManaging {
     private let id: WalletId
+    private let dispatchedActions = OSAllocatedUnfairLock(initialState: [SendFlowManagerAction]())
+
+    var actions: [SendFlowManagerAction] {
+        dispatchedActions.withLock { $0 }
+    }
 
     init(walletId: WalletId) {
         self.id = walletId
@@ -504,7 +534,9 @@ private final class TestSendFlowRustManager: SendFlowRustManaging {
     func utxos() -> [Utxo]? { nil }
     func maxSendMinusFees() -> Amount? { nil }
     func maxSendMinusFeesAndSmallUtxo() -> Amount? { nil }
-    func dispatch(action _: SendFlowManagerAction) {}
+    func dispatch(action: SendFlowManagerAction) {
+        dispatchedActions.withLock { $0.append(action) }
+    }
 }
 
 @MainActor

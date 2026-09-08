@@ -444,10 +444,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         let image = render(
             view: NavigationStack {
                 UtxoListScreen(
-                    manager: CoinControlManager(
-                        RustCoinControlManager.previewNew(),
-                        resolveSendFlowManager: { _ in nil }
-                    )
+                    manager: CoinControlManager(RustCoinControlManager.previewNew())
                 )
                 .environment(WalletManager(preview: .only))
             }

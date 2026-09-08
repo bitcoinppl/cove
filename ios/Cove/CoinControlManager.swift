@@ -14,7 +14,6 @@ private enum CoinControlManagerError: LocalizedError {
 @Observable final class CoinControlManager: ReconcilingManager, CoinControlManagerReconciler {
     typealias Message = CoinControlManagerReconcileMessage
     typealias Action = CoinControlManagerAction
-    typealias Sleep = @MainActor (Duration) async throws -> Void
 
     private struct SelectionState {
         var selected: Set<Utxo.ID> = []
@@ -32,12 +31,6 @@ private enum CoinControlManagerError: LocalizedError {
     @ObservationIgnored
     private let rustBridge = DispatchQueue(label: "cove.CoinControlManager.rustbridge", qos: .userInitiated)
 
-    /// Resolves the current app-owned send flow because navigation can replace the cached instance
-    @ObservationIgnored
-    private let resolveSendFlowManager: (WalletId) -> SendFlowManager?
-    @ObservationIgnored
-    private let sleep: Sleep
-
     let id: WalletId
 
     private(set) var sort: CoinControlListSort? = .some(.date(.descending))
@@ -47,8 +40,6 @@ private enum CoinControlManagerError: LocalizedError {
     var utxos: [Utxo]
     var lockStateLoadFailed: Bool
     var unit: Unit = .sat
-
-    private var updateSendFlowManagerTask: Task<Void, Never>? = nil
 
     private var rust: RustCoinControlManager? {
         rustState.withLock { $0.rust }
@@ -81,14 +72,8 @@ private enum CoinControlManagerError: LocalizedError {
         )
     }
 
-    public init(
-        _ rust: RustCoinControlManager,
-        resolveSendFlowManager: @escaping (WalletId) -> SendFlowManager?,
-        sleep: @escaping Sleep = { try await Task.sleep(for: $0) }
-    ) {
+    public init(_ rust: RustCoinControlManager) {
         self.id = rust.id()
-        self.resolveSendFlowManager = resolveSendFlowManager
-        self.sleep = sleep
 
         self.utxos = rust.utxos()
         self.lockStateLoadFailed = rust.lockStateLoadFailed()
@@ -106,8 +91,6 @@ private enum CoinControlManagerError: LocalizedError {
         guard takeRustForClose() != nil else { return }
 
         logger.debug("Closing CoinControlManager")
-        updateSendFlowManagerTask?.cancel()
-        updateSendFlowManagerTask = nil
     }
 
     private func takeRustForClose() -> RustCoinControlManager? {
@@ -162,25 +145,6 @@ private enum CoinControlManagerError: LocalizedError {
         Int(self.totalSelected.asSats())
     }
 
-    public func continuePressed() {
-        self.updateSendFlowManagerTask?.cancel()
-        self.updateSendFlowManagerTask = nil
-        guard let sendFlowManager = resolveSendFlowManager(id) else { return }
-
-        sendFlowManager.dispatch(.setCoinControlMode(selectedUtxos()))
-    }
-
-    private func updateSendFlowManager() {
-        self.updateSendFlowManagerTask?.cancel()
-        self.updateSendFlowManagerTask = Task {
-            try? await sleep(.milliseconds(100))
-            guard !Task.isCancelled else { return }
-            guard let sendFlowManager = resolveSendFlowManager(id) else { return }
-
-            sendFlowManager.dispatch(.setCoinControlMode(selectedUtxos()))
-        }
-    }
-
     var canApplyReconcileMessages: Bool {
         rust != nil
     }
@@ -196,7 +160,6 @@ private enum CoinControlManagerError: LocalizedError {
         case let .updateSearch(search):
             withAnimation { self.search = search }
         case let .updateSelectedUtxos(utxos: selected, totalSelected):
-            updateSendFlowManager()
             withAnimation {
                 self.selection = SelectionState(
                     selected: Set(selected),

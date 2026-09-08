@@ -159,30 +159,23 @@ struct SendFlowCoinControlSetAmountScreen: View {
 
     private func prepareScreen() async {
         let isAlreadyValid = validate()
-        let shouldShowLoading = !isAlreadyValid || utxos == sendFlowManager.utxos()
 
-        if shouldShowLoading {
-            Task {
-                await MainActor.run {
-                    withAnimation(
-                        .easeInOut(duration: 1.5).delay(0.4),
-                        completionCriteria: .removed
-                    ) {
-                        loadingOpacity = 0
-                    } completion: {
-                        isLoading = false
-                        if validate() { presenter.focusField = .none }
-                    }
+        Task {
+            await MainActor.run {
+                withAnimation(
+                    .easeInOut(duration: 1.5).delay(0.4),
+                    completionCriteria: .removed
+                ) {
+                    loadingOpacity = 0
+                } completion: {
+                    isLoading = false
+                    if validate() { presenter.focusField = .none }
                 }
             }
-        } else {
-            presenter.focusField = .none
         }
 
         // HACK: Bug in SwiftUI where keyboard toolbar is broken
-        if shouldShowLoading {
-            try? await Task.sleep(for: .milliseconds(700))
-        }
+        try? await Task.sleep(for: .milliseconds(700))
 
         await MainActor.run {
             if !isAlreadyValid { presenter.focusField = .address }
@@ -194,7 +187,6 @@ struct SendFlowCoinControlSetAmountScreen: View {
     }
 
     private func screenAppeared() {
-        sendFlowManager.dispatch(.setCoinControlMode(utxos))
         if validate(), utxos == sendFlowManager.utxos() {
             isLoading = false
             loadingOpacity = 0

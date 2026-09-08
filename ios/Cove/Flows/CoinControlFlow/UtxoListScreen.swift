@@ -52,7 +52,6 @@ struct UtxoListScreen: View {
     }
 
     private func continueToSend() {
-        manager.continuePressed()
         navigate(
             RouteFactory()
                 .coinControlSend(
@@ -613,10 +612,7 @@ private struct UtxoRow: View {
 #Preview {
     AsyncPreview {
         UtxoListScreen(
-            manager: CoinControlManager(
-                RustCoinControlManager.previewNew(),
-                resolveSendFlowManager: { _ in nil }
-            )
+            manager: CoinControlManager(RustCoinControlManager.previewNew())
         )
         .environment(WalletManager(preview: .only))
     }
@@ -626,8 +622,7 @@ private struct UtxoRow: View {
     AsyncPreview {
         UtxoListScreen(
             manager: CoinControlManager(
-                RustCoinControlManager.previewNew(outputCount: 0, changeCount: 0),
-                resolveSendFlowManager: { _ in nil }
+                RustCoinControlManager.previewNew(outputCount: 0, changeCount: 0)
             )
         )
         .environment(WalletManager(preview: .only))
