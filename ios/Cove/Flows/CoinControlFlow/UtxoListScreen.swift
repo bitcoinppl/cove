@@ -544,6 +544,8 @@ private struct UtxoListToolbarMenu: View {
 // MARK: - Row
 
 private struct UtxoRow: View {
+    @Environment(AppManager.self) private var app
+
     var manager: CoinControlManager
     let utxo: Utxo
     let onLockedSelectionAttempt: () -> Void
@@ -582,18 +584,30 @@ private struct UtxoRow: View {
                         .truncationMode(.middle)
                 }
             }
+            // floor keeps the name legible while the address absorbs the squeeze
+            .frame(minWidth: 100, alignment: .leading)
 
             Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 4) {
-                Text(manager.displayAmount(utxo.amount))
-                    .font(.footnote)
-                    .fontWeight(.regular)
+                Text(
+                    manager.displayAmountWithFiat(
+                        utxo.amount,
+                        prices: app.prices,
+                        currency: app.selectedFiatCurrency
+                    )
+                )
+                .font(.footnote)
+                .fontWeight(.regular)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .allowsTightening(true)
 
                 Text(utxo.date())
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+            .layoutPriority(1)
         }
         .padding(.vertical, 4)
         .opacity(utxo.spendable ? 1 : 0.58)
@@ -615,6 +629,7 @@ private struct UtxoRow: View {
             manager: CoinControlManager(RustCoinControlManager.previewNew())
         )
         .environment(WalletManager(preview: .only))
+        .environment(AppManager.shared)
     }
 }
 
@@ -626,5 +641,6 @@ private struct UtxoRow: View {
             )
         )
         .environment(WalletManager(preview: .only))
+        .environment(AppManager.shared)
     }
 }
