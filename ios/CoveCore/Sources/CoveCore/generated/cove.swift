@@ -8905,6 +8905,14 @@ public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
 
     func utxos()  -> [Utxo]
 
+    /**
+     * Formats a UTXO amount followed by its fiat value in brackets (e.g. "50,000 SATS ($31.25)")
+     *
+     * Falls back to the bitcoin amount on its own when no prices are available, so the
+     * amount is never followed by empty brackets.
+     */
+    func displayAmountWithFiat(amount: Amount, prices: PriceResponse?, currency: FiatCurrency)  -> String
+
 }
 open class RustCoinControlManager: RustCoinControlManagerProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -9075,6 +9083,24 @@ open func utxos() -> [Utxo]  {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustcoincontrolmanager_utxos(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Formats a UTXO amount followed by its fiat value in brackets (e.g. "50,000 SATS ($31.25)")
+     *
+     * Falls back to the bitcoin amount on its own when no prices are available, so the
+     * amount is never followed by empty brackets.
+     */
+open func displayAmountWithFiat(amount: Amount, prices: PriceResponse?, currency: FiatCurrency) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustcoincontrolmanager_display_amount_with_fiat(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeAmount_lower(amount),
+        FfiConverterOptionTypePriceResponse.lower(prices),
+        FfiConverterTypeFiatCurrency_lower(currency),uniffiCallStatus
     )
 })
 }
@@ -44506,6 +44532,30 @@ fileprivate struct FfiConverterOptionTypeMigration: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypePriceResponse: FfiConverterRustBuffer {
+    typealias SwiftType = PriceResponse?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePriceResponse.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePriceResponse.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeTapSignerOperationContinuation: FfiConverterRustBuffer {
     typealias SwiftType = TapSignerOperationContinuation?
 
@@ -47627,6 +47677,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_utxos() != 43520) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_display_amount_with_fiat() != 20084) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustconnectivitymanager_is_connected() != 47607) {

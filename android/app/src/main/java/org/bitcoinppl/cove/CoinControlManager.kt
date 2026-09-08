@@ -211,6 +211,15 @@ class CoinControlManager internal constructor(
     fun displayAmount(amount: Amount, showUnit: Boolean = true): String =
         if (showUnit) amount.fmtStringWithUnit(unit) else amount.fmtString(unit)
 
+    fun displayAmountWithFiat(
+        amount: Amount,
+        prices: PriceResponse?,
+        currency: FiatCurrency,
+    ): String =
+        withRustOr(displayAmount(amount)) {
+            displayAmountWithFiat(amount, prices, currency)
+        }
+
     suspend fun reloadLabels() {
         withRustOrSuspend(Unit) {
             reloadLabels()
