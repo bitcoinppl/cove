@@ -177,6 +177,12 @@ private enum CoinControlManagerError: LocalizedError {
         showUnit ? amount.fmtStringWithUnit(unit: unit) : amount.fmtString(unit: unit)
     }
 
+    func displayAmountWithFiat(_ amount: Amount, prices: PriceResponse?, currency: FiatCurrency) -> String {
+        guard let rust else { return displayAmount(amount) }
+
+        return rust.displayAmountWithFiat(amount: amount, prices: prices, currency: currency)
+    }
+
     func reloadLabels() async {
         guard let rust else { return }
 
