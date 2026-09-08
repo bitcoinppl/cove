@@ -54,7 +54,11 @@ struct UtxoRowPreview: View {
 
 #Preview("UTXORowPreview") {
     AsyncPreview {
-        let manager = CoinControlManager(RustCoinControlManager.previewNew())
+        let manager = CoinControlManager(
+            RustCoinControlManager.previewNew(),
+            resolveSendFlowManager: { _ in nil }
+        )
+
         UtxoRowPreview(displayAmount: manager.displayAmount, utxo: manager.utxos[0])
             .environment(WalletManager(preview: .only))
     }

@@ -40,6 +40,39 @@ final class CoinControlManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testContinueCancelsPendingSendFlowUpdateWhenManagerIsUnavailable() async {
+        let sendFlowResolutionProbe = SendFlowResolutionProbe()
+        let sleepStarted = XCTestExpectation(description: "send-flow update sleep started")
+        let sleepCompleted = XCTestExpectation(description: "send-flow update sleep completed")
+        var sleepContinuation: CheckedContinuation<Void, Error>?
+        let manager = CoinControlManager(
+            RustCoinControlManager.previewNew(outputCount: 2, changeCount: 0),
+            resolveSendFlowManager: sendFlowResolutionProbe.resolve,
+            sleep: { _ in
+                try await withCheckedThrowingContinuation { continuation in
+                    sleepContinuation = continuation
+                    sleepStarted.fulfill()
+                }
+                sleepCompleted.fulfill()
+            }
+        )
+        defer { manager.close() }
+
+        manager.dispatch(.toggleSelectAll)
+        let sleepStartedResult = await XCTWaiter.fulfillment(of: [sleepStarted], timeout: 2)
+        XCTAssertEqual(sleepStartedResult, .completed)
+
+        manager.continuePressed()
+        XCTAssertEqual(sendFlowResolutionProbe.count, 1)
+
+        sleepContinuation?.resume(returning: ())
+        let sleepCompletedResult = await XCTWaiter.fulfillment(of: [sleepCompleted], timeout: 2)
+        XCTAssertEqual(sleepCompletedResult, .completed)
+
+        XCTAssertEqual(sendFlowResolutionProbe.count, 1)
+    }
+
+    @MainActor
     private func drainMainQueue() async {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async {

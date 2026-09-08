@@ -14,6 +14,7 @@ private enum CoinControlManagerError: LocalizedError {
 @Observable final class CoinControlManager: ReconcilingManager, CoinControlManagerReconciler {
     typealias Message = CoinControlManagerReconcileMessage
     typealias Action = CoinControlManagerAction
+    typealias Sleep = @MainActor (Duration) async throws -> Void
 
     private struct SelectionState {
         var selected: Set<Utxo.ID> = []
@@ -34,6 +35,8 @@ private enum CoinControlManagerError: LocalizedError {
     /// Resolves the current app-owned send flow because navigation can replace the cached instance
     @ObservationIgnored
     private let resolveSendFlowManager: (WalletId) -> SendFlowManager?
+    @ObservationIgnored
+    private let sleep: Sleep
 
     let id: WalletId
 
@@ -80,10 +83,12 @@ private enum CoinControlManagerError: LocalizedError {
 
     public init(
         _ rust: RustCoinControlManager,
-        resolveSendFlowManager: @escaping (WalletId) -> SendFlowManager? = { _ in nil }
+        resolveSendFlowManager: @escaping (WalletId) -> SendFlowManager?,
+        sleep: @escaping Sleep = { try await Task.sleep(for: $0) }
     ) {
         self.id = rust.id()
         self.resolveSendFlowManager = resolveSendFlowManager
+        self.sleep = sleep
 
         self.utxos = rust.utxos()
         self.lockStateLoadFailed = rust.lockStateLoadFailed()
@@ -158,9 +163,9 @@ private enum CoinControlManagerError: LocalizedError {
     }
 
     public func continuePressed() {
-        guard let sendFlowManager = resolveSendFlowManager(id) else { return }
         self.updateSendFlowManagerTask?.cancel()
         self.updateSendFlowManagerTask = nil
+        guard let sendFlowManager = resolveSendFlowManager(id) else { return }
 
         sendFlowManager.dispatch(.setCoinControlMode(selectedUtxos()))
     }
@@ -168,7 +173,7 @@ private enum CoinControlManagerError: LocalizedError {
     private func updateSendFlowManager() {
         self.updateSendFlowManagerTask?.cancel()
         self.updateSendFlowManagerTask = Task {
-            try? await Task.sleep(for: .milliseconds(100))
+            try? await sleep(.milliseconds(100))
             guard !Task.isCancelled else { return }
             guard let sendFlowManager = resolveSendFlowManager(id) else { return }
 

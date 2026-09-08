@@ -613,7 +613,10 @@ private struct UtxoRow: View {
 #Preview {
     AsyncPreview {
         UtxoListScreen(
-            manager: CoinControlManager(RustCoinControlManager.previewNew())
+            manager: CoinControlManager(
+                RustCoinControlManager.previewNew(),
+                resolveSendFlowManager: { _ in nil }
+            )
         )
         .environment(WalletManager(preview: .only))
     }
@@ -623,7 +626,8 @@ private struct UtxoRow: View {
     AsyncPreview {
         UtxoListScreen(
             manager: CoinControlManager(
-                RustCoinControlManager.previewNew(outputCount: 0, changeCount: 0)
+                RustCoinControlManager.previewNew(outputCount: 0, changeCount: 0),
+                resolveSendFlowManager: { _ in nil }
             )
         )
         .environment(WalletManager(preview: .only))
