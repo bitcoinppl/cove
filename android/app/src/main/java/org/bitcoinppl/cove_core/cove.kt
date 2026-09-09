@@ -1809,11 +1809,11 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_mnemonic_words(
     ): Short
+    external fun uniffi_cove_checksum_method_nodeselector_cancel_pending_selection(
+    ): Short
     external fun uniffi_cove_checksum_method_nodeselector_certificate_decision(
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_check_node(
-    ): Short
-    external fun uniffi_cove_checksum_method_nodeselector_check_selected_node(
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_fetch_node_certificate(
     ): Short
@@ -3073,11 +3073,11 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_constructor_nodeselector_new(uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_cove_fn_method_nodeselector_cancel_pending_selection(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
     external fun uniffi_cove_fn_method_nodeselector_certificate_decision(`ptr`: Long,`url`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_nodeselector_check_node(`ptr`: Long,`node`: RustBuffer.ByValue,
-    ): Long
-    external fun uniffi_cove_fn_method_nodeselector_check_selected_node(`ptr`: Long,`node`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_nodeselector_fetch_node_certificate(`ptr`: Long,`url`: RustBuffer.ByValue,
     ): Long
@@ -3087,8 +3087,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_nodeselector_save_node(`ptr`: Long,`node`: RustBuffer.ByValue,
     ): Long
-    external fun uniffi_cove_fn_method_nodeselector_select_preset_node(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_nodeselector_select_preset_node(`ptr`: Long,`name`: RustBuffer.ByValue,
+    ): Long
     external fun uniffi_cove_fn_method_nodeselector_selected_node(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_pendingwallet(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3518,6 +3518,14 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_globalcachetableerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalconfigtableerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_noderuntimestate_runtime_node(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_noderuntimestate_runtime_selection(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_noderuntimestate_stored_node(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_noderuntimestate_stored_selection(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_globalflagtableerror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -5023,13 +5031,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_mnemonic_words() != 8009.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_nodeselector_cancel_pending_selection() != 60215.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_nodeselector_certificate_decision() != 17478.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_check_node() != 1658.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_nodeselector_check_selected_node() != 34244.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_fetch_node_certificate() != 27543.toShort()) {
@@ -5044,10 +5052,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_nodeselector_save_node() != 44659.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_nodeselector_select_preset_node() != 55812.toShort()) {
+    if (lib.uniffi_cove_checksum_method_nodeselector_select_preset_node() != 19070.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_nodeselector_selected_node() != 20791.toShort()) {
+    if (lib.uniffi_cove_checksum_method_nodeselector_selected_node() != 47967.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_qrscanner_reset() != 17017.toShort()) {
@@ -17467,6 +17475,11 @@ public object FfiConverterTypeMnemonic: FfiConverter<Mnemonic, Long> {
 public interface NodeSelectorInterface {
 
     /**
+     * Prevent an in-flight node selection from changing durable state
+     */
+    fun `cancelPendingSelection`()
+
+    /**
      * Decide what a rejected certificate means for this url.
      *
      * Deciding here rather than in each app keeps one rule: a url that already
@@ -17478,8 +17491,6 @@ public interface NodeSelectorInterface {
      * Check a node's network connection, including its certificate settings
      */
     suspend fun `checkNode`(`node`: Node)
-
-    suspend fun `checkSelectedNode`(`node`: Node)
 
     /**
      * Read the certificate a server presents, so it can be shown to the user.
@@ -17501,9 +17512,12 @@ public interface NodeSelectorInterface {
      */
     suspend fun `saveNode`(`node`: Node)
 
-    fun `selectPresetNode`(`name`: kotlin.String): Node
+    /**
+     * Check and select a preset node without changing durable state on failure
+     */
+    suspend fun `selectPresetNode`(`name`: kotlin.String): Node
 
-    fun `selectedNode`(): NodeSelection
+    fun `selectedNode`(): NodeRuntimeState
 
     companion object
 }
@@ -17619,6 +17633,21 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
 
 
     /**
+     * Prevent an in-flight node selection from changing durable state
+     */override fun `cancelPendingSelection`()
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_nodeselector_cancel_pending_selection(
+        it,
+        _status)
+}
+    }
+
+
+
+
+    /**
      * Decide what a rejected certificate means for this url.
      *
      * Deciding here rather than in each app keeps one rule: a url that already
@@ -17655,29 +17684,6 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
         return uniffiRustCallAsync(
         callWithHandle { uniffiHandle ->
             UniffiLib.uniffi_cove_fn_method_nodeselector_check_node(
-                uniffiHandle,
-
-        FfiConverterTypeNode.lower(`node`),
-            )
-        },
-        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_void(future, callback, continuation) },
-        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_void(future, continuation) },
-        { future -> UniffiLib.ffi_cove_rust_future_free_void(future) },
-        // lift function
-        { Unit },
-
-        // Error FFI converter
-        NodeSelectorException.ErrorHandler,
-    )
-    }
-
-
-    @Throws(NodeSelectorException::class)
-    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
-    override suspend fun `checkSelectedNode`(`node`: Node) {
-        return uniffiRustCallAsync(
-        callWithHandle { uniffiHandle ->
-            UniffiLib.uniffi_cove_fn_method_nodeselector_check_selected_node(
                 uniffiHandle,
 
         FfiConverterTypeNode.lower(`node`),
@@ -17783,22 +17789,32 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
     }
 
 
-    @Throws(NodeSelectorException::class)override fun `selectPresetNode`(`name`: kotlin.String): Node {
-            return FfiConverterTypeNode.lift(
-    callWithHandle {
-    uniffiRustCallWithError(NodeSelectorException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_nodeselector_select_preset_node(
-        it,
+    /**
+     * Check and select a preset node without changing durable state on failure
+     */
+    @Throws(NodeSelectorException::class)
+    @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
+    override suspend fun `selectPresetNode`(`name`: kotlin.String) : Node {
+        return uniffiRustCallAsync(
+        callWithHandle { uniffiHandle ->
+            UniffiLib.uniffi_cove_fn_method_nodeselector_select_preset_node(
+                uniffiHandle,
 
-        FfiConverterString.lower(`name`),_status)
-}
-    }
+        FfiConverterString.lower(`name`),
+            )
+        },
+        { future, callback, continuation -> UniffiLib.ffi_cove_rust_future_poll_rust_buffer(future, callback, continuation) },
+        { future, continuation -> UniffiLib.ffi_cove_rust_future_complete_rust_buffer(future, continuation) },
+        { future -> UniffiLib.ffi_cove_rust_future_free_rust_buffer(future) },
+        // lift function
+        { FfiConverterTypeNode.lift(it) },
+        // Error FFI converter
+        NodeSelectorException.ErrorHandler,
     )
     }
 
-
-    override fun `selectedNode`(): NodeSelection {
-            return FfiConverterTypeNodeSelection.lift(
+    override fun `selectedNode`(): NodeRuntimeState {
+            return FfiConverterTypeNodeRuntimeState.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_nodeselector_selected_node(
@@ -50696,6 +50712,189 @@ public object FfiConverterTypeNewWalletRoute : FfiConverterRustBuffer<NewWalletR
 
 
 
+/**
+ * Why the configured node could not be used by runtime consumers
+ */
+
+enum class NodeRuntimeFallbackReason {
+
+    INVALID_TRUST_STORAGE,
+    ENDPOINT_CONFLICT;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeRuntimeFallbackReason: FfiConverterRustBuffer<NodeRuntimeFallbackReason> {
+    override fun read(buf: ByteBuffer) = try {
+        NodeRuntimeFallbackReason.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: NodeRuntimeFallbackReason) = 4UL
+
+    override fun write(value: NodeRuntimeFallbackReason, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
+
+
+
+/**
+ * The node settings projection, including the safe runtime fallback when needed
+ */
+sealed class NodeRuntimeState {
+
+    data class Configured(
+        val `selection`: org.bitcoinppl.cove_core.NodeSelection) : NodeRuntimeState()
+
+    {
+
+
+        companion object
+    }
+
+    data class Fallback(
+        val `storedSelection`: org.bitcoinppl.cove_core.NodeSelection,
+        val `runtimeSelection`: org.bitcoinppl.cove_core.NodeSelection,
+        val `reason`: org.bitcoinppl.cove_core.NodeRuntimeFallbackReason) : NodeRuntimeState()
+
+    {
+
+
+        companion object
+    }
+
+
+
+
+
+
+    /**
+     * Returns the node that runtime consumers can safely use
+     */ fun `runtimeNode`(): Node {
+            return FfiConverterTypeNode.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_noderuntimestate_runtime_node(FfiConverterTypeNodeRuntimeState.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
+    /**
+     * Returns the selection that runtime consumers can safely use
+     */ fun `runtimeSelection`(): NodeSelection {
+            return FfiConverterTypeNodeSelection.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_noderuntimestate_runtime_selection(FfiConverterTypeNodeRuntimeState.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
+    /**
+     * Returns the node stored as the user's selection
+     */ fun `storedNode`(): Node {
+            return FfiConverterTypeNode.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_noderuntimestate_stored_node(FfiConverterTypeNodeRuntimeState.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
+    /**
+     * Returns the stored selection for settings presentation
+     */ fun `storedSelection`(): NodeSelection {
+            return FfiConverterTypeNodeSelection.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_noderuntimestate_stored_selection(FfiConverterTypeNodeRuntimeState.lower(this),
+        _status)
+}
+    )
+    }
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNodeRuntimeState : FfiConverterRustBuffer<NodeRuntimeState>{
+    override fun read(buf: ByteBuffer): NodeRuntimeState {
+        return when(buf.getInt()) {
+            1 -> NodeRuntimeState.Configured(
+                FfiConverterTypeNodeSelection.read(buf),
+                )
+            2 -> NodeRuntimeState.Fallback(
+                FfiConverterTypeNodeSelection.read(buf),
+                FfiConverterTypeNodeSelection.read(buf),
+                FfiConverterTypeNodeRuntimeFallbackReason.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: NodeRuntimeState): ULong = when(value) {
+        is NodeRuntimeState.Configured -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeNodeSelection.allocationSize(value.`selection`)
+            )
+        }
+        is NodeRuntimeState.Fallback -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterTypeNodeSelection.allocationSize(value.`storedSelection`)
+                + FfiConverterTypeNodeSelection.allocationSize(value.`runtimeSelection`)
+                + FfiConverterTypeNodeRuntimeFallbackReason.allocationSize(value.`reason`)
+            )
+        }
+    }
+
+    override fun write(value: NodeRuntimeState, buf: ByteBuffer) {
+        when(value) {
+            is NodeRuntimeState.Configured -> {
+                buf.putInt(1)
+                FfiConverterTypeNodeSelection.write(value.`selection`, buf)
+                Unit
+            }
+            is NodeRuntimeState.Fallback -> {
+                buf.putInt(2)
+                FfiConverterTypeNodeSelection.write(value.`storedSelection`, buf)
+                FfiConverterTypeNodeSelection.write(value.`runtimeSelection`, buf)
+                FfiConverterTypeNodeRuntimeFallbackReason.write(value.`reason`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 sealed class NodeSelection {
 
     data class Preset(
@@ -50839,6 +51038,12 @@ sealed class NodeSelectorException: kotlin.Exception() {
             get() = ""
     }
 
+    class SelectionSuperseded(
+        ) : NodeSelectorException() {
+        override val message
+            get() = ""
+    }
+
     /**
      * Reports an invalid persisted certificate trust store
      */
@@ -50885,7 +51090,8 @@ public object FfiConverterTypeNodeSelectorError : FfiConverterRustBuffer<NodeSel
                 FfiConverterString.read(buf),
                 )
             6 -> NodeSelectorException.CertificateNotTrusted()
-            7 -> NodeSelectorException.CertificateTrustStoreException(
+            7 -> NodeSelectorException.SelectionSuperseded()
+            8 -> NodeSelectorException.CertificateTrustStoreException(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -50920,6 +51126,10 @@ public object FfiConverterTypeNodeSelectorError : FfiConverterRustBuffer<NodeSel
                 + FfiConverterString.allocationSize(value.v1)
             )
             is NodeSelectorException.CertificateNotTrusted -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+            )
+            is NodeSelectorException.SelectionSuperseded -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
             )
@@ -50962,8 +51172,12 @@ public object FfiConverterTypeNodeSelectorError : FfiConverterRustBuffer<NodeSel
                 buf.putInt(6)
                 Unit
             }
-            is NodeSelectorException.CertificateTrustStoreException -> {
+            is NodeSelectorException.SelectionSuperseded -> {
                 buf.putInt(7)
+                Unit
+            }
+            is NodeSelectorException.CertificateTrustStoreException -> {
+                buf.putInt(8)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }

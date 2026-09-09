@@ -6567,6 +6567,11 @@ public func FfiConverterTypeMnemonic_lower(_ value: Mnemonic) -> UInt64 {
 public protocol NodeSelectorProtocol: AnyObject, Sendable {
 
     /**
+     * Prevent an in-flight node selection from changing durable state
+     */
+    func cancelPendingSelection()
+
+    /**
      * Decide what a rejected certificate means for this url.
      *
      * Deciding here rather than in each app keeps one rule: a url that already
@@ -6578,8 +6583,6 @@ public protocol NodeSelectorProtocol: AnyObject, Sendable {
      * Check a node's network connection, including its certificate settings
      */
     func checkNode(node: Node) async throws
-
-    func checkSelectedNode(node: Node) async throws
 
     /**
      * Read the certificate a server presents, so it can be shown to the user.
@@ -6601,9 +6604,12 @@ public protocol NodeSelectorProtocol: AnyObject, Sendable {
      */
     func saveNode(node: Node) async throws
 
-    func selectPresetNode(name: String) throws  -> Node
+    /**
+     * Check and select a preset node without changing durable state on failure
+     */
+    func selectPresetNode(name: String) async throws  -> Node
 
-    func selectedNode()  -> NodeSelection
+    func selectedNode()  -> NodeRuntimeState
 
 }
 open class NodeSelector: NodeSelectorProtocol, @unchecked Sendable {
@@ -6668,6 +6674,17 @@ public convenience init() {
 
 
     /**
+     * Prevent an in-flight node selection from changing durable state
+     */
+open func cancelPendingSelection()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_nodeselector_cancel_pending_selection(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+
+    /**
      * Decide what a rejected certificate means for this url.
      *
      * Deciding here rather than in each app keeps one rule: a url that already
@@ -6698,23 +6715,6 @@ open func checkNode(node: Node)async throws   {
         try  await uniffiRustCallAsync(
             rustFutureFunc: {
                 uniffi_cove_fn_method_nodeselector_check_node(
-                    self.uniffiCloneHandle(),
-                    FfiConverterTypeNode_lower(node)
-                )
-            },
-            pollFunc: ffi_cove_rust_future_poll_void,
-            completeFunc: ffi_cove_rust_future_complete_void,
-            freeFunc: ffi_cove_rust_future_free_void,
-            liftFunc: { $0 },
-            errorHandler: FfiConverterTypeNodeSelectorError_lift
-        )
-}
-
-open func checkSelectedNode(node: Node)async throws   {
-    return
-        try  await uniffiRustCallAsync(
-            rustFutureFunc: {
-                uniffi_cove_fn_method_nodeselector_check_selected_node(
                     self.uniffiCloneHandle(),
                     FfiConverterTypeNode_lower(node)
                 )
@@ -6795,18 +6795,28 @@ open func saveNode(node: Node)async throws   {
         )
 }
 
-open func selectPresetNode(name: String)throws  -> Node  {
-    return try  FfiConverterTypeNode_lift(try rustCallWithError(FfiConverterTypeNodeSelectorError_lift) {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_nodeselector_select_preset_node(
-            self.uniffiCloneHandle(),
-        FfiConverterString.lower(name),uniffiCallStatus
-    )
-})
+    /**
+     * Check and select a preset node without changing durable state on failure
+     */
+open func selectPresetNode(name: String)async throws  -> Node  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_cove_fn_method_nodeselector_select_preset_node(
+                    self.uniffiCloneHandle(),
+                    FfiConverterString.lower(name)
+                )
+            },
+            pollFunc: ffi_cove_rust_future_poll_rust_buffer,
+            completeFunc: ffi_cove_rust_future_complete_rust_buffer,
+            freeFunc: ffi_cove_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeNode_lift,
+            errorHandler: FfiConverterTypeNodeSelectorError_lift
+        )
 }
 
-open func selectedNode() -> NodeSelection  {
-    return try!  FfiConverterTypeNodeSelection_lift(try! rustCall() {
+open func selectedNode() -> NodeRuntimeState  {
+    return try!  FfiConverterTypeNodeRuntimeState_lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_nodeselector_selected_node(
             self.uniffiCloneHandle(),uniffiCallStatus
@@ -31390,6 +31400,200 @@ public func FfiConverterTypeNewWalletRoute_lower(_ value: NewWalletRoute) -> Rus
 
 
 
+/**
+ * Why the configured node could not be used by runtime consumers
+ */
+
+public enum NodeRuntimeFallbackReason: Equatable, Hashable {
+
+    case invalidTrustStorage
+    case endpointConflict
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension NodeRuntimeFallbackReason: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeRuntimeFallbackReason: FfiConverterRustBuffer {
+    typealias SwiftType = NodeRuntimeFallbackReason
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeRuntimeFallbackReason {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .invalidTrustStorage
+
+        case 2: return .endpointConflict
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeRuntimeFallbackReason, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .invalidTrustStorage:
+            writeInt(&buf, Int32(1))
+
+
+        case .endpointConflict:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeRuntimeFallbackReason_lift(_ buf: RustBuffer) throws -> NodeRuntimeFallbackReason {
+    return try FfiConverterTypeNodeRuntimeFallbackReason.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeRuntimeFallbackReason_lower(_ value: NodeRuntimeFallbackReason) -> RustBuffer {
+    return FfiConverterTypeNodeRuntimeFallbackReason.lower(value)
+}
+
+
+
+/**
+ * The node settings projection, including the safe runtime fallback when needed
+ */
+
+public enum NodeRuntimeState: Equatable, Hashable {
+
+    case configured(selection: NodeSelection
+    )
+    case fallback(storedSelection: NodeSelection, runtimeSelection: NodeSelection, reason: NodeRuntimeFallbackReason
+    )
+
+
+
+    /**
+     * Returns the node that runtime consumers can safely use
+     */
+public func runtimeNode() -> Node  {
+    return try!  FfiConverterTypeNode_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_noderuntimestate_runtime_node(
+            FfiConverterTypeNodeRuntimeState_lower(self),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Returns the selection that runtime consumers can safely use
+     */
+public func runtimeSelection() -> NodeSelection  {
+    return try!  FfiConverterTypeNodeSelection_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_noderuntimestate_runtime_selection(
+            FfiConverterTypeNodeRuntimeState_lower(self),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Returns the node stored as the user's selection
+     */
+public func storedNode() -> Node  {
+    return try!  FfiConverterTypeNode_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_noderuntimestate_stored_node(
+            FfiConverterTypeNodeRuntimeState_lower(self),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Returns the stored selection for settings presentation
+     */
+public func storedSelection() -> NodeSelection  {
+    return try!  FfiConverterTypeNodeSelection_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_noderuntimestate_stored_selection(
+            FfiConverterTypeNodeRuntimeState_lower(self),uniffiCallStatus
+    )
+})
+}
+
+
+
+}
+
+#if compiler(>=6)
+extension NodeRuntimeState: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNodeRuntimeState: FfiConverterRustBuffer {
+    typealias SwiftType = NodeRuntimeState
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NodeRuntimeState {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .configured(selection: try FfiConverterTypeNodeSelection.read(from: &buf)
+        )
+
+        case 2: return .fallback(storedSelection: try FfiConverterTypeNodeSelection.read(from: &buf), runtimeSelection: try FfiConverterTypeNodeSelection.read(from: &buf), reason: try FfiConverterTypeNodeRuntimeFallbackReason.read(from: &buf)
+        )
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NodeRuntimeState, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case let .configured(selection):
+            writeInt(&buf, Int32(1))
+            FfiConverterTypeNodeSelection.write(selection, into: &buf)
+
+
+        case let .fallback(storedSelection,runtimeSelection,reason):
+            writeInt(&buf, Int32(2))
+            FfiConverterTypeNodeSelection.write(storedSelection, into: &buf)
+            FfiConverterTypeNodeSelection.write(runtimeSelection, into: &buf)
+            FfiConverterTypeNodeRuntimeFallbackReason.write(reason, into: &buf)
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeRuntimeState_lift(_ buf: RustBuffer) throws -> NodeRuntimeState {
+    return try FfiConverterTypeNodeRuntimeState.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNodeRuntimeState_lower(_ value: NodeRuntimeState) -> RustBuffer {
+    return FfiConverterTypeNodeRuntimeState.lower(value)
+}
+
+
+
 
 public enum NodeSelection: Equatable, Hashable {
 
@@ -31487,6 +31691,7 @@ enum NodeSelectorError: Swift.Error, Equatable, Hashable, Foundation.LocalizedEr
     case ReadCertificateError(String
     )
     case CertificateNotTrusted
+    case SelectionSuperseded
     /**
      * Reports an invalid persisted certificate trust store
      */
@@ -31537,7 +31742,8 @@ public struct FfiConverterTypeNodeSelectorError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 6: return .CertificateNotTrusted
-        case 7: return .CertificateTrustStoreError(
+        case 7: return .SelectionSuperseded
+        case 8: return .CertificateTrustStoreError(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -31581,8 +31787,12 @@ public struct FfiConverterTypeNodeSelectorError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(6))
 
 
-        case let .CertificateTrustStoreError(v1):
+        case .SelectionSuperseded:
             writeInt(&buf, Int32(7))
+
+
+        case let .CertificateTrustStoreError(v1):
+            writeInt(&buf, Int32(8))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -46091,13 +46301,13 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_mnemonic_words() != 8009) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_nodeselector_cancel_pending_selection() != 60215) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_nodeselector_certificate_decision() != 17478) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_check_node() != 1658) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_nodeselector_check_selected_node() != 34244) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_fetch_node_certificate() != 27543) {
@@ -46112,10 +46322,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_nodeselector_save_node() != 44659) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_nodeselector_select_preset_node() != 55812) {
+    if (uniffi_cove_checksum_method_nodeselector_select_preset_node() != 19070) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_nodeselector_selected_node() != 20791) {
+    if (uniffi_cove_checksum_method_nodeselector_selected_node() != 47967) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_qrscanner_reset() != 17017) {
