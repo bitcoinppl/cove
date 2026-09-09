@@ -14,6 +14,7 @@ mod pending;
 mod pending_enable;
 mod pending_verification;
 mod reconcile;
+mod recovery_coverage;
 mod remote_inventory;
 mod store;
 mod sync_health;
@@ -117,6 +118,7 @@ pub(crate) use self::pending_verification::{
 };
 use self::reconcile::CloudBackupReconcileMessage;
 pub use self::reconcile::{DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction};
+pub(crate) use self::recovery_coverage::CloudBackupRecoveryCoverage;
 pub(crate) use self::remote_inventory::current_namespace_wallet_record_ids;
 pub(crate) use self::store::CloudBackupStore;
 pub(crate) use self::sync_health::SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE;
