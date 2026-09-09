@@ -7,7 +7,6 @@ enum CloudBackupDestructiveConfirmation: Equatable {
 
 enum CloudBackupDetailDialog {
     case destructive(CloudBackupDestructiveConfirmation)
-    case cloudOnlyWalletActions(CloudBackupWalletItem)
     case disableCloudBackup
     case recoverOtherBackups
 }
@@ -25,6 +24,7 @@ enum CloudBackupDetailAlert {
 
 enum CloudBackupDetailPresentation {
     case dialog(CloudBackupDetailDialog)
+    case cloudOnlyWalletDialog(CloudBackupWalletItem)
     case alert(CloudBackupDetailAlert)
 }
 
@@ -37,6 +37,72 @@ extension View {
             manager: manager,
             coordinator: coordinator
         ))
+    }
+
+    func cloudOnlyWalletActionDialog(
+        wallet: CloudBackupWalletItem,
+        manager: CloudBackupManager,
+        coordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    ) -> some View {
+        modifier(CloudOnlyWalletActionDialogModifier(
+            wallet: wallet,
+            manager: manager,
+            coordinator: coordinator
+        ))
+    }
+}
+
+private struct CloudOnlyWalletActionDialogModifier: ViewModifier {
+    let wallet: CloudBackupWalletItem
+    let manager: CloudBackupManager
+    let coordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+
+    private var isPresented: Binding<Bool> {
+        coordinator.isPresented { presentation in
+            guard case let .cloudOnlyWalletDialog(currentWallet) = presentation else {
+                return false
+            }
+
+            return currentWallet.recordId == wallet.recordId
+        }
+    }
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
+            wallet.name,
+            isPresented: isPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Restore to This Device") {
+                restoreWallet()
+            }
+            .disabled(!manager.isDetailInventoryReady)
+
+            Button("Delete from iCloud", role: .destructive) {
+                requestDeletion()
+            }
+            .disabled(!manager.isDetailInventoryReady)
+
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func restoreWallet() {
+        guard manager.isDetailInventoryReady else { return }
+
+        if wallet.syncStatus == .unsupportedVersion {
+            coordinator.transition(to: .alert(.cloudOnlyUnsupportedRestore(wallet)))
+            return
+        }
+
+        coordinator.dismissCurrentPresentation()
+        manager.dispatch(action: .restoreCloudWallet(wallet.recordId))
+    }
+
+    private func requestDeletion() {
+        guard manager.isDetailInventoryReady else { return }
+
+        coordinator.transition(to: .alert(.cloudOnlyDeleteWallet(wallet)))
     }
 }
 
@@ -106,8 +172,6 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
             case .recreate: "Recreate Backup Index"
             case .reinitialize: "Reinitialize Cloud Backup"
             }
-        case let .cloudOnlyWalletActions(wallet):
-            wallet.name
         case .disableCloudBackup:
             "Disable Cloud Backup?"
         case .recoverOtherBackups:
@@ -123,19 +187,6 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
                 performDestructiveAction(confirmation)
             }
             .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-
-        case let .cloudOnlyWalletActions(wallet):
-            Button("Restore to This Device") {
-                restoreCloudOnlyWallet(wallet)
-            }
-            .disabled(!manager.isDetailInventoryReady)
-
-            Button("Delete from iCloud", role: .destructive) {
-                requestCloudOnlyWalletDeletion(wallet)
-            }
-            .disabled(!manager.isDetailInventoryReady)
 
             Button("Cancel", role: .cancel) {}
 
@@ -167,8 +218,6 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
                     "This will replace your entire cloud backup. Wallets that only exist in the current cloud backup will be lost."
                 )
             }
-        case .cloudOnlyWalletActions:
-            EmptyView()
         case .disableCloudBackup:
             Text(
                 "Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage."
@@ -297,24 +346,6 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
         case .reinitialize:
             manager.dispatch(action: .reinitializeBackup)
         }
-    }
-
-    private func restoreCloudOnlyWallet(_ wallet: CloudBackupWalletItem) {
-        guard manager.isDetailInventoryReady else { return }
-
-        if wallet.syncStatus == .unsupportedVersion {
-            coordinator.transition(to: .alert(.cloudOnlyUnsupportedRestore(wallet)))
-            return
-        }
-
-        coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .restoreCloudWallet(wallet.recordId))
-    }
-
-    private func requestCloudOnlyWalletDeletion(_ wallet: CloudBackupWalletItem) {
-        guard manager.isDetailInventoryReady else { return }
-
-        coordinator.transition(to: .alert(.cloudOnlyDeleteWallet(wallet)))
     }
 
     private func presentFinalDisableConfirmation() {
