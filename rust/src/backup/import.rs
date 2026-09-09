@@ -982,6 +982,47 @@ mod tests {
         );
     }
 
+    #[test]
+    fn backup_import_rejects_tls_on_an_unsupported_node_transport() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, config) = test_config();
+        let previous = crate::node::Node::new_esplora(
+            "Previous".into(),
+            "https://previous.example/api".into(),
+            Network::Bitcoin,
+        );
+        config.set_selected_node(&previous).unwrap();
+        let unsupported = crate::node::Node {
+            tls: Some(crate::node::tls::TlsTrust::PinnedFingerprint { sha256: vec![9; 32] }),
+            ..crate::node::Node::new_esplora(
+                "Unsupported".into(),
+                "https://unsupported.example/api".into(),
+                Network::Bitcoin,
+            )
+        };
+        let settings = super::super::model::AppSettings {
+            selected_network: None,
+            selected_fiat_currency: None,
+            color_scheme: None,
+            selected_nodes: vec![(
+                Network::Bitcoin.to_string(),
+                serde_json::to_string(&unsupported).unwrap(),
+            )],
+            custom_block_explorers: BTreeMap::new(),
+            certificate_trust_store: BackupCertificateTrustStore::default(),
+        };
+
+        let error = restore_settings_with_config(&config, &settings).unwrap_err();
+
+        assert!(matches!(
+            error,
+            BackupError::Database(message)
+                if message.contains("node for Bitcoin")
+                    && message.contains("supported only for SSL Electrum")
+        ));
+        assert_eq!(config.stored_selected_node_for_network(Network::Bitcoin), previous);
+    }
+
     fn test_config() -> (tempfile::TempDir, GlobalConfigTable) {
         let tmp = tempfile::tempdir().unwrap();
         let db = Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());

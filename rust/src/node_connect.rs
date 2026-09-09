@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 use tracing::error;
 use url::Url;
 
@@ -6,7 +9,9 @@ use crate::node::tls::{self, TlsTrust};
 use crate::{
     database::{
         Database,
-        global_config::{CertificateTrustCache, GlobalConfigTableError},
+        global_config::{
+            CertificateTrustCache, GlobalConfigTable, GlobalConfigTableError, NodeRuntimeState,
+        },
     },
     network::Network,
     node::Node,
@@ -48,7 +53,15 @@ pub struct NodeSelector {
     network: Network,
     node_list: Vec<NodeSelection>,
     certificate_trust: CertificateTrustCache,
+    selection_order: NodeSelectionOrder,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SelectionRequest(u64);
+
+/// One commit order shared by all selectors for a database
+#[derive(Debug, Clone, Default)]
+pub(crate) struct NodeSelectionOrder(Arc<Mutex<u64>>);
 
 #[derive(Debug, Clone, uniffi::Enum, PartialEq, Eq, Hash)]
 pub enum NodeSelection {
@@ -92,6 +105,9 @@ pub enum NodeSelectorError {
 
     #[error("the server's certificate is not trusted")]
     CertificateNotTrusted,
+
+    #[error("a newer node selection replaced this request")]
+    SelectionSuperseded,
 
     /// Reports an invalid persisted certificate trust store
     #[error("unable to read the certificate trust store: {0}")]
@@ -139,12 +155,17 @@ impl NodeSelector {
     pub fn new() -> Self {
         let database = Database::global();
         let network = database.global_config.selected_network();
-        let selected_node = database.global_config.selected_node();
+        let selected_node = database.global_config.stored_selected_node();
         let certificate_trust = database.global_config.certificate_trust_cache();
 
         let node_selection_list = node_selection_list(network, selected_node);
 
-        Self { network, node_list: node_selection_list, certificate_trust }
+        Self {
+            network,
+            node_list: node_selection_list,
+            certificate_trust,
+            selection_order: database.global_config.node_selection_order(),
+        }
     }
 
     #[uniffi::method]
@@ -153,76 +174,38 @@ impl NodeSelector {
     }
 
     #[uniffi::method]
-    pub fn selected_node(&self) -> NodeSelection {
-        let selected_node = Database::global().global_config.selected_node();
-
-        selected_node_selection(self.network, selected_node)
+    pub fn selected_node(&self) -> NodeRuntimeState {
+        Database::global().global_config.selected_node_state_for_network(self.network)
     }
 
     #[uniffi::method]
-    pub fn select_preset_node(&self, name: String) -> Result<Node, Error> {
-        let requested_node = node_list(self.network)
-            .into_iter()
-            .find(|node| node.name == name)
-            .or_else(|| {
-                let selected_node = Database::global().global_config.selected_node();
-                if selected_node.name == name { Some(selected_node) } else { None }
-            })
-            .ok_or_else(|| {
-                error!("node with name {name} not found");
-                NodeSelectorError::NodeNotFound(name)
-            })?;
-        let database = Database::global();
-        let node = match self.hydrate_certificate_trust(requested_node.clone()) {
-            Ok(node) => {
-                if requested_node.tls.is_none()
-                    && let Some(endpoint) =
-                        database.global_config.conflicted_selected_node_endpoint(self.network)
-                {
-                    return database
-                        .global_config
-                        .recover_selected_node_from_certificate_trust_conflict(
-                            &requested_node,
-                            &endpoint,
-                        )
-                        .map_err_str(NodeSelectorError::SetSelectedNodeError);
-                }
+    /// Check and select a preset node without changing durable state on failure
+    pub async fn select_preset_node(&self, name: String) -> Result<Node, Error> {
+        let request = self.begin_selection_request();
+        let network = self.network;
+        let requested_name = name.clone();
+        let (requested_node, global_config) = cove_tokio::unblock::run_blocking(move || {
+            let database = Database::global();
+            let requested_node =
+                requested_preset_node(network, &requested_name, &database.global_config)?;
 
-                node
-            }
-            Err(CertificateTrustHydrationError::Store(
-                GlobalConfigTableError::CertificateTrustConflict(endpoint),
-            )) if requested_node.tls.is_none() => {
-                return database
-                    .global_config
-                    .recover_selected_node_from_certificate_trust_conflict(
-                        &requested_node,
-                        &endpoint,
-                    )
-                    .map_err_str(NodeSelectorError::SetSelectedNodeError);
-            }
-            Err(error) => return Err(error.into()),
-        };
+            Ok::<_, Error>((requested_node, database.global_config.clone()))
+        })
+        .await?;
 
-        database
-            .global_config
-            .set_selected_node(&node)
-            .map_err_str(NodeSelectorError::SetSelectedNodeError)?;
+        self.select_preset_node_with_config(requested_node, &global_config, request).await
+    }
 
-        Ok(node)
+    #[uniffi::method]
+    /// Prevent an in-flight node selection from changing durable state
+    pub fn cancel_pending_selection(&self) {
+        self.begin_selection_request();
     }
 
     #[uniffi::method]
     /// Check a node's network connection, including its certificate settings
     pub async fn check_node(&self, node: Node) -> Result<(), Error> {
         self.check_node_connection(node).await
-    }
-
-    #[uniffi::method]
-    pub async fn check_selected_node(&self, node: Node) -> Result<(), Error> {
-        node.check_url().await.map_err_debug(Error::NodeAccessError)?;
-
-        Ok(())
     }
 
     #[uniffi::method(default(certificate_trust = None))]
@@ -242,10 +225,10 @@ impl NodeSelector {
             return Err(Error::ParseNodeUrlError("invalid url, no domain".to_string()));
         }
 
-        let url_string = strip_trailing_slash(url.to_string());
+        let parsed_url_string = strip_trailing_slash(url.to_string());
 
         let name = if entered_name.is_empty() {
-            url.domain().unwrap_or(url_string.as_str()).to_string()
+            url.domain().unwrap_or(parsed_url_string.as_str()).to_string()
         } else {
             entered_name
         };
@@ -260,14 +243,17 @@ impl NodeSelector {
             .transpose()?;
 
         let node = if node_type.contains("electrum") {
-            let session_tls = if url.scheme() == "ssl" {
-                let endpoint = normalize_certificate_endpoint(&url_string)
+            let (url_string, session_tls) = if url.scheme() == "ssl" {
+                let endpoint = normalize_certificate_endpoint(&parsed_url_string)
                     .map_err_str(Error::ParseNodeUrlError)?;
-                certificate_trust
+
+                let session_tls = certificate_trust
                     .filter(|_| trusted_endpoint.as_deref() == Some(endpoint.as_str()))
-                    .map(|trust| trust.tls)
+                    .map(|trust| trust.tls);
+
+                (endpoint, session_tls)
             } else {
-                None
+                (parsed_url_string, None)
             };
 
             let node =
@@ -275,7 +261,7 @@ impl NodeSelector {
 
             self.hydrate_certificate_trust(node)?
         } else if node_type.contains("esplora") {
-            Node::new_esplora(name, url_string, self.network)
+            Node::new_esplora(name, parsed_url_string, self.network)
         } else {
             error!("invalid node type: {node_type}");
             Node::default(self.network)
@@ -327,24 +313,121 @@ impl NodeSelector {
     #[uniffi::method]
     /// Save a node after its network connection has been checked
     pub async fn save_node(&self, node: Node) -> Result<(), Error> {
-        cove_tokio::unblock::run_blocking(move || {
-            Database::global().global_config.set_selected_node(&node)
-        })
-        .await
-        .map_err_str(Error::SetSelectedNodeError)
+        let request = self.begin_selection_request();
+        let global_config = Database::global().global_config.clone();
+
+        self.save_node_with_config(node, &global_config, request).await
     }
 }
 
 impl NodeSelector {
+    fn begin_selection_request(&self) -> SelectionRequest {
+        let mut generation = self.selection_order.0.lock();
+        *generation = generation.wrapping_add(1);
+
+        SelectionRequest(*generation)
+    }
+
+    async fn save_node_with_config(
+        &self,
+        node: Node,
+        global_config: &GlobalConfigTable,
+        request: SelectionRequest,
+    ) -> Result<(), Error> {
+        let selector = self.clone();
+        let config = global_config.clone();
+
+        cove_tokio::unblock::run_blocking(move || {
+            let requested_node = selector.requested_custom_node(&node);
+
+            selector.commit_checked_node(&requested_node, &node, &config, request).map(|_| ())
+        })
+        .await
+    }
+
+    async fn select_preset_node_with_config(
+        &self,
+        requested_node: Node,
+        global_config: &GlobalConfigTable,
+        request: SelectionRequest,
+    ) -> Result<Node, Error> {
+        let selector = self.clone();
+        let requested_node_for_prepare = requested_node.clone();
+        let node = cove_tokio::unblock::run_blocking(move || {
+            selector.prepare_preset_node(requested_node_for_prepare)
+        })
+        .await?;
+
+        node.check_url().await.map_err_debug(Error::NodeAccessError)?;
+
+        let selector = self.clone();
+        let config = global_config.clone();
+        cove_tokio::unblock::run_blocking(move || {
+            selector.commit_checked_node(&requested_node, &node, &config, request)
+        })
+        .await
+    }
+
+    fn prepare_preset_node(&self, requested_node: Node) -> Result<Node, Error> {
+        match self.hydrate_certificate_trust(requested_node.clone()) {
+            Ok(node) => Ok(node),
+            Err(CertificateTrustHydrationError::Store(
+                GlobalConfigTableError::CertificateTrustConflict(_),
+            )) if requested_node.tls.is_none() => Ok(requested_node),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    fn requested_custom_node(&self, checked_node: &Node) -> Node {
+        let unpinned_node = Node { tls: None, ..checked_node.clone() };
+
+        // parsing can hydrate durable trust, but recovery still needs the original unpinned intent
+        match self.hydrate_certificate_trust(unpinned_node.clone()) {
+            Ok(hydrated_node) if hydrated_node == *checked_node => unpinned_node,
+            _ => checked_node.clone(),
+        }
+    }
+
+    fn commit_checked_node(
+        &self,
+        requested_node: &Node,
+        checked_node: &Node,
+        global_config: &GlobalConfigTable,
+        request: SelectionRequest,
+    ) -> Result<Node, Error> {
+        // keep request creation and the durable commit in one serial order so
+        // a newer request cannot appear between the identity check and write
+        let generation = self.selection_order.0.lock();
+        if *generation != request.0 {
+            return Err(Error::SelectionSuperseded);
+        }
+
+        if requested_node.tls.is_none()
+            && let Some(endpoint) = global_config.conflicted_selected_node_endpoint(self.network)
+        {
+            return global_config
+                .recover_selected_node_from_certificate_trust_conflict(
+                    requested_node,
+                    checked_node,
+                    &endpoint,
+                )
+                .map_err_str(NodeSelectorError::SetSelectedNodeError);
+        }
+
+        global_config
+            .set_selected_node(checked_node)
+            .map_err_str(NodeSelectorError::SetSelectedNodeError)?;
+
+        Ok(checked_node.clone())
+    }
+
     #[cfg(test)]
-    pub(crate) fn with_certificate_trust_cache(
-        network: Network,
-        certificate_trust: CertificateTrustCache,
-    ) -> Self {
+    pub(crate) fn with_global_config(network: Network, global_config: &GlobalConfigTable) -> Self {
         Self {
             network,
             node_list: node_selection_list(network, Node::default(network)),
-            certificate_trust,
+            certificate_trust: global_config.certificate_trust_cache(),
+            selection_order: global_config.node_selection_order(),
         }
     }
 
@@ -363,6 +446,24 @@ impl NodeSelector {
 
         Ok(())
     }
+}
+
+fn requested_preset_node(
+    network: Network,
+    name: &str,
+    global_config: &GlobalConfigTable,
+) -> Result<Node, Error> {
+    node_list(network)
+        .into_iter()
+        .find(|node| node.name == name)
+        .or_else(|| {
+            let selected_node = global_config.stored_selected_node_for_network(network);
+            (selected_node.name == name).then_some(selected_node)
+        })
+        .ok_or_else(|| {
+            error!("node with name {name} not found");
+            NodeSelectorError::NodeNotFound(name.to_string())
+        })
 }
 
 fn node_list(network: Network) -> Vec<Node> {
@@ -431,7 +532,7 @@ fn node_selection_list(network: Network, selected_node: Node) -> Vec<NodeSelecti
     selections
 }
 
-fn selected_node_selection(network: Network, selected_node: Node) -> NodeSelection {
+pub(crate) fn selected_node_selection(network: Network, selected_node: Node) -> NodeSelection {
     if node_list(network).iter().any(|preset| same_preset_identity(preset, &selected_node)) {
         NodeSelection::Preset(selected_node)
     } else {
@@ -626,7 +727,10 @@ mod tests {
 
     use parking_lot::RwLock;
 
-    use crate::database::global_config::CertificateTrustSnapshot;
+    use crate::database::global_config::{
+        CertificateTrustSnapshot, CertificateTrustStore, GlobalConfigTable,
+    };
+    use crate::node::client::electrum::test_server::{TestServer, setup};
 
     use super::*;
 
@@ -641,6 +745,7 @@ mod tests {
             network: Network::Bitcoin,
             node_list: Vec::new(),
             certificate_trust: Arc::new(RwLock::new(certificate_trust)),
+            selection_order: NodeSelectionOrder::default(),
         }
     }
 
@@ -744,7 +849,24 @@ mod tests {
             )
             .unwrap();
 
+        assert_eq!(node.url, "ssl://node.example.com:50002");
         assert_eq!(node.tls, Some(TlsTrust::PinnedFingerprint { sha256: vec![3; 32] }));
+    }
+
+    #[test]
+    fn untrusted_ssl_electrum_nodes_use_the_canonical_transport_url() {
+        let node = selector()
+            .parse_custom_node(
+                "ssl://user:password@NODE.example.com/ignored/path?query=value#fragment"
+                    .to_string(),
+                "Custom Electrum".to_string(),
+                String::new(),
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(node.url, "ssl://node.example.com:50002");
+        assert_eq!(node.tls, None);
     }
 
     #[test]
@@ -955,6 +1077,348 @@ mod tests {
         assert_eq!(selector.hydrate_certificate_trust(esplora.clone()).unwrap(), esplora);
     }
 
+    #[test]
+    fn newer_selector_instance_supersedes_an_older_instances_request() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_global_config();
+        let previous = Node::new_esplora(
+            "Previous".into(),
+            "https://previous.example/api".into(),
+            Network::Bitcoin,
+        );
+        table.set_selected_node(&previous).unwrap();
+
+        let stale_selector = NodeSelector::with_global_config(Network::Bitcoin, &table);
+        let current_selector = NodeSelector::with_global_config(Network::Bitcoin, &table);
+        let stale_request = stale_selector.begin_selection_request();
+        let current_request = current_selector.begin_selection_request();
+        let stale_node =
+            Node::new_esplora("Stale".into(), "https://stale.example/api".into(), Network::Bitcoin);
+
+        let error = stale_selector
+            .commit_checked_node(&stale_node, &stale_node, &table, stale_request)
+            .unwrap_err();
+
+        assert_eq!(error, Error::SelectionSuperseded);
+        assert_eq!(table.stored_selected_node_for_network(Network::Bitcoin), previous);
+
+        let current_node = Node::new_esplora(
+            "Current".into(),
+            "https://current.example/api".into(),
+            Network::Bitcoin,
+        );
+        current_selector
+            .commit_checked_node(&current_node, &current_node, &table, current_request)
+            .unwrap();
+
+        assert_eq!(table.stored_selected_node_for_network(Network::Bitcoin), current_node);
+    }
+
+    #[tokio::test]
+    async fn failed_preset_validation_leaves_stored_node_and_trust_unchanged() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        setup();
+        let (_tmp, table) = test_global_config();
+        let previous_trust = TlsTrust::PinnedFingerprint { sha256: vec![9; 32] };
+        let previous = Node {
+            tls: Some(previous_trust.clone()),
+            ..Node::new_electrum(
+                "Custom".into(),
+                "ssl://previous.example.com:50002".into(),
+                Network::Bitcoin,
+            )
+        };
+        table.set_selected_node(&previous).unwrap();
+
+        let selector = NodeSelector::with_global_config(Network::Bitcoin, &table);
+        let server = TestServer::self_signed("localhost");
+        let candidate = Node::new_electrum(
+            "Unavailable preset".into(),
+            format!("ssl://127.0.0.1:{}", server.port),
+            Network::Bitcoin,
+        );
+
+        let request = selector.begin_selection_request();
+        let error = selector
+            .select_preset_node_with_config(candidate.clone(), &table, request)
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, Error::NodeAccessError(_)));
+        assert_eq!(table.stored_selected_node_for_network(Network::Bitcoin), previous);
+        assert_eq!(
+            table.certificate_trust_for_url(Network::Bitcoin, &previous.url).unwrap(),
+            Some(previous_trust)
+        );
+        assert_eq!(
+            table.certificate_trust_for_url(Network::Bitcoin, &candidate.url).unwrap(),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn successful_preset_validation_commits_the_preset() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        setup();
+        let (_tmp, table) = test_global_config();
+        let previous = Node::new_esplora(
+            "Previous".into(),
+            "https://previous.example/api".into(),
+            Network::Bitcoin,
+        );
+        table.set_selected_node(&previous).unwrap();
+
+        let selector = NodeSelector::with_global_config(Network::Bitcoin, &table);
+        let server = TestServer::self_signed("localhost");
+        let trust = server.fingerprint_trust();
+        let candidate = Node {
+            tls: Some(trust.clone()),
+            ..Node::new_electrum(
+                "Working preset".into(),
+                format!("ssl://127.0.0.1:{}", server.port),
+                Network::Bitcoin,
+            )
+        };
+
+        let request = selector.begin_selection_request();
+        let selected = selector
+            .select_preset_node_with_config(candidate.clone(), &table, request)
+            .await
+            .unwrap();
+
+        assert_eq!(selected, candidate);
+        assert_eq!(table.stored_selected_node_for_network(Network::Bitcoin), candidate);
+        assert_eq!(
+            table.certificate_trust_for_url(Network::Bitcoin, &selected.url).unwrap(),
+            Some(trust)
+        );
+    }
+
+    #[tokio::test]
+    async fn preset_validation_hydrates_durable_trust_before_check_and_commit() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        setup();
+        let (_tmp, table) = test_global_config();
+        let previous = Node::new_esplora(
+            "Previous".into(),
+            "https://previous.example/api".into(),
+            Network::Bitcoin,
+        );
+        table.set_selected_node(&previous).unwrap();
+
+        let selector = NodeSelector::with_global_config(Network::Bitcoin, &table);
+        let server = TestServer::self_signed("localhost");
+        let endpoint = format!("ssl://127.0.0.1:{}", server.port);
+        let trust = server.fingerprint_trust();
+        let mut trust_store = CertificateTrustStore::default();
+        trust_store.insert_or_match(endpoint.clone(), trust.clone()).unwrap();
+        table
+            .set(
+                crate::database::global_config::GlobalConfigKey::CertificateTrustStore,
+                serde_json::to_string(&trust_store).unwrap(),
+            )
+            .unwrap();
+        let candidate = Node::new_electrum("Hydrated preset".into(), endpoint, Network::Bitcoin);
+
+        let request = selector.begin_selection_request();
+        let selected =
+            selector.select_preset_node_with_config(candidate, &table, request).await.unwrap();
+
+        assert_eq!(selected.tls, Some(trust.clone()));
+        assert_eq!(table.stored_selected_node_for_network(Network::Bitcoin), selected);
+        assert_eq!(
+            table.certificate_trust_for_url(Network::Bitcoin, &selected.url).unwrap(),
+            Some(trust)
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_selector_recovery_keeps_conflict_and_selection_unchanged() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        setup();
+        let (_tmp, table) = test_global_config();
+        let endpoint = "ssl://shared.example.com:50002";
+        let previous = Node {
+            tls: Some(TlsTrust::PinnedFingerprint { sha256: vec![2; 32] }),
+            ..Node::new_electrum("Bitcoin legacy".into(), endpoint.into(), Network::Bitcoin)
+        };
+        let other = Node {
+            tls: Some(TlsTrust::PinnedFingerprint { sha256: vec![3; 32] }),
+            ..Node::new_electrum("Testnet legacy".into(), endpoint.into(), Network::Testnet)
+        };
+        table
+            .set(
+                crate::database::global_config::GlobalConfigKey::SelectedNode(Network::Bitcoin),
+                serde_json::to_string(&previous).unwrap(),
+            )
+            .unwrap();
+        table
+            .set(
+                crate::database::global_config::GlobalConfigKey::SelectedNode(Network::Testnet),
+                serde_json::to_string(&other).unwrap(),
+            )
+            .unwrap();
+
+        let selector = NodeSelector::with_global_config(Network::Bitcoin, &table);
+        let server = TestServer::self_signed("localhost");
+        let replacement = Node::new_electrum(
+            "Replacement".into(),
+            format!("ssl://127.0.0.1:{}", server.port),
+            Network::Bitcoin,
+        );
+
+        let request = selector.begin_selection_request();
+        let error = selector
+            .select_preset_node_with_config(replacement, &table, request)
+            .await
+            .unwrap_err();
+
+        assert!(matches!(error, Error::NodeAccessError(_)));
+        assert_eq!(table.stored_selected_node_for_network(Network::Bitcoin), previous);
+        assert!(matches!(
+            table.certificate_trust_for_url(Network::Bitcoin, endpoint),
+            Err(crate::database::Error::GlobalConfig(
+                GlobalConfigTableError::CertificateTrustConflict(_)
+            ))
+        ));
+    }
+
+    #[tokio::test]
+    async fn successful_selector_recovery_commits_after_validation() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        setup();
+        let (_tmp, table) = test_global_config();
+        let conflict_endpoint = "ssl://shared.example.com:50002";
+        let previous = Node {
+            tls: Some(TlsTrust::PinnedFingerprint { sha256: vec![4; 32] }),
+            ..Node::new_electrum(
+                "Bitcoin legacy".into(),
+                conflict_endpoint.into(),
+                Network::Bitcoin,
+            )
+        };
+        let other = Node {
+            tls: Some(TlsTrust::PinnedFingerprint { sha256: vec![5; 32] }),
+            ..Node::new_electrum(
+                "Testnet legacy".into(),
+                conflict_endpoint.into(),
+                Network::Testnet,
+            )
+        };
+        table
+            .set(
+                crate::database::global_config::GlobalConfigKey::SelectedNode(Network::Bitcoin),
+                serde_json::to_string(&previous).unwrap(),
+            )
+            .unwrap();
+        table
+            .set(
+                crate::database::global_config::GlobalConfigKey::SelectedNode(Network::Testnet),
+                serde_json::to_string(&other).unwrap(),
+            )
+            .unwrap();
+
+        let server = TestServer::self_signed("localhost");
+        let replacement_endpoint = format!("ssl://127.0.0.1:{}", server.port);
+        let replacement_trust = server.fingerprint_trust();
+        let mut trust_store = CertificateTrustStore::default();
+        trust_store
+            .insert_or_match(replacement_endpoint.clone(), replacement_trust.clone())
+            .unwrap();
+        table
+            .set(
+                crate::database::global_config::GlobalConfigKey::CertificateTrustStore,
+                serde_json::to_string(&trust_store).unwrap(),
+            )
+            .unwrap();
+
+        let selector = NodeSelector::with_global_config(Network::Bitcoin, &table);
+        let replacement =
+            Node::new_electrum("Replacement".into(), replacement_endpoint, Network::Bitcoin);
+
+        let request = selector.begin_selection_request();
+        let selected =
+            selector.select_preset_node_with_config(replacement, &table, request).await.unwrap();
+
+        assert_eq!(selected.tls, Some(replacement_trust));
+        assert_eq!(table.stored_selected_node_for_network(Network::Bitcoin), selected);
+        assert_eq!(
+            table.certificate_trust_for_url(Network::Bitcoin, conflict_endpoint).unwrap(),
+            Some(TlsTrust::PinnedFingerprint { sha256: vec![5; 32] })
+        );
+    }
+
+    #[tokio::test]
+    async fn checked_custom_replacement_uses_current_conflict_recovery() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        setup();
+        let (_tmp, table) = test_global_config();
+        let conflict_endpoint = "ssl://shared.example.com:50002";
+        let previous = Node {
+            tls: Some(TlsTrust::PinnedFingerprint { sha256: vec![6; 32] }),
+            ..Node::new_electrum(
+                "Bitcoin legacy".into(),
+                conflict_endpoint.into(),
+                Network::Bitcoin,
+            )
+        };
+        let other = Node {
+            tls: Some(TlsTrust::PinnedFingerprint { sha256: vec![7; 32] }),
+            ..Node::new_electrum(
+                "Testnet legacy".into(),
+                conflict_endpoint.into(),
+                Network::Testnet,
+            )
+        };
+        table
+            .set(
+                crate::database::global_config::GlobalConfigKey::SelectedNode(Network::Bitcoin),
+                serde_json::to_string(&previous).unwrap(),
+            )
+            .unwrap();
+        table
+            .set(
+                crate::database::global_config::GlobalConfigKey::SelectedNode(Network::Testnet),
+                serde_json::to_string(&other).unwrap(),
+            )
+            .unwrap();
+
+        let server = TestServer::self_signed("localhost");
+        let replacement_endpoint = format!("ssl://127.0.0.1:{}", server.port);
+        let replacement_trust = server.fingerprint_trust();
+        let mut trust_store = CertificateTrustStore::default();
+        trust_store
+            .insert_or_match(replacement_endpoint.clone(), replacement_trust.clone())
+            .unwrap();
+        table
+            .set(
+                crate::database::global_config::GlobalConfigKey::CertificateTrustStore,
+                serde_json::to_string(&trust_store).unwrap(),
+            )
+            .unwrap();
+
+        let selector = NodeSelector::with_global_config(Network::Bitcoin, &table);
+        let replacement = selector
+            .parse_custom_node(
+                replacement_endpoint,
+                "Custom Electrum".into(),
+                "Replacement".into(),
+                None,
+            )
+            .unwrap();
+        selector.check_node_connection(replacement.clone()).await.unwrap();
+
+        let request = selector.begin_selection_request();
+        selector.save_node_with_config(replacement.clone(), &table, request).await.unwrap();
+
+        assert_eq!(replacement.tls, Some(replacement_trust));
+        assert_eq!(table.stored_selected_node_for_network(Network::Bitcoin), replacement);
+        assert_eq!(
+            table.certificate_trust_for_url(Network::Bitcoin, conflict_endpoint).unwrap(),
+            Some(TlsTrust::PinnedFingerprint { sha256: vec![7; 32] })
+        );
+    }
+
     /// Self hosted servers are commonly reached by address rather than by name.
     #[test]
     fn nodes_can_be_reached_by_ip_address() {
@@ -1016,5 +1480,15 @@ mod tests {
     fn a_url_without_a_host_is_rejected() {
         let url = parse_node_url("ssl://nodomain:50002").unwrap();
         assert!(!has_usable_host(&url));
+    }
+
+    fn test_global_config() -> (tempfile::TempDir, GlobalConfigTable) {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());
+        let write_txn = db.begin_write().unwrap();
+        let table = GlobalConfigTable::new(db, &write_txn);
+        write_txn.commit().unwrap();
+
+        (tmp, table)
     }
 }
