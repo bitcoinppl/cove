@@ -5,7 +5,7 @@ pub mod reconcile;
 
 use crate::database::global_config::SelectedWalletTarget;
 use std::{
-    sync::Arc,
+    sync::{Arc, LazyLock},
     time::{Duration, UNIX_EPOCH},
 };
 
@@ -20,7 +20,9 @@ use crate::{
         client::{FIAT_CLIENT, PriceResponse},
     },
     keychain::{Keychain, KeychainError},
-    manager::cloud_backup_manager::{CLOUD_BACKUP_MANAGER, CloudBackupKeychain},
+    manager::cloud_backup_manager::{
+        CLOUD_BACKUP_MANAGER, CloudBackupKeychain, CloudBackupRecoveryCoverage,
+    },
     manager::deferred_dispatch::{DeferredDispatch, Dispatchable},
     manager::key_teleport_manager::RustKeyTeleportManager,
     manager::reconcile_channel::ReconcileChannel,
@@ -34,7 +36,7 @@ use crate::{
         PreparedFullWipe, PreparedWalletDeletion, WalletDeletionFailure, WalletDeletionIntent,
         WalletInventoryFailure, targets_from_inventory,
     },
-    wallet::metadata::{WalletId, WalletMetadata, WalletType},
+    wallet::metadata::{WalletId, WalletMetadata},
     wallet_lifecycle::{
         ShutdownAttemptId, ShutdownDeadlineTier, WalletLifecycleCoordinator, WalletLifecycleFailure,
     },
@@ -466,10 +468,13 @@ impl FfiApp {
     /// Get wallets that have not been backed up and verified
     pub fn unverified_wallet_ids(&self) -> Vec<WalletId> {
         let all_wallets = Database::global().wallets().all().unwrap_or_default();
+        let cloud_coverage = LazyLock::get(&CLOUD_BACKUP_MANAGER)
+            .map(|manager| CloudBackupRecoveryCoverage::load(manager.as_ref()))
+            .unwrap_or_default();
 
         all_wallets
             .into_iter()
-            .filter(|wallet| wallet.wallet_type == WalletType::Hot && !wallet.verified)
+            .filter(|wallet| cloud_coverage.needs_backup(wallet))
             .map(|wallet| wallet.id)
             .collect::<Vec<WalletId>>()
     }
