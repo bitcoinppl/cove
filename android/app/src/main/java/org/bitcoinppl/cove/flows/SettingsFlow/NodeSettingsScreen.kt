@@ -63,6 +63,8 @@ import org.bitcoinppl.cove_core.NodeCertificate
 import org.bitcoinppl.cove_core.NodeSelection
 import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.NodeSelectorException
+import org.bitcoinppl.cove_core.NodeRuntimeFallbackReason
+import org.bitcoinppl.cove_core.NodeRuntimeState
 import org.bitcoinppl.cove_core.TlsTrust
 
 private data class CustomNodeInput(
@@ -121,7 +123,8 @@ fun NodeSettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var nodeList by remember { mutableStateOf(nodeSelector.nodeList()) }
-    var selectedNodeSelection by remember { mutableStateOf(nodeSelector.selectedNode()) }
+    var selectedNodeState by remember { mutableStateOf(nodeSelector.selectedNode()) }
+    var selectedNodeSelection by remember { mutableStateOf(selectedNodeState.storedSelection()) }
     var selectedNodeName by remember {
         mutableStateOf(selectedNodeSelection.toNode().name)
     }
@@ -167,13 +170,15 @@ fun NodeSettingsScreen(
     fun refreshNodeState() {
         NodeSelector().use { refreshedNodeSelector ->
             nodeList = refreshedNodeSelector.nodeList()
-            selectedNodeSelection = refreshedNodeSelector.selectedNode()
+            selectedNodeState = refreshedNodeSelector.selectedNode()
+            selectedNodeSelection = selectedNodeState.storedSelection()
         }
         selectedNodeName = selectedNodeSelection.toNode().name
     }
 
     fun restoreStoredNodeForm() {
-        val storedSelection = nodeSelector.selectedNode()
+        selectedNodeState = nodeSelector.selectedNode()
+        val storedSelection = selectedNodeState.storedSelection()
         val storedNode = storedSelection.toNode()
 
         selectedNodeSelection = storedSelection
@@ -229,14 +234,8 @@ fun NodeSettingsScreen(
         isLoading = true
         scope.launch {
             try {
-                val node =
-                    withContext(Dispatchers.IO) {
-                        nodeSelector.selectPresetNode(nodeName)
-                    }
+                val node = nodeSelector.selectPresetNode(nodeName)
 
-                withContext(Dispatchers.IO) {
-                    nodeSelector.checkSelectedNode(node)
-                }
                 refreshNodeState()
 
                 // launch snackbar in separate coroutine so it doesn't block finally
@@ -515,6 +514,7 @@ fun NodeSettingsScreen(
                         .padding(paddingValues),
             ) {
                 SectionHeader(stringResource(R.string.title_settings_node), showDivider = false)
+                NodeRuntimeWarning(selectedNodeState)
                 MaterialSection {
                     Column {
                         // preset nodes
@@ -629,6 +629,28 @@ fun NodeSettingsScreen(
             },
         )
     }
+}
+
+@Composable
+private fun NodeRuntimeWarning(state: NodeRuntimeState) {
+    if (state !is NodeRuntimeState.Fallback) return
+
+    val runtimeNode = state.runtimeSelection.toNode()
+    val reason = when (state.reason) {
+        NodeRuntimeFallbackReason.INVALID_TRUST_STORAGE ->
+            "the saved certificate trust data is invalid"
+        NodeRuntimeFallbackReason.ENDPOINT_CONFLICT ->
+            "certificate trust for the saved endpoint conflicts"
+    }
+
+    Text(
+        text =
+            "Cove is using ${runtimeNode.name} (${runtimeNode.url}) because $reason. " +
+                "Your saved node remains selected until you choose a replacement.",
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+    )
 }
 
 @Composable

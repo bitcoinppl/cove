@@ -13,6 +13,11 @@ private struct CustomNodeRequest: Equatable {
     let node: Node
 }
 
+private struct PresetNodeRequest: Equatable {
+    let id = UUID()
+    let name: String
+}
+
 private struct PendingCertificate {
     let request: CustomNodeRequest
     let decision: CertificateDecision
@@ -24,6 +29,7 @@ struct NodeSelectionView: View {
 
     @State private var selectedNodeName: String
     @State private var nodeList: [NodeSelection]
+    @State private var selectedNodeState: NodeRuntimeState
 
     @State private var nodeIsChecking = false
     @State private var customNodeName: String = ""
@@ -33,6 +39,7 @@ struct NodeSelectionView: View {
     @State private var parseUrlMessage = ""
 
     @State private var checkUrlTask: Task<Void, Never>?
+    @State private var presetNodeRequest: PresetNodeRequest?
 
     /// A certificate accepted in this session, paired with its endpoint
     /// `parseCustomNode` decides whether the endpoint matches the request
@@ -41,14 +48,16 @@ struct NodeSelectionView: View {
     @State private var showCertificateAlert = false
 
     init() {
-        let selectedNode = nodeSelector.selectedNode()
+        let selectedNodeState = nodeSelector.selectedNode()
+        let selectedNode = selectedNodeState.storedNode()
 
         selectedNodeName = selectedNode.name
         nodeList = nodeSelector.nodeList()
+        _selectedNodeState = State(initialValue: selectedNodeState)
 
         // These have defaults, so they must be set through their storage rather
         // than assigned, or SwiftUI discards the value when it installs them.
-        if case let .custom(node) = selectedNode {
+        if case let .custom(node) = selectedNodeState.storedSelection() {
             _customUrl = State(initialValue: node.url)
             _customNodeName = State(initialValue: node.name)
 
@@ -65,16 +74,18 @@ struct NodeSelectionView: View {
     }
 
     func cancelCheckUrlTask() {
-        if let checkUrlTask {
-            checkUrlTask.cancel()
-        }
+        presetNodeRequest = nil
+        nodeSelector.cancelPendingSelection()
+        checkUrlTask?.cancel()
+        checkUrlTask = nil
     }
 
     @MainActor
     private func refreshNodeState() {
         let refreshedNodeSelector = NodeSelector()
         nodeList = refreshedNodeSelector.nodeList()
-        selectedNodeName = refreshedNodeSelector.selectedNode().name
+        selectedNodeState = refreshedNodeSelector.selectedNode()
+        selectedNodeName = selectedNodeState.storedNode().name
     }
 
     private func showLoadingPopup() {
@@ -88,6 +99,7 @@ struct NodeSelectionView: View {
 
     private func completeLoading(_ state: PopupState) {
         checkUrlTask = nil
+        presetNodeRequest = nil
 
         Task { @MainActor in
             await dismissAllPopups()
@@ -223,6 +235,7 @@ struct NodeSelectionView: View {
     var body: some View {
         NodeSelectionForm(
             nodeList: nodeList,
+            selectedNodeState: selectedNodeState,
             selectedNodeName: $selectedNodeName,
             customUrl: $customUrl,
             customNodeName: $customNodeName,
@@ -285,36 +298,48 @@ struct NodeSelectionView: View {
     }
 
     private func nodeSelectionChanged(to newSelectedNodeName: String) {
-        guard nodeSelector.selectedNode().name != newSelectedNodeName else { return }
+        cancelCheckUrlTask()
+
+        guard selectedNodeState.storedNode().name != newSelectedNodeName else { return }
 
         if newSelectedNodeName.hasPrefix("Custom") {
             restoreCustomNodeFields(for: newSelectedNodeName)
             return
         }
 
-        let node: Node
-        do {
-            node = try nodeSelector.selectPresetNode(name: newSelectedNodeName)
-        } catch {
-            selectedNodeName = nodeSelector.selectedNode().name
-            completeLoading(.failure("Failed to select node\n \(error.localizedDescription)"))
-            return
-        }
-
         showLoadingPopup()
+        let request = PresetNodeRequest(name: newSelectedNodeName)
+        presetNodeRequest = request
         checkUrlTask = Task {
             do {
-                try await nodeSelector.checkSelectedNode(node: node)
+                let node = try await nodeSelector.selectPresetNode(name: newSelectedNodeName)
+
+                guard isCurrentPresetSelection(request: request) else {
+                    await dismissAllPopups()
+                    return
+                }
+
                 refreshNodeState()
-                completeLoading(.success("Succesfully connected to \(node.url)"))
+                completeLoading(.success("Successfully connected to \(node.url)"))
             } catch {
-                completeLoading(.failure("Failed to connect to \(node.url), reason: \(error.localizedDescription)"))
+                guard isCurrentPresetSelection(request: request) else {
+                    await dismissAllPopups()
+                    return
+                }
+
+                selectedNodeState = nodeSelector.selectedNode()
+                selectedNodeName = selectedNodeState.storedNode().name
+                completeLoading(.failure("Failed to select \(newSelectedNodeName), reason: \(error.localizedDescription)"))
             }
         }
     }
 
+    private func isCurrentPresetSelection(request: PresetNodeRequest) -> Bool {
+        presetNodeRequest == request && selectedNodeName == request.name
+    }
+
     private func restoreCustomNodeFields(for selectedNodeName: String) {
-        guard case let .custom(savedSelectedNode) = nodeSelector.selectedNode() else {
+        guard case let .custom(savedSelectedNode) = selectedNodeState.storedSelection() else {
             customCertificateTrust = nil
             return
         }
@@ -395,6 +420,7 @@ private struct NodeSelectionAlertsModifier: ViewModifier {
 
 private struct NodeSelectionForm: View {
     let nodeList: [NodeSelection]
+    let selectedNodeState: NodeRuntimeState
     @Binding var selectedNodeName: String
     @Binding var customUrl: String
     @Binding var customNodeName: String
@@ -402,6 +428,7 @@ private struct NodeSelectionForm: View {
 
     var body: some View {
         Form {
+            NodeRuntimeWarning(state: selectedNodeState)
             NodeSelectionPresetSection(
                 nodeList: nodeList,
                 selectedNodeName: $selectedNodeName
@@ -413,6 +440,38 @@ private struct NodeSelectionForm: View {
                 save: saveCustomNode
             )
         }
+    }
+}
+
+private struct NodeRuntimeWarning: View {
+    let state: NodeRuntimeState
+
+    var body: some View {
+        if case let .fallback(_, runtimeSelection, reason) = state {
+            Section {
+                Label {
+                    Text(warningText(runtimeSelection: runtimeSelection, reason: reason))
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+    }
+
+    private func warningText(
+        runtimeSelection: NodeSelection,
+        reason: NodeRuntimeFallbackReason
+    ) -> String {
+        let runtimeNode = runtimeSelection.toNode()
+        let reasonText = switch reason {
+        case .invalidTrustStorage:
+            "the saved certificate trust data is invalid"
+        case .endpointConflict:
+            "certificate trust for the saved endpoint conflicts"
+        }
+
+        return "Cove is using \(runtimeNode.name) (\(runtimeNode.url)) because \(reasonText). Your saved node remains selected until you choose a replacement."
     }
 }
 
