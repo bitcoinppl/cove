@@ -12,8 +12,9 @@ mod wallet_secret;
 
 pub use wallet_secret::WalletSecret;
 
-pub const PAYLOAD_VERSION: u32 = 2;
+pub const PAYLOAD_VERSION: u32 = 3;
 const BASELINE_PAYLOAD_VERSION: u32 = 1;
+const XPRV_PAYLOAD_VERSION: u32 = 2;
 
 /// Top-level backup payload, serialized to JSON before compression and encryption
 #[derive(Debug, Serialize, Deserialize)]
@@ -29,7 +30,7 @@ pub struct BackupPayload {
 }
 
 impl BackupPayload {
-    /// Builds a payload using the oldest format version that can represent its wallet secrets
+    /// Builds a payload using the oldest format version that can represent its contents
     pub fn try_new(
         wallets: Vec<WalletBackup>,
         settings: AppSettings,
@@ -40,12 +41,13 @@ impl BackupPayload {
             ));
         }
 
-        let version =
-            if wallets.iter().any(|wallet| matches!(&wallet.secret, WalletSecret::Xprv(_))) {
-                PAYLOAD_VERSION
-            } else {
-                BASELINE_PAYLOAD_VERSION
-            };
+        let version = if settings.contains_certificate_trust() {
+            PAYLOAD_VERSION
+        } else if wallets.iter().any(|wallet| matches!(&wallet.secret, WalletSecret::Xprv(_))) {
+            XPRV_PAYLOAD_VERSION
+        } else {
+            BASELINE_PAYLOAD_VERSION
+        };
 
         Ok(Self {
             version,
@@ -79,12 +81,19 @@ impl BackupPayload {
     pub fn validate(&self) -> Result<(), super::error::BackupError> {
         validate_payload_version(self.version)?;
 
-        if self.version == BASELINE_PAYLOAD_VERSION
+        if self.version < XPRV_PAYLOAD_VERSION
             && self.wallets.iter().any(|wallet| matches!(&wallet.secret, WalletSecret::Xprv(_)))
         {
             return Err(super::error::BackupError::Deserialization(
                 "payload version 1 cannot contain an extended private key secret".to_string(),
             ));
+        }
+
+        if self.version < PAYLOAD_VERSION && self.settings.contains_certificate_trust() {
+            return Err(super::error::BackupError::Deserialization(format!(
+                "payload version {} cannot contain certificate trust",
+                self.version
+            )));
         }
 
         Ok(())
@@ -93,7 +102,7 @@ impl BackupPayload {
 
 fn validate_payload_version(version: u32) -> Result<(), super::error::BackupError> {
     match version {
-        BASELINE_PAYLOAD_VERSION | PAYLOAD_VERSION => Ok(()),
+        BASELINE_PAYLOAD_VERSION | XPRV_PAYLOAD_VERSION | PAYLOAD_VERSION => Ok(()),
         0 => Err(super::error::BackupError::InvalidFormat),
         version => Err(super::error::BackupError::UnsupportedPayloadVersion(version)),
     }
@@ -180,6 +189,14 @@ impl BackupCertificateTrustStore {
             Err(error) => Self::Invalid { error: error.to_string(), raw },
         }
     }
+
+    fn contains_trust(&self) -> bool {
+        match self {
+            Self::Valid(store) => !store.is_empty(),
+            // an invalid value can contain security state that an older build would discard
+            Self::Invalid { .. } => true,
+        }
+    }
 }
 
 impl Serialize for BackupCertificateTrustStore {
@@ -220,6 +237,22 @@ pub struct AppSettings {
     /// Remembered certificate trust for custom SSL Electrum endpoints
     #[serde(default)]
     pub certificate_trust_store: BackupCertificateTrustStore,
+}
+
+impl AppSettings {
+    fn contains_certificate_trust(&self) -> bool {
+        if self.certificate_trust_store.contains_trust() {
+            return true;
+        }
+
+        self.selected_nodes.iter().any(|(_, node_json)| {
+            // inspect the wire value because an older build ignores `Node.tls` during restore
+            serde_json::from_str::<serde_json::Value>(node_json)
+                .ok()
+                .and_then(|node| node.get("tls").cloned())
+                .is_some_and(|tls| !tls.is_null())
+        })
+    }
 }
 
 /// Result of a successful backup export
@@ -397,9 +430,45 @@ mod tests {
     }
 
     #[test]
-    fn new_payload_uses_current_version_for_xprv() {
+    fn new_payload_uses_version_two_for_xprv_without_certificate_trust() {
         let mut sample = sample_payload();
         sample.wallets[0].secret = WalletSecret::Xprv("xprv-test".to_string());
+
+        let payload = BackupPayload::try_new(sample.wallets, sample.settings).unwrap();
+
+        assert_eq!(payload.version, XPRV_PAYLOAD_VERSION);
+    }
+
+    #[test]
+    fn new_payload_uses_current_version_for_certificate_trust_store() {
+        let mut sample = sample_payload();
+        let mut trust_store = CertificateTrustStore::default();
+        trust_store
+            .insert_or_match(
+                "ssl://node.example.com:50002".to_string(),
+                crate::node::tls::TlsTrust::PinnedFingerprint { sha256: vec![4; 32] },
+            )
+            .unwrap();
+        sample.settings.certificate_trust_store = BackupCertificateTrustStore::Valid(trust_store);
+
+        let payload = BackupPayload::try_new(sample.wallets, sample.settings).unwrap();
+
+        assert_eq!(payload.version, PAYLOAD_VERSION);
+    }
+
+    #[test]
+    fn new_payload_uses_current_version_for_embedded_node_trust() {
+        let mut sample = sample_payload();
+        let node = crate::node::Node {
+            tls: Some(crate::node::tls::TlsTrust::PinnedFingerprint { sha256: vec![5; 32] }),
+            ..crate::node::Node::new_electrum(
+                "Custom".to_string(),
+                "ssl://node.example.com:50002".to_string(),
+                Network::Bitcoin,
+            )
+        };
+        sample.settings.selected_nodes =
+            vec![(Network::Bitcoin.to_string(), serde_json::to_string(&node).unwrap())];
 
         let payload = BackupPayload::try_new(sample.wallets, sample.settings).unwrap();
 
@@ -435,6 +504,48 @@ mod tests {
             super::super::error::BackupError::Deserialization(message)
                 if message.contains("version 1")
         ));
+    }
+
+    #[test]
+    fn older_payload_versions_reject_certificate_trust_content() {
+        let mut trust_store_payload = sample_payload();
+        let mut trust_store = CertificateTrustStore::default();
+        trust_store
+            .insert_or_match(
+                "ssl://node.example.com:50002".to_string(),
+                crate::node::tls::TlsTrust::PinnedFingerprint { sha256: vec![6; 32] },
+            )
+            .unwrap();
+        trust_store_payload.settings.certificate_trust_store =
+            BackupCertificateTrustStore::Valid(trust_store);
+
+        let mut embedded_trust_payload = sample_payload();
+        embedded_trust_payload.settings.selected_nodes = vec![(
+            Network::Bitcoin.to_string(),
+            serde_json::json!({
+                "name": "Custom",
+                "network": "Bitcoin",
+                "api_type": "Electrum",
+                "url": "ssl://node.example.com:50002",
+                "tls": { "PinnedFingerprint": { "sha256": vec![7; 32] } }
+            })
+            .to_string(),
+        )];
+
+        for mut payload in [trust_store_payload, embedded_trust_payload] {
+            for version in [BASELINE_PAYLOAD_VERSION, XPRV_PAYLOAD_VERSION] {
+                payload.version = version;
+                let json = serde_json::to_vec(&payload).unwrap();
+
+                let error = BackupPayload::decode(&json).unwrap_err();
+
+                assert!(matches!(
+                    error,
+                    super::super::error::BackupError::Deserialization(message)
+                        if message.contains("cannot contain certificate trust")
+                ));
+            }
+        }
     }
 
     #[test]
@@ -770,6 +881,7 @@ mod tests {
         let payload = BackupPayload::try_new(sample.wallets, sample.settings).unwrap();
 
         assert_eq!(payload.wallets.len(), 1);
+        assert_eq!(payload.version, PAYLOAD_VERSION);
         assert!(matches!(
             payload.settings.certificate_trust_store,
             BackupCertificateTrustStore::Invalid { .. }
