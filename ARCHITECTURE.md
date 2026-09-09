@@ -107,6 +107,8 @@ redb stores typed table metadata for each table and validates the key and value 
 
 Certificate trust for custom SSL Electrum endpoints is durable security state. Rust owns its validation, endpoint identity, migration, conflict handling, recovery, backup behavior, and shared cache. Android and iOS keep an asynchronous certificate result bound to the exact node request that created it.
 
+Settings reads one Rust-owned `NodeRuntimeState` projection. It keeps the stored node intent visible and identifies a safe runtime fallback with a typed reason. Runtime consumers read the resolved node with hydrated trust or a safe fallback from global configuration.
+
 Read [docs/certificate_trust.md](docs/certificate_trust.md) before you change this flow.
 
 ---

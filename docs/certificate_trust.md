@@ -11,6 +11,9 @@ Cove can remember a pinned fingerprint or a custom CA for a custom SSL Electrum 
 - Invalid durable storage is not a missing trust value. Cove must report the storage error for a custom SSL node that has no valid embedded pin.
 - A trusted certificate must not change without a new explicit user decision. The normal certificate prompt does not replace existing trust.
 - Trust state, selected-node state, and the shared read snapshot must describe the same committed transaction.
+- `GlobalConfigTable::stored_selected_node_for_network` returns the exact persisted node intent. `selected_node_for_network` returns the runtime node after trust hydration or safe fallback resolution.
+- `NodeSelector::selected_node` returns one `NodeRuntimeState`: `Configured` contains the usable runtime selection, while `Fallback` contains the stored selection, the safe runtime selection, and one typed fallback reason.
+- Preset selection checks the candidate connection before it writes the selected node or trust store. A failed check leaves both unchanged.
 - An asynchronous platform result is valid only for the exact node request that started it.
 
 ## State Model
@@ -33,7 +36,9 @@ The effective state has three forms:
 
 Fail closed means that Cove does not select one conflicting value and does not hydrate an unpinned node. A valid pin that is already embedded in a selected node stays attached to that node and can enforce that exact value. If a stored selected SSL node has no embedded pin and hydration fails, Cove uses the safe default node. Non-TLS nodes do not need certificate trust state.
 
-`NodeSelector` reads the shared snapshot. It does not own migration or recovery. Android and iOS present decisions from Rust and do not change durable trust directly.
+`NodeSelector` reads the stored selection for its node list and returns the global configuration's `NodeRuntimeState` for settings. It owns preset check-then-commit ordering and serializes request creation with the final commit. A commit whose request is no longer current is rejected. It does not own migration or recovery. Android and iOS render the stored selection and typed fallback reason from Rust and do not change durable trust directly.
+
+Preset selection resolves and hydrates the candidate, checks its connection, then commits the selected node. Resolution or connection failure does not write durable state. Typed certificate-trust conflict recovery follows the same order: the replacement must pass its connection check before recovery can persist it.
 
 ## Persistence and Migration
 
@@ -56,6 +61,8 @@ Do not change the redb table definition, stored key, JSON shape, or type metadat
 ## Backup and Restore
 
 Backups contain the durable certificate trust map and the selected-node records. Old backups without the trust-map field use an empty map.
+
+Payload version 3 is required when a backup contains a non-empty or invalid trust map, or a selected-node record with embedded trust. Trust-free backups can keep their older minimum version. This makes older builds reject trust-bearing backups instead of restoring a node without its certificate decision.
 
 Restore merges the incoming map before it restores selected nodes:
 
@@ -111,9 +118,15 @@ A certificate accepted in the current screen session becomes one typed `Endpoint
 | Same endpoint and different trust in two sources | Endpoint-conflicted state | The endpoint fails closed and unrelated trust remains usable |
 | Malformed map, invalid endpoint, invalid fingerprint, or unusable CA | Invalid-storage state | An unpinned custom SSL node reports the error. Export preserves the raw value with a warning. An embedded valid pin and a non-TLS node keep their defined behavior |
 | Selected-node write fails | Durable data and shared snapshot stay unchanged | Verify transaction rollback and an existing selector read |
-| Recovery removes one old claim | Replacement commits only if the remaining effective state is valid | Cover success, stale state, mismatched durable value, remaining conflict, and invalid storage |
+| Preset connection check fails | The previous stored custom node and its trust remain selected | Deterministic selector test verifies no preset write occurs |
+| Preset connection check succeeds | The checked preset is committed, including hydrated trust | Deterministic selector test verifies the stored preset after the check |
+| Invalid or conflicted trust during settings read | `NodeRuntimeState::Fallback` keeps the stored selection visible, identifies the safe runtime node, and carries the typed reason | Verify `NodeRuntimeState`, `stored_selected_node_for_network`, and `selected_node_for_network` projections |
+| Recovery removes one old claim | A checked preset or custom replacement commits only if the remaining effective state is valid | Cover both selection paths, stale state, mismatched durable value, remaining conflict, and invalid storage |
 | Backup has no trust-map field | Empty incoming map | Old backup deserializes and restores |
+| Backup contains a trust map or embedded node trust | Payload minimum version is 3 | Verify trust-store, invalid-store, and embedded-pin version selection. Versions 1 and 2 reject trust-bearing content |
 | Backup has new, matching, and conflicting entries | Add new, ignore matching, keep existing on conflict, and report conflict | Verify the committed map and restore report |
+| Node carries trust on Esplora or non-SSL Electrum | Reject the node before persistence | Verify the selected node and trust store stay unchanged |
+| SSL Electrum node has malformed embedded trust | Report invalid trust storage and use the safe runtime fallback | Verify a valid embedded pin still works when the separate store is invalid |
 | Local trust is invalid during export | Wallet data exports and raw trust is retained as invalid | Verify the warning, raw round trip, and later settings-only import error |
 | Two trust-affecting writers overlap | Commit order and snapshot publication stay consistent | Use a controlled interleaving or lock-ownership test. Verify that a failed writer does not publish |
 | User edits a node while an async check or prompt is active | Stale result is discarded | Cover URL, node type, selected option, name, and TLS identity changes on Android and iOS |
