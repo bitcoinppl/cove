@@ -21,7 +21,7 @@ pub use state::{
     PersistedDeepVerificationReport, PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
     PersistedDriveAccountSwitchPhase, PersistedDriveAccountSwitchState, PersistedPasskeyState,
     PersistedPendingVerificationCompletion, PersistedPendingVerificationUpload,
-    PersistedRestoreAllMarker, PersistedWalletVerificationIssues,
+    PersistedRestoreAllMarker, PersistedVerificationRequirement, PersistedWalletVerificationIssues,
 };
 pub(crate) use tables::{CLOUD_BACKUP_STATE_TABLE, CLOUD_BLOB_SYNC_STATE_TABLE};
 
@@ -342,6 +342,7 @@ mod tests {
         let state = configured_state(
             PersistedPasskeyState::Available,
             PersistedBackupVerificationState::Required {
+                reason: PersistedVerificationRequirement::Unknown,
                 last_verified_at: None,
                 requested_at: Some(20),
                 dismissed_at: Some(10),
@@ -358,6 +359,7 @@ mod tests {
         let state = configured_state(
             PersistedPasskeyState::Available,
             PersistedBackupVerificationState::Required {
+                reason: PersistedVerificationRequirement::Unknown,
                 last_verified_at: None,
                 requested_at: Some(20),
                 dismissed_at: Some(20),

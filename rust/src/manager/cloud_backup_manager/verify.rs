@@ -230,13 +230,9 @@ impl RustCloudBackupManager {
         let persisted = self.mutate_persisted_cloud_backup_state(
             "mark cloud backup unverified after wallet change",
             |state| {
-                let Some(mut new_state) = IntegrityDowngrade::Unverified.apply_to(state) else {
-                    return false;
-                };
-
-                new_state.mark_verification_required(Some(requested_at));
-                *state = new_state;
-                true
+                let previous = state.clone();
+                state.mark_verification_required_after_wallet_change(Some(requested_at));
+                *state != previous
             },
         );
         if let Err(error) = persisted {
@@ -481,7 +477,7 @@ mod tests {
     use super::*;
     use crate::database::cloud_backup::{
         PersistedBackupSyncState, PersistedBackupVerificationState, PersistedConfiguredCloudBackup,
-        PersistedPasskeyState,
+        PersistedPasskeyState, PersistedVerificationRequirement,
     };
 
     fn configured_state(
@@ -519,6 +515,7 @@ mod tests {
             configured_state(
                 PersistedPasskeyState::Available,
                 PersistedBackupVerificationState::Required {
+                    reason: PersistedVerificationRequirement::IntegrityIssue,
                     last_verified_at: Some(21),
                     requested_at: None,
                     dismissed_at: None,
