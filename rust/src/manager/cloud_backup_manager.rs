@@ -1345,7 +1345,7 @@ mod tests {
     use super::*;
     use crate::database::cloud_backup::{
         PersistedBackupSyncState, PersistedBackupVerificationState, PersistedConfiguredCloudBackup,
-        PersistedPasskeyState,
+        PersistedPasskeyState, PersistedVerificationRequirement,
     };
     use act_zero::call;
     use cove_device::cloud_storage::CloudStorageError;
@@ -1599,6 +1599,7 @@ mod tests {
     #[test]
     fn verification_metadata_is_needs_verification_when_unverified() {
         let db_state = persisted_configured_state(PersistedBackupVerificationState::Required {
+            reason: PersistedVerificationRequirement::Unknown,
             last_verified_at: Some(21),
             requested_at: None,
             dismissed_at: None,
