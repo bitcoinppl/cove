@@ -313,10 +313,14 @@ impl PersistedCloudBackupState {
     }
 
     pub fn mark_verification_required(&mut self, requested_at: Option<u64>) {
-        self.mark_verification_required_with_reason(
+        let Some(configured) = self.configured_mut() else { return };
+
+        configured.verification = PersistedBackupVerificationState::Required {
+            reason: PersistedVerificationRequirement::IntegrityIssue,
+            last_verified_at: configured.verification.last_verified_at(),
             requested_at,
-            PersistedVerificationRequirement::IntegrityIssue,
-        );
+            dismissed_at: configured.verification.dismissed_at(),
+        };
     }
 
     pub fn mark_verification_required_after_wallet_change(&mut self, requested_at: Option<u64>) {
@@ -347,21 +351,6 @@ impl PersistedCloudBackupState {
             last_verified_at,
             requested_at,
             dismissed_at,
-        };
-    }
-
-    fn mark_verification_required_with_reason(
-        &mut self,
-        requested_at: Option<u64>,
-        reason: PersistedVerificationRequirement,
-    ) {
-        let Some(configured) = self.configured_mut() else { return };
-
-        configured.verification = PersistedBackupVerificationState::Required {
-            reason,
-            last_verified_at: configured.verification.last_verified_at(),
-            requested_at,
-            dismissed_at: configured.verification.dismissed_at(),
         };
     }
 
