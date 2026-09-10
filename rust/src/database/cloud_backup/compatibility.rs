@@ -26,7 +26,7 @@ use super::{
     PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
     PersistedDisablingCloudBackup, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchState,
     PersistedPasskeyState, PersistedPendingVerificationCompletion,
-    PersistedPendingVerificationUpload,
+    PersistedPendingVerificationUpload, PersistedVerificationRequirement,
 };
 use crate::wallet::metadata::WalletId;
 
@@ -120,6 +120,7 @@ fn legacy_verification_state(
 ) -> PersistedBackupVerificationState {
     if matches!(status, PersistedCloudBackupStatus::Unverified) {
         return PersistedBackupVerificationState::Required {
+            reason: PersistedVerificationRequirement::Unknown,
             last_verified_at,
             requested_at,
             dismissed_at,
@@ -481,7 +482,7 @@ mod tests {
         PersistedConfiguredCloudBackup, PersistedDriveAccountSwitch,
         PersistedDriveAccountSwitchPhase, PersistedPasskeyState,
         PersistedPendingVerificationUpload, PersistedRestoreAllMarker,
-        PersistedWalletVerificationIssues,
+        PersistedVerificationRequirement, PersistedWalletVerificationIssues,
     };
 
     fn configured_state(
@@ -517,6 +518,17 @@ mod tests {
         assert_eq!(state.last_verified_at(), Some(11));
         assert_eq!(state.last_verification_requested_at(), Some(20));
         assert_eq!(state.last_verification_dismissed_at(), Some(12));
+        assert!(matches!(
+            state,
+            PersistedCloudBackupState::Configured(ref configured)
+                if matches!(
+                    configured.verification,
+                    PersistedBackupVerificationState::Required {
+                        reason: PersistedVerificationRequirement::Unknown,
+                        ..
+                    }
+                )
+        ));
         assert!(state.pending_restore_all().is_none());
         assert!(state.should_prompt_verification());
     }
@@ -683,6 +695,17 @@ mod tests {
         assert_eq!(state.last_verified_at(), Some(11));
         assert_eq!(state.last_verification_requested_at(), Some(20));
         assert_eq!(state.last_verification_dismissed_at(), Some(12));
+        assert!(matches!(
+            state,
+            PersistedCloudBackupState::Configured(ref configured)
+                if matches!(
+                    configured.verification,
+                    PersistedBackupVerificationState::Required {
+                        reason: PersistedVerificationRequirement::Unknown,
+                        ..
+                    }
+                )
+        ));
         assert!(state.pending_restore_all().is_none());
     }
 

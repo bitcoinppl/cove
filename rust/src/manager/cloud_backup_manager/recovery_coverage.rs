@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use cove_cspp::backup_data::wallet_record_id;
+use cove_device::cloud_storage::CloudSyncHealth;
 
 use super::model::{CloudBackupDetailState, CloudBackupPasskeyState, CloudBackupVerificationState};
 use super::{
@@ -10,7 +11,7 @@ use super::{
 use crate::database::Database;
 use crate::database::cloud_backup::{
     PersistedBackupVerificationState, PersistedCloudBackupState, PersistedCloudBlobState,
-    PersistedCloudBlobSyncState, PersistedPasskeyState,
+    PersistedCloudBlobSyncState, PersistedPasskeyState, PersistedVerificationRequirement,
 };
 use crate::wallet::metadata::{WalletMetadata, WalletType};
 
@@ -54,33 +55,49 @@ impl CloudBackupRecoveryCoverage {
         namespace: &str,
         sync_states: &[PersistedCloudBlobSyncState],
     ) -> Self {
-        let PersistedCloudBackupState::Configured(configured) = persisted else {
+        let PersistedCloudBackupState::Configured(persisted_configured) = persisted else {
             return Self::default();
         };
 
-        if configured.passkey != PersistedPasskeyState::Available
-            || !matches!(configured.verification, PersistedBackupVerificationState::Verified { .. })
-            || configured.pending_verification_completion.is_some()
-            || configured.pending_restore_all.is_some()
+        if persisted_configured.passkey != PersistedPasskeyState::Available
+            || persisted_configured.pending_verification_completion.is_some()
+            || persisted_configured.pending_restore_all.is_some()
         {
             return Self::default();
         }
 
-        let CloudBackupLifecycle::Configured(configured) = &state.lifecycle else {
+        let CloudBackupLifecycle::Configured(live_configured) = &state.lifecycle else {
             return Self::default();
         };
 
-        if !matches!(&configured.passkey, CloudBackupPasskeyState::Available)
-            || !matches!(&configured.verification, CloudBackupVerificationState::Verified { .. })
+        if !matches!(&live_configured.passkey, CloudBackupPasskeyState::Available)
+            || live_configured.sync_health != CloudSyncHealth::AllUploaded
+            || !verification_proof_is_usable(
+                &live_configured.verification,
+                &persisted_configured.verification,
+            )
         {
             return Self::default();
         }
 
-        let CloudBackupDetailState::Complete { state: loaded } = &configured.detail else {
+        let CloudBackupDetailState::Complete { state: loaded } = &live_configured.detail else {
             return Self::default();
         };
 
         if loaded.inventory_authority != CloudBackupInventoryAuthority::ProviderConfirmed {
+            return Self::default();
+        }
+
+        if sync_states.iter().any(PersistedCloudBlobSyncState::is_corrupted) {
+            return Self::default();
+        }
+
+        if sync_states.iter().filter(|sync_state| sync_state.namespace_id == namespace).any(
+            |sync_state| {
+                sync_state.is_master_key_wrapper()
+                    && !matches!(&sync_state.state, PersistedCloudBlobState::Confirmed(_))
+            },
+        ) {
             return Self::default();
         }
 
@@ -114,6 +131,26 @@ impl CloudBackupRecoveryCoverage {
     }
 }
 
+fn verification_proof_is_usable(
+    live: &CloudBackupVerificationState,
+    persisted: &PersistedBackupVerificationState,
+) -> bool {
+    matches!(
+        (live, persisted),
+        (
+            CloudBackupVerificationState::Verified { .. },
+            PersistedBackupVerificationState::Verified { .. },
+        ) | (
+            CloudBackupVerificationState::Verified { .. } | CloudBackupVerificationState::Required,
+            PersistedBackupVerificationState::Required {
+                reason: PersistedVerificationRequirement::WalletSetChanged,
+                last_verified_at: Some(_),
+                ..
+            },
+        )
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,13 +182,22 @@ mod tests {
     }
 
     fn cloud_state(detail: CloudBackupDetailState) -> CloudBackupState {
+        cloud_state_with_verification(
+            detail,
+            CloudBackupVerificationState::Verified { report: None, last_verified_at: Some(10) },
+            CloudSyncHealth::AllUploaded,
+        )
+    }
+
+    fn cloud_state_with_verification(
+        detail: CloudBackupDetailState,
+        verification: CloudBackupVerificationState,
+        sync_health: CloudSyncHealth,
+    ) -> CloudBackupState {
         CloudBackupState {
             lifecycle: CloudBackupLifecycle::Configured(CloudBackupConfiguredState {
                 passkey: CloudBackupPasskeyState::Available,
-                verification: CloudBackupVerificationState::Verified {
-                    report: None,
-                    last_verified_at: Some(10),
-                },
+                verification,
                 sync: CloudBackupSyncState::Idle,
                 destructive_operation: CloudBackupDestructiveOperationState::Idle,
                 undecryptable_wallet_deletion: CloudBackupUndecryptableWalletDeletionState::Idle,
@@ -159,7 +205,7 @@ mod tests {
                 other_backups: CloudBackupOtherBackupsState::NotChecked,
                 restore_all: CloudBackupRestoreAllState::NotShown,
                 root_prompt: super::super::CloudBackupRootPrompt::None,
-                sync_health: CloudSyncHealth::AllUploaded,
+                sync_health,
                 verification_presentation: CloudBackupVerificationPresentation::Hidden {
                     source: None,
                 },
@@ -204,6 +250,23 @@ mod tests {
         let mut wallet = WalletMetadata::preview_new();
         wallet.id = id.into();
         wallet
+    }
+
+    fn persisted_required_state(
+        reason: PersistedVerificationRequirement,
+        last_verified_at: Option<u64>,
+    ) -> PersistedCloudBackupState {
+        let mut state = persisted_verified_state();
+        if let PersistedCloudBackupState::Configured(configured) = &mut state {
+            configured.verification = PersistedBackupVerificationState::Required {
+                reason,
+                last_verified_at,
+                requested_at: Some(20),
+                dismissed_at: None,
+            };
+        }
+
+        state
     }
 
     #[test]
@@ -308,6 +371,131 @@ mod tests {
             CloudBackupRecoveryCoverage::from_states(&detail, &pending_restore, "namespace", &[],)
                 .needs_backup(&wallet)
         );
+    }
+
+    #[test]
+    fn missing_or_pending_recovery_key_blocks_cloud_coverage() {
+        let wallet = wallet_with_id("wallet-1");
+        let record_id = wallet_record_id(wallet.id.as_ref());
+        let detail = loaded_detail(
+            CloudBackupInventoryAuthority::ProviderConfirmed,
+            CloudBackupWalletStatus::Confirmed,
+            &record_id,
+        );
+
+        for sync_health in [
+            CloudSyncHealth::Unknown,
+            CloudSyncHealth::Uploading,
+            CloudSyncHealth::Failed("missing master key".into()),
+        ] {
+            let coverage = CloudBackupRecoveryCoverage::from_states(
+                &cloud_state_with_verification(
+                    detail.clone(),
+                    CloudBackupVerificationState::Verified {
+                        report: None,
+                        last_verified_at: Some(10),
+                    },
+                    sync_health,
+                ),
+                &persisted_verified_state(),
+                "namespace",
+                &[],
+            );
+
+            assert!(coverage.needs_backup(&wallet));
+        }
+
+        for sync_state in [
+            PersistedCloudBlobState::Dirty(crate::database::cloud_backup::CloudBlobDirtyState {
+                changed_at: 20,
+            }),
+            PersistedCloudBlobState::Failed(crate::database::cloud_backup::CloudBlobFailedState {
+                revision_hash: None,
+                retryable: false,
+                error: "upload failed".into(),
+                issue: None,
+                failed_at: 20,
+            }),
+        ] {
+            let coverage = CloudBackupRecoveryCoverage::from_states(
+                &cloud_state(detail.clone()),
+                &persisted_verified_state(),
+                "namespace",
+                &[PersistedCloudBlobSyncState::master_key_wrapper("namespace".into(), sync_state)],
+            );
+
+            assert!(coverage.needs_backup(&wallet));
+        }
+    }
+
+    #[test]
+    fn corrupt_blob_sync_state_blocks_cloud_coverage() {
+        let wallet = wallet_with_id("wallet-1");
+        let record_id = wallet_record_id(wallet.id.as_ref());
+        let detail = cloud_state(loaded_detail(
+            CloudBackupInventoryAuthority::ProviderConfirmed,
+            CloudBackupWalletStatus::Confirmed,
+            &record_id,
+        ));
+
+        let coverage = CloudBackupRecoveryCoverage::from_states(
+            &detail,
+            &persisted_verified_state(),
+            "namespace",
+            &[PersistedCloudBlobSyncState::corrupted("decode failed".into())],
+        );
+
+        assert!(coverage.needs_backup(&wallet));
+    }
+
+    #[test]
+    fn confirmed_wallet_after_wallet_set_change_uses_prior_verification_proof() {
+        let wallet = wallet_with_id("wallet-1");
+        let record_id = wallet_record_id(wallet.id.as_ref());
+        let mut persisted = persisted_verified_state();
+        persisted.mark_verification_required_after_wallet_change(Some(20));
+
+        let coverage = CloudBackupRecoveryCoverage::from_states(
+            &cloud_state_with_verification(
+                loaded_detail(
+                    CloudBackupInventoryAuthority::ProviderConfirmed,
+                    CloudBackupWalletStatus::Confirmed,
+                    &record_id,
+                ),
+                CloudBackupVerificationState::Required,
+                CloudSyncHealth::AllUploaded,
+            ),
+            &persisted,
+            "namespace",
+            &[],
+        );
+
+        assert!(!coverage.needs_backup(&wallet));
+    }
+
+    #[test]
+    fn no_prior_verification_or_integrity_loss_still_blocks_cloud_coverage() {
+        let wallet = wallet_with_id("wallet-1");
+        let record_id = wallet_record_id(wallet.id.as_ref());
+        let detail = cloud_state_with_verification(
+            loaded_detail(
+                CloudBackupInventoryAuthority::ProviderConfirmed,
+                CloudBackupWalletStatus::Confirmed,
+                &record_id,
+            ),
+            CloudBackupVerificationState::Required,
+            CloudSyncHealth::AllUploaded,
+        );
+
+        for persisted in [
+            persisted_required_state(PersistedVerificationRequirement::WalletSetChanged, None),
+            persisted_required_state(PersistedVerificationRequirement::IntegrityIssue, Some(10)),
+        ] {
+            let coverage =
+                CloudBackupRecoveryCoverage::from_states(&detail, &persisted, "namespace", &[]);
+
+            assert!(coverage.needs_backup(&wallet));
+        }
     }
 
     #[test]

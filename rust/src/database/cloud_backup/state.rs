@@ -223,6 +223,7 @@ impl PersistedCloudBackupState {
         Self::Configured(PersistedConfiguredCloudBackup {
             passkey: PersistedPasskeyState::Available,
             verification: PersistedBackupVerificationState::Required {
+                reason: PersistedVerificationRequirement::BackupReset,
                 last_verified_at: None,
                 requested_at: None,
                 dismissed_at: None,
@@ -261,6 +262,7 @@ impl PersistedCloudBackupState {
 
         configured.passkey = PersistedPasskeyState::Available;
         configured.verification = PersistedBackupVerificationState::Required {
+            reason: PersistedVerificationRequirement::BackupReset,
             last_verified_at: None,
             requested_at: None,
             dismissed_at: None,
@@ -311,9 +313,52 @@ impl PersistedCloudBackupState {
     }
 
     pub fn mark_verification_required(&mut self, requested_at: Option<u64>) {
+        self.mark_verification_required_with_reason(
+            requested_at,
+            PersistedVerificationRequirement::IntegrityIssue,
+        );
+    }
+
+    pub fn mark_verification_required_after_wallet_change(&mut self, requested_at: Option<u64>) {
+        if !matches!(
+            self.status(),
+            PersistedCloudBackupStatus::Enabled | PersistedCloudBackupStatus::Unverified
+        ) {
+            return;
+        }
+
+        let Some(configured) = self.configured_mut() else { return };
+
+        let reason = match &configured.verification {
+            PersistedBackupVerificationState::NotVerified { .. }
+            | PersistedBackupVerificationState::Verified { .. } => {
+                PersistedVerificationRequirement::WalletSetChanged
+            }
+            PersistedBackupVerificationState::Required { reason, .. } => *reason,
+            PersistedBackupVerificationState::NeedsAttention { .. } => {
+                PersistedVerificationRequirement::IntegrityIssue
+            }
+        };
+
+        let last_verified_at = configured.verification.last_verified_at();
+        let dismissed_at = configured.verification.dismissed_at();
+        configured.verification = PersistedBackupVerificationState::Required {
+            reason,
+            last_verified_at,
+            requested_at,
+            dismissed_at,
+        };
+    }
+
+    fn mark_verification_required_with_reason(
+        &mut self,
+        requested_at: Option<u64>,
+        reason: PersistedVerificationRequirement,
+    ) {
         let Some(configured) = self.configured_mut() else { return };
 
         configured.verification = PersistedBackupVerificationState::Required {
+            reason,
             last_verified_at: configured.verification.last_verified_at(),
             requested_at,
             dismissed_at: configured.verification.dismissed_at(),
@@ -572,6 +617,20 @@ pub enum PersistedPasskeyState {
     Missing,
 }
 
+/// Reason a configured backup requires a fresh deep verification
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PersistedVerificationRequirement {
+    /// The local wallet set changed after the last verified backup
+    WalletSetChanged,
+    /// A backup integrity or verification check invalidated the prior proof
+    IntegrityIssue,
+    /// The configured backup was reset or reinitialized
+    BackupReset,
+    /// The requirement was written by a version that did not record its cause
+    #[default]
+    Unknown,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "state", content = "data")]
 pub enum PersistedBackupVerificationState {
@@ -600,6 +659,9 @@ pub enum PersistedBackupVerificationState {
         dismissed_at: Option<u64>,
     },
     Required {
+        /// Why the backup requires a fresh deep verification
+        #[serde(default)]
+        reason: PersistedVerificationRequirement,
         #[serde(default)]
         last_verified_at: Option<u64>,
         #[serde(default)]
@@ -669,9 +731,12 @@ impl PersistedBackupVerificationState {
                 requested_at,
                 dismissed_at: Some(dismissed_at),
             },
-            Self::Required { last_verified_at, requested_at, .. } => {
-                Self::Required { last_verified_at, requested_at, dismissed_at: Some(dismissed_at) }
-            }
+            Self::Required { reason, last_verified_at, requested_at, .. } => Self::Required {
+                reason,
+                last_verified_at,
+                requested_at,
+                dismissed_at: Some(dismissed_at),
+            },
         }
     }
 }
