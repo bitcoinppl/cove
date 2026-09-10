@@ -109,16 +109,13 @@ impl CloudBackupRecoveryCoverage {
             .map(|wallet| wallet.record_id.clone())
             .collect::<HashSet<_>>();
 
-        let mut pending_wallet_records = HashSet::new();
         for sync_state in sync_states.iter().filter(|sync_state| {
             sync_state.namespace_id == namespace && sync_state.is_wallet_record()
         }) {
             if !matches!(&sync_state.state, PersistedCloudBlobState::Confirmed(_)) {
-                pending_wallet_records.insert(sync_state.record_id().to_owned());
+                covered.remove(sync_state.record_id());
             }
         }
-
-        covered.retain(|record_id| !pending_wallet_records.contains(record_id));
 
         Self(covered)
     }
@@ -162,6 +159,7 @@ mod tests {
         CloudBackupRestoreAllState, CloudBackupSyncState,
         CloudBackupUndecryptableWalletDeletionState, LoadedCloudBackupDetail,
     };
+    use crate::manager::cloud_backup_manager::verify::test_support::apply_startup_integrity_downgrade;
     use crate::manager::cloud_backup_manager::{
         CloudBackupOtherBackupsState, CloudBackupVerificationPresentation,
     };
@@ -449,28 +447,31 @@ mod tests {
     }
 
     #[test]
-    fn confirmed_wallet_after_wallet_set_change_uses_prior_verification_proof() {
+    fn startup_integrity_downgrade_invalidates_wallet_set_recovery_coverage() {
         let wallet = wallet_with_id("wallet-1");
         let record_id = wallet_record_id(wallet.id.as_ref());
         let mut persisted = persisted_verified_state();
         persisted.mark_verification_required_after_wallet_change(Some(20));
 
-        let coverage = CloudBackupRecoveryCoverage::from_states(
-            &cloud_state_with_verification(
-                loaded_detail(
-                    CloudBackupInventoryAuthority::ProviderConfirmed,
-                    CloudBackupWalletStatus::Confirmed,
-                    &record_id,
-                ),
-                CloudBackupVerificationState::Required,
-                CloudSyncHealth::AllUploaded,
+        let live = cloud_state_with_verification(
+            loaded_detail(
+                CloudBackupInventoryAuthority::ProviderConfirmed,
+                CloudBackupWalletStatus::Confirmed,
+                &record_id,
             ),
-            &persisted,
-            "namespace",
-            &[],
+            CloudBackupVerificationState::Required,
+            CloudSyncHealth::AllUploaded,
         );
+        let coverage =
+            CloudBackupRecoveryCoverage::from_states(&live, &persisted, "namespace", &[]);
 
         assert!(!coverage.needs_backup(&wallet));
+
+        let downgraded = apply_startup_integrity_downgrade(&persisted).unwrap();
+        let coverage =
+            CloudBackupRecoveryCoverage::from_states(&live, &downgraded, "namespace", &[]);
+
+        assert!(coverage.needs_backup(&wallet));
     }
 
     #[test]
