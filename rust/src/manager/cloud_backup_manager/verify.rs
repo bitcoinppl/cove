@@ -52,18 +52,28 @@ impl IntegrityDowngrade {
     fn apply_to(&self, current: &PersistedCloudBackupState) -> Option<PersistedCloudBackupState> {
         match self {
             Self::Unverified => match current.status() {
-                PersistedCloudBackupStatus::Enabled => {
+                PersistedCloudBackupStatus::Enabled | PersistedCloudBackupStatus::Unverified => {
                     let mut state = current.clone();
                     state.mark_verification_required(state.last_verification_requested_at());
                     Some(state)
                 }
-                PersistedCloudBackupStatus::Unverified => Some(current.clone()),
                 PersistedCloudBackupStatus::PasskeyMissing
                 | PersistedCloudBackupStatus::Disabling
                 | PersistedCloudBackupStatus::Disabled
                 | PersistedCloudBackupStatus::Corrupted => None,
             },
         }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::{IntegrityDowngrade, PersistedCloudBackupState};
+
+    pub(crate) fn apply_startup_integrity_downgrade(
+        current: &PersistedCloudBackupState,
+    ) -> Option<PersistedCloudBackupState> {
+        IntegrityDowngrade::Unverified.apply_to(current)
     }
 }
 
