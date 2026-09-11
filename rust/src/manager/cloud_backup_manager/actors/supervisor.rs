@@ -48,12 +48,14 @@ use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_DISABLE_ERROR_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,
     CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
     CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailInventorySnapshot,
-    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailOutcome, CloudBackupDetailResult,
-    CloudBackupDisableOutcome, CloudBackupDisablePreparation, CloudBackupDriveAccountSwitchError,
-    CloudBackupEnableContext, CloudBackupEnablePasskeyPreparation,
-    CloudBackupEnablePasskeyRegistration, CloudBackupEnablePreparation,
-    CloudBackupEnableRecoveryCompletion, CloudBackupEnableRecoveryPreparation,
-    CloudBackupEnableState, CloudBackupError, CloudBackupInventoryIncompleteReason,
+    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailOutcome,
+    CloudBackupDetailProviderConfirmation, CloudBackupDetailResult,
+    CloudBackupDetailSnapshotCompletion, CloudBackupDisableOutcome, CloudBackupDisablePreparation,
+    CloudBackupDriveAccountSwitchError, CloudBackupEnableContext,
+    CloudBackupEnablePasskeyPreparation, CloudBackupEnablePasskeyRegistration,
+    CloudBackupEnablePreparation, CloudBackupEnableRecoveryCompletion,
+    CloudBackupEnableRecoveryPreparation, CloudBackupEnableState, CloudBackupError,
+    CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason,
     CloudBackupKeepEnabledPreparation, CloudBackupNoDiscoveryEnablePreparation,
     CloudBackupOtherBackupsOutcome, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
     CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
@@ -194,6 +196,27 @@ fn apply_cloud_only_operation_refresh_detail_result(
                 reason: CloudBackupInventoryIncompleteReason::from(CloudStorageIssue::from(error)),
                 error: error.reader_message(),
             });
+        }
+    }
+}
+
+fn apply_provider_confirmation_result(
+    manager: &RustCloudBackupManager,
+    result: &CloudBackupDetailResult,
+) {
+    match result {
+        CloudBackupDetailResult::SuccessWithAuthority { detail, authority } => {
+            manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
+                CloudBackupDetailOutcome::RefreshedWithAuthority {
+                    detail: detail.clone(),
+                    authority: *authority,
+                },
+            );
+        }
+        CloudBackupDetailResult::AccessError(error) => {
+            warn!(
+                "provider confirmation of trusted local inventory failed; keeping local snapshot detail: {error}"
+            );
         }
     }
 }
@@ -785,7 +808,7 @@ impl CloudBackupSupervisor {
         }
 
         self.ensure_supplemental_inventory_discovery(manager.clone());
-        if manager.detail_inventory_is_ready() {
+        if manager.detail_inventory_is_complete() {
             return Produces::ok(());
         }
 
@@ -836,8 +859,22 @@ impl CloudBackupSupervisor {
         claim: DetailRefreshClaim,
     ) {
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await;
-            send!(addr.complete_refresh_detail(result, attempt, claim));
+            let completion =
+                manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await;
+            send!(addr.complete_refresh_detail_from_snapshot(completion, attempt, claim));
+        });
+    }
+
+    fn schedule_confirm_refresh_detail(
+        &self,
+        manager: Arc<RustCloudBackupManager>,
+        confirmation: CloudBackupDetailProviderConfirmation,
+        attempt: DetailRefreshAttempt,
+        claim: DetailRefreshClaim,
+    ) {
+        self.addr.send_fut_with(move |addr| async move {
+            let result = manager.confirm_cloud_backup_detail_inventory(confirmation.clone()).await;
+            send!(addr.complete_confirm_refresh_detail(confirmation, result, attempt, claim));
         });
     }
 
@@ -900,6 +937,78 @@ impl CloudBackupSupervisor {
 
         self.ensure_supplemental_inventory_discovery(manager.clone());
 
+        self.handle_detail_refresh_plan(manager, completion.next);
+
+        Produces::ok(())
+    }
+
+    pub async fn complete_refresh_detail_from_snapshot(
+        &mut self,
+        completion: Option<CloudBackupDetailSnapshotCompletion>,
+        attempt: DetailRefreshAttempt,
+        claim: DetailRefreshClaim,
+    ) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        if !self.detail_workflow.is_refresh_active(claim) {
+            return Produces::ok(());
+        }
+
+        match completion {
+            None => self.complete_refresh_detail(None, attempt, claim).await,
+            Some(CloudBackupDetailSnapshotCompletion::Final(result)) => {
+                self.complete_refresh_detail(Some(result), attempt, claim).await
+            }
+            Some(CloudBackupDetailSnapshotCompletion::TrustedLocal { detail, confirmation }) => {
+                if self.detail_workflow.is_latest_refresh(claim) {
+                    manager.apply_detail_outcome(
+                        CloudBackupDetailOutcome::RefreshedWithAuthority {
+                            detail,
+                            authority:
+                                CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
+                        },
+                    );
+                }
+
+                self.ensure_supplemental_inventory_discovery(manager.clone());
+                self.schedule_confirm_refresh_detail(manager, confirmation, attempt, claim);
+
+                Produces::ok(())
+            }
+        }
+    }
+
+    pub async fn complete_confirm_refresh_detail(
+        &mut self,
+        confirmation: CloudBackupDetailProviderConfirmation,
+        result: Option<CloudBackupDetailResult>,
+        attempt: DetailRefreshAttempt,
+        claim: DetailRefreshClaim,
+    ) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        if !self.detail_workflow.is_refresh_active(claim) {
+            return Produces::ok(());
+        }
+
+        if refresh_detail_needs_connectivity_retry(&manager, attempt, &result) {
+            self.schedule_confirm_refresh_detail(
+                manager,
+                confirmation,
+                DetailRefreshAttempt::AutomaticConnectivityRetry,
+                claim,
+            );
+            return Produces::ok(());
+        }
+
+        let completion = self.detail_workflow.complete_refresh(claim);
+        if completion.apply
+            && let Some(result) = result
+        {
+            apply_provider_confirmation_result(&manager, &result);
+        }
+
+        self.ensure_supplemental_inventory_discovery(manager.clone());
         self.handle_detail_refresh_plan(manager, completion.next);
 
         Produces::ok(())
