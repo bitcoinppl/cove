@@ -93,6 +93,21 @@ pub(crate) struct CloudBackupDetailInventorySnapshot {
     pub(crate) provisional_detail: Option<CloudBackupDetail>,
 }
 
+/// Provider listing still owed after detail was built from a trusted local snapshot
+#[derive(Debug, Clone)]
+pub(crate) struct CloudBackupDetailProviderConfirmation {
+    pub(crate) namespace: String,
+}
+
+/// Outcome of building detail from an inventory snapshot
+#[derive(Debug)]
+pub(crate) enum CloudBackupDetailSnapshotCompletion {
+    /// The refresh is finished with this result
+    Final(CloudBackupDetailResult),
+    /// Trusted local rows can be shown now; the provider must still confirm them
+    TrustedLocal { detail: CloudBackupDetail, confirmation: CloudBackupDetailProviderConfirmation },
+}
+
 #[derive(Debug)]
 pub(crate) enum CloudBackupDetailInventorySnapshotResult {
     Success(CloudBackupDetailInventorySnapshot),
@@ -2240,6 +2255,55 @@ mod tests {
 
         assert!(!model.detail_inventory_is_complete());
         assert!(model.detail_inventory_is_ready());
+    }
+
+    #[test]
+    fn provider_confirmation_upgrades_trusted_local_snapshot_and_keeps_cloud_only_rows() {
+        let mut model = CloudBackupStateReducer {
+            state: configured_state(
+                CloudBackupVerificationState::NotVerified,
+                CloudSyncHealth::Unknown,
+            ),
+        };
+        let detail = test_detail(2);
+        let wallets = vec![
+            cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice),
+            cloud_only_wallet("wallet-2", CloudBackupWalletStatus::DeletedFromDevice),
+        ];
+
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+            detail: Some((
+                detail.clone(),
+                CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
+            )),
+            reset_cloud_only: false,
+        });
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
+            CloudOnlyState::Loaded { wallets: wallets.clone() },
+        ));
+
+        assert_eq!(
+            restore_all_state(&model),
+            CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 },
+        );
+
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+            detail: Some((detail, CloudBackupInventoryAuthority::ProviderConfirmed)),
+            reset_cloud_only: false,
+        });
+
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+        let CloudBackupDetailState::Complete { state } = configured.detail else {
+            panic!("expected complete detail");
+        };
+
+        assert_eq!(state.cloud_only, CloudOnlyState::Loaded { wallets });
+        assert_eq!(
+            configured.restore_all,
+            CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
+        );
     }
 
     #[test]

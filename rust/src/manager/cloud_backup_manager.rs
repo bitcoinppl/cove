@@ -87,7 +87,8 @@ pub(crate) use self::keychain::CloudBackupKeychain;
 pub(crate) use self::model::test_support;
 pub(crate) use self::model::{
     CloudBackupAcceptedEnablePrompt, CloudBackupDetailInventorySnapshot,
-    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailResult, CloudBackupDisableOutcome,
+    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailProviderConfirmation,
+    CloudBackupDetailResult, CloudBackupDetailSnapshotCompletion, CloudBackupDisableOutcome,
     CloudBackupEnableState, CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
     CloudBackupStateReducer, CloudBackupStateReducerEvent, CloudBackupStatus,
 };
