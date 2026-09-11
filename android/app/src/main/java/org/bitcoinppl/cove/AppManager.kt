@@ -369,11 +369,18 @@ class AppManager private constructor() : FfiReconcile {
      * clears all cached data and reinitializes
      */
     fun reset() {
+        clearSessionForReset()
+        resetRustProjection()
+    }
+
+    private fun clearSessionForReset() {
         // close managers before clearing them
         clearWalletManager()
         clearKeyTeleportManager()
         corruptedWalletDeletionRetry = null
+    }
 
+    private fun resetRustProjection(): Boolean {
         database = Database()
         needsOnboarding =
             withRustOr(needsOnboarding) {
@@ -381,10 +388,55 @@ class AppManager private constructor() : FfiReconcile {
             }
 
         val routerState =
-            withRustOr(null) {
+            withRustOr<AppState?>(null) {
                 state()
+            } ?: return false
+
+        router.reset(routerState.router)
+        return true
+    }
+
+    /**
+     * Reset the app session after a successful full wipe
+     *
+     * Rust publishes the empty database and direct route through reconciliation. This clears
+     * Android-owned presentation state before authentication is released
+     */
+    internal fun resetAfterWipe() {
+        val projectionReset = resetProjectionAfterWipe()
+        if (!projectionReset) {
+            router.reconcileDefaultRouteChanged(
+                Route.NewWallet(NewWalletRoute.Select),
+                emptyList(),
+            )
+        }
+
+        router.isSidebarVisible = false
+        wallets = emptyList()
+        isLoading = false
+        alertState = null
+        sheetState = null
+    }
+
+    private fun resetProjectionAfterWipe(): Boolean {
+        val resetResult =
+            runCatching {
+                clearSessionForReset()
+                resetRustProjection()
             }
-        router.reset(routerState?.router)
+
+        if (resetResult.getOrNull() == true) return true
+
+        resetResult.exceptionOrNull()?.let { error ->
+            Log.e(tag, "failed to reset app session after wipe", error)
+        }
+
+        val projectionResult = runCatching { resetRustProjection() }
+        projectionResult.exceptionOrNull()?.let { error ->
+            Log.e(tag, "failed to reset app projection after wipe", error)
+        }
+
+        return projectionResult.getOrDefault(false)
     }
 
     val currentRoute: Route
