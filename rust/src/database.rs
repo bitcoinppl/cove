@@ -90,6 +90,8 @@ impl Database {
     }
 
     pub fn dangerous_reset_all_data(&self) -> Result<(), error::DatabaseError> {
+        let completed_onboarding = self.global_flag.try_is_onboarding_complete()?;
+
         match std::fs::remove_file(database_location()) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -104,7 +106,7 @@ impl Database {
             error!("unable to clear diagnostics logs during data reset: {error}");
         }
 
-        let db = Self::init()?;
+        let db = Self::init_with_completed_onboarding(completed_onboarding)?;
         DATABASE.get().expect("database not initialized").swap(Arc::new(db));
 
         Ok(())
@@ -146,6 +148,12 @@ impl Database {
     }
 
     fn init() -> Result<Self, error::DatabaseError> {
+        Self::init_with_completed_onboarding(false)
+    }
+
+    fn init_with_completed_onboarding(
+        completed_onboarding: bool,
+    ) -> Result<Self, error::DatabaseError> {
         crate::bootstrap::ensure_storage_bootstrapped()
             .map_err_str(error::DatabaseError::BootstrapFailed)?;
 
@@ -164,6 +172,10 @@ impl Database {
         let unsigned_transactions = UnsignedTransactionsTable::new(main_db_arc.clone(), &write_txn);
         let historical_prices = HistoricalPriceTable::new(main_db_arc.clone(), &write_txn);
         let diagnostics_reports = DiagnosticsReportsTable::new(main_db_arc, &write_txn);
+
+        if completed_onboarding {
+            global_flag.set_onboarding_complete_in_transaction(&write_txn)?;
+        }
 
         write_txn.commit()?;
 
