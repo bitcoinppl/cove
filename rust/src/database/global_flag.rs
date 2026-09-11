@@ -152,12 +152,7 @@ impl GlobalFlagTable {
         debug!("setting global flag: {key:?} to {value}");
         let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
-        {
-            let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
-
-            let key: &'static str = key.into();
-            table.insert(key, value).map_err_str(GlobalFlagTableError::Save)?;
-        }
+        self.set_inner_in_transaction(&write_txn, key, value)?;
 
         write_txn.commit().map_err_str(Error::DatabaseAccess)?;
 
@@ -168,8 +163,33 @@ impl GlobalFlagTable {
         Ok(())
     }
 
+    pub(crate) fn set_onboarding_complete_in_transaction(
+        &self,
+        write_txn: &redb::WriteTransaction,
+    ) -> Result<(), Error> {
+        self.set_inner_in_transaction(write_txn, GlobalFlagKey::CompletedOnboarding, true)
+    }
+
+    fn set_inner_in_transaction(
+        &self,
+        write_txn: &redb::WriteTransaction,
+        key: GlobalFlagKey,
+        value: bool,
+    ) -> Result<(), Error> {
+        let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
+
+        let key: &'static str = key.into();
+        table.insert(key, value).map_err_str(GlobalFlagTableError::Save)?;
+
+        Ok(())
+    }
+
     pub(crate) fn is_onboarding_complete(&self) -> bool {
         self.get_bool_config(GlobalFlagKey::CompletedOnboarding)
+    }
+
+    pub(crate) fn try_is_onboarding_complete(&self) -> Result<bool, Error> {
+        self.get(GlobalFlagKey::CompletedOnboarding)
     }
 
     pub(crate) fn mark_onboarding_complete(&self) -> Result<(), Error> {
