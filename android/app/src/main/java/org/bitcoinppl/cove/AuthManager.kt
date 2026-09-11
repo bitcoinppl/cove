@@ -56,8 +56,11 @@ sealed interface WipePresentationState {
     data object Idle : WipePresentationState
     data object Running : WipePresentationState
     data class ShutdownBlocked(val attemptId: ShutdownAttemptId) : WipePresentationState
-    data class Failed(val message: String) : WipePresentationState
+    data object Failed : WipePresentationState
 }
+
+internal const val WIPE_FAILURE_TITLE = "Unable to Open Cove"
+internal const val WIPE_FAILURE_MESSAGE = "Please try again."
 
 /**
  * auth manager - manages authentication state
@@ -72,8 +75,7 @@ class AuthManager internal constructor(
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val wipeCommand = OwnerScopedCommand<UnlockMode>(mainScope)
 
-    private var rust: RustAuthManager = RustAuthManager()
-        private set
+    private val rust = RustAuthManager()
     private val isRustClosed = AtomicBoolean(false)
     private val rustGuard =
         RustHandleGuard(
@@ -318,31 +320,66 @@ class AuthManager internal constructor(
                 }
             }
 
-        result.exceptionOrNull()?.let { error ->
+        val wipeError = result.exceptionOrNull()
+        wipeError?.let { error ->
             val lifecycle = (error as? AppException.WalletLifecycle)?.v1
             if (lifecycle is WalletLifecycleFailure.ShutdownBlocked) {
                 wipePresentationState = WipePresentationState.ShutdownBlocked(lifecycle.attemptId)
             } else {
                 android.util.Log.e(tag, "failed to wipe all data", error)
-                wipePresentationState =
-                    WipePresentationState.Failed(error.message ?: "Unable to remove local data")
+                wipePresentationState = WipePresentationState.Failed
             }
-
-            return UnlockMode.LOCKED
         }
 
-        val oldRust = rust
-        rust = RustAuthManager()
-        rustGuard.markOpen()
-        rust.listenForUpdates(this)
-        oldRust.close()
-        unlock()
-        type = AuthType.NONE
-        wipePresentationState = WipePresentationState.Idle
-        App.reset()
+        if (wipeError == null) {
+            runCatching { App.resetAfterWipe() }
+                .onFailure { error ->
+                    android.util.Log.e(tag, "failed to reset app projection after wipe", error)
+                }
 
-        return UnlockMode.WIPE
+            runCatching { refreshAuthStateAfterWipe() }
+                .onFailure { error ->
+                    android.util.Log.e(tag, "failed to refresh authentication after wipe", error)
+                }
+
+            unlock()
+            wipePresentationState = WipePresentationState.Idle
+        }
+
+        return if (wipeError == null) {
+            UnlockMode.WIPE
+        } else {
+            UnlockMode.LOCKED
+        }
     }
+
+    private fun refreshAuthStateAfterWipe() {
+        val nextType = readAuthStateAfterWipe("auth type", AuthType.NONE) { authType() }
+        val nextWipeDataPinEnabled =
+            readAuthStateAfterWipe("wipe PIN state", false) {
+                isWipeDataPinEnabled()
+            }
+        val nextDecoyPinEnabled =
+            readAuthStateAfterWipe("decoy PIN state", false) {
+                isDecoyPinEnabled()
+            }
+
+        type = nextType
+        isWipeDataPinEnabled = nextWipeDataPinEnabled
+        isDecoyPinEnabled = nextDecoyPinEnabled
+        isUsingBiometrics = false
+    }
+
+    private fun <T> readAuthStateAfterWipe(
+        name: String,
+        defaultValue: T,
+        read: RustAuthManager.() -> T,
+    ): T =
+        runCatching { withRust(read) }
+            .getOrElse { error ->
+                android.util.Log.e(tag, "failed to refresh $name after wipe; using safe default", error)
+                defaultValue
+            }
 
     private fun recordMainCredentialAuthentication() {
         mainCredentialGeneration += 1
