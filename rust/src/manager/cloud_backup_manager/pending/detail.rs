@@ -7,7 +7,8 @@ use crate::database::Database;
 use crate::database::cloud_backup::{CloudBlobConfirmedState, PersistedCloudBlobState};
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupDetailInventorySnapshot,
-    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailResult, CloudBackupError,
+    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailProviderConfirmation,
+    CloudBackupDetailResult, CloudBackupDetailSnapshotCompletion, CloudBackupError,
     CloudBackupInventoryAuthority, CloudBackupStatus, RustCloudBackupManager, blocking_cloud_error,
     cloud_inventory::CloudWalletInventory, cloud_inventory::RemoteWalletTruth,
     offline_error_for_step,
@@ -70,7 +71,7 @@ impl RustCloudBackupManager {
     pub(crate) async fn complete_cloud_backup_detail_inventory_snapshot(
         &self,
         snapshot: CloudBackupDetailInventorySnapshot,
-    ) -> Option<CloudBackupDetailResult> {
+    ) -> Option<CloudBackupDetailSnapshotCompletion> {
         let status = self.state.read().status().clone();
         if !matches!(status, CloudBackupStatus::Enabled | CloudBackupStatus::PasskeyMissing) {
             info!("complete_cloud_backup_detail_inventory_snapshot: skipping, status={status:?}");
@@ -79,38 +80,105 @@ impl RustCloudBackupManager {
 
         let current_namespace = match self.current_namespace_id() {
             Ok(namespace) => namespace,
-            Err(error) => return Some(CloudBackupDetailResult::AccessError(error)),
+            Err(error) => {
+                return Some(CloudBackupDetailSnapshotCompletion::Final(
+                    CloudBackupDetailResult::AccessError(error),
+                ));
+            }
         };
         if current_namespace != snapshot.namespace {
-            return Some(CloudBackupDetailResult::AccessError(CloudBackupError::Internal(
-                "cloud backup namespace changed during inventory refresh".into(),
-            )));
+            return Some(CloudBackupDetailSnapshotCompletion::Final(
+                CloudBackupDetailResult::AccessError(CloudBackupError::Internal(
+                    "cloud backup namespace changed during inventory refresh".into(),
+                )),
+            ));
         }
 
         if self.is_known_offline() && snapshot.authority.is_none() {
-            return Some(CloudBackupDetailResult::AccessError(offline_error_for_step(
-                BlockingCloudStep::DetailRefresh,
-            )));
+            return Some(CloudBackupDetailSnapshotCompletion::Final(
+                CloudBackupDetailResult::AccessError(offline_error_for_step(
+                    BlockingCloudStep::DetailRefresh,
+                )),
+            ));
         }
 
         let cloud = CloudStorage::global_explicit_client();
-        let (wallet_record_ids, authority) = if let Some(authority) = snapshot.authority {
-            (snapshot.wallet_record_ids, authority)
-        } else {
-            match cloud.list_wallet_backups(snapshot.namespace.clone()).await {
-                Ok(record_ids) => (record_ids, CloudBackupInventoryAuthority::ProviderConfirmed),
-                Err(error) => {
-                    let error = blocking_cloud_error(
-                        BlockingCloudStep::DetailRefresh,
-                        CloudBackupError::cloud_storage_context("list wallet backups", error),
-                    );
-
-                    return Some(CloudBackupDetailResult::AccessError(error));
-                }
+        match snapshot.authority {
+            Some(CloudBackupInventoryAuthority::ProviderConfirmed) => {
+                Some(CloudBackupDetailSnapshotCompletion::Final(
+                    self.finish_cloud_backup_detail_refresh(
+                        snapshot.wallet_record_ids,
+                        CloudBackupInventoryAuthority::ProviderConfirmed,
+                        cloud,
+                    )
+                    .await,
+                ))
             }
-        };
+            Some(CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount) => {
+                let result = self
+                    .finish_cloud_backup_detail_refresh(
+                        snapshot.wallet_record_ids,
+                        CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
+                        cloud,
+                    )
+                    .await;
 
-        Some(self.finish_cloud_backup_detail_refresh(wallet_record_ids, authority, cloud).await)
+                Some(match result {
+                    CloudBackupDetailResult::SuccessWithAuthority { detail, .. } => {
+                        CloudBackupDetailSnapshotCompletion::TrustedLocal {
+                            detail,
+                            confirmation: CloudBackupDetailProviderConfirmation {
+                                namespace: snapshot.namespace,
+                            },
+                        }
+                    }
+                    CloudBackupDetailResult::AccessError(error) => {
+                        CloudBackupDetailSnapshotCompletion::Final(
+                            CloudBackupDetailResult::AccessError(error),
+                        )
+                    }
+                })
+            }
+            Some(CloudBackupInventoryAuthority::Provisional) | None => {
+                let result = match cloud.list_wallet_backups(snapshot.namespace).await {
+                    Ok(record_ids) => {
+                        self.finish_cloud_backup_detail_refresh(
+                            record_ids,
+                            CloudBackupInventoryAuthority::ProviderConfirmed,
+                            cloud,
+                        )
+                        .await
+                    }
+                    Err(error) => {
+                        let error = blocking_cloud_error(
+                            BlockingCloudStep::DetailRefresh,
+                            CloudBackupError::cloud_storage_context("list wallet backups", error),
+                        );
+
+                        CloudBackupDetailResult::AccessError(error)
+                    }
+                };
+
+                Some(CloudBackupDetailSnapshotCompletion::Final(result))
+            }
+        }
+    }
+
+    pub(crate) async fn confirm_cloud_backup_detail_inventory(
+        &self,
+        confirmation: CloudBackupDetailProviderConfirmation,
+    ) -> Option<CloudBackupDetailResult> {
+        let current_namespace = match self.current_namespace_id() {
+            Ok(namespace) => namespace,
+            Err(error) => return Some(CloudBackupDetailResult::AccessError(error)),
+        };
+        if current_namespace != confirmation.namespace {
+            return Some(CloudBackupDetailResult::AccessError(CloudBackupError::Internal(
+                "cloud backup namespace changed during inventory confirmation".into(),
+            )));
+        }
+
+        self.refresh_cloud_backup_detail().await
     }
 
     /// List wallet backups in the current namespace and build detail
