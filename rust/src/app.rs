@@ -760,7 +760,28 @@ async fn wipe_all_data_with_tier(
         AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired)
     })?;
 
+    reconcile_after_full_wipe();
+
     Ok(())
+}
+
+fn reconcile_after_full_wipe() {
+    let database = Database::global();
+
+    Updater::send_update(AppMessage::DatabaseUpdated);
+
+    let selected_network = database.global_config.selected_network();
+    let color_scheme = database.global_config._color_scheme();
+    let fiat_currency = database.global_config.selected_fiat_currency();
+    let selected_node = database.global_config.selected_node();
+
+    Updater::send_update(AppMessage::SelectedNetworkChanged(selected_network));
+    Updater::send_update(AppMessage::ColorSchemeChanged(color_scheme));
+    Updater::send_update(AppMessage::FiatCurrencyChanged(fiat_currency));
+    Updater::send_update(AppMessage::SelectedNodeChanged(selected_node));
+    Updater::send_update(AppMessage::WalletsChanged);
+
+    FfiApp::global().reset_default_route_to(Route::NewWallet(NewWalletRoute::Select));
 }
 
 fn failed_wipe_result(
@@ -1008,6 +1029,7 @@ enum SelectLatestWalletError {
 mod tests {
     use super::*;
     use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupResetRecovery};
+    use crate::router::SettingsRoute;
 
     #[test]
     fn orphan_sweep_removes_wallet_data_without_deleting_unknown_entries() {
@@ -1122,7 +1144,7 @@ mod tests {
     }
 
     #[test]
-    fn dangerous_wipe_all_data_retains_metadata_until_wallet_secrets_are_deleted() {
+    fn dangerous_wipe_all_data_preserves_setup_and_resets_presentation_after_success() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
 
         crate::test_support::ensure_tokio_runtime();
@@ -1144,6 +1166,19 @@ mod tests {
                 .save_restored_wallet_metadata(metadata.clone())
                 .expect("wallet metadata is saved");
         }
+
+        database.global_flag.mark_onboarding_complete().expect("onboarding completion is saved");
+        database.global_config.select_wallet(first.id.clone()).expect("wallet is selected");
+        FfiApp::global().reset_default_route_to(wallet_selection_loading_route(
+            first.id.clone(),
+            Some(Route::Settings(SettingsRoute::Main)),
+        ));
+        App::global().handle_action(AppAction::PushRoute(Route::Settings(SettingsRoute::About)));
+
+        assert_eq!(database.global_config.selected_wallet(), Some(first.id.clone()));
+        let stale_state = App::global().get_state();
+        assert!(matches!(stale_state.router.default, Route::LoadAndReset { .. }));
+        assert_eq!(stale_state.router.routes, vec![Route::Settings(SettingsRoute::About)]);
 
         let first_id = first.id.as_str();
         let second_id = second.id.as_str();
@@ -1191,10 +1226,30 @@ mod tests {
             keychain.get_entry(failed_secret).is_some(),
             "the injected wallet secret remains for the retry"
         );
+        assert!(
+            matches!(App::global().get_state().router.default, Route::LoadAndReset { .. }),
+            "failed cleanup must not publish the success route"
+        );
+        assert_eq!(
+            App::global().get_state().router.routes,
+            stale_state.router.routes,
+            "failed cleanup must keep the stale navigation stack"
+        );
+        assert!(
+            Database::global().global_flag.is_onboarding_complete(),
+            "failed cleanup must not clear completed onboarding"
+        );
 
         keychain.fail_delete_at(usize::MAX);
         FfiApp::global().dangerous_wipe_all_data().expect("the retry succeeds");
 
+        let app_state = App::global().get_state();
+        assert_eq!(
+            app_state.router.default,
+            Route::NewWallet(NewWalletRoute::Select),
+            "successful cleanup publishes the direct new-wallet route"
+        );
+        assert!(app_state.router.routes.is_empty(), "successful cleanup clears navigation stack");
         assert_eq!(
             Database::global()
                 .wallets
@@ -1202,6 +1257,19 @@ mod tests {
                 .expect("wallet metadata is read"),
             None,
             "the retry removes the failed wallet row"
+        );
+        assert!(
+            Database::global().wallets.all().expect("wallet inventory is read").is_empty(),
+            "successful cleanup removes every wallet"
+        );
+        assert!(
+            Database::global().global_flag.is_onboarding_complete(),
+            "successful cleanup preserves completed onboarding"
+        );
+        assert_eq!(
+            Database::global().global_config.selected_wallet(),
+            None,
+            "successful cleanup clears the selected wallet"
         );
 
         keychain.reset();
