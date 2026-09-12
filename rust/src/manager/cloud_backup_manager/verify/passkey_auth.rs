@@ -36,13 +36,6 @@ pub(crate) enum PasskeyAuthPolicy {
     DiscoverOnly,
 }
 
-enum StoredPasskeyAuthOutcome {
-    Authenticated(AuthenticatedPasskey),
-    UserCancelled,
-    Failed(PasskeyError),
-    NoCredentialFound,
-}
-
 /// Authenticates backup passkeys against the PRF salt from a master-key backup
 pub(crate) struct PasskeyAuthenticator {
     keychain: CloudBackupKeychain,
@@ -65,43 +58,15 @@ impl PasskeyAuthenticator {
 
         match policy {
             PasskeyAuthPolicy::StoredOnly => {
-                self.authenticate_stored_only(prf_salt, &retrier).await
+                self.authenticate_by_stored_credential(prf_salt, &retrier).await
             }
+
             PasskeyAuthPolicy::DiscoverOnly => {
                 self.authenticate_by_discovery(prf_salt, &retrier).await
             }
 
             PasskeyAuthPolicy::StoredThenDiscover => {
                 self.authenticate_stored_then_discover(prf_salt, &retrier).await
-            }
-        }
-    }
-
-    async fn authenticate_stored_only(
-        &self,
-        prf_salt: &[u8; 32],
-        retrier: &PlatformAuthorizationRetrier,
-    ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
-        // try the known credential first so normal restores do not show an account picker
-        let stored_outcome = self.authenticate_by_stored_credential(prf_salt, retrier).await?;
-        match stored_outcome {
-            StoredPasskeyAuthOutcome::Authenticated(authenticated) => {
-                Ok(PasskeyAuthOutcome::Authenticated(authenticated))
-            }
-
-            StoredPasskeyAuthOutcome::UserCancelled => Ok(PasskeyAuthOutcome::UserCancelled),
-
-            StoredPasskeyAuthOutcome::NoCredentialFound => {
-                Ok(PasskeyAuthOutcome::NoCredentialFound)
-            }
-
-            StoredPasskeyAuthOutcome::Failed(error) => {
-                if matches!(error, PasskeyError::PrfUnsupportedProvider) {
-                    return Err(CloudBackupError::UnsupportedPasskeyProvider);
-                }
-
-                info!("Stored credential auth failed ({error})");
-                Ok(PasskeyAuthOutcome::NoCredentialFound)
             }
         }
     }
@@ -114,24 +79,14 @@ impl PasskeyAuthenticator {
         // try the known credential first so normal restores do not show an account picker
         let stored_outcome = self.authenticate_by_stored_credential(prf_salt, retrier).await?;
         match stored_outcome {
-            StoredPasskeyAuthOutcome::Authenticated(authenticated) => {
+            PasskeyAuthOutcome::Authenticated(authenticated) => {
                 Ok(PasskeyAuthOutcome::Authenticated(authenticated))
             }
 
-            StoredPasskeyAuthOutcome::UserCancelled => Ok(PasskeyAuthOutcome::UserCancelled),
+            PasskeyAuthOutcome::UserCancelled => Ok(PasskeyAuthOutcome::UserCancelled),
 
             // stored-then-discover falls back when the stored credential is missing
-            StoredPasskeyAuthOutcome::NoCredentialFound => {
-                info!("Trying discovery after stored credential auth failed");
-                self.authenticate_by_discovery(prf_salt, retrier).await
-            }
-
-            StoredPasskeyAuthOutcome::Failed(error) => {
-                if matches!(error, PasskeyError::PrfUnsupportedProvider) {
-                    return Err(CloudBackupError::UnsupportedPasskeyProvider);
-                }
-
-                info!("Stored credential auth failed ({error})");
+            PasskeyAuthOutcome::NoCredentialFound => {
                 info!("Trying discovery after stored credential auth failed");
                 self.authenticate_by_discovery(prf_salt, retrier).await
             }
@@ -142,24 +97,23 @@ impl PasskeyAuthenticator {
         &self,
         prf_salt: &[u8; 32],
         retrier: &PlatformAuthorizationRetrier,
-    ) -> Result<StoredPasskeyAuthOutcome, CloudBackupError> {
+    ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
         let Some(credential_id) = self.keychain.load_credential_id() else {
-            return Ok(StoredPasskeyAuthOutcome::NoCredentialFound);
+            return Ok(PasskeyAuthOutcome::NoCredentialFound);
         };
 
         let auth_result = retrier.authenticate(&self.passkey, &credential_id, *prf_salt).await;
 
         let prf_output = match auth_result {
             Ok(prf_output) => prf_output,
-            Err(PasskeyError::UserCancelled) => return Ok(StoredPasskeyAuthOutcome::UserCancelled),
-            Err(error) => return Ok(StoredPasskeyAuthOutcome::Failed(error)),
+            Err(error) => return map_authentication_error(error),
         };
 
         let prf_key: [u8; 32] = prf_output
             .try_into()
             .map_err(|_| CloudBackupError::Internal("PRF output is not 32 bytes".into()))?;
 
-        Ok(StoredPasskeyAuthOutcome::Authenticated(AuthenticatedPasskey {
+        Ok(PasskeyAuthOutcome::Authenticated(AuthenticatedPasskey {
             prf_key,
             credential_id,
             credential_recovered: false,
@@ -175,7 +129,7 @@ impl PasskeyAuthenticator {
 
         let discovered = match discovered_result {
             Ok(discovered) => discovered,
-            Err(error) => return map_discovery_error(error),
+            Err(error) => return map_authentication_error(error),
         };
 
         let prf_key: [u8; 32] = discovered
@@ -208,7 +162,7 @@ impl VerificationSession {
     }
 }
 
-fn map_discovery_error(error: PasskeyError) -> Result<PasskeyAuthOutcome, CloudBackupError> {
+fn map_authentication_error(error: PasskeyError) -> Result<PasskeyAuthOutcome, CloudBackupError> {
     match error {
         PasskeyError::UserCancelled => Ok(PasskeyAuthOutcome::UserCancelled),
         PasskeyError::NoCredentialFound => Ok(PasskeyAuthOutcome::NoCredentialFound),
@@ -219,24 +173,33 @@ fn map_discovery_error(error: PasskeyError) -> Result<PasskeyAuthOutcome, CloudB
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use cove_device::passkey::{PasskeyFailureReason, PasskeyOperation};
+    use super::{
+        AuthenticatedPasskey, PasskeyAuthOutcome, PasskeyAuthPolicy, PasskeyAuthenticator,
+        map_authentication_error,
+    };
+    use cove_device::passkey::{
+        DiscoveredPasskeyResult, PasskeyAccess, PasskeyError, PasskeyFailureReason,
+        PasskeyOperation,
+    };
+
+    use crate::manager::cloud_backup_manager::ops::test_support::{async_test_lock, test_globals};
+    use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupKeychain};
 
     #[test]
-    fn map_discovery_error_returns_user_cancelled() {
-        let outcome = map_discovery_error(PasskeyError::UserCancelled).unwrap();
+    fn map_authentication_error_returns_user_cancelled() {
+        let outcome = map_authentication_error(PasskeyError::UserCancelled).unwrap();
         assert_eq!(outcome, PasskeyAuthOutcome::UserCancelled);
     }
 
     #[test]
-    fn map_discovery_error_returns_no_credential_found() {
-        let outcome = map_discovery_error(PasskeyError::NoCredentialFound).unwrap();
+    fn map_authentication_error_returns_no_credential_found() {
+        let outcome = map_authentication_error(PasskeyError::NoCredentialFound).unwrap();
         assert_eq!(outcome, PasskeyAuthOutcome::NoCredentialFound);
     }
 
     #[test]
-    fn map_discovery_error_preserves_unexpected_errors() {
-        let error = map_discovery_error(PasskeyError::RequestFailed {
+    fn map_authentication_error_preserves_unexpected_errors() {
+        let error = map_authentication_error(PasskeyError::RequestFailed {
             operation: PasskeyOperation::AuthenticateAssertion,
             reason: PasskeyFailureReason::Unknown { diagnostic_message: "boom".into() },
         })
@@ -247,8 +210,154 @@ mod tests {
     }
 
     #[test]
-    fn map_discovery_error_preserves_unsupported_provider() {
-        let error = map_discovery_error(PasskeyError::PrfUnsupportedProvider).unwrap_err();
+    fn map_authentication_error_preserves_unsupported_provider() {
+        let error = map_authentication_error(PasskeyError::PrfUnsupportedProvider).unwrap_err();
         assert!(matches!(error, CloudBackupError::UnsupportedPasskeyProvider));
+    }
+
+    #[tokio::test]
+    async fn stored_then_discover_falls_back_only_when_credential_is_missing() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        globals.reset();
+
+        let stored_credential_id = vec![1, 2, 3];
+        let discovered_credential_id = vec![4, 5, 6];
+        let prf_salt = [7; 32];
+        CloudBackupKeychain::global().save_passkey(&stored_credential_id, prf_salt).unwrap();
+        globals.passkey.set_authenticate_result(Err(PasskeyError::NoCredentialFound));
+        globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+            credential_id: discovered_credential_id.clone(),
+            prf_output: vec![8; 32],
+        }));
+
+        let result =
+            PasskeyAuthenticator::new(&CloudBackupKeychain::global(), PasskeyAccess::global())
+                .authenticate_with_policy(&prf_salt, PasskeyAuthPolicy::StoredThenDiscover)
+                .await
+                .unwrap();
+
+        assert!(matches!(
+            result,
+            PasskeyAuthOutcome::Authenticated(AuthenticatedPasskey {
+                credential_id,
+                credential_recovered: true,
+                ..
+            }) if credential_id == discovered_credential_id
+        ));
+        assert_eq!(globals.passkey.authenticate_count(), 1);
+        assert_eq!(globals.passkey.discover_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn stored_only_reports_missing_credential_without_discovery() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        globals.reset();
+
+        let prf_salt = [7; 32];
+        CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
+        globals.passkey.set_authenticate_result(Err(PasskeyError::NoCredentialFound));
+
+        let result =
+            PasskeyAuthenticator::new(&CloudBackupKeychain::global(), PasskeyAccess::global())
+                .authenticate_with_policy(&prf_salt, PasskeyAuthPolicy::StoredOnly)
+                .await
+                .unwrap();
+
+        assert_eq!(result, PasskeyAuthOutcome::NoCredentialFound);
+        assert_eq!(globals.passkey.authenticate_count(), 1);
+        assert_eq!(globals.passkey.discover_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn stored_authentication_failure_is_not_treated_as_missing() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+
+        for policy in [PasskeyAuthPolicy::StoredOnly, PasskeyAuthPolicy::StoredThenDiscover] {
+            for reason in [
+                PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
+                PasskeyFailureReason::InvalidResponse,
+            ] {
+                globals.reset();
+
+                let prf_salt = [7; 32];
+                CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
+                globals.passkey.set_authenticate_result(Err(PasskeyError::RequestFailed {
+                    operation: PasskeyOperation::AuthenticateAssertion,
+                    reason,
+                }));
+                globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+                    credential_id: vec![4, 5, 6],
+                    prf_output: vec![8; 32],
+                }));
+
+                let result = PasskeyAuthenticator::new(
+                    &CloudBackupKeychain::global(),
+                    PasskeyAccess::global(),
+                )
+                .authenticate_with_policy(&prf_salt, policy)
+                .await;
+
+                assert!(matches!(result, Err(CloudBackupError::Passkey(_))));
+                assert_eq!(globals.passkey.authenticate_count(), 1);
+                assert_eq!(globals.passkey.discover_count(), 0);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn stored_authentication_cancellation_does_not_start_discovery() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+
+        for policy in [PasskeyAuthPolicy::StoredOnly, PasskeyAuthPolicy::StoredThenDiscover] {
+            globals.reset();
+
+            let prf_salt = [7; 32];
+            CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
+            globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
+            globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+                credential_id: vec![4, 5, 6],
+                prf_output: vec![8; 32],
+            }));
+
+            let result =
+                PasskeyAuthenticator::new(&CloudBackupKeychain::global(), PasskeyAccess::global())
+                    .authenticate_with_policy(&prf_salt, policy)
+                    .await;
+
+            assert_eq!(result.unwrap(), PasskeyAuthOutcome::UserCancelled);
+            assert_eq!(globals.passkey.authenticate_count(), 1);
+            assert_eq!(globals.passkey.discover_count(), 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn stored_authentication_unsupported_provider_does_not_start_discovery() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+
+        for policy in [PasskeyAuthPolicy::StoredOnly, PasskeyAuthPolicy::StoredThenDiscover] {
+            globals.reset();
+
+            let prf_salt = [7; 32];
+            CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
+            globals.passkey.set_authenticate_result(Err(PasskeyError::PrfUnsupportedProvider));
+            globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+                credential_id: vec![4, 5, 6],
+                prf_output: vec![8; 32],
+            }));
+
+            let result =
+                PasskeyAuthenticator::new(&CloudBackupKeychain::global(), PasskeyAccess::global())
+                    .authenticate_with_policy(&prf_salt, policy)
+                    .await;
+
+            assert!(matches!(result, Err(CloudBackupError::UnsupportedPasskeyProvider)));
+            assert_eq!(globals.passkey.authenticate_count(), 1);
+            assert_eq!(globals.passkey.discover_count(), 0);
+        }
     }
 }
