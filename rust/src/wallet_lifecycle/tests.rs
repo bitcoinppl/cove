@@ -244,6 +244,8 @@ fn same_wallet_construction_returns_typed_closing_state_without_waiting() {
 
 #[tokio::test]
 async fn retryable_ordinary_close_is_retried_without_a_new_construction() {
+    // the actor close path reaches storage; the real bootstrap would block the runtime
+    crate::database::test_support::init_test_database();
     let coordinator: &'static WalletLifecycleCoordinator =
         Box::leak(Box::new(WalletLifecycleCoordinator::default()));
     let (wallet_id, registration_id, manager, registration) = register_preview_wallet(coordinator);
@@ -611,6 +613,8 @@ fn unrecoverable_ordinary_close_requires_process_restart() {
 
 #[test]
 fn destructive_preparation_keeps_normal_close_persistence_available() {
+    // the actor close path reaches storage; the real bootstrap would block the runtime
+    crate::database::test_support::init_test_database();
     let coordinator: &'static WalletLifecycleCoordinator =
         Box::leak(Box::new(WalletLifecycleCoordinator::default()));
     let (wallet_id, registration_id, manager, registration) = register_preview_wallet(coordinator);
