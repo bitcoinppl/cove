@@ -247,6 +247,26 @@ pub(crate) mod test_support {
     const TEST_DATA_DIR_PREFIX: &str = "cove-test-";
     const STALE_TEST_DATA_DIR_AGE: Duration = Duration::from_secs(60 * 60);
 
+    static TEST_ROOT: OnceLock<PathBuf> = OnceLock::new();
+
+    /// Install the process test root before any test can touch the real data directory
+    ///
+    /// `ROOT_DATA_DIR` resolves lazily and cannot be redirected afterwards, so a test
+    /// that reached it before `init_test_database` pinned the whole process to
+    /// `~/.data`, and `delete_database` then removed the developer's real wallet data
+    #[ctor::ctor(unsafe)]
+    fn install_process_test_root() {
+        process_test_data_dir();
+    }
+
+    /// Remove the process test root on normal exit; the stale sweep covers killed processes
+    #[dtor::dtor(unsafe)]
+    fn remove_process_test_root() {
+        if let Some(root) = TEST_ROOT.get() {
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
     pub(crate) fn init_test_database() {
         let root = process_test_data_dir();
         crate::bootstrap::tests::set_test_bootstrapped();
@@ -256,8 +276,13 @@ pub(crate) mod test_support {
 
     pub(crate) fn delete_database() {
         init_test_database();
+        let root = process_test_data_dir();
         let db_path = database_location();
         let wallet_data_dir = cove_common::consts::wallet_data_dir_path();
+        assert!(
+            db_path.starts_with(root) && wallet_data_dir.starts_with(root),
+            "test cleanup must stay inside the process test root {root:?}"
+        );
 
         let _ = std::fs::remove_file(&db_path);
         let _ = std::fs::remove_dir_all(&wallet_data_dir);
@@ -270,8 +295,6 @@ pub(crate) mod test_support {
     }
 
     fn process_test_data_dir() -> &'static PathBuf {
-        static TEST_ROOT: OnceLock<PathBuf> = OnceLock::new();
-
         TEST_ROOT.get_or_init(|| {
             let parent = std::env::temp_dir();
             sweep_stale_test_data_dirs(&parent);
@@ -285,7 +308,13 @@ pub(crate) mod test_support {
             // keep the directory for the process lifetime; Drop would delete it too early
             let path = tempdir.keep();
 
-            let _ = cove_common::consts::set_root_data_dir(path.clone());
+            cove_common::consts::set_root_data_dir(path.clone())
+                .expect("test root must be installed before any data directory access");
+            assert_eq!(
+                *cove_common::consts::ROOT_DATA_DIR,
+                path,
+                "data directory resolved before the test root was installed"
+            );
             path
         })
     }
@@ -344,6 +373,14 @@ pub(crate) mod test_support {
         let temp = std::env::temp_dir();
 
         assert!(path.starts_with(&temp), "test database {path:?} must be under {temp:?}");
+
+        let root = &*cove_common::consts::ROOT_DATA_DIR;
+        let wallet_data = cove_common::consts::wallet_data_dir_path();
+        assert!(root.starts_with(&temp), "root data dir {root:?} must be under {temp:?}");
+        assert!(
+            wallet_data.starts_with(root),
+            "wallet data {wallet_data:?} must be under {root:?}"
+        );
 
         if let Some(home) = dirs::home_dir() {
             let home_data = home.join(".data");
