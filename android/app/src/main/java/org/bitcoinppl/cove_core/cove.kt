@@ -51110,6 +51110,10 @@ enum class LocalDataResetStage {
      */
     WALLET_KEYCHAIN,
     /**
+     * Persisted KeyTeleport receive session
+     */
+    KEY_TELEPORT,
+    /**
      * Orphan BDK stores and wallet-data directories
      */
     WALLET_ARTIFACTS,
@@ -62080,6 +62084,14 @@ enum class WalletDeletionStage {
      * Parent-directory durability synchronization
      */
     DIRECTORY_SYNC,
+    /**
+     * Unsigned transaction rows that belong to the wallet
+     */
+    UNSIGNED_TRANSACTIONS,
+    /**
+     * Selected-wallet references in global config
+     */
+    WALLET_SELECTION,
     /**
      * Exact durable metadata rows
      */

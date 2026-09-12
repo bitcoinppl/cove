@@ -47,7 +47,6 @@ use cove_util::ResultExt as _;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage as AppMessage, FfiReconcile, Updater};
-use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
 pub static APP: OnceCell<App> = OnceCell::new();
@@ -124,6 +123,8 @@ pub enum AppError {
 pub enum LocalDataResetStage {
     /// Remaining Cove wallet keychain entries
     WalletKeychain,
+    /// Persisted KeyTeleport receive session
+    KeyTeleport,
     /// Orphan BDK stores and wallet-data directories
     WalletArtifacts,
     /// Cloud Backup local keychain or in-process state
@@ -724,6 +725,10 @@ async fn wipe_all_data_with_tier(
             .map_err(|source| local_reset_error(LocalDataResetStage::WalletKeychain, source))?;
 
         prepared
+            .delete_key_teleport_receive_session()
+            .map_err(|source| local_reset_error(LocalDataResetStage::KeyTeleport, source))?;
+
+        prepared
             .purge_orphan_wallet_artifacts()
             .map_err(|source| local_reset_error(LocalDataResetStage::WalletArtifacts, source))?;
 
@@ -958,13 +963,7 @@ impl FfiApp {
 
     fn finish_wallet_deletion_presentation(&self, id: WalletId) {
         let database = Database::global();
-        Updater::send_update(AppMessage::ClearCachedWalletManager(id.clone()));
-
-        if database.global_config.selected_wallet().as_ref() == Some(&id) {
-            let _ = database.global_config.clear_selected_wallet().tap_err(|error| {
-                error!("Unable to clear selected wallet: {error}");
-            });
-        }
+        Updater::send_update(AppMessage::ClearCachedWalletManager(id));
 
         let remaining_wallets = database.wallets().all().unwrap_or_default();
         if let Some(next_wallet) = remaining_wallets.first() {

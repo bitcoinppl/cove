@@ -115,6 +115,32 @@ impl UnsignedTransactionsTable {
         Ok(records)
     }
 
+    /// Remove every unsigned transaction that belongs to a wallet
+    ///
+    /// Wallet deletion owns this call so PSBT data does not outlive its wallet
+    pub(crate) fn delete_by_wallet_id(&self, wallet_id: &WalletId) -> Result<(), Error> {
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
+
+        {
+            let mut by_wallet =
+                write_txn.open_table(BY_WALLET_TABLE).map_err_str(Error::TableAccess)?;
+            let tx_ids = by_wallet
+                .remove(wallet_id)
+                .map_err_str(UnsignedTransactionsTableError::Save)?
+                .map(|value| value.value())
+                .unwrap_or_default();
+
+            let mut main = write_txn.open_table(MAIN_TABLE).map_err_str(Error::TableAccess)?;
+            for tx_id in &tx_ids {
+                main.remove(tx_id).map_err_str(UnsignedTransactionsTableError::Save)?;
+            }
+        }
+
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
+
+        Ok(())
+    }
+
     fn delete_tx_id(&self, key: &TxId) -> Result<(), Error> {
         let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
@@ -225,5 +251,61 @@ impl UnsignedTransactionRecord {
     #[uniffi::method]
     pub const fn created_at(&self) -> u64 {
         self.created_at
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{UnsignedTransactionRecord, UnsignedTransactionsTable};
+    use crate::transaction::TxId;
+    use cove_types::WalletId;
+
+    fn test_table() -> (tempfile::TempDir, UnsignedTransactionsTable) {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = std::sync::Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());
+        let write_txn = db.begin_write().unwrap();
+        let table = UnsignedTransactionsTable::new(db, &write_txn);
+        write_txn.commit().unwrap();
+
+        (tmp, table)
+    }
+
+    fn record(wallet_id: &WalletId) -> UnsignedTransactionRecord {
+        UnsignedTransactionRecord {
+            wallet_id: wallet_id.clone(),
+            tx_id: TxId::preview_new(),
+            confirm_details: cove_types::confirm::confirm_details_preview_new(),
+            created_at: 0,
+        }
+    }
+
+    #[test]
+    fn delete_by_wallet_id_removes_only_that_wallets_records() {
+        let (_tmp, table) = test_table();
+        let deleted = WalletId::preview_new_random();
+        let kept = WalletId::preview_new_random();
+
+        let deleted_records = [record(&deleted), record(&deleted)];
+        for record in &deleted_records {
+            table.save_tx(record.tx_id, record.clone()).unwrap();
+        }
+        let kept_record = record(&kept);
+        table.save_tx(kept_record.tx_id, kept_record.clone()).unwrap();
+
+        table.delete_by_wallet_id(&deleted).unwrap();
+
+        assert!(table.get_by_wallet_id(&deleted).unwrap().is_empty());
+        for record in &deleted_records {
+            assert_eq!(table.get_tx(&record.tx_id).unwrap(), None);
+        }
+        assert_eq!(table.get_by_wallet_id(&kept).unwrap(), vec![kept_record.clone()]);
+        assert_eq!(table.get_tx(&kept_record.tx_id).unwrap(), Some(kept_record));
+    }
+
+    #[test]
+    fn delete_by_wallet_id_is_a_no_op_for_unknown_wallets() {
+        let (_tmp, table) = test_table();
+
+        table.delete_by_wallet_id(&WalletId::preview_new_random()).unwrap();
     }
 }

@@ -95,6 +95,10 @@ impl PreparedFullWipe {
         self.recovery_cleanup.delete_all_wallet_items()
     }
 
+    pub(crate) fn delete_key_teleport_receive_session(&self) -> Result<(), String> {
+        self.recovery_cleanup.delete_key_teleport_receive_session()
+    }
+
     pub(crate) fn purge_orphan_wallet_artifacts(&self) -> std::io::Result<()> {
         self.recovery_cleanup.purge_orphan_wallet_artifacts()
     }
@@ -154,6 +158,18 @@ impl RecoveryCleanup {
         Keychain::global().delete_all_wallet_items().map_err_str(std::convert::identity)
     }
 
+    /// Remove the persisted KeyTeleport receive session and its private key
+    ///
+    /// The session is not a wallet keychain item, so the wallet sweep leaves it
+    /// behind and the next receive start would resume it after a wipe
+    pub(crate) fn delete_key_teleport_receive_session(&self) -> Result<(), String> {
+        if Keychain::global().delete_key_teleport_receive_session() {
+            return Ok(());
+        }
+
+        Err("unable to delete KeyTeleport receive session".to_string())
+    }
+
     pub(crate) fn purge_orphan_wallet_artifacts(&self) -> std::io::Result<()> {
         crate::app::purge_orphan_wallet_artifacts(self)
     }
@@ -179,6 +195,10 @@ pub enum WalletDeletionStage {
     WalletData,
     /// Parent-directory durability synchronization
     DirectorySync,
+    /// Unsigned transaction rows that belong to the wallet
+    UnsignedTransactions,
+    /// Selected-wallet references in global config
+    WalletSelection,
     /// Exact durable metadata rows
     Metadata,
 }
@@ -289,8 +309,19 @@ fn delete_registered_wallet(
         failure(wallet_id, WalletDeletionStage::DirectorySync, source.to_string())
     })?;
 
+    let database = Database::global();
+    database.unsigned_transactions.delete_by_wallet_id(wallet_id).map_err(|source| {
+        failure(wallet_id, WalletDeletionStage::UnsignedTransactions, source.to_string())
+    })?;
+
+    // main and decoy selections are only rewritten on a mode switch, so a stale id
+    // would re-select the deleted wallet the next time the mode changes
+    database.global_config.forget_wallet(wallet_id).map_err(|source| {
+        failure(wallet_id, WalletDeletionStage::WalletSelection, source.to_string())
+    })?;
+
     for location in &target.locations {
-        let removed = Database::global()
+        let removed = database
             .wallets
             .remove_prepared_wallet_metadata(location.network, location.wallet_mode, wallet_id)
             .map_err(|source| {

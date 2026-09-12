@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use redb::TableDefinition;
-use tap::TapFallible as _;
-use tracing::{error, warn};
+use redb::{ReadableTable as _, TableDefinition};
+use tracing::warn;
 
 use crate::{
     app::reconcile::{Update, Updater},
@@ -144,56 +143,94 @@ impl GlobalConfigTable {
 }
 
 impl GlobalConfigTable {
+    /// Switch to decoy mode and restore its selected wallet atomically
     pub fn set_decoy_mode(&self) -> Result<()> {
-        // already in decoy mode, nothing to do
-        if self.is_in_decoy_mode() {
-            warn!("already in decoy mode");
-            return Ok(());
+        self.set_wallet_mode(WalletMode::Decoy)
+    }
+
+    /// Switch to main mode and restore its selected wallet atomically
+    pub fn set_main_mode(&self) -> Result<()> {
+        self.set_wallet_mode(WalletMode::Main)
+    }
+
+    fn set_wallet_mode(&self, mode: WalletMode) -> Result<()> {
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
+
+        {
+            let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
+            let mode_key: &str = GlobalConfigKey::InDecoyMode.into();
+            let is_decoy = table
+                .get(mode_key)
+                .map_err_str(GlobalConfigTableError::Read)?
+                .is_some_and(|value| value.value() == "true");
+            let target_is_decoy = mode == WalletMode::Decoy;
+            if is_decoy == target_is_decoy {
+                return Ok(());
+            }
+
+            let (source_key, target_key) = match mode {
+                WalletMode::Decoy => {
+                    (GlobalConfigKey::MainSelectedWalletId, GlobalConfigKey::DecoySelectedWalletId)
+                }
+
+                WalletMode::Main => {
+                    (GlobalConfigKey::DecoySelectedWalletId, GlobalConfigKey::MainSelectedWalletId)
+                }
+            };
+
+            let selected_key: &str = GlobalConfigKey::SelectedWalletId.into();
+            let source_key: &str = source_key.into();
+            let target_key: &str = target_key.into();
+            let selected = table
+                .get(selected_key)
+                .map_err_str(GlobalConfigTableError::Read)?
+                .map(|value| value.value());
+            let target = table
+                .get(target_key)
+                .map_err_str(GlobalConfigTableError::Read)?
+                .map(|value| value.value());
+
+            // an empty selection must replace the saved value, not inherit the other mode's wallet
+            for (key, value) in [(source_key, selected), (selected_key, target)] {
+                match value {
+                    Some(value) => {
+                        table.insert(key, value).map_err_str(GlobalConfigTableError::Save)?;
+                    }
+
+                    None => {
+                        table.remove(key).map_err_str(GlobalConfigTableError::Save)?;
+                    }
+                }
+            }
+
+            table
+                .insert(mode_key, target_is_decoy.to_string())
+                .map_err_str(GlobalConfigTableError::Save)?;
         }
 
-        // currently in main mode, save the selected wallet id as the decoy selected wallet id
-        if let Some(id) = self.selected_wallet() {
-            let _ = self
-                .set(GlobalConfigKey::MainSelectedWalletId, id.to_string())
-                .tap_err(|error| error!("unable to set main selected wallet id ({id}): {error}"));
-        }
-
-        // get the selected wallet id for decoy mode if it exists and select it
-        if let Some(id) = self.get(GlobalConfigKey::DecoySelectedWalletId).ok().flatten() {
-            let _ = self
-                .select_wallet(id.clone().into())
-                .tap_err(|error| error!("unable to select wallet for decoy {id}: {error}"));
-        }
-
-        self.set(GlobalConfigKey::InDecoyMode, "true".to_string())?;
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
         Updater::send_update(Update::DatabaseUpdated);
 
         Ok(())
     }
 
-    pub fn set_main_mode(&self) -> Result<()> {
-        // already in main mode, nothing to do
-        if self.is_in_main_mode() {
-            warn!("already in main mode");
-            return Ok(());
-        }
+    /// Drop every selection that still points at a wallet that no longer exists
+    ///
+    /// Main and decoy selections are only rewritten on a mode switch, so a deleted
+    /// wallet would otherwise be re-selected the next time the mode changes
+    pub(crate) fn forget_wallet(&self, wallet_id: &WalletId) -> Result<()> {
+        let keys = [
+            GlobalConfigKey::SelectedWalletId,
+            GlobalConfigKey::MainSelectedWalletId,
+            GlobalConfigKey::DecoySelectedWalletId,
+        ];
 
-        // currently in decoy mode, save the selected wallet id as the decoy selected wallet id
-        if let Some(id) = self.selected_wallet() {
-            let _ = self
-                .set(GlobalConfigKey::DecoySelectedWalletId, id.to_string())
-                .tap_err(|error| error!("unable to set decoy selected wallet id ({id}): {error}"));
+        for key in keys {
+            let stored = self.get(key)?;
+            if stored.as_deref() == Some(wallet_id.as_str()) {
+                self.delete(key)?;
+            }
         }
-
-        // set the selected wallet id to the one saved if there is one
-        if let Some(id) = self.get(GlobalConfigKey::MainSelectedWalletId).ok().flatten() {
-            let _ = self
-                .select_wallet(id.clone().into())
-                .tap_err(|error| error!("unable to select wallet for main {id}: {error}"));
-        }
-
-        self.set(GlobalConfigKey::InDecoyMode, "false".to_string())?;
-        Updater::send_update(Update::DatabaseUpdated);
 
         Ok(())
     }
@@ -475,6 +512,51 @@ mod tests {
     use cove_types::Network;
 
     #[test]
+    fn mode_switch_clears_selection_when_target_mode_has_no_wallet() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+        let main = cove_types::WalletId::preview_new_random();
+        table.select_wallet(main.clone()).unwrap();
+
+        table.set_decoy_mode().unwrap();
+
+        assert!(table.is_in_decoy_mode());
+        assert_eq!(table.selected_wallet(), None);
+
+        table.set_main_mode().unwrap();
+
+        assert!(table.is_in_main_mode());
+        assert_eq!(table.selected_wallet(), Some(main));
+        assert_eq!(table.get(super::GlobalConfigKey::DecoySelectedWalletId).unwrap(), None);
+    }
+
+    #[test]
+    fn mode_switch_forgets_cleared_selection_and_preserves_other_mode() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+        let main = cove_types::WalletId::preview_new_random();
+        let decoy = cove_types::WalletId::preview_new_random();
+        table.select_wallet(main.clone()).unwrap();
+        table.set_decoy_mode().unwrap();
+        table.select_wallet(decoy.clone()).unwrap();
+        table.set_main_mode().unwrap();
+        assert_eq!(table.selected_wallet(), Some(main));
+
+        table.clear_selected_wallet().unwrap();
+        table.set_decoy_mode().unwrap();
+        assert_eq!(table.selected_wallet(), Some(decoy.clone()));
+
+        table.set_decoy_mode().unwrap();
+        assert_eq!(table.selected_wallet(), Some(decoy.clone()));
+
+        table.set_main_mode().unwrap();
+        assert_eq!(table.selected_wallet(), None);
+
+        table.set_decoy_mode().unwrap();
+        assert_eq!(table.selected_wallet(), Some(decoy));
+    }
+
+    #[test]
     fn test_selected_node_key() {
         use super::GlobalConfigKey;
 
@@ -699,6 +781,27 @@ mod tests {
         assert_eq!(
             table.selected_block_explorer_option(Network::Bitcoin),
             BlockExplorerOption::MempoolSpace
+        );
+    }
+
+    #[test]
+    fn forget_wallet_clears_every_matching_selection() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+        let deleted = cove_types::WalletId::preview_new_random();
+        let other = cove_types::WalletId::preview_new_random();
+
+        table.set(super::GlobalConfigKey::SelectedWalletId, deleted.to_string()).unwrap();
+        table.set(super::GlobalConfigKey::MainSelectedWalletId, deleted.to_string()).unwrap();
+        table.set(super::GlobalConfigKey::DecoySelectedWalletId, other.to_string()).unwrap();
+
+        table.forget_wallet(&deleted).unwrap();
+
+        assert_eq!(table.selected_wallet(), None);
+        assert_eq!(table.get(super::GlobalConfigKey::MainSelectedWalletId).unwrap(), None);
+        assert_eq!(
+            table.get(super::GlobalConfigKey::DecoySelectedWalletId).unwrap().as_deref(),
+            Some(other.as_str())
         );
     }
 

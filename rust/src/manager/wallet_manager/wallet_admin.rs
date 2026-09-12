@@ -10,8 +10,6 @@ use crate::{
 };
 use act_zero::call;
 use cove_util::result_ext::ResultExt as _;
-use tap::TapFallible as _;
-use tracing::error;
 
 use super::{Error, RustWalletManager};
 
@@ -54,17 +52,7 @@ impl RustWalletManager {
     fn finish_delete_wallet(&self, wallet_id: crate::wallet::metadata::WalletId) {
         let database = Database::global();
 
-        Updater::send_update(Update::ClearCachedWalletManager(wallet_id.clone()));
-
-        // unselect the wallet in the database
-        match database.global_config.selected_wallet() {
-            Some(selected_wallet_id) if selected_wallet_id == wallet_id => {
-                let _ = database.global_config.clear_selected_wallet().tap_err(|error| {
-                    error!("Unable to clear selected wallet: {error}");
-                });
-            }
-            _ => (),
-        }
+        Updater::send_update(Update::ClearCachedWalletManager(wallet_id));
 
         // check if other wallets exist and select the first one, or go to new wallet flow
         let remaining_wallets = database.wallets().all().unwrap_or_default();
