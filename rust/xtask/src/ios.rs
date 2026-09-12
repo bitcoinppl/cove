@@ -706,7 +706,11 @@ fn validate_testflight_associated_domain(sh: &Shell) -> Result<()> {
 
     let app_identifier = testflight_app_identifier();
     for url in testflight_aasa_urls() {
-        let output = cmd!(sh, "curl -LfsS {url}")
+        let curl_status_format = "%{stderr}%{http_code}";
+        let output = cmd!(
+            sh,
+            "curl --no-location --silent --show-error --connect-timeout 10 --max-time 30 --write-out {curl_status_format} {url}"
+        )
             .quiet()
             .ignore_status()
             .output()
@@ -716,21 +720,40 @@ fn validate_testflight_associated_domain(sh: &Shell) -> Result<()> {
             let stderr =
                 String::from_utf8(output.stderr).unwrap_or_else(|_| "<non-utf8 stderr>".into());
             color_eyre::eyre::bail!(
-                "failed to fetch associated-domain file from {url}: {}",
+                "curl failed to fetch associated-domain file from {url}: {}",
                 non_empty_output(&stderr, "<empty>")
             );
         }
 
+        let status = String::from_utf8(output.stderr)
+            .wrap_err_with(|| format!("HTTP status from {url} was not valid UTF-8"))?
+            .trim()
+            .parse::<u16>()
+            .wrap_err_with(|| format!("curl did not return an HTTP status for {url}"))?;
         let body = String::from_utf8(output.stdout)
             .wrap_err_with(|| format!("Associated-domain file from {url} was not valid UTF-8"))?;
-        ensure_aasa_webcredentials_app(&body, &app_identifier)
-            .wrap_err_with(|| format!("Invalid associated-domain file at {url}"))?;
+
+        validate_aasa_response(&url, status, &body, &app_identifier)?;
     }
 
     print_success(&format!(
         "Verified passkey associated domain {} for {}",
         IOS_ASSOCIATED_DOMAIN, app_identifier
     ));
+
+    Ok(())
+}
+
+fn validate_aasa_response(url: &str, status: u16, body: &str, app_identifier: &str) -> Result<()> {
+    if status != 200 {
+        color_eyre::eyre::bail!(
+            "associated-domain file from {url} returned HTTP status {status}; expected HTTP 200"
+        );
+    }
+
+    ensure_aasa_webcredentials_app(body, app_identifier).wrap_err_with(|| {
+        format!("Invalid associated-domain file at {url} with HTTP status {status}")
+    })?;
 
     Ok(())
 }
@@ -1353,8 +1376,7 @@ fn launch_ios_device_app(sh: &Shell, device_identifier: &str) -> Result<()> {
         }
 
         if SystemTime::now() >= locked_retry_deadline {
-            let message =
-                "Failed because iPhone wasn't unlocked. Unlock the iPhone, then run `just ri` again";
+            let message = "Failed because iPhone wasn't unlocked. Unlock the iPhone, then run `just ri` again";
             print_error(&message.red().bold().to_string());
             color_eyre::eyre::bail!("{message}");
         }
@@ -1683,8 +1705,8 @@ mod tests {
         device_selector_from_target_value, devicectl_device_connection_can_refresh,
         devicectl_device_is_available_ios, ensure_aasa_webcredentials_app, looks_like_ios_udid,
         normalize_pem_text, resolve_device_name_or_alias, sanitize_build_slot,
-        simulator_line_matches_device, simulator_state_from_line, DeviceSelector,
-        DevicectlConnectionProperties, DevicectlDevice, DevicectlDeviceProperties,
+        simulator_line_matches_device, simulator_state_from_line, validate_aasa_response,
+        DeviceSelector, DevicectlConnectionProperties, DevicectlDevice, DevicectlDeviceProperties,
         DevicectlHardwareProperties, DevicectlPairingState, DevicectlTunnelState,
         IOS_DEVICE_DERIVED_DATA_SUFFIX, IOS_SIMULATOR_DERIVED_DATA_SUFFIX,
     };
@@ -1957,6 +1979,75 @@ ABC123
 
         assert!(ensure_aasa_webcredentials_app(body, "Q8UP8C53Y8.org.bitcoinppl.cove").is_err());
     }
+
+    #[test]
+    fn aasa_response_accepts_http_200_with_testflight_app_identifier() {
+        let body = r#"{
+            "webcredentials": {
+                "apps": ["Q8UP8C53Y8.org.bitcoinppl.cove"]
+            }
+        }"#;
+
+        assert!(validate_aasa_response(
+            "https://example.com/.well-known/apple-app-site-association",
+            200,
+            body,
+            "Q8UP8C53Y8.org.bitcoinppl.cove",
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn aasa_response_rejects_redirect_status() {
+        let body = r#"{
+            "webcredentials": {
+                "apps": ["Q8UP8C53Y8.org.bitcoinppl.cove"]
+            }
+        }"#;
+
+        let error = validate_aasa_response(
+            "https://example.com/.well-known/apple-app-site-association",
+            301,
+            body,
+            "Q8UP8C53Y8.org.bitcoinppl.cove",
+        )
+        .expect_err("redirect response should be rejected");
+        let message = format!("{error:#}");
+
+        assert!(message.contains("https://example.com/.well-known/apple-app-site-association"));
+        assert!(message.contains("301"));
+    }
+
+    #[test]
+    fn aasa_response_rejects_malformed_json() {
+        let url = "https://example.com/.well-known/apple-app-site-association";
+        let error = validate_aasa_response(url, 200, "not json", "Q8UP8C53Y8.org.bitcoinppl.cove")
+            .expect_err("malformed JSON should be rejected");
+        let message = format!("{error:#}");
+
+        assert!(message.contains(url));
+        assert!(message.contains("HTTP status 200"));
+        assert!(message.contains("failed to parse apple-app-site-association JSON"));
+    }
+
+    #[test]
+    fn aasa_response_rejects_missing_testflight_app_identifier() {
+        let url = "https://example.com/.well-known/apple-app-site-association";
+        let body = r#"{
+            "webcredentials": {
+                "apps": ["Q8UP8C53Y8.org.bitcoinppl.other"]
+            }
+        }"#;
+
+        let error = validate_aasa_response(url, 200, body, "Q8UP8C53Y8.org.bitcoinppl.cove")
+            .expect_err("missing TestFlight app identifier should be rejected");
+        let message = format!("{error:#}");
+
+        assert!(message.contains(url));
+        assert!(message.contains("HTTP status 200"));
+        assert!(message.contains("webcredentials.apps` does not include"));
+    }
+
     #[test]
     fn derived_data_dir_name_includes_sanitized_slot_and_target() {
         assert_eq!(
