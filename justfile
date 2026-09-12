@@ -150,7 +150,7 @@ alias bir := build-ios-release
 
 # keep this path aligned with Xcode archives; passkeys fail in TestFlight if CLI signing diverges
 # xtask verifies Apple's AASA CDN before upload
-# [long, external] Bump iOS build, build release bindings, then upload to TestFlight
+# [long, external] Bump and upload to TestFlight, copy previous test notes, and add to me-only
 [group('build')]
 testflight:
     just xtask testflight
@@ -158,7 +158,7 @@ testflight:
 alias tf := testflight
 
 # use this when the build number was already bumped and committed
-# [long, external] Archive the current iOS build number and upload to TestFlight without bumping
+# [long, external] Upload to TestFlight without bumping, copy previous test notes, and add to me-only
 [group('build')]
 upload-testflight:
     just xtask upload-testflight
@@ -412,6 +412,62 @@ fix *flags="":
 [group('release')]
 bump type targets="":
     just xtask bump-version {{ type }} {{ if targets != "" { "--targets " + targets } else { "" } }}
+
+# testflight already bumps the iOS build number and builds release bindings
+# [long, external] Bump and upload to TestFlight, copy previous test notes, and add to me-only
+[group('release')]
+release-ios: testflight
+
+alias reli := release-ios
+
+# keep the increased build number on failure because Google may have accepted the upload
+# [long, external] Bump Android build, build signed artifacts, and release to Google Play internal testing
+[group('release')]
+release-android: _check-google-play
+    just bump build android
+    just bundle-android
+    just upload-google-play
+
+alias rela := release-android
+
+# [external] Upload the existing signed Android bundle to Google Play internal testing without bumping
+[group('release')]
+[script('bash')]
+upload-google-play: _check-google-play
+    set -euo pipefail
+    aab="android/app/build/outputs/bundle/storeRelease/app-store-release.aab"
+    if [ ! -f "$aab" ]; then
+        echo "Error: Signed bundle not found. Run just bundle-android first." >&2
+        exit 1
+    fi
+
+    fastlane supply \
+        --json_key "$GOOGLE_PLAY_JSON_KEY_PATH" \
+        --package_name org.bitcoinppl.cove \
+        --aab "$aab" \
+        --track internal \
+        --release_status completed \
+        --skip_upload_apk true \
+        --skip_upload_metadata true \
+        --skip_upload_changelogs true \
+        --skip_upload_images true \
+        --skip_upload_screenshots true
+
+alias ugp := upload-google-play
+
+[private]
+[script('bash')]
+_check-google-play:
+    set -euo pipefail
+    if ! command -v fastlane >/dev/null 2>&1; then
+        echo "Error: Install fastlane before uploading to Google Play (brew install fastlane)." >&2
+        exit 1
+    fi
+
+    if [ -z "${GOOGLE_PLAY_JSON_KEY_PATH:-}" ] || [ ! -r "$GOOGLE_PLAY_JSON_KEY_PATH" ] || [ ! -f "$GOOGLE_PLAY_JSON_KEY_PATH" ]; then
+        echo "Error: Set GOOGLE_PLAY_JSON_KEY_PATH to a readable Google Play service account JSON file." >&2
+        exit 1
+    fi
 
 # ------------------------------------------------------------------------------
 # xcode
