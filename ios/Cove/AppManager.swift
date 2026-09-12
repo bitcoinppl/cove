@@ -244,6 +244,7 @@ struct CorruptedWalletDeletionRetry: Equatable {
     }
 
     /// Reset the manager state
+    @MainActor
     public func reset() {
         navigationCoordinator.reset()
         corruptedWalletDeletionRetry = nil
@@ -251,6 +252,10 @@ struct CorruptedWalletDeletionRetry: Equatable {
         clearWalletManager()
         managerCache.clearCoinControlManager()
         clearKeyTeleportManager()
+
+        // a mode switch must not leave the previous mode's NFC session running
+        tapSignerNfc?.cancel()
+        tapSignerNfc = nil
 
         resetProjectionFromCommittedRustState()
     }

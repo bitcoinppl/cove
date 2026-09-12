@@ -372,6 +372,26 @@ final class WalletTransitionTests: XCTestCase {
         XCTAssertFalse(sendFlowManager.canApplyReconcileMessages)
     }
 
+    @MainActor
+    func testClearingWalletManagerAlsoClearsCoinControlManager() async throws {
+        let walletManager = WalletManager(preview: .only)
+        let coinControlManager = CoinControlManager(
+            RustCoinControlManager.previewNew(outputCount: 1, changeCount: 0)
+        )
+        let cache = ManagerCache(
+            backgroundScanTaskHandler: BackgroundScanTaskHandler(),
+            loadWalletManager: { _, _ in walletManager }
+        )
+
+        _ = try await cache.ensureWalletManagerLoaded(id: walletManager.id, delegate: TestWalletManagerDelegate())
+        cache.setCoinControlManager(coinControlManager)
+
+        cache.clearWalletManager()
+
+        XCTAssertNil(cache.coinControlManager)
+        XCTAssertFalse(coinControlManager.canApplyReconcileMessages)
+    }
+
     func testRepeatedInvalidationAdvancesWhenCacheIsEmpty() {
         var state = WalletManagerCacheState()
         state.invalidate(.wallet("wallet-b"))
