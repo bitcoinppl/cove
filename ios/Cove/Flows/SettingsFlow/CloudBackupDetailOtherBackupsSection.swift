@@ -3,7 +3,7 @@ import SwiftUI
 struct OtherBackupsSection: View {
     let summary: CloudBackupOtherBackupsSummary
     let manager: CloudBackupManager
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
 
     private var isRecovering: Bool {
         if case .recovering = manager.otherBackupsOperation { return true }
@@ -61,13 +61,13 @@ struct OtherBackupsSection: View {
     private func requestRecovery() {
         guard manager.isOtherBackupsInventoryReady else { return }
 
-        presentationCoordinator.present(.dialog(.recoverOtherBackups))
+        presenter.transitions.present(.dialog(.recoverOtherBackups))
     }
 
     private func requestDeletion() {
         guard manager.isOtherBackupsInventoryReady else { return }
 
-        presentationCoordinator.present(.alert(.otherBackupsDeleteConfirmation))
+        presenter.transitions.present(.alert(.otherBackupsDeleteConfirmation))
     }
 }
 
@@ -132,7 +132,7 @@ private struct OtherBackupsOperationLabel: View {
     }
 }
 
-struct OtherBackupsRecoveryResult {
+struct OtherBackupsRecoveryResult: Equatable {
     let walletsRestored: UInt32
     let walletsFailed: UInt32
     let failedWalletErrors: [String]

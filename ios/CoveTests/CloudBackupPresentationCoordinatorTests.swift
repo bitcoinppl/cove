@@ -34,6 +34,50 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testDetailPromptActionWaitsForPromptDismissal() throws {
+        var dispatched: [CloudBackupDetailDeferredAction] = []
+        let presenter = CloudBackupDetailPresenter { dispatched.append($0) }
+        presenter.transitions.present(.alert(.disableFinalConfirmation))
+
+        presenter.dismiss(.alert(.disableFinalConfirmation), then: .dispatch(.disableCloudBackup))
+
+        XCTAssertNil(presenter.transitions.currentPresentation)
+        XCTAssertTrue(dispatched.isEmpty)
+        let requestID = try XCTUnwrap(presenter.transitions.readinessRequestID)
+
+        presenter.presenterDidBecomeReady(UUID())
+        XCTAssertTrue(dispatched.isEmpty, "a stale readiness signal must not run the action")
+
+        presenter.presenterDidBecomeReady(requestID)
+        XCTAssertEqual(dispatched, [.dispatch(.disableCloudBackup)])
+        XCTAssertNil(presenter.transitions.readinessRequestID)
+    }
+
+    @MainActor
+    func testDetailPromptActionRunsAtOnceWithoutAPrompt() {
+        var dispatched: [CloudBackupDetailDeferredAction] = []
+        let presenter = CloudBackupDetailPresenter { dispatched.append($0) }
+
+        presenter.dismiss(.alert(.disableFinalConfirmation), then: .startVerification)
+
+        XCTAssertEqual(dispatched, [.startVerification])
+    }
+
+    @MainActor
+    func testDetailHostDisappearanceDropsStagedAction() throws {
+        var dispatched: [CloudBackupDetailDeferredAction] = []
+        let presenter = CloudBackupDetailPresenter { dispatched.append($0) }
+        presenter.transitions.present(.dialog(.recoverOtherBackups))
+        presenter.dismiss(.dialog(.recoverOtherBackups), then: .dispatch(.recoverOtherBackups))
+        let requestID = try XCTUnwrap(presenter.transitions.readinessRequestID)
+
+        presenter.hostDidDisappear()
+        presenter.presenterDidBecomeReady(requestID)
+
+        XCTAssertTrue(dispatched.isEmpty)
+    }
+
     func testOnboardingPolicySuppressesVerificationPrompt() {
         let context = presentableContext(presentationPolicy: .onboarding)
 

@@ -44,7 +44,7 @@ struct DetailFormContent: View {
     let detail: CloudBackupDetail
     let syncHealth: CloudSyncHealth
     let manager: CloudBackupManager
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
 
     var body: some View {
         HeaderSection(lastSync: detail.lastSync, syncHealth: syncHealth)
@@ -55,14 +55,14 @@ struct DetailFormContent: View {
             CloudOnlySection(
                 wallets: cloudOnlyWallets,
                 manager: manager,
-                presentationCoordinator: presentationCoordinator
+                presenter: presenter
             )
         }
         if let summary = cloudBackupVisibleOtherBackupsSummary(manager.otherBackupsState) {
             OtherBackupsSection(
                 summary: summary,
                 manager: manager,
-                presentationCoordinator: presentationCoordinator
+                presenter: presenter
             )
         }
 
@@ -177,7 +177,7 @@ struct MissingPasskeyContent: View {
 struct DisableCloudBackupSection: View {
     let manager: CloudBackupManager
     let detail: CloudBackupDetail?
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
 
     private var unavailableMessage: String? {
         if manager.isDisablingCloudBackup {
@@ -218,7 +218,7 @@ struct DisableCloudBackupSection: View {
         DisableCloudBackupControls(
             manager: manager,
             unavailableMessage: unavailableMessage,
-            presentationCoordinator: presentationCoordinator
+            presenter: presenter
         )
     }
 }
@@ -226,7 +226,7 @@ struct DisableCloudBackupSection: View {
 private struct DisableCloudBackupControls: View {
     let manager: CloudBackupManager
     let unavailableMessage: String?
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
 
     var body: some View {
         Section {
@@ -245,7 +245,7 @@ private struct DisableCloudBackupControls: View {
             DisableCloudBackupRequestButton(
                 manager: manager,
                 unavailableMessage: unavailableMessage,
-                presentationCoordinator: presentationCoordinator
+                presenter: presenter
             )
         }
     }
@@ -254,7 +254,7 @@ private struct DisableCloudBackupControls: View {
 private struct DisableCloudBackupRequestButton: View {
     let manager: CloudBackupManager
     let unavailableMessage: String?
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
 
     var body: some View {
         Button(role: .destructive, action: requestDisable) {
@@ -269,9 +269,9 @@ private struct DisableCloudBackupRequestButton: View {
         guard manager.isDetailInventoryComplete else { return }
 
         if let unavailableMessage {
-            presentationCoordinator.present(.alert(.disableUnavailable(unavailableMessage)))
+            presenter.transitions.present(.alert(.disableUnavailable(unavailableMessage)))
         } else {
-            presentationCoordinator.present(.dialog(.disableCloudBackup))
+            presenter.transitions.present(.dialog(.disableCloudBackup))
         }
     }
 }

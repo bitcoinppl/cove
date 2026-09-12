@@ -43,8 +43,13 @@ struct CloudBackupDetailScreen: View {
     @Environment(CloudBackupPresentationCoordinator.self)
     private var cloudBackupPresentationCoordinator
     @State private var manager = CloudBackupManager.shared
-    @State private var presentationCoordinator =
-        PresentationTransitionCoordinator<CloudBackupDetailPresentation>()
+    @State private var presenter = CloudBackupDetailPresenter { action in
+        action.perform(on: CloudBackupManager.shared)
+    }
+
+    private var presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation> {
+        presenter.transitions
+    }
 
     private var hasVerificationResult: Bool {
         switch manager.verificationState {
@@ -96,17 +101,21 @@ struct CloudBackupDetailScreen: View {
             isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
             shouldShowLoadingState: shouldShowLoadingState,
             progressPresentation: progressPresentation,
-            presentationCoordinator: presentationCoordinator,
+            presenter: presenter,
             recreateConfirmationIsPresented: confirmationBinding(for: .recreate),
             reinitializeConfirmationIsPresented: confirmationBinding(for: .reinitialize)
         )
         .cloudBackupDetailPresentations(
             manager: manager,
-            coordinator: presentationCoordinator
+            presenter: presenter
         )
         .navigationTitle("Cloud Backup")
         .navigationBarTitleDisplayMode(.inline)
-        .presentationTransitionHost(presentationCoordinator)
+        .presentationTransitionHost(
+            state: presentationCoordinator.hostState,
+            presenterDidBecomeReady: presenter.presenterDidBecomeReady,
+            hostDidDisappear: presenter.hostDidDisappear
+        )
         .task(enterDetail)
         .onDisappear(perform: clearDetailPresentation)
         .onChange(of: hasCloudBackupPresentationBlocker, initial: true) { _, active in
@@ -171,7 +180,7 @@ struct CloudBackupDetailScreen: View {
     }
 
     private func clearDetailPresentation() {
-        presentationCoordinator.discardAll()
+        presenter.hostDidDisappear()
         cloudBackupPresentationCoordinator.setBlocker(.cloudBackupDetailDialog, active: false)
     }
 }

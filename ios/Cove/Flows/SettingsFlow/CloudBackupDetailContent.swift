@@ -7,7 +7,7 @@ struct CloudBackupDetailForm: View {
     let isUnsupportedPasskeyProvider: Bool
     let shouldShowLoadingState: Bool
     let progressPresentation: CloudBackupDetailProgressPresentation
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
     let recreateConfirmationIsPresented: Binding<Bool>
     let reinitializeConfirmationIsPresented: Binding<Bool>
 
@@ -20,7 +20,7 @@ struct CloudBackupDetailForm: View {
                 isUnsupportedPasskeyProvider: isUnsupportedPasskeyProvider,
                 shouldShowLoadingState: shouldShowLoadingState,
                 progressPresentation: progressPresentation,
-                presentationCoordinator: presentationCoordinator,
+                presenter: presenter,
                 recreateConfirmationIsPresented: recreateConfirmationIsPresented,
                 reinitializeConfirmationIsPresented: reinitializeConfirmationIsPresented
             )
@@ -35,7 +35,7 @@ private struct CloudBackupDetailFormContent: View {
     let isUnsupportedPasskeyProvider: Bool
     let shouldShowLoadingState: Bool
     let progressPresentation: CloudBackupDetailProgressPresentation
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
     let recreateConfirmationIsPresented: Binding<Bool>
     let reinitializeConfirmationIsPresented: Binding<Bool>
 
@@ -49,7 +49,7 @@ private struct CloudBackupDetailFormContent: View {
                 DisableCloudBackupSection(
                     manager: manager,
                     detail: manager.detail,
-                    presentationCoordinator: presentationCoordinator
+                    presenter: presenter
                 )
             }
         } else {
@@ -60,11 +60,11 @@ private struct CloudBackupDetailFormContent: View {
                 isCancelled: isCancelled,
                 shouldShowLoadingState: shouldShowLoadingState,
                 progressPresentation: progressPresentation,
-                presentationCoordinator: presentationCoordinator
+                presenter: presenter
             )
             VerificationSection(
                 manager: manager,
-                presentationCoordinator: presentationCoordinator,
+                presenter: presenter,
                 recreateConfirmationIsPresented: recreateConfirmationIsPresented,
                 reinitializeConfirmationIsPresented: reinitializeConfirmationIsPresented
             )
@@ -72,7 +72,7 @@ private struct CloudBackupDetailFormContent: View {
                 DisableCloudBackupSection(
                     manager: manager,
                     detail: manager.detail,
-                    presentationCoordinator: presentationCoordinator
+                    presenter: presenter
                 )
             }
         }
@@ -84,7 +84,7 @@ private struct CloudBackupStatusSection: View {
     let isCancelled: Bool
     let shouldShowLoadingState: Bool
     let progressPresentation: CloudBackupDetailProgressPresentation
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
 
     @AccessibilityFocusState private var inventoryErrorFocused: Bool
 
@@ -111,7 +111,7 @@ private struct CloudBackupStatusSection: View {
                 isCancelled: isCancelled,
                 shouldShowLoadingState: shouldShowLoadingState,
                 progressPresentation: progressPresentation,
-                presentationCoordinator: presentationCoordinator
+                presenter: presenter
             )
         }
         .onChange(of: manager.detailError, initial: true) { _, error in
@@ -169,7 +169,7 @@ private struct CloudBackupDetailStatusContent: View {
     let isCancelled: Bool
     let shouldShowLoadingState: Bool
     let progressPresentation: CloudBackupDetailProgressPresentation
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
 
     var body: some View {
         if progressPresentation == .verificationCard {
@@ -179,7 +179,7 @@ private struct CloudBackupDetailStatusContent: View {
                 detail: detail,
                 syncHealth: manager.syncHealth,
                 manager: manager,
-                presentationCoordinator: presentationCoordinator
+                presenter: presenter
             )
         } else if shouldShowLoadingState, manager.detailError == nil {
             CloudBackupLoadingSection()
