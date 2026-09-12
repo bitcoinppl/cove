@@ -14,6 +14,10 @@ export COVE_KEYSTORE_PASSWORD="your-keystore-password-here"
 export COVE_KEY_ALIAS="upload"
 export COVE_KEY_PASSWORD="your-key-password-here"
 
+# Google Play internal releases: just rela (requires fastlane)
+# grant this service account access to testing releases for org.bitcoinppl.cove
+# export GOOGLE_PLAY_JSON_KEY_PATH="$HOME/.secrets/cove-google-play.json"
+
 # iOS device aliases for: just brall --device main|se
 # export IOS_DEVICE_MAIN="00008120-0006243420214032"
 # export IOS_DEVICE_SE="00008xxx-xxxxxxxxxxxxxxxx"

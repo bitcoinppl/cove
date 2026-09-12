@@ -205,7 +205,7 @@ enum Commands {
         foreground: bool,
     },
 
-    /// Bump iOS build, build release artifacts, and upload to TestFlight
+    /// Bump and upload to TestFlight, copy previous test notes, and add to me-only
     #[command(name = "testflight")]
     Testflight {
         /// App Store Connect API key file path
@@ -221,7 +221,7 @@ enum Commands {
         api_issuer_id: Option<String>,
     },
 
-    /// Archive and upload the iOS app to TestFlight
+    /// Upload to TestFlight without bumping, copy previous test notes, and add to me-only
     #[command(name = "upload-testflight")]
     UploadTestflight {
         /// App Store Connect API key file path

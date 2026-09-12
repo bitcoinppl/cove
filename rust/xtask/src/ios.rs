@@ -18,6 +18,10 @@ use std::{
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 use xshell::{cmd, Shell};
 
+mod testflight;
+
+use testflight::{BuildIdentity, Distribution};
+
 // iOS build constants
 const IOS_TARGET_DEVICE: &str = "aarch64-apple-ios";
 const IOS_TARGET_SIMULATOR: &str = "aarch64-apple-ios-sim";
@@ -600,7 +604,8 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
 
 pub fn testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
-    validate_testflight_credentials(&sh, &options)?;
+    let credentials = TestflightApiCredentials::from_options(&sh, &options)?;
+    let distribution = credentials.prepare_distribution()?;
 
     // fail before bumping/building if Apple has not associated this TestFlight app id
     validate_testflight_associated_domain(&sh)?;
@@ -609,43 +614,58 @@ pub fn testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()>
     let result = (|| {
         crate::version::bump_ios_build_number(&sh)?;
         build_ios(IosBuildType::Custom("release-speed"), true, false, verbose)?;
-        upload_testflight_inner(options, verbose, false)
+        upload_testflight_inner(&credentials, verbose, false)
     })();
 
-    if let Err(error) = result {
-        if let Some(snapshot) = project_snapshot {
-            if let Err(restore_error) = crate::version::restore_ios_project(&sh, &snapshot) {
-                return Err(error).wrap_err(format!(
-                    "Failed to restore iOS build number after TestFlight failure: {restore_error:#}"
-                ));
+    let identity = match result {
+        Ok(identity) => identity,
+        Err(error) => {
+            if let Some(snapshot) = project_snapshot {
+                if let Err(restore_error) = crate::version::restore_ios_project(&sh, &snapshot) {
+                    return Err(error).wrap_err(format!(
+                        "Failed to restore iOS build number after TestFlight failure: {restore_error:#}"
+                    ));
+                }
+
+                print_error("TestFlight failed; restored iOS build number");
+            } else {
+                print_error("TestFlight failed");
             }
 
-            print_error("TestFlight failed; restored iOS build number");
-        } else {
-            print_error("TestFlight failed");
+            return Err(error);
         }
+    };
 
-        return Err(error);
-    }
-
-    Ok(())
-}
-
-fn validate_testflight_credentials(sh: &Shell, options: &TestflightUploadOptions) -> Result<()> {
-    let _ = TestflightApiCredentials::from_options(sh, options)?;
-
-    Ok(())
+    // Apple has accepted the upload; distribution failure must not roll back its build number
+    finish_testflight_distribution(&distribution, &identity)
 }
 
 pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
-    upload_testflight_inner(options, verbose, true)
+    let sh = Shell::new()?;
+    let credentials = TestflightApiCredentials::from_options(&sh, &options)?;
+    let distribution = credentials.prepare_distribution()?;
+    let identity = upload_testflight_inner(&credentials, verbose, true)?;
+
+    finish_testflight_distribution(&distribution, &identity)
+}
+
+fn finish_testflight_distribution(
+    distribution: &Distribution,
+    identity: &BuildIdentity,
+) -> Result<()> {
+    distribution.distribute(identity).wrap_err_with(|| {
+        format!(
+            "Uploaded TestFlight {} ({}), but distribution did not finish. Kept the build number; finish export compliance, the test description, and me-only group assignment in App Store Connect",
+            identity.version, identity.build_number
+        )
+    })
 }
 
 fn upload_testflight_inner(
-    options: TestflightUploadOptions,
+    api_credentials: &TestflightApiCredentials,
     verbose: bool,
     validate_associated_domain: bool,
-) -> Result<()> {
+) -> Result<BuildIdentity> {
     let sh = Shell::new()?;
 
     if !command_exists("xcodebuild") {
@@ -653,7 +673,6 @@ fn upload_testflight_inner(
         color_eyre::eyre::bail!("xcodebuild command not found");
     }
 
-    let api_credentials = TestflightApiCredentials::from_options(&sh, &options)?;
     if validate_associated_domain {
         validate_testflight_associated_domain(&sh)?;
     }
@@ -685,6 +704,7 @@ fn upload_testflight_inner(
     .env("PATH", &xcode_path);
     run_xcodebuild(archive_cmd, verbose, "Failed to archive iOS app")?;
     validate_testflight_archive_entitlements(&sh, &archive_path)?;
+    let identity = testflight_archive_identity(&sh, &archive_path)?;
     print_success(&format!("Created archive at {archive_path}"));
 
     print_info("Uploading iOS archive to App Store Connect...");
@@ -696,7 +716,20 @@ fn upload_testflight_inner(
     run_xcodebuild(export_cmd, verbose, "Failed to upload iOS archive to App Store Connect")?;
     print_success("Uploaded iOS archive to App Store Connect");
 
-    Ok(())
+    Ok(identity)
+}
+
+fn testflight_archive_identity(sh: &Shell, archive_path: &str) -> Result<BuildIdentity> {
+    let plist = format!("{archive_path}/Products/Applications/{IOS_APP_NAME}.app/Info.plist");
+    let version =
+        cmd!(sh, "/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' {plist}")
+            .read()
+            .wrap_err("Failed to read the archived app version")?;
+    let build_number = cmd!(sh, "/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' {plist}")
+        .read()
+        .wrap_err("Failed to read the archived app build number")?;
+
+    Ok(BuildIdentity { version, build_number })
 }
 
 fn validate_testflight_associated_domain(sh: &Shell) -> Result<()> {
@@ -837,6 +870,15 @@ struct TestflightApiCredentials {
 }
 
 impl TestflightApiCredentials {
+    fn prepare_distribution(&self) -> Result<Distribution> {
+        Distribution::prepare(
+            &self.api_key_path,
+            &self.api_key_id,
+            &self.api_issuer_id,
+            IOS_BUNDLE_ID,
+        )
+    }
+
     fn from_options(sh: &Shell, options: &TestflightUploadOptions) -> Result<Self> {
         let api_key_path = normalize_required_arg("ASC_API_KEY_PATH", &options.api_key_path)?;
         let api_key_id = normalize_required_arg("ASC_API_KEY_ID", &options.api_key_id)?;
@@ -1700,6 +1742,48 @@ fn available_device_context(devices: &[ResolvedDevice]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "macos")]
+    mod archive_identity {
+        use crate::ios::testflight_archive_identity;
+        use xshell::Shell;
+
+        #[test]
+        fn reads_uploaded_identity_from_archive_not_project_settings() {
+            let archive = tempfile::tempdir().unwrap();
+            let app = archive.path().join("Products/Applications/Cove.app");
+            std::fs::create_dir_all(&app).unwrap();
+            std::fs::write(
+                app.join("Info.plist"),
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>CFBundleShortVersionString</key><string>1.4.0</string>
+<key>CFBundleVersion</key><string>203</string>
+</dict></plist>"#,
+            )
+            .unwrap();
+
+            let identity = testflight_archive_identity(
+                &Shell::new().unwrap(),
+                archive.path().to_str().unwrap(),
+            )
+            .unwrap();
+
+            assert_eq!(identity.version, "1.4.0");
+            assert_eq!(identity.build_number, "203");
+        }
+
+        #[test]
+        fn rejects_archive_without_build_metadata_before_upload() {
+            let archive = tempfile::tempdir().unwrap();
+            let result = testflight_archive_identity(
+                &Shell::new().unwrap(),
+                archive.path().to_str().unwrap(),
+            );
+
+            assert!(result.is_err());
+        }
+    }
+
     use super::{
         default_build_slot_from_cwd, derived_data_dir_name_for_slot,
         device_selector_from_target_value, devicectl_device_connection_can_refresh,
@@ -1781,7 +1865,7 @@ mod tests {
 
     fn device_alias_env_lock() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     const VALID_PEM: &str = "\
