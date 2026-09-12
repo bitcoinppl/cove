@@ -25,7 +25,7 @@ private extension CloudBackupPasskeyRepairState? {
 
 struct VerificationSection: View {
     let manager: CloudBackupManager
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
     let recreateConfirmationIsPresented: Binding<Bool>
     let reinitializeConfirmationIsPresented: Binding<Bool>
 
@@ -131,7 +131,7 @@ struct VerificationSection: View {
     private func requestUndecryptableWalletDeletion() {
         guard undecryptableWalletCount > 0 else { return }
 
-        presentationCoordinator.present(
+        presenter.transitions.present(
             .alert(.undecryptableWalletDeletion(undecryptableWalletCount))
         )
     }
