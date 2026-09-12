@@ -410,6 +410,26 @@ async fn supervisor_rejects_second_exclusive_operation_while_active() {
     assert_eq!(manager.projected_exclusive_operation(), None);
 }
 
+#[test]
+fn local_reset_cancels_restore_without_releasing_its_claim() {
+    let claim = CloudBackupExclusiveOperationClaim::new(
+        CloudBackupExclusiveOperation::Restore,
+        u64::MAX,
+    );
+    let cancellation = Arc::new(AtomicBool::new(false));
+    let mut active = ActiveOperation::default();
+    active.start_restore(RestoreRun {
+        claim,
+        cancellation: Arc::clone(&cancellation),
+    });
+
+    let released_claim = active.prepare_local_reset();
+
+    assert!(released_claim.is_none());
+    assert!(cancellation.load(Ordering::Acquire));
+    assert_eq!(active, Some(claim));
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn drive_account_switch_reports_busy_and_cancellation_releases_claim() {
     let _guard = async_test_lock().lock().await;
