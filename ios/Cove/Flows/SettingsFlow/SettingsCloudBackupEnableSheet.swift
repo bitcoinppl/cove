@@ -27,6 +27,10 @@ func cloudBackupPendingEnableSupportEmailURL(
 
 struct SettingsCloudBackupEnableSheet: View {
     @State private var manager = CloudBackupManager.shared
+    @State private var promptTransitions = PresentationTransitionCoordinator<CloudBackupRootPrompt>()
+    @State private var promptActionHandoff =
+        PresentationActionHandoff<CloudBackupRootPrompt, CloudBackupManagerAction>()
+    @State private var isHostAvailable = false
     @State private var ignoreNextPromptDismiss = false
 
     let onComplete: () -> Void
@@ -54,7 +58,13 @@ struct SettingsCloudBackupEnableSheet: View {
 
     private var showingPasskeyChoice: Binding<Bool> {
         Binding(
-            get: { isEnablePasskeyChoice(manager.rootPrompt) },
+            get: {
+                if case .passkeyChoice = promptTransitions.currentPresentation?.item {
+                    return true
+                }
+
+                return false
+            },
             set: { isPresented in
                 guard !isPresented else { return }
                 handlePromptDismiss()
@@ -65,7 +75,10 @@ struct SettingsCloudBackupEnableSheet: View {
     private var showingExistingBackupPrompt: Binding<Bool> {
         Binding(
             get: {
-                if case .existingBackupFound = manager.rootPrompt { return true }
+                if case .existingBackupFound = promptTransitions.currentPresentation?.item {
+                    return true
+                }
+
                 return false
             },
             set: { isPresented in
@@ -76,7 +89,9 @@ struct SettingsCloudBackupEnableSheet: View {
     }
 
     private var passkeyChoiceIntent: CloudBackupPasskeyChoiceIntent? {
-        guard case let .passkeyChoice(intent) = manager.rootPrompt else { return nil }
+        guard case let .passkeyChoice(intent) = promptTransitions.currentPresentation?.item else {
+            return nil
+        }
 
         return intent
     }
@@ -88,7 +103,9 @@ struct SettingsCloudBackupEnableSheet: View {
     }
 
     private var existingBackupPasskeyHint: CloudBackupPasskeyHint? {
-        guard case let .existingBackupFound(_, passkeyHint) = manager.rootPrompt else {
+        guard
+            case let .existingBackupFound(_, passkeyHint) = promptTransitions.currentPresentation?.item
+        else {
             return nil
         }
 
@@ -120,8 +137,27 @@ struct SettingsCloudBackupEnableSheet: View {
     }
 
     private func dispatchPromptAction(_ action: CloudBackupManagerAction) {
+        guard case .acceptEnablePrompt = action else {
+            ignoreNextPromptDismiss = true
+            manager.dispatch(action: action)
+            return
+        }
+
+        guard
+            promptActionHandoff.pendingAction == nil,
+            let currentPrompt = promptTransitions.currentPresentation?.item
+        else { return }
+
         ignoreNextPromptDismiss = true
-        manager.dispatch(action: action)
+        guard let transition = promptTransitions.dismissCurrentPresentationForTransition() else {
+            return
+        }
+
+        _ = promptActionHandoff.stage(
+            action: action,
+            presentation: currentPrompt,
+            transition: transition
+        )
     }
 
     private func handlePromptDismiss() {
@@ -160,6 +196,68 @@ struct SettingsCloudBackupEnableSheet: View {
         return "Creating a new Cloud Backup will not include wallets from your previous backup. If you still have access to the passkey named Cove Cloud Backup (\(existingBackupPasskeyHint.nameSuffix)), use that passkey instead."
     }
 
+    private func reconcilePrompt(_ rootPrompt: CloudBackupRootPrompt) {
+        let desiredPrompt = isAwaitingEnablePrompt(rootPrompt) ? rootPrompt : nil
+
+        if let pendingPrompt = promptActionHandoff.pendingPresentation,
+           pendingPrompt != desiredPrompt
+        {
+            promptActionHandoff.cancel()
+            promptTransitions.discardQueued { $0 == pendingPrompt }
+        }
+
+        guard let desiredPrompt else {
+            promptTransitions.discardQueued { _ in true }
+            if promptTransitions.currentPresentation != nil {
+                ignoreNextPromptDismiss = true
+                promptTransitions.dismissCurrentPresentation()
+            }
+            return
+        }
+
+        if promptTransitions.currentPresentation?.item == desiredPrompt {
+            promptTransitions.discardQueued { _ in true }
+            return
+        }
+
+        if promptTransitions.currentPresentation == nil {
+            if promptTransitions.isAwaitingPresenterReadiness {
+                promptTransitions.queue(desiredPrompt)
+            } else {
+                promptTransitions.present(desiredPrompt)
+            }
+            return
+        }
+
+        ignoreNextPromptDismiss = true
+        promptTransitions.transition(to: desiredPrompt)
+    }
+
+    private func presenterDidBecomeReady(_ requestID: UUID) {
+        let currentPrompt = isAwaitingEnablePrompt(manager.rootPrompt) ? manager.rootPrompt : nil
+
+        if promptActionHandoff.pendingAction != nil {
+            _ = promptActionHandoff.presenterDidBecomeReady(
+                requestID,
+                currentPresentation: currentPrompt,
+                isHostAvailable: isHostAvailable,
+                using: promptTransitions
+            ) { action in
+                manager.dispatch(action: action)
+            }
+
+            return
+        }
+
+        promptTransitions.presenterDidBecomeReady(requestID)
+    }
+
+    private func hostDidDisappear() {
+        isHostAvailable = false
+        promptActionHandoff.cancel()
+        promptTransitions.hostDidDisappear()
+    }
+
     var body: some View {
         CloudBackupExistingBackupAlertHost(
             isPresented: showingExistingBackupPrompt,
@@ -194,10 +292,22 @@ struct SettingsCloudBackupEnableSheet: View {
                 )
             }
         }
+        .presentationTransitionHost(
+            state: promptTransitions.hostState,
+            presenterDidBecomeReady: presenterDidBecomeReady,
+            hostDidDisappear: hostDidDisappear
+        )
+        .onAppear {
+            isHostAvailable = true
+        }
+        .onDisappear {
+            hostDidDisappear()
+        }
         .onChange(of: manager.enableCompletion, initial: true) { _, completion in
             completeIfReady(completion)
         }
         .onChange(of: manager.rootPrompt, initial: true) { _, rootPrompt in
+            reconcilePrompt(rootPrompt)
             if !isAwaitingEnablePrompt(rootPrompt) {
                 ignoreNextPromptDismiss = false
             }
