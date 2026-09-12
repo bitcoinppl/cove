@@ -3,7 +3,7 @@ import SwiftUI
 struct SelectedWalletPresentationContext {
     let app: AppManager
     let manager: WalletManager
-    let presentationState: Binding<TaggedItem<SelectedWalletPresentationState>?>
+    let presentReceive: () -> Void
     let walletErrorAlert: Binding<TaggedItem<WalletErrorAlert>?>
     let scannedLabels: Binding<TaggedItem<MultiFormat>?>
 
@@ -38,7 +38,7 @@ extension WalletErrorAlert: TaggedAlertPresentable {
                 actions: {
                     Button("Receive Funds") {
                         context.dismissWalletError()
-                        context.presentationState.wrappedValue = TaggedItem(.receive)
+                        context.presentReceive()
                     }
 
                     Button("Cancel", role: .cancel) {
