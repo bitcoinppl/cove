@@ -238,31 +238,26 @@ fn database_location() -> PathBuf {
 
 #[cfg(test)]
 pub(crate) mod test_support {
-    use rand::{distr::Alphanumeric, prelude::*};
+    use std::path::{Path, PathBuf};
+    use std::sync::OnceLock;
+    use std::time::Duration;
 
     use super::*;
 
+    const TEST_DATA_DIR_PREFIX: &str = "cove-test-";
+    const STALE_TEST_DATA_DIR_AGE: Duration = Duration::from_secs(60 * 60);
+
     pub(crate) fn init_test_database() {
+        let root = process_test_data_dir();
         crate::bootstrap::tests::set_test_bootstrapped();
         crate::app::reconcile::test_support::init_noop_updater();
-        let _ = DATABASE_LOCATION_OVERRIDE.set(test_database_location());
-    }
-
-    fn test_database_location() -> PathBuf {
-        let mut rng = rand::rng();
-        let random_string: String = (0..7).map(|_| rng.sample(Alphanumeric) as char).collect();
-        let cove_db = format!("cove_{random_string}.db");
-
-        let test_dir = ROOT_DATA_DIR.join("test");
-        std::fs::create_dir_all(&test_dir).expect("failed to create test dir");
-
-        test_dir.join(cove_db)
+        let _ = DATABASE_LOCATION_OVERRIDE.set(root.join("cove.encrypted.db"));
     }
 
     pub(crate) fn delete_database() {
         init_test_database();
         let db_path = database_location();
-        let wallet_data_dir = ROOT_DATA_DIR.join("wallet_data");
+        let wallet_data_dir = cove_common::consts::wallet_data_dir_path();
 
         let _ = std::fs::remove_file(&db_path);
         let _ = std::fs::remove_dir_all(&wallet_data_dir);
@@ -270,7 +265,93 @@ pub(crate) mod test_support {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent).expect("failed to recreate test dir");
         }
+
         std::fs::create_dir_all(wallet_data_dir).expect("failed to recreate wallet data test dir");
+    }
+
+    fn process_test_data_dir() -> &'static PathBuf {
+        static TEST_ROOT: OnceLock<PathBuf> = OnceLock::new();
+
+        TEST_ROOT.get_or_init(|| {
+            let parent = std::env::temp_dir();
+            sweep_stale_test_data_dirs(&parent);
+            remove_legacy_home_test_dir();
+
+            let tempdir = tempfile::Builder::new()
+                .prefix(TEST_DATA_DIR_PREFIX)
+                .tempdir()
+                .expect("failed to create test data directory");
+
+            // keep the directory for the process lifetime; Drop would delete it too early
+            let path = tempdir.keep();
+
+            let _ = cove_common::consts::set_root_data_dir(path.clone());
+            path
+        })
+    }
+
+    fn sweep_stale_test_data_dirs(parent: &Path) {
+        let Ok(entries) = std::fs::read_dir(parent) else {
+            return;
+        };
+
+        let now = std::time::SystemTime::now();
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+
+            if !name.starts_with(TEST_DATA_DIR_PREFIX) {
+                continue;
+            }
+
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+
+            if !metadata.is_dir() {
+                continue;
+            }
+
+            let Ok(modified) = metadata.modified() else {
+                continue;
+            };
+
+            let Ok(age) = now.duration_since(modified) else {
+                continue;
+            };
+
+            // nextest runs binaries in parallel, so only remove dirs older than one hour
+            if age > STALE_TEST_DATA_DIR_AGE {
+                let _ = std::fs::remove_dir_all(entry.path());
+            }
+        }
+    }
+
+    fn remove_legacy_home_test_dir() {
+        let Some(home) = dirs::home_dir() else {
+            return;
+        };
+
+        let _ = std::fs::remove_dir_all(home.join(".data").join("test"));
+    }
+
+    #[test]
+    fn test_database_lives_under_temp_dir_not_home_data() {
+        init_test_database();
+        let path = database_location();
+        let temp = std::env::temp_dir();
+
+        assert!(path.starts_with(&temp), "test database {path:?} must be under {temp:?}");
+
+        if let Some(home) = dirs::home_dir() {
+            let home_data = home.join(".data");
+            assert!(
+                !path.starts_with(&home_data),
+                "test database {path:?} must not be under {home_data:?}"
+            );
+        }
     }
 }
 
