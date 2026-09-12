@@ -48,14 +48,15 @@ class CloudBackupRegressionHelpersTest {
         val context = manualEnableContext()
         val hidden = CloudBackupVerificationPresentation.Hidden(null)
         val checkingPasskey = "Checking that your passkey is available..."
+        val checkingExistingBackups = "Checking for existing backups..."
         val creatingBackup = "Creating your encrypted backup..."
         val states =
             listOf<Pair<CloudBackupEnableFlow?, String>>(
-                CloudBackupEnableFlow.DiscoveringExistingBackup to creatingBackup,
-                CloudBackupEnableFlow.AwaitingForceNewConfirmation(context, null) to creatingBackup,
+                CloudBackupEnableFlow.DiscoveringExistingBackup to checkingExistingBackups,
+                CloudBackupEnableFlow.AwaitingForceNewConfirmation(context, null) to checkingExistingBackups,
                 CloudBackupEnableFlow.AwaitingPasskeyChoice(
                     CloudBackupPasskeyChoiceIntent.Enable(context, null),
-                ) to creatingBackup,
+                ) to checkingExistingBackups,
                 CloudBackupEnableFlow.CreatingPasskey to "Creating your passkey...",
                 CloudBackupEnableFlow.AwaitingSavedPasskeyConfirmation(
                     SavedPasskeyConfirmationMode.AUTOMATIC,
@@ -67,7 +68,7 @@ class CloudBackupRegressionHelpersTest {
                 CloudBackupEnableFlow.UploadingInitialBackup(null) to creatingBackup,
                 CloudBackupEnableFlow.RetryingUploadWithStagedMaterial(null) to creatingBackup,
                 CloudBackupEnableFlow.WaitingForPasskeyAvailability to checkingPasskey,
-                null to creatingBackup,
+                null to checkingExistingBackups,
             )
 
         states.forEach { (state, expectedTitle) ->
