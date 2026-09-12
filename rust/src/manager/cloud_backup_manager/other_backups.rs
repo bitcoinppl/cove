@@ -80,17 +80,6 @@ impl RustCloudBackupManager {
         Ok(CloudBackupOtherBackupsSummary { namespace_count, wallet_count, passkey_hints })
     }
 
-    pub(crate) async fn best_passkey_hint_for_namespaces(
-        &self,
-        cloud: &CloudStorageClient,
-        namespaces: &[String],
-    ) -> Option<CloudBackupPasskeyHint> {
-        self.passkey_hints_for_namespaces(cloud, namespaces)
-            .await
-            .into_iter()
-            .max_by_key(|hint| hint.registered_at)
-    }
-
     async fn passkey_hints_for_namespaces(
         &self,
         cloud: &CloudStorageClient,

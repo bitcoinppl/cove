@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex as StdMutex, OnceLock};
 use std::time::Duration;
 
 use act_zero::call;
@@ -97,6 +98,9 @@ struct MockCloudState {
     master_key_download_errors: HashMap<String, CloudStorageError>,
     backup_upload_state_errors: HashMap<(String, String), CloudStorageError>,
     master_key_download_attempts: usize,
+    master_key_download_active: usize,
+    master_key_download_max_active: usize,
+    master_key_download_gate: Option<Arc<MockCloudDownloadGate>>,
     wallet_backups: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_overrides: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_errors: HashMap<(String, String), CloudStorageError>,
@@ -139,6 +143,33 @@ struct MockCloudState {
 pub(crate) struct MockCloudDownloadGate {
     started: tokio::sync::Notify,
     release: tokio::sync::Notify,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct MockPasskeyCallGate {
+    started: AtomicBool,
+    released: AtomicBool,
+    wait_lock: StdMutex<()>,
+    wait_condvar: Condvar,
+}
+
+impl MockPasskeyCallGate {
+    fn block(&self) {
+        self.started.store(true, Ordering::Release);
+        let mut guard = self.wait_lock.lock().expect("passkey call gate lock");
+        while !self.released.load(Ordering::Acquire) {
+            guard = self.wait_condvar.wait(guard).expect("passkey call gate wait");
+        }
+    }
+
+    pub(crate) fn is_started(&self) -> bool {
+        self.started.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn release(&self) {
+        self.released.store(true, Ordering::Release);
+        self.wait_condvar.notify_all();
+    }
 }
 
 impl MockCloudDownloadGate {
@@ -430,6 +461,20 @@ impl MockCloudStorage {
         self.state.lock().master_key_download_attempts
     }
 
+    pub(crate) fn gate_master_key_downloads(&self) -> Arc<MockCloudDownloadGate> {
+        let gate = Arc::new(MockCloudDownloadGate::default());
+        self.state.lock().master_key_download_gate = Some(gate.clone());
+        gate
+    }
+
+    pub(crate) fn clear_master_key_download_gate(&self) {
+        self.state.lock().master_key_download_gate = None;
+    }
+
+    pub(crate) fn master_key_download_max_concurrency(&self) -> usize {
+        self.state.lock().master_key_download_max_active
+    }
+
     pub(crate) fn wallet_backup_download_attempt_count_for_record(
         &self,
         namespace: &str,
@@ -553,17 +598,34 @@ impl CloudStorageAccess for MockCloudStorage {
         _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        let mut state = self.state.lock();
-        state.master_key_download_attempts += 1;
-        if let Some(error) = state.master_key_download_errors.get(&namespace).cloned() {
-            return Err(error);
+        let gate = {
+            let mut state = self.state.lock();
+            state.master_key_download_attempts += 1;
+            state.master_key_download_active += 1;
+            state.master_key_download_max_active =
+                state.master_key_download_max_active.max(state.master_key_download_active);
+            state.master_key_download_gate.clone()
+        };
+
+        if let Some(gate) = gate {
+            gate.block().await;
         }
 
-        state
-            .master_key_backups
-            .get(&namespace)
-            .cloned()
-            .ok_or(CloudStorageError::NotFound(namespace))
+        let result = {
+            let state = self.state.lock();
+            if let Some(error) = state.master_key_download_errors.get(&namespace).cloned() {
+                Err(error)
+            } else {
+                state
+                    .master_key_backups
+                    .get(&namespace)
+                    .cloned()
+                    .ok_or(CloudStorageError::NotFound(namespace))
+            }
+        };
+
+        self.state.lock().master_key_download_active -= 1;
+        result
     }
 
     async fn download_wallet_backup(
@@ -826,6 +888,16 @@ pub(crate) struct MockPasskeyProviderImpl {
     authenticate_count: Arc<Mutex<usize>>,
     discover_count: Arc<Mutex<usize>>,
     authenticated_credential_ids: Arc<Mutex<Vec<Vec<u8>>>>,
+    authenticated_requests: Arc<Mutex<Vec<MockPasskeyAuthenticationRequest>>>,
+    authenticate_gate: Arc<Mutex<Option<Arc<MockPasskeyCallGate>>>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MockPasskeyAuthenticationRequest {
+    pub(crate) rp_id: String,
+    pub(crate) credential_id: Vec<u8>,
+    pub(crate) prf_salt: Vec<u8>,
+    pub(crate) challenge_len: usize,
 }
 
 impl MockPasskeyProviderImpl {
@@ -837,6 +909,8 @@ impl MockPasskeyProviderImpl {
         *self.authenticate_count.lock() = 0;
         *self.discover_count.lock() = 0;
         self.authenticated_credential_ids.lock().clear();
+        self.authenticated_requests.lock().clear();
+        *self.authenticate_gate.lock() = None;
     }
 
     pub(crate) fn set_discover_result(
@@ -890,6 +964,16 @@ impl MockPasskeyProviderImpl {
     pub(crate) fn authenticated_credential_ids(&self) -> Vec<Vec<u8>> {
         self.authenticated_credential_ids.lock().clone()
     }
+
+    pub(crate) fn authenticated_requests(&self) -> Vec<MockPasskeyAuthenticationRequest> {
+        self.authenticated_requests.lock().clone()
+    }
+
+    pub(crate) fn gate_next_authenticate(&self) -> Arc<MockPasskeyCallGate> {
+        let gate = Arc::new(MockPasskeyCallGate::default());
+        *self.authenticate_gate.lock() = Some(gate.clone());
+        gate
+    }
 }
 
 impl PasskeyProvider for MockPasskeyProviderImpl {
@@ -912,13 +996,24 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
 
     fn authenticate_with_prf(
         &self,
-        _rp_id: String,
+        rp_id: String,
         credential_id: Vec<u8>,
-        _prf_salt: Vec<u8>,
-        _challenge: Vec<u8>,
+        prf_salt: Vec<u8>,
+        challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
         *self.authenticate_count.lock() += 1;
-        self.authenticated_credential_ids.lock().push(credential_id);
+        self.authenticated_credential_ids.lock().push(credential_id.clone());
+        self.authenticated_requests.lock().push(MockPasskeyAuthenticationRequest {
+            rp_id,
+            credential_id,
+            prf_salt,
+            challenge_len: challenge.len(),
+        });
+
+        if let Some(gate) = self.authenticate_gate.lock().take() {
+            gate.block();
+        }
+
         self.authenticate_results.lock().pop_front().unwrap_or_else(|| {
             Err(PasskeyError::RequestFailed {
                 operation: PasskeyOperation::AuthenticateAssertion,

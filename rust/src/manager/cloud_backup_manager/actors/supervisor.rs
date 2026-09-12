@@ -263,8 +263,15 @@ struct RestoreAllRun {
 }
 
 #[derive(Debug)]
+struct RestoreRun {
+    claim: CloudBackupExclusiveOperationClaim,
+    cancellation: Arc<AtomicBool>,
+}
+
+#[derive(Debug)]
 enum ActiveOperationRun {
     Standard(CloudBackupExclusiveOperationClaim),
+    Restore(RestoreRun),
     RestoreAll(RestoreAllRun),
 }
 
@@ -283,6 +290,7 @@ impl ActiveOperation {
     fn claim(&self) -> Option<CloudBackupExclusiveOperationClaim> {
         match self.0.as_ref()? {
             ActiveOperationRun::Standard(claim) => Some(*claim),
+            ActiveOperationRun::Restore(run) => Some(run.claim),
             ActiveOperationRun::RestoreAll(run) => Some(run.claim),
         }
     }
@@ -296,14 +304,48 @@ impl ActiveOperation {
         self.0 = Some(ActiveOperationRun::Standard(claim));
     }
 
+    fn start_restore(&mut self, run: RestoreRun) {
+        self.0 = Some(ActiveOperationRun::Restore(run));
+    }
+
     fn start_restore_all(&mut self, run: RestoreAllRun) {
         self.0 = Some(ActiveOperationRun::RestoreAll(run));
+    }
+
+    fn restore(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreRun> {
+        match self.0.as_ref()? {
+            ActiveOperationRun::Restore(run) if run.claim == claim => Some(run),
+            ActiveOperationRun::Standard(_)
+            | ActiveOperationRun::Restore(_)
+            | ActiveOperationRun::RestoreAll(_) => None,
+        }
     }
 
     fn restore_all(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreAllRun> {
         match self.0.as_ref()? {
             ActiveOperationRun::RestoreAll(run) if run.claim == claim => Some(run),
-            ActiveOperationRun::Standard(_) | ActiveOperationRun::RestoreAll(_) => None,
+            ActiveOperationRun::Standard(_)
+            | ActiveOperationRun::Restore(_)
+            | ActiveOperationRun::RestoreAll(_) => None,
+        }
+    }
+
+    /// Cancels draining restore work but releases operations with no retained cancellation owner
+    fn prepare_local_reset(&mut self) -> Option<CloudBackupExclusiveOperationClaim> {
+        match self.0.as_ref()? {
+            ActiveOperationRun::Restore(run) => {
+                run.cancellation.store(true, Ordering::Release);
+                None
+            }
+            ActiveOperationRun::RestoreAll(run) => {
+                run.cancellation.store(true, Ordering::Release);
+                None
+            }
+            ActiveOperationRun::Standard(claim) => {
+                let claim = *claim;
+                self.clear();
+                Some(claim)
+            }
         }
     }
 
@@ -461,7 +503,14 @@ impl CloudBackupSupervisor {
         let operation_id = NEXT_SUPERVISOR_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
         let claim = CloudBackupExclusiveOperationClaim::new(operation, operation_id);
         manager.project_exclusive_operation_started(claim);
-        self.active_operation.start_standard(claim);
+        if operation == CloudBackupExclusiveOperation::Restore {
+            self.active_operation.start_restore(RestoreRun {
+                claim,
+                cancellation: Arc::new(AtomicBool::new(false)),
+            });
+        } else {
+            self.active_operation.start_standard(claim);
+        }
         Some(claim)
     }
 
@@ -529,8 +578,16 @@ impl CloudBackupSupervisor {
     }
 
     fn restore_operation_is_current(&self, claim: CloudBackupExclusiveOperationClaim) -> bool {
-        self.active_operation.is_current(claim)
-            && claim.operation() == CloudBackupExclusiveOperation::Restore
+        let Some(run) = self.active_operation.restore(claim) else { return false };
+
+        !run.cancellation.load(Ordering::Acquire)
+    }
+
+    fn restore_cancellation(
+        &self,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) -> Option<Arc<AtomicBool>> {
+        self.active_operation.restore(claim).map(|run| run.cancellation.clone())
     }
 
     pub async fn ensure_restore_current(
@@ -1247,7 +1304,10 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        let operation = RestoreOperation::new(claim, addr.clone());
+        let cancellation = self
+            .restore_cancellation(claim)
+            .expect("restore claim must carry a cancellation state");
+        let operation = RestoreOperation::new(claim, addr.clone(), cancellation);
         addr.send_fut_with(move |addr| async move {
             tracing::info!("restore_from_cloud_backup: task started");
             match operation.restore_from_cloud_backup(&manager).await {
@@ -1299,7 +1359,11 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        let operation = RestoreOperation::new_with_events(claim, addr.clone(), sender);
+        let cancellation = self
+            .restore_cancellation(claim)
+            .expect("restore claim must carry a cancellation state");
+        let operation =
+            RestoreOperation::new_with_events(claim, addr.clone(), sender, cancellation);
         addr.send_fut_with(move |addr| async move {
             tracing::info!("restore_from_cloud_backup: task started for onboarding");
             match operation.restore_from_cloud_backup(&manager).await {
@@ -1340,27 +1404,25 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn cancel_restore(&mut self) -> ActorResult<()> {
-        let Some(manager) = self.manager() else { return Produces::ok(()) };
         let Some(claim) = self.active_operation.claim() else {
             return Produces::ok(());
         };
-        if claim.operation() != CloudBackupExclusiveOperation::Restore {
+        let Some(run) = self.active_operation.restore(claim) else {
+            return Produces::ok(());
+        };
+
+        if run.cancellation.swap(true, Ordering::AcqRel) {
             return Produces::ok(());
         }
 
-        let status = manager.state.read().status();
-        if !matches!(status, CloudBackupStatus::Restoring) {
-            return Produces::ok(());
-        }
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        self.active_operation.clear();
-        manager.project_exclusive_operation_finished(claim);
         manager.clear_enable_progress_report();
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
         manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(
             &RustCloudBackupManager::load_persisted_state(),
         ));
-        tracing::info!("restore_from_cloud_backup: cancelled active restore");
+        tracing::info!("restore_from_cloud_backup: cancellation requested for active restore");
         Produces::ok(())
     }
 
@@ -1373,18 +1435,11 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn prepare_local_reset_runtime(&mut self) -> ActorResult<()> {
-        if let Some(run) = self.active_operation.0.as_ref()
-            && let ActiveOperationRun::RestoreAll(run) = run
-        {
-            run.cancellation.store(true, Ordering::Release);
-        }
-
-        if let Some(claim) = self.active_operation.claim()
+        if let Some(released_claim) = self.active_operation.prepare_local_reset()
             && let Some(manager) = self.manager()
         {
-            manager.project_exclusive_operation_finished(claim);
+            manager.project_exclusive_operation_finished(released_claim);
         }
-        self.active_operation.clear();
         self.active_sync_request = None;
         self.active_cloud_only_fetch_request = None;
         self.pending_disable_write_drain = None;
@@ -1415,7 +1470,10 @@ pub(crate) mod test_support {
             let claim = self
                 .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore)
                 .expect("begin restore operation");
-            let operation = RestoreOperation::new(claim, addr);
+            let cancellation = self
+                .restore_cancellation(claim)
+                .expect("restore claim must carry a cancellation state");
+            let operation = RestoreOperation::new(claim, addr, cancellation);
             Produces::ok(operation)
         }
 

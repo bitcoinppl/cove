@@ -55,6 +55,8 @@ final class OnboardingBackupViewsTests: XCTestCase {
             .uploadingInitialBackup(progress: progress),
             verificationPresentation: hidden
         )
+        XCTAssertEqual(defaultCopy.title, "Checking for existing backups...")
+        XCTAssertEqual(uploadCopy.title, "Creating your encrypted backup...")
 
         let promptOrDiscoveryStates: [CloudBackupEnableFlow?] = [
             nil,

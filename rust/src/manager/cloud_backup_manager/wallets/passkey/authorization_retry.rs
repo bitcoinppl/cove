@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use backon::{BackoffBuilder as _, ExponentialBuilder, Retryable as _};
@@ -146,6 +147,29 @@ impl PlatformAuthorizationRetrier {
             .await
     }
 
+    async fn retry_with_cancellation<T, Operation, OperationFuture>(
+        &self,
+        operation: Operation,
+        cancellation: &AtomicBool,
+    ) -> Result<T, PasskeyError>
+    where
+        Operation: FnMut() -> OperationFuture,
+        OperationFuture: Future<Output = Result<T, PasskeyError>>,
+    {
+        if cancellation.load(Ordering::Acquire) {
+            return Err(PasskeyError::UserCancelled);
+        }
+
+        let cancellation_for_retry = cancellation;
+        self.retry(operation).await.map_err(|error| {
+            if cancellation_for_retry.load(Ordering::Acquire) {
+                PasskeyError::UserCancelled
+            } else {
+                error
+            }
+        })
+    }
+
     pub(crate) async fn discover(
         &self,
         passkey: &PasskeyAccess,
@@ -165,6 +189,36 @@ impl PlatformAuthorizationRetrier {
                 .await
             }
         })
+        .await
+    }
+
+    pub(crate) async fn discover_with_cancellation(
+        &self,
+        passkey: &PasskeyAccess,
+        prf_salt: [u8; 32],
+        cancellation: &AtomicBool,
+    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
+        self.retry_with_cancellation(
+            || {
+                let passkey = passkey.clone();
+
+                async move {
+                    if cancellation.load(Ordering::Acquire) {
+                        return Err(PasskeyError::UserCancelled);
+                    }
+
+                    unblock::run_blocking(move || {
+                        passkey.discover_and_authenticate_with_prf(
+                            PASSKEY_RP_ID.to_string(),
+                            prf_salt.to_vec(),
+                            random_challenge(),
+                        )
+                    })
+                    .await
+                }
+            },
+            cancellation,
+        )
         .await
     }
 
@@ -209,6 +263,39 @@ impl PlatformAuthorizationRetrier {
                 .await
             }
         })
+        .await
+    }
+
+    pub(crate) async fn authenticate_with_cancellation(
+        &self,
+        passkey: &PasskeyAccess,
+        credential_id: &[u8],
+        prf_salt: [u8; 32],
+        cancellation: &AtomicBool,
+    ) -> Result<Vec<u8>, PasskeyError> {
+        self.retry_with_cancellation(
+            || {
+                let passkey = passkey.clone();
+                let credential_id = credential_id.to_vec();
+
+                async move {
+                    if cancellation.load(Ordering::Acquire) {
+                        return Err(PasskeyError::UserCancelled);
+                    }
+
+                    unblock::run_blocking(move || {
+                        passkey.authenticate_with_prf(
+                            PASSKEY_RP_ID.to_string(),
+                            credential_id,
+                            prf_salt.to_vec(),
+                            random_challenge(),
+                        )
+                    })
+                    .await
+                }
+            },
+            cancellation,
+        )
         .await
     }
 }
