@@ -154,6 +154,32 @@ impl UnsignedTransactionsTable {
         Ok(records)
     }
 
+    /// Remove every unsigned transaction that belongs to a wallet
+    ///
+    /// Wallet deletion owns this call so PSBT data does not outlive its wallet
+    pub(crate) fn delete_by_wallet_id(&self, wallet_id: &WalletId) -> Result<(), Error> {
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
+
+        {
+            let mut by_wallet =
+                write_txn.open_table(BY_WALLET_TABLE).map_err_str(Error::TableAccess)?;
+            let tx_ids = by_wallet
+                .remove(wallet_id)
+                .map_err_str(UnsignedTransactionsTableError::Save)?
+                .map(|value| value.value())
+                .unwrap_or_default();
+
+            let mut main = write_txn.open_table(MAIN_TABLE).map_err_str(Error::TableAccess)?;
+            for tx_id in &tx_ids {
+                main.remove(tx_id).map_err_str(UnsignedTransactionsTableError::Save)?;
+            }
+        }
+
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
+
+        Ok(())
+    }
+
     fn get(&self, key: &TxId) -> Result<Option<UnsignedTransactionRecord>, Error> {
         let read_txn = self.db.begin_read().map_err_str(Error::DatabaseAccess)?;
 
@@ -262,5 +288,35 @@ mod tests {
         assert_eq!(table.delete_tx(&deleted.tx_id).unwrap(), deleted);
         assert_eq!(table.get_by_wallet_id(&wallet_id).unwrap(), vec![kept]);
         assert!(table.delete_tx(&deleted.tx_id).is_err());
+    }
+
+    #[test]
+    fn delete_by_wallet_id_removes_only_that_wallets_records() {
+        let (_tmp, table) = test_table();
+        let deleted = WalletId::preview_new_random();
+        let kept = WalletId::preview_new_random();
+
+        let deleted_records = [record(&deleted), record(&deleted)];
+        for record in &deleted_records {
+            table.save_tx(record.tx_id, record.clone()).unwrap();
+        }
+        let kept_record = record(&kept);
+        table.save_tx(kept_record.tx_id, kept_record.clone()).unwrap();
+
+        table.delete_by_wallet_id(&deleted).unwrap();
+
+        assert!(table.get_by_wallet_id(&deleted).unwrap().is_empty());
+        for record in &deleted_records {
+            assert_eq!(table.get_tx(&record.tx_id).unwrap(), None);
+        }
+        assert_eq!(table.get_by_wallet_id(&kept).unwrap(), vec![kept_record.clone()]);
+        assert_eq!(table.get_tx(&kept_record.tx_id).unwrap(), Some(kept_record));
+    }
+
+    #[test]
+    fn delete_by_wallet_id_is_a_no_op_for_unknown_wallets() {
+        let (_tmp, table) = test_table();
+
+        table.delete_by_wallet_id(&WalletId::preview_new_random()).unwrap();
     }
 }
