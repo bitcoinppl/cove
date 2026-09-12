@@ -1,5 +1,4 @@
 import AuthenticationServices
-import CryptoKit
 
 @_exported import CoveCore
 import Foundation
@@ -30,6 +29,118 @@ enum PasskeyOperationContext: Equatable {
             .authenticateAssertion
         }
     }
+
+    var requestMode: PasskeyRequestMode {
+        switch self {
+        case .registration:
+            .registration
+        case .discoverAssertion:
+            .discovery
+        case .authenticateAssertion:
+            .targeted
+        }
+    }
+}
+
+enum PasskeyRequestMode: String, Equatable {
+    case registration
+    case discovery
+    case targeted
+    case presence
+}
+
+final class PasskeyRequestDiagnostics: @unchecked Sendable {
+    let requestID = UUID()
+    let rpId: String
+    let operation: String
+    let requestMode: PasskeyRequestMode
+
+    private let lock = NSLock()
+    private var nativeSubmissionTime: ContinuousClock.Instant?
+    private var presentationAnchorTime: ContinuousClock.Instant?
+    private var presentationAnchorAvailable: Bool?
+    private var presentationSceneActivation: String?
+    private var completionTime: ContinuousClock.Instant?
+
+    init(rpId: String, operation: String, requestMode: PasskeyRequestMode) {
+        self.rpId = rpId
+        self.operation = operation
+        self.requestMode = requestMode
+    }
+
+    var presentationAnchorRequested: Bool {
+        lock.withLock { presentationAnchorTime != nil }
+    }
+
+    func markNativeSubmission(at time: ContinuousClock.Instant = ContinuousClock.now) {
+        lock.withLock {
+            nativeSubmissionTime = time
+        }
+    }
+
+    func markPresentationAnchorRequest(
+        at time: ContinuousClock.Instant = ContinuousClock.now,
+        isAvailable: Bool? = nil,
+        sceneActivation: String? = nil
+    ) {
+        lock.withLock {
+            if presentationAnchorTime == nil {
+                presentationAnchorTime = time
+                presentationAnchorAvailable = isAvailable
+                presentationSceneActivation = sceneActivation
+            }
+        }
+    }
+
+    func markCompletion(at time: ContinuousClock.Instant = ContinuousClock.now) {
+        lock.withLock {
+            if completionTime == nil {
+                completionTime = time
+            }
+        }
+    }
+
+    func logFields() -> String {
+        lock.withLock {
+            let submissionToAnchor = durationMilliseconds(
+                from: nativeSubmissionTime,
+                to: presentationAnchorTime
+            )
+            let submissionToCompletion = durationMilliseconds(
+                from: nativeSubmissionTime,
+                to: completionTime
+            )
+            let anchorAvailable = presentationAnchorAvailable.map { String($0) } ?? "na"
+            let sceneActivation = presentationSceneActivation ?? "na"
+
+            return "request_id=\(requestID.uuidString) " +
+                "rpId=\(rpId) " +
+                "operation=\(operation) " +
+                "request_mode=\(requestMode.rawValue) " +
+                "submission_to_anchor_ms=\(submissionToAnchor) " +
+                "submission_to_completion_ms=\(submissionToCompletion) " +
+                "presentation_anchor_requested=\(presentationAnchorTime != nil) " +
+                "presentation_anchor_available=\(anchorAvailable) " +
+                "presentation_scene_activation=\(sceneActivation)"
+        }
+    }
+}
+
+private func durationMilliseconds(
+    from start: ContinuousClock.Instant?,
+    to end: ContinuousClock.Instant?
+) -> String {
+    guard let start, let end else { return "na" }
+
+    let components = start.duration(to: end).components
+    let milliseconds = components.seconds * 1000 +
+        components.attoseconds / 1_000_000_000_000_000
+    return String(milliseconds)
+}
+
+func passkeyNSErrorMetadata(_ error: Error) -> String {
+    let nsError = error as NSError
+    return "error_domain=\(nsError.domain) error_code=\(nsError.code)"
 }
 
 func passkeyUnexpectedCredentialError(
@@ -59,14 +170,6 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
                 "PRF output too short: \(count) bytes, need 32"
             }
         }
-    }
-
-    private func credentialSummary(_ credentialId: Data) -> String {
-        let fingerprint = SHA256.hash(data: credentialId)
-            .prefix(6)
-            .map { String(format: "%02x", $0) }
-            .joined()
-        return "len=\(credentialId.count) fingerprint=\(fingerprint)"
     }
 
     /// PRF is guaranteed on iOS 18.4+ (our minimum deployment target)
@@ -126,10 +229,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         )
 
         // passkey authorization requests can present iOS UI, so do not use this for background polling
-        let credentialSummary = credentialSummary(credentialId)
-        Log.info("[PASSKEY] presence check start rpId=\(rpId) credential=\(credentialSummary)")
-
-        let delegate = PasskeyExistenceDelegate()
+        let delegate = PasskeyExistenceDelegate(rpId: rpId)
         let controller: ASAuthorizationController
 
         controller = DispatchQueue.main.sync {
@@ -150,6 +250,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             let ctrl = ASAuthorizationController(authorizationRequests: [request])
             ctrl.delegate = delegate
             ctrl.presentationContextProvider = delegate
+            delegate.diagnostics.markNativeSubmission()
+            Log.info(
+                "[PASSKEY] native request submitted \(delegate.diagnostics.logFields())"
+            )
             ctrl.performRequests(options: .preferImmediatelyAvailableCredentials)
             return ctrl
         }
@@ -160,15 +264,16 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         let gotResult = delegate.semaphore.wait(timeout: .now() + 1.0)
 
         if gotResult == .timedOut {
+            delegate.diagnostics.markCompletion()
             Log.warn(
-                "[PASSKEY] presence check timed out after 1s"
+                "[PASSKEY] \(delegate.diagnostics.logFields()) timed_out_after_s=1"
             )
             DispatchQueue.main.async { controller.cancel() }
             return .indeterminate
         }
 
         Log.info(
-            "[PASSKEY] presence check resolved rpId=\(rpId) credential=\(credentialSummary) presence=\(delegate.presence)"
+            "[PASSKEY] \(delegate.diagnostics.logFields()) presence=\(delegate.presence)"
         )
         return delegate.presence
     }
@@ -199,11 +304,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         challenge: Data,
         user: PasskeyRegistrationUser
     ) throws -> ASAuthorizationPlatformPublicKeyCredentialRegistration {
-        let delegate = PasskeyDelegate(context: .registration)
+        let delegate = PasskeyDelegate(context: .registration, rpId: rpId)
         let controller: ASAuthorizationController
 
         controller = DispatchQueue.main.sync {
-            Log.info("[PASSKEY] registration request start rpId=\(rpId)")
             let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
                 relyingPartyIdentifier: rpId
             )
@@ -222,6 +326,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             let ctrl = ASAuthorizationController(authorizationRequests: [request])
             ctrl.delegate = delegate
             ctrl.presentationContextProvider = delegate
+            delegate.diagnostics.markNativeSubmission()
+            Log.info(
+                "[PASSKEY] native request submitted \(delegate.diagnostics.logFields())"
+            )
             ctrl.performRequests()
             return ctrl
         }
@@ -237,7 +345,9 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             throw passkeyUnexpectedCredentialError(operation: .registration)
         }
 
-        Log.info("[PASSKEY] registration request succeeded credential_len=\(registration.credentialID.count)")
+        Log.info(
+            "[PASSKEY] registration request succeeded \(delegate.diagnostics.logFields())"
+        )
         return registration
     }
 
@@ -294,13 +404,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         challenge: Data,
         context: PasskeyOperationContext
     ) throws -> ASAuthorizationPlatformPublicKeyCredentialAssertion {
-        let delegate = PasskeyDelegate(context: context)
+        let delegate = PasskeyDelegate(context: context, rpId: rpId)
         let controller: ASAuthorizationController
 
         controller = DispatchQueue.main.sync {
-            Log.info(
-                "[PASSKEY] \(context.logDescription) request start rpId=\(rpId) targeted=\(credentialId != nil)"
-            )
             let provider = ASAuthorizationPlatformPublicKeyCredentialProvider(
                 relyingPartyIdentifier: rpId
             )
@@ -326,6 +433,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             let ctrl = ASAuthorizationController(authorizationRequests: [request])
             ctrl.delegate = delegate
             ctrl.presentationContextProvider = delegate
+            delegate.diagnostics.markNativeSubmission()
+            Log.info(
+                "[PASSKEY] native request submitted \(delegate.diagnostics.logFields())"
+            )
             ctrl.performRequests()
             return ctrl
         }
@@ -341,7 +452,9 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             throw passkeyUnexpectedCredentialError(operation: context.operation)
         }
 
-        Log.info("[PASSKEY] \(context.logDescription) request succeeded credential_len=\(assertion.credentialID.count)")
+        Log.info(
+            "[PASSKEY] \(context.logDescription) request succeeded \(delegate.diagnostics.logFields())"
+        )
         return assertion
     }
 
@@ -369,35 +482,77 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
 
 // MARK: - PasskeyDelegate
 
-private func passkeyPresentationAnchor() -> ASPresentationAnchor {
+private struct PasskeyPresentationAnchorResolution {
+    let anchor: ASPresentationAnchor
+    let isAvailable: Bool
+    let sceneActivation: String
+}
+
+private func passkeySceneActivationName(_ state: UIScene.ActivationState?) -> String {
+    guard let state else { return "none" }
+
+    switch state {
+    case .foregroundActive:
+        return "foregroundActive"
+    case .foregroundInactive:
+        return "foregroundInactive"
+    case .background:
+        return "background"
+    case .unattached:
+        return "unattached"
+    @unknown default:
+        return "unknown"
+    }
+}
+
+private func passkeyPresentationAnchor() -> PasskeyPresentationAnchorResolution {
     let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
     let activeScene = scenes.first { $0.activationState == .foregroundActive }
     let foregroundScene = activeScene ?? scenes.first { $0.activationState == .foregroundInactive }
 
+    func resolution(for window: UIWindow?, scene: UIWindowScene?) -> PasskeyPresentationAnchorResolution {
+        guard let window else {
+            return PasskeyPresentationAnchorResolution(
+                anchor: ASPresentationAnchor(),
+                isAvailable: false,
+                sceneActivation: passkeySceneActivationName(
+                    scene?.activationState ?? foregroundScene?.activationState
+                )
+            )
+        }
+
+        return PasskeyPresentationAnchorResolution(
+            anchor: window,
+            isAvailable: true,
+            sceneActivation: passkeySceneActivationName(
+                window.windowScene?.activationState ?? scene?.activationState
+            )
+        )
+    }
+
     if let window = foregroundScene?.windows.first(where: \.isKeyWindow) {
-        return window
+        return resolution(for: window, scene: foregroundScene)
     }
 
     if let window = foregroundScene?.windows.first(where: {
         !$0.isHidden && $0.windowLevel == .normal
     }) {
-        return window
+        return resolution(for: window, scene: foregroundScene)
     }
 
     for scene in scenes {
         if let window = scene.windows.first(where: \.isKeyWindow) {
-            return window
+            return resolution(for: window, scene: scene)
         }
 
         if let window = scene.windows.first(where: {
             !$0.isHidden && $0.windowLevel == .normal
         }) {
-            return window
+            return resolution(for: window, scene: scene)
         }
     }
 
-    Log.warn("[PASSKEY] no foreground presentation anchor found")
-    return ASPresentationAnchor()
+    return resolution(for: nil, scene: foregroundScene)
 }
 
 final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
@@ -410,14 +565,20 @@ final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     private let timeout: TimeInterval
     private var result: Result<ASAuthorizationCredential, Error>?
     private let context: PasskeyOperationContext
-    private var didRequestPresentationAnchor = false
+    let diagnostics: PasskeyRequestDiagnostics
 
     init(
         context: PasskeyOperationContext,
+        rpId: String = "unknown",
         timeout: TimeInterval = PasskeyDelegate.interactiveRequestTimeout
     ) {
         self.context = context
         self.timeout = timeout
+        diagnostics = PasskeyRequestDiagnostics(
+            rpId: rpId,
+            operation: context.requestMode.rawValue,
+            requestMode: context.requestMode
+        )
     }
 
     func waitForResult(
@@ -432,8 +593,9 @@ final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
             )
 
             if complete(with: .failure(timeoutError)) {
+                diagnostics.markCompletion()
                 Log.warn(
-                    "[PASSKEY] \(context.logDescription) timed out after \(timeout)s"
+                    "[PASSKEY] \(diagnostics.logFields()) timed_out_after_s=\(timeout)"
                 )
                 DispatchQueue.main.async(execute: cancelController)
             }
@@ -449,43 +611,52 @@ final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     }
 
     func presentationAnchor(for _: ASAuthorizationController) -> ASPresentationAnchor {
-        lock.withLock {
-            didRequestPresentationAnchor = true
-        }
+        let resolution = passkeyPresentationAnchor()
+        diagnostics.markPresentationAnchorRequest(
+            isAvailable: resolution.isAvailable,
+            sceneActivation: resolution.sceneActivation
+        )
+        Log.info("[PASSKEY] \(diagnostics.logFields())")
 
-        return passkeyPresentationAnchor()
+        return resolution.anchor
     }
 
     func authorizationController(
         controller _: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
-        if complete(with: .success(authorization.credential)) {
-            Log.info("[PASSKEY] \(context.logDescription) completed credential_type=\(type(of: authorization.credential))")
+        diagnostics.markCompletion()
+        guard complete(with: .success(authorization.credential)) else {
+            Log.info("[PASSKEY] \(diagnostics.logFields()) late_callback")
+            return
         }
+
+        Log.info(
+            "[PASSKEY] \(diagnostics.logFields()) completed"
+        )
     }
 
     func authorizationController(
         controller _: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
-        let didRequestPresentationAnchor = lock.withLock {
-            self.didRequestPresentationAnchor
-        }
+        diagnostics.markCompletion()
+        let presentationAnchorRequested = diagnostics.presentationAnchorRequested
         let result: Result<ASAuthorizationCredential, Error>
         let logMessage: String
         let shouldWarn: Bool
+        let errorMetadata = passkeyNSErrorMetadata(error)
 
         switch error as? ASAuthorizationError {
         case let authError?:
             switch passkeyAuthorizationFailure(
                 for: authError.code,
-                didRequestPresentationAnchor: didRequestPresentationAnchor,
-                diagnosticMessage: error.localizedDescription
+                didRequestPresentationAnchor: presentationAnchorRequested,
+                diagnosticMessage: errorMetadata
             ) {
             case .userCancelled:
                 result = .failure(PasskeyError.UserCancelled)
-                logMessage = "[PASSKEY] \(context.logDescription) cancelled code=\(authError.code.rawValue) description=\(error.localizedDescription)"
+                logMessage = "[PASSKEY] \(diagnostics.logFields()) cancelled \(errorMetadata)"
                 shouldWarn = false
             case let .requestFailed(reason):
                 result = .failure(
@@ -494,21 +665,24 @@ final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
                         reason: reason
                     )
                 )
-                logMessage = "[PASSKEY] \(context.logDescription) failed code=\(authError.code.rawValue) requested_ui=\(didRequestPresentationAnchor) description=\(error.localizedDescription)"
+                logMessage = "[PASSKEY] \(diagnostics.logFields()) failed \(errorMetadata)"
                 shouldWarn = true
             }
         case nil:
             result = .failure(
                 PasskeyError.RequestFailed(
                     operation: context.operation,
-                    reason: .unknown(diagnosticMessage: error.localizedDescription)
+                    reason: .unknown(diagnosticMessage: errorMetadata)
                 )
             )
-            logMessage = "[PASSKEY] \(context.logDescription) failed with non-auth error: \(error.localizedDescription)"
+            logMessage = "[PASSKEY] \(diagnostics.logFields()) failed_non_auth \(errorMetadata)"
             shouldWarn = true
         }
 
-        guard complete(with: result) else { return }
+        guard complete(with: result) else {
+            Log.info("[PASSKEY] \(diagnostics.logFields()) late_callback \(errorMetadata)")
+            return
+        }
 
         if shouldWarn {
             Log.warn(logMessage)
@@ -591,19 +765,33 @@ private class PasskeyExistenceDelegate: NSObject, ASAuthorizationControllerDeleg
 {
     let semaphore = DispatchSemaphore(value: 0)
     var presence: PasskeyCredentialPresence = .indeterminate
-    private var didRequestPresentationAnchor = false
+    let diagnostics: PasskeyRequestDiagnostics
+
+    init(rpId: String) {
+        diagnostics = PasskeyRequestDiagnostics(
+            rpId: rpId,
+            operation: PasskeyRequestMode.presence.rawValue,
+            requestMode: .presence
+        )
+    }
 
     func presentationAnchor(for _: ASAuthorizationController) -> ASPresentationAnchor {
-        didRequestPresentationAnchor = true
-        return passkeyPresentationAnchor()
+        let resolution = passkeyPresentationAnchor()
+        diagnostics.markPresentationAnchorRequest(
+            isAvailable: resolution.isAvailable,
+            sceneActivation: resolution.sceneActivation
+        )
+        Log.info("[PASSKEY] \(diagnostics.logFields())")
+        return resolution.anchor
     }
 
     func authorizationController(
         controller _: ASAuthorizationController,
         didCompleteWithAuthorization _: ASAuthorization
     ) {
+        diagnostics.markCompletion()
         presence = .present
-        Log.info("[PASSKEY] presence check authorization succeeded")
+        Log.info("[PASSKEY] \(diagnostics.logFields()) presence=\(presence)")
         semaphore.signal()
     }
 
@@ -611,24 +799,30 @@ private class PasskeyExistenceDelegate: NSObject, ASAuthorizationControllerDeleg
         controller _: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
+        diagnostics.markCompletion()
+        let presentationAnchorRequested = diagnostics.presentationAnchorRequested
+        let errorMetadata = passkeyNSErrorMetadata(error)
+
         if let authError = error as? ASAuthorizationError {
             if authError.code == .notInteractive {
                 presence = .missing
                 Log.info(
-                    "[PASSKEY] presence check classified missing code=\(authError.code.rawValue) requested_ui=\(didRequestPresentationAnchor) description=\(error.localizedDescription)"
+                    "[PASSKEY] \(diagnostics.logFields()) classified=missing \(errorMetadata)"
                 )
-            } else if authError.code == .canceled, !didRequestPresentationAnchor {
+            } else if authError.code == .canceled, !presentationAnchorRequested {
                 presence = .missing
                 Log.info(
-                    "[PASSKEY] presence check classified missing after silent cancellation code=\(authError.code.rawValue) requested_ui=\(didRequestPresentationAnchor) description=\(error.localizedDescription)"
+                    "[PASSKEY] \(diagnostics.logFields()) classified=missing_after_silent_cancellation \(errorMetadata)"
                 )
             } else {
                 Log.warn(
-                    "[PASSKEY] presence check failed with auth error code=\(authError.code.rawValue) requested_ui=\(didRequestPresentationAnchor) description=\(error.localizedDescription)"
+                    "[PASSKEY] \(diagnostics.logFields()) failed \(errorMetadata)"
                 )
             }
         } else {
-            Log.warn("[PASSKEY] presence check failed with non-auth error: \(error.localizedDescription)")
+            Log.warn(
+                "[PASSKEY] \(diagnostics.logFields()) failed_non_auth \(errorMetadata)"
+            )
         }
         semaphore.signal()
     }
