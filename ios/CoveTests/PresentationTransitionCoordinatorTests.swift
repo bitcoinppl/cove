@@ -283,6 +283,40 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testCompetingQueuedPromptCancelsPendingActionAndPresentsPrompt() throws {
+        let coordinator = PresentationTransitionCoordinator<Presentation>()
+        let handoff = PresentationActionHandoff<Presentation, Presentation>()
+        coordinator.present(.first)
+        let transition = try XCTUnwrap(
+            coordinator.dismissCurrentPresentationForTransition()
+        )
+        _ = handoff.stage(
+            action: .sensitive,
+            presentation: .first,
+            transition: transition
+        )
+        coordinator.queue(.second)
+
+        var dispatched: [Presentation] = []
+        XCTAssertTrue(
+            handoff.presenterDidBecomeReady(
+                transition.readinessRequestID,
+                currentPresentation: .first,
+                isHostAvailable: true,
+                using: coordinator
+            ) { dispatched.append($0) }
+        )
+
+        XCTAssertNil(handoff.pendingAction)
+        guard case .second = coordinator.currentPresentation?.item else {
+            return XCTFail("Expected the competing queued prompt after readiness")
+        }
+
+        XCTAssertNil(coordinator.queuedPresentation)
+        XCTAssertTrue(dispatched.isEmpty)
+    }
+
+    @MainActor
     func testHostDisappearanceCancelsPendingAction() throws {
         let coordinator = PresentationTransitionCoordinator<Presentation>()
         let handoff = PresentationActionHandoff<Presentation, Presentation>()

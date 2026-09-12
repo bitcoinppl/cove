@@ -286,7 +286,9 @@ final class PresentationActionHandoff<Presentation: Equatable, Action> {
 
         let canDispatch = pendingAction.presentation == currentPresentation &&
             pendingAction.transition == coordinator.transitionRequest &&
-            isHostAvailable
+            isHostAvailable &&
+            (coordinator.queuedPresentation == nil ||
+                coordinator.queuedPresentation == pendingAction.presentation)
 
         guard canDispatch else {
             self.pendingAction = nil
