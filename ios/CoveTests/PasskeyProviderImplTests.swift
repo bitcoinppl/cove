@@ -69,6 +69,31 @@ final class PasskeyProviderImplTests: XCTestCase {
         XCTAssertFalse(metadata.contains("userInfo"))
     }
 
+    func testNSErrorMetadataIncludesUnderlyingErrorChainWithoutText() {
+        let inner = NSError(
+            domain: "com.apple.AuthenticationServicesCore.ASCAuthorizationError",
+            code: 6,
+            userInfo: [NSLocalizedDescriptionKey: "private inner description"]
+        )
+        let error = NSError(
+            domain: "com.apple.AuthenticationServices.AuthorizationError",
+            code: 1001,
+            userInfo: [
+                NSLocalizedDescriptionKey: "private outer description",
+                NSUnderlyingErrorKey: inner,
+            ]
+        )
+
+        let metadata = passkeyNSErrorMetadata(error)
+
+        XCTAssertEqual(
+            metadata,
+            "error_domain=com.apple.AuthenticationServices.AuthorizationError error_code=1001 "
+                + "underlying=com.apple.AuthenticationServicesCore.ASCAuthorizationError:6"
+        )
+        XCTAssertFalse(metadata.contains("private"))
+    }
+
     func testNonAuthorizationFailureReturnsOnlySanitizedMetadata() {
         let delegate = PasskeyDelegate(context: .discoverAssertion)
         let request = ASAuthorizationPlatformPublicKeyCredentialProvider(
