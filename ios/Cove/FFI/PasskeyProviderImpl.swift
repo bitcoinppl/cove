@@ -138,9 +138,57 @@ private func durationMilliseconds(
     return String(milliseconds)
 }
 
+/// Domain and code for the error and every underlying error, without localized text
+///
+/// AuthenticationServices wraps the credential provider's failure in `NSUnderlyingErrorKey`,
+/// and that inner code is what separates a user cancel from a system-side failure
 func passkeyNSErrorMetadata(_ error: Error) -> String {
     let nsError = error as NSError
-    return "error_domain=\(nsError.domain) error_code=\(nsError.code)"
+    var metadata = "error_domain=\(nsError.domain) error_code=\(nsError.code)"
+
+    let underlying = passkeyUnderlyingErrors(of: nsError)
+    if !underlying.isEmpty {
+        let chain = underlying.map { "\($0.domain):\($0.code)" }.joined(separator: ",")
+        metadata += " underlying=\(chain)"
+    }
+
+    return metadata
+}
+
+private func passkeyUnderlyingErrors(of error: NSError) -> [NSError] {
+    var chain: [NSError] = []
+    var visited = Set<ObjectIdentifier>()
+    var pending = [error]
+
+    while let current = pending.popLast(), chain.count < 8 {
+        guard visited.insert(ObjectIdentifier(current)).inserted else { continue }
+
+        var next: [NSError] = []
+        if let single = current.userInfo[NSUnderlyingErrorKey] as? NSError {
+            next.append(single)
+        }
+        if let multiple = current.userInfo[NSMultipleUnderlyingErrorsKey] as? [NSError] {
+            next.append(contentsOf: multiple)
+        }
+
+        chain.append(contentsOf: next)
+        pending.append(contentsOf: next.reversed())
+    }
+
+    return chain
+}
+
+/// Drop the last references to a finished request on the main thread
+///
+/// The blocking caller otherwise releases the controller off the main thread while
+/// AuthenticationServices is still unwinding its delegate callback for that controller
+private func releasePasskeyRequestOnMain(
+    _ controller: ASAuthorizationController,
+    _ delegate: AnyObject
+) {
+    DispatchQueue.main.async {
+        withExtendedLifetime((controller, delegate)) {}
+    }
 }
 
 func passkeyUnexpectedCredentialError(
@@ -257,6 +305,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             ctrl.performRequests(options: .preferImmediatelyAvailableCredentials)
             return ctrl
         }
+        defer { releasePasskeyRequestOnMain(controller, delegate) }
 
         // .notInteractive returns almost instantly when no credential exists.
         // if iOS doesn't respond quickly enough to prove presence or absence,
@@ -333,6 +382,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             ctrl.performRequests()
             return ctrl
         }
+        defer { releasePasskeyRequestOnMain(controller, delegate) }
 
         let credential = try delegate.waitForResult {
             controller.cancel()
@@ -440,6 +490,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             ctrl.performRequests()
             return ctrl
         }
+        defer { releasePasskeyRequestOnMain(controller, delegate) }
 
         let credential = try delegate.waitForResult {
             controller.cancel()
