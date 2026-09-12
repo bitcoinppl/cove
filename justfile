@@ -155,6 +155,12 @@ alias bir := build-ios-release
 testflight:
     just xtask testflight
 
+# use this when the build number was already bumped and committed
+# [long, external] Archive the current iOS build number and upload to TestFlight without bumping
+[group('build')]
+upload-testflight:
+    just xtask upload-testflight
+
 # [long] Build iOS debug for device
 [group('build')]
 build-ios-debug-device:
