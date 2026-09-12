@@ -251,6 +251,45 @@ final class WalletTransitionTests: XCTestCase {
     }
 
     @MainActor
+    func testClearingWalletManagerInvalidatesInFlightLoad() async throws {
+        let expectedManager = WalletManager(preview: .only)
+        var loadStarted = false
+        var resumeLoad: CheckedContinuation<Void, Never>?
+        let cache = ManagerCache(
+            backgroundScanTaskHandler: BackgroundScanTaskHandler(),
+            loadWalletManager: { _, _ in
+                loadStarted = true
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    resumeLoad = continuation
+                }
+
+                return expectedManager
+            }
+        )
+        let delegate = TestWalletManagerDelegate()
+
+        let load = Task { @MainActor in
+            try await cache.ensureWalletManagerLoaded(id: expectedManager.id, delegate: delegate)
+        }
+        try await waitUntilWalletLoadStarts({ loadStarted }) {
+            load.cancel()
+            resumeLoad?.resume()
+            resumeLoad = nil
+        }
+
+        cache.clearWalletManager()
+        resumeLoad?.resume()
+
+        do {
+            _ = try await load.value
+            XCTFail("cleared wallet load must be cancelled")
+        } catch is CancellationError {}
+
+        XCTAssertNil(cache.cachedWalletManager(id: expectedManager.id))
+        XCTAssertFalse(expectedManager.canApplyReconcileMessages)
+    }
+
+    @MainActor
     func testCurrentWalletLoadReceivesWinnerWhenAnotherWaiterIsStale() async throws {
         let expectedManager = WalletManager(preview: .only)
         var resumeLoad: CheckedContinuation<Void, Never>?
@@ -302,6 +341,34 @@ final class WalletTransitionTests: XCTestCase {
         XCTAssertTrue(expectedManager.canApplyReconcileMessages)
 
         cache.clearWalletManager()
+    }
+
+    @MainActor
+    func testClearingWalletManagerAlsoClearsRelatedSendFlowManager() async throws {
+        let walletManager = WalletManager(preview: .only)
+        let presenter = SendFlowPresenter(
+            routing: TestSendFlowRouting(),
+            manager: walletManager
+        )
+        let sendFlowManager = SendFlowManager(
+            TestSendFlowRustManager(walletId: walletManager.id),
+            presenter: presenter
+        )
+        let cache = ManagerCache(
+            backgroundScanTaskHandler: BackgroundScanTaskHandler(),
+            makeSendFlowManager: { _, _ in sendFlowManager },
+            loadWalletManager: { _, _ in walletManager }
+        )
+
+        _ = try await cache.ensureWalletManagerLoaded(id: walletManager.id, delegate: TestWalletManagerDelegate())
+        _ = try cache.ensureSendFlowManager(walletManager, presenter: presenter)
+
+        cache.clearWalletManager()
+
+        XCTAssertNil(cache.cachedWalletManager(id: walletManager.id))
+        XCTAssertNil(cache.cachedSendFlowManager(id: walletManager.id))
+        XCTAssertFalse(walletManager.canApplyReconcileMessages)
+        XCTAssertFalse(sendFlowManager.canApplyReconcileMessages)
     }
 
     func testRepeatedInvalidationAdvancesWhenCacheIsEmpty() {
