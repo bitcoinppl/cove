@@ -7,7 +7,11 @@
 
 import SwiftUI
 
-@Observable final class PendingWalletManager: PendingWalletManagerReconciler {
+extension WeakReconciler: PendingWalletManagerReconciler where Reconciler == PendingWalletManager {}
+
+@Observable final class PendingWalletManager: AnyReconciler, PendingWalletManagerReconciler {
+    typealias Message = PendingWalletManagerReconcileMessage
+
     private let logger = Log(id: "PendingWalletManager")
     var rust: RustPendingWalletManager
     var numberOfWords: NumberOfBip39Words
@@ -19,7 +23,8 @@ import SwiftUI
 
         self.numberOfWords = numberOfWords
         bip39Words = rust.bip39Words()
-        self.rust.listenForUpdates(reconciler: self)
+        // a strong reconciler would keep every discarded manager and its mnemonic alive
+        self.rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
     func reconcile(message: PendingWalletManagerReconcileMessage) {
@@ -33,6 +38,10 @@ import SwiftUI
                 bip39Words = rust.bip39Words()
             }
         }
+    }
+
+    func reconcileMany(messages: [PendingWalletManagerReconcileMessage]) {
+        messages.forEach(reconcile)
     }
 
     public func dispatch(action: PendingWalletManagerAction) {
