@@ -611,8 +611,8 @@ fn unrecoverable_ordinary_close_requires_process_restart() {
     drop(manager);
 }
 
-#[test]
-fn destructive_preparation_keeps_normal_close_persistence_available() {
+#[tokio::test]
+async fn destructive_preparation_keeps_normal_close_persistence_available() {
     // the actor close path reaches storage; the real bootstrap would block the runtime
     crate::database::test_support::init_test_database();
     let coordinator: &'static WalletLifecycleCoordinator =
@@ -620,27 +620,14 @@ fn destructive_preparation_keeps_normal_close_persistence_available() {
     let (wallet_id, registration_id, manager, registration) = register_preview_wallet(coordinator);
     mark_ordinary_closing(coordinator, registration_id);
 
-    let (result_sender, result_receiver) = std::sync::mpsc::sync_channel(1);
-    let deletion_wallet_id = wallet_id.clone();
-    std::thread::spawn(move || {
-        let result = cove_tokio::try_block_on(coordinator.prepare_wallet_deletion(
-            deletion_wallet_id,
-            ShutdownDeadlineTier::Initial,
-            None,
-        ))
-        .expect("runtime bridge is available");
-        result_sender.send(result.is_ok()).expect("send preparation result");
-    });
+    let mut preparation = std::pin::pin!(coordinator.prepare_wallet_deletion_owned(
+        wallet_id.clone(),
+        ShutdownDeadlineTier::Initial,
+        None,
+    ));
 
-    let reservation_started = (0..100).any(|_| {
-        if coordinator.data.lock().pending_preparation.is_some() {
-            return true;
-        }
-
-        std::thread::sleep(std::time::Duration::from_millis(1));
-        false
-    });
-    assert!(reservation_started, "destructive preparation reserves ownership");
+    assert!(matches!(futures::poll!(preparation.as_mut()), std::task::Poll::Pending));
+    assert!(coordinator.data.lock().pending_preparation.is_some());
     assert_eq!(coordinator.data.lock().phase, CoordinatorPhase::Available);
     assert!(matches!(
         coordinator.reserve_preparation(
@@ -661,11 +648,7 @@ fn destructive_preparation_keeps_normal_close_persistence_available() {
     drop(persistence);
 
     coordinator.finish_ordinary_close(registration_id, OrdinaryCloseOutcome::Retryable);
-    assert!(
-        result_receiver
-            .recv_timeout(std::time::Duration::from_secs(2))
-            .expect("destructive preparation finishes after ordinary close")
-    );
+    preparation.await.expect("destructive preparation finishes after ordinary close");
 
     std::mem::forget(registration);
     drop(manager);
