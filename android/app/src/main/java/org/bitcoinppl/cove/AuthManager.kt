@@ -192,9 +192,7 @@ class AuthManager internal constructor(
     }
 
     internal fun completeMainBiometricAuthentication() {
-        if (isInDecoyMode()) {
-            switchToMainMode()
-        }
+        if (isInDecoyMode() && !switchToMainMode()) return
 
         recordMainCredentialAuthentication()
         unlock()
@@ -260,8 +258,8 @@ class AuthManager internal constructor(
         }
 
     private fun unlockWithMainPin(): UnlockMode {
-        if (Database().globalConfig().isInDecoyMode()) {
-            switchToMainMode()
+        if (Database().globalConfig().isInDecoyMode() && !switchToMainMode()) {
+            return UnlockMode.LOCKED
         }
 
         recordMainCredentialAuthentication()
@@ -387,17 +385,21 @@ class AuthManager internal constructor(
 
     /**
      * switch to main mode from decoy mode
+     *
+     * returns false when the switch failed so callers keep the app locked
+     * instead of unlocking into the decoy projection with the main credential
      */
-    fun switchToMainMode() {
+    fun switchToMainMode(): Boolean =
         try {
             withRust {
                 switchToMainMode()
             }
             resetAppAndSelectWallet()
+            true
         } catch (e: Exception) {
             android.util.Log.e(tag, "failed to switch to main mode", e)
+            false
         }
-    }
 
     override fun reconcile(message: AuthManagerReconcileMessage) {
         logDebug("reconcile: $message")
