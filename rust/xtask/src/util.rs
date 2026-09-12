@@ -55,7 +55,7 @@ pub fn sign_psbt(
     let external_desc = format!("wpkh({}/84'/{}'/0'/0/*)", xprv, coin_type);
     let internal_desc = format!("wpkh({}/84'/{}'/0'/1/*)", xprv, coin_type);
 
-    let wallet = Wallet::create(external_desc.clone(), internal_desc.clone())
+    let wallet = Wallet::create(external_desc.clone(), internal_desc)
         .network(network)
         .create_wallet_no_persist()?;
 
