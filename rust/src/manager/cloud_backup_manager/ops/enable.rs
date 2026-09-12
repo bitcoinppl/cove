@@ -6,6 +6,7 @@ use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::CloudStorage;
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
+use std::time::Instant;
 use tracing::info;
 use zeroize::Zeroizing;
 
@@ -71,18 +72,22 @@ impl RustCloudBackupManager {
             return Ok(CloudBackupEnablePreparation::CreateNew { context });
         }
 
-        let mut namespaces = cloud
-            .list_namespaces()
-            .await
-            .map_err(|error| {
-                blocking_cloud_error(
-                    BlockingCloudStep::Enable,
-                    CloudBackupError::cloud_storage_context(
-                        "could not check for existing cloud backups, please try again when cloud storage is available",
-                        error,
-                    ),
-                )
-            })?;
+        let started_at = Instant::now();
+        let namespaces_result = cloud.list_namespaces().await;
+        info!(
+            "Enable: cloud namespace listing elapsed_ms={} success={}",
+            started_at.elapsed().as_millis(),
+            namespaces_result.is_ok()
+        );
+        let mut namespaces = namespaces_result.map_err(|error| {
+            blocking_cloud_error(
+                BlockingCloudStep::Enable,
+                CloudBackupError::cloud_storage_context(
+                    "could not check for existing cloud backups, please try again when cloud storage is available",
+                    error,
+                ),
+            )
+        })?;
         namespaces.sort();
 
         if namespaces.is_empty() {
@@ -90,10 +95,8 @@ impl RustCloudBackupManager {
         }
 
         info!("Enable: found {} existing namespace(s), attempting recovery", namespaces.len());
-        let passkey_hint = self.best_passkey_hint_for_namespaces(&cloud, &namespaces).await;
-
         let matcher = NamespacePasskeyMatcher::new(&cloud, passkey);
-        let match_outcome = matcher.match_namespaces(&namespaces).await?;
+        let (match_outcome, passkey_hint) = matcher.match_namespaces_with_hint(&namespaces).await?;
         match match_outcome {
             NamespaceMatchOutcome::Matched(matches) => {
                 if matches.is_empty() {
@@ -196,7 +199,14 @@ impl RustCloudBackupManager {
         let existing_namespaces = if has_local_master_key {
             Vec::new()
         } else {
-            cloud.list_namespaces().await.map_err(|error| {
+            let started_at = Instant::now();
+            let namespaces_result = cloud.list_namespaces().await;
+            info!(
+                "Enable (no discovery): cloud namespace listing elapsed_ms={} success={}",
+                started_at.elapsed().as_millis(),
+                namespaces_result.is_ok()
+            );
+            namespaces_result.map_err(|error| {
                 blocking_cloud_error(
                     BlockingCloudStep::Enable,
                     CloudBackupError::cloud_storage_context(
@@ -212,8 +222,8 @@ impl RustCloudBackupManager {
                 "Enable (no discovery): found {} existing namespace(s), waiting for confirmation before creating passkey",
                 existing_namespaces.len()
             );
-            let passkey_hint =
-                self.best_passkey_hint_for_namespaces(&cloud, &existing_namespaces).await;
+            let matcher = NamespacePasskeyMatcher::new(&cloud, PasskeyAccess::global());
+            let passkey_hint = matcher.passkey_hint_for_namespaces(&existing_namespaces).await;
             return Ok(CloudBackupNoDiscoveryEnablePreparation::ExistingBackupFound {
                 context,
                 passkey_hint,
