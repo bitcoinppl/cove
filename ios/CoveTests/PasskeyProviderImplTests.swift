@@ -4,6 +4,95 @@ import CoveCore
 import XCTest
 
 final class PasskeyProviderImplTests: XCTestCase {
+    func testRequestModesDescribeEachNativeOperation() {
+        XCTAssertEqual(PasskeyOperationContext.registration.requestMode, .registration)
+        XCTAssertEqual(PasskeyOperationContext.discoverAssertion.requestMode, .discovery)
+        XCTAssertEqual(PasskeyOperationContext.authenticateAssertion.requestMode, .targeted)
+
+        let presence = PasskeyRequestDiagnostics(
+            rpId: "example.com",
+            operation: PasskeyRequestMode.presence.rawValue,
+            requestMode: .presence
+        )
+        XCTAssertEqual(presence.requestMode, .presence)
+    }
+
+    func testDiagnosticsMeasureMonotonicRequestDurationsAndAnchorState() {
+        let diagnostics = PasskeyRequestDiagnostics(
+            rpId: "example.com",
+            operation: "targeted",
+            requestMode: .targeted
+        )
+        let submission = ContinuousClock.Instant.now
+        let anchor = submission.advanced(by: .milliseconds(12))
+        let completion = submission.advanced(by: .milliseconds(34))
+
+        diagnostics.markNativeSubmission(at: submission)
+        diagnostics.markPresentationAnchorRequest(
+            at: anchor,
+            isAvailable: true,
+            sceneActivation: "foregroundActive"
+        )
+        diagnostics.markCompletion(at: completion)
+
+        let fields = diagnostics.logFields()
+        XCTAssertTrue(fields.contains("request_id="))
+        XCTAssertEqual(fields.components(separatedBy: "rpId=").count, 2)
+        XCTAssertTrue(fields.contains("rpId=example.com"))
+        XCTAssertTrue(fields.contains("operation=targeted"))
+        XCTAssertTrue(fields.contains("request_mode=targeted"))
+        XCTAssertTrue(fields.contains("submission_to_anchor_ms=12"))
+        XCTAssertTrue(fields.contains("submission_to_completion_ms=34"))
+        XCTAssertTrue(fields.contains("presentation_anchor_requested=true"))
+        XCTAssertTrue(fields.contains("presentation_anchor_available=true"))
+        XCTAssertTrue(fields.contains("presentation_scene_activation=foregroundActive"))
+    }
+
+    func testNSErrorMetadataContainsOnlyDomainAndCode() {
+        let error = NSError(
+            domain: "com.example.passkey",
+            code: 42,
+            userInfo: [
+                NSLocalizedDescriptionKey: "private localized description",
+                "private": "private user info",
+            ]
+        )
+
+        let metadata = passkeyNSErrorMetadata(error)
+
+        XCTAssertEqual(
+            metadata,
+            "error_domain=com.example.passkey error_code=42"
+        )
+        XCTAssertFalse(metadata.contains("private"))
+        XCTAssertFalse(metadata.contains("localized"))
+        XCTAssertFalse(metadata.contains("userInfo"))
+    }
+
+    func testNonAuthorizationFailureReturnsOnlySanitizedMetadata() {
+        let delegate = PasskeyDelegate(context: .discoverAssertion)
+        let request = ASAuthorizationPlatformPublicKeyCredentialProvider(
+            relyingPartyIdentifier: "example.com"
+        ).createCredentialAssertionRequest(challenge: Data(count: 32))
+        delegate.authorizationController(
+            controller: ASAuthorizationController(authorizationRequests: [request]),
+            didCompleteWithError: NSError(
+                domain: "com.example.passkey",
+                code: 42,
+                userInfo: [NSLocalizedDescriptionKey: "private localized description"]
+            )
+        )
+
+        XCTAssertThrowsError(try delegate.waitForResult {}) { error in
+            let description = String(describing: error)
+
+            XCTAssertTrue(description.contains("com.example.passkey"))
+            XCTAssertTrue(description.contains("42"))
+            XCTAssertFalse(description.contains("private"))
+            XCTAssertFalse(description.contains("localized"))
+        }
+    }
+
     func testInteractiveRequestTimeoutCancelsOnMainQueueAndReturnsPresentedFailure() {
         let delegate = PasskeyDelegate(context: .registration, timeout: 0.01)
         let cancellation = expectation(description: "controller cancelled")
@@ -49,6 +138,18 @@ final class PasskeyProviderImplTests: XCTestCase {
                 userInfo: [NSLocalizedDescriptionKey: "late callback"]
             )
         )
+        let terminalDiagnostics = delegate.diagnostics.logFields()
+
+        delegate.authorizationController(
+            controller: ASAuthorizationController(authorizationRequests: [request]),
+            didCompleteWithError: NSError(
+                domain: "PasskeyProviderImplTests",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "second late callback"]
+            )
+        )
+
+        XCTAssertEqual(delegate.diagnostics.logFields(), terminalDiagnostics)
 
         XCTAssertThrowsError(
             try delegate.waitForResult {
