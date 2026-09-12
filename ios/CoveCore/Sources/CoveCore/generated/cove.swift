@@ -31720,6 +31720,10 @@ public enum LocalDataResetStage: Equatable, Hashable {
      */
     case walletKeychain
     /**
+     * Persisted KeyTeleport receive session
+     */
+    case keyTeleport
+    /**
      * Orphan BDK stores and wallet-data directories
      */
     case walletArtifacts
@@ -31766,17 +31770,19 @@ public struct FfiConverterTypeLocalDataResetStage: FfiConverterRustBuffer {
 
         case 1: return .walletKeychain
 
-        case 2: return .walletArtifacts
+        case 2: return .keyTeleport
 
-        case 3: return .cloudBackup
+        case 3: return .walletArtifacts
 
-        case 4: return .restoreState
+        case 4: return .cloudBackup
 
-        case 5: return .rootDirectorySync
+        case 5: return .restoreState
 
-        case 6: return .diagnostics
+        case 6: return .rootDirectorySync
 
-        case 7: return .database
+        case 7: return .diagnostics
+
+        case 8: return .database
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -31790,28 +31796,32 @@ public struct FfiConverterTypeLocalDataResetStage: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
 
 
-        case .walletArtifacts:
+        case .keyTeleport:
             writeInt(&buf, Int32(2))
 
 
-        case .cloudBackup:
+        case .walletArtifacts:
             writeInt(&buf, Int32(3))
 
 
-        case .restoreState:
+        case .cloudBackup:
             writeInt(&buf, Int32(4))
 
 
-        case .rootDirectorySync:
+        case .restoreState:
             writeInt(&buf, Int32(5))
 
 
-        case .diagnostics:
+        case .rootDirectorySync:
             writeInt(&buf, Int32(6))
 
 
-        case .database:
+        case .diagnostics:
             writeInt(&buf, Int32(7))
+
+
+        case .database:
+            writeInt(&buf, Int32(8))
 
         }
     }
@@ -40228,6 +40238,14 @@ public enum WalletDeletionStage: Equatable, Hashable {
      */
     case directorySync
     /**
+     * Unsigned transaction rows that belong to the wallet
+     */
+    case unsignedTransactions
+    /**
+     * Selected-wallet references in global config
+     */
+    case walletSelection
+    /**
      * Exact durable metadata rows
      */
     case metadata
@@ -40262,7 +40280,11 @@ public struct FfiConverterTypeWalletDeletionStage: FfiConverterRustBuffer {
 
         case 5: return .directorySync
 
-        case 6: return .metadata
+        case 6: return .unsignedTransactions
+
+        case 7: return .walletSelection
+
+        case 8: return .metadata
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -40292,8 +40314,16 @@ public struct FfiConverterTypeWalletDeletionStage: FfiConverterRustBuffer {
             writeInt(&buf, Int32(5))
 
 
-        case .metadata:
+        case .unsignedTransactions:
             writeInt(&buf, Int32(6))
+
+
+        case .walletSelection:
+            writeInt(&buf, Int32(7))
+
+
+        case .metadata:
+            writeInt(&buf, Int32(8))
 
         }
     }
