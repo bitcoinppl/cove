@@ -4,6 +4,36 @@ import SwiftUI
 import XCTest
 
 final class CloudBackupPresentationCoordinatorTests: XCTestCase {
+    @MainActor
+    func testVerificationActionWaitsForMatchingPresenterReadiness() throws {
+        let transitions = PresentationTransitionCoordinator<CloudBackupRootPresentation>()
+        let handoff =
+            PresentationActionHandoff<CloudBackupRootPresentation, CloudBackupManagerAction>()
+        transitions.present(.verificationPrompt)
+        let transition = try XCTUnwrap(
+            transitions.dismissCurrentPresentationForTransition()
+        )
+        _ = handoff.stage(
+            action: .startVerification(.rootPrompt),
+            presentation: .verificationPrompt,
+            transition: transition
+        )
+        var dispatchedAction: CloudBackupManagerAction?
+
+        XCTAssertNil(dispatchedAction)
+
+        _ = handoff.presenterDidBecomeReady(
+            transition.readinessRequestID,
+            currentPresentation: .verificationPrompt,
+            isHostAvailable: true,
+            using: transitions
+        ) { dispatchedAction = $0 }
+
+        guard case .startVerification(.rootPrompt) = dispatchedAction else {
+            return XCTFail("Expected root-prompt verification after presenter readiness")
+        }
+    }
+
     func testOnboardingPolicySuppressesVerificationPrompt() {
         let context = presentableContext(presentationPolicy: .onboarding)
 

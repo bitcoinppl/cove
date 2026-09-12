@@ -123,4 +123,213 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
             return XCTFail("Expected a stale readiness signal to leave the new presentation active")
         }
     }
+
+    @MainActor
+    func testPendingActionDoesNotDispatchBeforeReadiness() throws {
+        let coordinator = PresentationTransitionCoordinator<Presentation>()
+        let handoff = PresentationActionHandoff<Presentation, Presentation>()
+        coordinator.present(.first)
+        let transition = try XCTUnwrap(
+            coordinator.dismissCurrentPresentationForTransition()
+        )
+        _ = handoff.stage(
+            action: .sensitive,
+            presentation: .first,
+            transition: transition
+        )
+
+        let dispatched: [Presentation] = []
+
+        XCTAssertNotNil(handoff.pendingAction)
+        XCTAssertTrue(dispatched.isEmpty)
+        XCTAssertTrue(coordinator.isAwaitingPresenterReadiness)
+    }
+
+    @MainActor
+    func testPendingActionDispatchesExactlyOnceAfterMatchingReadiness() throws {
+        let coordinator = PresentationTransitionCoordinator<Presentation>()
+        let handoff = PresentationActionHandoff<Presentation, Presentation>()
+        coordinator.present(.first)
+        let transition = try XCTUnwrap(
+            coordinator.dismissCurrentPresentationForTransition()
+        )
+        _ = handoff.stage(
+            action: .sensitive,
+            presentation: .first,
+            transition: transition
+        )
+
+        var dispatched: [Presentation] = []
+        let handled = handoff.presenterDidBecomeReady(
+            transition.readinessRequestID,
+            currentPresentation: .first,
+            isHostAvailable: true,
+            using: coordinator
+        ) { dispatched.append($0) }
+
+        XCTAssertTrue(handled)
+        XCTAssertEqual(dispatched, [.sensitive])
+        XCTAssertNil(coordinator.currentPresentation)
+        XCTAssertNil(coordinator.queuedPresentation)
+
+        _ = handoff.presenterDidBecomeReady(
+            transition.readinessRequestID,
+            currentPresentation: .first,
+            isHostAvailable: true,
+            using: coordinator
+        ) { dispatched.append($0) }
+
+        XCTAssertEqual(dispatched, [.sensitive])
+    }
+
+    @MainActor
+    func testStaleReadinessCancelsPendingAction() throws {
+        let coordinator = PresentationTransitionCoordinator<Presentation>()
+        let handoff = PresentationActionHandoff<Presentation, Presentation>()
+        coordinator.present(.first)
+        let staleTransition = try XCTUnwrap(
+            coordinator.dismissCurrentPresentationForTransition()
+        )
+        _ = handoff.stage(
+            action: .sensitive,
+            presentation: .first,
+            transition: staleTransition
+        )
+
+        coordinator.hostDidDisappear()
+        coordinator.present(.second)
+        coordinator.present(.first)
+        let currentTransition = try XCTUnwrap(coordinator.transitionRequest)
+        var dispatched: [Presentation] = []
+
+        XCTAssertTrue(
+            handoff.presenterDidBecomeReady(
+                staleTransition.readinessRequestID,
+                currentPresentation: .first,
+                isHostAvailable: true,
+                using: coordinator
+            ) { dispatched.append($0) }
+        )
+        XCTAssertNil(handoff.pendingAction)
+        XCTAssertEqual(coordinator.transitionRequest, currentTransition)
+        XCTAssertTrue(dispatched.isEmpty)
+    }
+
+    @MainActor
+    func testUnrelatedReadinessDoesNotCancelPendingAction() throws {
+        let coordinator = PresentationTransitionCoordinator<Presentation>()
+        let handoff = PresentationActionHandoff<Presentation, Presentation>()
+        coordinator.present(.first)
+        let transition = try XCTUnwrap(
+            coordinator.dismissCurrentPresentationForTransition()
+        )
+        _ = handoff.stage(
+            action: .sensitive,
+            presentation: .first,
+            transition: transition
+        )
+
+        var dispatched: [Presentation] = []
+        XCTAssertFalse(
+            handoff.presenterDidBecomeReady(
+                UUID(),
+                currentPresentation: .first,
+                isHostAvailable: true,
+                using: coordinator
+            ) { dispatched.append($0) }
+        )
+        XCTAssertNotNil(handoff.pendingAction)
+        XCTAssertTrue(dispatched.isEmpty)
+
+        XCTAssertTrue(
+            handoff.presenterDidBecomeReady(
+                transition.readinessRequestID,
+                currentPresentation: .first,
+                isHostAvailable: true,
+                using: coordinator
+            ) { dispatched.append($0) }
+        )
+        XCTAssertEqual(dispatched, [.sensitive])
+    }
+
+    @MainActor
+    func testChangedPromptCancelsPendingActionWithoutReopeningOldPrompt() throws {
+        let coordinator = PresentationTransitionCoordinator<Presentation>()
+        let handoff = PresentationActionHandoff<Presentation, Presentation>()
+        coordinator.present(.first)
+        let transition = try XCTUnwrap(
+            coordinator.dismissCurrentPresentationForTransition()
+        )
+        _ = handoff.stage(
+            action: .sensitive,
+            presentation: .first,
+            transition: transition
+        )
+
+        var dispatched: [Presentation] = []
+        XCTAssertTrue(
+            handoff.presenterDidBecomeReady(
+                transition.readinessRequestID,
+                currentPresentation: .second,
+                isHostAvailable: true,
+                using: coordinator
+            ) { dispatched.append($0) }
+        )
+
+        XCTAssertNil(handoff.pendingAction)
+        XCTAssertNil(coordinator.currentPresentation)
+        XCTAssertNil(coordinator.queuedPresentation)
+        XCTAssertTrue(dispatched.isEmpty)
+    }
+
+    @MainActor
+    func testHostDisappearanceCancelsPendingAction() throws {
+        let coordinator = PresentationTransitionCoordinator<Presentation>()
+        let handoff = PresentationActionHandoff<Presentation, Presentation>()
+        coordinator.present(.first)
+        let transition = try XCTUnwrap(
+            coordinator.dismissCurrentPresentationForTransition()
+        )
+        _ = handoff.stage(
+            action: .sensitive,
+            presentation: .first,
+            transition: transition
+        )
+
+        handoff.cancel()
+        coordinator.hostDidDisappear()
+
+        XCTAssertNil(handoff.pendingAction)
+        XCTAssertFalse(coordinator.hasPresentationActivity)
+    }
+
+    @MainActor
+    func testMatchingReadinessDoesNotReopenQueuedOldPrompt() throws {
+        let coordinator = PresentationTransitionCoordinator<Presentation>()
+        let handoff = PresentationActionHandoff<Presentation, Presentation>()
+        coordinator.present(.first)
+        let transition = try XCTUnwrap(
+            coordinator.dismissCurrentPresentationForTransition()
+        )
+        coordinator.queue(.first)
+        _ = handoff.stage(
+            action: .sensitive,
+            presentation: .first,
+            transition: transition
+        )
+
+        var dispatched: [Presentation] = []
+        XCTAssertTrue(
+            handoff.presenterDidBecomeReady(
+                transition.readinessRequestID,
+                currentPresentation: .first,
+                isHostAvailable: true,
+                using: coordinator
+            ) { dispatched.append($0) }
+        )
+
+        XCTAssertEqual(dispatched, [.sensitive])
+        XCTAssertNil(coordinator.currentPresentation)
+        XCTAssertNil(coordinator.queuedPresentation)
+    }
 }
