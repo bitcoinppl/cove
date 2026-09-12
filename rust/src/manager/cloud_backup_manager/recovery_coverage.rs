@@ -135,10 +135,12 @@ fn verification_proof_is_usable(
     matches!(
         (live, persisted),
         (
-            CloudBackupVerificationState::Verified { .. },
+            CloudBackupVerificationState::Verified { .. } | CloudBackupVerificationState::Cancelled,
             PersistedBackupVerificationState::Verified { .. },
         ) | (
-            CloudBackupVerificationState::Verified { .. } | CloudBackupVerificationState::Required,
+            CloudBackupVerificationState::Verified { .. }
+                | CloudBackupVerificationState::Required
+                | CloudBackupVerificationState::Cancelled,
             PersistedBackupVerificationState::Required {
                 reason: PersistedVerificationRequirement::WalletSetChanged,
                 last_verified_at: Some(_),
@@ -159,9 +161,11 @@ mod tests {
         CloudBackupRestoreAllState, CloudBackupSyncState,
         CloudBackupUndecryptableWalletDeletionState, LoadedCloudBackupDetail,
     };
-    use crate::manager::cloud_backup_manager::verify::test_support::apply_startup_integrity_downgrade;
+    use crate::manager::cloud_backup_manager::verify::test_support::{
+        apply_startup_integrity_downgrade, apply_verification_result,
+    };
     use crate::manager::cloud_backup_manager::{
-        CloudBackupOtherBackupsState, CloudBackupVerificationPresentation,
+        CloudBackupOtherBackupsState, CloudBackupVerificationPresentation, DeepVerificationResult,
     };
     use cove_device::cloud_storage::CloudSyncHealth;
 
@@ -472,6 +476,59 @@ mod tests {
             CloudBackupRecoveryCoverage::from_states(&live, &downgraded, "namespace", &[]);
 
         assert!(coverage.needs_backup(&wallet));
+    }
+
+    #[test]
+    fn cancelled_verification_preserves_prior_recovery_coverage() {
+        let wallet = wallet_with_id("wallet-1");
+        let record_id = wallet_record_id(wallet.id.as_ref());
+        let live = cloud_state_with_verification(
+            loaded_detail(
+                CloudBackupInventoryAuthority::ProviderConfirmed,
+                CloudBackupWalletStatus::Confirmed,
+                &record_id,
+            ),
+            CloudBackupVerificationState::Cancelled,
+            CloudSyncHealth::AllUploaded,
+        );
+        let mut wallet_set_changed = persisted_verified_state();
+        wallet_set_changed.mark_verification_required_after_wallet_change(Some(20));
+
+        for persisted in [persisted_verified_state(), wallet_set_changed] {
+            let cancelled =
+                apply_verification_result(&persisted, &DeepVerificationResult::UserCancelled(None));
+
+            assert_eq!(cancelled, persisted);
+            assert!(
+                !CloudBackupRecoveryCoverage::from_states(&live, &cancelled, "namespace", &[])
+                    .needs_backup(&wallet)
+            );
+        }
+    }
+
+    #[test]
+    fn cancelled_live_state_does_not_restore_integrity_invalidated_coverage() {
+        let wallet = wallet_with_id("wallet-1");
+        let record_id = wallet_record_id(wallet.id.as_ref());
+        let persisted =
+            persisted_required_state(PersistedVerificationRequirement::IntegrityIssue, Some(10));
+        let cancelled =
+            apply_verification_result(&persisted, &DeepVerificationResult::UserCancelled(None));
+        let live = cloud_state_with_verification(
+            loaded_detail(
+                CloudBackupInventoryAuthority::ProviderConfirmed,
+                CloudBackupWalletStatus::Confirmed,
+                &record_id,
+            ),
+            CloudBackupVerificationState::Cancelled,
+            CloudSyncHealth::AllUploaded,
+        );
+
+        assert_eq!(cancelled, persisted);
+        assert!(
+            CloudBackupRecoveryCoverage::from_states(&live, &cancelled, "namespace", &[])
+                .needs_backup(&wallet)
+        );
     }
 
     #[test]
