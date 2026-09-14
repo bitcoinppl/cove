@@ -592,33 +592,35 @@ impl RestoreOperation {
     ) -> Result<Vec<(String, DownloadedWalletBackup)>, CloudBackupError> {
         self.ensure_current().await?;
         let mut downloaded_wallets = Vec::with_capacity(wallet_record_ids.len());
-        let mut lookups = stream::iter(
-            wallet_record_ids
-                .iter()
-                .cloned()
-                .map(|record_id| lookup_wallet_backup(reader.clone(), record_id)),
-        )
-        .buffered(CLOUD_BACKUP_IO_CONCURRENCY);
+        let mut failed_wallet_errors = Vec::new();
+        let mut lookups = stream::iter(wallet_record_ids.iter().cloned().enumerate().map(
+            |(index, record_id)| {
+                let reader = reader.clone();
 
-        while let Some((record_id, lookup)) = lookups.next().await {
+                async move { (index, lookup_wallet_backup(reader, record_id).await) }
+            },
+        ))
+        .buffer_unordered(CLOUD_BACKUP_IO_CONCURRENCY);
+
+        while let Some((index, (record_id, lookup))) = lookups.next().await {
             self.ensure_current().await?;
             let record_name = format!("{namespace_id}/{record_id}");
 
             match lookup {
                 Ok(WalletBackupLookup::Found(wallet)) => {
-                    downloaded_wallets.push((record_name.clone(), wallet));
+                    downloaded_wallets.push((index, (record_name, wallet)));
                 }
                 Ok(WalletBackupLookup::NotFound) => {
                     let error = CloudBackupError::NoBackupFound.reader_message();
                     warn!("Failed to download wallet backup: {error}");
                     report.wallets_failed += 1;
-                    report.failed_wallet_errors.push(error);
+                    failed_wallet_errors.push((index, error));
                 }
                 Ok(WalletBackupLookup::UnsupportedVersion(version)) => {
                     warn!("Failed to download wallet backup: unsupported version {version}");
                     let error = CLOUD_BACKUP_COMPATIBILITY_MESSAGE.to_string();
                     report.wallets_failed += 1;
-                    report.failed_wallet_errors.push(error);
+                    failed_wallet_errors.push((index, error));
                 }
                 Err(error) => {
                     if is_provider_wide_interruption(&error) {
@@ -627,7 +629,7 @@ impl RestoreOperation {
                     let error = GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.to_string();
                     warn!("Failed to download wallet backup: {error}");
                     report.wallets_failed += 1;
-                    report.failed_wallet_errors.push(error);
+                    failed_wallet_errors.push((index, error));
                 }
             }
 
@@ -643,7 +645,14 @@ impl RestoreOperation {
 
         self.ensure_current().await?;
 
-        Ok(downloaded_wallets)
+        // completion order must not change which duplicate wallet is restored first
+        downloaded_wallets.sort_by_key(|(index, _)| *index);
+        failed_wallet_errors.sort_by_key(|(index, _)| *index);
+        report
+            .failed_wallet_errors
+            .extend(failed_wallet_errors.into_iter().map(|(_, error)| error));
+
+        Ok(downloaded_wallets.into_iter().map(|(_, wallet)| wallet).collect())
     }
 
     /// Restore via passkey-based namespace matching (fresh device path)
@@ -847,7 +856,109 @@ mod tests {
     use crate::manager::cloud_backup_manager::keychain::{
         CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY,
     };
-    use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
+    use crate::manager::cloud_backup_manager::ops::test_support::{
+        async_test_lock, encrypted_wallet_backup_bytes, ensure_cloud_backup_test_tokio_runtime,
+        new_restore_operation_for_test, reset_cloud_backup_test_state, sample_xpub, test_globals,
+        test_lock, xpub_only_wallet_metadata,
+    };
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn restore_downloads_refill_slots_before_the_first_file_finishes_and_keep_order() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        ensure_cloud_backup_test_tokio_runtime();
+        let manager = RustCloudBackupManager::init();
+        reset_cloud_backup_test_state(&manager, globals);
+
+        let master_key = MasterKey::generate();
+        let namespace = master_key.namespace_id();
+        let mut record_ids = Vec::new();
+        let mut gates = Vec::new();
+        for _ in 0..CLOUD_BACKUP_IO_CONCURRENCY + 2 {
+            let metadata = xpub_only_wallet_metadata();
+            Keychain::global()
+                .save_wallet_xpub(&metadata.id, sample_xpub(&metadata).parse().unwrap())
+                .unwrap();
+
+            let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+            globals.cloud.set_wallet_backup(
+                namespace.clone(),
+                record_id.clone(),
+                encrypted_wallet_backup_bytes(&metadata, &master_key, "revision", 1).await,
+            );
+
+            gates.push(globals.cloud.gate_wallet_backup_download_after_successes(
+                namespace.clone(),
+                record_id.clone(),
+                0,
+            ));
+
+            record_ids.push(record_id);
+        }
+
+        let reader = WalletBackupReader::new(
+            CloudStorage::global_explicit_client(),
+            namespace.clone(),
+            Zeroizing::new(master_key.critical_data_key()),
+        );
+        let operation = new_restore_operation_for_test(&manager).await;
+        let mut report = CloudBackupRestoreReport {
+            wallets_restored: 0,
+            wallets_failed: 0,
+            failed_wallet_errors: Vec::new(),
+            labels_failed_wallet_names: Vec::new(),
+            labels_failed_errors: Vec::new(),
+        };
+        let mut progress = RestoreDownloadProgress { completed: 0, total: record_ids.len() as u32 };
+        let download = operation.download_wallets_for_restore(
+            &reader,
+            &namespace,
+            &record_ids,
+            &mut report,
+            &mut progress,
+        );
+        let release_downloads = async {
+            for gate in &gates[..CLOUD_BACKUP_IO_CONCURRENCY] {
+                gate.wait_until_blocked().await;
+            }
+
+            assert_eq!(
+                globals.cloud.wallet_backup_download_attempt_count(),
+                CLOUD_BACKUP_IO_CONCURRENCY
+            );
+
+            gates[1].release();
+            gates[CLOUD_BACKUP_IO_CONCURRENCY].wait_until_blocked().await;
+            assert_eq!(
+                globals.cloud.wallet_backup_download_attempt_count(),
+                CLOUD_BACKUP_IO_CONCURRENCY + 1
+            );
+
+            gates[CLOUD_BACKUP_IO_CONCURRENCY].release();
+            gates[CLOUD_BACKUP_IO_CONCURRENCY + 1].wait_until_blocked().await;
+
+            for gate in &gates {
+                gate.release();
+            }
+        };
+
+        let (downloaded, ()) = tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::join!(download, release_downloads)
+        })
+        .await
+        .expect("later downloads must start while the first file is blocked");
+        let downloaded = downloaded.unwrap();
+
+        assert_eq!(
+            downloaded.iter().map(|(record_name, _)| record_name.clone()).collect::<Vec<_>>(),
+            record_ids
+                .iter()
+                .map(|record_id| format!("{namespace}/{record_id}"))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(progress.completed, record_ids.len() as u32);
+        assert_eq!(report.wallets_failed, 0);
+    }
 
     #[test]
     fn restore_keychain_save_rolls_back_metadata_when_master_key_save_fails() {
