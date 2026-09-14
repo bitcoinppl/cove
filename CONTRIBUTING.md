@@ -48,10 +48,14 @@ Set `ASC_API_KEY_PATH`, `ASC_API_KEY_ID`, and `ASC_API_ISSUER_ID`. The API key m
 ### Android
 
 ```bash
-just build-android-release    # alias: just bar
+just release-android    # alias: just rela
 ```
 
-Then build a signed APK/AAB via Android Studio (Build → Generate Signed Bundle/APK).
+This bumps the Android versionCode, rebuilds the release Android bindings, builds the signed Play bundle, and uploads it to Google Play internal testing.
+
+Set `GOOGLE_PLAY_JSON_KEY_PATH` to a readable Google Play service account JSON file. Install fastlane (`brew install fastlane`). The service account must have access to testing releases for `org.bitcoinppl.cove`.
+
+Use `just upload-google-play` (`just ugp`) when the versionCode was already bumped and the signed bundle already exists.
 
 ## Development Workflow
 
