@@ -37,6 +37,8 @@ If you need one subdirectory, start with the appropriate iCloud scope and narrow
 
 Cove owns one main-actor metadata query for the lifetime of the process. The query searches the ubiquitous data scope, publishes value snapshots to async consumers, and remains running so later `didUpdate` events can satisfy upload-confirmation checks, downloads, listings, and sync-health checks. Do not create short-lived queries for individual operations or call `stop()` during normal app operation. Tearing down a query while CloudDocs is delivering progress notifications can race inside `NSMetadataQuery` cleanup.
 
+Complete listings reuse a metadata generation that has already completed the required quiet interval. A later metadata event invalidates that settled generation, so the next complete listing waits for stability again.
+
 The initial result is authoritative only after `NSMetadataQueryDidFinishGathering`. Updates received while gathering may reveal an item early, but an empty partial snapshot must not be interpreted as proof that an item is absent. A transient `start()` failure is not process-fatal: the shared index surfaces it to the operation that attempted startup and permits a later consumer to retry.
 
 ### Cold start timing
