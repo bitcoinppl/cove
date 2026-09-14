@@ -150,13 +150,6 @@ alias bir := build-ios-release
 
 # keep this path aligned with Xcode archives; passkeys fail in TestFlight if CLI signing diverges
 # xtask verifies Apple's AASA CDN before upload
-# [long, external] Bump and upload to TestFlight, copy previous test notes, and add to me-only
-[group('build')]
-testflight:
-    just xtask testflight
-
-alias tf := testflight
-
 # use this when the build number was already bumped and committed
 # [long, external] Upload to TestFlight without bumping, copy previous test notes, and add to me-only
 [group('build')]
@@ -413,12 +406,17 @@ fix *flags="":
 bump type targets="":
     just xtask bump-version {{ type }} {{ if targets != "" { "--targets " + targets } else { "" } }}
 
-# testflight already bumps the iOS build number and builds release bindings
-# [long, external] Bump and upload to TestFlight, copy previous test notes, and add to me-only
+# keep the increased build number on failure because Apple may have accepted the upload
+# [long, external] Bump iOS build, rebuild release bindings, and upload to TestFlight
 [group('release')]
-release-ios: testflight
+release-ios:
+    just bump build ios
+    just bir
+    just upload-testflight
 
 alias reli := release-ios
+alias tf := release-ios
+alias testflight := release-ios
 
 # keep the increased build number on failure because Google may have accepted the upload
 # [long, external] Bump Android build, build signed artifacts, and release to Google Play internal testing
