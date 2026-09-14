@@ -74,6 +74,22 @@ enum Commands {
     #[command(name = "bundle-android")]
     BundleAndroid,
 
+    /// Bump, build signed artifacts, and upload to Google Play internal testing
+    #[command(name = "release-android")]
+    ReleaseAndroid {
+        /// Google Play service account JSON key file path
+        #[arg(long, env = "GOOGLE_PLAY_JSON_KEY_PATH")]
+        json_key_path: Option<String>,
+    },
+
+    /// Upload the existing signed Android bundle to Google Play internal testing without bumping
+    #[command(name = "upload-google-play")]
+    UploadGooglePlay {
+        /// Google Play service account JSON key file path
+        #[arg(long, env = "GOOGLE_PLAY_JSON_KEY_PATH")]
+        json_key_path: Option<String>,
+    },
+
     /// Download Android screenshots into _scratch and delete them from the device
     #[command(name = "download-android-screenshots")]
     DownloadAndroidScreenshots,
@@ -349,6 +365,16 @@ fn main() -> Result<()> {
 
         Commands::BundleAndroid => android::bundle_android(cli.verbose),
 
+        Commands::ReleaseAndroid { json_key_path } => {
+            let options = android::GooglePlayUploadOptions::new(json_key_path);
+            android::release_android(options, cli.verbose)
+        }
+
+        Commands::UploadGooglePlay { json_key_path } => {
+            let options = android::GooglePlayUploadOptions::new(json_key_path);
+            android::upload_google_play(options, cli.verbose)
+        }
+
         Commands::DownloadAndroidScreenshots => android::download_android_screenshots(),
 
         Commands::AndroidStayAwake { command } => android::run_with_stay_awake(&command),
@@ -523,5 +549,35 @@ mod tests {
         };
 
         assert_eq!(device, ["main", "sim"]);
+    }
+
+    #[test]
+    fn release_android_reads_json_key_path() {
+        let cli =
+            Cli::try_parse_from(["xtask", "release-android", "--json-key-path", "/tmp/play.json"])
+                .expect("release-android should parse");
+
+        let Commands::ReleaseAndroid { json_key_path } = cli.command else {
+            panic!("expected release-android command");
+        };
+
+        assert_eq!(json_key_path.as_deref(), Some("/tmp/play.json"));
+    }
+
+    #[test]
+    fn upload_google_play_reads_json_key_path() {
+        let cli = Cli::try_parse_from([
+            "xtask",
+            "upload-google-play",
+            "--json-key-path",
+            "/tmp/play.json",
+        ])
+        .expect("upload-google-play should parse");
+
+        let Commands::UploadGooglePlay { json_key_path } = cli.command else {
+            panic!("expected upload-google-play command");
+        };
+
+        assert_eq!(json_key_path.as_deref(), Some("/tmp/play.json"));
     }
 }
