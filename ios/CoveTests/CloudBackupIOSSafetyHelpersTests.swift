@@ -408,6 +408,163 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertEqual(secondRecords, [record])
         XCTAssertEqual(source.startCount, 1)
     }
+}
+
+extension CloudBackupIOSSafetyHelpersTests {
+    @MainActor
+    func testMetadataIndexDoesNotSettleBeforeInitialGatheringFinishes() async throws {
+        let source = MetadataQuerySourceSpy()
+        let settleSleep = MetadataSettleSleepSpy(blockedCalls: [1])
+        let index = ICloudMetadataIndex(
+            source: source,
+            settleSleep: { duration in try await settleSleep.sleep(for: duration) }
+        )
+        let record = metadataRecord(name: "master-key.json", parentPath: "/cloud/namespace")
+        let request = Task {
+            try await index.settledRecords(timeout: 1, settleInterval: 0.5)
+        }
+
+        await source.waitUntilStarted()
+        XCTAssertEqual(settleSleep.durations, [])
+
+        source.send(.finishedGathering([record]))
+        await settleSleep.waitUntilCalled(count: 1)
+        settleSleep.resume(call: 1)
+
+        let records = try await request.value
+        XCTAssertEqual(records, [record])
+        XCTAssertEqual(settleSleep.durations, [0.5])
+    }
+
+    @MainActor
+    func testMetadataIndexReusesStrongestSettledGeneration() async throws {
+        let source = MetadataQuerySourceSpy()
+        let settleSleep = MetadataSettleSleepSpy(blockedCalls: [1])
+        let index = ICloudMetadataIndex(
+            source: source,
+            settleSleep: { duration in try await settleSleep.sleep(for: duration) }
+        )
+        let record = metadataRecord(name: "master-key.json", parentPath: "/cloud/namespace")
+        let initial = Task {
+            try await index.settledRecords(timeout: 1, settleInterval: 0.5)
+        }
+
+        await source.waitUntilStarted()
+        source.send(.finishedGathering([record]))
+        await settleSleep.waitUntilCalled(count: 1)
+        settleSleep.resume(call: 1)
+        _ = try await initial.value
+
+        let weakerRecords = try await index.settledRecords(timeout: 1, settleInterval: 0.25)
+        let equalRecords = try await index.settledRecords(timeout: 1, settleInterval: 0.5)
+
+        XCTAssertEqual(weakerRecords, [record])
+        XCTAssertEqual(equalRecords, [record])
+        XCTAssertEqual(settleSleep.durations, [0.5])
+
+        let strongerRecords = try await index.settledRecords(timeout: 1, settleInterval: 0.75)
+
+        XCTAssertEqual(strongerRecords, [record])
+        XCTAssertEqual(settleSleep.durations, [0.5, 0.75])
+    }
+
+    @MainActor
+    func testMetadataIndexDoesNotCacheTruncatedWaitAsFullInterval() async throws {
+        let source = MetadataQuerySourceSpy()
+        let settleSleep = MetadataSettleSleepSpy(blockedCalls: [])
+        let index = ICloudMetadataIndex(
+            source: source,
+            settleSleep: { duration in try await settleSleep.sleep(for: duration) }
+        )
+        let record = metadataRecord(name: "master-key.json", parentPath: "/cloud/namespace")
+        let initial = Task {
+            try await index.settledRecords(timeout: 5, settleInterval: 10)
+        }
+
+        await source.waitUntilStarted()
+        source.send(.finishedGathering([record]))
+        _ = try await initial.value
+
+        XCTAssertEqual(settleSleep.durations.count, 1)
+        XCTAssertLessThan(try XCTUnwrap(settleSleep.durations.first), 10)
+
+        let fullySettled = try await index.settledRecords(timeout: 20, settleInterval: 10)
+
+        XCTAssertEqual(fullySettled, [record])
+        XCTAssertEqual(settleSleep.durations.count, 2)
+        XCTAssertEqual(settleSleep.durations.last, 10)
+    }
+
+    @MainActor
+    func testMetadataIndexDoesNotCacheCancelledSettleWait() async throws {
+        let source = MetadataQuerySourceSpy()
+        let settleSleep = MetadataSettleSleepSpy(blockedCalls: [1])
+        let index = ICloudMetadataIndex(
+            source: source,
+            settleSleep: { duration in try await settleSleep.sleep(for: duration) }
+        )
+        let record = metadataRecord(name: "master-key.json", parentPath: "/cloud/namespace")
+        let cancelled = Task {
+            try await index.settledRecords(timeout: 1, settleInterval: 0.5)
+        }
+
+        await source.waitUntilStarted()
+        source.send(.finishedGathering([record]))
+        await settleSleep.waitUntilCalled(count: 1)
+        cancelled.cancel()
+
+        do {
+            _ = try await cancelled.value
+            XCTFail("expected cancellation")
+        } catch is CancellationError {
+        } catch {
+            XCTFail("expected CancellationError, got \(error)")
+        }
+
+        let settled = try await index.settledRecords(timeout: 1, settleInterval: 0.5)
+
+        XCTAssertEqual(settled, [record])
+        XCTAssertEqual(settleSleep.durations, [0.5, 0.5])
+    }
+
+    @MainActor
+    func testMetadataIndexInvalidatesSettledGenerationOnUpdates() async throws {
+        let source = MetadataQuerySourceSpy()
+        let settleSleep = MetadataSettleSleepSpy(blockedCalls: [1, 2])
+        let index = ICloudMetadataIndex(
+            source: source,
+            settleSleep: { duration in try await settleSleep.sleep(for: duration) }
+        )
+        let initialRecord = metadataRecord(
+            name: "master-key.json",
+            parentPath: "/cloud/namespace"
+        )
+        let firstUpdate = metadataRecord(name: "wallet-1.json", parentPath: "/cloud/namespace")
+        let secondUpdate = metadataRecord(name: "wallet-2.json", parentPath: "/cloud/namespace")
+        let initial = Task {
+            try await index.settledRecords(timeout: 1, settleInterval: 0.5)
+        }
+
+        await source.waitUntilStarted()
+        source.send(.finishedGathering([initialRecord]))
+        await settleSleep.waitUntilCalled(count: 1)
+        settleSleep.resume(call: 1)
+        _ = try await initial.value
+
+        source.send(.updated([firstUpdate]))
+        let refreshed = Task {
+            try await index.settledRecords(timeout: 1, settleInterval: 0.5)
+        }
+        await settleSleep.waitUntilCalled(count: 2)
+
+        source.send(.updated([secondUpdate]))
+        settleSleep.resume(call: 2)
+        await settleSleep.waitUntilCalled(count: 3)
+
+        let records = try await refreshed.value
+        XCTAssertEqual(records, [secondUpdate])
+        XCTAssertEqual(settleSleep.durations, [0.5, 0.5, 0.5])
+    }
 
     @MainActor
     func testMetadataIndexWaitsForAnItemPublishedByLaterUpdate() async throws {
@@ -1129,6 +1286,64 @@ private final class MetadataQuerySourceSpy: ICloudMetadataQuerySource {
     }
 
     private var startWaiters: [(count: Int, expectation: XCTestExpectation)] = []
+}
+
+@MainActor
+private final class MetadataSettleSleepSpy {
+    private let blockedCalls: Set<Int>
+    private var continuations: [Int: CheckedContinuation<Void, Error>] = [:]
+    private var callWaiters: [(count: Int, expectation: XCTestExpectation)] = []
+    private(set) var durations: [TimeInterval] = []
+
+    init(blockedCalls: Set<Int>) {
+        self.blockedCalls = blockedCalls
+    }
+
+    func sleep(for duration: TimeInterval) async throws {
+        try Task.checkCancellation()
+        durations.append(duration)
+        let call = durations.count
+        callWaiters
+            .filter { $0.count <= call }
+            .forEach { $0.expectation.fulfill() }
+        callWaiters.removeAll { $0.count <= call }
+
+        guard blockedCalls.contains(call) else { return }
+
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                continuations[call] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.cancel(call: call)
+            }
+        }
+    }
+
+    func waitUntilCalled(count: Int, timeout: TimeInterval = 1) async {
+        guard durations.count < count else { return }
+
+        let expectation = XCTestExpectation(description: "metadata settle sleep call \(count)")
+        callWaiters.append((count, expectation))
+
+        let result = await XCTWaiter.fulfillment(of: [expectation], timeout: timeout)
+        callWaiters.removeAll { $0.expectation === expectation }
+
+        XCTAssertEqual(
+            result,
+            .completed,
+            "metadata settle sleep reached \(durations.count) of \(count) expected call(s)"
+        )
+    }
+
+    func resume(call: Int) {
+        continuations.removeValue(forKey: call)?.resume()
+    }
+
+    private func cancel(call: Int) {
+        continuations.removeValue(forKey: call)?.resume(throwing: CancellationError())
+    }
 }
 
 private final class SilentNamespaceProbeTestState: @unchecked Sendable {

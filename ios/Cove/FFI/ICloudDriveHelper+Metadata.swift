@@ -163,6 +163,8 @@ enum ICloudMetadataIndexError: Error, Equatable {
     case timedOut
 }
 
+typealias ICloudMetadataSettleSleep = @MainActor @Sendable (TimeInterval) async throws -> Void
+
 @MainActor
 final class ICloudMetadataIndex {
     static let shared = ICloudMetadataIndex(source: FoundationICloudMetadataQuerySource())
@@ -184,16 +186,33 @@ final class ICloudMetadataIndex {
         let timeoutTask: Task<Void, Never>
     }
 
+    private struct SettledGeneration {
+        let generation: UInt64
+        let interval: TimeInterval
+
+        func satisfies(generation: UInt64, interval: TimeInterval) -> Bool {
+            self.generation == generation && self.interval >= interval
+        }
+    }
+
     private let source: ICloudMetadataQuerySource
+    private let settleSleep: ICloudMetadataSettleSleep
     private var phase = Phase.idle
     private var records: [ICloudMetadataRecord] = []
     private var generation: UInt64 = 0
+    private var settledGeneration: SettledGeneration?
     private var snapshotWaiters: [UUID: SnapshotWaiter] = [:]
     private var itemWaiters: [UUID: ItemWaiter] = [:]
     private var observers: [UUID: @MainActor @Sendable () -> Void] = [:]
 
-    init(source: ICloudMetadataQuerySource) {
+    init(
+        source: ICloudMetadataQuerySource,
+        settleSleep: @escaping ICloudMetadataSettleSleep = { duration in
+            try await Task.sleep(for: .seconds(duration))
+        }
+    ) {
         self.source = source
+        self.settleSleep = settleSleep
     }
 
     func currentOrInitialRecords(timeout: TimeInterval) async throws -> [ICloudMetadataRecord] {
@@ -215,15 +234,33 @@ final class ICloudMetadataIndex {
         let deadline = Date().addingTimeInterval(timeout)
         _ = try await currentOrInitialRecords(timeout: timeout)
 
+        try Task.checkCancellation()
+        guard deadline.timeIntervalSinceNow > 0 else {
+            throw ICloudMetadataIndexError.timedOut
+        }
+
+        if settledGeneration?.satisfies(generation: generation, interval: settleInterval) == true {
+            return records
+        }
+
         while true {
             try Task.checkCancellation()
             let observedGeneration = generation
             let remaining = deadline.timeIntervalSinceNow
             guard remaining > 0 else { throw ICloudMetadataIndexError.timedOut }
 
-            try await Task.sleep(for: .seconds(min(settleInterval, remaining)))
+            let quietInterval = min(settleInterval, remaining)
+            try await settleSleep(quietInterval)
+            try Task.checkCancellation()
             guard generation == observedGeneration else { continue }
 
+            let priorInterval = settledGeneration.flatMap { settled in
+                settled.generation == observedGeneration ? settled.interval : nil
+            } ?? 0
+            settledGeneration = SettledGeneration(
+                generation: observedGeneration,
+                interval: max(priorInterval, quietInterval)
+            )
             return records
         }
     }
@@ -341,6 +378,7 @@ final class ICloudMetadataIndex {
         }
 
         generation &+= 1
+        settledGeneration = nil
         resumeMatchingItemWaiters()
 
         for observer in observers.values {
