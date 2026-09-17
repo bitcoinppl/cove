@@ -1784,3 +1784,175 @@ async fn restore_fails_when_all_listed_wallet_backups_are_missing() {
         PersistedCloudBackupStatus::Disabled
     );
 }
+
+/// The raw stored values, so adopting an item is distinguishable from rewriting it
+fn raw_wallet_keychain_entries(
+    globals: &TestGlobals,
+    wallet_id: &cove_types::WalletId,
+) -> Vec<Option<String>> {
+    [
+        "::wallet_mnemonic",
+        "::wallet_mnemonic_encryption_key_and_nonce",
+        "::wallet_xpub",
+        "::wallet_public_descriptor",
+    ]
+    .iter()
+    .map(|suffix| globals.keychain.get_entry(&format!("{wallet_id}{suffix}")))
+    .collect()
+}
+
+/// A hot wallet whose keychain items survived an app reinstall that removed the database
+fn hot_wallet_with_surviving_keychain_items() -> WalletMetadata {
+    use crate::wallet_secret::WalletSecretExt as _;
+
+    let mut metadata = WalletMetadata::preview_new();
+    metadata.wallet_type = WalletType::Hot;
+
+    // a seed of its own, so this wallet cannot be mistaken for the xpub-only fixture
+    let mnemonic =
+        bip39::Mnemonic::parse("zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong").unwrap();
+    let secret = cove_device::keychain::WalletSecret::Mnemonic(mnemonic);
+    let xpub = secret.xpub(metadata.network);
+    let descriptors = secret.clone().into_descriptors(metadata.network, metadata.address_type);
+    let keychain = Keychain::global();
+
+    // the identity set treats two wallets with one fingerprint as duplicates
+    metadata.master_fingerprint =
+        Some(Arc::new(crate::wallet::fingerprint::Fingerprint::from(xpub.fingerprint())));
+    keychain.save_wallet_xpub(&metadata.id, xpub).unwrap();
+    keychain
+        .save_public_descriptor(
+            &metadata.id,
+            descriptors.external.extended_descriptor.clone(),
+            descriptors.internal.extended_descriptor,
+        )
+        .unwrap();
+    keychain.save_wallet_secret(&metadata.id, secret).unwrap();
+
+    metadata
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_after_reinstall_adopts_surviving_keychain_items() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+    globals
+        .cloud
+        .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted_master).unwrap());
+    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();
+
+    let hot_wallet = hot_wallet_with_surviving_keychain_items();
+    let xpub_wallet = xpub_only_wallet_metadata();
+    Keychain::global()
+        .save_wallet_xpub(&xpub_wallet.id, sample_xpub(&xpub_wallet).parse().unwrap())
+        .unwrap();
+
+    let mut wallet_files = Vec::new();
+    for wallet in [&hot_wallet, &xpub_wallet] {
+        let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+        // this fixture keeps the keychain items, which is what a reinstall leaves behind
+        globals.cloud.set_wallet_backup(
+            namespace.clone(),
+            record_id.clone(),
+            encrypted_reinstalled_wallet_backup_bytes(wallet, &master_key, "reinstall-revision", 2)
+                .await,
+        );
+        wallet_files.push(wallet_filename_from_record_id(&record_id));
+    }
+    globals.cloud.set_wallet_files(namespace, wallet_files);
+
+    let before = [
+        raw_wallet_keychain_entries(globals, &hot_wallet.id),
+        raw_wallet_keychain_entries(globals, &xpub_wallet.id),
+    ];
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
+
+    assert_eq!(
+        (report.wallets_restored, report.wallets_failed, report.failed_wallet_errors.clone()),
+        (2, 0, Vec::new())
+    );
+    assert_eq!(
+        [
+            raw_wallet_keychain_entries(globals, &hot_wallet.id),
+            raw_wallet_keychain_entries(globals, &xpub_wallet.id),
+        ],
+        before
+    );
+    for wallet in [&hot_wallet, &xpub_wallet] {
+        assert!(
+            Database::global()
+                .wallets()
+                .get(&wallet.id, wallet.network, wallet.wallet_mode)
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    let second_operation = new_restore_operation_for_test(&manager).await;
+    let second_report = second_operation.restore_from_cloud_backup(&manager).await.unwrap();
+
+    assert_eq!(second_report.wallets_restored, 0);
+    assert_eq!(second_report.wallets_failed, 0);
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_keeps_the_conflict_category_when_every_wallet_conflicts() {
+    use crate::mnemonic::MnemonicExt as _;
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+    globals
+        .cloud
+        .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted_master).unwrap());
+    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();
+
+    let wallet = xpub_only_wallet_metadata();
+    Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        record_id.clone(),
+        encrypted_reinstalled_wallet_backup_bytes(&wallet, &master_key, "conflict-revision", 2)
+            .await,
+    );
+    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+
+    // the surviving keychain xpub belongs to another seed, so it cannot be adopted
+    let unrelated_xpub =
+        bip39::Mnemonic::parse("zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong")
+            .unwrap()
+            .xpub(wallet.network.into());
+    Keychain::global().save_wallet_xpub(&wallet.id, unrelated_xpub).unwrap();
+    let before = raw_wallet_keychain_entries(globals, &wallet.id);
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();
+
+    assert!(matches!(
+        error,
+        CloudBackupError::LocalWalletConflict(crate::backup::import::LocalWalletConflict::Mismatch)
+    ));
+    assert_eq!(raw_wallet_keychain_entries(globals, &wallet.id), before);
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+}
