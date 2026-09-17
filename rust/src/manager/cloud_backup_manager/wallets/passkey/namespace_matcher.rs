@@ -377,6 +377,12 @@ impl NamespacePasskeyMatchSession {
                     let discovered = match discovery {
                         Ok(discovered) => discovered,
                         Err(PasskeyError::UserCancelled) => {
+                            // the platform reports a cancellation and an authenticator failure
+                            // the same way, so record what the attempt looked like
+                            info!(
+                                "Passkey discovery cancelled elapsed_ms={} underlying_error=none",
+                                started_at.elapsed().as_millis()
+                            );
                             return Ok(NamespaceMatchSnapshotOutcome::UserDeclined);
                         }
                         Err(PasskeyError::NoCredentialFound) => {

@@ -40,6 +40,7 @@ pub(crate) const CLOUD_BACKUP_COMPATIBILITY_MESSAGE: &str =
     "This cloud backup was created by an unsupported version of Cove.";
 const CLOUD_BACKUP_WALLET_SUPPORT_MESSAGE: &str =
     "This cloud backup contains a wallet this version of Cove can't restore.";
+const PASSKEY_REQUEST_INCOMPLETE_MESSAGE: &str = "The passkey request did not complete. Try again.";
 const LOCAL_WALLET_MISMATCH_MESSAGE: &str = concat!(
     "Cove unlocked your backup, but some saved wallet data on this iPhone does not match it. ",
     "Cove kept that data unchanged."
@@ -464,7 +465,7 @@ impl CloudBackupError {
                     operation: PasskeyOperation::Registration,
                     reason: PasskeyFailureReason::DeviceNotConfigured,
                 }) => ANDROID_PASSKEY_ASSOCIATION_MESSAGE.into(),
-                Some(PasskeyError::UserCancelled) => Self::PasskeyDiscoveryCancelled.to_string(),
+                Some(PasskeyError::UserCancelled) => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
                 Some(PasskeyError::NoCredentialFound) => PASSKEY_NOT_FOUND_MESSAGE.into(),
                 Some(PasskeyError::PrfUnsupportedProvider) => {
                     UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE.into()
@@ -488,10 +489,10 @@ impl CloudBackupError {
             Self::LocalWalletConflict(LocalWalletConflict::Unreadable) => {
                 LOCAL_WALLET_UNREADABLE_MESSAGE.into()
             }
-            Self::PasskeyMismatch
-            | Self::NoBackupFound
-            | Self::PasskeyDiscoveryCancelled
-            | Self::Cancelled => self.to_string(),
+            // a bare platform cancellation does not prove the reader cancelled, so the
+            // copy states the outcome instead of claiming intent
+            Self::PasskeyDiscoveryCancelled => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
+            Self::PasskeyMismatch | Self::NoBackupFound | Self::Cancelled => self.to_string(),
         }
     }
 }
@@ -618,7 +619,11 @@ mod tests {
         let unsupported =
             CloudBackupError::from(PasskeyError::PrfUnsupportedProvider).reader_message();
 
-        assert_eq!(cancellation, CloudBackupError::PasskeyDiscoveryCancelled.to_string());
+        assert_eq!(cancellation, PASSKEY_REQUEST_INCOMPLETE_MESSAGE);
+        assert_eq!(
+            CloudBackupError::PasskeyDiscoveryCancelled.reader_message(),
+            PASSKEY_REQUEST_INCOMPLETE_MESSAGE
+        );
         assert_eq!(missing, PASSKEY_NOT_FOUND_MESSAGE);
         assert_eq!(unsupported, UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE);
         assert_ne!(cancellation, missing);
