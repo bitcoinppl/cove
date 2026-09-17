@@ -3,6 +3,7 @@ use std::{error::Error as StdError, fmt, ops::Deref};
 use cove_device::passkey::{PasskeyFailureReason, PasskeyOperation};
 use cove_device::{cloud_storage::CloudStorageError, passkey::PasskeyError};
 
+use crate::backup::import::LocalWalletConflict;
 use crate::database::cloud_backup::CloudStorageIssue;
 
 const PASSKEY_ACCESS_RECOVERY_MESSAGE: &str = "Cove couldn't access your passkey. Check your connection and passkey account, then try again. If this keeps happening, choose another passkey provider or contact support.";
@@ -39,6 +40,14 @@ pub(crate) const CLOUD_BACKUP_COMPATIBILITY_MESSAGE: &str =
     "This cloud backup was created by an unsupported version of Cove.";
 const CLOUD_BACKUP_WALLET_SUPPORT_MESSAGE: &str =
     "This cloud backup contains a wallet this version of Cove can't restore.";
+const LOCAL_WALLET_MISMATCH_MESSAGE: &str = concat!(
+    "Cove unlocked your backup, but some saved wallet data on this iPhone does not match it. ",
+    "Cove kept that data unchanged."
+);
+const LOCAL_WALLET_UNREADABLE_MESSAGE: &str = concat!(
+    "Cove unlocked your backup, but some saved wallet data on this iPhone could not be read. ",
+    "Cove kept that data unchanged."
+);
 const ANDROID_PASSKEY_ASSOCIATION_MESSAGE: &str = concat!(
     "Cove could not verify Android passkey setup yet. Wait a few minutes and try again. ",
     "If this keeps happening, update Cove or contact support."
@@ -263,6 +272,7 @@ impl From<&CloudBackupError> for CloudStorageIssue {
             | CloudBackupError::PasskeyMismatch
             | CloudBackupError::NoBackupFound
             | CloudBackupError::PasskeyDiscoveryCancelled
+            | CloudBackupError::LocalWalletConflict(_)
             | CloudBackupError::Cancelled => Self::Other,
         }
     }
@@ -397,6 +407,10 @@ pub(crate) enum CloudBackupError {
 
     #[error("restore cancelled")]
     Cancelled,
+
+    /// A restore kept local wallet data unchanged because it did not match the backup
+    #[error("local wallet conflict: {0}")]
+    LocalWalletConflict(#[source] LocalWalletConflict),
 }
 
 impl CloudBackupError {
@@ -467,6 +481,12 @@ impl CloudBackupError {
             Self::Compatibility(_) => CLOUD_BACKUP_COMPATIBILITY_MESSAGE.into(),
             Self::Cloud(_) | Self::Deferred(_) | Self::Internal(_) => {
                 GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into()
+            }
+            Self::LocalWalletConflict(LocalWalletConflict::Mismatch) => {
+                LOCAL_WALLET_MISMATCH_MESSAGE.into()
+            }
+            Self::LocalWalletConflict(LocalWalletConflict::Unreadable) => {
+                LOCAL_WALLET_UNREADABLE_MESSAGE.into()
             }
             Self::PasskeyMismatch
             | Self::NoBackupFound

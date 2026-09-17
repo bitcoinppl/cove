@@ -12,6 +12,7 @@ use tokio::time::Instant;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
+use crate::backup::import::LocalWalletConflict;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::ops::try_restore_from_local_master_key;
 use crate::manager::cloud_backup_manager::wallets::{
@@ -124,6 +125,52 @@ enum RestoreResolution {
 enum RestorePasskeyMatchOutcome {
     Matched(Vec<NamespaceMatch>),
     Cancelled(Vec<NamespaceMatch>),
+}
+
+/// What applying the downloaded wallets produced locally
+struct RestoreApplication {
+    resolution: RestoreResolution,
+    failures: RestoreFailureCategory,
+}
+
+/// The one failure category a restore can report when no wallet was restored
+///
+/// A run where every wallet hit a local conflict must keep that category: the
+/// reader has to learn their local data was kept unchanged
+#[derive(Clone, Copy, Default)]
+enum RestoreFailureCategory {
+    #[default]
+    None,
+    LocalConflict(LocalWalletConflict),
+    Mixed,
+}
+
+impl RestoreFailureCategory {
+    fn record(self, error: &CloudBackupError) -> Self {
+        let conflict = match error {
+            CloudBackupError::LocalWalletConflict(conflict) => *conflict,
+            _ => return Self::Mixed,
+        };
+
+        match self {
+            Self::None => Self::LocalConflict(conflict),
+            Self::LocalConflict(recorded) if recorded == conflict => self,
+            // unreadable and mismatched items are both local data the restore kept, so the
+            // mismatch copy stays truthful for the whole run
+            Self::LocalConflict(_) => Self::LocalConflict(LocalWalletConflict::Mismatch),
+            Self::Mixed => Self::Mixed,
+        }
+    }
+
+    /// The error to report when every wallet in the run failed
+    fn all_failed_error(self) -> CloudBackupError {
+        match self {
+            Self::LocalConflict(conflict) => CloudBackupError::LocalWalletConflict(conflict),
+            Self::None | Self::Mixed => {
+                CloudBackupError::Internal("all wallets failed to restore".into())
+            }
+        }
+    }
 }
 
 impl RestoreResolution {
@@ -307,15 +354,15 @@ impl RestoreOperation {
                 &mut report,
             )
             .await?;
-        let resolution = self.apply_downloaded_wallets(&downloaded_wallets, &mut report).await?;
+        let applied = self.apply_downloaded_wallets(&downloaded_wallets, &mut report).await?;
 
-        if matches!(resolution, RestoreResolution::Nothing) && report.wallets_failed > 0 {
+        if matches!(applied.resolution, RestoreResolution::Nothing) && report.wallets_failed > 0 {
             self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
-            return Err(CloudBackupError::Internal("all wallets failed to restore".into()));
+            return Err(applied.failures.all_failed_error());
         }
 
         let restored_status =
-            self.resolve_restored_status(manager, resolution, &namespace_wallets).await?;
+            self.resolve_restored_status(manager, applied.resolution, &namespace_wallets).await?;
 
         self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
         self.apply_status(restored_status).await?;
@@ -447,7 +494,7 @@ impl RestoreOperation {
         &self,
         downloaded_wallets: &[(usize, DownloadedWalletRecord)],
         report: &mut CloudBackupRestoreReport,
-    ) -> Result<RestoreResolution, CloudBackupError> {
+    ) -> Result<RestoreApplication, CloudBackupError> {
         let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
             .map_err(|source| {
                 CloudBackupError::internal_context("collect wallet identities", source)
@@ -455,6 +502,11 @@ impl RestoreOperation {
         let mut restore_session = WalletRestoreSession::new(existing_identities);
         let restore_total = downloaded_wallets.len() as u32;
         let mut resolution = RestoreResolution::Nothing;
+        // download failures already counted here have no local category of their own
+        let mut failures = match report.wallets_failed {
+            0 => RestoreFailureCategory::None,
+            _ => RestoreFailureCategory::Mixed,
+        };
 
         self.send_restore_progress(restore_progress_flow(
             RestoreProgressPhase::Restoring,
@@ -484,6 +536,7 @@ impl RestoreOperation {
                 Err(CloudBackupError::Cancelled) => return Err(CloudBackupError::Cancelled),
                 Err(error) => {
                     warn!("Failed to restore wallet backup: {error}");
+                    failures = failures.record(&error);
                     report.wallets_failed += 1;
                     report.failed_wallet_errors.push(error.reader_message());
                 }
@@ -497,7 +550,7 @@ impl RestoreOperation {
             .await?;
         }
 
-        Ok(resolution)
+        Ok(RestoreApplication { resolution, failures })
     }
 
     /// Pick the cloud backup status to end on and activate the namespace it came from
