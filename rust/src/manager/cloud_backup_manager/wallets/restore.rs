@@ -10,7 +10,9 @@ use zeroize::Zeroizing;
 
 use super::payload::{convert_cloud_secret, descriptor_pair_from_cloud};
 use super::{DownloadedWalletBackup, RemoteWalletBackupSummary, decode_cloud_labels_jsonl};
-use crate::backup::import::{LabelRestoreBehavior, LabelRestoreWarning, restore_wallet_labels};
+use crate::backup::import::{
+    CloudRestoreError, LabelRestoreBehavior, LabelRestoreWarning, restore_wallet_labels,
+};
 use crate::backup::model::{WalletBackup, WalletSecret};
 use crate::manager::cloud_backup_manager::error::CloudBackupInternalError;
 use crate::manager::cloud_backup_manager::{CloudBackupError, LocalWalletSecret};
@@ -223,6 +225,18 @@ impl WalletRestoreSession {
     }
 }
 
+/// Keep a local-data conflict typed so the reader learns their data was kept unchanged
+fn cloud_restore_error(context: &str, error: CloudRestoreError) -> CloudBackupError {
+    match error {
+        CloudRestoreError::LocalConflict(conflict) => {
+            CloudBackupError::LocalWalletConflict(conflict)
+        }
+        CloudRestoreError::Backup(error) => {
+            CloudBackupError::Internal(CloudBackupInternalError::context(context, error))
+        }
+    }
+}
+
 impl DownloadedWalletBackup {
     fn duplicate_key(&self) -> Result<WalletIdentityKey, CloudBackupError> {
         let backup_model = WalletBackup {
@@ -258,8 +272,7 @@ impl DownloadedWalletBackup {
                 })?;
 
                 crate::backup::import::restore_cloud_mnemonic_wallet(&self.metadata, mnemonic)
-                    .map_err(|(error, _)| error)
-                    .map_err_prefix("restore mnemonic wallet", CloudBackupInternalError::from)?;
+                    .map_err(|(error, _)| cloud_restore_error("restore mnemonic wallet", error))?;
             }
             LocalWalletSecret::Xprv(value) => {
                 let xpriv = WalletXprv::parse(value.as_str()).map_err_prefix(
@@ -267,20 +280,16 @@ impl DownloadedWalletBackup {
                     CloudBackupInternalError::from,
                 )?;
 
-                crate::backup::import::restore_cloud_xpriv_wallet(&self.metadata, xpriv)
-                    .map_err(|(error, _)| error)
-                    .map_err_prefix(
-                        "restore extended-private-key wallet",
-                        CloudBackupInternalError::from,
-                    )?;
+                crate::backup::import::restore_cloud_xpriv_wallet(&self.metadata, xpriv).map_err(
+                    |(error, _)| cloud_restore_error("restore extended-private-key wallet", error),
+                )?;
             }
             _ => {
                 crate::backup::import::restore_cloud_descriptor_wallet(
                     &self.metadata,
                     &backup_model,
                 )
-                .map_err(|(error, _)| error)
-                .map_err_prefix("restore descriptor wallet", CloudBackupInternalError::from)?;
+                .map_err(|(error, _)| cloud_restore_error("restore descriptor wallet", error))?;
             }
         }
 
