@@ -43,10 +43,11 @@ internal enum class PinState {
     HARD,
 }
 
-/** Pin state and slider amount in sats after one raw slider event */
+/** Complete slider interaction state in sats */
 internal data class SmartSnap(
     val pinState: PinState,
     val amount: Double,
+    val previousRaw: Double,
 )
 
 /**
@@ -58,42 +59,54 @@ internal data class SmartSnapBand(
     val maxSend: Double,
     val step: Double,
 ) {
+    /** Replaces all slider state from one manager amount */
+    fun synchronize(amount: Double): SmartSnap =
+        SmartSnap(
+            pinState =
+                when (amount) {
+                    maxSend -> PinState.HARD
+                    softMaxSend -> PinState.SOFT
+                    else -> PinState.NONE
+                },
+            amount = amount,
+            previousRaw = amount,
+        )
+
     /** Applies the pins to one raw slider event */
     fun snap(
-        pinState: PinState,
+        state: SmartSnap,
         raw: Double,
-        previousRaw: Double,
     ): SmartSnap {
-        val goingUp = raw > previousRaw
-        val goingDown = raw < previousRaw
+        val goingUp = raw > state.previousRaw
+        val goingDown = raw < state.previousRaw
         val belowBand = raw < softMaxSend - step
 
-        return when (pinState) {
+        return when (state.pinState) {
             PinState.HARD ->
                 when {
                     // a tap on the track lands far below the band in one event,
                     // holding the pin there would commit max instead of the tapped amount
-                    belowBand -> SmartSnap(PinState.NONE, raw)
-                    goingDown -> SmartSnap(PinState.SOFT, softMaxSend)
+                    belowBand -> SmartSnap(PinState.NONE, raw, raw)
+                    goingDown -> SmartSnap(PinState.SOFT, softMaxSend, raw)
                     // hold at pin
-                    else -> SmartSnap(PinState.HARD, maxSend)
+                    else -> SmartSnap(PinState.HARD, maxSend, raw)
                 }
 
             PinState.SOFT ->
                 when {
                     // crossing upward -> snap to hard
-                    goingUp -> SmartSnap(PinState.HARD, maxSend)
+                    goingUp -> SmartSnap(PinState.HARD, maxSend, raw)
                     // pulled a full step below band -> release pin
-                    belowBand -> SmartSnap(PinState.NONE, raw)
+                    belowBand -> SmartSnap(PinState.NONE, raw, raw)
                     // hold at pin
-                    else -> SmartSnap(PinState.SOFT, softMaxSend)
+                    else -> SmartSnap(PinState.SOFT, softMaxSend, raw)
                 }
 
             PinState.NONE ->
                 when {
-                    raw < softMaxSend -> SmartSnap(PinState.NONE, raw)
-                    goingUp -> SmartSnap(PinState.HARD, maxSend)
-                    else -> SmartSnap(PinState.SOFT, softMaxSend)
+                    raw < softMaxSend -> SmartSnap(PinState.NONE, raw, raw)
+                    goingUp -> SmartSnap(PinState.HARD, maxSend, raw)
+                    else -> SmartSnap(PinState.SOFT, softMaxSend, raw)
                 }
         }
     }
@@ -110,13 +123,9 @@ fun CoinControlCustomAmountSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
 
-    // pin state for slider
-    var pinState by remember { mutableStateOf(PinState.HARD) }
-
     // slider values are always sats, the Float round trip of the Compose slider
     // would leave sub-satoshi noise on unit-relative BTC values
-    var previousAmount by remember { mutableDoubleStateOf(0.0) }
-    var customAmount by remember { mutableDoubleStateOf(0.0) }
+    var sliderState by remember { mutableStateOf(SmartSnap(PinState.HARD, 0.0, 0.0)) }
     var enteringAmount by remember { mutableStateOf<String?>(null) }
     var isEditing by remember { mutableStateOf(false) }
 
@@ -125,8 +134,9 @@ fun CoinControlCustomAmountSheet(
     val minSend = conservativeDustLimitSats.toDouble()
     val step = 10.0
 
+    val selectedFeeRate = sendFlowManager.selectedFeeRate
     val maxSend =
-        remember(sendFlowManager.amount) {
+        remember(sendFlowManager.amount, selectedFeeRate) {
             val maxSendSats =
                 sendFlowManager
                     .maxSendMinusFees()
@@ -138,17 +148,18 @@ fun CoinControlCustomAmountSheet(
         }
 
     val softMaxSend =
-        remember(sendFlowManager.amount) {
+        remember(sendFlowManager.amount, selectedFeeRate) {
             val softMaxSendSats = sendFlowManager.maxSendMinusFeesAndSmallUtxo()?.asSats() ?: conservativeDustLimitSats
             softMaxSendSats.toDouble().coerceAtLeast(minSend)
         }
+    val snapBand = remember(softMaxSend, maxSend) { SmartSnapBand(softMaxSend, maxSend, step) }
 
     // follow the manager amount, except mid-drag where it would fight the thumb
-    LaunchedEffect(sendFlowManager.amount) {
+    LaunchedEffect(sendFlowManager.amount, maxSend, softMaxSend) {
         if (isEditing) return@LaunchedEffect
 
-        customAmount = sendFlowManager.amount?.asSats()?.toDouble() ?: maxSend
-        previousAmount = customAmount
+        val amount = sendFlowManager.amount?.asSats()?.toDouble() ?: maxSend
+        sliderState = snapBand.synchronize(amount)
     }
 
     fun amountFromSliderValue(value: Double): Amount = Amount.fromSat(value.roundToLong().coerceAtLeast(0L).toULong())
@@ -156,27 +167,25 @@ fun CoinControlCustomAmountSheet(
     fun coinControlAmountChanged(value: Double): SendFlowManagerAction =
         SendFlowManagerAction.NotifyCoinControlAmountChanged(amountFromSliderValue(value))
 
-    fun displayAmount(): String = walletManager.amountFmt(amountFromSliderValue(customAmount))
+    fun displayAmount(): String = walletManager.amountFmt(amountFromSliderValue(sliderState.amount))
 
     fun handleSliderChange(raw: Double) {
         isEditing = true
         enteringAmount = null
 
-        val snap = SmartSnapBand(softMaxSend, maxSend, step).snap(pinState, raw, previousAmount)
-        pinState = snap.pinState
+        val snap = snapBand.snap(sliderState, raw)
 
         // update model only on real change
-        if (customAmount != snap.amount) {
-            customAmount = snap.amount
+        if (sliderState.amount != snap.amount) {
             sendFlowManager.debouncedDispatch(coinControlAmountChanged(snap.amount), debounceDelayMs = 200)
         }
 
-        previousAmount = raw
+        sliderState = snap
     }
 
     fun finishSliderEditing() {
-        // no delay replaces the pending debounced dispatch with the released amount
-        sendFlowManager.debouncedDispatch(coinControlAmountChanged(customAmount), debounceDelayMs = 0)
+        val committedAmount = sendFlowManager.commitCoinControlAmount(amountFromSliderValue(sliderState.amount))
+        sliderState = snapBand.synchronize(committedAmount.asSats().toDouble())
         isEditing = false
     }
 
@@ -318,7 +327,7 @@ fun CoinControlCustomAmountSheet(
                 Spacer(Modifier.height(12.dp))
 
                 Slider(
-                    value = customAmount.toFloat(),
+                    value = sliderState.amount.toFloat(),
                     onValueChange = { handleSliderChange(it.toDouble()) },
                     valueRange = minSend.toFloat()..maxSend.toFloat(),
                     onValueChangeFinished = { finishSliderEditing() },

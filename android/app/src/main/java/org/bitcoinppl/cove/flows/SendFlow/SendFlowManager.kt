@@ -235,6 +235,17 @@ class SendFlowManager internal constructor(
         dispatch(SendFlowManagerAction.NotifyAmountChanged(amount))
     }
 
+    /** Commits the released slider amount and returns the authoritative Rust amount */
+    fun commitCoinControlAmount(amount: Amount): Amount {
+        debouncedTask?.cancel()
+        debouncedTask = null
+
+        return withRustOr(amount) {
+            dispatch(SendFlowManagerAction.NotifyCoinControlAmountChanged(amount))
+            this.amount()
+        }
+    }
+
     fun refreshPresenters() {
         totalSpentInFiat =
             withRustOr(totalSpentInFiat) {

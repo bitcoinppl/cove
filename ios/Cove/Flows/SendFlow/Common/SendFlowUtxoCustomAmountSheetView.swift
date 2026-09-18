@@ -1,5 +1,88 @@
 import SwiftUI
 
+enum CoinControlPinState: Equatable {
+    case none
+    case soft
+    case hard
+}
+
+struct CoinControlSmartSnap: Equatable {
+    let pinState: CoinControlPinState
+    let amount: Double
+    let previousRaw: Double
+}
+
+struct CoinControlSmartSnapBand {
+    let softMaxSend: Double
+    let maxSend: Double
+    let step: Double
+
+    func synchronize(amount: Double) -> CoinControlSmartSnap {
+        let pinState: CoinControlPinState = if amount == maxSend {
+            .hard
+        } else if amount == softMaxSend {
+            .soft
+        } else {
+            .none
+        }
+
+        return CoinControlSmartSnap(
+            pinState: pinState,
+            amount: amount,
+            previousRaw: amount
+        )
+    }
+
+    func snap(state: CoinControlSmartSnap, raw: Double) -> CoinControlSmartSnap {
+        let goingUp = raw > state.previousRaw
+        let goingDown = raw < state.previousRaw
+        let belowBand = raw < softMaxSend - step
+        let pinState: CoinControlPinState
+        let amount: Double
+
+        switch state.pinState {
+        case .hard:
+            if goingDown {
+                pinState = .soft
+                amount = softMaxSend
+            } else {
+                pinState = .hard
+                amount = maxSend
+            }
+
+        case .soft:
+            if goingUp {
+                pinState = .hard
+                amount = maxSend
+            } else if belowBand {
+                pinState = .none
+                amount = raw
+            } else {
+                pinState = .soft
+                amount = softMaxSend
+            }
+
+        case .none:
+            if raw < softMaxSend {
+                pinState = .none
+                amount = raw
+            } else if goingUp {
+                pinState = .hard
+                amount = maxSend
+            } else {
+                pinState = .soft
+                amount = softMaxSend
+            }
+        }
+
+        return CoinControlSmartSnap(
+            pinState: pinState,
+            amount: amount,
+            previousRaw: raw
+        )
+    }
+}
+
 struct SendFlowUtxoCustomAmountSheetView: View {
     @Environment(AppManager.self) private var app
     @Environment(WalletManager.self) private var walletManager
@@ -12,12 +95,13 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     let utxos: [Utxo]
 
-    // slider values are always sats, unit-relative BTC doubles do not convert back to exact sats
-    @State private var customAmount: Double = 0.0
-    @State private var previousAmount: Double = .init(conservativeDustLimitSats)
+    /// Slider values are always sats, unit-relative BTC doubles do not convert back to exact sats
+    @State private var sliderState = CoinControlSmartSnap(
+        pinState: .hard,
+        amount: 0,
+        previousRaw: .init(conservativeDustLimitSats)
+    )
     @State private var isEditing: Bool = false
-    @State private var pinState: PinState = .hard
-    private enum PinState { case none, soft, hard }
 
     @State private var enteringAmount: String? = nil
 
@@ -29,54 +113,20 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     private var smartSnapBinding: Binding<Double> {
         Binding(
-            get: { customAmount },
+            get: { sliderState.amount },
             set: { raw in
                 enteringAmount = nil
-                let goingUp = raw > previousAmount
-                let goingDown = raw < previousAmount
-                var adjusted = raw
-
-                switch pinState {
-                case .hard:
-                    if goingDown {
-                        pinState = .soft
-                        adjusted = softMaxSend
-                    } else {
-                        // hold at pin
-                        adjusted = maxSend
-                    }
-
-                case .soft:
-                    // crossing upward → snap to hard
-                    if goingUp {
-                        pinState = .hard
-                        adjusted = maxSend
-                    } else if raw < softMaxSend - step {
-                        // pulled a full step below band → release pin
-                        pinState = .none
-                        adjusted = raw
-                    } else {
-                        // hold at pin
-                        adjusted = softMaxSend
-                    }
-
-                case .none:
-                    if raw >= softMaxSend {
-                        pinState = goingUp ? .hard : .soft
-                        adjusted = goingUp ? maxSend : softMaxSend
-                    }
-                }
+                let snap = smartSnapBand.snap(state: sliderState, raw: raw)
 
                 // update model only on real change
-                if customAmount != adjusted {
-                    customAmount = adjusted
+                if sliderState.amount != snap.amount {
                     manager.debouncedDispatch(
-                        .notifyCoinControlAmountChanged(amountFromSliderValue(adjusted)),
+                        .notifyCoinControlAmountChanged(amountFromSliderValue(snap.amount)),
                         for: .milliseconds(200)
                     )
                 }
 
-                previousAmount = raw
+                sliderState = snap
             }
         )
     }
@@ -95,6 +145,14 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     private var step: Double {
         10
+    }
+
+    private var smartSnapBand: CoinControlSmartSnapBand {
+        CoinControlSmartSnapBand(
+            softMaxSend: softMaxSend,
+            maxSend: maxSend,
+            step: step
+        )
     }
 
     private var maxSend: Double {
@@ -127,7 +185,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                 // truncation would show some typed amounts one sat low
                 Amount.fromSat(sats: UInt64((amount * 100_000_000).rounded()))
             case (_, nil):
-                amountFromSliderValue(customAmount)
+                amountFromSliderValue(sliderState.amount)
             }
 
         return walletManager.displayAmount(amount, showUnit: false)
@@ -185,25 +243,42 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         .onAppear(perform: syncCustomAmount)
         .onChange(of: isEditing, editingChanged)
         .onChange(of: manager.amount, managerAmountChanged)
+        .onChange(of: manager.selectedFeeRate, selectedFeeRateChanged)
         .onChange(of: isFocused, initial: false, focusChanged)
     }
 
     private func syncCustomAmount() {
-        customAmount = manager.amount.map(sliderValue) ?? maxSend
+        let amount = manager.amount.map(sliderValue) ?? maxSend
+        sliderState = smartSnapBand.synchronize(amount: amount)
     }
 
     private func editingChanged(_ old: Bool, _ new: Bool) {
         Log.debug("isEditing changed from \(old) -> \(new)")
 
-        if old, !new {
-            manager.dispatch(.notifyCoinControlAmountChanged(amountFromSliderValue(customAmount)))
+        guard old, !new else { return }
+
+        let releasedAmount = amountFromSliderValue(sliderState.amount)
+        Task { @MainActor in
+            let committedAmount = await manager.commitCoinControlAmount(releasedAmount)
+            guard !isEditing else { return }
+
+            sliderState = smartSnapBand.synchronize(amount: sliderValue(committedAmount))
         }
     }
 
     private func managerAmountChanged(_: Amount?, _ new: Amount?) {
         guard let newAmount = new, !isEditing else { return }
 
-        customAmount = sliderValue(newAmount)
+        sliderState = smartSnapBand.synchronize(amount: sliderValue(newAmount))
+    }
+
+    private func selectedFeeRateChanged(
+        _: FeeRateOptionWithTotalFee?,
+        _: FeeRateOptionWithTotalFee?
+    ) {
+        guard !isEditing else { return }
+
+        syncCustomAmount()
     }
 
     private func focusChanged(_ old: Bool, _ new: Bool) {

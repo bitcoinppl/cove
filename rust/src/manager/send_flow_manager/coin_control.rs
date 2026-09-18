@@ -26,15 +26,19 @@ impl RustSendFlowManager {
         // amounts above the soft maximum would leave a dust output, so select the full maximum
         let max_send_without_fees =
             self.max_send_minus_fees().filter(|amount| amount.as_sats() > 0);
-        let max_send_threshold =
-            self.max_send_minus_fees_and_small_utxo().or(max_send_without_fees);
-        if let Some(max_send_threshold) = max_send_threshold
-            && amount > max_send_threshold
-        {
+        let soft_max_send = self.max_send_minus_fees_and_small_utxo();
+        let should_select_max = match soft_max_send {
+            Some(soft_max_send) => amount > soft_max_send,
+            None => max_send_without_fees.is_some_and(|max_send| amount >= max_send),
+        };
+
+        if should_select_max {
+            let amount_sats = amount.as_sats();
+            let max_send_threshold =
+                soft_max_send.or(max_send_without_fees).map(|amount| amount.as_sats());
+
             debug!(
-                "setting coin control to max amount close to max {} {}",
-                amount.as_sats(),
-                max_send_threshold.as_sats()
+                "setting coin control to max amount close to max {amount_sats} {max_send_threshold:?}"
             );
 
             let max_send_amount =

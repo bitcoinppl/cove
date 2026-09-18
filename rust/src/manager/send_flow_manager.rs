@@ -1050,6 +1050,44 @@ mod tests {
     }
 
     #[test]
+    fn coin_control_amount_change_selects_exact_fallback_maximum() {
+        for max_send_sats in [1, 500, 600] {
+            let manager = manager_for_validation();
+            set_coin_control_mode_with_total(&manager, max_send_sats + 100);
+            set_selected_fee_total(&manager, 100);
+
+            assert!(manager.max_send_minus_fees_and_small_utxo().is_none());
+            assert!(
+                manager
+                    .handle_coin_control_amount_changed(super::Amount::from_sat(max_send_sats))
+                    .is_some()
+            );
+
+            let state = manager.state.lock();
+            assert_eq!(state.amount_sats, Some(max_send_sats));
+            assert!(
+                matches!(&state.mode, super::EnterMode::CoinControl(mode) if mode.is_max_selected)
+            );
+        }
+    }
+
+    #[test]
+    fn coin_control_exact_fallback_maximum_follows_fee_change() {
+        let manager = manager_for_validation();
+        set_coin_control_mode_with_total(&manager, 700);
+        set_selected_fee_total(&manager, 100);
+
+        assert!(manager.handle_coin_control_amount_changed(super::Amount::from_sat(600)).is_some());
+
+        let selected = fee_rate_option_with_total_fee(FeeSpeed::Custom { duration_mins: 20 }, 200);
+        manager.selected_fee_rate_changed(Arc::new(selected));
+
+        let state = manager.state.lock();
+        assert_eq!(state.amount_sats, Some(500));
+        assert!(matches!(&state.mode, super::EnterMode::CoinControl(mode) if mode.is_max_selected));
+    }
+
+    #[test]
     fn coin_control_amount_change_preserves_amount_when_fallback_max_is_zero() {
         let manager = manager_for_validation();
         set_coin_control_mode_with_total(&manager, 900);
