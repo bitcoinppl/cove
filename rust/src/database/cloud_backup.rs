@@ -8,6 +8,7 @@ use super::Error;
 
 mod compat;
 mod compatibility;
+pub(crate) mod restore_activation;
 mod state;
 mod tables;
 
