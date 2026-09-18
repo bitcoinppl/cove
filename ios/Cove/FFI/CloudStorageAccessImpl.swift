@@ -286,10 +286,13 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         data: Data,
         policy _: CloudAccessPolicy
     ) async throws {
-        try await run {
+        let url = try await run {
             let url = try self.helper.backupFileURL(namespace: namespace, location: location)
             try self.helper.writeForUpload(data: data, to: url)
+            return url
         }
+
+        await helper.clearMetadataDeletion(of: url)
     }
 
     func uploadWalletBackup(
@@ -299,10 +302,13 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
         data: Data,
         policy _: CloudAccessPolicy
     ) async throws {
-        try await run {
+        let url = try await run {
             let url = try self.helper.backupFileURL(namespace: namespace, location: location)
             try self.helper.writeForUpload(data: data, to: url)
+            return url
         }
+
+        await helper.clearMetadataDeletion(of: url)
     }
 
     // MARK: - Download
@@ -351,28 +357,7 @@ final class CloudStorageAccessImpl: CloudStorageAccess, @unchecked Sendable {
     }
 
     func deleteNamespace(namespace: String, policy _: CloudAccessPolicy) async throws {
-        let url = try await run {
-            try self.helper.namespaceDirectoryReadURL(namespace: namespace)
-        }
-        let isLocallyVisible = await run {
-            FileManager.default.fileExists(atPath: url.path)
-        }
-        if isLocallyVisible {
-            try await run {
-                try self.helper.coordinatedDelete(at: url, missingItemID: namespace)
-            }
-            return
-        }
-
-        let resolvedURL = try await helper.metadataItemIfPresent(
-            named: url.lastPathComponent,
-            parentDirectoryURL: url.deletingLastPathComponent()
-        )?.url
-        guard let resolvedURL else { throw CloudStorageError.NotFound(namespace) }
-
-        try await run {
-            try self.helper.coordinatedDelete(at: resolvedURL, missingItemID: namespace)
-        }
+        try await helper.deleteNamespaceDirectory(namespace: namespace)
     }
 
     // MARK: - Discovery
