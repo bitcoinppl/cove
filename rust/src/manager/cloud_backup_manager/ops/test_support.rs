@@ -1226,6 +1226,7 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
 ) {
     ensure_cloud_backup_test_tokio_runtime();
     wait_for_cleanup_idle_for_test(manager);
+    crate::database::cloud_backup::restore_activation::test_support::reset();
     globals.reset();
     clear_local_wallets();
     let reset_manager = manager.clone();

@@ -30,7 +30,9 @@ use crate::manager::cloud_backup_manager::{
 };
 use crate::wallet::metadata::WalletId;
 
-use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
+use crate::manager::cloud_backup_manager::keychain::{
+    CloudBackupKeychain, RestoreActivationKeychainSnapshot,
+};
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
 
 use super::CloudBackupSupervisor;
@@ -870,6 +872,7 @@ pub(crate) fn save_restore_keychain_entries(
 ) -> Result<(), CloudBackupError> {
     let keychain = Keychain::global();
     let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
+    let snapshot = cloud_keychain.capture_restore_activation_snapshot();
     let cspp = cove_cspp::Cspp::new(keychain.clone());
 
     let metadata_save_result = match passkey {
@@ -882,40 +885,50 @@ pub(crate) fn save_restore_keychain_entries(
     };
 
     if let Err((context, error)) = metadata_save_result {
-        if let Err(rollback) = cloud_keychain.clear_local_state() {
-            return Err(CloudBackupError::Internal(
-                format!("{context}: {error}; rollback failed: {rollback}").into(),
-            ));
-        }
-
-        return Err(CloudBackupError::Internal(format!("{context}: {error}").into()));
+        return Err(rollback_restore_activation_keychain(
+            &snapshot,
+            CloudBackupError::Internal(format!("{context}: {error}").into()),
+        ));
     }
 
     if let Err(error) = cspp.save_master_key(&master_key) {
-        if let Err(rollback) = cloud_keychain.clear_local_state() {
-            return Err(CloudBackupError::Internal(
-                format!("save master key: {error}; rollback failed: {rollback}").into(),
-            ));
-        }
-
-        return Err(CloudBackupError::Internal(format!("save master key: {error}").into()));
+        return Err(rollback_restore_activation_keychain(
+            &snapshot,
+            CloudBackupError::Internal(format!("save master key: {error}").into()),
+        ));
     }
 
     Ok(())
+}
+
+pub(crate) fn rollback_restore_activation_keychain(
+    snapshot: &RestoreActivationKeychainSnapshot,
+    original: CloudBackupError,
+) -> CloudBackupError {
+    match CloudBackupKeychain::global().restore_activation_snapshot(snapshot) {
+        Ok(()) => original,
+        Err(rollback) => {
+            CloudBackupError::Internal(format!("{original}; rollback failed: {rollback}").into())
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::database::Database;
-    use crate::database::cloud_backup::PersistedCloudBackupStatus;
+    use crate::database::cloud_backup::{
+        PersistedCloudBackupStatus, PersistedCloudBlobState, restore_activation,
+    };
+    use crate::manager::cloud_backup_manager::CloudBackupLifecycle;
     use crate::manager::cloud_backup_manager::keychain::{
         CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY,
     };
     use crate::manager::cloud_backup_manager::ops::test_support::{
         async_test_lock, encrypted_wallet_backup_bytes, ensure_cloud_backup_test_tokio_runtime,
-        new_restore_operation_for_test, reset_cloud_backup_test_state, sample_xpub, test_globals,
-        test_lock, xpub_only_wallet_metadata,
+        new_restore_operation_for_test, persist_dirty_blob_state, persist_xpub_wallets,
+        reset_cloud_backup_test_state, sample_xpub, test_globals, test_lock,
+        xpub_only_wallet_metadata,
     };
 
     #[tokio::test(flavor = "current_thread")]
@@ -1040,8 +1053,9 @@ mod tests {
         let _guard = test_lock().lock();
         let globals = test_globals();
         globals.reset();
+        let previous_master = cove_cspp::master_key::MasterKey::generate();
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-        cspp.save_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
+        cspp.save_master_key(&previous_master).unwrap();
         CloudBackupKeychain::global()
             .save_passkey_and_namespace(&[9, 8, 7], [6; 32], "old-namespace")
             .unwrap();
@@ -1054,10 +1068,16 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert!(cspp.load_master_key_from_store().unwrap().is_none());
-        assert!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).is_none());
-        assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_none());
-        assert!(globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).is_none());
+        assert_eq!(
+            cspp.load_master_key_from_store().unwrap().as_ref().map(MasterKey::as_bytes),
+            Some(previous_master.as_bytes())
+        );
+        assert_eq!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).as_deref(), Some("090807"));
+        assert_eq!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY), Some(hex::encode([6; 32])));
+        assert_eq!(
+            globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).as_deref(),
+            Some("old-namespace")
+        );
     }
 
     #[test]
@@ -1065,8 +1085,9 @@ mod tests {
         let _guard = test_lock().lock();
         let globals = test_globals();
         globals.reset();
+        let previous_master = cove_cspp::master_key::MasterKey::generate();
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-        cspp.save_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
+        cspp.save_master_key(&previous_master).unwrap();
         CloudBackupKeychain::global()
             .save_passkey_and_namespace(&[9, 8, 7], [6; 32], "old-namespace")
             .unwrap();
@@ -1079,10 +1100,16 @@ mod tests {
         );
 
         assert!(result.is_err());
-        assert!(cspp.load_master_key_from_store().unwrap().is_none());
-        assert!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).is_none());
-        assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_none());
-        assert!(globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).is_none());
+        assert_eq!(
+            cspp.load_master_key_from_store().unwrap().as_ref().map(MasterKey::as_bytes),
+            Some(previous_master.as_bytes())
+        );
+        assert_eq!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).as_deref(), Some("090807"));
+        assert_eq!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY), Some(hex::encode([6; 32])));
+        assert_eq!(
+            globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).as_deref(),
+            Some("old-namespace")
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -1093,6 +1120,9 @@ mod tests {
         let manager = RustCloudBackupManager::init();
         reset_cloud_backup_test_state(&manager, globals);
 
+        let first_wallet = xpub_only_wallet_metadata();
+        let second_wallet = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![first_wallet.clone(), second_wallet.clone()]);
         CloudBackupKeychain::global().save_namespace_id("previous-namespace").unwrap();
         Database::global().cloud_backup_state.set(&PersistedCloudBackupState::default()).unwrap();
 
@@ -1125,7 +1155,181 @@ mod tests {
             Database::global().cloud_backup_state.get().unwrap().status(),
             PersistedCloudBackupStatus::Enabled
         );
+        assert_eq!(manager.current_status(), CloudBackupStatus::Restoring);
+        assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Configured(_)));
+        assert_eq!(
+            dirty_restore_wallet_ids(),
+            sorted_wallet_ids(&[first_wallet.id.clone(), second_wallet.id.clone()])
+        );
         assert!(operation.cancellation.load(Ordering::Acquire));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn restore_namespace_commit_rolls_back_keychain_if_configured_state_persist_fails() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        ensure_cloud_backup_test_tokio_runtime();
+        let manager = RustCloudBackupManager::init();
+        reset_cloud_backup_test_state(&manager, globals);
+
+        let previous = seed_previous_restore_activation();
+        let first_wallet = xpub_only_wallet_metadata();
+        let second_wallet = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![first_wallet, second_wallet]);
+        restore_activation::test_support::fail_next_configured_state_write();
+
+        let error = activate_new_restore_namespace(&manager).await.unwrap_err();
+
+        assert!(
+            error.to_string().contains("injected restored namespace configured-state failure"),
+            "{error}"
+        );
+        assert_previous_restore_activation_preserved(globals, &manager, &previous);
+        assert!(dirty_restore_wallet_ids().is_empty());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn restore_namespace_commit_rolls_back_if_dirty_wallet_persist_fails_after_prefix() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        ensure_cloud_backup_test_tokio_runtime();
+        let manager = RustCloudBackupManager::init();
+        reset_cloud_backup_test_state(&manager, globals);
+
+        let previous = seed_previous_restore_activation();
+        let leftover = xpub_only_wallet_metadata();
+        persist_dirty_blob_state(leftover.id.clone());
+        let first_wallet = xpub_only_wallet_metadata();
+        let second_wallet = xpub_only_wallet_metadata();
+        persist_xpub_wallets(vec![first_wallet.clone(), second_wallet.clone()]);
+        restore_activation::test_support::fail_dirty_wallet_write_at(1);
+
+        let error = activate_new_restore_namespace(&manager).await.unwrap_err();
+        let dirty_wallet_ids = dirty_restore_wallet_ids();
+
+        assert!(
+            error.to_string().contains("injected restored namespace dirty-wallet failure"),
+            "{error}"
+        );
+        assert_previous_restore_activation_preserved(globals, &manager, &previous);
+        assert_eq!(dirty_wallet_ids, vec![leftover.id.clone()]);
+        assert!(!dirty_wallet_ids.contains(&first_wallet.id));
+        assert!(!dirty_wallet_ids.contains(&second_wallet.id));
+        assert_eq!(
+            Database::global()
+                .cloud_blob_sync_states
+                .get(&cove_cspp::backup_data::wallet_record_id(leftover.id.as_ref()))
+                .unwrap()
+                .unwrap()
+                .namespace_id,
+            previous.namespace_id
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn restore_namespace_commit_preserves_persist_error_if_keychain_rollback_fails() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        ensure_cloud_backup_test_tokio_runtime();
+        let manager = RustCloudBackupManager::init();
+        reset_cloud_backup_test_state(&manager, globals);
+
+        Database::global().cloud_backup_state.set(&PersistedCloudBackupState::default()).unwrap();
+        restore_activation::test_support::fail_next_configured_state_write();
+        globals.keychain.fail_delete_at(1);
+
+        let error = activate_new_restore_namespace(&manager).await.unwrap_err();
+        let message = error.to_string();
+
+        assert!(
+            message.contains("injected restored namespace configured-state failure"),
+            "{message}"
+        );
+        assert!(message.contains("rollback failed"), "{message}");
+        assert_eq!(
+            Database::global().cloud_backup_state.get().unwrap().status(),
+            PersistedCloudBackupStatus::Disabled
+        );
+        assert_eq!(manager.current_status(), CloudBackupStatus::Restoring);
+        assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Restoring(_)));
+        assert!(dirty_restore_wallet_ids().is_empty());
+    }
+
+    struct PreviousRestoreActivation {
+        master_key: MasterKey,
+        namespace_id: String,
+    }
+
+    fn seed_previous_restore_activation() -> PreviousRestoreActivation {
+        let master_key = MasterKey::generate();
+        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        cspp.save_master_key(&master_key).unwrap();
+        CloudBackupKeychain::global()
+            .save_passkey_and_namespace(&[9, 8, 7], [6; 32], "previous-namespace")
+            .unwrap();
+        Database::global().cloud_backup_state.set(&PersistedCloudBackupState::default()).unwrap();
+
+        PreviousRestoreActivation { master_key, namespace_id: "previous-namespace".into() }
+    }
+
+    fn assert_previous_restore_activation_preserved(
+        globals: &crate::manager::cloud_backup_manager::ops::test_support::TestGlobals,
+        manager: &RustCloudBackupManager,
+        previous: &PreviousRestoreActivation,
+    ) {
+        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        assert_eq!(
+            cspp.load_master_key_from_store().unwrap().as_ref().map(MasterKey::as_bytes),
+            Some(previous.master_key.as_bytes())
+        );
+        assert_eq!(
+            globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).as_deref(),
+            Some(previous.namespace_id.as_str())
+        );
+        assert_eq!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).as_deref(), Some("090807"));
+        assert_eq!(
+            Database::global().cloud_backup_state.get().unwrap().status(),
+            PersistedCloudBackupStatus::Disabled
+        );
+        assert_eq!(manager.current_status(), CloudBackupStatus::Restoring);
+        assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Restoring(_)));
+    }
+
+    async fn activate_new_restore_namespace(
+        manager: &RustCloudBackupManager,
+    ) -> Result<(), CloudBackupError> {
+        let master_key = MasterKey::generate();
+        let active = RestorableNamespace {
+            namespace_id: master_key.namespace_id(),
+            master_key,
+            passkey: Some(RestorableNamespacePasskey {
+                credential_id: vec![1, 2, 3],
+                prf_salt: [4; 32],
+            }),
+        };
+        let operation = new_restore_operation_for_test(manager).await;
+        operation.activate_restored_namespace(&active).await
+    }
+
+    fn dirty_restore_wallet_ids() -> Vec<WalletId> {
+        let mut wallet_ids = Database::global()
+            .cloud_blob_sync_states
+            .list()
+            .unwrap()
+            .into_iter()
+            .filter_map(|state| match state.state {
+                PersistedCloudBlobState::Dirty(_) => state.wallet_id().cloned(),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        wallet_ids.sort();
+        wallet_ids
+    }
+
+    fn sorted_wallet_ids(wallet_ids: &[WalletId]) -> Vec<WalletId> {
+        let mut wallet_ids = wallet_ids.to_vec();
+        wallet_ids.sort();
+        wallet_ids
     }
 
     #[test]
