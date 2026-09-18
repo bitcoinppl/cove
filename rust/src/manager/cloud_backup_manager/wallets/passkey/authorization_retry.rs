@@ -263,8 +263,7 @@ mod tests {
     fn platform_authorization_retry_budget_extends_beyond_two_seconds() {
         let policy = PlatformAuthorizationRetryPolicy::IosInteractive;
         let config = policy.config();
-        let delays = deterministic_retry_backoff(policy, 7)
-            .collect::<Vec<_>>();
+        let delays = deterministic_retry_backoff(policy, 7).collect::<Vec<_>>();
         let total_delay = delays.iter().sum::<Duration>();
 
         assert!(delays[0] >= config.min_delay);
@@ -277,8 +276,9 @@ mod tests {
     async fn ios_retry_recovers_without_retrying_non_transient_failures() {
         let attempts = Arc::new(AtomicUsize::new(0));
         let retry_attempts = Arc::clone(&attempts);
-        let retrier =
-            PlatformAuthorizationRetrier::from_policy(PlatformAuthorizationRetryPolicy::IosInteractive);
+        let retrier = PlatformAuthorizationRetrier::from_policy(
+            PlatformAuthorizationRetryPolicy::IosInteractive,
+        );
         let result = retrier
             .retry(move || {
                 let retry_attempts = Arc::clone(&retry_attempts);
