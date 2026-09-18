@@ -46,6 +46,9 @@ impl Server {
                     }
                 };
 
+                // macOS accepted sockets inherit the listener's non-blocking mode, so a read
+                // before the request bytes arrive would fail with WouldBlock
+                stream.set_nonblocking(false).unwrap();
                 stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
                 let mut bytes = Vec::new();
                 let header_end = loop {
