@@ -263,20 +263,6 @@ impl CaptureState {
         }
     }
 
-    #[cfg(test)]
-    fn snapshot_text(&self) -> String {
-        self.snapshot_start().finish()
-    }
-
-    #[cfg(test)]
-    fn clear(&mut self) -> Result<(), CaptureError> {
-        if let Some(clear) = self.start_clear()? {
-            clear.wait()?;
-        }
-
-        Ok(())
-    }
-
     fn start_clear(&mut self) -> Result<Option<WriterReply>, CaptureError> {
         let marker = format!("diagnostics logs cleared at {}", timestamp());
         self.ring.clear();
@@ -783,6 +769,18 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    fn snapshot_text(state: &CaptureState) -> String {
+        state.snapshot_start().finish()
+    }
+
+    fn clear(state: &mut CaptureState) -> Result<(), CaptureError> {
+        if let Some(clear) = state.start_clear()? {
+            clear.wait()?;
+        }
+
+        Ok(())
+    }
+
     fn writer_that_replaces_current_file_on_shutdown(dir: &Path) -> LogWriter {
         let writer_dir = dir.to_path_buf();
         let (sender, receiver) = mpsc::sync_channel(WRITER_QUEUE_CAPACITY);
@@ -914,7 +912,7 @@ mod tests {
         state.attach(dir.path().to_path_buf())?;
         state.record_line("after reattach");
 
-        assert_eq!(state.snapshot_text(), "replacement\nafter reattach\n");
+        assert_eq!(snapshot_text(&state), "replacement\nafter reattach\n");
 
         Ok(())
     }
@@ -931,7 +929,7 @@ mod tests {
         let mut state = CaptureState::default();
         state.attach(dir.path().to_path_buf())?;
 
-        assert!(state.snapshot_text().contains("before restart"));
+        assert!(snapshot_text(&state).contains("before restart"));
 
         Ok(())
     }
@@ -946,7 +944,7 @@ mod tests {
         let mut state = CaptureState::default();
         state.attach(dir.path().to_path_buf())?;
 
-        assert_eq!(state.snapshot_text(), "oldest\nolder\ncurrent\n");
+        assert_eq!(snapshot_text(&state), "oldest\nolder\ncurrent\n");
 
         Ok(())
     }
@@ -961,13 +959,13 @@ mod tests {
         state.record_line(" ".repeat(LOG_FILE_BYTES));
         state.record_line("after disk failure");
 
-        let text = state.snapshot_text();
+        let text = snapshot_text(&state);
 
         assert!(text.contains("failed to write Rust diagnostics log file"));
         assert!(text.contains("disk capture may be incomplete"));
         assert!(text.contains("after disk failure"));
 
-        let text = state.snapshot_text();
+        let text = snapshot_text(&state);
         assert!(text.contains("failed to write Rust diagnostics log file"));
         assert!(text.contains("after disk failure"));
 
@@ -981,10 +979,10 @@ mod tests {
         state.attach(dir.path().to_path_buf())?;
         state.record_line("before clear");
 
-        state.clear()?;
+        clear(&mut state)?;
         state.record_line("after clear");
 
-        let text = state.snapshot_text();
+        let text = snapshot_text(&state);
         assert!(!text.contains("before clear"));
         assert!(text.contains("diagnostics logs cleared at"));
         assert!(text.contains("after clear"));
