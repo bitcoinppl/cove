@@ -272,7 +272,7 @@ impl DownloadedWalletBackup {
                 })?;
 
                 crate::backup::import::restore_cloud_mnemonic_wallet(&self.metadata, mnemonic)
-                    .map_err(|(error, _)| cloud_restore_error("restore mnemonic wallet", error))?;
+                    .map_err(|error| cloud_restore_error("restore mnemonic wallet", error))?;
             }
             LocalWalletSecret::Xprv(value) => {
                 let xpriv = WalletXprv::parse(value.as_str()).map_err_prefix(
@@ -281,7 +281,7 @@ impl DownloadedWalletBackup {
                 )?;
 
                 crate::backup::import::restore_cloud_xpriv_wallet(&self.metadata, xpriv).map_err(
-                    |(error, _)| cloud_restore_error("restore extended-private-key wallet", error),
+                    |error| cloud_restore_error("restore extended-private-key wallet", error),
                 )?;
             }
             _ => {
@@ -289,7 +289,7 @@ impl DownloadedWalletBackup {
                     &self.metadata,
                     &backup_model,
                 )
-                .map_err(|(error, _)| cloud_restore_error("restore descriptor wallet", error))?;
+                .map_err(|error| cloud_restore_error("restore descriptor wallet", error))?;
             }
         }
 
