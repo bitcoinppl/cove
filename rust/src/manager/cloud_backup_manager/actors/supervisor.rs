@@ -673,18 +673,41 @@ impl CloudBackupSupervisor {
         Produces::ok(result)
     }
 
-    pub async fn save_restore_keychain_state(
+    pub async fn commit_restore_namespace_activation(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         master_key: cove_cspp::master_key::MasterKey,
         passkey: Option<RestoredPasskeyMaterial>,
         namespace_id: String,
+        state: PersistedCloudBackupState,
+        wallet_ids: Vec<WalletId>,
     ) -> ActorResult<Result<(), CloudBackupError>> {
         if !self.restore_operation_is_current(claim) {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         }
+        let Some(manager) = self.manager() else {
+            return Produces::ok(Err(CloudBackupError::Cancelled));
+        };
 
-        let result = restore::save_restore_keychain_entries(master_key, passkey, namespace_id);
+        if let Err(error) =
+            restore::save_restore_keychain_entries(master_key, passkey, namespace_id)
+        {
+            return Produces::ok(Err(error));
+        }
+
+        // keychain and configured state are one restore commit; cancellation cannot split them
+        let result = Database::global().cloud_backup_state.set(&state).map_err(|source| {
+            CloudBackupError::internal_context("persist restored cloud backup state", source)
+        });
+
+        if result.is_ok() {
+            manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(&state));
+            manager.refresh_persisted_flags();
+            if let Err(error) = manager.mark_wallet_blobs_dirty_for_background_upload(wallet_ids) {
+                return Produces::ok(Err(error));
+            }
+        }
+
         Produces::ok(result)
     }
 
