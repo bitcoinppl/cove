@@ -90,6 +90,7 @@ impl cove_cspp::CsppStore for MockStoreHandle {
 
 type MockDiscoverResult = Result<(Vec<u8>, Vec<u8>), PasskeyError>;
 type MockPasskeyActionResults = Arc<Mutex<VecDeque<Result<Vec<u8>, PasskeyError>>>>;
+type MockPasskeyStickyResult = Arc<Mutex<Option<Result<Vec<u8>, PasskeyError>>>>;
 type MockPasskeyCreateResult = Arc<Mutex<Option<Result<PasskeyRegistrationResult, PasskeyError>>>>;
 #[derive(Debug, Default)]
 struct MockCloudState {
@@ -884,6 +885,7 @@ pub(crate) struct MockPasskeyProviderImpl {
     discover_results: Arc<Mutex<VecDeque<MockDiscoverResult>>>,
     create_result: MockPasskeyCreateResult,
     authenticate_results: MockPasskeyActionResults,
+    authenticate_result_default: MockPasskeyStickyResult,
     create_count: Arc<Mutex<usize>>,
     authenticate_count: Arc<Mutex<usize>>,
     discover_count: Arc<Mutex<usize>>,
@@ -905,6 +907,7 @@ impl MockPasskeyProviderImpl {
         self.discover_results.lock().clear();
         *self.create_result.lock() = None;
         self.authenticate_results.lock().clear();
+        *self.authenticate_result_default.lock() = None;
         *self.create_count.lock() = 0;
         *self.authenticate_count.lock() = 0;
         *self.discover_count.lock() = 0;
@@ -940,6 +943,7 @@ impl MockPasskeyProviderImpl {
     }
 
     pub(crate) fn set_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
+        *self.authenticate_result_default.lock() = Some(result.clone());
         let mut results = self.authenticate_results.lock();
         results.clear();
         results.push_back(result);
@@ -1014,13 +1018,20 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
             gate.block();
         }
 
-        self.authenticate_results.lock().pop_front().unwrap_or_else(|| {
-            Err(PasskeyError::RequestFailed {
-                operation: PasskeyOperation::AuthenticateAssertion,
-                reason: PasskeyFailureReason::Unknown {
-                    diagnostic_message: "unexpected authenticate_with_prf call".into(),
-                },
-            })
+        if let Some(result) = self.authenticate_results.lock().pop_front() {
+            return result;
+        }
+
+        // set_authenticate_result is the reusable default after queued results
+        if let Some(result) = self.authenticate_result_default.lock().clone() {
+            return result;
+        }
+
+        Err(PasskeyError::RequestFailed {
+            operation: PasskeyOperation::AuthenticateAssertion,
+            reason: PasskeyFailureReason::Unknown {
+                diagnostic_message: "unexpected authenticate_with_prf call".into(),
+            },
         })
     }
 
