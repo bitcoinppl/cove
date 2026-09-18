@@ -287,13 +287,6 @@ impl ActiveOperation {
     fn clear(&mut self) {
         self.0 = None;
     }
-
-    #[cfg(test)]
-    fn take_claim(&mut self) -> Option<CloudBackupExclusiveOperationClaim> {
-        let claim = self.claim();
-        self.clear();
-        claim
-    }
 }
 
 impl PartialEq<Option<CloudBackupExclusiveOperationClaim>> for ActiveOperation {
@@ -1287,6 +1280,14 @@ pub(crate) mod test_support {
     #![cfg(test)]
 
     use super::*;
+
+    impl ActiveOperation {
+        pub fn take_claim(&mut self) -> Option<CloudBackupExclusiveOperationClaim> {
+            let claim = self.claim();
+            self.clear();
+            claim
+        }
+    }
 
     impl CloudBackupSupervisor {
         pub async fn run_wallet_upload_inline_for_test(

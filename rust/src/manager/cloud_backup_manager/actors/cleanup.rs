@@ -105,10 +105,18 @@ impl CloudBackupCleanupWorker {
 
         Produces::ok(())
     }
+}
 
-    #[cfg(test)]
-    pub(crate) async fn is_idle_for_test(&mut self) -> ActorResult<bool> {
-        Produces::ok(!self.running && self.queue.is_empty())
+#[cfg(test)]
+pub(crate) mod test_support {
+    use act_zero::{ActorResult, Produces};
+
+    use super::CloudBackupCleanupWorker;
+
+    impl CloudBackupCleanupWorker {
+        pub(crate) async fn is_idle_for_test(&mut self) -> ActorResult<bool> {
+            Produces::ok(!self.running && self.queue.is_empty())
+        }
     }
 }
 

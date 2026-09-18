@@ -17,12 +17,6 @@ impl CloudBackupSupervisor {
         manager.clear_enable_progress(status);
     }
 
-    #[cfg(test)]
-    pub async fn clear_pending_enable_session(&mut self) -> ActorResult<()> {
-        self.pending_enable_session = None;
-        Produces::ok(())
-    }
-
     pub async fn clear_runtime_passkey_authorization(&mut self) -> ActorResult<()> {
         self.detail_workflow.clear_authorization();
         Produces::ok(())
@@ -171,5 +165,13 @@ impl CloudBackupSupervisor {
                 GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into(),
             ));
         }
+    }
+}
+
+#[cfg(test)]
+impl CloudBackupSupervisor {
+    pub async fn clear_pending_enable_session(&mut self) -> ActorResult<()> {
+        self.pending_enable_session = None;
+        Produces::ok(())
     }
 }
