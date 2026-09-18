@@ -42,11 +42,11 @@ const CLOUD_BACKUP_WALLET_SUPPORT_MESSAGE: &str =
     "This cloud backup contains a wallet this version of Cove can't restore.";
 const PASSKEY_REQUEST_INCOMPLETE_MESSAGE: &str = "The passkey request did not complete. Try again.";
 const LOCAL_WALLET_MISMATCH_MESSAGE: &str = concat!(
-    "Cove unlocked your backup, but some saved wallet data on this iPhone does not match it. ",
+    "Cove unlocked your backup, but some saved wallet data on this device does not match it. ",
     "Cove kept that data unchanged."
 );
 const LOCAL_WALLET_UNREADABLE_MESSAGE: &str = concat!(
-    "Cove unlocked your backup, but some saved wallet data on this iPhone could not be read. ",
+    "Cove unlocked your backup, but some saved wallet data on this device could not be read. ",
     "Cove kept that data unchanged."
 );
 const ANDROID_PASSKEY_ASSOCIATION_MESSAGE: &str = concat!(
@@ -637,6 +637,22 @@ mod tests {
         assert!(message.contains("cloud storage"));
         assert!(!message.contains("iCloud"));
         assert!(!message.contains("Google Drive"));
+    }
+
+    #[test]
+    fn local_wallet_conflict_reader_messages_are_platform_neutral() {
+        let mismatch =
+            CloudBackupError::LocalWalletConflict(LocalWalletConflict::Mismatch).reader_message();
+        let unreadable =
+            CloudBackupError::LocalWalletConflict(LocalWalletConflict::Unreadable).reader_message();
+
+        assert_eq!(mismatch, LOCAL_WALLET_MISMATCH_MESSAGE);
+        assert_eq!(unreadable, LOCAL_WALLET_UNREADABLE_MESSAGE);
+        for message in [mismatch, unreadable] {
+            assert!(message.contains("this device"));
+            assert!(!message.contains("iPhone"));
+            assert!(!message.contains("Android"));
+        }
     }
 
     #[test]
