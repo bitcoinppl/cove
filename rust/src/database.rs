@@ -363,7 +363,56 @@ pub(crate) mod test_support {
             return;
         };
 
-        let _ = std::fs::remove_dir_all(home.join(".data").join("test"));
+        try_remove_identified_legacy_cove_test_dir(&home.join(".data").join("test"));
+    }
+
+    fn try_remove_identified_legacy_cove_test_dir(path: &Path) -> bool {
+        if !is_identified_legacy_cove_test_dir(path) {
+            return false;
+        }
+
+        std::fs::remove_dir_all(path).is_ok()
+    }
+
+    fn is_identified_legacy_cove_test_dir(path: &Path) -> bool {
+        let Ok(entries) = std::fs::read_dir(path) else {
+            return false;
+        };
+
+        let mut saw_test_database = false;
+        for entry in entries {
+            let Ok(entry) = entry else {
+                return false;
+            };
+
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                return false;
+            };
+
+            let Ok(file_type) = entry.file_type() else {
+                return false;
+            };
+
+            if !file_type.is_file() || !is_legacy_cove_test_database_file_name(name) {
+                return false;
+            }
+
+            saw_test_database = true;
+        }
+
+        saw_test_database
+    }
+
+    fn is_legacy_cove_test_database_file_name(name: &str) -> bool {
+        let Some(stem) = name.strip_prefix("cove_") else {
+            return false;
+        };
+        let Some(stem) = stem.strip_suffix(".db") else {
+            return false;
+        };
+
+        !stem.is_empty() && stem.bytes().all(|byte| byte.is_ascii_alphanumeric())
     }
 
     #[test]
@@ -389,6 +438,42 @@ pub(crate) mod test_support {
                 "test database {path:?} must not be under {home_data:?}"
             );
         }
+    }
+
+    #[test]
+    fn legacy_home_test_cleanup_deletes_only_identified_cove_test_data() {
+        let root = tempfile::TempDir::new().expect("temp dir");
+
+        let owned = root.path().join("owned");
+        std::fs::create_dir_all(&owned).unwrap();
+        std::fs::write(owned.join("cove_abc1234.db"), b"cove").unwrap();
+        assert!(try_remove_identified_legacy_cove_test_dir(&owned));
+        assert!(!owned.exists());
+
+        let unrelated = root.path().join("unrelated");
+        std::fs::create_dir_all(&unrelated).unwrap();
+        std::fs::write(unrelated.join("notes.txt"), b"keep").unwrap();
+        assert!(!try_remove_identified_legacy_cove_test_dir(&unrelated));
+        assert!(unrelated.join("notes.txt").exists());
+
+        let mixed = root.path().join("mixed");
+        std::fs::create_dir_all(&mixed).unwrap();
+        std::fs::write(mixed.join("cove_abc1234.db"), b"cove").unwrap();
+        std::fs::write(mixed.join("notes.txt"), b"keep").unwrap();
+        assert!(!try_remove_identified_legacy_cove_test_dir(&mixed));
+        assert!(mixed.join("notes.txt").exists());
+        assert!(mixed.join("cove_abc1234.db").exists());
+
+        let empty = root.path().join("empty");
+        std::fs::create_dir_all(&empty).unwrap();
+        assert!(!try_remove_identified_legacy_cove_test_dir(&empty));
+        assert!(empty.exists());
+
+        let nested = root.path().join("nested");
+        std::fs::create_dir_all(nested.join("subdir")).unwrap();
+        std::fs::write(nested.join("cove_abc1234.db"), b"cove").unwrap();
+        assert!(!try_remove_identified_legacy_cove_test_dir(&nested));
+        assert!(nested.join("cove_abc1234.db").exists());
     }
 }
 
