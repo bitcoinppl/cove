@@ -10,6 +10,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use act_zero::{Actor, ActorResult, Addr, AddrLike, Produces, WeakAddr, call, send};
+use cove_cspp::backup_data::wallet_record_id;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
@@ -26,7 +27,8 @@ use super::write::{
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBackupRecordKey, CloudStorageIssue, DriveAccountSwitchId, PersistedCloudBackupState,
+    CloudBackupRecordKey, CloudBlobDirtyState, CloudStorageIssue, DriveAccountSwitchId,
+    PersistedCloudBackupState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
     PersistedDisablingCloudBackup, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
 };
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
@@ -417,12 +419,38 @@ impl CloudBackupSupervisor {
     ) -> Result<(), CloudBackupError> {
         let RestoredNamespaceCommit { master_key, passkey, namespace_id, state, wallet_ids } =
             commit;
+        let keychain = CloudBackupKeychain::global();
+        let snapshot = keychain.capture_restore_activation_snapshot();
+        let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
+        let dirty_states = wallet_ids
+            .into_iter()
+            .map(|wallet_id| {
+                let record_id = wallet_record_id(wallet_id.as_ref());
+                PersistedCloudBlobSyncState::wallet(
+                    namespace_id.clone(),
+                    wallet_id,
+                    record_id,
+                    PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
+                )
+            })
+            .collect::<Vec<_>>();
 
         restore::save_restore_keychain_entries(master_key, passkey, namespace_id)?;
 
-        // keychain and configured state are one restore commit; cancellation cannot split them
-        Self::persist_cloud_backup_state(manager, &state, "persist restored cloud backup state")?;
-        manager.mark_wallet_blobs_dirty_for_background_upload(wallet_ids)?;
+        // keychain, configured state, and dirty-wallet rows are one restore commit
+        if let Err(source) = Database::global()
+            .cloud_backup_state
+            .persist_restored_namespace_activation(&state, &dirty_states)
+        {
+            let original =
+                CloudBackupError::internal_context("persist restored namespace activation", source);
+
+            return Err(restore::rollback_restore_activation_keychain(&snapshot, original));
+        }
+
+        manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(&state));
+        manager.refresh_persisted_flags();
+        manager.refresh_sync_health();
 
         Ok(())
     }

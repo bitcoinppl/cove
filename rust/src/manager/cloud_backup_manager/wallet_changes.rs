@@ -4,8 +4,8 @@ use act_zero::send;
 use cove_cspp::backup_data::wallet_record_id;
 use tracing::{error, warn};
 
+use super::RustCloudBackupManager;
 use super::wallets::wallet_metadata_change_requires_upload;
-use super::{CloudBackupError, RustCloudBackupManager};
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobDirtyState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
@@ -55,35 +55,6 @@ impl RustCloudBackupManager {
         }
 
         self.schedule_wallet_upload(wallet_id, false);
-    }
-
-    pub(crate) fn mark_wallet_blobs_dirty_for_background_upload<I>(
-        &self,
-        wallet_ids: I,
-    ) -> Result<(), CloudBackupError>
-    where
-        I: IntoIterator<Item = WalletId>,
-    {
-        let namespace_id = self.current_namespace_id()?;
-        let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
-
-        for wallet_id in wallet_ids {
-            let record_id = wallet_record_id(wallet_id.as_ref());
-            let sync_state = PersistedCloudBlobSyncState::wallet(
-                namespace_id.clone(),
-                wallet_id,
-                record_id,
-                PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
-            );
-
-            Database::global().cloud_blob_sync_states.set(&sync_state).map_err(|source| {
-                CloudBackupError::internal_context("persist dirty cloud backup state", source)
-            })?;
-        }
-
-        self.refresh_sync_health();
-
-        Ok(())
     }
 
     pub(crate) fn handle_wallet_metadata_update(
