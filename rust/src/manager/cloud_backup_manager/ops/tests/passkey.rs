@@ -852,11 +852,11 @@ async fn passkey_match_session_retries_targeted_auth_failure_before_presentation
         current_namespace.clone(),
         serde_json::to_vec(&current_encrypted).unwrap(),
     );
-    globals.passkey.set_authenticate_result(Err(PasskeyError::RequestFailed {
+    globals.passkey.set_authenticate_result(Ok(selected_prf_key.to_vec()));
+    globals.passkey.push_authenticate_result(Err(PasskeyError::RequestFailed {
         operation: PasskeyOperation::AuthenticateAssertion,
         reason: PasskeyFailureReason::PlatformAuthorizationFailed,
     }));
-    globals.passkey.push_authenticate_result(Ok(selected_prf_key.to_vec()));
 
     let failed = session
         .match_snapshot(&[stale_namespace.clone(), current_namespace.clone()])
@@ -915,11 +915,11 @@ async fn passkey_match_session_does_not_retry_targeted_auth_failure_after_presen
         current_namespace.clone(),
         serde_json::to_vec(&current_encrypted).unwrap(),
     );
-    globals.passkey.set_authenticate_result(Err(PasskeyError::RequestFailed {
+    globals.passkey.set_authenticate_result(Ok(selected_prf_key.to_vec()));
+    globals.passkey.push_authenticate_result(Err(PasskeyError::RequestFailed {
         operation: PasskeyOperation::AuthenticateAssertion,
         reason: PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
     }));
-    globals.passkey.push_authenticate_result(Ok(selected_prf_key.to_vec()));
 
     let failed =
         session.match_snapshot(&[stale_namespace.clone(), current_namespace.clone()]).await;
@@ -955,11 +955,11 @@ async fn passkey_match_stops_after_terminal_targeted_auth_failure() {
         prf_output: discovered_prf_key.to_vec(),
         credential_id: vec![1, 2, 3],
     }));
-    globals.passkey.set_authenticate_result(Err(PasskeyError::RequestFailed {
+    globals.passkey.set_authenticate_result(Ok(discovered_prf_key.to_vec()));
+    globals.passkey.push_authenticate_result(Err(PasskeyError::RequestFailed {
         operation: PasskeyOperation::AuthenticateAssertion,
         reason: PasskeyFailureReason::InvalidResponse,
     }));
-    globals.passkey.push_authenticate_result(Ok(discovered_prf_key.to_vec()));
 
     let result = NamespacePasskeyMatcher::new(
         &CloudStorage::global_explicit_client(),
