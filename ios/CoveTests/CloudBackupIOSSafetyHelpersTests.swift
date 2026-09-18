@@ -614,7 +614,9 @@ extension CloudBackupIOSSafetyHelpersTests {
 
     @MainActor
     func testBackupReadUsesLocalTargetBeforeMetadata() async throws {
-        let fixture = makeICloudMetadataFixture()
+        // CI runners can take more than the 1s fixture default to read a small
+        // local file; a timeout falls through to metadata and returns SyncPending
+        let fixture = makeICloudMetadataFixture(defaultTimeout: 60)
         defer { fixture.removeContainer() }
 
         let location = try XCTUnwrap(backupLocations().first)
