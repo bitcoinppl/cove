@@ -138,9 +138,8 @@ struct RestoreApplication {
 ///
 /// A run where every wallet hit a local conflict must keep that category: the
 /// reader has to learn their local data was kept unchanged
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 enum RestoreFailureCategory {
-    #[default]
     None,
     LocalConflict(LocalWalletConflict),
     Mixed,
@@ -314,16 +313,12 @@ impl RestoreOperation {
         state: PersistedCloudBackupState,
         wallet_ids: Vec<WalletId>,
     ) -> Result<(), CloudBackupError> {
-        call!(self.supervisor.commit_restore_namespace_activation(
-            self.operation_claim,
-            master_key,
-            passkey,
-            namespace_id,
-            state,
-            wallet_ids
-        ))
-        .await
-        .map_err(|_| CloudBackupError::Cancelled)?
+        let commit =
+            RestoredNamespaceCommit { master_key, passkey, namespace_id, state, wallet_ids };
+
+        call!(self.supervisor.commit_restore_namespace_activation(self.operation_claim, commit))
+            .await
+            .map_err(|_| CloudBackupError::Cancelled)?
     }
 
     pub(crate) async fn restore_from_cloud_backup(
@@ -843,6 +838,14 @@ impl RestoreOperation {
 pub(crate) struct RestoredPasskeyMaterial {
     pub(crate) credential_id: Vec<u8>,
     pub(crate) prf_salt: [u8; 32],
+}
+
+pub(crate) struct RestoredNamespaceCommit {
+    pub(crate) master_key: MasterKey,
+    pub(crate) passkey: Option<RestoredPasskeyMaterial>,
+    pub(crate) namespace_id: String,
+    pub(crate) state: PersistedCloudBackupState,
+    pub(crate) wallet_ids: Vec<WalletId>,
 }
 
 impl From<&RestorableNamespacePasskey> for RestoredPasskeyMaterial {
