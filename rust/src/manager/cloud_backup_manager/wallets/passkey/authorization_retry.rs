@@ -75,8 +75,6 @@ pub(crate) fn is_pre_presentation_platform_authorization_failure(error: &Passkey
 pub(crate) struct PlatformAuthorizationRetrier {
     policy: PlatformAuthorizationRetryPolicy,
     deadline: Instant,
-    #[cfg(test)]
-    jitter_seed: Option<u64>,
 }
 
 impl PlatformAuthorizationRetrier {
@@ -84,20 +82,8 @@ impl PlatformAuthorizationRetrier {
         Self::from_policy(PlatformAuthorizationRetryPolicy::for_current_platform())
     }
 
-    fn from_policy(policy: PlatformAuthorizationRetryPolicy) -> Self {
-        Self {
-            policy,
-            deadline: Instant::now() + policy.config().total_delay,
-            #[cfg(test)]
-            jitter_seed: None,
-        }
-    }
-
-    #[cfg(test)]
-    fn for_test(policy: PlatformAuthorizationRetryPolicy, jitter_seed: u64) -> Self {
-        let mut retrier = Self::from_policy(policy);
-        retrier.jitter_seed = Some(jitter_seed);
-        retrier
+    pub(crate) fn from_policy(policy: PlatformAuthorizationRetryPolicy) -> Self {
+        Self { policy, deadline: Instant::now() + policy.config().total_delay }
     }
 
     fn retry_backoff(&self, total_delay: Duration) -> impl backon::Backoff {
@@ -110,10 +96,6 @@ impl PlatformAuthorizationRetrier {
 
         if config.jitter {
             builder = builder.with_jitter();
-        }
-        #[cfg(test)]
-        if let Some(seed) = self.jitter_seed {
-            builder = builder.with_jitter_seed(seed);
         }
 
         builder.build().map(move |delay| delay.min(config.max_delay))
@@ -259,12 +241,30 @@ mod tests {
         }));
     }
 
+    fn deterministic_retry_backoff(
+        policy: PlatformAuthorizationRetryPolicy,
+        seed: u64,
+    ) -> impl backon::Backoff {
+        let config = policy.config();
+        let mut builder = ExponentialBuilder::default()
+            .with_min_delay(config.min_delay)
+            .with_max_delay(config.max_delay)
+            .without_max_times()
+            .with_total_delay(Some(config.total_delay));
+
+        if config.jitter {
+            builder = builder.with_jitter_seed(seed);
+        }
+
+        builder.build().map(move |delay| delay.min(config.max_delay))
+    }
+
     #[test]
     fn platform_authorization_retry_budget_extends_beyond_two_seconds() {
         let policy = PlatformAuthorizationRetryPolicy::IosInteractive;
         let config = policy.config();
-        let retrier = PlatformAuthorizationRetrier::for_test(policy, 7);
-        let delays = retrier.retry_backoff(config.total_delay).collect::<Vec<_>>();
+        let delays = deterministic_retry_backoff(policy, 7)
+            .collect::<Vec<_>>();
         let total_delay = delays.iter().sum::<Duration>();
 
         assert!(delays[0] >= config.min_delay);
@@ -277,10 +277,8 @@ mod tests {
     async fn ios_retry_recovers_without_retrying_non_transient_failures() {
         let attempts = Arc::new(AtomicUsize::new(0));
         let retry_attempts = Arc::clone(&attempts);
-        let retrier = PlatformAuthorizationRetrier::for_test(
-            PlatformAuthorizationRetryPolicy::IosInteractive,
-            7,
-        );
+        let retrier =
+            PlatformAuthorizationRetrier::from_policy(PlatformAuthorizationRetryPolicy::IosInteractive);
         let result = retrier
             .retry(move || {
                 let retry_attempts = Arc::clone(&retry_attempts);
@@ -313,9 +311,8 @@ mod tests {
             let attempts = Arc::new(AtomicUsize::new(0));
             let operation_attempts = Arc::clone(&attempts);
             let expected = error.clone();
-            let retrier = PlatformAuthorizationRetrier::for_test(
+            let retrier = PlatformAuthorizationRetrier::from_policy(
                 PlatformAuthorizationRetryPolicy::IosInteractive,
-                7,
             );
             let actual = retrier
                 .retry(move || {
@@ -334,7 +331,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread", start_paused = true)]
     async fn sequential_operations_share_one_platform_authorization_retry_deadline() {
         let policy = PlatformAuthorizationRetryPolicy::IosInteractive;
-        let retrier = PlatformAuthorizationRetrier::for_test(policy, 7);
+        let retrier = PlatformAuthorizationRetrier::from_policy(policy);
         let started_at = Instant::now();
         let first_attempts = Arc::new(AtomicUsize::new(0));
         let operation_attempts = Arc::clone(&first_attempts);
