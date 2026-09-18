@@ -82,11 +82,15 @@ impl PlatformAuthorizationRetrier {
         Self::from_policy(PlatformAuthorizationRetryPolicy::for_current_platform())
     }
 
-    pub(crate) fn from_policy(policy: PlatformAuthorizationRetryPolicy) -> Self {
+    fn from_policy(policy: PlatformAuthorizationRetryPolicy) -> Self {
         Self { policy, deadline: Instant::now() + policy.config().total_delay }
     }
 
-    fn retry_backoff(&self, total_delay: Duration) -> impl backon::Backoff {
+    fn retry_backoff(
+        &self,
+        total_delay: Duration,
+        jitter_seed: Option<u64>,
+    ) -> impl backon::Backoff {
         let config = self.policy.config();
         let mut builder = ExponentialBuilder::default()
             .with_min_delay(config.min_delay)
@@ -95,7 +99,10 @@ impl PlatformAuthorizationRetrier {
             .with_total_delay(Some(total_delay));
 
         if config.jitter {
-            builder = builder.with_jitter();
+            match jitter_seed {
+                Some(seed) => builder = builder.with_jitter_seed(seed),
+                None => builder = builder.with_jitter(),
+            }
         }
 
         builder.build().map(move |delay| delay.min(config.max_delay))
@@ -114,7 +121,7 @@ impl PlatformAuthorizationRetrier {
         let policy = self.policy;
 
         operation
-            .retry(self.retry_backoff(available_delay))
+            .retry(self.retry_backoff(available_delay, None))
             .when(move |error| policy.retries(error))
             .adjust(move |_error, delay| {
                 let remaining = deadline.saturating_duration_since(Instant::now());
@@ -241,29 +248,12 @@ mod tests {
         }));
     }
 
-    fn deterministic_retry_backoff(
-        policy: PlatformAuthorizationRetryPolicy,
-        seed: u64,
-    ) -> impl backon::Backoff {
-        let config = policy.config();
-        let mut builder = ExponentialBuilder::default()
-            .with_min_delay(config.min_delay)
-            .with_max_delay(config.max_delay)
-            .without_max_times()
-            .with_total_delay(Some(config.total_delay));
-
-        if config.jitter {
-            builder = builder.with_jitter_seed(seed);
-        }
-
-        builder.build().map(move |delay| delay.min(config.max_delay))
-    }
-
     #[test]
     fn platform_authorization_retry_budget_extends_beyond_two_seconds() {
         let policy = PlatformAuthorizationRetryPolicy::IosInteractive;
         let config = policy.config();
-        let delays = deterministic_retry_backoff(policy, 7).collect::<Vec<_>>();
+        let retrier = PlatformAuthorizationRetrier::from_policy(policy);
+        let delays = retrier.retry_backoff(config.total_delay, Some(7)).collect::<Vec<_>>();
         let total_delay = delays.iter().sum::<Duration>();
 
         assert!(delays[0] >= config.min_delay);

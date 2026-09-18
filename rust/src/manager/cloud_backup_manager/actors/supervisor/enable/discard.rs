@@ -169,9 +169,15 @@ impl CloudBackupSupervisor {
 }
 
 #[cfg(test)]
-impl CloudBackupSupervisor {
-    pub async fn clear_pending_enable_session(&mut self) -> ActorResult<()> {
-        self.pending_enable_session = None;
-        Produces::ok(())
+pub(crate) mod test_support {
+    use act_zero::{ActorResult, Produces};
+
+    use super::CloudBackupSupervisor;
+
+    impl CloudBackupSupervisor {
+        pub async fn clear_pending_enable_session(&mut self) -> ActorResult<()> {
+            self.pending_enable_session = None;
+            Produces::ok(())
+        }
     }
 }

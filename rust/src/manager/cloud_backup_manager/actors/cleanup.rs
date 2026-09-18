@@ -107,19 +107,6 @@ impl CloudBackupCleanupWorker {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod test_support {
-    use act_zero::{ActorResult, Produces};
-
-    use super::CloudBackupCleanupWorker;
-
-    impl CloudBackupCleanupWorker {
-        pub(crate) async fn is_idle_for_test(&mut self) -> ActorResult<bool> {
-            Produces::ok(!self.running && self.queue.is_empty())
-        }
-    }
-}
-
 async fn run_cleanup_job(mut job: CloudBackupCleanupJob) -> Result<(), CloudBackupError> {
     let cloud = job.cloud.clone();
     let active_reader = WalletBackupReader::new(
@@ -206,4 +193,17 @@ async fn verify_source_in_active_namespace(
 
 fn matches_revision_hash(entry: &WalletEntry, expected_revision: &str) -> bool {
     entry.content_revision_hash == expected_revision
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use act_zero::{ActorResult, Produces};
+
+    use super::CloudBackupCleanupWorker;
+
+    impl CloudBackupCleanupWorker {
+        pub(crate) async fn is_idle_for_test(&mut self) -> ActorResult<bool> {
+            Produces::ok(!self.running && self.queue.is_empty())
+        }
+    }
 }
