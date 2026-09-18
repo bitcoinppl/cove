@@ -972,21 +972,10 @@ mod tests {
 
     use cove_types::BlockSizeLast;
 
-    use crate::wallet::fingerprint::Fingerprint;
+    use crate::test_support::hot_wallet_metadata as hot_metadata;
     use crate::wallet::metadata::StoreType;
 
     use super::*;
-
-    fn hot_metadata(name: &str) -> WalletMetadata {
-        let mut metadata = WalletMetadata::preview_new();
-        metadata.name = name.to_string();
-        metadata.wallet_type = WalletType::Hot;
-        metadata.master_fingerprint = Some(Arc::new(Fingerprint::from(
-            bdk_wallet::bitcoin::bip32::Fingerprint::from_str("817e7be0").unwrap(),
-        )));
-
-        metadata
-    }
 
     fn cold_metadata(name: &str) -> WalletMetadata {
         let mut metadata = hot_metadata(name);
