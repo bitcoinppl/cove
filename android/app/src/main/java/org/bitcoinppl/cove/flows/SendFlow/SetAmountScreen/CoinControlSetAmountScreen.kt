@@ -14,7 +14,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.QrCode2
@@ -65,6 +64,8 @@ import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.SetAmountFocusField
+import org.bitcoinppl.cove_core.WalletManagerAction
+import org.bitcoinppl.cove_core.types.BitcoinUnit
 import org.bitcoinppl.cove_core.types.addressStringSpacedOut
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -173,6 +174,9 @@ fun CoinControlSetAmountScreen(
                         denomination = sendingDenomination,
                         dollarText = dollarEquivalentText,
                         onAmountTap = onAmountTap,
+                        onUnitChange = { unit ->
+                            walletManager.dispatch(WalletManagerAction.UpdateUnit(unit))
+                        },
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                     AddressWidget(
@@ -351,6 +355,7 @@ private fun CoinControlAmountWidget(
     denomination: String,
     dollarText: String,
     onAmountTap: () -> Unit,
+    onUnitChange: (BitcoinUnit) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(20.dp))
@@ -368,13 +373,16 @@ private fun CoinControlAmountWidget(
         )
         Spacer(Modifier.height(24.dp))
         Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onAmountTap),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Bottom,
         ) {
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            Box(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .clickable(onClick = onAmountTap),
+                contentAlignment = Alignment.Center,
+            ) {
                 // offset to compensate for unit dropdown (matches iOS)
                 val configuration = LocalConfiguration.current
                 val screenWidthDp = configuration.screenWidthDp.dp
@@ -392,16 +400,7 @@ private fun CoinControlAmountWidget(
                 )
             }
             Spacer(Modifier.width(32.dp))
-            Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.offset(y = (-4).dp)) {
-                Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, maxLines = 1)
-                Spacer(Modifier.width(4.dp))
-                Icon(
-                    imageVector = Icons.Filled.ArrowDropDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+            BitcoinUnitDropdown(denomination = denomination, onUnitChange = onUnitChange)
         }
         Spacer(Modifier.height(8.dp))
         Text(

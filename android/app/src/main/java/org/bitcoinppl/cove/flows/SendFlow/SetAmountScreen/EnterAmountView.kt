@@ -12,14 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AutoSizeTextField
+import org.bitcoinppl.cove_core.types.BitcoinUnit
 
 @Composable
 fun EnterAmountView(
@@ -49,7 +44,7 @@ fun EnterAmountView(
     secondaryUnit: String = "",
     onAmountChanged: (String) -> Unit,
     onClearAmount: () -> Unit = {},
-    onUnitChange: (String) -> Unit = {},
+    onUnitChange: (BitcoinUnit) -> Unit = {},
     onToggleFiatOrBtc: () -> Unit = {},
     onSanitizeBtcAmount: (oldValue: String, newValue: String) -> String? = { _, _ -> null },
     onSanitizeFiatAmount: (oldValue: String, newValue: String) -> String? = { _, _ -> null },
@@ -60,7 +55,6 @@ fun EnterAmountView(
     onDone: () -> Unit = {},
 ) {
     var amount by remember { mutableStateOf(initialAmount) }
-    var showUnitMenu by remember { mutableStateOf(false) }
     var textWidth by remember { mutableStateOf(0.dp) }
     var isFocused by remember { mutableStateOf(false) }
 
@@ -136,43 +130,7 @@ fun EnterAmountView(
             // unit dropdown area (only shown when in BTC mode, matches iOS)
             if (!isFiatMode) {
                 Spacer(Modifier.width(32.dp))
-                Box {
-                    Row(
-                        verticalAlignment = Alignment.Bottom,
-                        modifier =
-                            Modifier
-                                .offset(y = (-4).dp)
-                                .clickable { showUnitMenu = true },
-                    ) {
-                        Text(denomination, color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, maxLines = 1)
-                        Spacer(Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Filled.ArrowDropDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showUnitMenu,
-                        onDismissRequest = { showUnitMenu = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("sats") },
-                            onClick = {
-                                onUnitChange("sats")
-                                showUnitMenu = false
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("btc") },
-                            onClick = {
-                                onUnitChange("btc")
-                                showUnitMenu = false
-                            },
-                        )
-                    }
-                }
+                BitcoinUnitDropdown(denomination = denomination, onUnitChange = onUnitChange)
             }
         }
         Spacer(Modifier.height(8.dp))

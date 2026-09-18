@@ -12,7 +12,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
 
     let utxos: [Utxo]
 
-    // private
+    // slider values are always sats, unit-relative BTC doubles do not convert back to exact sats
     @State private var customAmount: Double = 0.0
     @State private var previousAmount: Double = .init(conservativeDustLimitSats)
     @State private var isEditing: Bool = false
@@ -71,7 +71,7 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                 if customAmount != adjusted {
                     customAmount = adjusted
                     manager.debouncedDispatch(
-                        .notifyCoinControlAmountChanged(adjusted),
+                        .notifyCoinControlAmountChanged(amountFromSliderValue(adjusted)),
                         for: .milliseconds(200)
                     )
                 }
@@ -81,12 +81,20 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         )
     }
 
+    private func amountFromSliderValue(_ value: Double) -> Amount {
+        Amount.fromSat(sats: UInt64(value.rounded()))
+    }
+
+    private func sliderValue(_ amount: Amount) -> Double {
+        Double(amount.asSats())
+    }
+
     private var minSend: Double {
-        satToDouble(conservativeDustLimitSats)
+        Double(conservativeDustLimitSats)
     }
 
     private var step: Double {
-        satToDouble(10)
+        10
     }
 
     private var maxSend: Double {
@@ -96,14 +104,15 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         if amount.asSats() <= conservativeDustLimitSatsU {
             amount = Amount.fromSat(sats: conservativeDustLimitSatsU + 1000)
         }
-        return amountToDouble(amount)
+
+        return sliderValue(amount)
     }
 
     /// softMaxSend is the next biggest amount below maxSend that can be selected
     /// any amount between softMaxSend and maxSend can NOT be selected, because that would create a dust UTXO
     private var softMaxSend: Double {
         let amount = manager.maxSendMinusFeesAndSmallUtxo() ?? conservativeDustLimitAmount
-        return amountToDouble(amount)
+        return sliderValue(amount)
     }
 
     private func displayAmount(_ amount: String? = nil) -> String {
@@ -115,11 +124,10 @@ struct SendFlowUtxoCustomAmountSheetView: View {
             case let (.sat, .some(amount)):
                 Amount.fromSat(sats: UInt64(amount))
             case let (.btc, .some(amount)):
-                Amount.fromSat(sats: UInt64(amount * 100_000_000))
-            case (.sat, nil):
-                Amount.fromSat(sats: UInt64(customAmount))
-            case (.btc, nil):
-                Amount.fromSat(sats: UInt64(customAmount * 100_000_000))
+                // truncation would show some typed amounts one sat low
+                Amount.fromSat(sats: UInt64((amount * 100_000_000).rounded()))
+            case (_, nil):
+                amountFromSliderValue(customAmount)
             }
 
         return walletManager.displayAmount(amount, showUnit: false)
@@ -133,17 +141,6 @@ struct SendFlowUtxoCustomAmountSheetView: View {
                 manager.dispatch(.notifyCoinControlEnteredAmountChanged($0, isFocused))
             }
         )
-    }
-
-    private func satToDouble(_ sats: Int) -> Double {
-        amountToDouble(Amount.fromSat(sats: UInt64(sats)))
-    }
-
-    private func amountToDouble(_ amount: Amount) -> Double {
-        switch metadata.selectedUnit {
-        case .sat: Double(amount.asSats())
-        case .btc: amount.asBtc()
-        }
     }
 
     var selectedUnitSymbol: String {
@@ -185,37 +182,34 @@ struct SendFlowUtxoCustomAmountSheetView: View {
         .background(Color(UIColor.secondarySystemBackground))
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .onChange(of: metadata.selectedUnit, initial: true, selectedUnitChanged)
+        .onAppear(perform: syncCustomAmount)
         .onChange(of: isEditing, editingChanged)
         .onChange(of: manager.amount, managerAmountChanged)
         .onChange(of: isFocused, initial: false, focusChanged)
     }
 
-    private func selectedUnitChanged(_: Unit, _: Unit) {
-        customAmount = manager.amount.map(amountToDouble) ?? maxSend
+    private func syncCustomAmount() {
+        customAmount = manager.amount.map(sliderValue) ?? maxSend
     }
 
     private func editingChanged(_ old: Bool, _ new: Bool) {
         Log.debug("isEditing changed from \(old) -> \(new)")
 
         if old, !new {
-            manager.dispatch(.notifyCoinControlAmountChanged(customAmount))
+            manager.dispatch(.notifyCoinControlAmountChanged(amountFromSliderValue(customAmount)))
         }
     }
 
     private func managerAmountChanged(_: Amount?, _ new: Amount?) {
         guard let newAmount = new, !isEditing else { return }
 
-        switch metadata.selectedUnit {
-        case .sat: customAmount = Double(newAmount.asSats())
-        case .btc: customAmount = newAmount.asBtc()
-        }
+        customAmount = sliderValue(newAmount)
     }
 
     private func focusChanged(_ old: Bool, _ new: Bool) {
         guard old, !new else { return }
 
-        customAmount = manager.amount.map(amountToDouble) ?? maxSend
+        syncCustomAmount()
     }
 }
 

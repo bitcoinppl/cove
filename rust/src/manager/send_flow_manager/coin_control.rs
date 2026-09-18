@@ -10,28 +10,26 @@ use tracing::debug;
 use super::{RustSendFlowManager, state::EnterMode};
 
 impl RustSendFlowManager {
-    pub(crate) fn handle_coin_control_amount_changed(self: &Arc<Self>, amount: f64) -> Option<()> {
-        debug!("handle_coin_control_amount_changed: {amount}");
+    pub(crate) fn handle_coin_control_amount_changed(
+        self: &Arc<Self>,
+        amount: Amount,
+    ) -> Option<()> {
+        debug!("handle_coin_control_amount_changed: {amount:?}");
 
         let mut coin_control_mode = match self.state.lock().mode.clone() {
             EnterMode::CoinControl(coin_control_mode) => coin_control_mode,
             _ => return None,
         };
 
-        let unit = self.state.lock().metadata.selected_unit;
-        let amount = match unit {
-            BitcoinUnit::Btc => Amount::from_btc(amount).ok()?,
-            BitcoinUnit::Sat => Amount::from_sat(amount as u64),
-        };
         let amount = amount.min(coin_control_mode.max_send());
 
-        // if the amount we are selecting is within 1000 sats of the max send, then select the max send
+        // amounts above the soft maximum would leave a dust output, so select the full maximum
         let max_send_without_fees =
             self.max_send_minus_fees().filter(|amount| amount.as_sats() > 0);
         let max_send_threshold =
             self.max_send_minus_fees_and_small_utxo().or(max_send_without_fees);
         if let Some(max_send_threshold) = max_send_threshold
-            && amount >= max_send_threshold
+            && amount > max_send_threshold
         {
             debug!(
                 "setting coin control to max amount close to max {} {}",
@@ -113,9 +111,13 @@ impl RustSendFlowManager {
     ) -> Option<()> {
         debug!("handle_coin_control_entered_amount_changed: {amount}");
         let amount = amount.chars().filter(|c| c.is_numeric() || *c == '.').collect::<String>();
-        let amount_float = amount.parse::<f64>().ok()?;
+        let unit = self.state.lock().metadata.selected_unit;
+        let amount = match unit {
+            BitcoinUnit::Sat => Amount::from_sat(amount.parse::<u64>().ok()?),
+            BitcoinUnit::Btc => Amount::from_btc_str(&amount).ok()?,
+        };
 
-        self.handle_coin_control_amount_changed(amount_float)
+        self.handle_coin_control_amount_changed(amount)
     }
 
     pub(crate) fn set_coin_control_mode(self: &Arc<Self>, utxos: Vec<Utxo>) {

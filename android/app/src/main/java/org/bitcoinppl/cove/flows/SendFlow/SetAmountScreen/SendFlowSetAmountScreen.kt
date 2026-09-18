@@ -82,7 +82,6 @@ import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.SetAmountFocusField
 import org.bitcoinppl.cove_core.WalletManagerAction
-import org.bitcoinppl.cove_core.types.BitcoinUnit
 import org.bitcoinppl.cove_core.types.FeeSpeed
 
 private enum class SendFocusField { None, Amount, Address }
@@ -270,13 +269,7 @@ fun SendFlowSetAmountScreen(
                                 sendFlowManager.dispatch(SendFlowManagerAction.ClearSendAmount)
                             },
                             onUnitChange = { unit ->
-                                val bitcoinUnit =
-                                    when (unit.lowercase()) {
-                                        "sats" -> BitcoinUnit.SAT
-                                        "btc" -> BitcoinUnit.BTC
-                                        else -> BitcoinUnit.SAT
-                                    }
-                                walletManager.dispatch(WalletManagerAction.UpdateUnit(bitcoinUnit))
+                                walletManager.dispatch(WalletManagerAction.UpdateUnit(unit))
                             },
                             onToggleFiatOrBtc = {
                                 walletManager.dispatch(WalletManagerAction.ToggleFiatOrBtc)
