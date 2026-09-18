@@ -1,5 +1,5 @@
 use crate::common::{
-    command_exists, print_error, print_info, print_success, print_warning,
+    cargo_target_dir, command_exists, print_error, print_info, print_success, print_warning,
     trim_generated_trailing_whitespace,
 };
 use color_eyre::{
@@ -381,6 +381,7 @@ struct DevicectlHardwareProperties {
 pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
     sh.set_var("IPHONEOS_DEPLOYMENT_TARGET", IPHONEOS_DEPLOYMENT_TARGET);
+    let target_dir = cargo_target_dir(&sh)?;
 
     // check for xcodebuild
     if !command_exists("xcodebuild") {
@@ -458,15 +459,15 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
 
         build_result.wrap_err_with(|| format!("Failed to build for target {}", target))?;
 
-        let lib_path = format!("./target/{}/{}/{}", target, build_dir, IOS_LIB_NAME);
+        let lib_path = target_dir.join(target).join(build_dir).join(IOS_LIB_NAME);
         if !sh.path_exists(&lib_path) {
-            print_error(&format!("Missing static library at {}", lib_path));
-            color_eyre::eyre::bail!("Build failed: missing library at {}", lib_path);
+            print_error(&format!("Missing static library at {}", lib_path.display()));
+            color_eyre::eyre::bail!("Build failed: missing library at {}", lib_path.display());
         }
 
         library_flags.extend([
             "-library".to_string(),
-            lib_path,
+            lib_path.to_string_lossy().into_owned(),
             "-headers".to_string(),
             BINDINGS_DIR.to_string(),
         ]);
@@ -475,7 +476,7 @@ pub fn build_ios(build_type: IosBuildType, device: bool, _sign: bool, verbose: b
 
     // generate headers, modulemap, and swift sources using UniFFI
     println!("{}", "Generating Swift bindings...".blue().bold());
-    let static_lib_path = format!("./target/{}/{}/{}", targets[0], build_dir, IOS_LIB_NAME);
+    let static_lib_path = target_dir.join(targets[0]).join(build_dir).join(IOS_LIB_NAME);
 
     sh.create_dir(BINDINGS_DIR).wrap_err("Failed to create bindings directory")?;
 

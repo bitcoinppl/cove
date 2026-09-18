@@ -1,7 +1,12 @@
-use color_eyre::Result;
+use color_eyre::{eyre::Context, Result};
 use colored::Colorize;
-use std::{fs, path::Path, process::Command};
-use xshell::Shell;
+use serde::Deserialize;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
+use xshell::{cmd, Shell};
 
 /// Check if a command exists in PATH
 pub fn command_exists(command: &str) -> bool {
@@ -40,6 +45,21 @@ pub fn ensure_rust_directory(sh: &Shell) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoMetadata {
+    target_directory: PathBuf,
+}
+
+pub fn cargo_target_dir(sh: &Shell) -> Result<PathBuf> {
+    let output = cmd!(sh, "cargo metadata --format-version 1 --no-deps")
+        .read()
+        .wrap_err("Failed to read cargo metadata")?;
+    let metadata: CargoMetadata =
+        serde_json::from_str(&output).wrap_err("Failed to parse cargo metadata")?;
+
+    Ok(metadata.target_directory)
 }
 
 /// Parse build flags and return individual arguments

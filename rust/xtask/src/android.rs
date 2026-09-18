@@ -1,6 +1,6 @@
 use crate::android_device::{adb_stdout, command_error, AndroidDevice};
 use crate::common::{
-    command_exists, print_error, print_info, print_success, print_warning,
+    cargo_target_dir, command_exists, print_error, print_info, print_success, print_warning,
     trim_generated_trailing_whitespace,
 };
 use color_eyre::{
@@ -164,6 +164,7 @@ pub fn build_android(
     verbose: bool,
 ) -> Result<()> {
     let sh = Shell::new()?;
+    let target_dir = cargo_target_dir(&sh)?;
 
     // check for cargo-ndk
     if !command_exists("cargo-ndk") {
@@ -256,10 +257,13 @@ pub fn build_android(
         })?;
 
         // verify the library was built
-        let dynamic_lib_path = format!("./target/{}/{}/{}", target, build_type, LIB_NAME);
+        let dynamic_lib_path = target_dir.join(target).join(build_type).join(LIB_NAME);
         if !sh.path_exists(&dynamic_lib_path) {
-            print_error(&format!("Missing dynamic library at {}", dynamic_lib_path));
-            color_eyre::eyre::bail!("Build failed: missing library at {}", dynamic_lib_path);
+            print_error(&format!("Missing dynamic library at {}", dynamic_lib_path.display()));
+            color_eyre::eyre::bail!(
+                "Build failed: missing library at {}",
+                dynamic_lib_path.display()
+            );
         }
 
         // copy to jniLibs
@@ -273,7 +277,7 @@ pub fn build_android(
 
         let dest_path = format!("{}/{}", abi_dir, OUTPUT_LIB_NAME);
         sh.copy_file(&dynamic_lib_path, &dest_path).wrap_err_with(|| {
-            format!("Failed to copy library from {} to {}", dynamic_lib_path, dest_path)
+            format!("Failed to copy library from {} to {}", dynamic_lib_path.display(), dest_path)
         })?;
 
         print_success(&format!("Built and copied library for {}", target));
@@ -282,13 +286,13 @@ pub fn build_android(
     // generate UniFFI bindings
     println!("{}", "Generating Kotlin bindings...".blue().bold());
     let first_target = targets.first().context("Android build needs at least one Rust target")?;
-    let dynamic_lib_path = format!("./target/{}/{}/{}", first_target, build_type, LIB_NAME);
+    let dynamic_lib_path = target_dir.join(first_target).join(build_type).join(LIB_NAME);
 
     if !sh.path_exists(&dynamic_lib_path) {
-        print_error(&format!("Missing dynamic library at {}", dynamic_lib_path));
+        print_error(&format!("Missing dynamic library at {}", dynamic_lib_path.display()));
         color_eyre::eyre::bail!(
             "Cannot generate bindings: missing library at {}",
-            dynamic_lib_path
+            dynamic_lib_path.display()
         );
     }
 
