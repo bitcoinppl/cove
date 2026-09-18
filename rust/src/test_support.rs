@@ -6,6 +6,7 @@ use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
 use parking_lot::Mutex;
 
 static FAIL_KEYCHAIN_DELETES: AtomicBool = AtomicBool::new(false);
+type AfterSaveHook = Arc<dyn Fn(&str) + Send + Sync>;
 
 /// In-memory keychain shared by every test module
 ///
@@ -13,13 +14,26 @@ static FAIL_KEYCHAIN_DELETES: AtomicBool = AtomicBool::new(false);
 /// module's init wins that race is nondeterministic. Sharing one clonable
 /// instance keeps entry inspection and failure injection working no matter
 /// which module installs it
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub(crate) struct MockKeychain {
     entries: Arc<Mutex<HashMap<String, String>>>,
     fail_save_at: Arc<Mutex<Option<usize>>>,
     fail_delete_at: Arc<Mutex<Option<usize>>>,
     save_count: Arc<Mutex<usize>>,
     delete_count: Arc<Mutex<usize>>,
+    after_save: Arc<Mutex<Option<AfterSaveHook>>>,
+}
+
+impl std::fmt::Debug for MockKeychain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MockKeychain")
+            .field("entries", &self.entries)
+            .field("fail_save_at", &self.fail_save_at)
+            .field("fail_delete_at", &self.fail_delete_at)
+            .field("save_count", &self.save_count)
+            .field("delete_count", &self.delete_count)
+            .finish_non_exhaustive()
+    }
 }
 
 impl MockKeychain {
@@ -29,6 +43,7 @@ impl MockKeychain {
         *self.fail_delete_at.lock() = None;
         *self.save_count.lock() = 0;
         *self.delete_count.lock() = 0;
+        *self.after_save.lock() = None;
     }
 
     pub(crate) fn set_entries(&self, entries: Vec<(&str, &str)>) {
@@ -49,17 +64,29 @@ impl MockKeychain {
         *self.delete_count.lock() = 0;
         *self.fail_delete_at.lock() = Some(delete_attempt);
     }
+
+    pub(crate) fn set_after_save(&self, hook: impl Fn(&str) + Send + Sync + 'static) {
+        *self.after_save.lock() = Some(Arc::new(hook));
+    }
 }
 
 impl KeychainAccess for MockKeychain {
     fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-        let mut save_count = self.save_count.lock();
-        *save_count += 1;
-        if Some(*save_count) == *self.fail_save_at.lock() {
-            return Err(KeychainError::Save);
+        {
+            let mut save_count = self.save_count.lock();
+            *save_count += 1;
+            if Some(*save_count) == *self.fail_save_at.lock() {
+                return Err(KeychainError::Save);
+            }
         }
 
-        self.entries.lock().insert(key, value);
+        self.entries.lock().insert(key.clone(), value);
+
+        let hook = self.after_save.lock().clone();
+        if let Some(hook) = hook {
+            hook(&key);
+        }
+
         Ok(())
     }
 
