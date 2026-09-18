@@ -173,7 +173,7 @@ alias gen-swift := build-ios
 [group('build')]
 [working-directory('ios')]
 compile-ios:
-    xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build && just notf "done compile ios"
+    if [ ! -f "CoveCore/Sources/cove_core_ffi.xcframework/Info.plist" ] || [ ! -f "CoveCore/Sources/cove_core_ffi.xcframework/ios-arm64/libcove.a" ] || [ ! -f "CoveCore/Sources/cove_core_ffi.xcframework/ios-arm64-simulator/libcove.a" ]; then just build-ios-debug-device; fi && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build && just notf "done compile ios"
 
 # [bounded] Compile Android debug
 [group('build')]
