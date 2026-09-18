@@ -58,7 +58,7 @@ Then build a signed APK/AAB via Android Studio (Build → Generate Signed Bundle
 ### Iterative Development
 
 - **Rust-only changes**: Use `just bacon` or `just bcheck` for continuous feedback
-- **UI changes (no Rust API changes)**: Use `just compile-ios` or `just compile-android` for faster iteration
+- **UI changes (no Rust API changes)**: Use `just compile-ios` or `just compile-android` for faster iteration; `compile-ios` will bootstrap the generated iOS bindings with `just build-ios-debug-device` if the XCFramework is missing or incomplete
 - **Rust API or UniFFI changes**: Run `just build-ios` or `just build-android` to rebuild Rust and regenerate bindings
 - **Run iOS on a physical device**: Use `just build-run-ios --udid <device-udid>` when bindings may be stale, or `just run-ios --udid <device-udid>` when generated bindings are already current
 - **Tests**: Run `just watch-test` (`just wtest`) in a separate terminal for continuous test feedback
@@ -83,7 +83,7 @@ Then build a signed APK/AAB via Android Studio (Build → Generate Signed Bundle
 | `just build-ios-release` | `just bir` | Build iOS release |
 | `just build-run-ios` | `just bri` | Rebuild iOS bindings, install, and run on device or simulator |
 | `just run-ios` | `just ri` | Install and run iOS using existing generated bindings |
-| `just compile-ios` | - | Compile iOS without regenerating bindings |
+| `just compile-ios` | - | Compile iOS without regenerating bindings when the generated package inputs already exist and include both iOS slices |
 | `just compile-android` | - | Compile Android without regenerating bindings |
 | `just test` | - | Run the Rust test suite with nextest |
 | `just watch-test` | `just wtest` | Watch and re-run tests on Rust file changes |
