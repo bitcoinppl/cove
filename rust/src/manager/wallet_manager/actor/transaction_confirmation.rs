@@ -339,36 +339,6 @@ fn confirmation_count_requires_watcher(confirmations: Option<u32>) -> bool {
 }
 
 #[cfg(test)]
-impl WalletActor {
-    pub(crate) async fn active_targeted_transaction_scan_count_for_test(
-        &mut self,
-    ) -> ActorResult<usize> {
-        Produces::ok(self.targeted_transaction_scans.active.len())
-    }
-
-    pub(crate) async fn start_targeted_transaction_scan_after_block_refresh_for_test(
-        &mut self,
-        tx_id: Txid,
-    ) -> ActorResult<()> {
-        let Some(scan) = self.start_targeted_transaction_scan(tx_id) else {
-            return Produces::ok(());
-        };
-
-        self.perform_scan_for_single_tx(scan).await
-    }
-
-    pub(crate) async fn complete_targeted_sync_after_shutdown_for_test(
-        &mut self,
-        tx_id: Txid,
-    ) -> ActorResult<()> {
-        let scan = TargetedTransactionScan::new(tx_id, self.scan_generation);
-        self.shutdown().await?;
-
-        self.update_targeted_transaction_sync(Ok(SyncResponse::default()), scan).await
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use bitcoin::hashes::Hash as _;
 
@@ -409,5 +379,45 @@ mod tests {
         scans.finish(stale);
 
         assert!(scans.contains(current));
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use act_zero::{ActorResult, Produces};
+    use bdk_wallet::chain::spk_client::SyncResponse;
+    use bitcoin::Txid;
+
+    use crate::manager::wallet_manager::actor::WalletActor;
+
+    use super::TargetedTransactionScan;
+
+    impl WalletActor {
+        pub(crate) async fn active_targeted_transaction_scan_count_for_test(
+            &mut self,
+        ) -> ActorResult<usize> {
+            Produces::ok(self.targeted_transaction_scans.active.len())
+        }
+
+        pub(crate) async fn start_targeted_transaction_scan_after_block_refresh_for_test(
+            &mut self,
+            tx_id: Txid,
+        ) -> ActorResult<()> {
+            let Some(scan) = self.start_targeted_transaction_scan(tx_id) else {
+                return Produces::ok(());
+            };
+
+            self.perform_scan_for_single_tx(scan).await
+        }
+
+        pub(crate) async fn complete_targeted_sync_after_shutdown_for_test(
+            &mut self,
+            tx_id: Txid,
+        ) -> ActorResult<()> {
+            let scan = TargetedTransactionScan::new(tx_id, self.scan_generation);
+            self.shutdown().await?;
+
+            self.update_targeted_transaction_sync(Ok(SyncResponse::default()), scan).await
+        }
     }
 }
