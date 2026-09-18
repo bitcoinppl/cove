@@ -176,6 +176,22 @@ final class CloudBackupPresentationCoordinator {
         presentationTransitions.discard { _ in true }
     }
 
+    @discardableResult
+    func dismissCurrentPresentationForAction() -> PresentationTransitionRequest? {
+        guard currentPresentation != nil else { return nil }
+
+        ignoreNextDismissEvent = true
+        return presentationTransitions.dismissCurrentPresentationForTransition()
+    }
+
+    func isPendingActionPresentable(_ presentation: CloudBackupRootPresentation) -> Bool {
+        guard CloudBackupRootPresentation(rootPrompt: rootPrompt()) == presentation else {
+            return false
+        }
+
+        return isPromptPresentable(presentation)
+    }
+
     func consumeDismissEvent() -> Bool {
         if ignoreNextDismissEvent {
             ignoreNextDismissEvent = false
@@ -293,6 +309,8 @@ struct CloudBackupPresentationHost<Content: View>: View {
 
     @State private var manager = CloudBackupManager.shared
     @State private var coordinator = CloudBackupPresentationCoordinator()
+    @State private var passkeyActionHandoff =
+        PresentationActionHandoff<CloudBackupRootPresentation, CloudBackupManagerAction>()
     @State private var successFloater: CloudBackupSuccessFloater?
     @State private var successFloaterDismissTask: Task<Void, Never>?
 
@@ -395,23 +413,50 @@ struct CloudBackupPresentationHost<Content: View>: View {
     }
 
     private func handlePasskeyChoice(existing: Bool) {
-        guard let intent = passkeyChoiceIntent else { return }
-        coordinator.dismissCurrentPresentation()
+        guard
+            let currentPresentation = coordinator.presentationTransitions.currentPresentation,
+            case let .passkeyChoice(intent) = currentPresentation.item
+        else { return }
 
-        switch (intent, existing) {
-        case (.enable, true):
-            manager.dispatch(action: .acceptEnablePrompt(.useExisting))
-        case (.enable, false):
-            manager.dispatch(action: .acceptEnablePrompt(.createNew))
-        case (.enableExistingPasskeyOnly, true):
-            manager.dispatch(action: .acceptEnablePrompt(.useExisting))
-        case (.enableExistingPasskeyOnly, false):
+        let presentation = currentPresentation.item
+        guard let action = passkeyChoiceAction(intent: intent, existing: existing) else {
+            coordinator.dismissCurrentPresentation()
             return
-        case (.repairPasskey, true):
-            manager.dispatch(action: .repairPasskey)
-        case (.repairPasskey, false):
-            manager.dispatch(action: .repairPasskeyNoDiscovery)
         }
+
+        beginPasskeyAction(action, presentation: presentation)
+    }
+
+    private func passkeyChoiceAction(
+        intent: CloudBackupPasskeyChoiceIntent,
+        existing: Bool
+    ) -> CloudBackupManagerAction? {
+        switch (intent, existing) {
+        case (.enable, true), (.enableExistingPasskeyOnly, true):
+            .acceptEnablePrompt(.useExisting)
+        case (.enable, false):
+            .acceptEnablePrompt(.createNew)
+        case (.enableExistingPasskeyOnly, false):
+            nil
+        case (.repairPasskey, true):
+            .repairPasskey
+        case (.repairPasskey, false):
+            .repairPasskeyNoDiscovery
+        }
+    }
+
+    private func beginPasskeyAction(
+        _ action: CloudBackupManagerAction,
+        presentation: CloudBackupRootPresentation
+    ) {
+        guard passkeyActionHandoff.pendingAction == nil else { return }
+        guard let transition = coordinator.dismissCurrentPresentationForAction() else { return }
+
+        _ = passkeyActionHandoff.stage(
+            action: action,
+            presentation: presentation,
+            transition: transition
+        )
     }
 
     private func openCloudBackupScreen() {
@@ -426,13 +471,27 @@ struct CloudBackupPresentationHost<Content: View>: View {
     }
 
     private func createNewBackup() {
-        coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .acceptEnablePrompt(.createNew))
+        guard
+            case let .existingBackupFound(context, passkeyHint) =
+            coordinator.currentPresentation
+        else { return }
+
+        beginPasskeyAction(
+            .acceptEnablePrompt(.createNew),
+            presentation: .existingBackupFound(context, passkeyHint)
+        )
     }
 
     private func useExistingBackup() {
-        coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .acceptEnablePrompt(.useExisting))
+        guard
+            case let .existingBackupFound(context, passkeyHint) =
+            coordinator.currentPresentation
+        else { return }
+
+        beginPasskeyAction(
+            .acceptEnablePrompt(.useExisting),
+            presentation: .existingBackupFound(context, passkeyHint)
+        )
     }
 
     private func cancelExistingBackupPrompt() {
@@ -464,8 +523,12 @@ struct CloudBackupPresentationHost<Content: View>: View {
     }
 
     private func verifyCloudBackup() {
-        coordinator.dismissCurrentPresentation()
-        manager.startVerification(source: .rootPrompt)
+        guard coordinator.currentPresentation == .verificationPrompt else { return }
+
+        beginPasskeyAction(
+            .startVerification(.rootPrompt),
+            presentation: .verificationPrompt
+        )
     }
 
     private func existingPasskeyButtonTitle(for hint: CloudBackupPasskeyHint?) -> String {
@@ -518,6 +581,45 @@ struct CloudBackupPresentationHost<Content: View>: View {
         }
     }
 
+    private func presenterDidBecomeReady(_ requestID: UUID) {
+        let currentPresentation = CloudBackupRootPresentation(rootPrompt: manager.rootPrompt)
+        let isHostAvailable = currentPresentation.map(coordinator.isPendingActionPresentable) == true
+
+        if passkeyActionHandoff.pendingAction != nil {
+            _ = passkeyActionHandoff.presenterDidBecomeReady(
+                requestID,
+                currentPresentation: currentPresentation,
+                isHostAvailable: isHostAvailable,
+                using: coordinator.presentationTransitions
+            ) { action in
+                manager.dispatch(action: action)
+            }
+
+            return
+        }
+
+        coordinator.presenterDidBecomeReady(requestID)
+    }
+
+    private func handleRootPromptChange(_ rootPrompt: CloudBackupRootPrompt) {
+        let currentPresentation = CloudBackupRootPresentation(rootPrompt: rootPrompt)
+        if let pendingPresentation = passkeyActionHandoff.pendingPresentation,
+           pendingPresentation != currentPresentation
+        {
+            passkeyActionHandoff.cancel()
+            coordinator.presentationTransitions.discardQueued { queuedPresentation in
+                queuedPresentation == pendingPresentation
+            }
+        }
+
+        coordinator.reconcile()
+    }
+
+    private func hostDidDisappear() {
+        passkeyActionHandoff.cancel()
+        coordinator.hostDidDisappear()
+    }
+
     var body: some View {
         content
             .overlay(alignment: .top) {
@@ -531,8 +633,8 @@ struct CloudBackupPresentationHost<Content: View>: View {
             .environment(coordinator)
             .presentationTransitionHost(
                 state: coordinator.presentationTransitions.hostState,
-                presenterDidBecomeReady: coordinator.presenterDidBecomeReady,
-                hostDidDisappear: coordinator.hostDidDisappear
+                presenterDidBecomeReady: presenterDidBecomeReady,
+                hostDidDisappear: hostDidDisappear
             )
             .modifier(CloudBackupObservationModifier(
                 presentationContext: presentationContext,
@@ -540,6 +642,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
                 verificationState: manager.verificationState,
                 verificationPresentation: manager.verificationPresentation,
                 updateContext: coordinator.update,
+                handleRootPromptChange: handleRootPromptChange,
                 reconcile: coordinator.reconcile,
                 handleVerificationPresentation: handleVerificationPresentation,
                 onDisappear: dismissSuccessFloater
@@ -605,6 +708,7 @@ private struct CloudBackupObservationModifier: ViewModifier {
     let verificationState: CloudBackupVerificationState?
     let verificationPresentation: CloudBackupVerificationPresentation
     let updateContext: (CloudBackupPresentationContext) -> Void
+    let handleRootPromptChange: (CloudBackupRootPrompt) -> Void
     let reconcile: () -> Void
     let handleVerificationPresentation: (CloudBackupVerificationPresentation) -> Void
     let onDisappear: (UUID?) -> Void
@@ -614,8 +718,8 @@ private struct CloudBackupObservationModifier: ViewModifier {
             .onChange(of: presentationContext, initial: true) { _, context in
                 updateContext(context)
             }
-            .onChange(of: rootPrompt) { _, _ in
-                reconcile()
+            .onChange(of: rootPrompt) { _, rootPrompt in
+                handleRootPromptChange(rootPrompt)
             }
             .onChange(of: verificationState) { _, _ in
                 reconcile()

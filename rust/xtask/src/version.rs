@@ -6,7 +6,7 @@ use xshell::{cmd, Shell};
 // Version file paths
 const CARGO_TOML_PATH: &str = "Cargo.toml";
 pub(crate) const IOS_PROJECT_PATH: &str = "../ios/Cove.xcodeproj/project.pbxproj";
-const ANDROID_GRADLE_PATH: &str = "../android/app/build.gradle.kts";
+pub(crate) const ANDROID_GRADLE_PATH: &str = "../android/app/build.gradle.kts";
 
 pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()> {
     let sh = Shell::new()?;
@@ -19,9 +19,10 @@ pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()
     let targets_str = targets_opt
         .as_ref()
         .filter(|s| !s.is_empty())
-        .map(|s| s.as_str())
+        .map(String::as_str)
         .unwrap_or_else(|| if is_build_bump { "ios,android" } else { "rust,ios,android" });
-    let targets: Vec<&str> = targets_str.split(',').map(|s| s.trim()).collect();
+
+    let targets: Vec<&str> = targets_str.split(',').map(str::trim).collect();
 
     // validate targets
     let valid_targets =
@@ -208,6 +209,18 @@ pub(crate) fn restore_ios_project(sh: &Shell, snapshot: &str) -> Result<()> {
     Ok(sh.write_file(IOS_PROJECT_PATH, snapshot)?)
 }
 
+pub(crate) fn snapshot_android_gradle(sh: &Shell) -> Result<Option<String>> {
+    if !sh.path_exists(ANDROID_GRADLE_PATH) {
+        return Ok(None);
+    }
+
+    Ok(sh.read_file(ANDROID_GRADLE_PATH).map(Some)?)
+}
+
+pub(crate) fn restore_android_gradle(sh: &Shell, snapshot: &str) -> Result<()> {
+    Ok(sh.write_file(ANDROID_GRADLE_PATH, snapshot)?)
+}
+
 pub(crate) fn bump_ios_build_number(sh: &Shell) -> Result<()> {
     if !sh.path_exists(IOS_PROJECT_PATH) {
         print_warning(&format!("iOS project file not found at {}", IOS_PROJECT_PATH));
@@ -221,7 +234,7 @@ pub(crate) fn bump_ios_build_number(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-fn bump_android_build_number(sh: &Shell) -> Result<()> {
+pub(crate) fn bump_android_build_number(sh: &Shell) -> Result<()> {
     if !sh.path_exists(ANDROID_GRADLE_PATH) {
         print_warning(&format!("Android build.gradle.kts not found at {}", ANDROID_GRADLE_PATH));
         return Ok(());
@@ -336,8 +349,9 @@ fn replace_u32_values(
 #[cfg(test)]
 mod tests {
     use super::{
-        bump_ios_build_number, increment_and_replace_ios, prepare_android, prepare_ios,
-        restore_ios_project, snapshot_ios_project, IOS_PROJECT_PATH,
+        bump_android_build_number, bump_ios_build_number, increment_and_replace_ios,
+        prepare_android, prepare_ios, restore_android_gradle, restore_ios_project,
+        snapshot_android_gradle, snapshot_ios_project, ANDROID_GRADLE_PATH, IOS_PROJECT_PATH,
     };
     use xshell::Shell;
 
@@ -435,5 +449,31 @@ CURRENT_PROJECT_VERSION = 89;
         assert!(sh.path_exists(IOS_PROJECT_PATH));
 
         std::fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
+    fn restores_android_gradle_snapshot_after_failed_play_release_flow() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let rust_dir = temp_dir.path().join("rust");
+        let android_app_dir = temp_dir.path().join("android/app");
+        std::fs::create_dir_all(&rust_dir).unwrap();
+        std::fs::create_dir_all(&android_app_dir).unwrap();
+
+        let gradle_path = android_app_dir.join("build.gradle.kts");
+        let original = "\
+versionCode = 28
+versionName = \"1.4.0\"
+";
+        std::fs::write(&gradle_path, original).unwrap();
+
+        let sh = Shell::new().unwrap();
+        sh.change_dir(&rust_dir);
+
+        let snapshot = snapshot_android_gradle(&sh).unwrap().unwrap();
+        bump_android_build_number(&sh).unwrap();
+        restore_android_gradle(&sh, &snapshot).unwrap();
+
+        assert_eq!(std::fs::read_to_string(&gradle_path).unwrap(), original);
+        assert!(sh.path_exists(ANDROID_GRADLE_PATH));
     }
 }

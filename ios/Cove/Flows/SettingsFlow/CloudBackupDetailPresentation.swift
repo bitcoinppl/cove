@@ -5,14 +5,13 @@ enum CloudBackupDestructiveConfirmation: Equatable {
     case reinitialize
 }
 
-enum CloudBackupDetailDialog {
+enum CloudBackupDetailDialog: Equatable {
     case destructive(CloudBackupDestructiveConfirmation)
-    case cloudOnlyWalletActions(CloudBackupWalletItem)
     case disableCloudBackup
     case recoverOtherBackups
 }
 
-enum CloudBackupDetailAlert {
+enum CloudBackupDetailAlert: Equatable {
     case cloudOnlyDeleteWallet(CloudBackupWalletItem)
     case cloudOnlyUnsupportedRestore(CloudBackupWalletItem)
     case undecryptableWalletDeletion(UInt32)
@@ -23,26 +22,177 @@ enum CloudBackupDetailAlert {
     case otherBackupsFinalDeleteConfirmation
 }
 
-enum CloudBackupDetailPresentation {
+enum CloudBackupDetailPresentation: Equatable {
     case dialog(CloudBackupDetailDialog)
+    case cloudOnlyWalletDialog(CloudBackupWalletItem)
     case alert(CloudBackupDetailAlert)
+}
+
+/// Work a dialog or alert button requests that must wait for that prompt to finish dismissing
+///
+/// Most of these reach a passkey prompt; requesting it during the dismissal animation cancels
+/// the assertion silently and misreports the passkey as missing
+enum CloudBackupDetailDeferredAction: Equatable {
+    case dispatch(CloudBackupManagerAction)
+    case startVerification
+
+    func perform(on manager: CloudBackupManager) {
+        switch self {
+        case let .dispatch(action):
+            manager.dispatch(action: action)
+        case .startVerification:
+            manager.startVerification(source: .cloudBackupDetail)
+        }
+    }
+}
+
+/// Owns the detail screen's prompt transitions and the action staged behind a dismissal
+@MainActor
+@Observable
+final class CloudBackupDetailPresenter {
+    let transitions = PresentationTransitionCoordinator<CloudBackupDetailPresentation>()
+
+    @ObservationIgnored
+    private let handoff =
+        PresentationActionHandoff<CloudBackupDetailPresentation, CloudBackupDetailDeferredAction>()
+    @ObservationIgnored
+    private let dispatch: (CloudBackupDetailDeferredAction) -> Void
+
+    init(dispatch: @escaping (CloudBackupDetailDeferredAction) -> Void) {
+        self.dispatch = dispatch
+    }
+
+    /// Dismiss `presentation` and run `action` once UIKit reports the presenter free again
+    func dismiss(
+        _ presentation: CloudBackupDetailPresentation,
+        then action: CloudBackupDetailDeferredAction
+    ) {
+        guard handoff.pendingAction == nil else { return }
+
+        // SwiftUI may clear the prompt binding before the button action runs, so reuse that dismissal
+        let transition = transitions.dismissCurrentPresentationForTransition()
+            ?? transitions.transitionRequest
+
+        guard let transition else {
+            dispatch(action)
+            return
+        }
+
+        _ = handoff.stage(action: action, presentation: presentation, transition: transition)
+    }
+
+    func presenterDidBecomeReady(_ requestID: UUID) {
+        guard handoff.pendingAction != nil else {
+            transitions.presenterDidBecomeReady(requestID)
+            return
+        }
+
+        _ = handoff.presenterDidBecomeReady(
+            requestID,
+            currentPresentation: handoff.pendingPresentation,
+            isHostAvailable: true,
+            using: transitions,
+            dispatch: dispatch
+        )
+    }
+
+    func hostDidDisappear() {
+        handoff.cancel()
+        transitions.hostDidDisappear()
+    }
 }
 
 extension View {
     func cloudBackupDetailPresentations(
         manager: CloudBackupManager,
-        coordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+        presenter: CloudBackupDetailPresenter
     ) -> some View {
         modifier(CloudBackupDetailPresentationModifier(
             manager: manager,
-            coordinator: coordinator
+            presenter: presenter
         ))
+    }
+
+    func cloudOnlyWalletActionDialog(
+        wallet: CloudBackupWalletItem,
+        manager: CloudBackupManager,
+        presenter: CloudBackupDetailPresenter
+    ) -> some View {
+        modifier(CloudOnlyWalletActionDialogModifier(
+            wallet: wallet,
+            manager: manager,
+            presenter: presenter
+        ))
+    }
+}
+
+private struct CloudOnlyWalletActionDialogModifier: ViewModifier {
+    let wallet: CloudBackupWalletItem
+    let manager: CloudBackupManager
+    let presenter: CloudBackupDetailPresenter
+
+    private var coordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation> {
+        presenter.transitions
+    }
+
+    private var isPresented: Binding<Bool> {
+        coordinator.isPresented { presentation in
+            guard case let .cloudOnlyWalletDialog(currentWallet) = presentation else {
+                return false
+            }
+
+            return currentWallet.recordId == wallet.recordId
+        }
+    }
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
+            wallet.name,
+            isPresented: isPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Restore to This Device") {
+                restoreWallet()
+            }
+            .disabled(!manager.isDetailInventoryReady)
+
+            Button("Delete from iCloud", role: .destructive) {
+                requestDeletion()
+            }
+            .disabled(!manager.isDetailInventoryReady)
+
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func restoreWallet() {
+        guard manager.isDetailInventoryReady else { return }
+
+        if wallet.syncStatus == .unsupportedVersion {
+            coordinator.transition(to: .alert(.cloudOnlyUnsupportedRestore(wallet)))
+            return
+        }
+
+        presenter.dismiss(
+            .cloudOnlyWalletDialog(wallet),
+            then: .dispatch(.restoreCloudWallet(wallet.recordId))
+        )
+    }
+
+    private func requestDeletion() {
+        guard manager.isDetailInventoryReady else { return }
+
+        coordinator.transition(to: .alert(.cloudOnlyDeleteWallet(wallet)))
     }
 }
 
 private struct CloudBackupDetailPresentationModifier: ViewModifier {
     let manager: CloudBackupManager
-    let coordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
+
+    private var coordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation> {
+        presenter.transitions
+    }
 
     private var dialog: CloudBackupDetailDialog? {
         guard case let .dialog(dialog) = coordinator.currentPresentation?.item else {
@@ -106,8 +256,6 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
             case .recreate: "Recreate Backup Index"
             case .reinitialize: "Reinitialize Cloud Backup"
             }
-        case let .cloudOnlyWalletActions(wallet):
-            wallet.name
         case .disableCloudBackup:
             "Disable Cloud Backup?"
         case .recoverOtherBackups:
@@ -123,19 +271,6 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
                 performDestructiveAction(confirmation)
             }
             .disabled(!manager.isDetailInventoryComplete)
-
-            Button("Cancel", role: .cancel) {}
-
-        case let .cloudOnlyWalletActions(wallet):
-            Button("Restore to This Device") {
-                restoreCloudOnlyWallet(wallet)
-            }
-            .disabled(!manager.isDetailInventoryReady)
-
-            Button("Delete from iCloud", role: .destructive) {
-                requestCloudOnlyWalletDeletion(wallet)
-            }
-            .disabled(!manager.isDetailInventoryReady)
 
             Button("Cancel", role: .cancel) {}
 
@@ -167,8 +302,6 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
                     "This will replace your entire cloud backup. Wallets that only exist in the current cloud backup will be lost."
                 )
             }
-        case .cloudOnlyWalletActions:
-            EmptyView()
         case .disableCloudBackup:
             Text(
                 "Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage."
@@ -216,11 +349,9 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
             Button("OK", role: .cancel) {}
 
         case .undecryptableWalletDeletion:
-            Button(
-                "Delete Backups",
-                role: .destructive,
-                action: deleteUndecryptableWalletBackups
-            )
+            Button("Delete Backups", role: .destructive) {
+                deleteUndecryptableWalletBackups(after: alert)
+            }
             .disabled(undecryptableWalletCount == 0 || manager.isPerformingDestructiveAction)
 
             Button("Cancel", role: .cancel) {}
@@ -232,7 +363,9 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
             Button("Cancel", role: .cancel) {}
 
         case .otherBackupsRecoveryResult:
-            Button("Verify Current Passkey", action: verifyCurrentPasskey)
+            Button("Verify Current Passkey") {
+                presenter.dismiss(.alert(alert), then: .startVerification)
+            }
             Button("Done", role: .cancel) {}
 
         case .otherBackupsDeleteConfirmation:
@@ -289,32 +422,12 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
     private func performDestructiveAction(_ confirmation: CloudBackupDestructiveConfirmation) {
         guard manager.isDetailInventoryComplete else { return }
 
-        coordinator.dismissCurrentPresentation()
-
-        switch confirmation {
-        case .recreate:
-            manager.dispatch(action: .recreateManifest)
-        case .reinitialize:
-            manager.dispatch(action: .reinitializeBackup)
-        }
-    }
-
-    private func restoreCloudOnlyWallet(_ wallet: CloudBackupWalletItem) {
-        guard manager.isDetailInventoryReady else { return }
-
-        if wallet.syncStatus == .unsupportedVersion {
-            coordinator.transition(to: .alert(.cloudOnlyUnsupportedRestore(wallet)))
-            return
+        let action: CloudBackupManagerAction = switch confirmation {
+        case .recreate: .recreateManifest
+        case .reinitialize: .reinitializeBackup
         }
 
-        coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .restoreCloudWallet(wallet.recordId))
-    }
-
-    private func requestCloudOnlyWalletDeletion(_ wallet: CloudBackupWalletItem) {
-        guard manager.isDetailInventoryReady else { return }
-
-        coordinator.transition(to: .alert(.cloudOnlyDeleteWallet(wallet)))
+        presenter.dismiss(.dialog(.destructive(confirmation)), then: .dispatch(action))
     }
 
     private func presentFinalDisableConfirmation() {
@@ -326,27 +439,22 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
     private func recoverOtherBackups() {
         guard manager.isOtherBackupsInventoryReady else { return }
 
-        coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .recoverOtherBackups)
+        presenter.dismiss(.dialog(.recoverOtherBackups), then: .dispatch(.recoverOtherBackups))
     }
 
     private func deleteCloudOnlyWallet(_ wallet: CloudBackupWalletItem) {
         guard manager.isDetailInventoryReady else { return }
 
-        coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .deleteCloudWallet(wallet.recordId))
+        presenter.dismiss(
+            .alert(.cloudOnlyDeleteWallet(wallet)),
+            then: .dispatch(.deleteCloudWallet(wallet.recordId))
+        )
     }
 
     private func disableCloudBackup() {
         guard manager.isDetailInventoryComplete else { return }
 
-        coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .disableCloudBackup)
-    }
-
-    private func verifyCurrentPasskey() {
-        coordinator.dismissCurrentPresentation()
-        manager.startVerification(source: .cloudBackupDetail)
+        presenter.dismiss(.alert(.disableFinalConfirmation), then: .dispatch(.disableCloudBackup))
     }
 
     private func presentFinalOtherBackupsDeleteConfirmation() {
@@ -358,14 +466,15 @@ private struct CloudBackupDetailPresentationModifier: ViewModifier {
     private func deleteOtherBackups() {
         guard manager.isOtherBackupsInventoryReady else { return }
 
-        coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .deleteOtherBackups)
+        presenter.dismiss(
+            .alert(.otherBackupsFinalDeleteConfirmation),
+            then: .dispatch(.deleteOtherBackups)
+        )
     }
 
-    private func deleteUndecryptableWalletBackups() {
+    private func deleteUndecryptableWalletBackups(after alert: CloudBackupDetailAlert) {
         guard undecryptableWalletCount > 0, !manager.isPerformingDestructiveAction else { return }
 
-        coordinator.dismissCurrentPresentation()
-        manager.dispatch(action: .deleteUndecryptableWalletBackups)
+        presenter.dismiss(.alert(alert), then: .dispatch(.deleteUndecryptableWalletBackups))
     }
 }

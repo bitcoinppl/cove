@@ -17,6 +17,10 @@ use std::{
 };
 use xshell::{cmd, Shell};
 
+mod google_play;
+
+pub use google_play::{release_android, upload_google_play, GooglePlayUploadOptions};
+
 // Android build constants
 const ANDROID_TARGETS: &[&str] =
     &["aarch64-linux-android", "armv7-linux-androideabi", "x86_64-linux-android"];
@@ -554,6 +558,11 @@ impl AndroidReleaseSigning {
         sh.set_var("COVE_KEY_ALIAS", &self.key_alias);
         sh.set_var("COVE_KEY_PASSWORD", &self.key_password);
     }
+}
+
+pub(crate) fn ensure_store_release_signing() -> Result<()> {
+    AndroidReleaseSigning::resolve()?;
+    Ok(())
 }
 
 pub fn bundle_android(verbose: bool) -> Result<()> {

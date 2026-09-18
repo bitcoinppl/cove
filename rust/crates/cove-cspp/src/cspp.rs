@@ -25,6 +25,13 @@ static MASTER_KEY_CACHE: LazyLock<ArcSwapOption<Zeroizing<[u8; 32]>>> =
 
 pub struct Cspp<S: CsppStore>(S);
 
+/// Snapshot of the active master-key entries in the CSPP store
+///
+/// The storage keys and serialized values remain private to CSPP so callers can
+/// restore a failed cross-store operation without depending on its key layout
+#[derive(Clone)]
+pub struct ActiveMasterKeySnapshot(StoredMasterKeyEntries);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MasterKeyPromotionActiveState {
     Prior,
@@ -88,6 +95,31 @@ impl<S: CsppStore> Cspp<S> {
     /// across runtime transitions
     pub fn clear_cached_master_key() {
         MASTER_KEY_CACHE.store(None);
+    }
+
+    /// Captures the active master-key entries for a later rollback
+    pub fn capture_active_master_key_snapshot(&self) -> ActiveMasterKeySnapshot {
+        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        ActiveMasterKeySnapshot(self.read_active_entries())
+    }
+
+    /// Restores active master-key entries captured before a failed operation
+    pub fn restore_active_master_key_snapshot(
+        &self,
+        snapshot: &ActiveMasterKeySnapshot,
+    ) -> Result<(), CsppError> {
+        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+
+        if let Err(error) = self.restore_active_entries(&snapshot.0) {
+            Self::clear_cached_master_key();
+
+            return Err(error);
+        }
+
+        Self::refresh_cache_from_entries(&snapshot.0);
+
+        Ok(())
     }
 
     /// Loads the master key from the store, or generates and saves a new one
@@ -885,6 +917,45 @@ mod tests {
 
         let loaded = cspp.get_or_create_master_key().unwrap();
         assert_eq!(loaded.as_bytes(), replacement.as_bytes());
+    }
+
+    #[test]
+    fn active_master_key_snapshot_restores_store_and_cache() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<MockStore>::reset_cache();
+
+        let cspp = mock_cspp();
+        let original = MasterKey::generate();
+        let replacement = MasterKey::generate();
+        cspp.save_master_key(&original).unwrap();
+        let snapshot = cspp.capture_active_master_key_snapshot();
+
+        cspp.save_master_key(&replacement).unwrap();
+        assert_eq!(cspp.get_or_create_master_key().unwrap().as_bytes(), replacement.as_bytes());
+
+        cspp.restore_active_master_key_snapshot(&snapshot).unwrap();
+        assert_eq!(cspp.get_or_create_master_key().unwrap().as_bytes(), original.as_bytes());
+        assert_eq!(
+            cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
+            original.as_bytes()
+        );
+    }
+
+    #[test]
+    fn failed_active_master_key_snapshot_restore_clears_cache() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<FailNthStore>::clear_cached_master_key();
+
+        let store = FailNthStore::new();
+        let cspp = Cspp::new(store.clone());
+        cspp.save_master_key(&MasterKey::generate()).unwrap();
+        let snapshot = cspp.capture_active_master_key_snapshot();
+        cspp.save_master_key(&MasterKey::generate()).unwrap();
+        assert!(MASTER_KEY_CACHE.load().is_some());
+        store.fail_nth_mutation(1);
+
+        assert!(cspp.restore_active_master_key_snapshot(&snapshot).is_err());
+        assert!(MASTER_KEY_CACHE.load().is_none());
     }
 
     #[test]

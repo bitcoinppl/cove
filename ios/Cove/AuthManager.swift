@@ -8,7 +8,15 @@ enum WipePresentationState: Equatable {
     case idle
     case running
     case shutdownBlocked(ShutdownAttemptId)
-    case failed(String)
+    case failed
+
+    var failureTitle: String {
+        "Unable to Open Cove"
+    }
+
+    var failureMessage: String {
+        "Please try again."
+    }
 }
 
 private enum WipeCallResult: Sendable {
@@ -160,15 +168,23 @@ private enum WipeCallResult: Sendable {
     }
 
     @MainActor
+    private func refreshAuthenticationFlags() {
+        type = rust.authType()
+        isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
+        isDecoyPinEnabled = rust.isDecoyPinEnabled()
+        isUsingBiometrics = false
+    }
+
+    @MainActor
     private func finishWipe(call: WipeCall) async -> UnlockMode {
-        let app = AppManager.shared.rust
+        let rustApp = AppManager.shared.rust
         let result = await Task.detached(priority: .userInitiated) {
             do {
                 switch call {
                 case .initial:
-                    try app.dangerousWipeAllData()
+                    try rustApp.dangerousWipeAllData()
                 case let .retry(attemptId):
-                    try app.retryDangerousWipeAllData(attemptId: attemptId)
+                    try rustApp.retryDangerousWipeAllData(attemptId: attemptId)
                 }
 
                 return WipeCallResult.success
@@ -181,11 +197,10 @@ private enum WipeCallResult: Sendable {
 
         switch result {
         case .success:
-            rust = RustAuthManager()
+            await AppManager.shared.prepareForWipeCompletion()
+            refreshAuthenticationFlags()
             unlock()
-            type = .none
             wipePresentationState = .idle
-            AppManager.shared.reset()
             return .wipe
 
         case let .failure(.WalletLifecycle(.shutdownBlocked(attemptId, _, _))):
@@ -194,12 +209,12 @@ private enum WipeCallResult: Sendable {
 
         case let .failure(error):
             logger.error("Failed to wipe all data: \(error)")
-            wipePresentationState = .failed(error.localizedDescription)
+            wipePresentationState = .failed
             return .locked
 
         case let .unexpectedFailure(message):
             logger.error("Failed to wipe all data: \(message)")
-            wipePresentationState = .failed(message)
+            wipePresentationState = .failed
             return .locked
         }
     }

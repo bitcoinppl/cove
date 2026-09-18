@@ -335,7 +335,7 @@ internal fun cloudBackupEnableBusyCopy(
         null,
         ->
             CloudBackupEnableBusyCopy(
-                title = "Creating your encrypted backup...",
+                title = "Checking for existing backups...",
                 subtitle = "Cloud Backup will continue automatically",
             )
     }
