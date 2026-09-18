@@ -33,6 +33,7 @@ protocol SendFlowRustManaging: AnyObject, Sendable {
     func utxos() -> [Utxo]?
     func maxSendMinusFees() -> Amount?
     func maxSendMinusFeesAndSmallUtxo() -> Amount?
+    func amount() -> Amount
     func dispatch(action: SendFlowManagerAction)
 }
 
@@ -200,6 +201,16 @@ private enum SendFlowManagerAccessError: LocalizedError {
         previousTask?.cancel()
     }
 
+    private func cancelDebouncedTask() {
+        let task = rustState.withLock { state in
+            let task = state.debouncedTask
+            state.debouncedTask = nil
+            return task
+        }
+
+        task?.cancel()
+    }
+
     private func installDelayedAlertWorkItem(_ workItem: DispatchWorkItem?) {
         let previousWorkItem = rustState.withLock { state -> DispatchWorkItem? in
             guard !state.isClosed else {
@@ -261,6 +272,13 @@ private enum SendFlowManagerAccessError: LocalizedError {
     /// Applies the route-owned coin selection before the send screen becomes visible
     func prepareCoinControl(utxos: [Utxo]) async {
         await dispatchAndWait(.setCoinControlMode(utxos))
+    }
+
+    /// Commits the released slider amount and returns the authoritative Rust amount
+    func commitCoinControlAmount(_ amount: Amount) async -> Amount {
+        cancelDebouncedTask()
+        await dispatchAndWait(.notifyCoinControlAmountChanged(amount))
+        return withRustOr(amount) { $0.amount() }
     }
 
     /// Waits until Rust synchronously handles an action, but not for tasks that the action starts

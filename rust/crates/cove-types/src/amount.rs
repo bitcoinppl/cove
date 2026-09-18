@@ -40,6 +40,15 @@ impl Amount {
     pub fn from_btc(btc: f64) -> Result<Self, eyre::Report> {
         Ok(Self(bitcoin::Amount::from_btc(btc)?))
     }
+
+    /// Parse a BTC decimal string into satoshis without converting through `f64`
+    ///
+    /// # Errors
+    /// Returns an error if the string is not a valid BTC amount, is too precise
+    /// (more than 8 decimal places), negative, or out of range
+    pub fn from_btc_str(btc: &str) -> Result<Self, eyre::Report> {
+        Ok(Self(bitcoin::Amount::from_str_in(btc, bitcoin::Denomination::Bitcoin)?))
+    }
 }
 
 #[uniffi::export]
@@ -135,5 +144,16 @@ mod tests {
 
         assert_eq!(amount.fmt_string_with_unit(BitcoinUnit::Sat), "12,000 SATS");
         assert_eq!(amount.fmt_string_with_unit(BitcoinUnit::Btc), "0.00012 BTC");
+    }
+
+    #[test]
+    fn from_btc_str_parses_exact_satoshis() {
+        let amount = Amount::from_btc_str("0.00117716").expect("valid btc string");
+        assert_eq!(amount.as_sats(), 117_716);
+    }
+
+    #[test]
+    fn from_btc_str_rejects_over_precision() {
+        assert!(Amount::from_btc_str("0.001177161").is_err());
     }
 }

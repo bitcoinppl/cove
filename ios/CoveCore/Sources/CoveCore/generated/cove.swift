@@ -36163,7 +36163,7 @@ public enum SendFlowManagerAction {
     )
     case notifyAmountChanged(Amount
     )
-    case notifyCoinControlAmountChanged(Double
+    case notifyCoinControlAmountChanged(Amount
     )
     case notifyCoinControlEnteredAmountChanged(String,Bool
     )
@@ -36245,7 +36245,7 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
         case 19: return .notifyAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
         )
 
-        case 20: return .notifyCoinControlAmountChanged(try FfiConverterDouble.read(from: &buf)
+        case 20: return .notifyCoinControlAmountChanged(try FfiConverterTypeAmount.read(from: &buf)
         )
 
         case 21: return .notifyCoinControlEnteredAmountChanged(try FfiConverterString.read(from: &buf), try FfiConverterBool.read(from: &buf)
@@ -36363,7 +36363,7 @@ public struct FfiConverterTypeSendFlowManagerAction: FfiConverterRustBuffer {
 
         case let .notifyCoinControlAmountChanged(v1):
             writeInt(&buf, Int32(20))
-            FfiConverterDouble.write(v1, into: &buf)
+            FfiConverterTypeAmount.write(v1, into: &buf)
 
 
         case let .notifyCoinControlEnteredAmountChanged(v1,v2):

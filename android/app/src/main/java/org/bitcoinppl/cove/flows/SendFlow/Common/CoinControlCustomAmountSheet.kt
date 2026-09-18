@@ -25,9 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlin.math.roundToLong
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.CoinControlFlow.displayDate
 import org.bitcoinppl.cove.flows.CoinControlFlow.displayName
@@ -39,10 +37,79 @@ import org.bitcoinppl.cove_core.types.Amount
 import org.bitcoinppl.cove_core.types.Utxo
 import org.bitcoinppl.cove_core.types.UtxoType
 
-private enum class PinState {
+internal enum class PinState {
     NONE,
     SOFT,
     HARD,
+}
+
+/** Complete slider interaction state in sats */
+internal data class SmartSnap(
+    val pinState: PinState,
+    val amount: Double,
+    val previousRaw: Double,
+)
+
+/**
+ * Slider pins in sats, the slider holds at max and at the soft max just below it because
+ * amounts between the two would leave a dust change output
+ */
+internal data class SmartSnapBand(
+    val softMaxSend: Double,
+    val maxSend: Double,
+    val step: Double,
+) {
+    /** Replaces all slider state from one manager amount */
+    fun synchronize(amount: Double): SmartSnap =
+        SmartSnap(
+            pinState =
+                when (amount) {
+                    maxSend -> PinState.HARD
+                    softMaxSend -> PinState.SOFT
+                    else -> PinState.NONE
+                },
+            amount = amount,
+            previousRaw = amount,
+        )
+
+    /** Applies the pins to one raw slider event */
+    fun snap(
+        state: SmartSnap,
+        raw: Double,
+    ): SmartSnap {
+        val goingUp = raw > state.previousRaw
+        val goingDown = raw < state.previousRaw
+        val belowBand = raw < softMaxSend - step
+
+        return when (state.pinState) {
+            PinState.HARD ->
+                when {
+                    // a tap on the track lands far below the band in one event,
+                    // holding the pin there would commit max instead of the tapped amount
+                    belowBand -> SmartSnap(PinState.NONE, raw, raw)
+                    goingDown -> SmartSnap(PinState.SOFT, softMaxSend, raw)
+                    // hold at pin
+                    else -> SmartSnap(PinState.HARD, maxSend, raw)
+                }
+
+            PinState.SOFT ->
+                when {
+                    // crossing upward -> snap to hard
+                    goingUp -> SmartSnap(PinState.HARD, maxSend, raw)
+                    // pulled a full step below band -> release pin
+                    belowBand -> SmartSnap(PinState.NONE, raw, raw)
+                    // hold at pin
+                    else -> SmartSnap(PinState.SOFT, softMaxSend, raw)
+                }
+
+            PinState.NONE ->
+                when {
+                    raw < softMaxSend -> SmartSnap(PinState.NONE, raw, raw)
+                    goingUp -> SmartSnap(PinState.HARD, maxSend, raw)
+                    else -> SmartSnap(PinState.SOFT, softMaxSend, raw)
+                }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,140 +122,71 @@ fun CoinControlCustomAmountSheet(
     modifier: Modifier = Modifier,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-    val scope = rememberCoroutineScope()
-    val unit = walletManager.unit
-    val isSats = unit == "sats"
 
-    // pin state for slider
-    var pinState by remember { mutableStateOf(PinState.HARD) }
-    var previousAmount by remember { mutableDoubleStateOf(0.0) }
-    var customAmount by remember { mutableDoubleStateOf(0.0) }
+    // slider values are always sats, the Float round trip of the Compose slider
+    // would leave sub-satoshi noise on unit-relative BTC values
+    var sliderState by remember { mutableStateOf(SmartSnap(PinState.HARD, 0.0, 0.0)) }
     var enteringAmount by remember { mutableStateOf<String?>(null) }
     var isEditing by remember { mutableStateOf(false) }
 
-    // debounced dispatch
-    var debounceJob: Job? by remember { mutableStateOf(null) }
-
     // min/max calculations
-    val conservativeDustLimitSatsU = remember { ffiConservativeDustLimitSats() }
-    val conservativeDustLimitSats = conservativeDustLimitSatsU.toLong()
-    val minSend =
-        if (isSats) {
-            conservativeDustLimitSats.toDouble()
-        } else {
-            conservativeDustLimitSats.toDouble() / 100_000_000.0
-        }
+    val conservativeDustLimitSats = remember { ffiConservativeDustLimitSats() }
+    val minSend = conservativeDustLimitSats.toDouble()
+    val step = 10.0
 
-    val step = if (isSats) 10.0 else 0.0000001
-
+    val selectedFeeRate = sendFlowManager.selectedFeeRate
     val maxSend =
-        remember(sendFlowManager.amount, unit) {
-            var amount = sendFlowManager.maxSendMinusFees() ?: Amount.fromSat(conservativeDustLimitSatsU + 1_000uL)
-            if (amount.asSats() <= conservativeDustLimitSatsU) {
-                amount = Amount.fromSat(conservativeDustLimitSatsU + 1_000uL)
-            }
+        remember(sendFlowManager.amount, selectedFeeRate) {
+            val maxSendSats =
+                sendFlowManager
+                    .maxSendMinusFees()
+                    ?.asSats()
+                    ?.takeIf { it > conservativeDustLimitSats }
+                    ?: (conservativeDustLimitSats + 1_000uL)
 
-            val value = if (isSats) amount.asSats().toDouble() else amount.asBtc()
-            value.coerceAtLeast(minSend)
+            maxSendSats.toDouble()
         }
 
     val softMaxSend =
-        remember(sendFlowManager.amount, unit) {
-            val amount = sendFlowManager.maxSendMinusFeesAndSmallUtxo() ?: Amount.fromSat(conservativeDustLimitSatsU)
-            val value = if (isSats) amount.asSats().toDouble() else amount.asBtc()
-            value.coerceAtLeast(minSend)
+        remember(sendFlowManager.amount, selectedFeeRate) {
+            val softMaxSendSats = sendFlowManager.maxSendMinusFeesAndSmallUtxo()?.asSats() ?: conservativeDustLimitSats
+            softMaxSendSats.toDouble().coerceAtLeast(minSend)
         }
+    val snapBand = remember(softMaxSend, maxSend) { SmartSnapBand(softMaxSend, maxSend, step) }
 
-    // Initialize customAmount from manager
-    LaunchedEffect(sendFlowManager.amount, unit) {
-        sendFlowManager.amount?.let { amount ->
-            customAmount = if (isSats) amount.asSats().toDouble() else amount.asBtc()
-            previousAmount = customAmount
-        } ?: run {
-            customAmount = maxSend
-            previousAmount = maxSend
-        }
+    // follow the manager amount, except mid-drag where it would fight the thumb
+    LaunchedEffect(sendFlowManager.amount, maxSend, softMaxSend) {
+        if (isEditing) return@LaunchedEffect
+
+        val amount = sendFlowManager.amount?.asSats()?.toDouble() ?: maxSend
+        sliderState = snapBand.synchronize(amount)
     }
 
-    // Display amount helper
-    fun displayAmount(amountStr: String? = null): String {
-        val amountDouble =
-            amountStr
-                ?.let { sendFlowManager.sanitizeBtcEnteringAmount(enteringAmount ?: "", it) }
-                ?.replace(",", "")
-                ?.toDoubleOrNull()
+    fun amountFromSliderValue(value: Double): Amount = Amount.fromSat(value.roundToLong().coerceAtLeast(0L).toULong())
 
-        val amount =
-            when {
-                amountDouble != null && isSats -> Amount.fromSat(amountDouble.toULong())
-                amountDouble != null && !isSats ->
-                    Amount.fromSat(
-                        (amountDouble * 100_000_000).toULong(),
-                    )
-                isSats -> Amount.fromSat(customAmount.toULong())
-                else -> Amount.fromSat((customAmount * 100_000_000).toULong())
-            }
+    fun coinControlAmountChanged(value: Double): SendFlowManagerAction =
+        SendFlowManagerAction.NotifyCoinControlAmountChanged(amountFromSliderValue(value))
 
-        return walletManager.amountFmt(amount)
-    }
+    fun displayAmount(): String = walletManager.amountFmt(amountFromSliderValue(sliderState.amount))
 
-    // Smart snap binding for slider
     fun handleSliderChange(raw: Double) {
+        isEditing = true
         enteringAmount = null
-        val goingUp = raw > previousAmount
-        val goingDown = raw < previousAmount
-        var adjusted = raw
 
-        when (pinState) {
-            PinState.HARD -> {
-                adjusted =
-                    if (goingDown) {
-                        pinState = PinState.SOFT
-                        softMaxSend
-                    } else {
-                        // hold at pin
-                        maxSend
-                    }
-            }
-            PinState.SOFT -> {
-                adjusted =
-                    when {
-                        // crossing upward -> snap to hard
-                        goingUp -> {
-                            pinState = PinState.HARD
-                            maxSend
-                        }
-                        // pulled a full step below band -> release pin
-                        raw < softMaxSend - step -> {
-                            pinState = PinState.NONE
-                            raw
-                        }
-                        // hold at pin
-                        else -> softMaxSend
-                    }
-            }
-            PinState.NONE -> {
-                if (raw >= softMaxSend) {
-                    pinState = if (goingUp) PinState.HARD else PinState.SOFT
-                    adjusted = if (goingUp) maxSend else softMaxSend
-                }
-            }
-        }
+        val snap = snapBand.snap(sliderState, raw)
 
         // update model only on real change
-        if (customAmount != adjusted) {
-            customAmount = adjusted
-
-            // debounced dispatch
-            debounceJob?.cancel()
-            debounceJob =
-                scope.launch {
-                    delay(200)
-                    sendFlowManager.dispatch(SendFlowManagerAction.NotifyCoinControlAmountChanged(adjusted))
-                }
+        if (sliderState.amount != snap.amount) {
+            sendFlowManager.debouncedDispatch(coinControlAmountChanged(snap.amount), debounceDelayMs = 200)
         }
 
-        previousAmount = raw
+        sliderState = snap
+    }
+
+    fun finishSliderEditing() {
+        val committedAmount = sendFlowManager.commitCoinControlAmount(amountFromSliderValue(sliderState.amount))
+        sliderState = snapBand.synchronize(committedAmount.asSats().toDouble())
+        isEditing = false
     }
 
     ModalBottomSheet(
@@ -310,7 +308,7 @@ fun CoinControlCustomAmountSheet(
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            if (isSats) "SATS" else "BTC",
+                            walletManager.unit.uppercase(),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -329,20 +327,10 @@ fun CoinControlCustomAmountSheet(
                 Spacer(Modifier.height(12.dp))
 
                 Slider(
-                    value = customAmount.toFloat(),
+                    value = sliderState.amount.toFloat(),
                     onValueChange = { handleSliderChange(it.toDouble()) },
                     valueRange = minSend.toFloat()..maxSend.toFloat(),
-                    onValueChangeFinished = {
-                        if (isEditing) {
-                            scope.launch {
-                                sendFlowManager.dispatch(
-                                    SendFlowManagerAction.NotifyCoinControlAmountChanged(
-                                        customAmount,
-                                    ),
-                                )
-                            }
-                        }
-                    },
+                    onValueChangeFinished = { finishSliderEditing() },
                     colors =
                         SliderDefaults.colors(
                             thumbColor = MaterialTheme.colorScheme.primary,

@@ -56580,7 +56580,7 @@ sealed class SendFlowManagerAction: Disposable  {
     }
 
     data class NotifyCoinControlAmountChanged(
-        val v1: kotlin.Double) : SendFlowManagerAction()
+        val v1: org.bitcoinppl.cove_core.types.Amount) : SendFlowManagerAction()
 
     {
 
@@ -56836,7 +56836,7 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
                 FfiConverterTypeAmount.read(buf),
                 )
             20 -> SendFlowManagerAction.NotifyCoinControlAmountChanged(
-                FfiConverterDouble.read(buf),
+                FfiConverterTypeAmount.read(buf),
                 )
             21 -> SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged(
                 FfiConverterString.read(buf),
@@ -56990,7 +56990,7 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
-                + FfiConverterDouble.allocationSize(value.v1)
+                + FfiConverterTypeAmount.allocationSize(value.v1)
             )
         }
         is SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged -> {
@@ -57121,7 +57121,7 @@ public object FfiConverterTypeSendFlowManagerAction : FfiConverterRustBuffer<Sen
             }
             is SendFlowManagerAction.NotifyCoinControlAmountChanged -> {
                 buf.putInt(20)
-                FfiConverterDouble.write(value.v1, buf)
+                FfiConverterTypeAmount.write(value.v1, buf)
                 Unit
             }
             is SendFlowManagerAction.NotifyCoinControlEnteredAmountChanged -> {
