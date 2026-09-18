@@ -267,6 +267,7 @@ mod tests {
         DriveAccountSwitchId, PersistedBackupSyncState, PersistedBackupVerificationState,
         PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedConfiguredCloudBackup,
         PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase, PersistedPasskeyState,
+        test_support::delete as delete_cloud_backup_state,
     };
     use crate::manager::cloud_backup_manager::ops::test_support::{test_globals, test_lock};
     use crate::manager::cloud_backup_manager::{
@@ -363,7 +364,7 @@ mod tests {
     fn reset_verification_does_not_preserve_passkey_missing() {
         let _guard = setup_database_test();
         let db = Database::global();
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
         db.cloud_backup_state.set(&passkey_missing_state()).unwrap();
 
         CloudBackupStore::new(&db)
@@ -377,14 +378,14 @@ mod tests {
         assert_eq!(state.last_verified_at(), None);
         assert_eq!(state.last_verification_requested_at(), None);
         assert_eq!(state.last_verification_dismissed_at(), None);
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
     }
 
     #[test]
     fn persist_enabled_state_clears_passkey_missing() {
         let _guard = setup_database_test();
         let db = Database::global();
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
         db.cloud_backup_state.set(&passkey_missing_state()).unwrap();
 
         CloudBackupStore::new(&db).persist_enabled(7).unwrap();
@@ -396,14 +397,14 @@ mod tests {
         assert_eq!(state.last_verified_at(), Some(11));
         assert_eq!(state.last_verification_requested_at(), Some(12));
         assert_eq!(state.last_verification_dismissed_at(), Some(13));
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
     }
 
     #[test]
     fn atomic_state_mutations_preserve_restore_marker_count_and_verification() {
         let _guard = setup_database_test();
         let db = Database::global();
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
         db.cloud_backup_state.set(&passkey_missing_state()).unwrap();
         let store = CloudBackupStore::new(&db);
         let first_marker = PersistedRestoreAllMarker { namespace_id: "namespace-1".into() };
@@ -457,14 +458,14 @@ mod tests {
         assert_eq!(state.last_verified_at(), Some(11));
         assert_eq!(state.last_verification_requested_at(), Some(12));
         assert_eq!(state.last_verification_dismissed_at(), Some(13));
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
     }
 
     #[test]
     fn concurrent_verification_and_completion_writes_preserve_new_restore_marker() {
         let _guard = setup_database_test();
         let db = Database::global();
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
         db.cloud_backup_state.set(&passkey_missing_state()).unwrap();
         let store = CloudBackupStore::new(&db);
         let marker = PersistedRestoreAllMarker { namespace_id: "namespace-1".into() };
@@ -505,14 +506,14 @@ mod tests {
         assert_eq!(state.pending_restore_all(), Some(&completion_marker));
         assert_eq!(state.pending_verification_completion(), Some(&completion));
         assert_eq!(state.last_verified_at(), Some(21));
-        let _ = Database::global().cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&Database::global().cloud_backup_state);
     }
 
     #[test]
     fn concurrent_verification_and_completion_writes_do_not_resurrect_cleared_restore_marker() {
         let _guard = setup_database_test();
         let db = Database::global();
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
         let mut initial = passkey_missing_state();
         assert!(initial.replace_pending_restore_all(PersistedRestoreAllMarker {
             namespace_id: "namespace-1".into(),
@@ -547,14 +548,14 @@ mod tests {
         assert!(state.pending_restore_all().is_none());
         assert!(state.pending_verification_completion().is_none());
         assert_eq!(state.last_verification_requested_at(), Some(30));
-        let _ = Database::global().cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&Database::global().cloud_backup_state);
     }
 
     #[test]
     fn restore_all_marker_requires_configured_state() {
         let _guard = setup_database_test();
         let db = Database::global();
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
 
         let error = CloudBackupStore::new(&db)
             .persist_restore_all_marker("namespace-1".into())
@@ -564,14 +565,14 @@ mod tests {
             matches!(error, CloudBackupError::Internal(message) if message.contains("not configured"))
         );
         assert_eq!(db.cloud_backup_state.get().unwrap(), PersistedCloudBackupState::Disabled);
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
     }
 
     #[test]
     fn reset_verification_persists_pending_completion_in_enabled_state_write() {
         let _guard = setup_database_test();
         let db = Database::global();
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
         let completion = pending_completion();
 
         CloudBackupStore::new(&db)
@@ -582,14 +583,14 @@ mod tests {
         assert_eq!(state.status(), PersistedCloudBackupStatus::Unverified);
         assert_eq!(state.wallet_count(), Some(3));
         assert_eq!(state.pending_verification_completion(), Some(&completion));
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
     }
 
     #[test]
     fn reset_verification_with_pending_completion_preserves_drive_transition() {
         let _guard = setup_database_test();
         let db = Database::global();
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
         let transition = PersistedDriveAccountSwitch {
             transition_id: DriveAccountSwitchId::new(42),
             phase: PersistedDriveAccountSwitchPhase::Reinitializing,
@@ -608,6 +609,6 @@ mod tests {
         assert_eq!(state.pending_verification_completion(), Some(&completion));
         assert_eq!(state.status(), PersistedCloudBackupStatus::Unverified);
         assert_eq!(state.wallet_count(), Some(3));
-        let _ = db.cloud_backup_state.delete();
+        let _ = delete_cloud_backup_state(&db.cloud_backup_state);
     }
 }

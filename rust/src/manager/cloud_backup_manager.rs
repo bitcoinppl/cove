@@ -868,11 +868,6 @@ impl RustCloudBackupManager {
             .ok_or_else(|| CloudBackupError::Internal("namespace_id not found in keychain".into()))
     }
 
-    #[cfg(test)]
-    pub(crate) fn clear_pending_enable_session(&self) {
-        send!(self.supervisor.clear_pending_enable_session());
-    }
-
     pub(crate) fn replace_pending_verification_completion(
         &self,
         completion: PendingVerificationCompletion,
@@ -968,6 +963,10 @@ mod manager_test_support {
     use super::*;
 
     impl RustCloudBackupManager {
+        pub(crate) fn clear_pending_enable_session(&self) {
+            send!(self.supervisor.clear_pending_enable_session());
+        }
+
         pub(crate) fn persist_cloud_backup_state(
             &self,
             state: &PersistedCloudBackupState,
@@ -996,7 +995,7 @@ mod manager_test_support {
             self.clear_pending_enable_session();
 
             let db = Database::global();
-            let _ = db.cloud_backup_state.delete();
+            let _ = crate::database::cloud_backup::test_support::delete(&db.cloud_backup_state);
             let _ = db.cloud_blob_sync_states.delete_all();
 
             self.clear_pending_verification_completion();

@@ -95,21 +95,6 @@ impl CloudBackupStateTable {
 
         Ok(CommittedCloudBackupStateMutation { outcome, state })
     }
-
-    #[cfg(test)]
-    pub fn delete(&self) -> Result<(), Error> {
-        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
-
-        {
-            let mut table =
-                write_txn.open_table(CLOUD_BACKUP_STATE_TABLE).map_err_str(Error::TableAccess)?;
-            table.remove(CURRENT_KEY).map_err_str(Error::TableAccess)?;
-        }
-
-        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
-
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -231,6 +216,25 @@ impl CloudBlobSyncStateTable {
             for key in keys {
                 table.remove(key.as_str()).map_err_str(Error::TableAccess)?;
             }
+        }
+
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    pub(crate) fn delete(table: &CloudBackupStateTable) -> Result<(), Error> {
+        let write_txn = table.db.begin_write().map_err_str(Error::DatabaseAccess)?;
+
+        {
+            let mut table =
+                write_txn.open_table(CLOUD_BACKUP_STATE_TABLE).map_err_str(Error::TableAccess)?;
+            table.remove(CURRENT_KEY).map_err_str(Error::TableAccess)?;
         }
 
         write_txn.commit().map_err_str(Error::DatabaseAccess)?;
