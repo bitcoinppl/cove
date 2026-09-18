@@ -45,6 +45,8 @@ pub(crate) enum CloudRestoreError {
 ///
 /// Local data the backup cannot account for is a conflict: a restore must never
 /// write over local data it did not verify
+///
+/// Returns the value to write, or `None` when the restore writes nothing
 fn plan_entry<T: PartialEq>(
     local: Option<T>,
     incoming: Option<T>,
@@ -257,35 +259,18 @@ fn report_cloud_restore(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::str::FromStr as _;
-    use std::sync::Arc;
 
     use crate::database::Database;
-    use crate::wallet::fingerprint::Fingerprint;
+    use crate::test_support::{
+        WALLET_KEYCHAIN_KEY_SUFFIXES, WALLET_MNEMONIC_CRYPTOR_KEY_SUFFIX,
+        WALLET_MNEMONIC_KEY_SUFFIX, WALLET_XPUB_KEY_SUFFIX, hot_wallet_metadata as hot_metadata,
+    };
     use crate::wallet::metadata::WalletType;
     use crate::wallet_secret::WalletSecretExt as _;
 
     use super::*;
-
-    fn hot_metadata(name: &str) -> WalletMetadata {
-        let mut metadata = WalletMetadata::preview_new();
-        metadata.name = name.to_string();
-        metadata.wallet_type = WalletType::Hot;
-        metadata.master_fingerprint = Some(Arc::new(Fingerprint::from(
-            bdk_wallet::bitcoin::bip32::Fingerprint::from_str("817e7be0").unwrap(),
-        )));
-
-        metadata
-    }
-
-    const KEYCHAIN_KEY_SUFFIXES: [&str; 6] = [
-        "::wallet_mnemonic",
-        "::wallet_mnemonic_encryption_key_and_nonce",
-        "::wallet_xpub",
-        "::wallet_public_descriptor",
-        "::tap_signer_backup",
-        "::wallet_tap_signer_encryption_key_and_nonce_key_name",
-    ];
 
     fn init_cloud_restore_test_state() {
         crate::database::test_support::delete_database();
@@ -295,15 +280,15 @@ mod tests {
 
     /// The raw stored values, so a rewrite of an adopted item is visible even
     /// when the decrypted value would still compare equal
-    fn raw_keychain_entries(id: &WalletId) -> Vec<(String, Option<String>)> {
+    fn raw_keychain_entries(id: &WalletId) -> BTreeMap<&'static str, Option<String>> {
         let keychain = crate::test_support::shared_mock_keychain();
 
-        KEYCHAIN_KEY_SUFFIXES
+        WALLET_KEYCHAIN_KEY_SUFFIXES
             .iter()
             .map(|suffix| {
                 let key = format!("{id}{suffix}");
                 let value = keychain.get_entry(&key);
-                (key, value)
+                (*suffix, value)
             })
             .collect()
     }
@@ -413,8 +398,11 @@ mod tests {
         restore_cloud_xpriv_wallet(&metadata, xpriv).expect("adopt matching wallet secret");
 
         let after = raw_keychain_entries(&metadata.id);
-        assert_eq!(after[0], before[0]);
-        assert_eq!(after[1], before[1]);
+        assert_eq!(after.get(WALLET_MNEMONIC_KEY_SUFFIX), before.get(WALLET_MNEMONIC_KEY_SUFFIX));
+        assert_eq!(
+            after.get(WALLET_MNEMONIC_CRYPTOR_KEY_SUFFIX),
+            before.get(WALLET_MNEMONIC_CRYPTOR_KEY_SUFFIX)
+        );
         assert!(Keychain::global().get_wallet_xpub(&metadata.id).unwrap().is_some());
         assert!(Keychain::global().get_public_descriptor(&metadata.id).unwrap().is_some());
         assert!(restored_metadata_exists(&metadata));
@@ -435,7 +423,7 @@ mod tests {
         restore_cloud_mnemonic_wallet(&metadata, mnemonic.clone()).expect("adopt matching xpub");
 
         let after = raw_keychain_entries(&metadata.id);
-        assert_eq!(after[2], before[2]);
+        assert_eq!(after.get(WALLET_XPUB_KEY_SUFFIX), before.get(WALLET_XPUB_KEY_SUFFIX));
         assert_eq!(
             Keychain::global().get_wallet_secret(&metadata.id).unwrap(),
             Some(KeychainWalletSecret::Mnemonic(mnemonic))

@@ -1790,15 +1790,10 @@ fn raw_wallet_keychain_entries(
     globals: &TestGlobals,
     wallet_id: &cove_types::WalletId,
 ) -> Vec<Option<String>> {
-    [
-        "::wallet_mnemonic",
-        "::wallet_mnemonic_encryption_key_and_nonce",
-        "::wallet_xpub",
-        "::wallet_public_descriptor",
-    ]
-    .iter()
-    .map(|suffix| globals.keychain.get_entry(&format!("{wallet_id}{suffix}")))
-    .collect()
+    crate::test_support::WALLET_KEYCHAIN_KEY_SUFFIXES
+        .iter()
+        .map(|suffix| globals.keychain.get_entry(&format!("{wallet_id}{suffix}")))
+        .collect()
 }
 
 /// A hot wallet whose keychain items survived an app reinstall that removed the database
