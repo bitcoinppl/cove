@@ -1199,7 +1199,7 @@ extension CloudBackupIOSSafetyHelpersTests {
         },
         now: @escaping @MainActor @Sendable () -> Date = { Date() },
         deletionTombstoneMaxAge: TimeInterval = 60,
-        coordinatedDeleteOverride: (@Sendable (URL, String) throws -> Void)? = nil,
+        coordinatedDeleteOverride: (@Sendable (URL, String) throws -> URL)? = nil,
         defaultTimeout: TimeInterval = 1,
         metadataListingTimeout: TimeInterval = 5
     ) -> ICloudMetadataFixture {
@@ -1529,6 +1529,47 @@ extension CloudBackupIOSSafetyHelpersTests {
                 XCTFail("expected deleted metadata item to be absent")
             } catch CloudStorageError.NotFound {}
         }
+    }
+
+    @MainActor
+    func testBackupDeleteRecordsCoordinatorResolvedURL() async throws {
+        let location = try XCTUnwrap(backupLocations().first)
+        let redirectedURL = URL(fileURLWithPath: "/provider/\(testNamespace)/wallet-record.json")
+        let deleteStub = CoordinatedDeleteStub(redirectTo: redirectedURL)
+        let fixture = makeICloudMetadataFixture(
+            coordinatedDeleteOverride: { url, id in
+                try deleteStub.delete(url: url, missingItemID: id)
+            }
+        )
+        defer { fixture.removeContainer() }
+
+        let requestedURL = try fixture.helper.backupFileReadURL(
+            namespace: testNamespace,
+            location: location
+        )
+        try writeTestBackup(at: requestedURL)
+        let providerRecord = ICloudMetadataRecord(
+            name: requestedURL.lastPathComponent,
+            url: redirectedURL,
+            resolvedPath: redirectedURL.resolvingSymlinksInPath().path
+        )
+        let initial = Task { try await fixture.index.currentOrInitialRecords(timeout: 1) }
+        await fixture.source.waitUntilStarted()
+        fixture.source.send(.finishedGathering([providerRecord]))
+        _ = try await initial.value
+
+        try await fixture.helper.deleteExistingBackupFile(
+            namespace: testNamespace,
+            recordId: "wallet-record",
+            locations: [location]
+        )
+
+        XCTAssertEqual(deleteStub.deletedURLs, [requestedURL])
+        var visibleRecords = try await fixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(visibleRecords, [])
+        fixture.source.send(.updated([providerRecord]))
+        visibleRecords = try await fixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(visibleRecords, [])
     }
 
     @MainActor
@@ -1865,6 +1906,7 @@ private final class CoordinatedDeleteStub: @unchecked Sendable {
     private let blockOnCall: Int?
     private let notFoundOnCalls: Set<Int>
     private let removeFiles: Bool
+    private let redirectedURL: URL?
     private let blocked = DispatchSemaphore(value: 0)
     private let releaseBlock = DispatchSemaphore(value: 0)
     private var calls = 0
@@ -1874,12 +1916,14 @@ private final class CoordinatedDeleteStub: @unchecked Sendable {
         failOnCall: Int? = nil,
         blockOnCall: Int? = nil,
         notFoundOnCalls: Set<Int> = [],
-        removeFiles: Bool = true
+        removeFiles: Bool = true,
+        redirectTo redirectedURL: URL? = nil
     ) {
         self.failOnCall = failOnCall
         self.blockOnCall = blockOnCall
         self.notFoundOnCalls = notFoundOnCalls
         self.removeFiles = removeFiles
+        self.redirectedURL = redirectedURL
     }
 
     var callCount: Int {
@@ -1890,7 +1934,7 @@ private final class CoordinatedDeleteStub: @unchecked Sendable {
         lock.withLock { urls }
     }
 
-    func delete(url: URL, missingItemID _: String) throws {
+    func delete(url: URL, missingItemID _: String) throws -> URL {
         let call = lock.withLock {
             calls += 1
             return calls
@@ -1912,6 +1956,8 @@ private final class CoordinatedDeleteStub: @unchecked Sendable {
         lock.withLock {
             urls.append(url)
         }
+
+        return redirectedURL ?? url
     }
 
     func waitUntilBlocked() async {
