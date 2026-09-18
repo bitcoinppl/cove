@@ -18,6 +18,8 @@ use super::historical::HistoricalPricesResponse;
 
 const CURRENCY_URL: &str = "https://mempool.space/api/v1/prices";
 const HISTORICAL_PRICES_URL: &str = "https://mempool.space/api/v1/historical-price";
+const FALLBACK_CURRENCY_URL: &str = "https://bitcoin.gob.sv/api/v1/prices";
+const FALLBACK_HISTORICAL_PRICES_URL: &str = "https://bitcoin.gob.sv/api/v1/historical-price";
 
 /// How often to fetch prices from the server 1 minute
 const BACKGROUND_REFRESH_INTERVAL: u64 = 60;
@@ -34,6 +36,9 @@ pub static PRICES: LazyLock<ArcSwap<Option<PriceResponse>>> =
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct FiatClient {
     url: String,
+    fallback_url: String,
+    historical_url: String,
+    fallback_historical_url: String,
     client: OnceCell<reqwest::Client>,
 }
 
@@ -81,7 +86,13 @@ impl_default_for!(FiatClient);
 
 impl FiatClient {
     fn new() -> Self {
-        Self { url: CURRENCY_URL.to_string(), client: OnceCell::new() }
+        Self {
+            url: CURRENCY_URL.to_string(),
+            fallback_url: FALLBACK_CURRENCY_URL.to_string(),
+            historical_url: HISTORICAL_PRICES_URL.to_string(),
+            fallback_historical_url: FALLBACK_HISTORICAL_PRICES_URL.to_string(),
+            client: OnceCell::new(),
+        }
     }
     /// Sync method using cached prices only, returns None if no cache
     pub fn value_in_currency_cached(&self, amount: Amount, currency: FiatCurrency) -> Option<f64> {
@@ -103,9 +114,10 @@ impl FiatClient {
         &self,
         timestamp: u64,
     ) -> Result<HistoricalPricesResponse, reqwest::Error> {
-        let url = format!("{HISTORICAL_PRICES_URL}?timestamp={timestamp}");
+        let primary = format!("{}?timestamp={timestamp}", self.historical_url);
+        let fallback = format!("{}?timestamp={timestamp}", self.fallback_historical_url);
 
-        let response = self.client()?.get(&url).send().await?;
+        let response = self.fetch_with_fallback(&primary, &fallback).await?;
         let historical_prices: HistoricalPricesResponse = response.json().await?;
 
         Ok(historical_prices)
@@ -146,7 +158,7 @@ impl FiatClient {
         }
 
         debug!("fetching prices");
-        let response = self.client()?.get(&self.url).send().await?;
+        let response = self.fetch_with_fallback(&self.url, &self.fallback_url).await?;
         let prices: PriceResponse = response.json().await?;
 
         // saved prices are the same as the new ones don't need to update
@@ -192,6 +204,25 @@ impl FiatClient {
         let value_in_currency = btc * price as f64;
 
         Ok(value_in_currency)
+    }
+
+    async fn fetch_with_fallback(
+        &self,
+        primary: &str,
+        fallback: &str,
+    ) -> Result<reqwest::Response, reqwest::Error> {
+        match self.client()?.get(primary).send().await {
+            Ok(response) if !response.status().is_server_error() => Ok(response),
+            Ok(response) => {
+                let status = response.status();
+                warn!("Primary price API returned {status}, trying fallback");
+                self.client()?.get(fallback).send().await
+            }
+            Err(error) => {
+                warn!("Primary price API failed: {error}, trying fallback");
+                self.client()?.get(fallback).send().await
+            }
+        }
     }
 
     fn client(&self) -> Result<&reqwest::Client, reqwest::Error> {
@@ -277,6 +308,15 @@ mod tests {
     use super::*;
     use crate::transaction::Amount;
 
+    #[test]
+    fn fallback_urls_are_configured() {
+        let client = FiatClient::new();
+        assert_eq!(client.url, CURRENCY_URL);
+        assert_eq!(client.fallback_url, FALLBACK_CURRENCY_URL);
+        assert_eq!(client.historical_url, HISTORICAL_PRICES_URL);
+        assert_eq!(client.fallback_historical_url, FALLBACK_HISTORICAL_PRICES_URL);
+    }
+
     #[tokio::test]
     #[ignore] // requires external network connection to fiat price api
     async fn run_all_tests() {
@@ -288,6 +328,44 @@ mod tests {
         test_get_value_in_usd_with_currency().await;
         test_get_historical_prices().await;
         test_historical_price_at_time().await;
+    }
+
+    #[tokio::test]
+    #[ignore] // requires external network connection
+    async fn fallback_api_returns_valid_prices() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
+            .build()
+            .unwrap();
+
+        let response = client.get(FALLBACK_CURRENCY_URL).send().await.unwrap();
+        let prices: PriceResponse = response.json().await.unwrap();
+
+        assert!(prices.usd > 0);
+        assert!(prices.eur > 0);
+        assert!(prices.gbp > 0);
+    }
+
+    #[tokio::test]
+    #[ignore] // requires external network connection
+    async fn fallback_api_returns_valid_historical_prices() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(30))
+            .build()
+            .unwrap();
+
+        let now = Timestamp::now().as_second() as u64;
+        let url = format!("{FALLBACK_HISTORICAL_PRICES_URL}?timestamp={now}");
+        let response = client.get(&url).send().await.unwrap();
+        let historical: HistoricalPricesResponse = response.json().await.unwrap();
+
+        assert!(!historical.prices.is_empty());
+        let first = historical.prices.first().unwrap();
+        assert!(first.usd > 0.0);
     }
 
     async fn test_get_prices() {
