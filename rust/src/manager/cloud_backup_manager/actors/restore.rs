@@ -28,6 +28,7 @@ use crate::manager::cloud_backup_manager::{
     GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, RustCloudBackupManager, blocking_cloud_error,
     is_connectivity_related_issue, is_provider_wide_interruption, offline_error_for_step,
 };
+use crate::wallet::metadata::WalletId;
 
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
@@ -305,17 +306,21 @@ impl RestoreOperation {
         .map_err(|_| CloudBackupError::Cancelled)?
     }
 
-    pub(crate) async fn save_keychain_state(
+    pub(crate) async fn commit_restored_namespace(
         &self,
         master_key: MasterKey,
         passkey: Option<RestoredPasskeyMaterial>,
         namespace_id: String,
+        state: PersistedCloudBackupState,
+        wallet_ids: Vec<WalletId>,
     ) -> Result<(), CloudBackupError> {
-        call!(self.supervisor.save_restore_keychain_state(
+        call!(self.supervisor.commit_restore_namespace_activation(
             self.operation_claim,
             master_key,
             passkey,
-            namespace_id
+            namespace_id,
+            state,
+            wallet_ids
         ))
         .await
         .map_err(|_| CloudBackupError::Cancelled)?
@@ -362,7 +367,7 @@ impl RestoreOperation {
         }
 
         let restored_status =
-            self.resolve_restored_status(manager, applied.resolution, &namespace_wallets).await?;
+            self.resolve_restored_status(applied.resolution, &namespace_wallets).await?;
 
         self.apply_outcome(CloudBackupRestoreOutcome::ProgressCleared).await?;
         self.apply_status(restored_status).await?;
@@ -556,7 +561,6 @@ impl RestoreOperation {
     /// Pick the cloud backup status to end on and activate the namespace it came from
     async fn resolve_restored_status(
         &self,
-        manager: &RustCloudBackupManager,
         resolution: RestoreResolution,
         namespace_wallets: &[(RestorableNamespace, Vec<String>)],
     ) -> Result<CloudBackupStatus, CloudBackupError> {
@@ -565,7 +569,7 @@ impl RestoreOperation {
         match resolution {
             RestoreResolution::Restored { namespace_index } => {
                 if let Some(active) = namespace_at(namespace_index) {
-                    self.activate_restored_namespace(manager, active).await?;
+                    self.activate_restored_namespace(active).await?;
                 }
 
                 Ok(CloudBackupStatus::Enabled)
@@ -576,7 +580,7 @@ impl RestoreOperation {
                 if matches!(state, PersistedCloudBackupState::Disabled)
                     && let Some(active) = namespace_at(namespace_index)
                 {
-                    self.activate_restored_namespace(manager, active).await?;
+                    self.activate_restored_namespace(active).await?;
 
                     return Ok(CloudBackupStatus::Enabled);
                 }
@@ -605,7 +609,6 @@ impl RestoreOperation {
 
     async fn activate_restored_namespace(
         &self,
-        manager: &RustCloudBackupManager,
         active: &RestorableNamespace,
     ) -> Result<(), CloudBackupError> {
         self.ensure_current().await?;
@@ -613,24 +616,19 @@ impl RestoreOperation {
         let passkey = active.passkey.as_ref().map(RestoredPasskeyMaterial::from);
         let wallets = CloudBackupStore::global().all_wallets()?;
         let wallet_count = wallets.len() as u32;
-
-        self.save_keychain_state(master_key, passkey, active.namespace_id.clone()).await?;
-        self.ensure_current().await?;
-
         let enabled_state = PersistedCloudBackupState::configured_after_restore(
             cove_util::time::unix_timestamp_secs_or_zero(),
             wallet_count,
         );
-        self.persist_cloud_backup_state(
+
+        self.commit_restored_namespace(
+            master_key,
+            passkey,
+            active.namespace_id.clone(),
             enabled_state,
-            "persist restored cloud backup state".into(),
+            wallets.into_iter().map(|wallet| wallet.id).collect(),
         )
         .await?;
-        self.ensure_current().await?;
-
-        manager.mark_wallet_blobs_dirty_for_background_upload(
-            wallets.into_iter().map(|wallet| wallet.id),
-        )?;
 
         Ok(())
     }
@@ -906,6 +904,8 @@ pub(crate) fn save_restore_keychain_entries(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::Database;
+    use crate::database::cloud_backup::PersistedCloudBackupStatus;
     use crate::manager::cloud_backup_manager::keychain::{
         CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY, CSPP_PRF_SALT_KEY,
     };
@@ -1080,6 +1080,49 @@ mod tests {
         assert!(globals.keychain.get_entry(CSPP_CREDENTIAL_ID_KEY).is_none());
         assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_none());
         assert!(globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn restore_namespace_commit_stays_consistent_if_cancelled_after_keychain_save() {
+        let _guard = async_test_lock().lock().await;
+        let globals = test_globals();
+        ensure_cloud_backup_test_tokio_runtime();
+        let manager = RustCloudBackupManager::init();
+        reset_cloud_backup_test_state(&manager, globals);
+
+        CloudBackupKeychain::global().save_namespace_id("previous-namespace").unwrap();
+        Database::global().cloud_backup_state.set(&PersistedCloudBackupState::default()).unwrap();
+
+        let master_key = MasterKey::generate();
+        let namespace_id = master_key.namespace_id();
+        let active = RestorableNamespace {
+            namespace_id: namespace_id.clone(),
+            master_key,
+            passkey: Some(RestorableNamespacePasskey {
+                credential_id: vec![1, 2, 3],
+                prf_salt: [4; 32],
+            }),
+        };
+
+        let operation = new_restore_operation_for_test(&manager).await;
+        let cancellation = operation.cancellation.clone();
+        globals.keychain.set_after_save(move |key| {
+            if key == CSPP_NAMESPACE_ID_KEY {
+                cancellation.store(true, Ordering::Release);
+            }
+        });
+
+        operation.activate_restored_namespace(&active).await.unwrap();
+
+        assert_eq!(
+            globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).as_deref(),
+            Some(namespace_id.as_str())
+        );
+        assert_eq!(
+            Database::global().cloud_backup_state.get().unwrap().status(),
+            PersistedCloudBackupStatus::Enabled
+        );
+        assert!(operation.cancellation.load(Ordering::Acquire));
     }
 
     #[test]
