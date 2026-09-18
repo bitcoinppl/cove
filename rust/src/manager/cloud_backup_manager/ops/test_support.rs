@@ -943,10 +943,8 @@ impl MockPasskeyProviderImpl {
     }
 
     pub(crate) fn set_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
-        *self.authenticate_result_default.lock() = Some(result.clone());
-        let mut results = self.authenticate_results.lock();
-        results.clear();
-        results.push_back(result);
+        self.authenticate_results.lock().clear();
+        *self.authenticate_result_default.lock() = Some(result);
     }
 
     pub(crate) fn push_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
@@ -1022,7 +1020,6 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
             return result;
         }
 
-        // set_authenticate_result is the reusable default after queued results
         if let Some(result) = self.authenticate_result_default.lock().clone() {
             return result;
         }
