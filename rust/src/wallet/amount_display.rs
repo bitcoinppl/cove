@@ -4,7 +4,10 @@ use cove_util::format::NumberFormatter as _;
 
 use crate::{
     database::Database,
-    fiat::{FiatCurrency, client::FIAT_CLIENT},
+    fiat::{
+        FiatCurrency,
+        client::{FIAT_CLIENT, PriceResponse},
+    },
     transaction::{Amount, SentAndReceived, TransactionDirection, Unit},
     wallet::metadata::WalletMetadata,
 };
@@ -144,6 +147,22 @@ pub(crate) fn display_fiat_amount_with_currency(
         return FIAT_MASK.to_string();
     }
 
+    fmt_fiat_amount(currency, amount, with_suffix)
+}
+
+/// Converts a bitcoin amount into its fiat value, rounded up to the nearest cent
+pub(crate) fn convert_amount_to_fiat(
+    amount: &Amount,
+    prices: &PriceResponse,
+    currency: FiatCurrency,
+) -> f64 {
+    let price = prices.get_for_currency(currency) as f64;
+
+    ((amount.as_btc() * price) * 100.0).ceil() / 100.0
+}
+
+/// Formats a fiat value with its currency symbol and suffix, e.g. "$31.25" or "31.25 CHF"
+pub(crate) fn fmt_fiat_amount(currency: FiatCurrency, amount: f64, with_suffix: bool) -> String {
     let fiat = amount.thousands_fiat();
     let symbol = currency.symbol();
     let suffix = currency.suffix();
