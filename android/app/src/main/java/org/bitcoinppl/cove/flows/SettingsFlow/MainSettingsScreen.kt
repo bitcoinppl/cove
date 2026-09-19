@@ -244,6 +244,22 @@ fun MainSettingsScreen(
 
                 WalletSettingsSection(app = app)
 
+                SectionHeader(stringResource(R.string.settings_advanced_section))
+                MaterialSection {
+                    Column {
+                        MaterialSettingsItem(
+                            title = stringResource(R.string.title_settings_ohttp_relay),
+                            icon = Icons.Default.Hub,
+                            onClick = {
+                                app.pushRoute(
+                                    org.bitcoinppl.cove_core.Route
+                                        .Settings(org.bitcoinppl.cove_core.SettingsRoute.OhttpRelay),
+                                )
+                            },
+                        )
+                    }
+                }
+
                 SecuritySection(app = app)
 
                 BackupSection(

@@ -113,6 +113,12 @@ fun SettingsContainer(
                         modifier = modifier,
                     )
                 }
+                is SettingsRoute.OhttpRelay -> {
+                    OhttpRelaySettingsScreen(
+                        app = app,
+                        modifier = modifier,
+                    )
+                }
             }
         }
     }
