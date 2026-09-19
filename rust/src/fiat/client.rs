@@ -117,10 +117,7 @@ impl FiatClient {
         let primary = format!("{}?timestamp={timestamp}", self.historical_url);
         let fallback = format!("{}?timestamp={timestamp}", self.fallback_historical_url);
 
-        let response = self.fetch_with_fallback(&primary, &fallback).await?;
-        let historical_prices: HistoricalPricesResponse = response.json().await?;
-
-        Ok(historical_prices)
+        self.fetch_json_with_fallback(&primary, &fallback).await
     }
 
     /// Get the cached prices, will fetch and update the prices in the background if needed
@@ -158,8 +155,8 @@ impl FiatClient {
         }
 
         debug!("fetching prices");
-        let response = self.fetch_with_fallback(&self.url, &self.fallback_url).await?;
-        let prices: PriceResponse = response.json().await?;
+        let prices: PriceResponse =
+            self.fetch_json_with_fallback(&self.url, &self.fallback_url).await?;
 
         // saved prices are the same as the new ones don't need to update
         if let Some(saved_prices) = *PRICES.load().as_ref()
@@ -206,23 +203,27 @@ impl FiatClient {
         Ok(value_in_currency)
     }
 
-    async fn fetch_with_fallback(
+    async fn fetch_json_with_fallback<T: serde::de::DeserializeOwned>(
         &self,
         primary: &str,
         fallback: &str,
-    ) -> Result<reqwest::Response, reqwest::Error> {
-        match self.client()?.get(primary).send().await {
-            Ok(response) if !response.status().is_server_error() => Ok(response),
-            Ok(response) => {
-                let status = response.status();
-                warn!("Primary price API returned {status}, trying fallback");
-                self.client()?.get(fallback).send().await
-            }
+    ) -> Result<T, reqwest::Error> {
+        match self.try_fetch_json(primary).await {
+            Ok(value) => Ok(value),
             Err(error) => {
                 warn!("Primary price API failed: {error}, trying fallback");
-                self.client()?.get(fallback).send().await
+                self.try_fetch_json(fallback).await
             }
         }
+    }
+
+    async fn try_fetch_json<T: serde::de::DeserializeOwned>(
+        &self,
+        url: &str,
+    ) -> Result<T, reqwest::Error> {
+        let response = self.client()?.get(url).send().await?;
+        let response = response.error_for_status()?;
+        response.json::<T>().await
     }
 
     fn client(&self) -> Result<&reqwest::Client, reqwest::Error> {
