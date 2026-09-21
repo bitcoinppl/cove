@@ -124,10 +124,11 @@ enum RestoreResolution {
     Nothing,
 }
 
-/// Result of namespace matching, including a terminal native cancellation
+/// Result of namespace matching, including the terminal native stops that keep earlier matches
 enum RestorePasskeyMatchOutcome {
     Matched(Vec<NamespaceMatch>),
     Cancelled(Vec<NamespaceMatch>),
+    AuthenticationFailed(Vec<NamespaceMatch>),
 }
 
 /// What applying the downloaded wallets produced locally
@@ -413,7 +414,8 @@ impl RestoreOperation {
         let passkey = PasskeyAccess::global();
         match self.restore_via_passkey_matching(cloud, passkey).await {
             Ok(RestorePasskeyMatchOutcome::Matched(matches))
-            | Ok(RestorePasskeyMatchOutcome::Cancelled(matches)) => Ok(matches
+            | Ok(RestorePasskeyMatchOutcome::Cancelled(matches))
+            | Ok(RestorePasskeyMatchOutcome::AuthenticationFailed(matches)) => Ok(matches
                 .into_iter()
                 .map(|matched| RestorableNamespace {
                     namespace_id: matched.namespace_id,
@@ -784,6 +786,15 @@ impl RestoreOperation {
                 }
                 NamespaceMatchSnapshotOutcome::OperationCancelled => {
                     return Err(CloudBackupError::Cancelled);
+                }
+                NamespaceMatchSnapshotOutcome::AuthenticationFailed { matches, error } => {
+                    merge_namespace_matches(&mut accumulated_matches, matches);
+                    let matches = NamespaceMatchSnapshotOutcome::authentication_failure_result(
+                        accumulated_matches,
+                        error,
+                    )?;
+
+                    return Ok(RestorePasskeyMatchOutcome::AuthenticationFailed(matches));
                 }
                 NamespaceMatchSnapshotOutcome::Continue => {}
             }
