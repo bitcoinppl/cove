@@ -921,9 +921,14 @@ async fn passkey_match_session_does_not_retry_targeted_auth_failure_after_presen
         reason: PasskeyFailureReason::PlatformAuthorizationFailedAfterPresentation,
     }));
 
-    let failed =
-        session.match_snapshot(&[stale_namespace.clone(), current_namespace.clone()]).await;
-    assert!(matches!(failed, Err(CloudBackupError::Passkey(_))));
+    let failed = session
+        .match_snapshot(&[stale_namespace.clone(), current_namespace.clone()])
+        .await
+        .unwrap();
+    let NamespaceMatchSnapshotOutcome::AuthenticationFailed { matches, .. } = failed else {
+        panic!("expected terminal authentication failure");
+    };
+    assert!(matches.is_empty());
 
     let unchanged = session.match_snapshot(&[stale_namespace, current_namespace]).await.unwrap();
 
@@ -972,6 +977,50 @@ async fn passkey_match_stops_after_terminal_targeted_auth_failure() {
     };
 
     assert!(matches!(error, CloudBackupError::Passkey(_)));
+    assert_eq!(globals.passkey.authenticate_count(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn passkey_match_keeps_earlier_matches_after_terminal_targeted_auth_failure() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    globals.reset();
+
+    let discovered_prf_key = [8u8; 32];
+    let mut candidates = Vec::new();
+    for registered_at in [3, 2, 1] {
+        let master_key = cove_cspp::master_key::MasterKey::generate();
+        let namespace = master_key.namespace_id();
+        globals.cloud.set_master_key_backup(
+            namespace.clone(),
+            master_wrapper_for_test(&master_key, &discovered_prf_key, &[9; 32], registered_at),
+        );
+        candidates.push(namespace);
+    }
+
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: discovered_prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Ok(discovered_prf_key.to_vec()));
+    globals.passkey.push_authenticate_result(Err(PasskeyError::RequestFailed {
+        operation: PasskeyOperation::AuthenticateAssertion,
+        reason: PasskeyFailureReason::InvalidResponse,
+    }));
+
+    let outcome = NamespacePasskeyMatcher::new(
+        &CloudStorage::global_explicit_client(),
+        PasskeyAccess::global(),
+    )
+    .match_namespaces(&candidates)
+    .await
+    .unwrap();
+    let NamespaceMatchOutcome::Matched(matches) = outcome else {
+        panic!("the namespace matched before the failure must stay restorable");
+    };
+
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0].namespace_id, candidates[0]);
     assert_eq!(globals.passkey.authenticate_count(), 1);
 }
 

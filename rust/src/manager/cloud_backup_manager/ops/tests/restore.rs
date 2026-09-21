@@ -379,6 +379,21 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_native_cancellation_after_match_restores_retained_matches_without_refresh() {
+    assert_terminal_native_stop_restores_retained_matches(PasskeyError::UserCancelled).await;
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_terminal_auth_failure_after_match_restores_retained_matches_without_refresh() {
+    assert_terminal_native_stop_restores_retained_matches(PasskeyError::RequestFailed {
+        operation: PasskeyOperation::AuthenticateAssertion,
+        reason: PasskeyFailureReason::InvalidResponse,
+    })
+    .await;
+}
+
+/// The first namespace matches through discovery, then targeted authentication for the second
+/// namespace stops with `targeted_auth_error`
+async fn assert_terminal_native_stop_restores_retained_matches(targeted_auth_error: PasskeyError) {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -402,7 +417,7 @@ async fn restore_native_cancellation_after_match_restores_retained_matches_witho
         prf_output: prf_key.to_vec(),
         credential_id: vec![1, 2, 3],
     }));
-    globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
+    globals.passkey.set_authenticate_result(Err(targeted_auth_error));
 
     let first_wallet = xpub_only_wallet_metadata();
     let second_wallet = xpub_only_wallet_metadata();
