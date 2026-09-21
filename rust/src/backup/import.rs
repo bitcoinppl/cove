@@ -28,8 +28,13 @@ use crate::wallet_secret::WalletSecretExt as _;
 use super::crypto;
 use super::error::BackupError;
 use super::model::{BackupImportReport, BackupPayload, WalletBackup, WalletSecret};
-use super::recovery::{
-    RestoreArtifactSnapshot, RestoreMarkerGuard, ValidatedRestoreWalletId, WalletRestoreLease,
+use super::recovery::{RestoreArtifactSnapshot, RestoreMarkerGuard, WalletRestoreLease};
+
+mod cloud_restore;
+
+pub(crate) use cloud_restore::{
+    CloudRestoreError, LocalWalletConflict, restore_cloud_descriptor_wallet,
+    restore_cloud_mnemonic_wallet, restore_cloud_xpriv_wallet,
 };
 
 #[derive(Debug)]
@@ -51,6 +56,15 @@ struct PreparedHotWallet {
     secret: KeychainWalletSecret,
     xpub: Xpub,
     descriptors: Descriptors,
+}
+
+impl PreparedHotWallet {
+    fn from_secret(secret: KeychainWalletSecret, metadata: &WalletMetadata) -> Self {
+        let xpub = secret.xpub(metadata.network);
+        let descriptors = secret.clone().into_descriptors(metadata.network, metadata.address_type);
+
+        Self { secret, xpub, descriptors }
+    }
 }
 
 #[derive(Debug)]
@@ -233,11 +247,7 @@ fn prepare_wallet_kind(
             )?;
 
             let secret = KeychainWalletSecret::Mnemonic(mnemonic);
-            let xpub = secret.xpub(metadata.network);
-            let descriptors =
-                secret.clone().into_descriptors(metadata.network, metadata.address_type);
-
-            Ok(PreparedWalletKind::Hot(PreparedHotWallet { secret, xpub, descriptors }))
+            Ok(PreparedWalletKind::Hot(PreparedHotWallet::from_secret(secret, metadata)))
         }
         WalletSecret::Xprv(value) => {
             let xprv = WalletXprv::parse(value.as_str()).map_err_prefix(
@@ -246,29 +256,16 @@ fn prepare_wallet_kind(
             )?;
 
             let secret = KeychainWalletSecret::Xpriv(xprv);
-            let xpub = secret.xpub(metadata.network);
-            let descriptors =
-                secret.clone().into_descriptors(metadata.network, metadata.address_type);
-
-            Ok(PreparedWalletKind::Hot(PreparedHotWallet { secret, xpub, descriptors }))
+            Ok(PreparedWalletKind::Hot(PreparedHotWallet::from_secret(secret, metadata)))
         }
-        WalletSecret::TapSignerBackup(backup_bytes) => {
-            let public = prepare_public_wallet(
+        WalletSecret::TapSignerBackup(_) | WalletSecret::None | WalletSecret::Unknown => {
+            prepare_public_wallet(
                 backup,
                 metadata,
                 validation == WalletTypeSecretValidation::Degraded,
-            )?;
-            Ok(PreparedWalletKind::Public(PreparedPublicWallet {
-                tap_signer_backup: Some(backup_bytes.clone()),
-                ..public
-            }))
+            )
+            .map(PreparedWalletKind::Public)
         }
-        WalletSecret::None | WalletSecret::Unknown => prepare_public_wallet(
-            backup,
-            metadata,
-            validation == WalletTypeSecretValidation::Degraded,
-        )
-        .map(PreparedWalletKind::Public),
     }?;
 
     validate_prepared_wallet_storage(metadata, &kind)?;
@@ -347,7 +344,12 @@ fn prepare_public_wallet(
         )));
     }
 
-    Ok(PreparedPublicWallet { xpub, descriptors, tap_signer_backup: None, degraded })
+    let tap_signer_backup = match &backup.secret {
+        WalletSecret::TapSignerBackup(bytes) => Some(bytes.clone()),
+        _ => None,
+    };
+
+    Ok(PreparedPublicWallet { xpub, descriptors, tap_signer_backup, degraded })
 }
 
 /// Check that an approval belongs to this exact payload and covers exactly the
@@ -668,31 +670,70 @@ where
     }
 }
 
-fn cloud_restore_snapshot(
-    metadata: &WalletMetadata,
-    expected_xpub: Option<Xpub>,
-) -> Result<RestoreArtifactSnapshot, BackupError> {
-    let id = ValidatedRestoreWalletId::validate(&metadata.id)?;
-    let snapshot = RestoreArtifactSnapshot::capture(&id)?;
+fn public_descriptor_pair(descriptors: &Descriptors) -> (ExtendedDescriptor, ExtendedDescriptor) {
+    (
+        descriptors.external.extended_descriptor.clone(),
+        descriptors.internal.extended_descriptor.clone(),
+    )
+}
 
-    if snapshot.metadata || !snapshot.bdk_paths.is_empty() || snapshot.wallet_data_occupied {
-        return Err(BackupError::WalletIdOccupied(metadata.id.clone()));
+/// The keychain writes a hot wallet restore performs
+struct HotWalletWrites {
+    /// Descriptors with their key maps
+    ///
+    /// The BDK wallet is always created because every restore rejects a wallet
+    /// id that already owns BDK artifacts
+    bdk_descriptors: Descriptors,
+    secret: Option<KeychainWalletSecret>,
+    xpub: Option<Xpub>,
+    descriptors: Option<(ExtendedDescriptor, ExtendedDescriptor)>,
+}
+
+impl HotWalletWrites {
+    /// Write every item the backup carries
+    ///
+    /// The file-import callers reach this only after requiring an empty wallet
+    /// id or removing the artifacts an approval covered
+    fn create_all(prepared: PreparedHotWallet) -> Self {
+        let PreparedHotWallet { secret, xpub, descriptors } = prepared;
+
+        Self {
+            descriptors: Some(public_descriptor_pair(&descriptors)),
+            bdk_descriptors: descriptors,
+            secret: Some(secret),
+            xpub: Some(xpub),
+        }
     }
+}
 
-    let has_non_xpub_keychain_item = snapshot.keychain_entries.keys().any(|kind| kind != "xpub");
-    if has_non_xpub_keychain_item {
-        return Err(BackupError::WalletIdOccupied(metadata.id.clone()));
+/// The keychain writes a public wallet restore performs
+struct PublicWalletWrites {
+    /// Descriptors used to create the BDK wallet when the backup carries them
+    bdk_descriptors: Option<(ExtendedDescriptor, ExtendedDescriptor)>,
+    xpub: Option<Xpub>,
+    descriptors: Option<(ExtendedDescriptor, ExtendedDescriptor)>,
+    tap_signer_backup: Option<Zeroizing<Vec<u8>>>,
+}
+
+impl PublicWalletWrites {
+    /// Write every item the backup carries
+    ///
+    /// The file-import callers reach this only after requiring an empty wallet
+    /// id or removing the artifacts an approval covered
+    fn create_all(prepared: PreparedPublicWallet) -> Self {
+        let PreparedPublicWallet { xpub, descriptors, tap_signer_backup, .. } = prepared;
+
+        Self {
+            bdk_descriptors: descriptors.clone(),
+            xpub,
+            descriptors,
+            tap_signer_backup: tap_signer_backup.map(Zeroizing::new),
+        }
     }
+}
 
-    let existing_xpub = Keychain::global()
-        .get_wallet_xpub(&metadata.id)
-        .map_err_prefix("cloud restore xpub", BackupError::Keychain)?;
-
-    if existing_xpub.is_some() && existing_xpub != expected_xpub {
-        return Err(BackupError::WalletIdOccupied(metadata.id.clone()));
-    }
-
-    Ok(snapshot)
+trait WalletWrites {
+    fn apply(self, metadata: &WalletMetadata) -> Result<(), BackupError>;
 }
 
 fn restore_hot_wallet_prepared_with_context(
@@ -701,7 +742,7 @@ fn restore_hot_wallet_prepared_with_context(
     cleanup: RestoreCleanup<'_>,
 ) -> Result<Vec<String>, (BackupError, Vec<String>)> {
     let result = with_restore_journal(metadata, cleanup, || {
-        restore_hot_wallet_inner_prepared(metadata, prepared)
+        HotWalletWrites::create_all(prepared).apply(metadata)
     });
     if result.is_ok() {
         schedule_cloud_backup_after_local_commit(metadata);
@@ -716,7 +757,7 @@ fn restore_descriptor_wallet_prepared_with_context(
     cleanup: RestoreCleanup<'_>,
 ) -> Result<Vec<String>, (BackupError, Vec<String>)> {
     let result = with_restore_journal(metadata, cleanup, || {
-        restore_descriptor_wallet_inner_prepared(metadata, prepared)
+        PublicWalletWrites::create_all(prepared).apply(metadata)
     });
     if result.is_ok() {
         schedule_cloud_backup_after_local_commit(metadata);
@@ -725,166 +766,91 @@ fn restore_descriptor_wallet_prepared_with_context(
     result
 }
 
-pub(crate) fn restore_cloud_mnemonic_wallet(
-    metadata: &WalletMetadata,
-    mnemonic: Mnemonic,
-) -> Result<(), (BackupError, Vec<String>)> {
-    let secret = KeychainWalletSecret::Mnemonic(mnemonic);
-    let xpub = secret.xpub(metadata.network);
-    let descriptors = secret.clone().into_descriptors(metadata.network, metadata.address_type);
-    let prepared = PreparedHotWallet { secret, xpub, descriptors };
-    let snapshot = cloud_restore_snapshot(metadata, Some(prepared.xpub))
-        .map_err(|error| (error, Vec::new()))?;
-
-    let result = with_restore_journal(metadata, RestoreCleanup::Preserve(&snapshot), || {
-        restore_hot_wallet_inner_prepared(metadata, prepared)
-    });
-    if let Ok(warnings) = &result {
+impl WalletWrites for HotWalletWrites {
+    fn apply(self, metadata: &WalletMetadata) -> Result<(), BackupError> {
+        let keychain = Keychain::global();
+        let db = Database::global();
         let name = &metadata.name;
-        for warning in warnings {
-            warn!("cloud restore cleanup warning for {name}: {warning}");
-        }
-    }
-    result.map(|_| ())
-}
+        let network = metadata.network;
+        let Self { bdk_descriptors, secret, xpub, descriptors } = self;
 
-pub(crate) fn restore_cloud_xpriv_wallet(
-    metadata: &WalletMetadata,
-    xpriv: WalletXprv,
-) -> Result<(), (BackupError, Vec<String>)> {
-    let secret = KeychainWalletSecret::Xpriv(xpriv);
-    let xpub = secret.xpub(metadata.network);
-    let descriptors = secret.clone().into_descriptors(metadata.network, metadata.address_type);
-    let prepared = PreparedHotWallet { secret, xpub, descriptors };
-    let snapshot = cloud_restore_snapshot(metadata, Some(prepared.xpub))
-        .map_err(|error| (error, Vec::new()))?;
-
-    let result = with_restore_journal(metadata, RestoreCleanup::Preserve(&snapshot), || {
-        restore_hot_wallet_inner_prepared(metadata, prepared)
-    });
-    if let Ok(warnings) = &result {
-        let name = &metadata.name;
-        for warning in warnings {
-            warn!("cloud restore cleanup warning for {name}: {warning}");
-        }
-    }
-    result.map(|_| ())
-}
-
-fn restore_hot_wallet_inner_prepared(
-    metadata: &WalletMetadata,
-    prepared: PreparedHotWallet,
-) -> Result<(), BackupError> {
-    let keychain = Keychain::global();
-    let db = Database::global();
-    let name = &metadata.name;
-    let network = metadata.network;
-    let PreparedHotWallet { secret, xpub, descriptors } = prepared;
-
-    let mut store = crate::bdk_store::BdkStore::try_new(&metadata.id, network)
-        .map_err(|e| BackupError::Restore(format!("BDK store for {name}: {e}")))?;
-
-    let ext_descriptor = descriptors.external.extended_descriptor.clone();
-    let int_descriptor = descriptors.internal.extended_descriptor.clone();
-
-    // create BDK wallet first — if this fails we haven't touched the keychain yet
-    bdk_wallet::Wallet::create(
-        descriptors.external.into_tuple(),
-        descriptors.internal.into_tuple(),
-    )
-    .network(network.into())
-    .create_wallet(&mut store.conn)
-    .map_err(|e| BackupError::Restore(format!("BDK wallet for {name}: {e}")))?;
-
-    keychain
-        .save_wallet_secret(&metadata.id, secret)
-        .map_err(|e| BackupError::Keychain(format!("private key for {name}: {e}")))?;
-
-    keychain
-        .save_wallet_xpub(&metadata.id, xpub)
-        .map_err(|e| BackupError::Keychain(format!("xpub for {name}: {e}")))?;
-
-    keychain
-        .save_public_descriptor(&metadata.id, ext_descriptor, int_descriptor)
-        .map_err(|e| BackupError::Keychain(format!("descriptors for {name}: {e}")))?;
-
-    RestoredWalletMetadataStore::new(&db).save(metadata, name)?;
-
-    Ok(())
-}
-
-pub(crate) fn restore_cloud_descriptor_wallet(
-    metadata: &WalletMetadata,
-    backup: &WalletBackup,
-) -> Result<(), (BackupError, Vec<String>)> {
-    let prepared =
-        prepare_public_wallet(backup, metadata, matches!(&backup.secret, WalletSecret::Unknown))
-            .map_err(|error| (error, Vec::new()))?;
-
-    let prepared = PreparedPublicWallet {
-        tap_signer_backup: match &backup.secret {
-            WalletSecret::TapSignerBackup(bytes) => Some(bytes.clone()),
-            _ => None,
-        },
-        ..prepared
-    };
-    let snapshot =
-        cloud_restore_snapshot(metadata, prepared.xpub).map_err(|error| (error, Vec::new()))?;
-
-    let result = with_restore_journal(metadata, RestoreCleanup::Preserve(&snapshot), || {
-        restore_descriptor_wallet_inner_prepared(metadata, prepared)
-    });
-    if let Ok(warnings) = &result {
-        let name = &metadata.name;
-        for warning in warnings {
-            warn!("cloud restore cleanup warning for {name}: {warning}");
-        }
-    }
-    result.map(|_| ())
-}
-
-fn restore_descriptor_wallet_inner_prepared(
-    metadata: &WalletMetadata,
-    prepared: PreparedPublicWallet,
-) -> Result<(), BackupError> {
-    let keychain = Keychain::global();
-    let db = Database::global();
-    let name = &metadata.name;
-
-    let PreparedPublicWallet { xpub, descriptors, tap_signer_backup, .. } = prepared;
-
-    if let Some(xpub) = xpub {
-        keychain
-            .save_wallet_xpub(&metadata.id, xpub)
-            .map_err(|e| BackupError::Keychain(format!("xpub for {name}: {e}")))?;
-    }
-
-    // save descriptors and create BDK wallet if present
-    if let Some((ext, int)) = descriptors {
-        keychain
-            .save_public_descriptor(&metadata.id, ext.clone(), int.clone())
-            .map_err(|e| BackupError::Keychain(format!("descriptors for {name}: {e}")))?;
-
-        // create BDK wallet store from descriptors
-        let mut store = crate::bdk_store::BdkStore::try_new(&metadata.id, metadata.network)
+        let mut store = crate::bdk_store::BdkStore::try_new(&metadata.id, network)
             .map_err(|e| BackupError::Restore(format!("BDK store for {name}: {e}")))?;
 
-        bdk_wallet::Wallet::create(ext, int)
-            .network(metadata.network.into())
-            .create_wallet(&mut store.conn)
-            .map_err(|e| BackupError::Restore(format!("BDK wallet for {name}: {e}")))?;
+        // create BDK wallet first — if this fails we haven't touched the keychain yet
+        bdk_wallet::Wallet::create(
+            bdk_descriptors.external.into_tuple(),
+            bdk_descriptors.internal.into_tuple(),
+        )
+        .network(network.into())
+        .create_wallet(&mut store.conn)
+        .map_err(|e| BackupError::Restore(format!("BDK wallet for {name}: {e}")))?;
+
+        if let Some(secret) = secret {
+            keychain
+                .save_wallet_secret(&metadata.id, secret)
+                .map_err(|e| BackupError::Keychain(format!("private key for {name}: {e}")))?;
+        }
+
+        if let Some(xpub) = xpub {
+            keychain
+                .save_wallet_xpub(&metadata.id, xpub)
+                .map_err(|e| BackupError::Keychain(format!("xpub for {name}: {e}")))?;
+        }
+
+        if let Some((external, internal)) = descriptors {
+            keychain
+                .save_public_descriptor(&metadata.id, external, internal)
+                .map_err(|e| BackupError::Keychain(format!("descriptors for {name}: {e}")))?;
+        }
+
+        RestoredWalletMetadataStore::new(&db).save(metadata, name)?;
+
+        Ok(())
     }
+}
 
-    // save tap signer backup inside the cleanup wrapper so failure triggers full rollback
-    if let Some(backup_bytes) = tap_signer_backup {
-        keychain
-            .save_tap_signer_backup(&metadata.id, &backup_bytes)
-            .map_err(|e| BackupError::Keychain(format!("tap signer backup for {name}: {e}")))?;
+impl WalletWrites for PublicWalletWrites {
+    fn apply(self, metadata: &WalletMetadata) -> Result<(), BackupError> {
+        let keychain = Keychain::global();
+        let db = Database::global();
+        let name = &metadata.name;
+        let Self { bdk_descriptors, xpub, descriptors, tap_signer_backup } = self;
+
+        if let Some(xpub) = xpub {
+            keychain
+                .save_wallet_xpub(&metadata.id, xpub)
+                .map_err(|e| BackupError::Keychain(format!("xpub for {name}: {e}")))?;
+        }
+
+        if let Some((external, internal)) = descriptors {
+            keychain
+                .save_public_descriptor(&metadata.id, external, internal)
+                .map_err(|e| BackupError::Keychain(format!("descriptors for {name}: {e}")))?;
+        }
+
+        // create the BDK wallet from the backup's descriptors, whether they were written or adopted
+        if let Some((external, internal)) = bdk_descriptors {
+            let mut store = crate::bdk_store::BdkStore::try_new(&metadata.id, metadata.network)
+                .map_err(|e| BackupError::Restore(format!("BDK store for {name}: {e}")))?;
+
+            bdk_wallet::Wallet::create(external, internal)
+                .network(metadata.network.into())
+                .create_wallet(&mut store.conn)
+                .map_err(|e| BackupError::Restore(format!("BDK wallet for {name}: {e}")))?;
+        }
+
+        // save tap signer backup inside the cleanup wrapper so failure triggers full rollback
+        if let Some(backup) = tap_signer_backup {
+            keychain
+                .save_tap_signer_backup(&metadata.id, &backup)
+                .map_err(|e| BackupError::Keychain(format!("tap signer backup for {name}: {e}")))?;
+        }
+
+        RestoredWalletMetadataStore::new(&db).save(metadata, name)?;
+
+        Ok(())
     }
-
-    RestoredWalletMetadataStore::new(&db).save(metadata, name)?;
-
-    Ok(())
 }
 
 fn import_labels(id: &WalletId, jsonl: &str) -> Result<(), BackupError> {
@@ -1006,21 +972,10 @@ mod tests {
 
     use cove_types::BlockSizeLast;
 
-    use crate::wallet::fingerprint::Fingerprint;
+    use crate::test_support::hot_wallet_metadata as hot_metadata;
     use crate::wallet::metadata::StoreType;
 
     use super::*;
-
-    fn hot_metadata(name: &str) -> WalletMetadata {
-        let mut metadata = WalletMetadata::preview_new();
-        metadata.name = name.to_string();
-        metadata.wallet_type = WalletType::Hot;
-        metadata.master_fingerprint = Some(Arc::new(Fingerprint::from(
-            bdk_wallet::bitcoin::bip32::Fingerprint::from_str("817e7be0").unwrap(),
-        )));
-
-        metadata
-    }
 
     fn cold_metadata(name: &str) -> WalletMetadata {
         let mut metadata = hot_metadata(name);

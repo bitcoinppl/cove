@@ -5,6 +5,33 @@ use crate::manager::cloud_backup_manager::{
     GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
 };
 
+fn restore_master_wrapper_for_test(
+    master_key: &cove_cspp::master_key::MasterKey,
+    prf_key: &[u8; 32],
+    prf_salt: &[u8; 32],
+    registered_at: u64,
+) -> Vec<u8> {
+    let namespace = master_key.namespace_id();
+    let encrypted = cove_cspp::master_key_crypto::encrypt_master_key_with_remote_metadata(
+        master_key,
+        prf_key,
+        prf_salt,
+        Some(cove_cspp::backup_data::PasskeyProviderHint {
+            aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+            registered_platform: cove_cspp::backup_data::PasskeyRegistrationPlatform::Android,
+            registered_at,
+            name_suffix: format!("{registered_at}"),
+        }),
+        cove_cspp::backup_data::remote_payload::RemotePayloadMetadata::master_key(
+            &namespace,
+            registered_at,
+        ),
+    )
+    .unwrap();
+
+    serde_json::to_vec(&encrypted).unwrap()
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn restore_downloaded_wallet_does_not_reupload_wallet_or_mutate_backup_counts() {
     let _guard = async_test_lock().lock().await;
@@ -348,6 +375,168 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
             "unexpected sync state: {sync_state:?}"
         );
     }
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_native_cancellation_after_match_restores_retained_matches_without_refresh() {
+    assert_terminal_native_stop_restores_retained_matches(PasskeyError::UserCancelled).await;
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_terminal_auth_failure_after_match_restores_retained_matches_without_refresh() {
+    assert_terminal_native_stop_restores_retained_matches(PasskeyError::RequestFailed {
+        operation: PasskeyOperation::AuthenticateAssertion,
+        reason: PasskeyFailureReason::InvalidResponse,
+    })
+    .await;
+}
+
+/// The first namespace matches through discovery, then targeted authentication for the second
+/// namespace stops with `targeted_auth_error`
+async fn assert_terminal_native_stop_restores_retained_matches(targeted_auth_error: PasskeyError) {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let prf_key = [7u8; 32];
+    let first_master_key = cove_cspp::master_key::MasterKey::generate();
+    let second_master_key = cove_cspp::master_key::MasterKey::generate();
+    let first_namespace = first_master_key.namespace_id();
+    let second_namespace = second_master_key.namespace_id();
+    globals.cloud.set_master_key_backup(
+        first_namespace.clone(),
+        restore_master_wrapper_for_test(&first_master_key, &prf_key, &[9; 32], 2),
+    );
+    globals.cloud.set_master_key_backup(
+        second_namespace.clone(),
+        restore_master_wrapper_for_test(&second_master_key, &prf_key, &[8; 32], 1),
+    );
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Err(targeted_auth_error));
+
+    let first_wallet = xpub_only_wallet_metadata();
+    let second_wallet = xpub_only_wallet_metadata();
+    let sample_xpub_from_entropy = |metadata: &WalletMetadata, byte| {
+        let entropy = [byte; 16];
+        let mnemonic = Mnemonic::from_entropy(&entropy).unwrap();
+
+        crate::mnemonic::MnemonicExt::xpub(&mnemonic, metadata.network.into()).to_string()
+    };
+    Keychain::global()
+        .save_wallet_xpub(
+            &first_wallet.id,
+            sample_xpub_from_entropy(&first_wallet, 1).parse().unwrap(),
+        )
+        .unwrap();
+    Keychain::global()
+        .save_wallet_xpub(
+            &second_wallet.id,
+            sample_xpub_from_entropy(&second_wallet, 2).parse().unwrap(),
+        )
+        .unwrap();
+    let first_record_id = wallet_record_id(first_wallet.id.as_ref());
+    let second_record_id = wallet_record_id(second_wallet.id.as_ref());
+    globals.cloud.set_wallet_backup(
+        first_namespace.clone(),
+        first_record_id.clone(),
+        encrypted_remote_wallet_backup_bytes(&first_wallet, &first_master_key, "first-revision", 1)
+            .await,
+    );
+    globals.cloud.set_wallet_backup(
+        second_namespace.clone(),
+        second_record_id.clone(),
+        encrypted_remote_wallet_backup_bytes(
+            &second_wallet,
+            &second_master_key,
+            "second-revision",
+            1,
+        )
+        .await,
+    );
+    globals
+        .cloud
+        .set_wallet_files(first_namespace, vec![wallet_filename_from_record_id(&first_record_id)]);
+    globals.cloud.set_wallet_files(
+        second_namespace,
+        vec![wallet_filename_from_record_id(&second_record_id)],
+    );
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
+
+    assert_eq!(report.wallets_restored, 1);
+    assert_eq!(report.wallets_failed, 0);
+    assert_eq!(globals.passkey.discover_count(), 1);
+    assert_eq!(globals.passkey.authenticate_count(), 1);
+    assert_eq!(globals.cloud.list_namespaces_attempt_count(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn restore_cancellation_retains_exclusive_claim_until_native_call_returns() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let discovered_prf_key = [7u8; 32];
+    let mismatch_master_key = cove_cspp::master_key::MasterKey::generate();
+    let matching_master_key = cove_cspp::master_key::MasterKey::generate();
+    let mismatch_namespace = mismatch_master_key.namespace_id();
+    let matching_namespace = matching_master_key.namespace_id();
+    globals.cloud.set_master_key_backup(
+        mismatch_namespace,
+        restore_master_wrapper_for_test(&mismatch_master_key, &[8; 32], &[9; 32], 2),
+    );
+    globals.cloud.set_master_key_backup(
+        matching_namespace,
+        restore_master_wrapper_for_test(&matching_master_key, &discovered_prf_key, &[8; 32], 1),
+    );
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: discovered_prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Ok(discovered_prf_key.to_vec()));
+    let native_gate = globals.passkey.gate_next_authenticate();
+
+    let (sender, _receiver) = flume::bounded(100);
+    call!(manager.supervisor.start_restore_from_cloud_backup_with_events(sender)).await.unwrap();
+    wait_for_test_condition(
+        Duration::from_secs(2),
+        "targeted restore authentication starts",
+        || native_gate.is_started(),
+    )
+    .await;
+
+    let active_claim = manager.projected_exclusive_operation().expect("restore claim is active");
+    assert_eq!(active_claim.operation(), CloudBackupExclusiveOperation::Restore);
+    call!(manager.supervisor.cancel_restore()).await.unwrap();
+    assert_eq!(manager.projected_exclusive_operation(), Some(active_claim));
+
+    let (retry_sender, retry_receiver) = flume::bounded(1);
+    call!(manager.supervisor.start_restore_from_cloud_backup_with_events(retry_sender))
+        .await
+        .unwrap();
+    let retry_event = tokio::time::timeout(Duration::from_secs(2), retry_receiver.recv_async())
+        .await
+        .expect("restore retry response")
+        .expect("restore retry event");
+    assert!(matches!(
+        retry_event,
+        CloudBackupRestoreEvent::Failed(message) if message == "restore already in progress"
+    ));
+
+    native_gate.release();
+    wait_for_test_condition(Duration::from_secs(2), "cancelled restore releases ownership", || {
+        manager.projected_exclusive_operation().is_none()
+    })
+    .await;
+    assert_eq!(globals.passkey.authenticate_count(), 1);
 }
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
@@ -1605,6 +1794,173 @@ async fn restore_fails_when_all_listed_wallet_backups_are_missing() {
         CloudBackupError::Internal(message) if message == "all wallets failed to restore"
     ));
 
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+}
+
+/// The raw stored values, so adopting an item is distinguishable from rewriting it
+fn raw_wallet_keychain_entries(
+    globals: &TestGlobals,
+    wallet_id: &cove_types::WalletId,
+) -> Vec<Option<String>> {
+    crate::test_support::WALLET_KEYCHAIN_KEY_SUFFIXES
+        .iter()
+        .map(|suffix| globals.keychain.get_entry(&format!("{wallet_id}{suffix}")))
+        .collect()
+}
+
+/// A hot wallet whose keychain items survived an app reinstall that removed the database
+fn hot_wallet_with_surviving_keychain_items() -> WalletMetadata {
+    use crate::wallet_secret::WalletSecretExt as _;
+
+    let mut metadata = WalletMetadata::preview_new();
+    metadata.wallet_type = WalletType::Hot;
+
+    // a seed of its own, so this wallet cannot be mistaken for the xpub-only fixture
+    let mnemonic =
+        bip39::Mnemonic::parse("zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong").unwrap();
+    let secret = cove_device::keychain::WalletSecret::Mnemonic(mnemonic);
+    let xpub = secret.xpub(metadata.network);
+    let descriptors = secret.clone().into_descriptors(metadata.network, metadata.address_type);
+    let keychain = Keychain::global();
+
+    // the identity set treats two wallets with one fingerprint as duplicates
+    metadata.master_fingerprint =
+        Some(Arc::new(crate::wallet::fingerprint::Fingerprint::from(xpub.fingerprint())));
+    keychain.save_wallet_xpub(&metadata.id, xpub).unwrap();
+    keychain
+        .save_public_descriptor(
+            &metadata.id,
+            descriptors.external.extended_descriptor.clone(),
+            descriptors.internal.extended_descriptor,
+        )
+        .unwrap();
+    keychain.save_wallet_secret(&metadata.id, secret).unwrap();
+
+    metadata
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_after_reinstall_adopts_surviving_keychain_items() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+    globals
+        .cloud
+        .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted_master).unwrap());
+    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();
+
+    let hot_wallet = hot_wallet_with_surviving_keychain_items();
+    let xpub_wallet = xpub_only_wallet_metadata();
+    Keychain::global()
+        .save_wallet_xpub(&xpub_wallet.id, sample_xpub(&xpub_wallet).parse().unwrap())
+        .unwrap();
+
+    let mut wallet_files = Vec::new();
+    for wallet in [&hot_wallet, &xpub_wallet] {
+        let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+        // this fixture keeps the keychain items, which is what a reinstall leaves behind
+        globals.cloud.set_wallet_backup(
+            namespace.clone(),
+            record_id.clone(),
+            encrypted_reinstalled_wallet_backup_bytes(wallet, &master_key, "reinstall-revision", 2)
+                .await,
+        );
+        wallet_files.push(wallet_filename_from_record_id(&record_id));
+    }
+    globals.cloud.set_wallet_files(namespace, wallet_files);
+
+    let before = [
+        raw_wallet_keychain_entries(globals, &hot_wallet.id),
+        raw_wallet_keychain_entries(globals, &xpub_wallet.id),
+    ];
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
+
+    assert_eq!(
+        (report.wallets_restored, report.wallets_failed, report.failed_wallet_errors.clone()),
+        (2, 0, Vec::new())
+    );
+    assert_eq!(
+        [
+            raw_wallet_keychain_entries(globals, &hot_wallet.id),
+            raw_wallet_keychain_entries(globals, &xpub_wallet.id),
+        ],
+        before
+    );
+    for wallet in [&hot_wallet, &xpub_wallet] {
+        assert!(
+            Database::global()
+                .wallets()
+                .get(&wallet.id, wallet.network, wallet.wallet_mode)
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    let second_operation = new_restore_operation_for_test(&manager).await;
+    let second_report = second_operation.restore_from_cloud_backup(&manager).await.unwrap();
+
+    assert_eq!(second_report.wallets_restored, 0);
+    assert_eq!(second_report.wallets_failed, 0);
+}
+
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_keeps_the_conflict_category_when_every_wallet_conflicts() {
+    use crate::mnemonic::MnemonicExt as _;
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let encrypted_master =
+        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &[7; 32], &[9; 32]).unwrap();
+    globals
+        .cloud
+        .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted_master).unwrap());
+    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();
+
+    let wallet = xpub_only_wallet_metadata();
+    Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        record_id.clone(),
+        encrypted_reinstalled_wallet_backup_bytes(&wallet, &master_key, "conflict-revision", 2)
+            .await,
+    );
+    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+
+    // the surviving keychain xpub belongs to another seed, so it cannot be adopted
+    let unrelated_xpub =
+        bip39::Mnemonic::parse("zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong")
+            .unwrap()
+            .xpub(wallet.network.into());
+    Keychain::global().save_wallet_xpub(&wallet.id, unrelated_xpub).unwrap();
+    let before = raw_wallet_keychain_entries(globals, &wallet.id);
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();
+
+    assert!(matches!(
+        error,
+        CloudBackupError::LocalWalletConflict(crate::backup::import::LocalWalletConflict::Mismatch)
+    ));
+    assert_eq!(raw_wallet_keychain_entries(globals, &wallet.id), before);
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Disabled

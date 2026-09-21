@@ -963,7 +963,18 @@ mod tests {
         ScriptBuf, Transaction, TxOut, psbt::Output as PsbtOutput, transaction::Version,
     };
 
-    fn new_test_persister() -> (PayjoinSessionPersister, WalletDataDb, tempfile::TempDir) {
+    // in-memory storage skips the process-global lifecycle coordinator, so these
+    // persister tests cannot race with wipe-phase tests in the same cargo test process
+    fn new_test_persister() -> (PayjoinSessionPersister, WalletDataDb) {
+        let db = WalletDataDb::new_in_memory(WalletId::preview_new_random())
+            .expect("in-memory payjoin test db");
+        (PayjoinSessionPersister::new(db.clone()), db)
+    }
+
+    // persistent storage goes through begin_persistence_operation; callers must
+    // hold global_state_test_lock so wipe-phase tests cannot observe CoordinatorBusy
+    fn new_persistent_test_persister() -> (PayjoinSessionPersister, WalletDataDb, tempfile::TempDir)
+    {
         let (db, tmp) = test_support::new_test_wallet_data_db(WalletId::preview_new_random());
         (PayjoinSessionPersister::new(db.clone()), db, tmp)
     }
@@ -1025,7 +1036,7 @@ mod tests {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
         crate::test_support::ensure_tokio_runtime();
 
-        let (persister, db, _tmp) = new_test_persister();
+        let (persister, db, _tmp) = new_persistent_test_persister();
         persister.create_session(&test_fallback_tx()).expect("payjoin session is persisted");
         let wallet_id = db.id.clone();
         let actor = cove_tokio::task::spawn_actor(terminal_test_actor(persister));
@@ -1059,7 +1070,7 @@ mod tests {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
         crate::test_support::ensure_tokio_runtime();
 
-        let (persister, db, _tmp) = new_test_persister();
+        let (persister, db, _tmp) = new_persistent_test_persister();
         let fallback = test_fallback_tx();
         let proposal = BdkTransaction {
             version: Version::TWO,
@@ -1094,7 +1105,7 @@ mod tests {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
         crate::test_support::ensure_tokio_runtime();
 
-        let (persister, db, _tmp) = new_test_persister();
+        let (persister, db, _tmp) = new_persistent_test_persister();
         let actor = cove_tokio::task::spawn_actor(terminal_test_actor(persister.clone()));
         let (authority, preparation) =
             crate::wallet_lifecycle::test_support::begin_wallet_deletion(db.id.clone());
@@ -1117,7 +1128,7 @@ mod tests {
 
     #[test]
     fn test_close_session_is_idempotent() {
-        let (persister, _db, _tmp) = new_test_persister();
+        let (persister, _db) = new_test_persister();
         let mut actor = PayjoinActor {
             addr: WeakAddr::default(),
             wallet_addr: WeakAddr::default(),
@@ -1188,7 +1199,7 @@ mod tests {
 
     #[test]
     fn save_event_requires_a_session_record() {
-        let (persister, _db, _tmp) = new_test_persister();
+        let (persister, _db) = new_test_persister();
 
         let result = persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt());
 
@@ -1197,7 +1208,7 @@ mod tests {
 
     #[test]
     fn events_round_trip_in_order() {
-        let (persister, _db, _tmp) = new_test_persister();
+        let (persister, _db) = new_test_persister();
         persister.create_session(&test_fallback_tx()).unwrap();
 
         persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt()).unwrap();
@@ -1215,7 +1226,7 @@ mod tests {
 
     #[test]
     fn create_session_rejects_when_session_exists() {
-        let (persister, _db, _tmp) = new_test_persister();
+        let (persister, _db) = new_test_persister();
         persister.create_session(&test_fallback_tx()).unwrap();
         persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt()).unwrap();
 
@@ -1227,7 +1238,7 @@ mod tests {
 
     #[test]
     fn close_keeps_the_session_record() {
-        let (persister, _db, _tmp) = new_test_persister();
+        let (persister, _db) = new_test_persister();
         persister.create_session(&test_fallback_tx()).unwrap();
         persister.save_event(PayjoinSessionEvent::PostedOriginalPsbt()).unwrap();
 
@@ -1238,7 +1249,7 @@ mod tests {
 
     #[test]
     fn resume_with_no_record_is_none() {
-        let (_persister, db, _tmp) = new_test_persister();
+        let (_persister, db) = new_test_persister();
 
         let resumption = resume_session(db, WeakAddr::default());
 
@@ -1247,7 +1258,7 @@ mod tests {
 
     #[test]
     fn resume_with_unreplayable_log_broadcasts_stored_fallback() {
-        let (persister, db, _tmp) = new_test_persister();
+        let (persister, db) = new_test_persister();
         let tx = test_fallback_tx();
         persister.create_session(&tx).unwrap();
         // a log that does not start with a Created event cannot be replayed
@@ -1263,7 +1274,7 @@ mod tests {
 
     #[test]
     fn save_event_rejected_after_set_pending_fallback() {
-        let (persister, _db, _tmp) = new_test_persister();
+        let (persister, _db) = new_test_persister();
         persister.create_session(&test_fallback_tx()).unwrap();
         persister.set_pending_fallback().unwrap();
 
@@ -1274,7 +1285,7 @@ mod tests {
 
     #[test]
     fn resume_prioritises_pending_fallback_over_event_log() {
-        let (_persister, db, _tmp) = new_test_persister();
+        let (_persister, db) = new_test_persister();
         let tx = test_fallback_tx();
         let session = PayjoinSenderSession {
             events: vec!["irrelevant_event".to_string()],
@@ -1294,7 +1305,7 @@ mod tests {
 
     #[test]
     fn set_pending_fallback_rejects_overwrite_of_proposal() {
-        let (persister, _db, _tmp) = new_test_persister();
+        let (persister, _db) = new_test_persister();
         let tx = empty_transaction();
         persister.create_session(&test_fallback_tx()).unwrap();
         persister.set_pending_proposal(&tx).unwrap();
@@ -1306,7 +1317,7 @@ mod tests {
 
     #[test]
     fn set_pending_proposal_rejects_overwrite_with_different_tx() {
-        let (persister, _db, _tmp) = new_test_persister();
+        let (persister, _db) = new_test_persister();
         let tx_a = empty_transaction();
         let mut tx_b = empty_transaction();
         tx_b.version = Version::ONE;
@@ -1320,7 +1331,7 @@ mod tests {
 
     #[test]
     fn set_pending_proposal_is_idempotent() {
-        let (persister, db, _tmp) = new_test_persister();
+        let (persister, db) = new_test_persister();
         let tx = empty_transaction();
         persister.create_session(&test_fallback_tx()).unwrap();
         persister.set_pending_proposal(&tx).unwrap();
@@ -1337,7 +1348,7 @@ mod tests {
 
     #[test]
     fn resume_with_proposal_marker_returns_broadcast_stored_proposal() {
-        let (_persister, db, _tmp) = new_test_persister();
+        let (_persister, db) = new_test_persister();
         let tx = empty_transaction();
         let session = PayjoinSenderSession {
             events: vec![],
@@ -1361,7 +1372,7 @@ mod tests {
 
     #[test]
     fn resume_with_corrupt_proposal_retains_record_and_reports_error() {
-        let (_persister, db, _tmp) = new_test_persister();
+        let (_persister, db) = new_test_persister();
         let session = PayjoinSenderSession {
             events: vec![],
             fallback_tx: consensus::serialize(&test_fallback_tx()).into(),
@@ -1387,7 +1398,7 @@ mod tests {
 
     #[test]
     fn resume_with_corrupt_fallback_clears_the_record() {
-        let (_persister, db, _tmp) = new_test_persister();
+        let (_persister, db) = new_test_persister();
         let session = PayjoinSenderSession {
             events: vec![],
             fallback_tx: vec![0xff].into(),
@@ -1411,7 +1422,7 @@ mod tests {
 
     #[test]
     fn resume_with_corrupt_committed_fallback_retains_the_record() {
-        let (_persister, db, _tmp) = new_test_persister();
+        let (_persister, db) = new_test_persister();
         let session = PayjoinSenderSession {
             events: vec![],
             fallback_tx: vec![0xff].into(),

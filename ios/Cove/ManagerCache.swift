@@ -317,6 +317,7 @@ struct WalletManagerCacheState: Equatable {
 
             let hadWalletManager = walletManager != nil
             clearSendFlowManager()
+            clearCoinControlManager()
             backgroundScanTaskHandler.endInitialScanBackgroundTask()
             walletManager?.setInitialScanLifecycleChanged(nil)
             let walletManager = self.walletManager
@@ -332,6 +333,7 @@ struct WalletManagerCacheState: Equatable {
         guard let id else { return }
         walletManagerCacheState.invalidate(.wallet(id))
         clearSendFlowManager(id: id)
+        clearCoinControlManager(id: id)
 
         if walletManager?.id == id {
             backgroundScanTaskHandler.endInitialScanBackgroundTask()
@@ -376,8 +378,8 @@ struct WalletManagerCacheState: Equatable {
         }
     }
 
-    func clearCoinControlManager() {
-        guard let coinControlManager else { return }
+    func clearCoinControlManager(id: WalletId? = nil) {
+        guard let coinControlManager, id == nil || coinControlManager.id == id else { return }
 
         self.coinControlManager = nil
         coinControlManager.close()

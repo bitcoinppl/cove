@@ -76,7 +76,7 @@ func cloudBackupRestoreAllPresentation(
 struct CloudOnlySection: View {
     let wallets: [CloudBackupWalletItem]
     let manager: CloudBackupManager
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
 
     private var isOperating: Bool {
         manager.cloudOnlyOperation.operatingRecordId != nil
@@ -87,7 +87,7 @@ struct CloudOnlySection: View {
             wallets: wallets,
             manager: manager,
             isOperating: isOperating,
-            presentationCoordinator: presentationCoordinator
+            presenter: presenter
         )
     }
 }
@@ -96,7 +96,7 @@ private struct CloudOnlyFormSection: View {
     let wallets: [CloudBackupWalletItem]
     let manager: CloudBackupManager
     let isOperating: Bool
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
 
     var body: some View {
         Section(header: Text("Not on This Device")) {
@@ -104,7 +104,7 @@ private struct CloudOnlyFormSection: View {
                 wallets: wallets,
                 manager: manager,
                 isOperating: isOperating,
-                presentationCoordinator: presentationCoordinator
+                presenter: presenter
             )
         }
     }
@@ -114,7 +114,7 @@ private struct CloudOnlySectionContent: View {
     let wallets: [CloudBackupWalletItem]
     let manager: CloudBackupManager
     let isOperating: Bool
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
 
     var body: some View {
         CloudOnlyRestoreAllControl(manager: manager)
@@ -125,7 +125,7 @@ private struct CloudOnlySectionContent: View {
             operatingRecordId: manager.cloudOnlyOperation.operatingRecordId,
             isOperating: isOperating || manager.restoreAllState.isRunning
                 || !manager.isDetailInventoryReady,
-            presentationCoordinator: presentationCoordinator,
+            presenter: presenter,
             onRetryWallet: { item in
                 manager.dispatch(action: .restoreCloudWallet(item.recordId))
             }
@@ -285,7 +285,7 @@ private struct CloudOnlyWalletRows: View {
     let wallets: [CloudBackupWalletItem]
     let operatingRecordId: String?
     let isOperating: Bool
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
     let onRetryWallet: (CloudBackupWalletItem) -> Void
 
     var body: some View {
@@ -293,9 +293,10 @@ private struct CloudOnlyWalletRows: View {
             VStack(alignment: .leading, spacing: 8) {
                 CloudOnlyWalletActionButton(
                     item: item,
+                    manager: manager,
                     isOperating: isOperating,
                     isCurrentOperation: operatingRecordId == item.recordId,
-                    presentationCoordinator: presentationCoordinator
+                    presenter: presenter
                 )
 
                 if item.restoreFailure != nil {
@@ -316,13 +317,14 @@ private struct CloudOnlyWalletRows: View {
 
 private struct CloudOnlyWalletActionButton: View {
     let item: CloudBackupWalletItem
+    let manager: CloudBackupManager
     let isOperating: Bool
     let isCurrentOperation: Bool
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+    let presenter: CloudBackupDetailPresenter
 
     var body: some View {
         Button {
-            presentationCoordinator.present(.dialog(.cloudOnlyWalletActions(item)))
+            presenter.transitions.present(.cloudOnlyWalletDialog(item))
         } label: {
             CloudOnlyWalletActionLabel(
                 item: item,
@@ -332,6 +334,11 @@ private struct CloudOnlyWalletActionButton: View {
         .buttonStyle(.plain)
         .foregroundStyle(.primary)
         .disabled(isOperating)
+        .cloudOnlyWalletActionDialog(
+            wallet: item,
+            manager: manager,
+            presenter: presenter
+        )
     }
 }
 

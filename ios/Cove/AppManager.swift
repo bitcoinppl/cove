@@ -244,18 +244,42 @@ struct CorruptedWalletDeletionRetry: Equatable {
     }
 
     /// Reset the manager state
+    @MainActor
     public func reset() {
         navigationCoordinator.reset()
         corruptedWalletDeletionRetry = nil
 
-        database = Database()
-        needsOnboarding = rust.needsOnboarding()
         clearWalletManager()
         managerCache.clearCoinControlManager()
         clearKeyTeleportManager()
 
-        let state = rust.state()
-        router = state.router
+        // a mode switch must not leave the previous mode's NFC session running
+        tapSignerNfc?.cancel()
+        tapSignerNfc = nil
+
+        resetProjectionFromCommittedRustState()
+    }
+
+    @MainActor
+    func prepareForWipeCompletion() async {
+        navigationCoordinator.reset()
+        managerCache.clearWalletManager()
+        managerCache.clearCoinControlManager()
+        clearKeyTeleportManager()
+
+        tapSignerNfc?.cancel()
+        tapSignerNfc = nil
+        isSidebarVisible = false
+        isLoading = false
+        wallets = []
+        alertState = nil
+        sheetState = nil
+        corruptedWalletDeletionRetry = nil
+        isPastHeader = false
+        CloudBackupManager.shared.enableCompletion = nil
+
+        resetProjectionFromCommittedRustState()
+        await PopupStack.dismissAllPopups()
     }
 
     func deleteCorruptedWallet(id: WalletId, databaseError: String) {
@@ -752,6 +776,21 @@ struct CorruptedWalletDeletionRetry: Equatable {
 }
 
 extension AppManager {
+    private func resetProjectionFromCommittedRustState() {
+        database = Database()
+        needsOnboarding = rust.needsOnboarding()
+
+        let globalConfig = database.globalConfig()
+        selectedNetwork = globalConfig.selectedNetwork()
+        colorSchemeSelection = globalConfig.colorScheme()
+        selectedNode = globalConfig.selectedNode()
+        selectedFiatCurrency = globalConfig.selectedFiatCurrency()
+        wallets = (try? database.wallets().all()) ?? []
+
+        router = rust.state().router
+        routeId = UUID()
+    }
+
     @MainActor
     private func applyConfigurationMessage(_ message: AppStateReconcileMessage) {
         switch message {

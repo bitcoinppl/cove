@@ -193,23 +193,28 @@ struct CoveMainView: View {
     }
 
     var body: some View {
-        CloudBackupPresentationHost(app: app, auth: auth, isCoverPresented: showCover) {
-            CoveMainPresentedContent(
-                app: app,
-                auth: auth,
-                showCover: $showCover,
-                scannedCode: $scannedCode,
-                id: id,
-                phase: phase,
-                presentationContext: presentationContext,
-                navigate: navigate,
-                resetIdentity: resetViewIdentity,
-                onChangeRoute: onChangeRoute,
-                onChangeQr: onChangeQr,
-                onChangeNfc: onChangeNfc,
-                onChangePhase: handleScenePhaseChange
-            )
+        Group {
+            if auth.wipePresentationState == .running {
+                CoverView()
+            } else {
+                CloudBackupPresentationHost(app: app, auth: auth, isCoverPresented: showCover) {
+                    CoveMainPresentedContent(
+                        app: app,
+                        auth: auth,
+                        showCover: $showCover,
+                        scannedCode: $scannedCode,
+                        id: id,
+                        presentationContext: presentationContext,
+                        navigate: navigate,
+                        resetIdentity: resetViewIdentity,
+                        onChangeRoute: onChangeRoute,
+                        onChangeQr: onChangeQr,
+                        onChangeNfc: onChangeNfc
+                    )
+                }
+            }
         }
+        .onChange(of: phase, initial: true, handleScenePhaseChange)
     }
 }
 
@@ -219,14 +224,12 @@ private struct CoveMainPresentedContent: View {
     @Binding var showCover: Bool
     @Binding var scannedCode: TaggedItem<MultiFormat>?
     let id: UUID
-    let phase: ScenePhase
     let presentationContext: CoveMainPresentationContext
     let navigate: (Route) -> Void
     let resetIdentity: () -> Void
     let onChangeRoute: ([Route], [Route]) -> Void
     let onChangeQr: (TaggedItem<MultiFormat>?, TaggedItem<MultiFormat>?) -> Void
     let onChangeNfc: (NfcMessage?, NfcMessage?) -> Void
-    let onChangePhase: (ScenePhase, ScenePhase) -> Void
 
     var body: some View {
         CoveLockedContent(app: app, auth: auth, showCover: $showCover)
@@ -241,7 +244,6 @@ private struct CoveMainPresentedContent: View {
             .presentingAlert($app.alertState, context: presentationContext)
             .presentingSheet($app.sheetState, context: presentationContext)
             .onOpenURL(perform: ScanManager.shared.handleFileOpen)
-            .onChange(of: phase, initial: true, onChangePhase)
     }
 }
 
@@ -290,18 +292,8 @@ private struct CoveWipePresentationModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .overlay {
-                if auth.wipePresentationState == .running {
-                    ZStack {
-                        Color.black.opacity(0.8).ignoresSafeArea()
-                        ProgressView("Removing local wallet data…")
-                            .tint(.white)
-                            .foregroundStyle(.white)
-                    }
-                }
-            }
             .alert(
-                "Wallet Shutdown Is Blocked",
+                auth.wipePresentationState.failureTitle,
                 isPresented: Binding(
                     get: { blockedAttempt != nil },
                     set: { _ in }
@@ -316,13 +308,13 @@ private struct CoveWipePresentationModifier: ViewModifier {
                     }
                 }
             } message: {
-                Text("Cove could not stop all wallet work. Retry or cancel the wipe.")
+                Text(auth.wipePresentationState.failureMessage)
             }
             .alert(
-                "Unable to Remove Local Data",
+                auth.wipePresentationState.failureTitle,
                 isPresented: Binding(
                     get: {
-                        if case .failed = auth.wipePresentationState { true } else { false }
+                        auth.wipePresentationState == .failed
                     },
                     set: { presented in
                         if !presented { auth.clearWipeFailure() }
@@ -331,9 +323,7 @@ private struct CoveWipePresentationModifier: ViewModifier {
             ) {
                 Button("OK", role: .cancel) { auth.clearWipeFailure() }
             } message: {
-                if case let .failed(message) = auth.wipePresentationState {
-                    Text(message)
-                }
+                Text(auth.wipePresentationState.failureMessage)
             }
     }
 

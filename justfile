@@ -150,10 +150,13 @@ alias bir := build-ios-release
 
 # keep this path aligned with Xcode archives; passkeys fail in TestFlight if CLI signing diverges
 # xtask verifies Apple's AASA CDN before upload
-# [long, external] Bump iOS build, build release bindings, then upload to TestFlight
+# use this when the build number was already bumped and committed
+# [long, external] Upload to TestFlight without bumping, copy previous test notes, and add to me-only
 [group('build')]
-testflight:
-    just xtask testflight
+upload-testflight:
+    just xtask upload-testflight
+
+alias utf := upload-testflight
 
 # [long] Build iOS debug for device
 [group('build')]
@@ -402,6 +405,32 @@ fix *flags="":
 [group('release')]
 bump type targets="":
     just xtask bump-version {{ type }} {{ if targets != "" { "--targets " + targets } else { "" } }}
+
+# xtask restores the iOS build number if Apple has not accepted the upload
+# [long, external] Bump iOS build, rebuild release bindings, and upload to TestFlight
+[group('release')]
+release-ios:
+    just xtask testflight
+
+alias reli := release-ios
+alias tf := release-ios
+alias testflight := release-ios
+
+# xtask restores the Android versionCode if Google Play has not been invoked
+# [long, external] Bump Android build, build signed artifacts, and release to Google Play internal testing
+[group('release')]
+release-android:
+    just xtask release-android
+
+alias rela := release-android
+
+# use this when the versionCode was already bumped and the signed bundle already exists
+# [external] Upload the existing signed Android bundle to Google Play internal testing without bumping
+[group('release')]
+upload-google-play:
+    just xtask upload-google-play
+
+alias ugp := upload-google-play
 
 # ------------------------------------------------------------------------------
 # xcode

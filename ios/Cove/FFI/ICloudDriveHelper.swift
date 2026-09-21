@@ -67,6 +67,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
     private let namespacesSubdirectory = csppNamespacesSubdirectory()
     private let walletsSubdirectory = csppWalletsDirectory()
     private let containerURLProvider: @Sendable () -> URL?
+    private let coordinatedDeleteOverride: (@Sendable (URL, String) throws -> URL)?
     let metadataIndexProvider: @MainActor @Sendable () -> ICloudMetadataIndex
     let defaultTimeout: TimeInterval
     let metadataListingTimeout: TimeInterval
@@ -90,12 +91,14 @@ final class ICloudDriveHelper: @unchecked Sendable {
         metadataIndexProvider: @escaping @MainActor @Sendable () -> ICloudMetadataIndex = {
             ICloudMetadataIndex.shared
         },
+        coordinatedDeleteOverride: (@Sendable (URL, String) throws -> URL)? = nil,
         defaultTimeout: TimeInterval = 60,
         metadataListingTimeout: TimeInterval = 15,
         readAttemptTimeout: TimeInterval = 5
     ) {
         self.containerURLProvider = containerURLProvider
         self.metadataIndexProvider = metadataIndexProvider
+        self.coordinatedDeleteOverride = coordinatedDeleteOverride
         self.defaultTimeout = defaultTimeout
         self.metadataListingTimeout = metadataListingTimeout
         self.readAttemptTimeout = readAttemptTimeout
@@ -447,9 +450,10 @@ extension ICloudDriveHelper {
         Log.info("writeForUpload: validated local iCloud handoff for \(url.lastPathComponent)")
     }
 
-    func coordinatedDelete(at url: URL, missingItemID: String) throws {
+    func coordinatedDelete(at url: URL, missingItemID: String) throws -> URL {
         var coordinatorError: NSError?
         var deleteError: Error?
+        var deletedURL: URL?
 
         let coordinator = NSFileCoordinator()
         coordinator.coordinate(
@@ -457,6 +461,7 @@ extension ICloudDriveHelper {
         ) { newURL in
             do {
                 try FileManager.default.removeItem(at: newURL)
+                deletedURL = newURL
             } catch {
                 deleteError = error
             }
@@ -468,6 +473,20 @@ extension ICloudDriveHelper {
             }
             throw Self.uploadError("delete failed", error: error)
         }
+
+        guard let deletedURL else {
+            throw CloudStorageError.UploadFailed("coordinated delete produced no result")
+        }
+
+        return deletedURL
+    }
+
+    private func performCoordinatedDelete(at url: URL, missingItemID: String) throws -> URL {
+        if let coordinatedDeleteOverride {
+            return try coordinatedDeleteOverride(url, missingItemID)
+        }
+
+        return try coordinatedDelete(at: url, missingItemID: missingItemID)
     }
 
     private static func coordinatedRead(
@@ -562,6 +581,16 @@ extension ICloudDriveHelper {
     private func directReadAsync(from url: URL) async throws -> Data {
         try await CancellableDispatchOperation.run(on: fileReadQueue) {
             try Data(contentsOf: url)
+        }
+    }
+
+    private func runFileOperation<Value: Sendable>(
+        _ operation: @escaping @Sendable () throws -> Value
+    ) async throws -> Value {
+        try await withCheckedThrowingContinuation { continuation in
+            fileReadQueue.async {
+                continuation.resume(with: Result { try operation() })
+            }
         }
     }
 
@@ -1073,15 +1102,16 @@ extension ICloudDriveHelper {
         let urlsToDelete = (localURLs + metadataURLs).filter { url in
             seenPaths.insert(url.standardizedFileURL.path).inserted
         }
-        var deletedAny = false
+        var deletedURLs: [URL] = []
         var lastError: Error?
 
         for url in urlsToDelete {
-            try Task.checkCancellation()
+            guard !Task.isCancelled else { break }
 
             do {
-                try coordinatedDelete(at: url, missingItemID: recordId)
-                deletedAny = true
+                let deletedURL = try performCoordinatedDelete(at: url, missingItemID: recordId)
+                deletedURLs.append(deletedURL)
+                deletedURLs.append(url)
             } catch CloudStorageError.NotFound {
                 continue
             } catch {
@@ -1089,10 +1119,39 @@ extension ICloudDriveHelper {
             }
         }
 
+        await recordMetadataDeletions(of: deletedURLs)
+
+        try Task.checkCancellation()
         if let lastError {
             throw lastError
         }
-        guard deletedAny else { throw CloudStorageError.NotFound(recordId) }
+        guard !deletedURLs.isEmpty else { throw CloudStorageError.NotFound(recordId) }
+    }
+
+    func deleteNamespaceDirectory(namespace: String) async throws {
+        let (requestedURL, isLocallyVisible) = try await runFileOperation {
+            let requestedURL = try self.namespaceDirectoryReadURL(namespace: namespace)
+            let isLocallyVisible = FileManager.default.fileExists(atPath: requestedURL.path)
+            return (requestedURL, isLocallyVisible)
+        }
+        let deleteURL: URL
+
+        if isLocallyVisible {
+            deleteURL = requestedURL
+        } else {
+            let metadataItem = try await metadataItemIfPresent(
+                named: requestedURL.lastPathComponent,
+                parentDirectoryURL: requestedURL.deletingLastPathComponent()
+            )
+            guard let metadataItem else { throw CloudStorageError.NotFound(namespace) }
+
+            deleteURL = metadataItem.url
+        }
+
+        let deletedURL = try await runFileOperation {
+            try self.performCoordinatedDelete(at: deleteURL, missingItemID: namespace)
+        }
+        await recordMetadataDeletions(of: [requestedURL, deleteURL, deletedURL])
     }
 
     private func allBackupFiles(in namespaceDirectory: URL) -> [URL] {

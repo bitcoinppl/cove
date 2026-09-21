@@ -3,6 +3,7 @@ use std::{error::Error as StdError, fmt, ops::Deref};
 use cove_device::passkey::{PasskeyFailureReason, PasskeyOperation};
 use cove_device::{cloud_storage::CloudStorageError, passkey::PasskeyError};
 
+use crate::backup::import::LocalWalletConflict;
 use crate::database::cloud_backup::CloudStorageIssue;
 
 const PASSKEY_ACCESS_RECOVERY_MESSAGE: &str = "Cove couldn't access your passkey. Check your connection and passkey account, then try again. If this keeps happening, choose another passkey provider or contact support.";
@@ -39,6 +40,15 @@ pub(crate) const CLOUD_BACKUP_COMPATIBILITY_MESSAGE: &str =
     "This cloud backup was created by an unsupported version of Cove.";
 const CLOUD_BACKUP_WALLET_SUPPORT_MESSAGE: &str =
     "This cloud backup contains a wallet this version of Cove can't restore.";
+const PASSKEY_REQUEST_INCOMPLETE_MESSAGE: &str = "The passkey request did not complete. Try again.";
+const LOCAL_WALLET_MISMATCH_MESSAGE: &str = concat!(
+    "Cove unlocked your backup, but some saved wallet data on this device does not match it. ",
+    "Cove kept that data unchanged."
+);
+const LOCAL_WALLET_UNREADABLE_MESSAGE: &str = concat!(
+    "Cove unlocked your backup, but some saved wallet data on this device could not be read. ",
+    "Cove kept that data unchanged."
+);
 const ANDROID_PASSKEY_ASSOCIATION_MESSAGE: &str = concat!(
     "Cove could not verify Android passkey setup yet. Wait a few minutes and try again. ",
     "If this keeps happening, update Cove or contact support."
@@ -263,6 +273,7 @@ impl From<&CloudBackupError> for CloudStorageIssue {
             | CloudBackupError::PasskeyMismatch
             | CloudBackupError::NoBackupFound
             | CloudBackupError::PasskeyDiscoveryCancelled
+            | CloudBackupError::LocalWalletConflict(_)
             | CloudBackupError::Cancelled => Self::Other,
         }
     }
@@ -397,6 +408,10 @@ pub(crate) enum CloudBackupError {
 
     #[error("restore cancelled")]
     Cancelled,
+
+    /// A restore kept local wallet data unchanged because it did not match the backup
+    #[error("local wallet conflict: {0}")]
+    LocalWalletConflict(#[source] LocalWalletConflict),
 }
 
 impl CloudBackupError {
@@ -450,7 +465,7 @@ impl CloudBackupError {
                     operation: PasskeyOperation::Registration,
                     reason: PasskeyFailureReason::DeviceNotConfigured,
                 }) => ANDROID_PASSKEY_ASSOCIATION_MESSAGE.into(),
-                Some(PasskeyError::UserCancelled) => Self::PasskeyDiscoveryCancelled.to_string(),
+                Some(PasskeyError::UserCancelled) => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
                 Some(PasskeyError::NoCredentialFound) => PASSKEY_NOT_FOUND_MESSAGE.into(),
                 Some(PasskeyError::PrfUnsupportedProvider) => {
                     UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE.into()
@@ -468,10 +483,16 @@ impl CloudBackupError {
             Self::Cloud(_) | Self::Deferred(_) | Self::Internal(_) => {
                 GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into()
             }
-            Self::PasskeyMismatch
-            | Self::NoBackupFound
-            | Self::PasskeyDiscoveryCancelled
-            | Self::Cancelled => self.to_string(),
+            Self::LocalWalletConflict(LocalWalletConflict::Mismatch) => {
+                LOCAL_WALLET_MISMATCH_MESSAGE.into()
+            }
+            Self::LocalWalletConflict(LocalWalletConflict::Unreadable) => {
+                LOCAL_WALLET_UNREADABLE_MESSAGE.into()
+            }
+            // a bare platform cancellation does not prove the reader cancelled, so the
+            // copy states the outcome instead of claiming intent
+            Self::PasskeyDiscoveryCancelled => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
+            Self::PasskeyMismatch | Self::NoBackupFound | Self::Cancelled => self.to_string(),
         }
     }
 }
@@ -598,7 +619,11 @@ mod tests {
         let unsupported =
             CloudBackupError::from(PasskeyError::PrfUnsupportedProvider).reader_message();
 
-        assert_eq!(cancellation, CloudBackupError::PasskeyDiscoveryCancelled.to_string());
+        assert_eq!(cancellation, PASSKEY_REQUEST_INCOMPLETE_MESSAGE);
+        assert_eq!(
+            CloudBackupError::PasskeyDiscoveryCancelled.reader_message(),
+            PASSKEY_REQUEST_INCOMPLETE_MESSAGE
+        );
         assert_eq!(missing, PASSKEY_NOT_FOUND_MESSAGE);
         assert_eq!(unsupported, UNSUPPORTED_PASSKEY_PROVIDER_MESSAGE);
         assert_ne!(cancellation, missing);
@@ -612,6 +637,22 @@ mod tests {
         assert!(message.contains("cloud storage"));
         assert!(!message.contains("iCloud"));
         assert!(!message.contains("Google Drive"));
+    }
+
+    #[test]
+    fn local_wallet_conflict_reader_messages_are_platform_neutral() {
+        let mismatch =
+            CloudBackupError::LocalWalletConflict(LocalWalletConflict::Mismatch).reader_message();
+        let unreadable =
+            CloudBackupError::LocalWalletConflict(LocalWalletConflict::Unreadable).reader_message();
+
+        assert_eq!(mismatch, LOCAL_WALLET_MISMATCH_MESSAGE);
+        assert_eq!(unreadable, LOCAL_WALLET_UNREADABLE_MESSAGE);
+        for message in [mismatch, unreadable] {
+            assert!(message.contains("this device"));
+            assert!(!message.contains("iPhone"));
+            assert!(!message.contains("Android"));
+        }
     }
 
     #[test]

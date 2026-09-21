@@ -141,6 +141,9 @@ fn wipe_local_data_for_catastrophic_recovery() -> Result<(), CatastrophicRecover
     let cleanup = crate::wallet::deletion::RecoveryCleanup::prepare_database_unavailable()
         .map_err_str(CatastrophicRecoveryError::Failure)?;
     cleanup.delete_all_wallet_items().map_err_str(CatastrophicRecoveryError::Failure)?;
+    cleanup
+        .delete_key_teleport_receive_session()
+        .map_err_str(CatastrophicRecoveryError::Failure)?;
     CloudBackupKeychain::global()
         .clear_local_state()
         .map_err_str(CatastrophicRecoveryError::Failure)?;
