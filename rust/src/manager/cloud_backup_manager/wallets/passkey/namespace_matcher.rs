@@ -42,7 +42,35 @@ pub(crate) enum NamespaceMatchSnapshotOutcome {
     Cancelled(Vec<NamespaceMatch>),
     /// The restore operation was cancelled while this snapshot was in flight
     OperationCancelled,
+    /// Targeted authentication failed after the system prompt was shown
+    ///
+    /// Matching stops so the user is not prompted again, and the namespaces matched
+    /// earlier in this snapshot stay restorable. The caller owns the matches from
+    /// earlier snapshots, so it decides whether the failure is fatal
+    AuthenticationFailed {
+        matches: Vec<NamespaceMatch>,
+        error: PasskeyError,
+    },
     Continue,
+}
+
+impl NamespaceMatchSnapshotOutcome {
+    /// Ends matching on a terminal authentication failure, which is only an error
+    /// when no namespace matched before it
+    pub(crate) fn authentication_failure_result(
+        matches: Vec<NamespaceMatch>,
+        error: PasskeyError,
+    ) -> Result<Vec<NamespaceMatch>, CloudBackupError> {
+        if matches.is_empty() {
+            return Err(CloudBackupError::passkey(error));
+        }
+
+        warn!(
+            "Passkey authentication failed after {} namespace match(es), keeping them: {error}",
+            matches.len()
+        );
+        Ok(matches)
+    }
 }
 
 pub(crate) struct NamespacePasskeyMatcher {
@@ -196,6 +224,11 @@ impl NamespacePasskeyMatcher {
             NamespaceMatchSnapshotOutcome::OperationCancelled => {
                 NamespaceMatchOutcome::Inconclusive
             }
+            NamespaceMatchSnapshotOutcome::AuthenticationFailed { matches, error } => {
+                NamespaceMatchOutcome::Matched(
+                    NamespaceMatchSnapshotOutcome::authentication_failure_result(matches, error)?,
+                )
+            }
             NamespaceMatchSnapshotOutcome::Continue => session.finish(),
         };
 
@@ -333,7 +366,10 @@ impl NamespacePasskeyMatchSession {
                             );
                             if !is_pre_presentation_platform_authorization_failure(&error) {
                                 self.attempted_candidates.insert(candidate.identity.clone());
-                                return Err(CloudBackupError::passkey(error));
+                                return Ok(NamespaceMatchSnapshotOutcome::AuthenticationFailed {
+                                    matches,
+                                    error,
+                                });
                             }
                             self.candidate_outcomes.push(NamespaceCandidateOutcome::Inconclusive);
                             continue;
