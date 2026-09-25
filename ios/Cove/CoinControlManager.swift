@@ -137,10 +137,6 @@ private enum CoinControlManagerError: LocalizedError {
         selection.total
     }
 
-    public var totalSelectedAmount: String {
-        displayAmount(self.totalSelected)
-    }
-
     public var totalSelectedSats: Int {
         Int(self.totalSelected.asSats())
     }
@@ -181,6 +177,10 @@ private enum CoinControlManagerError: LocalizedError {
         guard let rust else { return displayAmount(amount) }
 
         return rust.displayAmountWithFiat(amount: amount, prices: prices, currency: currency)
+    }
+
+    func displayFiatAmount(_ amount: Amount, prices: PriceResponse?, currency: FiatCurrency) -> String? {
+        rust?.displayFiatAmount(amount: amount, prices: prices, currency: currency)
     }
 
     func reloadLabels() async {

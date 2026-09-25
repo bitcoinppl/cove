@@ -299,11 +299,21 @@ private struct UtxoSortButton: View {
 }
 
 private struct UtxoSelectionSection: View {
+    @Environment(AppManager.self) private var app
+
     let manager: CoinControlManager
     let onShowTransaction: (Utxo) -> Void
 
     @Binding var showLockedSelectionAlert: Bool
     @Binding var utxoLockUpdateError: String?
+
+    private var totalSelectedAmount: String {
+        manager.displayAmountWithFiat(
+            manager.totalSelected,
+            prices: app.prices,
+            currency: app.selectedFiatCurrency
+        )
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -328,12 +338,12 @@ private struct UtxoSelectionSection: View {
                     .padding(.horizontal)
             }
 
-            Text(manager.totalSelectedAmount)
+            Text(totalSelectedAmount)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .opacity(manager.selected.isEmpty ? 0 : 0.8)
                 .contentTransition(.numericText())
-                .animation(.easeInOut(duration: 0.1), value: manager.totalSelectedAmount)
+                .animation(.easeInOut(duration: 0.1), value: totalSelectedAmount)
         }
     }
 }
@@ -584,30 +594,28 @@ private struct UtxoRow: View {
                         .truncationMode(.middle)
                 }
             }
-            // floor keeps the name legible while the address absorbs the squeeze
-            .frame(minWidth: 100, alignment: .leading)
 
             Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 4) {
-                Text(
-                    manager.displayAmountWithFiat(
-                        utxo.amount,
-                        prices: app.prices,
-                        currency: app.selectedFiatCurrency
-                    )
-                )
-                .font(.footnote)
-                .fontWeight(.regular)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .allowsTightening(true)
+                Text(manager.displayAmount(utxo.amount))
+                    .font(.footnote)
+                    .fontWeight(.regular)
+
+                if let fiat = manager.displayFiatAmount(
+                    utxo.amount,
+                    prices: app.prices,
+                    currency: app.selectedFiatCurrency
+                ) {
+                    Text(fiat)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
 
                 Text(utxo.date())
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            .layoutPriority(1)
         }
         .padding(.vertical, 4)
         .opacity(utxo.spendable ? 1 : 0.58)

@@ -1569,6 +1569,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustcoincontrolmanager_display_amount_with_fiat(
     ): Short
+    external fun uniffi_cove_checksum_method_rustcoincontrolmanager_display_fiat_amount(
+    ): Short
     external fun uniffi_cove_checksum_method_rustconnectivitymanager_is_connected(
     ): Short
     external fun uniffi_cove_checksum_method_rustconnectivitymanager_set_connection_state(
@@ -2728,6 +2730,8 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_rustcoincontrolmanager_utxos(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustcoincontrolmanager_display_amount_with_fiat(`ptr`: Long,`amount`: Long,`prices`: RustBuffer.ByValue,`currency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustcoincontrolmanager_display_fiat_amount(`ptr`: Long,`amount`: Long,`prices`: RustBuffer.ByValue,`currency`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_clone_coincontrolmanagerstate(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
@@ -4618,7 +4622,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_utxos() != 43520.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_display_amount_with_fiat() != 20084.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_display_amount_with_fiat() != 29447.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustcoincontrolmanager_display_fiat_amount() != 8420.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustconnectivitymanager_is_connected() != 47607.toShort()) {
@@ -21373,12 +21380,19 @@ public interface RustCoinControlManagerInterface {
     fun `utxos`(): List<Utxo>
 
     /**
-     * Formats a UTXO amount followed by its fiat value in brackets (e.g. "50,000 SATS ($31.25)")
+     * Formats an amount followed by its fiat value in brackets (e.g. "50,000 SATS ($31.25)")
      *
-     * Falls back to the bitcoin amount on its own when no prices are available, so the
-     * amount is never followed by empty brackets.
+     * Used for the selected total. Falls back to the bitcoin amount on its own when no
+     * prices are available, so the amount is never followed by empty brackets.
      */
     fun `displayAmountWithFiat`(`amount`: Amount, `prices`: PriceResponse?, `currency`: FiatCurrency): kotlin.String
+
+    /**
+     * Formats the fiat value of an amount on its own (e.g. "$31.25" or "31.25 CHF")
+     *
+     * Returns None when no prices are available, so the fiat line can be hidden.
+     */
+    fun `displayFiatAmount`(`amount`: Amount, `prices`: PriceResponse?, `currency`: FiatCurrency): kotlin.String?
 
     companion object
 }
@@ -21640,15 +21654,36 @@ open class RustCoinControlManager: Disposable, AutoCloseable, RustCoinControlMan
 
 
     /**
-     * Formats a UTXO amount followed by its fiat value in brackets (e.g. "50,000 SATS ($31.25)")
+     * Formats an amount followed by its fiat value in brackets (e.g. "50,000 SATS ($31.25)")
      *
-     * Falls back to the bitcoin amount on its own when no prices are available, so the
-     * amount is never followed by empty brackets.
+     * Used for the selected total. Falls back to the bitcoin amount on its own when no
+     * prices are available, so the amount is never followed by empty brackets.
      */override fun `displayAmountWithFiat`(`amount`: Amount, `prices`: PriceResponse?, `currency`: FiatCurrency): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_display_amount_with_fiat(
+        it,
+
+        FfiConverterTypeAmount.lower(`amount`),
+        FfiConverterOptionalTypePriceResponse.lower(`prices`),
+        FfiConverterTypeFiatCurrency.lower(`currency`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Formats the fiat value of an amount on its own (e.g. "$31.25" or "31.25 CHF")
+     *
+     * Returns None when no prices are available, so the fiat line can be hidden.
+     */override fun `displayFiatAmount`(`amount`: Amount, `prices`: PriceResponse?, `currency`: FiatCurrency): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustcoincontrolmanager_display_fiat_amount(
         it,
 
         FfiConverterTypeAmount.lower(`amount`),

@@ -8906,12 +8906,19 @@ public protocol RustCoinControlManagerProtocol: AnyObject, Sendable {
     func utxos()  -> [Utxo]
 
     /**
-     * Formats a UTXO amount followed by its fiat value in brackets (e.g. "50,000 SATS ($31.25)")
+     * Formats an amount followed by its fiat value in brackets (e.g. "50,000 SATS ($31.25)")
      *
-     * Falls back to the bitcoin amount on its own when no prices are available, so the
-     * amount is never followed by empty brackets.
+     * Used for the selected total. Falls back to the bitcoin amount on its own when no
+     * prices are available, so the amount is never followed by empty brackets.
      */
     func displayAmountWithFiat(amount: Amount, prices: PriceResponse?, currency: FiatCurrency)  -> String
+
+    /**
+     * Formats the fiat value of an amount on its own (e.g. "$31.25" or "31.25 CHF")
+     *
+     * Returns None when no prices are available, so the fiat line can be hidden.
+     */
+    func displayFiatAmount(amount: Amount, prices: PriceResponse?, currency: FiatCurrency)  -> String?
 
 }
 open class RustCoinControlManager: RustCoinControlManagerProtocol, @unchecked Sendable {
@@ -9088,15 +9095,32 @@ open func utxos() -> [Utxo]  {
 }
 
     /**
-     * Formats a UTXO amount followed by its fiat value in brackets (e.g. "50,000 SATS ($31.25)")
+     * Formats an amount followed by its fiat value in brackets (e.g. "50,000 SATS ($31.25)")
      *
-     * Falls back to the bitcoin amount on its own when no prices are available, so the
-     * amount is never followed by empty brackets.
+     * Used for the selected total. Falls back to the bitcoin amount on its own when no
+     * prices are available, so the amount is never followed by empty brackets.
      */
 open func displayAmountWithFiat(amount: Amount, prices: PriceResponse?, currency: FiatCurrency) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_rustcoincontrolmanager_display_amount_with_fiat(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeAmount_lower(amount),
+        FfiConverterOptionTypePriceResponse.lower(prices),
+        FfiConverterTypeFiatCurrency_lower(currency),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Formats the fiat value of an amount on its own (e.g. "$31.25" or "31.25 CHF")
+     *
+     * Returns None when no prices are available, so the fiat line can be hidden.
+     */
+open func displayFiatAmount(amount: Amount, prices: PriceResponse?, currency: FiatCurrency) -> String?  {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustcoincontrolmanager_display_fiat_amount(
             self.uniffiCloneHandle(),
         FfiConverterTypeAmount_lower(amount),
         FfiConverterOptionTypePriceResponse.lower(prices),
@@ -47679,7 +47703,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustcoincontrolmanager_utxos() != 43520) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustcoincontrolmanager_display_amount_with_fiat() != 20084) {
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_display_amount_with_fiat() != 29447) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustcoincontrolmanager_display_fiat_amount() != 8420) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustconnectivitymanager_is_connected() != 47607) {

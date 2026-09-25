@@ -116,7 +116,12 @@ fun UtxoListScreen(
         utxos = manager.utxos,
         selected = manager.selected,
         lockStateLoadFailed = manager.lockStateLoadFailed,
-        totalSelectedAmount = manager.totalSelectedAmount,
+        totalSelectedAmount =
+            manager.displayAmountWithFiat(
+                manager.totalSelected,
+                app.prices,
+                app.selectedFiatCurrency,
+            ),
         searchQuery = manager.search,
         prices = app.prices,
         fiatCurrency = app.selectedFiatCurrency,
@@ -357,11 +362,15 @@ private fun UtxoListScreenContent(
                             utxos.forEachIndexed { index, utxo ->
                                 UtxoItemRow(
                                     utxo = utxo,
-                                    amountText =
-                                        manager.displayAmountWithFiat(
-                                            utxo.amount,
-                                            prices,
-                                            fiatCurrency,
+                                    amount =
+                                        UtxoRowAmount(
+                                            bitcoin = manager.displayAmount(utxo.amount),
+                                            fiat =
+                                                manager.displayFiatAmount(
+                                                    utxo.amount,
+                                                    prices,
+                                                    fiatCurrency,
+                                                ),
                                         ),
                                     selected = utxo.spendable && selected.contains(utxo.id),
                                     onToggle = { onToggle(utxo) },
@@ -467,11 +476,17 @@ private fun UtxoListScreenContent(
     }
 }
 
+// fiat is null when no prices are available, so the row hides the fiat line
+private data class UtxoRowAmount(
+    val bitcoin: String,
+    val fiat: String?,
+)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun UtxoItemRow(
     utxo: org.bitcoinppl.cove_core.types.Utxo,
-    amountText: String,
+    amount: UtxoRowAmount,
     selected: Boolean,
     onToggle: () -> Unit,
     onSetSpendability: () -> Unit,
@@ -517,13 +532,23 @@ private fun UtxoItemRow(
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    amountText,
+                    amount.bitcoin,
                     fontWeight = FontWeight.Normal,
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                amount.fiat?.let { fiat ->
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        fiat,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     utxo.displayDate,

@@ -136,9 +136,6 @@ class CoinControlManager internal constructor(
             buttonPresentation(key)
         }
 
-    val totalSelectedAmount: String
-        get() = displayAmount(totalSelected)
-
     val totalSelectedSats: Long
         get() = totalSelected.asSats().toLong()
 
@@ -218,6 +215,15 @@ class CoinControlManager internal constructor(
     ): String =
         withRustOr(displayAmount(amount)) {
             displayAmountWithFiat(amount, prices, currency)
+        }
+
+    fun displayFiatAmount(
+        amount: Amount,
+        prices: PriceResponse?,
+        currency: FiatCurrency,
+    ): String? =
+        withRustOr(null) {
+            displayFiatAmount(amount, prices, currency)
         }
 
     suspend fun reloadLabels() {
