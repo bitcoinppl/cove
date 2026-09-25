@@ -299,11 +299,21 @@ private struct UtxoSortButton: View {
 }
 
 private struct UtxoSelectionSection: View {
+    @Environment(AppManager.self) private var app
+
     let manager: CoinControlManager
     let onShowTransaction: (Utxo) -> Void
 
     @Binding var showLockedSelectionAlert: Bool
     @Binding var utxoLockUpdateError: String?
+
+    private var totalSelectedAmount: String {
+        manager.displayAmountWithFiat(
+            manager.totalSelected,
+            prices: app.prices,
+            currency: app.selectedFiatCurrency
+        )
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -328,12 +338,12 @@ private struct UtxoSelectionSection: View {
                     .padding(.horizontal)
             }
 
-            Text(manager.totalSelectedAmount)
+            Text(totalSelectedAmount)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .opacity(manager.selected.isEmpty ? 0 : 0.8)
                 .contentTransition(.numericText())
-                .animation(.easeInOut(duration: 0.1), value: manager.totalSelectedAmount)
+                .animation(.easeInOut(duration: 0.1), value: totalSelectedAmount)
         }
     }
 }
@@ -544,6 +554,8 @@ private struct UtxoListToolbarMenu: View {
 // MARK: - Row
 
 private struct UtxoRow: View {
+    @Environment(AppManager.self) private var app
+
     var manager: CoinControlManager
     let utxo: Utxo
     let onLockedSelectionAttempt: () -> Void
@@ -590,6 +602,16 @@ private struct UtxoRow: View {
                     .font(.footnote)
                     .fontWeight(.regular)
 
+                if let fiat = manager.displayFiatAmount(
+                    utxo.amount,
+                    prices: app.prices,
+                    currency: app.selectedFiatCurrency
+                ) {
+                    Text(fiat)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
                 Text(utxo.date())
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -615,6 +637,7 @@ private struct UtxoRow: View {
             manager: CoinControlManager(RustCoinControlManager.previewNew())
         )
         .environment(WalletManager(preview: .only))
+        .environment(AppManager.shared)
     }
 }
 
@@ -626,5 +649,6 @@ private struct UtxoRow: View {
             )
         )
         .environment(WalletManager(preview: .only))
+        .environment(AppManager.shared)
     }
 }

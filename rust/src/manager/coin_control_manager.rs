@@ -1,3 +1,4 @@
+mod display;
 mod state;
 
 use std::{
