@@ -19,7 +19,7 @@ use xshell::{cmd, Shell};
 
 mod google_play;
 
-pub use google_play::{release_android, upload_google_play, GooglePlayUploadOptions};
+pub use google_play::{release_android, upload_google_play};
 
 // Android build constants
 const ANDROID_TARGETS: &[&str] =

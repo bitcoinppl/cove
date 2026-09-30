@@ -1,109 +1,62 @@
 use super::{build_android, bundle_android, AndroidBuildTargets, BuildProfile};
 use crate::common::{
-    command_exists, ensure_rust_directory, print_error, print_info, print_success,
+    command_exists, ensure_rust_directory, normalize_required_arg, print_info, print_success,
+    resolve_readable_file,
 };
-use crate::version;
-use color_eyre::eyre::{bail, ensure, Context, Result};
+use crate::version::BuildNumberFile;
+use color_eyre::eyre::{bail, Context, Result};
 use std::fs;
-use std::path::Path;
 use xshell::{cmd, Shell};
 
 const PLAY_PACKAGE_NAME: &str = "org.bitcoinppl.cove";
 const PLAY_AAB_PATH: &str =
     "../android/app/build/outputs/bundle/storeRelease/app-store-release.aab";
+const JSON_KEY_PATH_ENV: &str = "GOOGLE_PLAY_JSON_KEY_PATH";
+const JSON_KEY_PATH_HINT: &str =
+    "Set GOOGLE_PLAY_JSON_KEY_PATH to a readable Google Play service account JSON file.";
 
-pub struct GooglePlayUploadOptions {
-    json_key_path: Option<String>,
-}
-
-impl GooglePlayUploadOptions {
-    pub fn new(json_key_path: Option<String>) -> Self {
-        Self { json_key_path }
-    }
-}
-
-struct GooglePlayCredentials {
-    json_key_path: String,
-}
+/// Canonical path to a readable Google Play service account key, resolved once fastlane is installed
+struct GooglePlayCredentials(String);
 
 impl GooglePlayCredentials {
-    fn from_options(options: &GooglePlayUploadOptions) -> Result<Self> {
+    fn resolve(json_key_path: Option<&str>) -> Result<Self> {
         if !command_exists("fastlane") {
             bail!("Install fastlane before uploading to Google Play (brew install fastlane).");
         }
 
-        let json_key_path = resolve_json_key_path(options.json_key_path.as_deref())?;
-
-        Ok(Self { json_key_path })
+        resolve_json_key_path(json_key_path).map(Self)
     }
 }
 
 fn resolve_json_key_path(value: Option<&str>) -> Result<String> {
-    let path = value.unwrap_or_default().trim();
-    ensure!(
-        !path.is_empty(),
-        "Set GOOGLE_PLAY_JSON_KEY_PATH to a readable Google Play service account JSON file."
-    );
+    let path = normalize_required_arg(JSON_KEY_PATH_ENV, value).wrap_err(JSON_KEY_PATH_HINT)?;
 
-    let path = Path::new(path);
-    ensure!(
-        path.is_file(),
-        "Set GOOGLE_PLAY_JSON_KEY_PATH to a readable Google Play service account JSON file."
-    );
-
-    fs::File::open(path).wrap_err(
-        "Set GOOGLE_PLAY_JSON_KEY_PATH to a readable Google Play service account JSON file.",
-    )?;
-
-    fs::canonicalize(path).map(|resolved| resolved.to_string_lossy().into_owned()).wrap_err_with(
-        || format!("Failed to resolve GOOGLE_PLAY_JSON_KEY_PATH: {}", path.display()),
-    )
+    resolve_readable_file(JSON_KEY_PATH_ENV, &path).wrap_err(JSON_KEY_PATH_HINT)
 }
 
-pub fn upload_google_play(options: GooglePlayUploadOptions, verbose: bool) -> Result<()> {
+pub fn upload_google_play(json_key_path: Option<&str>, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
     ensure_rust_directory(&sh)?;
-    let credentials = GooglePlayCredentials::from_options(&options)?;
+    let credentials = GooglePlayCredentials::resolve(json_key_path)?;
 
     upload_with_credentials(&sh, &credentials, verbose)
 }
 
-pub fn release_android(options: GooglePlayUploadOptions, verbose: bool) -> Result<()> {
+pub fn release_android(json_key_path: Option<&str>, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
     ensure_rust_directory(&sh)?;
 
     // fail before bumping if Play credentials or store signing are missing
-    let credentials = GooglePlayCredentials::from_options(&options)?;
+    let credentials = GooglePlayCredentials::resolve(json_key_path)?;
     super::ensure_store_release_signing()?;
 
-    let snapshot = version::snapshot_android_gradle(&sh)?;
-
-    let result: Result<()> = (|| {
-        version::bump_android_build_number(&sh)?;
+    BuildNumberFile::AndroidGradle.bump_for_release(&sh, || {
         build_android(BuildProfile::from_str("release-speed"), AndroidBuildTargets::All, verbose)?;
-        bundle_android(verbose)?;
-        Ok(())
-    })();
+        bundle_android(verbose)
+    })?;
 
-    match result {
-        // Google may have accepted the bundle; keep versionCode if supply fails
-        Ok(()) => upload_with_credentials(&sh, &credentials, verbose),
-        Err(error) => {
-            if let Some(snapshot) = snapshot {
-                if let Err(restore_error) = version::restore_android_gradle(&sh, &snapshot) {
-                    return Err(error).wrap_err(format!(
-                        "Failed to restore Android versionCode after Google Play release failure: {restore_error:#}"
-                    ));
-                }
-
-                print_error("Google Play release failed; restored Android versionCode");
-            } else {
-                print_error("Google Play release failed");
-            }
-
-            Err(error)
-        }
-    }
+    // Google may have accepted the bundle; keep versionCode if supply fails
+    upload_with_credentials(&sh, &credentials, verbose)
 }
 
 fn upload_with_credentials(
@@ -119,7 +72,7 @@ fn upload_with_credentials(
         .wrap_err_with(|| format!("Failed to resolve signed bundle at {PLAY_AAB_PATH}"))?
         .to_string_lossy()
         .into_owned();
-    let json_key = &credentials.json_key_path;
+    let json_key = &credentials.0;
 
     print_info("Uploading Android bundle to Google Play internal testing...");
 
