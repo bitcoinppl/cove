@@ -1,4 +1,4 @@
-use crate::common::{print_info, print_success};
+use crate::common::{http_client_without_redirects, print_info, print_success};
 use color_eyre::eyre::{bail, ensure, eyre, Context, Result};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use reqwest::blocking::{Client, Response};
@@ -287,11 +287,7 @@ struct Api {
 
 impl Api {
     fn new(key: &[u8], key_id: &str, issuer_id: &str) -> Result<Self> {
-        let client = Client::builder()
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
-            .redirect(reqwest::redirect::Policy::none())
-            .build()?;
+        let client = http_client_without_redirects()?;
 
         Ok(Self {
             client,

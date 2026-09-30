@@ -366,13 +366,11 @@ fn main() -> Result<()> {
         Commands::BundleAndroid => android::bundle_android(cli.verbose),
 
         Commands::ReleaseAndroid { json_key_path } => {
-            let options = android::GooglePlayUploadOptions::new(json_key_path);
-            android::release_android(options, cli.verbose)
+            android::release_android(json_key_path.as_deref(), cli.verbose)
         }
 
         Commands::UploadGooglePlay { json_key_path } => {
-            let options = android::GooglePlayUploadOptions::new(json_key_path);
-            android::upload_google_play(options, cli.verbose)
+            android::upload_google_play(json_key_path.as_deref(), cli.verbose)
         }
 
         Commands::DownloadAndroidScreenshots => android::download_android_screenshots(),

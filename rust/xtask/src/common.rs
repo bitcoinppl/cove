@@ -1,10 +1,15 @@
-use color_eyre::{eyre::Context, Result};
+use color_eyre::{
+    eyre::{bail, ensure, Context},
+    Result,
+};
 use colored::Colorize;
+use reqwest::{blocking::Client, redirect};
 use serde::Deserialize;
 use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
+    time::Duration,
 };
 use xshell::{cmd, Shell};
 
@@ -60,6 +65,43 @@ pub fn cargo_target_dir(sh: &Shell) -> Result<PathBuf> {
         serde_json::from_str(&output).wrap_err("Failed to parse cargo metadata")?;
 
     Ok(metadata.target_directory)
+}
+
+/// Returns the trimmed value of a required argument, failing when it is missing or blank
+pub fn normalize_required_arg(name: &str, value: Option<&str>) -> Result<String> {
+    let value = value.unwrap_or_default().trim();
+
+    if value.is_empty() {
+        bail!("{name} must be set");
+    }
+
+    Ok(value.to_string())
+}
+
+/// Resolves a path argument to the canonical path of an existing, readable file
+pub fn resolve_readable_file(name: &str, path: &str) -> Result<String> {
+    let file = Path::new(path);
+    ensure!(file.exists(), "{name} does not exist: {path}");
+    ensure!(file.is_file(), "{name} is not a file: {path}");
+    fs::File::open(file).wrap_err_with(|| format!("{name} is not readable: {path}"))?;
+
+    fs::canonicalize(file)
+        .map(|resolved| resolved.to_string_lossy().into_owned())
+        .wrap_err_with(|| format!("Failed to resolve {name}: {path}"))
+}
+
+/// Builds a blocking HTTP client with release-tooling timeouts that never follows redirects
+///
+/// Redirects stay unfollowed so bearer tokens never leave the requested origin and
+/// associated-domain checks see the response Apple would, since Apple rejects redirected
+/// apple-app-site-association files
+pub fn http_client_without_redirects() -> Result<Client> {
+    Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(30))
+        .redirect(redirect::Policy::none())
+        .build()
+        .wrap_err("Failed to build HTTP client")
 }
 
 /// Parse build flags and return individual arguments

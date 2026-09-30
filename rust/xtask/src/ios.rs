@@ -1,12 +1,15 @@
 use crate::common::{
-    cargo_target_dir, command_exists, print_error, print_info, print_success, print_warning,
+    cargo_target_dir, command_exists, http_client_without_redirects, normalize_required_arg,
+    print_error, print_info, print_success, print_warning, resolve_readable_file,
     trim_generated_trailing_whitespace,
 };
+use crate::version::BuildNumberFile;
 use color_eyre::{
     eyre::{eyre, Context},
     Result,
 };
 use colored::Colorize;
+use reqwest::StatusCode;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -605,45 +608,23 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
 
 pub fn testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
-    let credentials = TestflightApiCredentials::from_options(&sh, &options)?;
+    let credentials = TestflightApiCredentials::from_options(&options)?;
     let distribution = credentials.prepare_distribution()?;
 
     // fail before bumping/building if Apple has not associated this TestFlight app id
-    validate_testflight_associated_domain(&sh)?;
-    let project_snapshot = crate::version::snapshot_ios_project(&sh)?;
+    validate_testflight_associated_domain()?;
 
-    let result = (|| {
-        crate::version::bump_ios_build_number(&sh)?;
+    let identity = BuildNumberFile::IosProject.bump_for_release(&sh, || {
         build_ios(IosBuildType::Custom("release-speed"), true, false, verbose)?;
         upload_testflight_inner(&credentials, verbose, false)
-    })();
-
-    let identity = match result {
-        Ok(identity) => identity,
-        Err(error) => {
-            if let Some(snapshot) = project_snapshot {
-                if let Err(restore_error) = crate::version::restore_ios_project(&sh, &snapshot) {
-                    return Err(error).wrap_err(format!(
-                        "Failed to restore iOS build number after TestFlight failure: {restore_error:#}"
-                    ));
-                }
-
-                print_error("TestFlight failed; restored iOS build number");
-            } else {
-                print_error("TestFlight failed");
-            }
-
-            return Err(error);
-        }
-    };
+    })?;
 
     // Apple has accepted the upload; distribution failure must not roll back its build number
     finish_testflight_distribution(&distribution, &identity)
 }
 
 pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
-    let sh = Shell::new()?;
-    let credentials = TestflightApiCredentials::from_options(&sh, &options)?;
+    let credentials = TestflightApiCredentials::from_options(&options)?;
     let distribution = credentials.prepare_distribution()?;
     let identity = upload_testflight_inner(&credentials, verbose, true)?;
 
@@ -675,7 +656,7 @@ fn upload_testflight_inner(
     }
 
     if validate_associated_domain {
-        validate_testflight_associated_domain(&sh)?;
+        validate_testflight_associated_domain()?;
     }
 
     sh.change_dir("../ios");
@@ -733,38 +714,22 @@ fn testflight_archive_identity(sh: &Shell, archive_path: &str) -> Result<BuildId
     Ok(BuildIdentity { version, build_number })
 }
 
-fn validate_testflight_associated_domain(sh: &Shell) -> Result<()> {
-    if !command_exists("curl") {
-        color_eyre::eyre::bail!("curl not found; needed to verify TestFlight passkey domain");
-    }
-
+fn validate_testflight_associated_domain() -> Result<()> {
+    let client = http_client_without_redirects()?;
     let app_identifier = testflight_app_identifier();
+
     for url in testflight_aasa_urls() {
-        let curl_status_format = "%{stderr}%{http_code}";
-        let output = cmd!(
-            sh,
-            "curl --no-location --silent --show-error --connect-timeout 10 --max-time 30 --write-out {curl_status_format} {url}"
-        )
-            .quiet()
-            .ignore_status()
-            .output()
+        let response = client
+            .get(&url)
+            .send()
             .wrap_err_with(|| format!("Failed to fetch associated-domain file from {url}"))?;
+        let status = response.status();
 
-        if !output.status.success() {
-            let stderr =
-                String::from_utf8(output.stderr).unwrap_or_else(|_| "<non-utf8 stderr>".into());
-            color_eyre::eyre::bail!(
-                "curl failed to fetch associated-domain file from {url}: {}",
-                non_empty_output(&stderr, "<empty>")
-            );
-        }
-
-        let status = String::from_utf8(output.stderr)
-            .wrap_err_with(|| format!("HTTP status from {url} was not valid UTF-8"))?
-            .trim()
-            .parse::<u16>()
-            .wrap_err_with(|| format!("curl did not return an HTTP status for {url}"))?;
-        let body = String::from_utf8(output.stdout)
+        // decode strictly instead of lossily so a corrupt file fails instead of passing
+        let body = response
+            .bytes()
+            .wrap_err_with(|| format!("Failed to read associated-domain file from {url}"))?;
+        let body = String::from_utf8(body.to_vec())
             .wrap_err_with(|| format!("Associated-domain file from {url} was not valid UTF-8"))?;
 
         validate_aasa_response(&url, status, &body, &app_identifier)?;
@@ -778,8 +743,13 @@ fn validate_testflight_associated_domain(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-fn validate_aasa_response(url: &str, status: u16, body: &str, app_identifier: &str) -> Result<()> {
-    if status != 200 {
+fn validate_aasa_response(
+    url: &str,
+    status: StatusCode,
+    body: &str,
+    app_identifier: &str,
+) -> Result<()> {
+    if status != StatusCode::OK {
         color_eyre::eyre::bail!(
             "associated-domain file from {url} returned HTTP status {status}; expected HTTP 200"
         );
@@ -880,18 +850,13 @@ impl TestflightApiCredentials {
         )
     }
 
-    fn from_options(sh: &Shell, options: &TestflightUploadOptions) -> Result<Self> {
-        let api_key_path = normalize_required_arg("ASC_API_KEY_PATH", &options.api_key_path)?;
-        let api_key_id = normalize_required_arg("ASC_API_KEY_ID", &options.api_key_id)?;
-        let api_issuer_id = normalize_required_arg("ASC_API_ISSUER_ID", &options.api_issuer_id)?;
-
-        if !sh.path_exists(&api_key_path) {
-            color_eyre::eyre::bail!("ASC_API_KEY_PATH does not exist: {api_key_path}");
-        }
-        let api_key_path = std::fs::canonicalize(&api_key_path)
-            .wrap_err_with(|| format!("Failed to resolve ASC_API_KEY_PATH: {api_key_path}"))?
-            .to_string_lossy()
-            .into_owned();
+    fn from_options(options: &TestflightUploadOptions) -> Result<Self> {
+        let api_key_path =
+            normalize_required_arg("ASC_API_KEY_PATH", options.api_key_path.as_deref())?;
+        let api_key_id = normalize_required_arg("ASC_API_KEY_ID", options.api_key_id.as_deref())?;
+        let api_issuer_id =
+            normalize_required_arg("ASC_API_ISSUER_ID", options.api_issuer_id.as_deref())?;
+        let api_key_path = resolve_readable_file("ASC_API_KEY_PATH", &api_key_path)?;
 
         let normalized_api_key = normalize_testflight_api_key(&api_key_path)?;
         let api_key_file =
@@ -970,17 +935,6 @@ fn set_secret_file_permissions(path: &str) -> Result<()> {
 #[cfg(not(unix))]
 fn set_secret_file_permissions(_path: &str) -> Result<()> {
     Ok(())
-}
-
-fn normalize_required_arg(name: &str, value: &Option<String>) -> Result<String> {
-    let value = value.as_deref().unwrap_or_default();
-    let value = value.trim();
-
-    if value.is_empty() {
-        color_eyre::eyre::bail!("{name} must be set");
-    }
-
-    Ok(value.to_string())
 }
 
 fn xcode_distribution_path() -> String {
@@ -1795,6 +1749,7 @@ mod tests {
         DevicectlHardwareProperties, DevicectlPairingState, DevicectlTunnelState,
         IOS_DEVICE_DERIVED_DATA_SUFFIX, IOS_SIMULATOR_DERIVED_DATA_SUFFIX,
     };
+    use reqwest::StatusCode;
     use std::path::Path;
 
     #[test]
@@ -2075,7 +2030,7 @@ ABC123
 
         assert!(validate_aasa_response(
             "https://example.com/.well-known/apple-app-site-association",
-            200,
+            StatusCode::OK,
             body,
             "Q8UP8C53Y8.org.bitcoinppl.cove",
         )
@@ -2092,7 +2047,7 @@ ABC123
 
         let error = validate_aasa_response(
             "https://example.com/.well-known/apple-app-site-association",
-            301,
+            StatusCode::MOVED_PERMANENTLY,
             body,
             "Q8UP8C53Y8.org.bitcoinppl.cove",
         )
@@ -2106,8 +2061,13 @@ ABC123
     #[test]
     fn aasa_response_rejects_malformed_json() {
         let url = "https://example.com/.well-known/apple-app-site-association";
-        let error = validate_aasa_response(url, 200, "not json", "Q8UP8C53Y8.org.bitcoinppl.cove")
-            .expect_err("malformed JSON should be rejected");
+        let error = validate_aasa_response(
+            url,
+            StatusCode::OK,
+            "not json",
+            "Q8UP8C53Y8.org.bitcoinppl.cove",
+        )
+        .expect_err("malformed JSON should be rejected");
         let message = format!("{error:#}");
 
         assert!(message.contains(url));
@@ -2124,8 +2084,9 @@ ABC123
             }
         }"#;
 
-        let error = validate_aasa_response(url, 200, body, "Q8UP8C53Y8.org.bitcoinppl.cove")
-            .expect_err("missing TestFlight app identifier should be rejected");
+        let error =
+            validate_aasa_response(url, StatusCode::OK, body, "Q8UP8C53Y8.org.bitcoinppl.cove")
+                .expect_err("missing TestFlight app identifier should be rejected");
         let message = format!("{error:#}");
 
         assert!(message.contains(url));
