@@ -614,21 +614,27 @@ pub fn testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()>
     // fail before bumping/building if Apple has not associated this TestFlight app id
     validate_testflight_associated_domain()?;
 
-    let identity = BuildNumberFile::IosProject.bump_for_release(&sh, || {
+    let archive = BuildNumberFile::IosProject.bump_for_release(&sh, || {
         build_ios(IosBuildType::Custom("release-speed"), true, false, verbose)?;
-        upload_testflight_inner(&credentials, verbose, false)
+        archive_testflight(&credentials, verbose, false)
     })?;
 
-    // Apple has accepted the upload; distribution failure must not roll back its build number
-    finish_testflight_distribution(&distribution, &identity)
+    // keep the bumped build number from here on: App Store Connect can accept an upload even when
+    // xcodebuild reports failure, and reusing an accepted number would fail the next upload
+    archive.upload(&credentials, verbose).wrap_err(
+        "TestFlight upload failed; kept the bumped build number. Retry with `just upload-testflight`",
+    )?;
+
+    finish_testflight_distribution(&distribution, &archive.identity)
 }
 
 pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
     let credentials = TestflightApiCredentials::from_options(&options)?;
     let distribution = credentials.prepare_distribution()?;
-    let identity = upload_testflight_inner(&credentials, verbose, true)?;
+    let archive = archive_testflight(&credentials, verbose, true)?;
+    archive.upload(&credentials, verbose)?;
 
-    finish_testflight_distribution(&distribution, &identity)
+    finish_testflight_distribution(&distribution, &archive.identity)
 }
 
 fn finish_testflight_distribution(
@@ -643,11 +649,11 @@ fn finish_testflight_distribution(
     })
 }
 
-fn upload_testflight_inner(
+fn archive_testflight(
     api_credentials: &TestflightApiCredentials,
     verbose: bool,
     validate_associated_domain: bool,
-) -> Result<BuildIdentity> {
+) -> Result<TestflightArchive> {
     let sh = Shell::new()?;
 
     if !command_exists("xcodebuild") {
@@ -689,16 +695,37 @@ fn upload_testflight_inner(
     let identity = testflight_archive_identity(&sh, &archive_path)?;
     print_success(&format!("Created archive at {archive_path}"));
 
-    print_info("Uploading iOS archive to App Store Connect...");
-    let export_cmd = cmd!(
-        sh,
-        "xcodebuild -exportArchive -archivePath {archive_path} -exportPath {export_path} -exportOptionsPlist {export_options_path} -allowProvisioningUpdates -authenticationKeyPath {api_key_path} -authenticationKeyID {api_key_id} -authenticationKeyIssuerID {api_issuer_id}"
-    )
-    .env("PATH", &xcode_path);
-    run_xcodebuild(export_cmd, verbose, "Failed to upload iOS archive to App Store Connect")?;
-    print_success("Uploaded iOS archive to App Store Connect");
+    Ok(TestflightArchive { archive_path, export_path, export_options_path, identity })
+}
 
-    Ok(identity)
+/// A signed TestFlight archive ready for upload
+struct TestflightArchive {
+    archive_path: String,
+    export_path: String,
+    export_options_path: String,
+    identity: BuildIdentity,
+}
+
+impl TestflightArchive {
+    fn upload(&self, api_credentials: &TestflightApiCredentials, verbose: bool) -> Result<()> {
+        let sh = Shell::new()?;
+        let Self { archive_path, export_path, export_options_path, .. } = self;
+        let api_key_path = &api_credentials.api_key_path;
+        let api_key_id = &api_credentials.api_key_id;
+        let api_issuer_id = &api_credentials.api_issuer_id;
+        let xcode_path = xcode_distribution_path();
+
+        print_info("Uploading iOS archive to App Store Connect...");
+        let export_cmd = cmd!(
+            sh,
+            "xcodebuild -exportArchive -archivePath {archive_path} -exportPath {export_path} -exportOptionsPlist {export_options_path} -allowProvisioningUpdates -authenticationKeyPath {api_key_path} -authenticationKeyID {api_key_id} -authenticationKeyIssuerID {api_issuer_id}"
+        )
+        .env("PATH", &xcode_path);
+        run_xcodebuild(export_cmd, verbose, "Failed to upload iOS archive to App Store Connect")?;
+        print_success("Uploaded iOS archive to App Store Connect");
+
+        Ok(())
+    }
 }
 
 fn testflight_archive_identity(sh: &Shell, archive_path: &str) -> Result<BuildIdentity> {

@@ -406,7 +406,7 @@ fix *flags="":
 bump type targets="":
     just xtask bump-version {{ type }} {{ if targets != "" { "--targets " + targets } else { "" } }}
 
-# xtask restores the iOS build number if Apple has not accepted the upload
+# xtask restores the iOS build number if the build or archive fails; a failed upload keeps it for upload-testflight
 # [long, external] Bump iOS build, rebuild release bindings, and upload to TestFlight
 [group('release')]
 release-ios:
