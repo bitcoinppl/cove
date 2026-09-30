@@ -332,13 +332,7 @@ class AuthManager internal constructor(
         }
 
         val completion = result.getOrThrow()
-
-        // the data is already gone, so a presentation reset failure must not strand the lock screen
-        runCatching { App.applyWipeCompletion(completion) }
-            .onFailure { error ->
-                android.util.Log.e(tag, "failed to apply wipe completion", error)
-            }
-
+        App.applyWipeCompletion(completion)
         apply(completion.auth)
 
         unlock()
