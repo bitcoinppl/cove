@@ -331,38 +331,27 @@ class AuthManager internal constructor(
             return UnlockMode.LOCKED
         }
 
-        runCatching { App.resetAfterWipe() }
+        val completion = result.getOrThrow()
+
+        // the data is already gone, so a presentation reset failure must not strand the lock screen
+        runCatching { App.applyWipeCompletion(completion) }
             .onFailure { error ->
-                android.util.Log.e(tag, "failed to reset app projection after wipe", error)
+                android.util.Log.e(tag, "failed to apply wipe completion", error)
             }
 
-        runCatching { refreshAuthStateAfterWipe() }
-            .onFailure { error ->
-                android.util.Log.e(tag, "failed to refresh authentication after wipe", error)
-            }
+        apply(completion.auth)
 
         unlock()
         wipePresentationState = WipePresentationState.Idle
         return UnlockMode.WIPE
     }
 
-    private fun refreshAuthStateAfterWipe() {
-        type = readAuthStateAfterWipe("auth type", AuthType.NONE) { authType() }
-        isWipeDataPinEnabled = readAuthStateAfterWipe("wipe PIN state", false) { isWipeDataPinEnabled() }
-        isDecoyPinEnabled = readAuthStateAfterWipe("decoy PIN state", false) { isDecoyPinEnabled() }
+    private fun apply(settings: AuthSettings) {
+        type = settings.authType
+        isWipeDataPinEnabled = settings.isWipeDataPinEnabled
+        isDecoyPinEnabled = settings.isDecoyPinEnabled
         isUsingBiometrics = false
     }
-
-    private fun <T> readAuthStateAfterWipe(
-        name: String,
-        defaultValue: T,
-        read: RustAuthManager.() -> T,
-    ): T =
-        runCatching { withRust(read) }
-            .getOrElse { error ->
-                android.util.Log.e(tag, "failed to refresh $name after wipe; using safe default", error)
-                defaultValue
-            }
 
     private fun recordMainCredentialAuthentication() {
         mainCredentialGeneration += 1
@@ -395,17 +384,11 @@ class AuthManager internal constructor(
                 }
 
                 is AuthManagerReconcileMessage.WipeDataPinChanged -> {
-                    isWipeDataPinEnabled =
-                        withRustOr(isWipeDataPinEnabled) {
-                            isWipeDataPinEnabled()
-                        }
+                    isWipeDataPinEnabled = message.v1
                 }
 
                 is AuthManagerReconcileMessage.DecoyPinChanged -> {
-                    isDecoyPinEnabled =
-                        withRustOr(isDecoyPinEnabled) {
-                            isDecoyPinEnabled()
-                        }
+                    isDecoyPinEnabled = message.v1
                 }
             }
         }

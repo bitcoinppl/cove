@@ -88,8 +88,14 @@ impl Database {
     pub fn diagnostics_reports(&self) -> DiagnosticsReportsTable {
         self.diagnostics_reports.clone()
     }
+}
 
-    pub fn dangerous_reset_all_data(&self) -> Result<(), error::DatabaseError> {
+impl Database {
+    /// Replace the database file with a fresh one that keeps only completed onboarding
+    ///
+    /// Only the lifecycle coordinator's full wipe may call this. Returns whether onboarding
+    /// stays complete in the fresh database, so callers report the committed value
+    pub(crate) fn dangerous_reset_all_data(&self) -> Result<bool, error::DatabaseError> {
         let completed_onboarding = self.global_flag.try_is_onboarding_complete()?;
 
         match std::fs::remove_file(database_location()) {
@@ -109,11 +115,9 @@ impl Database {
         let db = Self::init_with_completed_onboarding(completed_onboarding)?;
         DATABASE.get().expect("database not initialized").swap(Arc::new(db));
 
-        Ok(())
+        Ok(completed_onboarding)
     }
-}
 
-impl Database {
     pub fn global() -> Arc<Self> {
         Self::try_global().expect("failed to initialize main database")
     }

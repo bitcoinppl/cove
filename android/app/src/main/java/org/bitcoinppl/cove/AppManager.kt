@@ -380,7 +380,7 @@ class AppManager private constructor() : FfiReconcile {
         corruptedWalletDeletionRetry = null
     }
 
-    private fun resetRustProjection(): Boolean {
+    private fun resetRustProjection() {
         database = Database()
         needsOnboarding =
             withRustOr(needsOnboarding) {
@@ -390,50 +390,31 @@ class AppManager private constructor() : FfiReconcile {
         val routerState =
             withRustOr<AppState?>(null) {
                 state()
-            } ?: return false
+            } ?: return
 
         router.reset(routerState.router)
-        return true
     }
 
     /**
-     * Reset the app session after a successful full wipe
+     * Apply the committed post-wipe state from Rust before authentication is released
      *
-     * Rust publishes the empty database and direct route through reconciliation. This clears
-     * Android-owned presentation state before authentication is released
+     * Rust decides what a wiped app looks like; this only clears Android-owned presentation state
      */
-    internal fun resetAfterWipe() {
-        val projectionReset = resetProjectionAfterWipe()
-        if (!projectionReset) {
-            router.reconcileDefaultRouteChanged(
-                Route.NewWallet(NewWalletRoute.Select),
-                emptyList(),
-            )
-        }
-
+    internal fun applyWipeCompletion(completion: FullWipeCompletion) {
         router.isSidebarVisible = false
-        wallets = emptyList()
         isLoading = false
         alertState = null
         sheetState = null
-    }
+        clearSessionForReset()
 
-    private fun resetProjectionAfterWipe(): Boolean {
-        val sessionReset =
-            runCatching {
-                clearSessionForReset()
-                resetRustProjection()
-            }.onFailure { error ->
-                Log.e(tag, "failed to reset app session after wipe", error)
-            }.getOrDefault(false)
-
-        if (sessionReset) return true
-
-        // retry the projection alone when session cleanup threw or rust state was unavailable
-        return runCatching { resetRustProjection() }
-            .onFailure { error ->
-                Log.e(tag, "failed to reset app projection after wipe", error)
-            }.getOrDefault(false)
+        database = Database()
+        needsOnboarding = completion.needsOnboarding
+        selectedNetwork = completion.selectedNetwork
+        colorSchemeSelection = completion.colorScheme
+        selectedNode = completion.selectedNode
+        selectedFiatCurrency = completion.fiatCurrency
+        wallets = completion.wallets
+        router.reset(completion.router)
     }
 
     val currentRoute: Route
@@ -871,17 +852,15 @@ class AppManager private constructor() : FfiReconcile {
             unverifiedWalletIds()
         }
 
-    internal fun dangerousWipeAllData() {
+    internal fun dangerousWipeAllData(): FullWipeCompletion =
         withRust {
             dangerousWipeAllData()
         }
-    }
 
-    internal fun retryDangerousWipeAllData(attemptId: ShutdownAttemptId) {
+    internal fun retryDangerousWipeAllData(attemptId: ShutdownAttemptId): FullWipeCompletion =
         withRust {
             retryDangerousWipeAllData(attemptId)
         }
-    }
 
     internal fun cancelDangerousWipe(attemptId: ShutdownAttemptId) {
         withRust {

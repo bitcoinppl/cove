@@ -15,7 +15,7 @@ enum WipePresentationState: Equatable {
 }
 
 private enum WipeCallResult: Sendable {
-    case success
+    case success(FullWipeCompletion)
     case failure(AppError)
     case unexpectedFailure(String)
 }
@@ -163,10 +163,10 @@ private enum WipeCallResult: Sendable {
     }
 
     @MainActor
-    private func refreshAuthenticationFlags() {
-        type = rust.authType()
-        isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
-        isDecoyPinEnabled = rust.isDecoyPinEnabled()
+    private func apply(_ settings: AuthSettings) {
+        type = settings.authType
+        isWipeDataPinEnabled = settings.isWipeDataPinEnabled
+        isDecoyPinEnabled = settings.isDecoyPinEnabled
         isUsingBiometrics = false
     }
 
@@ -175,14 +175,14 @@ private enum WipeCallResult: Sendable {
         let rustApp = AppManager.shared.rust
         let result = await Task.detached(priority: .userInitiated) {
             do {
-                switch call {
+                let completion = switch call {
                 case .initial:
                     try rustApp.dangerousWipeAllData()
                 case let .retry(attemptId):
                     try rustApp.retryDangerousWipeAllData(attemptId: attemptId)
                 }
 
-                return WipeCallResult.success
+                return WipeCallResult.success(completion)
             } catch let error as AppError {
                 return WipeCallResult.failure(error)
             } catch {
@@ -191,9 +191,9 @@ private enum WipeCallResult: Sendable {
         }.value
 
         switch result {
-        case .success:
-            await AppManager.shared.prepareForWipeCompletion()
-            refreshAuthenticationFlags()
+        case let .success(completion):
+            await AppManager.shared.applyWipeCompletion(completion)
+            apply(completion.auth)
             unlock()
             wipePresentationState = .idle
             return .wipe
@@ -253,11 +253,11 @@ private enum WipeCallResult: Sendable {
             case let .authTypeChanged(authType):
                 type = authType
 
-            case .wipeDataPinChanged:
-                isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
+            case let .wipeDataPinChanged(enabled):
+                isWipeDataPinEnabled = enabled
 
-            case .decoyPinChanged:
-                isDecoyPinEnabled = rust.isDecoyPinEnabled()
+            case let .decoyPinChanged(enabled):
+                isDecoyPinEnabled = enabled
             }
         }
     }

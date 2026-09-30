@@ -3072,8 +3072,6 @@ public func FfiConverterTypeConverter_lower(_ value: Converter) -> UInt64 {
 
 public protocol DatabaseProtocol: AnyObject, Sendable {
 
-    func dangerousResetAllData() throws
-
     func diagnosticsReports()  -> DiagnosticsReportsTable
 
     func globalConfig()  -> GlobalConfigTable
@@ -3147,14 +3145,6 @@ public convenience init() {
 
 
 
-
-open func dangerousResetAllData()throws   {try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_database_dangerous_reset_all_data(
-            self.uniffiCloneHandle(),uniffiCallStatus
-    )
-}
-}
 
 open func diagnosticsReports() -> DiagnosticsReportsTable  {
     return try!  FfiConverterTypeDiagnosticsReportsTable_lift(try! rustCall() {
@@ -3605,8 +3595,10 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
 
     /**
      * DANGER: This will wipe all wallet data on this device
+     *
+     * Returns the committed post-wipe state the frontend applies before releasing authentication
      */
-    func dangerousWipeAllData() throws
+    func dangerousWipeAllData() throws  -> FullWipeCompletion
 
     /**
      * Delete a wallet with a corrupted database, cleaning up all associated data
@@ -3692,7 +3684,7 @@ public protocol FfiAppProtocol: AnyObject, Sendable {
     /**
      * Retry a full wipe after a typed shutdown block
      */
-    func retryDangerousWipeAllData(attemptId: ShutdownAttemptId) throws
+    func retryDangerousWipeAllData(attemptId: ShutdownAttemptId) throws  -> FullWipeCompletion
 
     /**
      * Retry a corrupted-wallet deletion after a typed shutdown block
@@ -3829,13 +3821,16 @@ open func cancelWalletDeletionAttempt(attemptId: ShutdownAttemptId)  {try! rustC
 
     /**
      * DANGER: This will wipe all wallet data on this device
+     *
+     * Returns the committed post-wipe state the frontend applies before releasing authentication
      */
-open func dangerousWipeAllData()throws   {try rustCallWithError(FfiConverterTypeAppError_lift) {
+open func dangerousWipeAllData()throws  -> FullWipeCompletion  {
+    return try  FfiConverterTypeFullWipeCompletion_lift(try rustCallWithError(FfiConverterTypeAppError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
-}
+})
 }
 
     /**
@@ -4083,13 +4078,14 @@ open func resetNestedRoutesTo(defaultRoute: Route, nestedRoutes: [Route])  {try!
     /**
      * Retry a full wipe after a typed shutdown block
      */
-open func retryDangerousWipeAllData(attemptId: ShutdownAttemptId)throws   {try rustCallWithError(FfiConverterTypeAppError_lift) {
+open func retryDangerousWipeAllData(attemptId: ShutdownAttemptId)throws  -> FullWipeCompletion  {
+    return try  FfiConverterTypeFullWipeCompletion_lift(try rustCallWithError(FfiConverterTypeAppError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_ffiapp_retry_dangerous_wipe_all_data(
             self.uniffiCloneHandle(),
         FfiConverterTypeShutdownAttemptId_lower(attemptId),uniffiCallStatus
     )
-}
+})
 }
 
     /**
@@ -15269,6 +15265,85 @@ public func FfiConverterTypeAppState_lower(_ value: AppState) -> RustBuffer {
 
 
 /**
+ * Authentication settings a frontend mirrors
+ */
+public struct AuthSettings: Equatable, Hashable {
+    /**
+     * How the app is unlocked
+     */
+    public var authType: AuthType
+    /**
+     * Whether a wipe data PIN is set
+     */
+    public var isWipeDataPinEnabled: Bool
+    /**
+     * Whether a decoy PIN is set
+     */
+    public var isDecoyPinEnabled: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * How the app is unlocked
+         */authType: AuthType,
+        /**
+         * Whether a wipe data PIN is set
+         */isWipeDataPinEnabled: Bool,
+        /**
+         * Whether a decoy PIN is set
+         */isDecoyPinEnabled: Bool) {
+        self.authType = authType
+        self.isWipeDataPinEnabled = isWipeDataPinEnabled
+        self.isDecoyPinEnabled = isDecoyPinEnabled
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AuthSettings: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAuthSettings: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AuthSettings {
+        return
+            try AuthSettings(
+                authType: FfiConverterTypeAuthType.read(from: &buf),
+                isWipeDataPinEnabled: FfiConverterBool.read(from: &buf),
+                isDecoyPinEnabled: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: AuthSettings, into buf: inout [UInt8]) {
+        FfiConverterTypeAuthType.write(value.authType, into: &buf)
+        FfiConverterBool.write(value.isWipeDataPinEnabled, into: &buf)
+        FfiConverterBool.write(value.isDecoyPinEnabled, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthSettings_lift(_ buf: RustBuffer) throws -> AuthSettings {
+    return try FfiConverterTypeAuthSettings.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAuthSettings_lower(_ value: AuthSettings) -> RustBuffer {
+    return FfiConverterTypeAuthSettings.lower(value)
+}
+
+
+/**
  * Report of what happened during a backup import
  */
 public struct BackupImportReport: Equatable, Hashable {
@@ -17288,6 +17363,108 @@ public func FfiConverterTypeFoundAddress_lift(_ buf: RustBuffer) throws -> Found
 #endif
 public func FfiConverterTypeFoundAddress_lower(_ value: FoundAddress) -> RustBuffer {
     return FfiConverterTypeFoundAddress.lower(value)
+}
+
+
+/**
+ * Committed app and authentication state after a successful full wipe
+ *
+ * Frontends apply this synchronously before releasing authentication, so no frontend has
+ * to decide on its own what a wiped app looks like
+ */
+public struct FullWipeCompletion {
+    /**
+     * Navigation after the wipe, starting at new-wallet selection with no pushed routes
+     */
+    public var router: Router
+    /**
+     * Whether the app must show onboarding, carried over from before the wipe
+     */
+    public var needsOnboarding: Bool
+    public var selectedNetwork: Network
+    public var colorScheme: ColorSchemeSelection
+    public var selectedNode: Node
+    public var fiatCurrency: FiatCurrency
+    /**
+     * Always empty, included so frontends replace their wallet list instead of re-reading it
+     */
+    public var wallets: [WalletMetadata]
+    public var auth: AuthSettings
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * Navigation after the wipe, starting at new-wallet selection with no pushed routes
+         */router: Router,
+        /**
+         * Whether the app must show onboarding, carried over from before the wipe
+         */needsOnboarding: Bool, selectedNetwork: Network, colorScheme: ColorSchemeSelection, selectedNode: Node, fiatCurrency: FiatCurrency,
+        /**
+         * Always empty, included so frontends replace their wallet list instead of re-reading it
+         */wallets: [WalletMetadata], auth: AuthSettings) {
+        self.router = router
+        self.needsOnboarding = needsOnboarding
+        self.selectedNetwork = selectedNetwork
+        self.colorScheme = colorScheme
+        self.selectedNode = selectedNode
+        self.fiatCurrency = fiatCurrency
+        self.wallets = wallets
+        self.auth = auth
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension FullWipeCompletion: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFullWipeCompletion: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FullWipeCompletion {
+        return
+            try FullWipeCompletion(
+                router: FfiConverterTypeRouter.read(from: &buf),
+                needsOnboarding: FfiConverterBool.read(from: &buf),
+                selectedNetwork: FfiConverterTypeNetwork.read(from: &buf),
+                colorScheme: FfiConverterTypeColorSchemeSelection.read(from: &buf),
+                selectedNode: FfiConverterTypeNode.read(from: &buf),
+                fiatCurrency: FfiConverterTypeFiatCurrency.read(from: &buf),
+                wallets: FfiConverterSequenceTypeWalletMetadata.read(from: &buf),
+                auth: FfiConverterTypeAuthSettings.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FullWipeCompletion, into buf: inout [UInt8]) {
+        FfiConverterTypeRouter.write(value.router, into: &buf)
+        FfiConverterBool.write(value.needsOnboarding, into: &buf)
+        FfiConverterTypeNetwork.write(value.selectedNetwork, into: &buf)
+        FfiConverterTypeColorSchemeSelection.write(value.colorScheme, into: &buf)
+        FfiConverterTypeNode.write(value.selectedNode, into: &buf)
+        FfiConverterTypeFiatCurrency.write(value.fiatCurrency, into: &buf)
+        FfiConverterSequenceTypeWalletMetadata.write(value.wallets, into: &buf)
+        FfiConverterTypeAuthSettings.write(value.auth, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFullWipeCompletion_lift(_ buf: RustBuffer) throws -> FullWipeCompletion {
+    return try FfiConverterTypeFullWipeCompletion.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFullWipeCompletion_lower(_ value: FullWipeCompletion) -> RustBuffer {
+    return FfiConverterTypeFullWipeCompletion.lower(value)
 }
 
 
@@ -21717,8 +21894,16 @@ public enum AuthManagerReconcileMessage: Equatable, Hashable {
 
     case authTypeChanged(AuthType
     )
-    case wipeDataPinChanged
-    case decoyPinChanged
+    /**
+     * Whether a wipe data PIN is now set
+     */
+    case wipeDataPinChanged(Bool
+    )
+    /**
+     * Whether a decoy PIN is now set
+     */
+    case decoyPinChanged(Bool
+    )
 
 
 
@@ -21743,9 +21928,11 @@ public struct FfiConverterTypeAuthManagerReconcileMessage: FfiConverterRustBuffe
         case 1: return .authTypeChanged(try FfiConverterTypeAuthType.read(from: &buf)
         )
 
-        case 2: return .wipeDataPinChanged
+        case 2: return .wipeDataPinChanged(try FfiConverterBool.read(from: &buf)
+        )
 
-        case 3: return .decoyPinChanged
+        case 3: return .decoyPinChanged(try FfiConverterBool.read(from: &buf)
+        )
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -21760,12 +21947,14 @@ public struct FfiConverterTypeAuthManagerReconcileMessage: FfiConverterRustBuffe
             FfiConverterTypeAuthType.write(v1, into: &buf)
 
 
-        case .wipeDataPinChanged:
+        case let .wipeDataPinChanged(v1):
             writeInt(&buf, Int32(2))
+            FfiConverterBool.write(v1, into: &buf)
 
 
-        case .decoyPinChanged:
+        case let .decoyPinChanged(v1):
             writeInt(&buf, Int32(3))
+            FfiConverterBool.write(v1, into: &buf)
 
         }
     }
@@ -47125,7 +47314,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_cancel_wallet_deletion_attempt() != 29231) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 1643) {
+    if (uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 55578) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_delete_corrupted_wallet() != 8180) {
@@ -47188,7 +47377,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to() != 57261) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_ffiapp_retry_dangerous_wipe_all_data() != 38709) {
+    if (uniffi_cove_checksum_method_ffiapp_retry_dangerous_wipe_all_data() != 62726) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_ffiapp_retry_delete_corrupted_wallet() != 50275) {
@@ -47282,9 +47471,6 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_converter_parse_fiat_str() != 59628) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_cove_checksum_method_database_dangerous_reset_all_data() != 1221) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_database_diagnostics_reports() != 32801) {

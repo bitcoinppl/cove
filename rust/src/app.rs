@@ -1,6 +1,7 @@
 //! `AppManager`
 
 pub mod alert_state;
+pub mod full_wipe;
 pub mod reconcile;
 
 use crate::database::global_config::SelectedWalletTarget;
@@ -44,6 +45,7 @@ use crate::{
 use cove_macros::impl_default_for;
 use cove_types::BlockSizeLast;
 use cove_util::ResultExt as _;
+use full_wipe::FullWipeCompletion;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use reconcile::{AppStateReconcileMessage as AppMessage, FfiReconcile, Updater};
@@ -328,7 +330,7 @@ impl App {
                 Updater::send_update(AppMessage::DatabaseUpdated);
 
                 // reconcile restored settings so frontends update without restart
-                send_global_settings_updates("import");
+                send_imported_settings_updates();
             }
         }
 
@@ -565,7 +567,9 @@ impl FfiApp {
     }
 
     /// DANGER: This will wipe all wallet data on this device
-    pub fn dangerous_wipe_all_data(&self) -> Result<(), Error> {
+    ///
+    /// Returns the committed post-wipe state the frontend applies before releasing authentication
+    pub fn dangerous_wipe_all_data(&self) -> Result<FullWipeCompletion, Error> {
         run_lifecycle_sync(wipe_all_data_with_tier(ShutdownDeadlineTier::Initial, None))
     }
 
@@ -573,7 +577,7 @@ impl FfiApp {
     pub fn retry_dangerous_wipe_all_data(
         &self,
         attempt_id: ShutdownAttemptId,
-    ) -> Result<(), Error> {
+    ) -> Result<FullWipeCompletion, Error> {
         run_lifecycle_sync(wipe_all_data_with_tier(ShutdownDeadlineTier::Retry, Some(attempt_id)))
     }
 
@@ -676,7 +680,7 @@ pub(crate) async fn delete_wallet_with_tier(
 async fn wipe_all_data_with_tier(
     tier: ShutdownDeadlineTier,
     retry: Option<ShutdownAttemptId>,
-) -> Result<(), AppError> {
+) -> Result<FullWipeCompletion, AppError> {
     let database = Database::global();
 
     // a failed bucket read must stop before actor shutdown or destructive work
@@ -737,68 +741,57 @@ async fn wipe_all_data_with_tier(
 
         database
             .dangerous_reset_all_data()
-            .map_err(|source| local_reset_error(LocalDataResetStage::Database, source))?;
-
-        Ok(())
+            .map_err(|source| local_reset_error(LocalDataResetStage::Database, source))
     }
     .await;
 
-    if let Err(error) = wipe_result {
-        return failed_wipe_result(error, prepared.resume_after_failure().await);
-    }
+    let completed_onboarding = match wipe_result {
+        Ok(completed_onboarding) => completed_onboarding,
+        Err(error) => return Err(failed_wipe_error(error, prepared.resume_after_failure().await)),
+    };
 
     prepared.complete_after_database_reset().await.map_err(|_| {
         AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired)
     })?;
 
-    reconcile_after_full_wipe();
+    let completion = FullWipeCompletion::after_reset(completed_onboarding);
+    completion.publish();
 
-    Ok(())
+    Ok(completion)
 }
 
-fn reconcile_after_full_wipe() {
-    Updater::send_update(AppMessage::DatabaseUpdated);
-    send_global_settings_updates("wipe");
-    Updater::send_update(AppMessage::WalletsChanged);
-
-    FfiApp::global().reset_default_route_to(Route::NewWallet(NewWalletRoute::Select));
-}
-
-/// Pushes the stored global settings to frontends after `event` replaced the database
+/// Pushes the stored global settings to frontends after an import replaced the database
 ///
 /// A setting that cannot be read is logged and skipped, so a read failure never
 /// overwrites the frontend's value with a guessed default
-fn send_global_settings_updates(event: &str) {
+fn send_imported_settings_updates() {
     let config = &Database::global().global_config;
 
     Updater::send_update(AppMessage::SelectedNetworkChanged(config.selected_network()));
 
     match config.color_scheme() {
         Ok(scheme) => Updater::send_update(AppMessage::ColorSchemeChanged(scheme)),
-        Err(e) => warn!("failed to read color scheme after {event}: {e}"),
+        Err(e) => warn!("failed to read color scheme after import: {e}"),
     }
 
     match config.fiat_currency() {
         Ok(fiat) => Updater::send_update(AppMessage::FiatCurrencyChanged(fiat)),
-        Err(e) => warn!("failed to read fiat currency after {event}: {e}"),
+        Err(e) => warn!("failed to read fiat currency after import: {e}"),
     }
 
     Updater::send_update(AppMessage::SelectedNodeChanged(config.selected_node()));
 }
 
-fn failed_wipe_result(
+fn failed_wipe_error(
     wipe_error: AppError,
     cloud_recovery: Result<
         crate::manager::cloud_backup_manager::CloudBackupResetRecovery,
         crate::manager::cloud_backup_manager::CloudBackupError,
     >,
-) -> Result<(), AppError> {
+) -> AppError {
     match cloud_recovery {
-        Ok(_) => Err(wipe_error),
-
-        Err(_) => {
-            Err(AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired))
-        }
+        Ok(_) => wipe_error,
+        Err(_) => AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired),
     }
 }
 
@@ -1026,6 +1019,7 @@ mod tests {
     use super::*;
     use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupResetRecovery};
     use crate::router::SettingsRoute;
+    use crate::{auth::AuthType, manager::auth_manager::AuthSettings};
 
     #[test]
     fn orphan_sweep_removes_wallet_data_without_deleting_unknown_entries() {
@@ -1087,22 +1081,22 @@ mod tests {
     fn failed_wipe_preserves_original_error_after_safe_cloud_recovery() {
         let wipe_error = local_reset_error(LocalDataResetStage::WalletArtifacts, "disk error");
 
-        let result =
-            failed_wipe_result(wipe_error.clone(), Ok(CloudBackupResetRecovery::SafelyDisabled));
+        let error =
+            failed_wipe_error(wipe_error.clone(), Ok(CloudBackupResetRecovery::SafelyDisabled));
 
-        assert_eq!(result, Err(wipe_error));
+        assert_eq!(error, wipe_error);
     }
 
     #[test]
     fn failed_wipe_requires_recovery_when_cloud_writers_cannot_resume_safely() {
         let wipe_error = local_reset_error(LocalDataResetStage::WalletArtifacts, "disk error");
 
-        let result =
-            failed_wipe_result(wipe_error, Err(CloudBackupError::Deferred("resume failed".into())));
+        let error =
+            failed_wipe_error(wipe_error, Err(CloudBackupError::Deferred("resume failed".into())));
 
         assert_eq!(
-            result,
-            Err(AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired))
+            error,
+            AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired)
         );
     }
 
@@ -1165,6 +1159,13 @@ mod tests {
 
         database.global_flag.mark_onboarding_complete().expect("onboarding completion is saved");
         database.global_config.select_wallet(first.id.clone()).expect("wallet is selected");
+        database.global_config.set_auth_type(AuthType::Pin).expect("auth type is saved");
+        database.global_config.set_wipe_data_pin("wipe".into()).expect("wipe PIN is saved");
+        database.global_config.set_decoy_pin("decoy".into()).expect("decoy PIN is saved");
+        database
+            .global_config
+            .set_color_scheme(ColorSchemeSelection::Dark)
+            .expect("color scheme is saved");
         FfiApp::global().reset_default_route_to(wallet_selection_loading_route(
             first.id.clone(),
             Some(Route::Settings(SettingsRoute::Main)),
@@ -1237,9 +1238,30 @@ mod tests {
         );
 
         keychain.fail_delete_at(usize::MAX);
-        FfiApp::global().dangerous_wipe_all_data().expect("the retry succeeds");
+        let completion = FfiApp::global().dangerous_wipe_all_data().expect("the retry succeeds");
 
         let app_state = App::global().get_state();
+        assert_eq!(
+            completion.router, app_state.router,
+            "the returned completion carries the committed post-wipe router"
+        );
+        assert!(completion.wallets.is_empty(), "the returned completion has no wallets");
+        assert!(!completion.needs_onboarding, "the returned completion keeps setup complete");
+        assert_eq!(
+            completion.auth,
+            AuthSettings {
+                auth_type: AuthType::None,
+                is_wipe_data_pin_enabled: false,
+                is_decoy_pin_enabled: false,
+            },
+            "the returned completion drops the wiped PIN and trick PINs"
+        );
+        assert_eq!(
+            completion.color_scheme,
+            ColorSchemeSelection::System,
+            "the returned completion carries the reset color scheme"
+        );
+
         assert_eq!(
             app_state.router.default,
             Route::NewWallet(NewWalletRoute::Select),
