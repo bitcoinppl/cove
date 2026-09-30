@@ -1325,6 +1325,12 @@ impl CloudBackupStateReducer {
         self.state.public_state()
     }
 
+    /// The public configured state, or `None` outside the configured phase
+    pub(crate) fn configured_state(&self) -> Option<CloudBackupConfiguredState> {
+        matches!(self.state.phase, CloudBackupLifecyclePhase::Configured)
+            .then(|| self.state.public_configured_state())
+    }
+
     pub(crate) fn status(&self) -> CloudBackupStatus {
         self.state.status()
     }

@@ -58,13 +58,7 @@ struct SettingsCloudBackupEnableSheet: View {
 
     private var showingPasskeyChoice: Binding<Bool> {
         Binding(
-            get: {
-                if case .passkeyChoice = promptTransitions.currentPresentation?.item {
-                    return true
-                }
-
-                return false
-            },
+            get: { passkeyChoiceIntent != nil },
             set: { isPresented in
                 guard !isPresented else { return }
                 handlePromptDismiss()
@@ -153,7 +147,7 @@ struct SettingsCloudBackupEnableSheet: View {
             return
         }
 
-        _ = promptActionHandoff.stage(
+        promptActionHandoff.stage(
             action: action,
             presentation: currentPrompt,
             transition: transition
@@ -215,47 +209,27 @@ struct SettingsCloudBackupEnableSheet: View {
             return
         }
 
-        if promptTransitions.currentPresentation?.item == desiredPrompt {
-            promptTransitions.discardQueued { _ in true }
-            return
+        promptTransitions.reconcile(toward: desiredPrompt) {
+            ignoreNextPromptDismiss = true
         }
-
-        if promptTransitions.currentPresentation == nil {
-            if promptTransitions.isAwaitingPresenterReadiness {
-                promptTransitions.queue(desiredPrompt)
-            } else {
-                promptTransitions.present(desiredPrompt)
-            }
-            return
-        }
-
-        ignoreNextPromptDismiss = true
-        promptTransitions.transition(to: desiredPrompt)
     }
 
     private func presenterDidBecomeReady(_ requestID: UUID) {
         let currentPrompt = isAwaitingEnablePrompt(manager.rootPrompt) ? manager.rootPrompt : nil
 
-        if promptActionHandoff.pendingAction != nil {
-            _ = promptActionHandoff.presenterDidBecomeReady(
-                requestID,
-                currentPresentation: currentPrompt,
-                isHostAvailable: isHostAvailable,
-                using: promptTransitions
-            ) { action in
-                manager.dispatch(action: action)
-            }
-
-            return
+        promptActionHandoff.presenterDidBecomeReady(
+            requestID,
+            currentPresentation: currentPrompt,
+            isHostAvailable: isHostAvailable,
+            using: promptTransitions
+        ) { action in
+            manager.dispatch(action: action)
         }
-
-        promptTransitions.presenterDidBecomeReady(requestID)
     }
 
     private func hostDidDisappear() {
         isHostAvailable = false
-        promptActionHandoff.cancel()
-        promptTransitions.hostDidDisappear()
+        promptActionHandoff.hostDidDisappear(using: promptTransitions)
     }
 
     var body: some View {

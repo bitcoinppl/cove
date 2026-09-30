@@ -11,6 +11,7 @@ use std::{
     sync::Arc,
 };
 
+use bdk_wallet::{bitcoin::bip32::Xpub, descriptor::ExtendedDescriptor};
 use cove_device::keychain::Keychain;
 use cove_types::WalletId;
 use serde::{Deserialize, Serialize};
@@ -325,56 +326,76 @@ fn delete_keychain_kind(keychain: &Keychain, id: &WalletId, kind: KeychainArtifa
 fn capture_keychain_fingerprints(
     id: &WalletId,
 ) -> Result<BTreeMap<String, ArtifactFingerprint>, BackupError> {
-    let keychain = Keychain::global();
-    let mut fingerprints = BTreeMap::new();
+    WalletKeychainItems::read(id).map(|items| items.fingerprints())
+}
 
-    if let Some(secret) = keychain
-        .get_wallet_secret(id)
-        .map_err_prefix("wallet secret snapshot", BackupError::Keychain)?
-    {
-        let fingerprint = match secret {
-            cove_device::keychain::WalletSecret::Mnemonic(mnemonic) => {
-                secret_fingerprint("mnemonic:", mnemonic)
-            }
-            cove_device::keychain::WalletSecret::Xpriv(xprv) => {
-                secret_fingerprint("xpriv:", xprv.expose())
-            }
-        };
-        fingerprints.insert(KeychainArtifactKind::Secret.as_str().to_string(), fingerprint);
+/// The keychain items a wallet id owns, read once for both fingerprinting and comparison
+pub(crate) struct WalletKeychainItems {
+    pub(crate) secret: Option<cove_device::keychain::WalletSecret>,
+    pub(crate) xpub: Option<Xpub>,
+    pub(crate) descriptors: Option<(ExtendedDescriptor, ExtendedDescriptor)>,
+    pub(crate) tap_signer_backup: Option<Zeroizing<Vec<u8>>>,
+}
+
+impl WalletKeychainItems {
+    fn read(id: &WalletId) -> Result<Self, BackupError> {
+        let keychain = Keychain::global();
+
+        Ok(Self {
+            secret: keychain
+                .get_wallet_secret(id)
+                .map_err_prefix("wallet secret snapshot", BackupError::Keychain)?,
+            xpub: keychain
+                .get_wallet_xpub(id)
+                .map_err_prefix("wallet xpub snapshot", BackupError::Keychain)?,
+            descriptors: keychain
+                .get_public_descriptor(id)
+                .map_err_prefix("wallet descriptor snapshot", BackupError::Keychain)?,
+            tap_signer_backup: keychain
+                .get_tap_signer_backup(id)
+                .map_err_prefix("TapSigner backup snapshot", BackupError::Keychain)?,
+        })
     }
 
-    if let Some(xpub) = keychain
-        .get_wallet_xpub(id)
-        .map_err_prefix("wallet xpub snapshot", BackupError::Keychain)?
-    {
-        fingerprints.insert(
-            KeychainArtifactKind::Xpub.as_str().to_string(),
-            value_fingerprint(xpub.to_string().as_bytes()),
-        );
-    }
+    fn fingerprints(&self) -> BTreeMap<String, ArtifactFingerprint> {
+        let mut fingerprints = BTreeMap::new();
 
-    if let Some((external, internal)) = keychain
-        .get_public_descriptor(id)
-        .map_err_prefix("wallet descriptor snapshot", BackupError::Keychain)?
-    {
-        let value = format!("{external}\n{internal}");
-        fingerprints.insert(
-            KeychainArtifactKind::Descriptors.as_str().to_string(),
-            value_fingerprint(value.as_bytes()),
-        );
-    }
+        if let Some(secret) = &self.secret {
+            let fingerprint = match secret {
+                cove_device::keychain::WalletSecret::Mnemonic(mnemonic) => {
+                    secret_fingerprint("mnemonic:", mnemonic)
+                }
+                cove_device::keychain::WalletSecret::Xpriv(xprv) => {
+                    secret_fingerprint("xpriv:", xprv.expose())
+                }
+            };
+            fingerprints.insert(KeychainArtifactKind::Secret.as_str().to_string(), fingerprint);
+        }
 
-    if let Some(backup) = keychain
-        .get_tap_signer_backup(id)
-        .map_err_prefix("TapSigner backup snapshot", BackupError::Keychain)?
-    {
-        fingerprints.insert(
-            KeychainArtifactKind::TapSignerBackup.as_str().to_string(),
-            value_fingerprint(&backup),
-        );
-    }
+        if let Some(xpub) = &self.xpub {
+            fingerprints.insert(
+                KeychainArtifactKind::Xpub.as_str().to_string(),
+                value_fingerprint(xpub.to_string().as_bytes()),
+            );
+        }
 
-    Ok(fingerprints)
+        if let Some((external, internal)) = &self.descriptors {
+            let value = format!("{external}\n{internal}");
+            fingerprints.insert(
+                KeychainArtifactKind::Descriptors.as_str().to_string(),
+                value_fingerprint(value.as_bytes()),
+            );
+        }
+
+        if let Some(backup) = &self.tap_signer_backup {
+            fingerprints.insert(
+                KeychainArtifactKind::TapSignerBackup.as_str().to_string(),
+                value_fingerprint(backup),
+            );
+        }
+
+        fingerprints
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -414,6 +435,16 @@ pub(crate) struct RestoreArtifactSnapshot {
 
 impl RestoreArtifactSnapshot {
     pub(crate) fn capture(id: &ValidatedRestoreWalletId) -> Result<Self, BackupError> {
+        Self::capture_with_keychain_items(id).map(|(snapshot, _)| snapshot)
+    }
+
+    /// Captures the snapshot and returns the keychain items it fingerprinted
+    ///
+    /// Callers that compare local items against a backup reuse these values
+    /// instead of reading the keychain a second time
+    pub(crate) fn capture_with_keychain_items(
+        id: &ValidatedRestoreWalletId,
+    ) -> Result<(Self, WalletKeychainItems), BackupError> {
         let metadata_present = metadata_exists(id)?;
 
         for entry in crate::database::wallet_data::wallet_data_root_entries()
@@ -430,7 +461,9 @@ impl RestoreArtifactSnapshot {
             }
         }
 
-        let keychain_entries = capture_keychain_fingerprints(id.as_wallet_id())?
+        let keychain_items_read = WalletKeychainItems::read(id.as_wallet_id())?;
+        let keychain_entries = keychain_items_read
+            .fingerprints()
             .into_iter()
             .map(|(kind, fingerprint)| (kind, Some(fingerprint)))
             .collect::<BTreeMap<_, _>>();
@@ -483,7 +516,7 @@ impl RestoreArtifactSnapshot {
                 .as_ref()
                 .is_some_and(|fingerprint| fingerprint.kind != ArtifactKind::Directory);
 
-        Ok(Self {
+        let snapshot = Self {
             metadata: metadata_present,
             keychain_items,
             keychain_entries,
@@ -493,7 +526,9 @@ impl RestoreArtifactSnapshot {
             wallet_data_fingerprints,
             wallet_data_directory,
             wallet_data_occupied,
-        })
+        };
+
+        Ok((snapshot, keychain_items_read))
     }
 
     pub(crate) fn is_occupied(&self) -> bool {

@@ -1200,7 +1200,9 @@ extension CloudBackupIOSSafetyHelpersTests {
         },
         now: @escaping @MainActor @Sendable () -> Date = { Date() },
         deletionTombstoneMaxAge: TimeInterval = 60,
-        coordinatedDeleteOverride: (@Sendable (URL, String) throws -> URL)? = nil,
+        coordinatedDeleter: @escaping @Sendable (URL, String) throws -> URL = { url, missingItemID in
+            try ICloudDriveHelper.coordinatedDelete(at: url, missingItemID: missingItemID)
+        },
         defaultTimeout: TimeInterval = 1,
         metadataListingTimeout: TimeInterval = 5
     ) -> ICloudMetadataFixture {
@@ -1218,7 +1220,7 @@ extension CloudBackupIOSSafetyHelpersTests {
         let helper = ICloudDriveHelper(
             containerURLProvider: { containerURL },
             metadataIndexProvider: { index },
-            coordinatedDeleteOverride: coordinatedDeleteOverride,
+            coordinatedDeleter: coordinatedDeleter,
             defaultTimeout: defaultTimeout,
             metadataListingTimeout: metadataListingTimeout
         )
@@ -1538,7 +1540,7 @@ extension CloudBackupIOSSafetyHelpersTests {
         let redirectedURL = URL(fileURLWithPath: "/provider/\(testNamespace)/wallet-record.json")
         let deleteStub = CoordinatedDeleteStub(redirectTo: redirectedURL)
         let fixture = makeICloudMetadataFixture(
-            coordinatedDeleteOverride: { url, id in
+            coordinatedDeleter: { url, id in
                 try deleteStub.delete(url: url, missingItemID: id)
             }
         )
@@ -1577,7 +1579,7 @@ extension CloudBackupIOSSafetyHelpersTests {
     func testBackupDeleteDoesNotRecordNoSuccessNotFound() async throws {
         let notFoundStub = CoordinatedDeleteStub(notFoundOnCalls: [1])
         let notFoundFixture = makeICloudMetadataFixture(
-            coordinatedDeleteOverride: { url, id in
+            coordinatedDeleter: { url, id in
                 try notFoundStub.delete(url: url, missingItemID: id)
             }
         )
@@ -1616,7 +1618,7 @@ extension CloudBackupIOSSafetyHelpersTests {
     func testBackupDeleteRecordsPartialSuccessBeforeFailure() async throws {
         let deleteStub = CoordinatedDeleteStub(failOnCall: 2)
         let fixture = makeICloudMetadataFixture(
-            coordinatedDeleteOverride: { url, id in
+            coordinatedDeleter: { url, id in
                 try deleteStub.delete(url: url, missingItemID: id)
             }
         )
@@ -1653,7 +1655,7 @@ extension CloudBackupIOSSafetyHelpersTests {
     func testBackupDeleteCancelledBeforeWorkLeavesMetadataVisible() async throws {
         let cancelledStub = CoordinatedDeleteStub()
         let cancelledFixture = makeICloudMetadataFixture(
-            coordinatedDeleteOverride: { url, id in
+            coordinatedDeleter: { url, id in
                 try cancelledStub.delete(url: url, missingItemID: id)
             }
         )
@@ -1698,7 +1700,7 @@ extension CloudBackupIOSSafetyHelpersTests {
     func testBackupDeleteRecordsSuccessBeforeCancellationTakesPrecedence() async throws {
         let precedenceStub = CoordinatedDeleteStub(failOnCall: 1, blockOnCall: 2)
         let precedenceFixture = makeICloudMetadataFixture(
-            coordinatedDeleteOverride: { url, id in
+            coordinatedDeleter: { url, id in
                 try precedenceStub.delete(url: url, missingItemID: id)
             }
         )
@@ -1777,7 +1779,7 @@ extension CloudBackupIOSSafetyHelpersTests {
     func testNamespaceDeleteHidesMetadataFallbackDescendants() async throws {
         let fallbackStub = CoordinatedDeleteStub(removeFiles: false)
         let fallbackFixture = makeICloudMetadataFixture(
-            coordinatedDeleteOverride: { url, id in
+            coordinatedDeleter: { url, id in
                 try fallbackStub.delete(url: url, missingItemID: id)
             }
         )
@@ -1813,7 +1815,7 @@ extension CloudBackupIOSSafetyHelpersTests {
     func testFailedNamespaceDeleteLeavesMetadataVisible() async throws {
         let failureStub = CoordinatedDeleteStub(failOnCall: 1, removeFiles: false)
         let failureFixture = makeICloudMetadataFixture(
-            coordinatedDeleteOverride: { url, id in
+            coordinatedDeleter: { url, id in
                 try failureStub.delete(url: url, missingItemID: id)
             }
         )
@@ -1847,7 +1849,7 @@ extension CloudBackupIOSSafetyHelpersTests {
     func testNotFoundNamespaceDeleteLeavesMetadataVisible() async throws {
         let notFoundStub = CoordinatedDeleteStub(notFoundOnCalls: [1], removeFiles: false)
         let fixture = makeICloudMetadataFixture(
-            coordinatedDeleteOverride: { url, id in
+            coordinatedDeleter: { url, id in
                 try notFoundStub.delete(url: url, missingItemID: id)
             }
         )

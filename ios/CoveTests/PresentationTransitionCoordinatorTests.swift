@@ -132,7 +132,7 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
         let transition = try XCTUnwrap(
             coordinator.dismissCurrentPresentationForTransition()
         )
-        _ = handoff.stage(
+        handoff.stage(
             action: .sensitive,
             presentation: .first,
             transition: transition
@@ -153,26 +153,25 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
         let transition = try XCTUnwrap(
             coordinator.dismissCurrentPresentationForTransition()
         )
-        _ = handoff.stage(
+        handoff.stage(
             action: .sensitive,
             presentation: .first,
             transition: transition
         )
 
         var dispatched: [Presentation] = []
-        let handled = handoff.presenterDidBecomeReady(
+        handoff.presenterDidBecomeReady(
             transition.readinessRequestID,
             currentPresentation: .first,
             isHostAvailable: true,
             using: coordinator
         ) { dispatched.append($0) }
 
-        XCTAssertTrue(handled)
         XCTAssertEqual(dispatched, [.sensitive])
         XCTAssertNil(coordinator.currentPresentation)
         XCTAssertNil(coordinator.queuedPresentation)
 
-        _ = handoff.presenterDidBecomeReady(
+        handoff.presenterDidBecomeReady(
             transition.readinessRequestID,
             currentPresentation: .first,
             isHostAvailable: true,
@@ -190,7 +189,7 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
         let staleTransition = try XCTUnwrap(
             coordinator.dismissCurrentPresentationForTransition()
         )
-        _ = handoff.stage(
+        handoff.stage(
             action: .sensitive,
             presentation: .first,
             transition: staleTransition
@@ -202,14 +201,13 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
         let currentTransition = try XCTUnwrap(coordinator.transitionRequest)
         var dispatched: [Presentation] = []
 
-        XCTAssertTrue(
-            handoff.presenterDidBecomeReady(
-                staleTransition.readinessRequestID,
-                currentPresentation: .first,
-                isHostAvailable: true,
-                using: coordinator
-            ) { dispatched.append($0) }
-        )
+        handoff.presenterDidBecomeReady(
+            staleTransition.readinessRequestID,
+            currentPresentation: .first,
+            isHostAvailable: true,
+            using: coordinator
+        ) { dispatched.append($0) }
+
         XCTAssertNil(handoff.pendingAction)
         XCTAssertEqual(coordinator.transitionRequest, currentTransition)
         XCTAssertTrue(dispatched.isEmpty)
@@ -223,32 +221,30 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
         let transition = try XCTUnwrap(
             coordinator.dismissCurrentPresentationForTransition()
         )
-        _ = handoff.stage(
+        handoff.stage(
             action: .sensitive,
             presentation: .first,
             transition: transition
         )
 
         var dispatched: [Presentation] = []
-        XCTAssertFalse(
-            handoff.presenterDidBecomeReady(
-                UUID(),
-                currentPresentation: .first,
-                isHostAvailable: true,
-                using: coordinator
-            ) { dispatched.append($0) }
-        )
+        handoff.presenterDidBecomeReady(
+            UUID(),
+            currentPresentation: .first,
+            isHostAvailable: true,
+            using: coordinator
+        ) { dispatched.append($0) }
+
         XCTAssertNotNil(handoff.pendingAction)
         XCTAssertTrue(dispatched.isEmpty)
 
-        XCTAssertTrue(
-            handoff.presenterDidBecomeReady(
-                transition.readinessRequestID,
-                currentPresentation: .first,
-                isHostAvailable: true,
-                using: coordinator
-            ) { dispatched.append($0) }
-        )
+        handoff.presenterDidBecomeReady(
+            transition.readinessRequestID,
+            currentPresentation: .first,
+            isHostAvailable: true,
+            using: coordinator
+        ) { dispatched.append($0) }
+
         XCTAssertEqual(dispatched, [.sensitive])
     }
 
@@ -260,21 +256,19 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
         let transition = try XCTUnwrap(
             coordinator.dismissCurrentPresentationForTransition()
         )
-        _ = handoff.stage(
+        handoff.stage(
             action: .sensitive,
             presentation: .first,
             transition: transition
         )
 
         var dispatched: [Presentation] = []
-        XCTAssertTrue(
-            handoff.presenterDidBecomeReady(
-                transition.readinessRequestID,
-                currentPresentation: .second,
-                isHostAvailable: true,
-                using: coordinator
-            ) { dispatched.append($0) }
-        )
+        handoff.presenterDidBecomeReady(
+            transition.readinessRequestID,
+            currentPresentation: .second,
+            isHostAvailable: true,
+            using: coordinator
+        ) { dispatched.append($0) }
 
         XCTAssertNil(handoff.pendingAction)
         XCTAssertNil(coordinator.currentPresentation)
@@ -290,7 +284,7 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
         let transition = try XCTUnwrap(
             coordinator.dismissCurrentPresentationForTransition()
         )
-        _ = handoff.stage(
+        handoff.stage(
             action: .sensitive,
             presentation: .first,
             transition: transition
@@ -298,14 +292,12 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
         coordinator.queue(.second)
 
         var dispatched: [Presentation] = []
-        XCTAssertTrue(
-            handoff.presenterDidBecomeReady(
-                transition.readinessRequestID,
-                currentPresentation: .first,
-                isHostAvailable: true,
-                using: coordinator
-            ) { dispatched.append($0) }
-        )
+        handoff.presenterDidBecomeReady(
+            transition.readinessRequestID,
+            currentPresentation: .first,
+            isHostAvailable: true,
+            using: coordinator
+        ) { dispatched.append($0) }
 
         XCTAssertNil(handoff.pendingAction)
         guard case .second = coordinator.currentPresentation?.item else {
@@ -317,6 +309,41 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
     }
 
     @MainActor
+    func testReadinessWithoutPendingActionFallsBackToHostOrCoordinator() throws {
+        let coordinator = PresentationTransitionCoordinator<Presentation>()
+        let handoff = PresentationActionHandoff<Presentation, Presentation>()
+        coordinator.present(.first)
+        coordinator.present(.second)
+        let requestID = try XCTUnwrap(coordinator.readinessRequestID)
+        var fallbackRequests: [UUID] = []
+        var dispatched: [Presentation] = []
+
+        handoff.presenterDidBecomeReady(
+            requestID,
+            currentPresentation: nil,
+            isHostAvailable: true,
+            using: coordinator,
+            withoutPendingAction: { fallbackRequests.append($0) }
+        ) { dispatched.append($0) }
+
+        XCTAssertEqual(fallbackRequests, [requestID])
+        XCTAssertTrue(coordinator.isAwaitingPresenterReadiness)
+
+        handoff.presenterDidBecomeReady(
+            requestID,
+            currentPresentation: nil,
+            isHostAvailable: true,
+            using: coordinator
+        ) { dispatched.append($0) }
+
+        guard case .second = coordinator.currentPresentation?.item else {
+            return XCTFail("Expected the coordinator to present the queued presentation")
+        }
+
+        XCTAssertTrue(dispatched.isEmpty)
+    }
+
+    @MainActor
     func testHostDisappearanceCancelsPendingAction() throws {
         let coordinator = PresentationTransitionCoordinator<Presentation>()
         let handoff = PresentationActionHandoff<Presentation, Presentation>()
@@ -324,14 +351,13 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
         let transition = try XCTUnwrap(
             coordinator.dismissCurrentPresentationForTransition()
         )
-        _ = handoff.stage(
+        handoff.stage(
             action: .sensitive,
             presentation: .first,
             transition: transition
         )
 
-        handoff.cancel()
-        coordinator.hostDidDisappear()
+        handoff.hostDidDisappear(using: coordinator)
 
         XCTAssertNil(handoff.pendingAction)
         XCTAssertFalse(coordinator.hasPresentationActivity)
@@ -346,21 +372,19 @@ final class PresentationTransitionCoordinatorTests: XCTestCase {
             coordinator.dismissCurrentPresentationForTransition()
         )
         coordinator.queue(.first)
-        _ = handoff.stage(
+        handoff.stage(
             action: .sensitive,
             presentation: .first,
             transition: transition
         )
 
         var dispatched: [Presentation] = []
-        XCTAssertTrue(
-            handoff.presenterDidBecomeReady(
-                transition.readinessRequestID,
-                currentPresentation: .first,
-                isHostAvailable: true,
-                using: coordinator
-            ) { dispatched.append($0) }
-        )
+        handoff.presenterDidBecomeReady(
+            transition.readinessRequestID,
+            currentPresentation: .first,
+            isHostAvailable: true,
+            using: coordinator
+        ) { dispatched.append($0) }
 
         XCTAssertEqual(dispatched, [.sensitive])
         XCTAssertNil(coordinator.currentPresentation)

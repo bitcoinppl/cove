@@ -10,13 +10,11 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential
 import androidx.credentials.exceptions.CreateCredentialCancellationException
-import androidx.credentials.exceptions.CreateCredentialException
 import androidx.credentials.exceptions.CreateCredentialInterruptedException
 import androidx.credentials.exceptions.CreateCredentialNoCreateOptionException
 import androidx.credentials.exceptions.CreateCredentialProviderConfigurationException
 import androidx.credentials.exceptions.CreateCredentialUnsupportedException
 import androidx.credentials.exceptions.GetCredentialCancellationException
-import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
@@ -111,11 +109,10 @@ class AndroidPasskeyProvider(
                     )
 
                 val credential =
-                    response.credential as? PublicKeyCredential
-                        ?: throw passkeyRequestFailed(
-                            PasskeyOperation.AUTHENTICATE_ASSERTION,
-                            PasskeyFailureReason.UnexpectedCredentialType,
-                        )
+                    requirePublicKeyCredential(
+                        response.credential,
+                        PasskeyOperation.AUTHENTICATE_ASSERTION,
+                    )
 
                 extractPrfOutput(credential.authenticationResponseJson)
             } catch (error: Exception) {
@@ -145,7 +142,10 @@ class AndroidPasskeyProvider(
                     )
 
                 val credential =
-                    requireDiscoveredPublicKeyCredential(response.credential)
+                    requirePublicKeyCredential(
+                        response.credential,
+                        PasskeyOperation.DISCOVER_ASSERTION,
+                    )
 
                 DiscoveredPasskeyResult(
                     prfOutput = extractPrfOutput(credential.authenticationResponseJson),
@@ -337,12 +337,6 @@ internal fun mapPasskeyCreateError(error: Exception): PasskeyException =
         is CreateCredentialUnsupportedException ->
             passkeyNotSupported(PasskeyFailureReason.ProviderConfiguration)
 
-        is CreateCredentialException ->
-            passkeyRequestFailed(
-                PasskeyOperation.REGISTRATION,
-                passkeyUnknownReason("passkey creation failed"),
-            )
-
         else ->
             passkeyRequestFailed(
                 PasskeyOperation.REGISTRATION,
@@ -383,12 +377,6 @@ internal fun mapPasskeyGetError(
 
         is GetCredentialUnsupportedException ->
             passkeyNotSupported(PasskeyFailureReason.ProviderConfiguration)
-
-        is GetCredentialException ->
-            passkeyRequestFailed(
-                operation,
-                passkeyUnknownReason("passkey authentication failed"),
-            )
 
         else ->
             passkeyRequestFailed(
@@ -502,10 +490,13 @@ internal fun buildPasskeyAssertionRequestJson(
     return request.toString()
 }
 
-internal fun requireDiscoveredPublicKeyCredential(credential: Credential): PublicKeyCredential =
+internal fun requirePublicKeyCredential(
+    credential: Credential,
+    operation: PasskeyOperation,
+): PublicKeyCredential =
     credential as? PublicKeyCredential
         ?: throw passkeyRequestFailed(
-            PasskeyOperation.DISCOVER_ASSERTION,
+            operation,
             PasskeyFailureReason.UnexpectedCredentialType,
         )
 

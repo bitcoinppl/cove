@@ -1,15 +1,14 @@
-use bdk_wallet::{bitcoin::bip32::Xpub, descriptor::ExtendedDescriptor};
 use bip39::Mnemonic;
-use cove_device::keychain::{
-    Keychain, KeychainError, WalletSecret as KeychainWalletSecret, WalletXprv,
-};
+use cove_device::keychain::{WalletSecret as KeychainWalletSecret, WalletXprv};
 use tracing::warn;
 use zeroize::Zeroizing;
 
 use crate::backup::error::BackupError;
 use crate::backup::model::{WalletBackup, WalletSecret};
-use crate::backup::recovery::{RestoreArtifactSnapshot, ValidatedRestoreWalletId};
-use crate::wallet::metadata::{WalletId, WalletMetadata};
+use crate::backup::recovery::{
+    RestoreArtifactSnapshot, ValidatedRestoreWalletId, WalletKeychainItems,
+};
+use crate::wallet::metadata::WalletMetadata;
 
 use super::{
     HotWalletWrites, PreparedHotWallet, PreparedPublicWallet, PublicWalletWrites, RestoreCleanup,
@@ -59,41 +58,6 @@ fn plan_entry<T: PartialEq>(
     }
 }
 
-/// The keychain items a wallet id already owns on this device
-struct LocalWalletItems {
-    secret: Option<KeychainWalletSecret>,
-    xpub: Option<Xpub>,
-    descriptors: Option<(ExtendedDescriptor, ExtendedDescriptor)>,
-    tap_signer_backup: Option<Zeroizing<Vec<u8>>>,
-}
-
-impl LocalWalletItems {
-    /// Read every wallet-owned keychain item for comparison against a backup
-    ///
-    /// A read failure means local data exists that cannot be compared, so the
-    /// restore reports a conflict instead of writing over it
-    fn read(id: &WalletId) -> Result<Self, LocalWalletConflict> {
-        let keychain = Keychain::global();
-        let unreadable = |kind: &str, error: KeychainError| {
-            warn!("cloud restore cannot read local {kind} for wallet id={id}: {error}");
-            LocalWalletConflict::Unreadable
-        };
-
-        Ok(Self {
-            secret: keychain
-                .get_wallet_secret(id)
-                .map_err(|error| unreadable("wallet secret", error))?,
-            xpub: keychain.get_wallet_xpub(id).map_err(|error| unreadable("xpub", error))?,
-            descriptors: keychain
-                .get_public_descriptor(id)
-                .map_err(|error| unreadable("descriptors", error))?,
-            tap_signer_backup: keychain
-                .get_tap_signer_backup(id)
-                .map_err(|error| unreadable("TapSigner backup", error))?,
-        })
-    }
-}
-
 /// A cloud restore whose every pre-existing local item was checked against the backup
 ///
 /// The validating constructors are the only way to build this type, so planned
@@ -118,14 +82,17 @@ impl<W: WalletWrites> VerifiedCloudRestorePlan<W> {
 ///
 /// Metadata rows, BDK artifacts and occupied wallet-data paths still reserve the
 /// wallet id outright: only keychain items can be verified and adopted
+///
+/// A keychain read failure means local data exists that cannot be compared, so the
+/// restore reports a conflict instead of writing over it
 fn capture_local_wallet_state(
     metadata: &WalletMetadata,
-) -> Result<(RestoreArtifactSnapshot, LocalWalletItems), CloudRestoreError> {
+) -> Result<(RestoreArtifactSnapshot, WalletKeychainItems), CloudRestoreError> {
     let wallet_id = &metadata.id;
-    let id = ValidatedRestoreWalletId::validate(wallet_id).map_err(CloudRestoreError::Backup)?;
+    let id = ValidatedRestoreWalletId::validate(wallet_id)?;
 
-    let snapshot = match RestoreArtifactSnapshot::capture(&id) {
-        Ok(snapshot) => snapshot,
+    let (snapshot, items) = match RestoreArtifactSnapshot::capture_with_keychain_items(&id) {
+        Ok(captured) => captured,
         // capture only reads this wallet id, so a keychain failure is local data we cannot compare
         Err(BackupError::Keychain(error)) => {
             warn!(
@@ -146,8 +113,6 @@ fn capture_local_wallet_state(
         warn!("cloud restore found undescribed local keychain items for wallet id={wallet_id}");
         return Err(LocalWalletConflict::Unreadable.into());
     }
-
-    let items = LocalWalletItems::read(wallet_id)?;
 
     Ok((snapshot, items))
 }
@@ -232,8 +197,7 @@ pub(crate) fn restore_cloud_descriptor_wallet(
     backup: &WalletBackup,
 ) -> Result<(), CloudRestoreError> {
     let prepared =
-        prepare_public_wallet(backup, metadata, matches!(&backup.secret, WalletSecret::Unknown))
-            .map_err(CloudRestoreError::Backup)?;
+        prepare_public_wallet(backup, metadata, matches!(&backup.secret, WalletSecret::Unknown))?;
     let plan = VerifiedCloudRestorePlan::<PublicWalletWrites>::prepare(metadata, prepared)?;
 
     report_cloud_restore(metadata, plan.execute(metadata))
@@ -259,15 +223,17 @@ fn report_cloud_restore(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use std::str::FromStr as _;
+
+    use bdk_wallet::{bitcoin::bip32::Xpub, descriptor::ExtendedDescriptor};
+    use cove_device::keychain::Keychain;
 
     use crate::database::Database;
     use crate::test_support::{
-        WALLET_KEYCHAIN_KEY_SUFFIXES, WALLET_MNEMONIC_CRYPTOR_KEY_SUFFIX,
-        WALLET_MNEMONIC_KEY_SUFFIX, WALLET_XPUB_KEY_SUFFIX, hot_wallet_metadata as hot_metadata,
+        WALLET_MNEMONIC_CRYPTOR_KEY_SUFFIX, WALLET_MNEMONIC_KEY_SUFFIX, WALLET_XPUB_KEY_SUFFIX,
+        hot_wallet_metadata as hot_metadata, raw_wallet_keychain_entries as raw_keychain_entries,
     };
-    use crate::wallet::metadata::WalletType;
+    use crate::wallet::metadata::{WalletId, WalletType};
     use crate::wallet_secret::WalletSecretExt as _;
 
     use super::*;
@@ -276,21 +242,6 @@ mod tests {
         crate::database::test_support::delete_database();
         crate::test_support::init_test_keychain();
         crate::test_support::shared_mock_keychain().reset();
-    }
-
-    /// The raw stored values, so a rewrite of an adopted item is visible even
-    /// when the decrypted value would still compare equal
-    fn raw_keychain_entries(id: &WalletId) -> BTreeMap<&'static str, Option<String>> {
-        let keychain = crate::test_support::shared_mock_keychain();
-
-        WALLET_KEYCHAIN_KEY_SUFFIXES
-            .iter()
-            .map(|suffix| {
-                let key = format!("{id}{suffix}");
-                let value = keychain.get_entry(&key);
-                (*suffix, value)
-            })
-            .collect()
     }
 
     fn cloud_restore_metadata(name: &str, wallet_type: WalletType) -> WalletMetadata {

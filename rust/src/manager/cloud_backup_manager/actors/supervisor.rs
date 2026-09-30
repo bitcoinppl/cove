@@ -10,7 +10,6 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use act_zero::{Actor, ActorResult, Addr, AddrLike, Produces, WeakAddr, call, send};
-use cove_cspp::backup_data::wallet_record_id;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_device::keychain::Keychain;
@@ -27,9 +26,9 @@ use super::write::{
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBackupRecordKey, CloudBlobDirtyState, CloudStorageIssue, DriveAccountSwitchId,
-    PersistedCloudBackupState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
-    PersistedDisablingCloudBackup, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
+    CloudBackupRecordKey, CloudStorageIssue, DriveAccountSwitchId, PersistedCloudBackupState,
+    PersistedCloudBlobSyncState, PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
+    PersistedDriveAccountSwitchPhase,
 };
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::model::{
@@ -258,12 +257,7 @@ struct PendingDisableWriteDrain {
     disabling: PersistedDisablingCloudBackup,
 }
 
-#[derive(Debug)]
-struct RestoreAllRun {
-    claim: CloudBackupExclusiveOperationClaim,
-    cancellation: Arc<AtomicBool>,
-}
-
+/// A restore or Restore All run, whose worker keeps draining until it observes cancellation
 #[derive(Debug)]
 struct RestoreRun {
     claim: CloudBackupExclusiveOperationClaim,
@@ -274,7 +268,7 @@ struct RestoreRun {
 enum ActiveOperationRun {
     Standard(CloudBackupExclusiveOperationClaim),
     Restore(RestoreRun),
-    RestoreAll(RestoreAllRun),
+    RestoreAll(RestoreRun),
 }
 
 #[derive(Debug, Default)]
@@ -310,7 +304,7 @@ impl ActiveOperation {
         self.0 = Some(ActiveOperationRun::Restore(run));
     }
 
-    fn start_restore_all(&mut self, run: RestoreAllRun) {
+    fn start_restore_all(&mut self, run: RestoreRun) {
         self.0 = Some(ActiveOperationRun::RestoreAll(run));
     }
 
@@ -323,7 +317,7 @@ impl ActiveOperation {
         }
     }
 
-    fn restore_all(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreAllRun> {
+    fn restore_all(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreRun> {
         match self.0.as_ref()? {
             ActiveOperationRun::RestoreAll(run) if run.claim == claim => Some(run),
             ActiveOperationRun::Standard(_)
@@ -335,11 +329,7 @@ impl ActiveOperation {
     /// Cancels draining restore work but releases operations with no retained cancellation owner
     fn prepare_local_reset(&mut self) -> Option<CloudBackupExclusiveOperationClaim> {
         match self.0.as_ref()? {
-            ActiveOperationRun::Restore(run) => {
-                run.cancellation.store(true, Ordering::Release);
-                None
-            }
-            ActiveOperationRun::RestoreAll(run) => {
+            ActiveOperationRun::Restore(run) | ActiveOperationRun::RestoreAll(run) => {
                 run.cancellation.store(true, Ordering::Release);
                 None
             }
@@ -397,45 +387,26 @@ impl Actor for CloudBackupSupervisor {
 }
 
 impl CloudBackupSupervisor {
-    fn persist_cloud_backup_state(
-        manager: &RustCloudBackupManager,
-        state: &PersistedCloudBackupState,
-        context: impl std::fmt::Display,
-    ) -> Result<(), CloudBackupError> {
-        Database::global()
-            .cloud_backup_state
-            .set(state)
-            .map_err(|source| CloudBackupError::internal_context(context, source))?;
-
-        manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(state));
-        manager.refresh_persisted_flags();
-
-        Ok(())
-    }
-
     fn commit_restored_namespace(
         manager: &RustCloudBackupManager,
         commit: RestoredNamespaceCommit,
     ) -> Result<(), CloudBackupError> {
         let RestoredNamespaceCommit { master_key, passkey, namespace_id, state, wallet_ids } =
             commit;
-        let keychain = CloudBackupKeychain::global();
-        let snapshot = keychain.capture_restore_activation_snapshot();
+        let snapshot = CloudBackupKeychain::global().capture_restore_activation_snapshot();
         let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
         let dirty_states = wallet_ids
             .into_iter()
             .map(|wallet_id| {
-                let record_id = wallet_record_id(wallet_id.as_ref());
-                PersistedCloudBlobSyncState::wallet(
+                PersistedCloudBlobSyncState::dirty_wallet(
                     namespace_id.clone(),
                     wallet_id,
-                    record_id,
-                    PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
+                    changed_at,
                 )
             })
             .collect::<Vec<_>>();
 
-        restore::save_restore_keychain_entries(master_key, passkey, namespace_id)?;
+        restore::save_restore_keychain_entries(&snapshot, master_key, passkey, namespace_id)?;
 
         // keychain, configured state, and dirty-wallet rows are one restore commit
         if let Err(source) = Database::global()
@@ -448,8 +419,7 @@ impl CloudBackupSupervisor {
             return Err(restore::rollback_restore_activation_keychain(&snapshot, original));
         }
 
-        manager.reconcile_runtime_status(RustCloudBackupManager::runtime_status_for(&state));
-        manager.refresh_persisted_flags();
+        manager.reconcile_persisted_state(&state);
         manager.refresh_sync_health();
 
         Ok(())
@@ -587,7 +557,7 @@ impl CloudBackupSupervisor {
             operation_id,
         );
         let cancellation = Arc::new(AtomicBool::new(false));
-        self.active_operation.start_restore_all(RestoreAllRun { claim, cancellation });
+        self.active_operation.start_restore_all(RestoreRun { claim, cancellation });
 
         Some(claim)
     }
@@ -643,11 +613,12 @@ impl CloudBackupSupervisor {
         !run.cancellation.load(Ordering::Acquire)
     }
 
-    fn restore_cancellation(
-        &self,
-        claim: CloudBackupExclusiveOperationClaim,
-    ) -> Option<Arc<AtomicBool>> {
-        self.active_operation.restore(claim).map(|run| run.cancellation.clone())
+    /// The cancellation flag of a restore claim that was just started
+    fn restore_cancellation(&self, claim: CloudBackupExclusiveOperationClaim) -> Arc<AtomicBool> {
+        self.active_operation
+            .restore(claim)
+            .map(|run| run.cancellation.clone())
+            .expect("restore claim must carry a cancellation state")
     }
 
     pub async fn ensure_restore_current(
@@ -721,7 +692,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         };
 
-        let result = Self::persist_cloud_backup_state(&manager, &state, context);
+        let result = manager.persist_cloud_backup_state(&state, context);
 
         Produces::ok(result)
     }
@@ -1357,9 +1328,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        let cancellation = self
-            .restore_cancellation(claim)
-            .expect("restore claim must carry a cancellation state");
+        let cancellation = self.restore_cancellation(claim);
         let operation = RestoreOperation::new(claim, addr.clone(), cancellation);
         addr.send_fut_with(move |addr| async move {
             tracing::info!("restore_from_cloud_backup: task started");
@@ -1412,9 +1381,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        let cancellation = self
-            .restore_cancellation(claim)
-            .expect("restore claim must carry a cancellation state");
+        let cancellation = self.restore_cancellation(claim);
         let operation =
             RestoreOperation::new_with_events(claim, addr.clone(), sender, cancellation);
         addr.send_fut_with(move |addr| async move {
@@ -1457,10 +1424,7 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn cancel_restore(&mut self) -> ActorResult<()> {
-        let Some(claim) = self.active_operation.claim() else {
-            return Produces::ok(());
-        };
-        let Some(run) = self.active_operation.restore(claim) else {
+        let Some(ActiveOperationRun::Restore(run)) = self.active_operation.0.as_ref() else {
             return Produces::ok(());
         };
 
@@ -1523,9 +1487,7 @@ pub(crate) mod test_support {
             let claim = self
                 .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore)
                 .expect("begin restore operation");
-            let cancellation = self
-                .restore_cancellation(claim)
-                .expect("restore claim must carry a cancellation state");
+            let cancellation = self.restore_cancellation(claim);
             let operation = RestoreOperation::new(claim, addr, cancellation);
             Produces::ok(operation)
         }

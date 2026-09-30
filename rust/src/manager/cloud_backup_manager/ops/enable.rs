@@ -3,15 +3,15 @@ mod types;
 
 use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::master_key_crypto;
-use cove_device::cloud_storage::CloudStorage;
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
-use std::time::Instant;
 use tracing::info;
 use zeroize::Zeroizing;
 
 use super::{BlockingCloudStep, RustCloudBackupManager, blocking_cloud_error};
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
+use crate::manager::cloud_backup_manager::timing::log_elapsed;
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
     PasskeyMaterialOutcome, PreparedWalletBackup, StagedPrfKey,
@@ -31,6 +31,22 @@ pub(crate) use types::{
     CloudBackupSavedPasskeyConfirmation, CloudBackupUploadedEnableBackup,
     EnablePasskeyRegistrationFlow,
 };
+
+/// Lists the cloud backup namespaces an enable must account for, timed under `log_label`
+async fn list_existing_namespaces(
+    cloud: &CloudStorageClient,
+    log_label: &str,
+) -> Result<Vec<String>, CloudBackupError> {
+    log_elapsed(log_label, cloud.list_namespaces()).await.map_err(|error| {
+        blocking_cloud_error(
+            BlockingCloudStep::Enable,
+            CloudBackupError::cloud_storage_context(
+                "could not check for existing cloud backups, please try again when cloud storage is available",
+                error,
+            ),
+        )
+    })
+}
 
 impl RustCloudBackupManager {
     fn pending_verification_uploads(
@@ -72,22 +88,8 @@ impl RustCloudBackupManager {
             return Ok(CloudBackupEnablePreparation::CreateNew { context });
         }
 
-        let started_at = Instant::now();
-        let namespaces_result = cloud.list_namespaces().await;
-        info!(
-            "Enable: cloud namespace listing elapsed_ms={} success={}",
-            started_at.elapsed().as_millis(),
-            namespaces_result.is_ok()
-        );
-        let mut namespaces = namespaces_result.map_err(|error| {
-            blocking_cloud_error(
-                BlockingCloudStep::Enable,
-                CloudBackupError::cloud_storage_context(
-                    "could not check for existing cloud backups, please try again when cloud storage is available",
-                    error,
-                ),
-            )
-        })?;
+        let mut namespaces =
+            list_existing_namespaces(&cloud, "Enable: cloud namespace listing").await?;
         namespaces.sort();
 
         if namespaces.is_empty() {
@@ -199,22 +201,8 @@ impl RustCloudBackupManager {
         let existing_namespaces = if has_local_master_key {
             Vec::new()
         } else {
-            let started_at = Instant::now();
-            let namespaces_result = cloud.list_namespaces().await;
-            info!(
-                "Enable (no discovery): cloud namespace listing elapsed_ms={} success={}",
-                started_at.elapsed().as_millis(),
-                namespaces_result.is_ok()
-            );
-            namespaces_result.map_err(|error| {
-                blocking_cloud_error(
-                    BlockingCloudStep::Enable,
-                    CloudBackupError::cloud_storage_context(
-                        "could not check for existing cloud backups, please try again when cloud storage is available",
-                        error,
-                    ),
-                )
-            })?
+            list_existing_namespaces(&cloud, "Enable (no discovery): cloud namespace listing")
+                .await?
         };
 
         if !existing_namespaces.is_empty() {

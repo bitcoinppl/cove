@@ -9,7 +9,7 @@ import SwiftUI
 
 extension WeakReconciler: PendingWalletManagerReconciler where Reconciler == PendingWalletManager {}
 
-@Observable final class PendingWalletManager: AnyReconciler, PendingWalletManagerReconciler {
+@Observable final class PendingWalletManager: ReconcilingManager, PendingWalletManagerReconciler {
     typealias Message = PendingWalletManagerReconcileMessage
 
     private let logger = Log(id: "PendingWalletManager")
@@ -27,21 +27,20 @@ extension WeakReconciler: PendingWalletManagerReconciler where Reconciler == Pen
         self.rust.listenForUpdates(reconciler: WeakReconciler(self))
     }
 
-    func reconcile(message: PendingWalletManagerReconcileMessage) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            logger.debug("Reconcile: \(message)")
-
-            switch message {
-            case let .words(numberOfBip39Words):
-                numberOfWords = numberOfBip39Words
-                bip39Words = rust.bip39Words()
-            }
+    func apply(_ message: Message) {
+        switch message {
+        case let .words(numberOfBip39Words):
+            numberOfWords = numberOfBip39Words
+            bip39Words = rust.bip39Words()
         }
     }
 
-    func reconcileMany(messages: [PendingWalletManagerReconcileMessage]) {
-        messages.forEach(reconcile)
+    func logReconcile(message: Message) {
+        logger.debug("Reconcile: \(message)")
+    }
+
+    func logReconcileMany(messages: [Message]) {
+        messages.forEach(logReconcile)
     }
 
     public func dispatch(action: PendingWalletManagerAction) {

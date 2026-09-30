@@ -224,13 +224,36 @@ impl GlobalConfigTable {
             GlobalConfigKey::MainSelectedWalletId,
             GlobalConfigKey::DecoySelectedWalletId,
         ];
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
-        for key in keys {
-            let stored = self.get(key)?;
-            if stored.as_deref() == Some(wallet_id.as_str()) {
-                self.delete(key)?;
+        let removed_any = {
+            let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
+            let mut removed_any = false;
+
+            for key in keys {
+                let key: &str = key.into();
+                let selects_wallet = table
+                    .get(key)
+                    .map_err_str(GlobalConfigTableError::Read)?
+                    .is_some_and(|value| value.value() == wallet_id.as_str());
+                if !selects_wallet {
+                    continue;
+                }
+
+                table.remove(key).map_err_str(GlobalConfigTableError::Save)?;
+                removed_any = true;
             }
+
+            removed_any
+        };
+
+        if !removed_any {
+            write_txn.abort().map_err_str(Error::DatabaseAccess)?;
+            return Ok(());
         }
+
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
+        Updater::send_update(Update::DatabaseUpdated);
 
         Ok(())
     }

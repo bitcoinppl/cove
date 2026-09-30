@@ -419,24 +419,21 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     private fun resetProjectionAfterWipe(): Boolean {
-        val resetResult =
+        val sessionReset =
             runCatching {
                 clearSessionForReset()
                 resetRustProjection()
-            }
+            }.onFailure { error ->
+                Log.e(tag, "failed to reset app session after wipe", error)
+            }.getOrDefault(false)
 
-        if (resetResult.getOrNull() == true) return true
+        if (sessionReset) return true
 
-        resetResult.exceptionOrNull()?.let { error ->
-            Log.e(tag, "failed to reset app session after wipe", error)
-        }
-
-        val projectionResult = runCatching { resetRustProjection() }
-        projectionResult.exceptionOrNull()?.let { error ->
-            Log.e(tag, "failed to reset app projection after wipe", error)
-        }
-
-        return projectionResult.getOrDefault(false)
+        // retry the projection alone when session cleanup threw or rust state was unavailable
+        return runCatching { resetRustProjection() }
+            .onFailure { error ->
+                Log.e(tag, "failed to reset app projection after wipe", error)
+            }.getOrDefault(false)
     }
 
     val currentRoute: Route

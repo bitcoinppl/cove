@@ -319,52 +319,37 @@ class AuthManager internal constructor(
             }
 
         val wipeError = result.exceptionOrNull()
-        wipeError?.let { error ->
-            val lifecycle = (error as? AppException.WalletLifecycle)?.v1
+        if (wipeError != null) {
+            val lifecycle = (wipeError as? AppException.WalletLifecycle)?.v1
             if (lifecycle is WalletLifecycleFailure.ShutdownBlocked) {
                 wipePresentationState = WipePresentationState.ShutdownBlocked(lifecycle.attemptId)
             } else {
-                android.util.Log.e(tag, "failed to wipe all data", error)
+                android.util.Log.e(tag, "failed to wipe all data", wipeError)
                 wipePresentationState = WipePresentationState.Failed
             }
+
+            return UnlockMode.LOCKED
         }
 
-        if (wipeError == null) {
-            runCatching { App.resetAfterWipe() }
-                .onFailure { error ->
-                    android.util.Log.e(tag, "failed to reset app projection after wipe", error)
-                }
+        runCatching { App.resetAfterWipe() }
+            .onFailure { error ->
+                android.util.Log.e(tag, "failed to reset app projection after wipe", error)
+            }
 
-            runCatching { refreshAuthStateAfterWipe() }
-                .onFailure { error ->
-                    android.util.Log.e(tag, "failed to refresh authentication after wipe", error)
-                }
+        runCatching { refreshAuthStateAfterWipe() }
+            .onFailure { error ->
+                android.util.Log.e(tag, "failed to refresh authentication after wipe", error)
+            }
 
-            unlock()
-            wipePresentationState = WipePresentationState.Idle
-        }
-
-        return if (wipeError == null) {
-            UnlockMode.WIPE
-        } else {
-            UnlockMode.LOCKED
-        }
+        unlock()
+        wipePresentationState = WipePresentationState.Idle
+        return UnlockMode.WIPE
     }
 
     private fun refreshAuthStateAfterWipe() {
-        val nextType = readAuthStateAfterWipe("auth type", AuthType.NONE) { authType() }
-        val nextWipeDataPinEnabled =
-            readAuthStateAfterWipe("wipe PIN state", false) {
-                isWipeDataPinEnabled()
-            }
-        val nextDecoyPinEnabled =
-            readAuthStateAfterWipe("decoy PIN state", false) {
-                isDecoyPinEnabled()
-            }
-
-        type = nextType
-        isWipeDataPinEnabled = nextWipeDataPinEnabled
-        isDecoyPinEnabled = nextDecoyPinEnabled
+        type = readAuthStateAfterWipe("auth type", AuthType.NONE) { authType() }
+        isWipeDataPinEnabled = readAuthStateAfterWipe("wipe PIN state", false) { isWipeDataPinEnabled() }
+        isDecoyPinEnabled = readAuthStateAfterWipe("decoy PIN state", false) { isDecoyPinEnabled() }
         isUsingBiometrics = false
     }
 

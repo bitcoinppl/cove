@@ -78,16 +78,11 @@ final class CloudBackupDetailPresenter {
             return
         }
 
-        _ = handoff.stage(action: action, presentation: presentation, transition: transition)
+        handoff.stage(action: action, presentation: presentation, transition: transition)
     }
 
     func presenterDidBecomeReady(_ requestID: UUID) {
-        guard handoff.pendingAction != nil else {
-            transitions.presenterDidBecomeReady(requestID)
-            return
-        }
-
-        _ = handoff.presenterDidBecomeReady(
+        handoff.presenterDidBecomeReady(
             requestID,
             currentPresentation: handoff.pendingPresentation,
             isHostAvailable: true,
@@ -97,8 +92,7 @@ final class CloudBackupDetailPresenter {
     }
 
     func hostDidDisappear() {
-        handoff.cancel()
-        transitions.hostDidDisappear()
+        handoff.hostDidDisappear(using: transitions)
     }
 }
 

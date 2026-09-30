@@ -34,6 +34,7 @@ use crate::manager::cloud_backup_manager::keychain::{
     CloudBackupKeychain, RestoreActivationKeychainSnapshot,
 };
 use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
+use crate::manager::cloud_backup_manager::timing::log_elapsed;
 
 use super::CloudBackupSupervisor;
 
@@ -124,13 +125,6 @@ enum RestoreResolution {
     Nothing,
 }
 
-/// Result of namespace matching, including the terminal native stops that keep earlier matches
-enum RestorePasskeyMatchOutcome {
-    Matched(Vec<NamespaceMatch>),
-    Cancelled(Vec<NamespaceMatch>),
-    AuthenticationFailed(Vec<NamespaceMatch>),
-}
-
 /// What applying the downloaded wallets produced locally
 struct RestoreApplication {
     resolution: RestoreResolution,
@@ -150,9 +144,8 @@ enum RestoreFailureCategory {
 
 impl RestoreFailureCategory {
     fn record(self, error: &CloudBackupError) -> Self {
-        let conflict = match error {
-            CloudBackupError::LocalWalletConflict(conflict) => *conflict,
-            _ => return Self::Mixed,
+        let CloudBackupError::LocalWalletConflict(conflict) = *error else {
+            return Self::Mixed;
         };
 
         match self {
@@ -385,13 +378,11 @@ impl RestoreOperation {
 
         for namespace in namespaces {
             self.ensure_current().await?;
-            let started_at = Instant::now();
-            let result = cloud.list_wallet_backups(namespace.namespace_id.clone()).await;
-            info!(
-                "Restore: cloud wallet listing elapsed_ms={} success={}",
-                started_at.elapsed().as_millis(),
-                result.is_ok()
-            );
+            let result = log_elapsed(
+                "Restore: cloud wallet listing",
+                cloud.list_wallet_backups(namespace.namespace_id.clone()),
+            )
+            .await;
             self.ensure_current().await?;
             let wallet_record_ids = result.map_err(|error| {
                 blocking_cloud_error(
@@ -413,9 +404,7 @@ impl RestoreOperation {
     ) -> Result<Vec<RestorableNamespace>, CloudBackupError> {
         let passkey = PasskeyAccess::global();
         match self.restore_via_passkey_matching(cloud, passkey).await {
-            Ok(RestorePasskeyMatchOutcome::Matched(matches))
-            | Ok(RestorePasskeyMatchOutcome::Cancelled(matches))
-            | Ok(RestorePasskeyMatchOutcome::AuthenticationFailed(matches)) => Ok(matches
+            Ok(matches) => Ok(matches
                 .into_iter()
                 .map(|matched| RestorableNamespace {
                     namespace_id: matched.namespace_id,
@@ -627,9 +616,7 @@ impl RestoreOperation {
             enabled_state,
             wallets.into_iter().map(|wallet| wallet.id).collect(),
         )
-        .await?;
-
-        Ok(())
+        .await
     }
 
     async fn download_wallets_for_restore(
@@ -710,12 +697,13 @@ impl RestoreOperation {
     /// Tries the selected passkey across all downloaded namespaces. If it
     /// doesn't match any of them, returns `PasskeyMismatch` so the caller can
     /// try local master key fallback or prompt the user to try a different
-    /// passkey. Successful matches are non-empty
+    /// passkey. Successful matches are non-empty, including the ones kept when the
+    /// user cancels or authentication fails after an earlier match
     async fn restore_via_passkey_matching(
         &self,
         cloud: &CloudStorageClient,
         passkey: &PasskeyAccess,
-    ) -> Result<RestorePasskeyMatchOutcome, CloudBackupError> {
+    ) -> Result<Vec<NamespaceMatch>, CloudBackupError> {
         let matcher = NamespacePasskeyMatcher::new(cloud, passkey);
         let mut session = matcher.start_session_with_cancellation(self.cancellation.clone());
         let started_at = Instant::now();
@@ -728,13 +716,8 @@ impl RestoreOperation {
         loop {
             self.ensure_current().await?;
 
-            let namespace_started_at = Instant::now();
-            let namespace_result = cloud.list_namespaces().await;
-            info!(
-                "Restore: cloud namespace listing elapsed_ms={} success={}",
-                namespace_started_at.elapsed().as_millis(),
-                namespace_result.is_ok()
-            );
+            let namespace_result =
+                log_elapsed("Restore: cloud namespace listing", cloud.list_namespaces()).await;
             self.ensure_current().await?;
 
             let mut namespaces = match namespace_result {
@@ -778,23 +761,21 @@ impl RestoreOperation {
                         return Err(CloudBackupError::PasskeyDiscoveryCancelled);
                     }
 
-                    return Ok(RestorePasskeyMatchOutcome::Cancelled(accumulated_matches));
+                    return Ok(accumulated_matches);
                 }
                 NamespaceMatchSnapshotOutcome::Cancelled(matches) => {
                     merge_namespace_matches(&mut accumulated_matches, matches);
-                    return Ok(RestorePasskeyMatchOutcome::Cancelled(accumulated_matches));
+                    return Ok(accumulated_matches);
                 }
                 NamespaceMatchSnapshotOutcome::OperationCancelled => {
                     return Err(CloudBackupError::Cancelled);
                 }
                 NamespaceMatchSnapshotOutcome::AuthenticationFailed { matches, error } => {
                     merge_namespace_matches(&mut accumulated_matches, matches);
-                    let matches = NamespaceMatchSnapshotOutcome::authentication_failure_result(
+                    return NamespaceMatchSnapshotOutcome::authentication_failure_result(
                         accumulated_matches,
                         error,
-                    )?;
-
-                    return Ok(RestorePasskeyMatchOutcome::AuthenticationFailed(matches));
+                    );
                 }
                 NamespaceMatchSnapshotOutcome::Continue => {}
             }
@@ -803,7 +784,7 @@ impl RestoreOperation {
                 let Some(refresh_offset) =
                     PASSKEY_NAMESPACE_MATCH_GRACE_OFFSETS.get(grace_refresh_index)
                 else {
-                    return Ok(RestorePasskeyMatchOutcome::Matched(accumulated_matches));
+                    return Ok(accumulated_matches);
                 };
                 grace_refresh_index += 1;
 
@@ -830,9 +811,7 @@ impl RestoreOperation {
         let match_outcome = session.finish();
 
         match match_outcome {
-            NamespaceMatchOutcome::Matched(matches) => {
-                Ok(RestorePasskeyMatchOutcome::Matched(matches))
-            }
+            NamespaceMatchOutcome::Matched(matches) => Ok(matches),
             NamespaceMatchOutcome::UserDeclined => Err(CloudBackupError::PasskeyDiscoveryCancelled),
             NamespaceMatchOutcome::NoMatch if saw_supported_candidate => {
                 Err(CloudBackupError::PasskeyMismatch)
@@ -876,14 +855,18 @@ impl std::fmt::Debug for RestoredPasskeyMaterial {
     }
 }
 
+/// Saves restored keychain entries, rolling back to `snapshot` if any save fails
+///
+/// The caller captures `snapshot` before this call so it can also roll back
+/// later steps of the same restore commit
 pub(crate) fn save_restore_keychain_entries(
+    snapshot: &RestoreActivationKeychainSnapshot,
     master_key: MasterKey,
     passkey: Option<RestoredPasskeyMaterial>,
     namespace_id: String,
 ) -> Result<(), CloudBackupError> {
     let keychain = Keychain::global();
     let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
-    let snapshot = cloud_keychain.capture_restore_activation_snapshot();
     let cspp = cove_cspp::Cspp::new(keychain.clone());
 
     let metadata_save_result = match passkey {
@@ -897,15 +880,15 @@ pub(crate) fn save_restore_keychain_entries(
 
     if let Err((context, error)) = metadata_save_result {
         return Err(rollback_restore_activation_keychain(
-            &snapshot,
-            CloudBackupError::Internal(format!("{context}: {error}").into()),
+            snapshot,
+            CloudBackupError::internal_context(context, error),
         ));
     }
 
     if let Err(error) = cspp.save_master_key(&master_key) {
         return Err(rollback_restore_activation_keychain(
-            &snapshot,
-            CloudBackupError::Internal(format!("save master key: {error}").into()),
+            snapshot,
+            CloudBackupError::internal_context("save master key", error),
         ));
     }
 
@@ -1048,6 +1031,7 @@ mod tests {
         globals.keychain.fail_save_at(4);
 
         let result = save_restore_keychain_entries(
+            &CloudBackupKeychain::global().capture_restore_activation_snapshot(),
             cove_cspp::master_key::MasterKey::generate(),
             Some(RestoredPasskeyMaterial { credential_id: vec![1, 2, 3], prf_salt: [4; 32] }),
             "namespace-id".into(),
@@ -1073,6 +1057,7 @@ mod tests {
         globals.keychain.fail_save_at(1);
 
         let result = save_restore_keychain_entries(
+            &CloudBackupKeychain::global().capture_restore_activation_snapshot(),
             cove_cspp::master_key::MasterKey::generate(),
             Some(RestoredPasskeyMaterial { credential_id: vec![1, 2, 3], prf_salt: [4; 32] }),
             "namespace-id".into(),
@@ -1105,6 +1090,7 @@ mod tests {
         globals.keychain.fail_save_at(1);
 
         let result = save_restore_keychain_entries(
+            &CloudBackupKeychain::global().capture_restore_activation_snapshot(),
             cove_cspp::master_key::MasterKey::generate(),
             None,
             "namespace-id".into(),

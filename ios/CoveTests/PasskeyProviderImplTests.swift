@@ -9,20 +9,12 @@ final class PasskeyProviderImplTests: XCTestCase {
         XCTAssertEqual(PasskeyOperationContext.discoverAssertion.requestMode, .discovery)
         XCTAssertEqual(PasskeyOperationContext.authenticateAssertion.requestMode, .targeted)
 
-        let presence = PasskeyRequestDiagnostics(
-            rpId: "example.com",
-            operation: PasskeyRequestMode.presence.rawValue,
-            requestMode: .presence
-        )
+        let presence = PasskeyRequestDiagnostics(rpId: "example.com", requestMode: .presence)
         XCTAssertEqual(presence.requestMode, .presence)
     }
 
     func testDiagnosticsMeasureMonotonicRequestDurationsAndAnchorState() {
-        let diagnostics = PasskeyRequestDiagnostics(
-            rpId: "example.com",
-            operation: "targeted",
-            requestMode: .targeted
-        )
+        let diagnostics = PasskeyRequestDiagnostics(rpId: "example.com", requestMode: .targeted)
         let submission = ContinuousClock.Instant.now
         let anchor = submission.advanced(by: .milliseconds(12))
         let completion = submission.advanced(by: .milliseconds(34))

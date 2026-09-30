@@ -1596,3 +1596,31 @@ pub(crate) async fn new_restore_operation_for_test(
 ) -> RestoreOperation {
     call!(manager.supervisor.new_restore_operation()).await.expect("create restore operation")
 }
+
+/// A master key wrapper whose passkey hint and metadata are stamped with `registered_at`
+pub(crate) fn master_wrapper_for_test(
+    master_key: &cove_cspp::master_key::MasterKey,
+    prf_key: &[u8; 32],
+    prf_salt: &[u8; 32],
+    registered_at: u64,
+) -> Vec<u8> {
+    let namespace = master_key.namespace_id();
+    let encrypted = cove_cspp::master_key_crypto::encrypt_master_key_with_remote_metadata(
+        master_key,
+        prf_key,
+        prf_salt,
+        Some(cove_cspp::backup_data::PasskeyProviderHint {
+            aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+            registered_platform: cove_cspp::backup_data::PasskeyRegistrationPlatform::Android,
+            registered_at,
+            name_suffix: format!("{registered_at}"),
+        }),
+        cove_cspp::backup_data::remote_payload::RemotePayloadMetadata::master_key(
+            &namespace,
+            registered_at,
+        ),
+    )
+    .unwrap();
+
+    serde_json::to_vec(&encrypted).unwrap()
+}

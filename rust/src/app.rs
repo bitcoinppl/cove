@@ -328,21 +328,7 @@ impl App {
                 Updater::send_update(AppMessage::DatabaseUpdated);
 
                 // reconcile restored settings so frontends update without restart
-                let config = &Database::global().global_config;
-
-                Updater::send_update(AppMessage::SelectedNetworkChanged(config.selected_network()));
-
-                match config.color_scheme() {
-                    Ok(scheme) => Updater::send_update(AppMessage::ColorSchemeChanged(scheme)),
-                    Err(e) => warn!("failed to read color scheme after import: {e}"),
-                }
-
-                match config.fiat_currency() {
-                    Ok(fiat) => Updater::send_update(AppMessage::FiatCurrencyChanged(fiat)),
-                    Err(e) => warn!("failed to read fiat currency after import: {e}"),
-                }
-
-                Updater::send_update(AppMessage::SelectedNodeChanged(config.selected_node()));
+                send_global_settings_updates("import");
             }
         }
 
@@ -771,22 +757,33 @@ async fn wipe_all_data_with_tier(
 }
 
 fn reconcile_after_full_wipe() {
-    let database = Database::global();
-
     Updater::send_update(AppMessage::DatabaseUpdated);
-
-    let selected_network = database.global_config.selected_network();
-    let color_scheme = database.global_config._color_scheme();
-    let fiat_currency = database.global_config.selected_fiat_currency();
-    let selected_node = database.global_config.selected_node();
-
-    Updater::send_update(AppMessage::SelectedNetworkChanged(selected_network));
-    Updater::send_update(AppMessage::ColorSchemeChanged(color_scheme));
-    Updater::send_update(AppMessage::FiatCurrencyChanged(fiat_currency));
-    Updater::send_update(AppMessage::SelectedNodeChanged(selected_node));
+    send_global_settings_updates("wipe");
     Updater::send_update(AppMessage::WalletsChanged);
 
     FfiApp::global().reset_default_route_to(Route::NewWallet(NewWalletRoute::Select));
+}
+
+/// Pushes the stored global settings to frontends after `event` replaced the database
+///
+/// A setting that cannot be read is logged and skipped, so a read failure never
+/// overwrites the frontend's value with a guessed default
+fn send_global_settings_updates(event: &str) {
+    let config = &Database::global().global_config;
+
+    Updater::send_update(AppMessage::SelectedNetworkChanged(config.selected_network()));
+
+    match config.color_scheme() {
+        Ok(scheme) => Updater::send_update(AppMessage::ColorSchemeChanged(scheme)),
+        Err(e) => warn!("failed to read color scheme after {event}: {e}"),
+    }
+
+    match config.fiat_currency() {
+        Ok(fiat) => Updater::send_update(AppMessage::FiatCurrencyChanged(fiat)),
+        Err(e) => warn!("failed to read fiat currency after {event}: {e}"),
+    }
+
+    Updater::send_update(AppMessage::SelectedNodeChanged(config.selected_node()));
 }
 
 fn failed_wipe_result(

@@ -2865,7 +2865,7 @@ async fn overlapping_cloud_only_refetch_preserves_active_restore_all_marker_and_
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreAllRun {
+    supervisor.active_operation.start_restore_all(RestoreRun {
         claim,
         cancellation: Arc::new(AtomicBool::new(false)),
     });
@@ -2938,7 +2938,7 @@ async fn restore_all_queue_completion_without_remaining_wallets_clears_marker_an
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreAllRun {
+    supervisor.active_operation.start_restore_all(RestoreRun {
         claim,
         cancellation: Arc::new(AtomicBool::new(false)),
     });
@@ -2964,7 +2964,7 @@ async fn restore_all_cancellation_keeps_claim_until_record_boundary() {
         )
         .unwrap();
     let cancellation = Arc::new(AtomicBool::new(false));
-    supervisor.active_operation.start_restore_all(RestoreAllRun {
+    supervisor.active_operation.start_restore_all(RestoreRun {
         claim,
         cancellation: cancellation.clone(),
     });
@@ -2991,7 +2991,7 @@ async fn supplemental_inventory_does_not_cancel_restore_all() {
         )
         .unwrap();
     let cancellation = Arc::new(AtomicBool::new(false));
-    supervisor.active_operation.start_restore_all(RestoreAllRun {
+    supervisor.active_operation.start_restore_all(RestoreRun {
         claim,
         cancellation: cancellation.clone(),
     });
@@ -3221,7 +3221,7 @@ async fn restore_all_cancellation_during_preparation_clears_marker_after_complet
         )
         .unwrap();
     let cancellation = Arc::new(AtomicBool::new(true));
-    supervisor.active_operation.start_restore_all(RestoreAllRun {
+    supervisor.active_operation.start_restore_all(RestoreRun {
         claim,
         cancellation: cancellation.clone(),
     });
@@ -3284,7 +3284,7 @@ async fn restore_all_provider_failure_during_success_refresh_stops_with_marker_r
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreAllRun {
+    supervisor.active_operation.start_restore_all(RestoreRun {
         claim,
         cancellation: Arc::new(AtomicBool::new(false)),
     });
@@ -3331,7 +3331,7 @@ async fn ordinary_restore_all_record_failure_keeps_batch_claim_for_next_record()
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreAllRun {
+    supervisor.active_operation.start_restore_all(RestoreRun {
         claim,
         cancellation: Arc::new(AtomicBool::new(false)),
     });
