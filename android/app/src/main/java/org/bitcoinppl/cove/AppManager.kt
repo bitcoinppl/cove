@@ -401,13 +401,11 @@ class AppManager private constructor() : FfiReconcile {
      * Rust decides what a wiped app looks like; this only clears Android-owned presentation state
      */
     internal fun applyWipeCompletion(completion: FullWipeCompletion) {
+        // replace everything visible first so a cleanup failure below cannot leave pre-wipe state on screen
         router.isSidebarVisible = false
         isLoading = false
         alertState = null
         sheetState = null
-        clearSessionForReset()
-
-        database = Database()
         needsOnboarding = completion.needsOnboarding
         selectedNetwork = completion.selectedNetwork
         colorSchemeSelection = completion.colorScheme
@@ -415,6 +413,14 @@ class AppManager private constructor() : FfiReconcile {
         selectedFiatCurrency = completion.fiatCurrency
         wallets = completion.wallets
         router.reset(completion.router)
+
+        // the data is already gone, so a manager cleanup failure must not keep the app locked
+        runCatching {
+            clearSessionForReset()
+            database = Database()
+        }.onFailure { error ->
+            Log.e(tag, "failed to clear the app session after wipe", error)
+        }
     }
 
     val currentRoute: Route
