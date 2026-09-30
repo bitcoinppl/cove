@@ -1,4 +1,3 @@
-use ::redb::Database as RedbDatabase;
 use cove_util::result_ext::ResultExt as _;
 
 use super::{
@@ -14,44 +13,35 @@ impl CloudBackupStateTable {
         configured: &PersistedCloudBackupState,
         dirty_states: &[PersistedCloudBlobSyncState],
     ) -> Result<(), Error> {
-        persist_restored_namespace_activation(&self.db, configured, dirty_states)
-    }
-}
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
-fn persist_restored_namespace_activation(
-    db: &RedbDatabase,
-    configured: &PersistedCloudBackupState,
-    dirty_states: &[PersistedCloudBlobSyncState],
-) -> Result<(), Error> {
-    let write_txn = db.begin_write().map_err_str(Error::DatabaseAccess)?;
+        {
+            let mut table =
+                write_txn.open_table(CLOUD_BACKUP_STATE_TABLE).map_err_str(Error::TableAccess)?;
 
-    {
-        let mut table =
-            write_txn.open_table(CLOUD_BACKUP_STATE_TABLE).map_err_str(Error::TableAccess)?;
-
-        #[cfg(test)]
-        test_support::fail_configured_state_write()?;
-
-        table.insert(CURRENT_KEY, configured).map_err_str(Error::TableAccess)?;
-    }
-
-    {
-        let mut table =
-            write_txn.open_table(CLOUD_BLOB_SYNC_STATE_TABLE).map_err_str(Error::TableAccess)?;
-
-        for (index, state) in dirty_states.iter().enumerate() {
             #[cfg(test)]
-            test_support::fail_dirty_wallet_write(index)?;
-            #[cfg(not(test))]
-            let _ = index;
+            test_support::fail_configured_state_write()?;
 
-            table.insert(state.record_id(), state).map_err_str(Error::TableAccess)?;
+            table.insert(CURRENT_KEY, configured).map_err_str(Error::TableAccess)?;
         }
+
+        {
+            let mut table = write_txn
+                .open_table(CLOUD_BLOB_SYNC_STATE_TABLE)
+                .map_err_str(Error::TableAccess)?;
+
+            for state in dirty_states {
+                #[cfg(test)]
+                test_support::fail_dirty_wallet_write()?;
+
+                table.insert(state.record_id(), state).map_err_str(Error::TableAccess)?;
+            }
+        }
+
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
+
+        Ok(())
     }
-
-    write_txn.commit().map_err_str(Error::DatabaseAccess)?;
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -61,19 +51,21 @@ pub(crate) mod test_support {
     use super::*;
 
     static FAIL_CONFIGURED_STATE_WRITE: AtomicBool = AtomicBool::new(false);
-    static FAIL_DIRTY_WALLET_WRITE_AT: AtomicUsize = AtomicUsize::new(usize::MAX);
+    /// Dirty-wallet writes left to succeed before the injected failure, `usize::MAX` when disarmed
+    static DIRTY_WALLET_WRITES_BEFORE_FAILURE: AtomicUsize = AtomicUsize::new(usize::MAX);
 
     pub(crate) fn fail_next_configured_state_write() {
         FAIL_CONFIGURED_STATE_WRITE.store(true, Ordering::SeqCst);
     }
 
+    /// Fails the dirty-wallet write at `index` of the next restored namespace activation
     pub(crate) fn fail_dirty_wallet_write_at(index: usize) {
-        FAIL_DIRTY_WALLET_WRITE_AT.store(index, Ordering::SeqCst);
+        DIRTY_WALLET_WRITES_BEFORE_FAILURE.store(index, Ordering::SeqCst);
     }
 
     pub(crate) fn reset() {
         FAIL_CONFIGURED_STATE_WRITE.store(false, Ordering::SeqCst);
-        FAIL_DIRTY_WALLET_WRITE_AT.store(usize::MAX, Ordering::SeqCst);
+        DIRTY_WALLET_WRITES_BEFORE_FAILURE.store(usize::MAX, Ordering::SeqCst);
     }
 
     pub(crate) fn fail_configured_state_write() -> Result<(), Error> {
@@ -86,14 +78,18 @@ pub(crate) mod test_support {
         Ok(())
     }
 
-    pub(crate) fn fail_dirty_wallet_write(index: usize) -> Result<(), Error> {
-        if FAIL_DIRTY_WALLET_WRITE_AT.load(Ordering::SeqCst) == index {
-            FAIL_DIRTY_WALLET_WRITE_AT.store(usize::MAX, Ordering::SeqCst);
-            return Err(Error::TableAccess(
-                "injected restored namespace dirty-wallet failure".into(),
-            ));
+    pub(crate) fn fail_dirty_wallet_write() -> Result<(), Error> {
+        let remaining = DIRTY_WALLET_WRITES_BEFORE_FAILURE.load(Ordering::SeqCst);
+        if remaining == usize::MAX {
+            return Ok(());
         }
 
-        Ok(())
+        if remaining > 0 {
+            DIRTY_WALLET_WRITES_BEFORE_FAILURE.store(remaining - 1, Ordering::SeqCst);
+            return Ok(());
+        }
+
+        DIRTY_WALLET_WRITES_BEFORE_FAILURE.store(usize::MAX, Ordering::SeqCst);
+        Err(Error::TableAccess("injected restored namespace dirty-wallet failure".into()))
     }
 }

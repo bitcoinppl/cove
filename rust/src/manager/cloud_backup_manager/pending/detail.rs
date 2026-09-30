@@ -132,10 +132,8 @@ impl RustCloudBackupManager {
                             },
                         }
                     }
-                    CloudBackupDetailResult::AccessError(error) => {
-                        CloudBackupDetailSnapshotCompletion::Final(
-                            CloudBackupDetailResult::AccessError(error),
-                        )
+                    result @ CloudBackupDetailResult::AccessError(_) => {
+                        CloudBackupDetailSnapshotCompletion::Final(result)
                     }
                 })
             }

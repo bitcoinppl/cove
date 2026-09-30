@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -76,19 +77,31 @@ pub(crate) fn is_pre_presentation_platform_authorization_failure(error: &Passkey
 pub(crate) struct PlatformAuthorizationRetrier {
     policy: PlatformAuthorizationRetryPolicy,
     deadline: Instant,
+    /// Set by the owning operation to stop retries and report the user cancelled
+    cancellation: Arc<AtomicBool>,
     #[cfg(test)]
     jitter_seed: Option<u64>,
 }
 
 impl PlatformAuthorizationRetrier {
+    /// A retrier nothing can cancel
     pub(crate) fn new() -> Self {
-        Self::from_policy(PlatformAuthorizationRetryPolicy::for_current_platform())
+        Self::with_cancellation(Arc::default())
     }
 
-    fn from_policy(policy: PlatformAuthorizationRetryPolicy) -> Self {
+    /// A retrier that stops with `UserCancelled` once `cancellation` is set
+    pub(crate) fn with_cancellation(cancellation: Arc<AtomicBool>) -> Self {
+        Self::from_policy(PlatformAuthorizationRetryPolicy::for_current_platform(), cancellation)
+    }
+
+    fn from_policy(
+        policy: PlatformAuthorizationRetryPolicy,
+        cancellation: Arc<AtomicBool>,
+    ) -> Self {
         Self {
             policy,
             deadline: Instant::now() + policy.config().total_delay,
+            cancellation,
             #[cfg(test)]
             jitter_seed: None,
         }
@@ -96,9 +109,13 @@ impl PlatformAuthorizationRetrier {
 
     #[cfg(test)]
     fn for_test(policy: PlatformAuthorizationRetryPolicy, jitter_seed: u64) -> Self {
-        let mut retrier = Self::from_policy(policy);
+        let mut retrier = Self::from_policy(policy, Arc::default());
         retrier.jitter_seed = Some(jitter_seed);
         retrier
+    }
+
+    fn cancelled(&self) -> bool {
+        self.cancellation.load(Ordering::Acquire)
     }
 
     fn retry_backoff(&self, total_delay: Duration) -> impl backon::Backoff {
@@ -122,17 +139,34 @@ impl PlatformAuthorizationRetrier {
 
     async fn retry<T, Operation, OperationFuture>(
         &self,
-        operation: Operation,
+        mut operation: Operation,
     ) -> Result<T, PasskeyError>
     where
         Operation: FnMut() -> OperationFuture,
         OperationFuture: Future<Output = Result<T, PasskeyError>>,
     {
+        if self.cancelled() {
+            return Err(PasskeyError::UserCancelled);
+        }
+
         let available_delay = self.deadline.saturating_duration_since(Instant::now());
         let deadline = self.deadline;
         let policy = self.policy;
 
-        operation
+        // each attempt rechecks cancellation so a retry never presents a new prompt after cancel
+        let attempt = || {
+            let attempt = operation();
+
+            async move {
+                if self.cancelled() {
+                    return Err(PasskeyError::UserCancelled);
+                }
+
+                attempt.await
+            }
+        };
+
+        attempt
             .retry(self.retry_backoff(available_delay))
             .when(move |error| policy.retries(error))
             .adjust(move |_error, delay| {
@@ -145,29 +179,7 @@ impl PlatformAuthorizationRetrier {
                 );
             })
             .await
-    }
-
-    async fn retry_with_cancellation<T, Operation, OperationFuture>(
-        &self,
-        operation: Operation,
-        cancellation: &AtomicBool,
-    ) -> Result<T, PasskeyError>
-    where
-        Operation: FnMut() -> OperationFuture,
-        OperationFuture: Future<Output = Result<T, PasskeyError>>,
-    {
-        if cancellation.load(Ordering::Acquire) {
-            return Err(PasskeyError::UserCancelled);
-        }
-
-        let cancellation_for_retry = cancellation;
-        self.retry(operation).await.map_err(|error| {
-            if cancellation_for_retry.load(Ordering::Acquire) {
-                PasskeyError::UserCancelled
-            } else {
-                error
-            }
-        })
+            .map_err(|error| if self.cancelled() { PasskeyError::UserCancelled } else { error })
     }
 
     pub(crate) async fn discover(
@@ -189,36 +201,6 @@ impl PlatformAuthorizationRetrier {
                 .await
             }
         })
-        .await
-    }
-
-    pub(crate) async fn discover_with_cancellation(
-        &self,
-        passkey: &PasskeyAccess,
-        prf_salt: [u8; 32],
-        cancellation: &AtomicBool,
-    ) -> Result<cove_device::passkey::DiscoveredPasskeyResult, PasskeyError> {
-        self.retry_with_cancellation(
-            || {
-                let passkey = passkey.clone();
-
-                async move {
-                    if cancellation.load(Ordering::Acquire) {
-                        return Err(PasskeyError::UserCancelled);
-                    }
-
-                    unblock::run_blocking(move || {
-                        passkey.discover_and_authenticate_with_prf(
-                            PASSKEY_RP_ID.to_string(),
-                            prf_salt.to_vec(),
-                            random_challenge(),
-                        )
-                    })
-                    .await
-                }
-            },
-            cancellation,
-        )
         .await
     }
 
@@ -265,39 +247,6 @@ impl PlatformAuthorizationRetrier {
         })
         .await
     }
-
-    pub(crate) async fn authenticate_with_cancellation(
-        &self,
-        passkey: &PasskeyAccess,
-        credential_id: &[u8],
-        prf_salt: [u8; 32],
-        cancellation: &AtomicBool,
-    ) -> Result<Vec<u8>, PasskeyError> {
-        self.retry_with_cancellation(
-            || {
-                let passkey = passkey.clone();
-                let credential_id = credential_id.to_vec();
-
-                async move {
-                    if cancellation.load(Ordering::Acquire) {
-                        return Err(PasskeyError::UserCancelled);
-                    }
-
-                    unblock::run_blocking(move || {
-                        passkey.authenticate_with_prf(
-                            PASSKEY_RP_ID.to_string(),
-                            credential_id,
-                            prf_salt.to_vec(),
-                            random_challenge(),
-                        )
-                    })
-                    .await
-                }
-            },
-            cancellation,
-        )
-        .await
-    }
 }
 
 fn random_challenge() -> Vec<u8> {
@@ -306,8 +255,7 @@ fn random_challenge() -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::AtomicUsize;
 
     use super::*;
 

@@ -262,23 +262,15 @@ struct CorruptedWalletDeletionRetry: Equatable {
 
     @MainActor
     func prepareForWipeCompletion() async {
-        navigationCoordinator.reset()
-        managerCache.clearWalletManager()
-        managerCache.clearCoinControlManager()
-        clearKeyTeleportManager()
-
-        tapSignerNfc?.cancel()
-        tapSignerNfc = nil
         isSidebarVisible = false
         isLoading = false
-        wallets = []
         alertState = nil
         sheetState = nil
-        corruptedWalletDeletionRetry = nil
         isPastHeader = false
         CloudBackupManager.shared.enableCompletion = nil
 
-        resetProjectionFromCommittedRustState()
+        // reset last so the committed Rust state projection wins over the cleared UI state
+        reset()
         await PopupStack.dismissAllPopups()
     }
 

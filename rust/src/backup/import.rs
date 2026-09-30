@@ -4,7 +4,8 @@ use std::{
     sync::Arc,
 };
 
-use bdk_wallet::{bitcoin::bip32::Xpub, descriptor::ExtendedDescriptor};
+use bdk_wallet::bitcoin::bip32::Xpub;
+use bdk_wallet::descriptor::{ExtendedDescriptor, IntoWalletDescriptor};
 use bip39::Mnemonic;
 use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret, WalletXprv};
 use cove_types::network::Network;
@@ -768,43 +769,24 @@ fn restore_descriptor_wallet_prepared_with_context(
 
 impl WalletWrites for HotWalletWrites {
     fn apply(self, metadata: &WalletMetadata) -> Result<(), BackupError> {
-        let keychain = Keychain::global();
-        let db = Database::global();
         let name = &metadata.name;
-        let network = metadata.network;
         let Self { bdk_descriptors, secret, xpub, descriptors } = self;
 
-        let mut store = crate::bdk_store::BdkStore::try_new(&metadata.id, network)
-            .map_err(|e| BackupError::Restore(format!("BDK store for {name}: {e}")))?;
-
         // create BDK wallet first — if this fails we haven't touched the keychain yet
-        bdk_wallet::Wallet::create(
+        create_bdk_wallet(
+            metadata,
             bdk_descriptors.external.into_tuple(),
             bdk_descriptors.internal.into_tuple(),
-        )
-        .network(network.into())
-        .create_wallet(&mut store.conn)
-        .map_err(|e| BackupError::Restore(format!("BDK wallet for {name}: {e}")))?;
+        )?;
 
         if let Some(secret) = secret {
-            keychain
+            Keychain::global()
                 .save_wallet_secret(&metadata.id, secret)
-                .map_err(|e| BackupError::Keychain(format!("private key for {name}: {e}")))?;
+                .map_err_prefix(&format!("private key for {name}"), BackupError::Keychain)?;
         }
 
-        if let Some(xpub) = xpub {
-            keychain
-                .save_wallet_xpub(&metadata.id, xpub)
-                .map_err(|e| BackupError::Keychain(format!("xpub for {name}: {e}")))?;
-        }
-
-        if let Some((external, internal)) = descriptors {
-            keychain
-                .save_public_descriptor(&metadata.id, external, internal)
-                .map_err(|e| BackupError::Keychain(format!("descriptors for {name}: {e}")))?;
-        }
-
-        RestoredWalletMetadataStore::new(&db).save(metadata, name)?;
+        save_public_keychain_items(metadata, xpub, descriptors)?;
+        RestoredWalletMetadataStore::new(&Database::global()).save(metadata, name)?;
 
         Ok(())
     }
@@ -812,45 +794,72 @@ impl WalletWrites for HotWalletWrites {
 
 impl WalletWrites for PublicWalletWrites {
     fn apply(self, metadata: &WalletMetadata) -> Result<(), BackupError> {
-        let keychain = Keychain::global();
-        let db = Database::global();
         let name = &metadata.name;
         let Self { bdk_descriptors, xpub, descriptors, tap_signer_backup } = self;
 
-        if let Some(xpub) = xpub {
-            keychain
-                .save_wallet_xpub(&metadata.id, xpub)
-                .map_err(|e| BackupError::Keychain(format!("xpub for {name}: {e}")))?;
-        }
-
-        if let Some((external, internal)) = descriptors {
-            keychain
-                .save_public_descriptor(&metadata.id, external, internal)
-                .map_err(|e| BackupError::Keychain(format!("descriptors for {name}: {e}")))?;
-        }
+        save_public_keychain_items(metadata, xpub, descriptors)?;
 
         // create the BDK wallet from the backup's descriptors, whether they were written or adopted
         if let Some((external, internal)) = bdk_descriptors {
-            let mut store = crate::bdk_store::BdkStore::try_new(&metadata.id, metadata.network)
-                .map_err(|e| BackupError::Restore(format!("BDK store for {name}: {e}")))?;
-
-            bdk_wallet::Wallet::create(external, internal)
-                .network(metadata.network.into())
-                .create_wallet(&mut store.conn)
-                .map_err(|e| BackupError::Restore(format!("BDK wallet for {name}: {e}")))?;
+            create_bdk_wallet(metadata, external, internal)?;
         }
 
         // save tap signer backup inside the cleanup wrapper so failure triggers full rollback
         if let Some(backup) = tap_signer_backup {
-            keychain
+            Keychain::global()
                 .save_tap_signer_backup(&metadata.id, &backup)
-                .map_err(|e| BackupError::Keychain(format!("tap signer backup for {name}: {e}")))?;
+                .map_err_prefix(&format!("tap signer backup for {name}"), BackupError::Keychain)?;
         }
 
-        RestoredWalletMetadataStore::new(&db).save(metadata, name)?;
+        RestoredWalletMetadataStore::new(&Database::global()).save(metadata, name)?;
 
         Ok(())
     }
+}
+
+/// Creates the BDK wallet store a restored wallet syncs into
+fn create_bdk_wallet<D>(
+    metadata: &WalletMetadata,
+    external: D,
+    internal: D,
+) -> Result<(), BackupError>
+where
+    D: IntoWalletDescriptor + Send + Clone + 'static,
+{
+    let name = &metadata.name;
+    let mut store = crate::bdk_store::BdkStore::try_new(&metadata.id, metadata.network)
+        .map_err_prefix(&format!("BDK store for {name}"), BackupError::Restore)?;
+
+    bdk_wallet::Wallet::create(external, internal)
+        .network(metadata.network.into())
+        .create_wallet(&mut store.conn)
+        .map_err_prefix(&format!("BDK wallet for {name}"), BackupError::Restore)?;
+
+    Ok(())
+}
+
+/// Saves the public keychain items a restore planned to write
+fn save_public_keychain_items(
+    metadata: &WalletMetadata,
+    xpub: Option<Xpub>,
+    descriptors: Option<(ExtendedDescriptor, ExtendedDescriptor)>,
+) -> Result<(), BackupError> {
+    let keychain = Keychain::global();
+    let name = &metadata.name;
+
+    if let Some(xpub) = xpub {
+        keychain
+            .save_wallet_xpub(&metadata.id, xpub)
+            .map_err_prefix(&format!("xpub for {name}"), BackupError::Keychain)?;
+    }
+
+    if let Some((external, internal)) = descriptors {
+        keychain
+            .save_public_descriptor(&metadata.id, external, internal)
+            .map_err_prefix(&format!("descriptors for {name}"), BackupError::Keychain)?;
+    }
+
+    Ok(())
 }
 
 fn import_labels(id: &WalletId, jsonl: &str) -> Result<(), BackupError> {

@@ -1,4 +1,4 @@
-use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
+use cove_cspp::backup_data::{MASTER_KEY_RECORD_ID, wallet_record_id};
 use serde::{Deserialize, Serialize};
 
 use crate::wallet::metadata::WalletId;
@@ -315,12 +315,9 @@ impl PersistedCloudBackupState {
     pub fn mark_verification_required(&mut self, requested_at: Option<u64>) {
         let Some(configured) = self.configured_mut() else { return };
 
-        configured.verification = PersistedBackupVerificationState::Required {
-            reason: PersistedVerificationRequirement::IntegrityIssue,
-            last_verified_at: configured.verification.last_verified_at(),
-            requested_at,
-            dismissed_at: configured.verification.dismissed_at(),
-        };
+        configured.verification = configured
+            .verification
+            .required(PersistedVerificationRequirement::IntegrityIssue, requested_at);
     }
 
     pub fn mark_verification_required_after_wallet_change(&mut self, requested_at: Option<u64>) {
@@ -344,14 +341,7 @@ impl PersistedCloudBackupState {
             }
         };
 
-        let last_verified_at = configured.verification.last_verified_at();
-        let dismissed_at = configured.verification.dismissed_at();
-        configured.verification = PersistedBackupVerificationState::Required {
-            reason,
-            last_verified_at,
-            requested_at,
-            dismissed_at,
-        };
+        configured.verification = configured.verification.required(reason, requested_at);
     }
 
     pub fn dismiss_verification_request(&mut self, dismissed_at: u64) -> bool {
@@ -661,6 +651,20 @@ pub enum PersistedBackupVerificationState {
 }
 
 impl PersistedBackupVerificationState {
+    /// Requires verification for `reason`, keeping when it last passed and was dismissed
+    fn required(
+        &self,
+        reason: PersistedVerificationRequirement,
+        requested_at: Option<u64>,
+    ) -> Self {
+        Self::Required {
+            reason,
+            last_verified_at: self.last_verified_at(),
+            requested_at,
+            dismissed_at: self.dismissed_at(),
+        }
+    }
+
     fn status(&self) -> PersistedCloudBackupStatus {
         match self {
             Self::NotVerified { .. } | Self::Verified { .. } | Self::NeedsAttention { .. } => {
@@ -803,6 +807,18 @@ impl PersistedCloudBlobSyncState {
         state: PersistedCloudBlobState,
     ) -> Self {
         Self { namespace_id, record_key: CloudBackupRecordKey::Wallet(wallet_id, record_id), state }
+    }
+
+    /// A wallet blob waiting to be uploaded after a change at `changed_at`
+    pub fn dirty_wallet(namespace_id: String, wallet_id: WalletId, changed_at: u64) -> Self {
+        let record_id = wallet_record_id(wallet_id.as_ref());
+
+        Self::wallet(
+            namespace_id,
+            wallet_id,
+            record_id,
+            PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
+        )
     }
 
     pub fn from_record_key(

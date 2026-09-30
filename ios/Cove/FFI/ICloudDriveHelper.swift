@@ -67,7 +67,7 @@ final class ICloudDriveHelper: @unchecked Sendable {
     private let namespacesSubdirectory = csppNamespacesSubdirectory()
     private let walletsSubdirectory = csppWalletsDirectory()
     private let containerURLProvider: @Sendable () -> URL?
-    private let coordinatedDeleteOverride: (@Sendable (URL, String) throws -> URL)?
+    private let coordinatedDeleter: @Sendable (URL, String) throws -> URL
     let metadataIndexProvider: @MainActor @Sendable () -> ICloudMetadataIndex
     let defaultTimeout: TimeInterval
     let metadataListingTimeout: TimeInterval
@@ -91,14 +91,16 @@ final class ICloudDriveHelper: @unchecked Sendable {
         metadataIndexProvider: @escaping @MainActor @Sendable () -> ICloudMetadataIndex = {
             ICloudMetadataIndex.shared
         },
-        coordinatedDeleteOverride: (@Sendable (URL, String) throws -> URL)? = nil,
+        coordinatedDeleter: @escaping @Sendable (URL, String) throws -> URL = { url, missingItemID in
+            try ICloudDriveHelper.coordinatedDelete(at: url, missingItemID: missingItemID)
+        },
         defaultTimeout: TimeInterval = 60,
         metadataListingTimeout: TimeInterval = 15,
         readAttemptTimeout: TimeInterval = 5
     ) {
         self.containerURLProvider = containerURLProvider
         self.metadataIndexProvider = metadataIndexProvider
-        self.coordinatedDeleteOverride = coordinatedDeleteOverride
+        self.coordinatedDeleter = coordinatedDeleter
         self.defaultTimeout = defaultTimeout
         self.metadataListingTimeout = metadataListingTimeout
         self.readAttemptTimeout = readAttemptTimeout
@@ -450,7 +452,7 @@ extension ICloudDriveHelper {
         Log.info("writeForUpload: validated local iCloud handoff for \(url.lastPathComponent)")
     }
 
-    func coordinatedDelete(at url: URL, missingItemID: String) throws -> URL {
+    static func coordinatedDelete(at url: URL, missingItemID: String) throws -> URL {
         var coordinatorError: NSError?
         var deleteError: Error?
         var deletedURL: URL?
@@ -482,11 +484,7 @@ extension ICloudDriveHelper {
     }
 
     private func performCoordinatedDelete(at url: URL, missingItemID: String) throws -> URL {
-        if let coordinatedDeleteOverride {
-            return try coordinatedDeleteOverride(url, missingItemID)
-        }
-
-        return try coordinatedDelete(at: url, missingItemID: missingItemID)
+        try coordinatedDeleter(url, missingItemID)
     }
 
     private static func coordinatedRead(

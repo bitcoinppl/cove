@@ -79,11 +79,10 @@ impl PasskeyAuthenticator {
         // try the known credential first so normal restores do not show an account picker
         let stored_outcome = self.authenticate_by_stored_credential(prf_salt, retrier).await?;
         match stored_outcome {
-            PasskeyAuthOutcome::Authenticated(authenticated) => {
-                Ok(PasskeyAuthOutcome::Authenticated(authenticated))
+            outcome
+            @ (PasskeyAuthOutcome::Authenticated(_) | PasskeyAuthOutcome::UserCancelled) => {
+                Ok(outcome)
             }
-
-            PasskeyAuthOutcome::UserCancelled => Ok(PasskeyAuthOutcome::UserCancelled),
 
             // stored-then-discover falls back when the stored credential is missing
             PasskeyAuthOutcome::NoCredentialFound => {

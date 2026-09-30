@@ -10,13 +10,8 @@ enum WipePresentationState: Equatable {
     case shutdownBlocked(ShutdownAttemptId)
     case failed
 
-    var failureTitle: String {
-        "Unable to Open Cove"
-    }
-
-    var failureMessage: String {
-        "Please try again."
-    }
+    static let failureTitle = "Unable to Open Cove"
+    static let failureMessage = "Please try again."
 }
 
 private enum WipeCallResult: Sendable {

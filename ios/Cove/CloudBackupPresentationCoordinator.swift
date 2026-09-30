@@ -228,22 +228,9 @@ final class CloudBackupPresentationCoordinator {
             return
         }
 
-        if currentPresentation == desiredPresentation {
-            presentationTransitions.discardQueued { _ in true }
-            return
+        presentationTransitions.reconcile(toward: desiredPresentation) {
+            ignoreNextDismissEvent = true
         }
-
-        if currentPresentation == nil {
-            if presentationTransitions.isAwaitingPresenterReadiness {
-                presentationTransitions.queue(desiredPresentation)
-            } else {
-                presentationTransitions.present(desiredPresentation)
-            }
-            return
-        }
-
-        ignoreNextDismissEvent = true
-        presentationTransitions.transition(to: desiredPresentation)
     }
 
     func presenterDidBecomeReady(_ requestID: UUID) {
@@ -452,7 +439,7 @@ struct CloudBackupPresentationHost<Content: View>: View {
         guard passkeyActionHandoff.pendingAction == nil else { return }
         guard let transition = coordinator.dismissCurrentPresentationForAction() else { return }
 
-        _ = passkeyActionHandoff.stage(
+        passkeyActionHandoff.stage(
             action: action,
             presentation: presentation,
             transition: transition
@@ -471,27 +458,20 @@ struct CloudBackupPresentationHost<Content: View>: View {
     }
 
     private func createNewBackup() {
-        guard
-            case let .existingBackupFound(context, passkeyHint) =
-            coordinator.currentPresentation
-        else { return }
-
-        beginPasskeyAction(
-            .acceptEnablePrompt(.createNew),
-            presentation: .existingBackupFound(context, passkeyHint)
-        )
+        acceptExistingBackupPrompt(.createNew)
     }
 
     private func useExistingBackup() {
+        acceptExistingBackupPrompt(.useExisting)
+    }
+
+    private func acceptExistingBackupPrompt(_ choice: CloudBackupEnablePromptChoice) {
         guard
-            case let .existingBackupFound(context, passkeyHint) =
-            coordinator.currentPresentation
+            let presentation = coordinator.currentPresentation,
+            case .existingBackupFound = presentation
         else { return }
 
-        beginPasskeyAction(
-            .acceptEnablePrompt(.useExisting),
-            presentation: .existingBackupFound(context, passkeyHint)
-        )
+        beginPasskeyAction(.acceptEnablePrompt(choice), presentation: presentation)
     }
 
     private func cancelExistingBackupPrompt() {
@@ -585,20 +565,15 @@ struct CloudBackupPresentationHost<Content: View>: View {
         let currentPresentation = CloudBackupRootPresentation(rootPrompt: manager.rootPrompt)
         let isHostAvailable = currentPresentation.map(coordinator.isPendingActionPresentable) == true
 
-        if passkeyActionHandoff.pendingAction != nil {
-            _ = passkeyActionHandoff.presenterDidBecomeReady(
-                requestID,
-                currentPresentation: currentPresentation,
-                isHostAvailable: isHostAvailable,
-                using: coordinator.presentationTransitions
-            ) { action in
-                manager.dispatch(action: action)
-            }
-
-            return
+        passkeyActionHandoff.presenterDidBecomeReady(
+            requestID,
+            currentPresentation: currentPresentation,
+            isHostAvailable: isHostAvailable,
+            using: coordinator.presentationTransitions,
+            withoutPendingAction: coordinator.presenterDidBecomeReady
+        ) { action in
+            manager.dispatch(action: action)
         }
-
-        coordinator.presenterDidBecomeReady(requestID)
     }
 
     private func handleRootPromptChange(_ rootPrompt: CloudBackupRootPrompt) {

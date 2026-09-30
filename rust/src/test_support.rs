@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -7,7 +7,7 @@ use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
 use parking_lot::Mutex;
 
 use crate::wallet::fingerprint::Fingerprint;
-use crate::wallet::metadata::{WalletMetadata, WalletType};
+use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
 
 static FAIL_KEYCHAIN_DELETES: AtomicBool = AtomicBool::new(false);
 type AfterSaveHook = Arc<dyn Fn(&str) + Send + Sync>;
@@ -25,6 +25,21 @@ pub(crate) const WALLET_KEYCHAIN_KEY_SUFFIXES: [&str; 6] = [
     "::tap_signer_backup",
     "::wallet_tap_signer_encryption_key_and_nonce_key_name",
 ];
+
+/// The raw stored wallet keychain values keyed by suffix
+///
+/// Comparing raw values makes a rewrite of an adopted item visible even when the
+/// decrypted value would still compare equal
+pub(crate) fn raw_wallet_keychain_entries(
+    wallet_id: &WalletId,
+) -> BTreeMap<&'static str, Option<String>> {
+    let keychain = shared_mock_keychain();
+
+    WALLET_KEYCHAIN_KEY_SUFFIXES
+        .iter()
+        .map(|suffix| (*suffix, keychain.get_entry(&format!("{wallet_id}{suffix}"))))
+        .collect()
+}
 
 /// In-memory keychain shared by every test module
 ///

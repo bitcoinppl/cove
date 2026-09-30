@@ -3,10 +3,13 @@ use std::collections::HashSet;
 use cove_cspp::backup_data::wallet_record_id;
 use cove_device::cloud_storage::CloudSyncHealth;
 
-use super::model::{CloudBackupDetailState, CloudBackupPasskeyState, CloudBackupVerificationState};
+use super::model::{
+    CloudBackupConfiguredState, CloudBackupDetailState, CloudBackupPasskeyState,
+    CloudBackupVerificationState,
+};
 use super::{
-    CloudBackupInventoryAuthority, CloudBackupKeychain, CloudBackupLifecycle, CloudBackupState,
-    CloudBackupStatus, CloudBackupWalletStatus, RustCloudBackupManager,
+    CloudBackupInventoryAuthority, CloudBackupKeychain, CloudBackupStatus, CloudBackupWalletStatus,
+    RustCloudBackupManager,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -22,35 +25,36 @@ pub(crate) struct CloudBackupRecoveryCoverage(HashSet<String>);
 impl CloudBackupRecoveryCoverage {
     /// Load recovery coverage only from the current authoritative cloud state
     pub(crate) fn load(manager: &RustCloudBackupManager) -> Self {
-        let Some(namespace) =
-            CloudBackupKeychain::global().namespace_id().filter(|namespace| !namespace.is_empty())
-        else {
-            return Self::default();
-        };
-
-        let persisted = match Database::global().cloud_backup_state.get() {
-            Ok(state) => state,
-            Err(_) => return Self::default(),
-        };
-        let sync_states = match Database::global().cloud_blob_sync_states.list() {
-            Ok(states) => states,
-            Err(_) => return Self::default(),
-        };
-
-        let cloud_state = {
+        // the live state gates everything else, so skip keychain and database reads when it cannot qualify
+        let live_configured = {
             let state = manager.state.read();
             if state.status() != CloudBackupStatus::Enabled || state.active_operation().is_some() {
                 return Self::default();
             }
 
-            state.public_state()
+            state.configured_state()
+        };
+        let Some(live_configured) = live_configured else {
+            return Self::default();
         };
 
-        Self::from_states(&cloud_state, &persisted, &namespace, &sync_states)
+        let Some(namespace) =
+            CloudBackupKeychain::global().namespace_id().filter(|namespace| !namespace.is_empty())
+        else {
+            return Self::default();
+        };
+        let Ok(persisted) = Database::global().cloud_backup_state.get() else {
+            return Self::default();
+        };
+        let Ok(sync_states) = Database::global().cloud_blob_sync_states.list() else {
+            return Self::default();
+        };
+
+        Self::from_states(&live_configured, &persisted, &namespace, &sync_states)
     }
 
     fn from_states(
-        state: &CloudBackupState,
+        live_configured: &CloudBackupConfiguredState,
         persisted: &PersistedCloudBackupState,
         namespace: &str,
         sync_states: &[PersistedCloudBlobSyncState],
@@ -65,10 +69,6 @@ impl CloudBackupRecoveryCoverage {
         {
             return Self::default();
         }
-
-        let CloudBackupLifecycle::Configured(live_configured) = &state.lifecycle else {
-            return Self::default();
-        };
 
         if !matches!(&live_configured.passkey, CloudBackupPasskeyState::Available)
             || live_configured.sync_health != CloudSyncHealth::AllUploaded
@@ -157,8 +157,7 @@ mod tests {
         PersistedBackupSyncState, PersistedConfiguredCloudBackup, PersistedRestoreAllMarker,
     };
     use crate::manager::cloud_backup_manager::model::{
-        CloudBackupConfiguredState, CloudBackupDestructiveOperationState,
-        CloudBackupRestoreAllState, CloudBackupSyncState,
+        CloudBackupDestructiveOperationState, CloudBackupRestoreAllState, CloudBackupSyncState,
         CloudBackupUndecryptableWalletDeletionState, LoadedCloudBackupDetail,
     };
     use crate::manager::cloud_backup_manager::verify::test_support::{
@@ -183,7 +182,7 @@ mod tests {
         })
     }
 
-    fn cloud_state(detail: CloudBackupDetailState) -> CloudBackupState {
+    fn cloud_state(detail: CloudBackupDetailState) -> CloudBackupConfiguredState {
         cloud_state_with_verification(
             detail,
             CloudBackupVerificationState::Verified { report: None, last_verified_at: Some(10) },
@@ -195,24 +194,19 @@ mod tests {
         detail: CloudBackupDetailState,
         verification: CloudBackupVerificationState,
         sync_health: CloudSyncHealth,
-    ) -> CloudBackupState {
-        CloudBackupState {
-            lifecycle: CloudBackupLifecycle::Configured(CloudBackupConfiguredState {
-                passkey: CloudBackupPasskeyState::Available,
-                verification,
-                sync: CloudBackupSyncState::Idle,
-                destructive_operation: CloudBackupDestructiveOperationState::Idle,
-                undecryptable_wallet_deletion: CloudBackupUndecryptableWalletDeletionState::Idle,
-                detail,
-                other_backups: CloudBackupOtherBackupsState::NotChecked,
-                restore_all: CloudBackupRestoreAllState::NotShown,
-                root_prompt: super::super::CloudBackupRootPrompt::None,
-                sync_health,
-                verification_presentation: CloudBackupVerificationPresentation::Hidden {
-                    source: None,
-                },
-            }),
-            settings_row_status: super::super::CloudBackupSettingsRowStatus::Active,
+    ) -> CloudBackupConfiguredState {
+        CloudBackupConfiguredState {
+            passkey: CloudBackupPasskeyState::Available,
+            verification,
+            sync: CloudBackupSyncState::Idle,
+            destructive_operation: CloudBackupDestructiveOperationState::Idle,
+            undecryptable_wallet_deletion: CloudBackupUndecryptableWalletDeletionState::Idle,
+            detail,
+            other_backups: CloudBackupOtherBackupsState::NotChecked,
+            restore_all: CloudBackupRestoreAllState::NotShown,
+            root_prompt: super::super::CloudBackupRootPrompt::None,
+            sync_health,
+            verification_presentation: CloudBackupVerificationPresentation::Hidden { source: None },
         }
     }
 

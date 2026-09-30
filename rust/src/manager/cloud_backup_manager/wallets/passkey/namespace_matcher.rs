@@ -15,6 +15,7 @@ use super::authorization_retry::{
     PlatformAuthorizationRetrier, is_pre_presentation_platform_authorization_failure,
 };
 use super::prf_output_to_key;
+use crate::manager::cloud_backup_manager::timing::log_elapsed;
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupPasskeyHint,
     master_key_wrapper_revision_hash,
@@ -100,8 +101,8 @@ struct LoadedNamespaceWrapper {
 enum NamespaceWrapperLoad {
     Loaded(Box<LoadedNamespaceWrapper>),
     Missing,
+    /// The wrapper could not be downloaded or decoded, already logged where it failed
     Failed,
-    Unreadable,
 }
 
 enum NamespaceCandidateLoad {
@@ -159,7 +160,8 @@ pub(crate) struct NamespacePasskeyMatchSession {
     attempted_candidates: HashSet<CandidateRevisionIdentity>,
     saw_supported_candidate: bool,
     candidate_outcomes: Vec<NamespaceCandidateOutcome>,
-    cancellation: Option<Arc<AtomicBool>>,
+    /// Never set for sessions that no restore operation can cancel
+    cancellation: Arc<AtomicBool>,
 }
 
 impl NamespacePasskeyMatcher {
@@ -169,25 +171,25 @@ impl NamespacePasskeyMatcher {
     }
 
     pub(crate) fn start_session(&self) -> NamespacePasskeyMatchSession {
-        NamespacePasskeyMatchSession {
-            cloud: self.cloud.clone(),
-            passkey: self.passkey.clone(),
-            authorization_retrier: PlatformAuthorizationRetrier::new(),
-            credential_selection: CredentialSelection::NotAttempted,
-            attempted_candidates: HashSet::new(),
-            saw_supported_candidate: false,
-            candidate_outcomes: Vec::new(),
-            cancellation: None,
-        }
+        self.start_session_with_cancellation(Arc::default())
     }
 
     pub(crate) fn start_session_with_cancellation(
         &self,
         cancellation: Arc<AtomicBool>,
     ) -> NamespacePasskeyMatchSession {
-        let mut session = self.start_session();
-        session.cancellation = Some(cancellation);
-        session
+        NamespacePasskeyMatchSession {
+            cloud: self.cloud.clone(),
+            passkey: self.passkey.clone(),
+            authorization_retrier: PlatformAuthorizationRetrier::with_cancellation(
+                cancellation.clone(),
+            ),
+            credential_selection: CredentialSelection::NotAttempted,
+            attempted_candidates: HashSet::new(),
+            saw_supported_candidate: false,
+            candidate_outcomes: Vec::new(),
+            cancellation,
+        }
     }
 
     /// Loads cloud wrappers once and derives both display hints and candidates
@@ -195,7 +197,8 @@ impl NamespacePasskeyMatcher {
         &self,
         namespaces: &[String],
     ) -> Result<NamespacePasskeyCandidateSnapshot, CloudBackupError> {
-        load_candidate_snapshot(&self.cloud, namespaces, None).await
+        let never_cancelled = AtomicBool::new(false);
+        load_candidate_snapshot(&self.cloud, namespaces, &never_cancelled).await
     }
 
     /// Downloads candidate wrappers and tries the selected passkey against each PRF salt
@@ -256,13 +259,13 @@ impl NamespacePasskeyMatchSession {
         &mut self,
         namespaces: &[String],
     ) -> Result<NamespaceMatchSnapshotOutcome, CloudBackupError> {
-        if self.cancellation_requested() {
+        if cancellation_requested(&self.cancellation) {
             return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
         }
 
         let snapshot_result =
-            load_candidate_snapshot(&self.cloud, namespaces, self.cancellation.clone()).await;
-        if self.cancellation_requested() {
+            load_candidate_snapshot(&self.cloud, namespaces, &self.cancellation).await;
+        if cancellation_requested(&self.cancellation) {
             return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
         }
         let snapshot = snapshot_result?;
@@ -275,7 +278,7 @@ impl NamespacePasskeyMatchSession {
         namespace_count: usize,
         snapshot: NamespacePasskeyCandidateSnapshot,
     ) -> Result<NamespaceMatchSnapshotOutcome, CloudBackupError> {
-        if self.cancellation_requested() {
+        if cancellation_requested(&self.cancellation) {
             return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
         }
         self.candidate_outcomes.extend(snapshot.candidate_outcomes);
@@ -303,7 +306,7 @@ impl NamespacePasskeyMatchSession {
 
         let mut matches = Vec::new();
         for candidate in candidates {
-            if self.cancellation_requested() {
+            if cancellation_requested(&self.cancellation) {
                 return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
             }
             if self.attempted_candidates.contains(&candidate.identity) {
@@ -312,39 +315,17 @@ impl NamespacePasskeyMatchSession {
 
             let (credential_id, prf_output) = match &self.credential_selection {
                 CredentialSelection::Selected(credential_id) => {
-                    if self.cancellation_requested() {
-                        return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
-                    }
+                    let auth = log_elapsed(
+                        "Passkey targeted authentication",
+                        self.authorization_retrier.authenticate(
+                            &self.passkey,
+                            credential_id,
+                            candidate.encrypted.prf_salt,
+                        ),
+                    )
+                    .await;
 
-                    let started_at = Instant::now();
-                    let auth = match self.cancellation.as_ref() {
-                        Some(cancellation) => {
-                            self.authorization_retrier
-                                .authenticate_with_cancellation(
-                                    &self.passkey,
-                                    credential_id,
-                                    candidate.encrypted.prf_salt,
-                                    cancellation,
-                                )
-                                .await
-                        }
-                        None => {
-                            self.authorization_retrier
-                                .authenticate(
-                                    &self.passkey,
-                                    credential_id,
-                                    candidate.encrypted.prf_salt,
-                                )
-                                .await
-                        }
-                    };
-                    info!(
-                        "Passkey targeted authentication elapsed_ms={} success={}",
-                        started_at.elapsed().as_millis(),
-                        auth.is_ok()
-                    );
-
-                    if self.cancellation_requested() {
+                    if cancellation_requested(&self.cancellation) {
                         return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
                     }
 
@@ -379,34 +360,15 @@ impl NamespacePasskeyMatchSession {
                     (credential_id.clone(), prf_output)
                 }
                 CredentialSelection::NotAttempted => {
-                    if self.cancellation_requested() {
-                        return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
-                    }
-
                     let started_at = Instant::now();
-                    let discovery = match self.cancellation.as_ref() {
-                        Some(cancellation) => {
-                            self.authorization_retrier
-                                .discover_with_cancellation(
-                                    &self.passkey,
-                                    candidate.encrypted.prf_salt,
-                                    cancellation,
-                                )
-                                .await
-                        }
-                        None => {
-                            self.authorization_retrier
-                                .discover(&self.passkey, candidate.encrypted.prf_salt)
-                                .await
-                        }
-                    };
-                    info!(
-                        "Passkey discovery authentication elapsed_ms={} success={}",
-                        started_at.elapsed().as_millis(),
-                        discovery.is_ok()
-                    );
+                    let discovery = log_elapsed(
+                        "Passkey discovery authentication",
+                        self.authorization_retrier
+                            .discover(&self.passkey, candidate.encrypted.prf_salt),
+                    )
+                    .await;
 
-                    if self.cancellation_requested() {
+                    if cancellation_requested(&self.cancellation) {
                         return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
                     }
 
@@ -446,7 +408,7 @@ impl NamespacePasskeyMatchSession {
                 }
             };
 
-            if self.cancellation_requested() {
+            if cancellation_requested(&self.cancellation) {
                 return Ok(NamespaceMatchSnapshotOutcome::OperationCancelled);
             }
 
@@ -491,16 +453,12 @@ impl NamespacePasskeyMatchSession {
 
         NamespaceMatchOutcome::NoMatch
     }
-
-    fn cancellation_requested(&self) -> bool {
-        self.cancellation.as_ref().is_some_and(|cancellation| cancellation.load(Ordering::Acquire))
-    }
 }
 
 async fn load_candidate_snapshot(
     cloud: &CloudStorageClient,
     namespaces: &[String],
-    cancellation: Option<Arc<AtomicBool>>,
+    cancellation: &AtomicBool,
 ) -> Result<NamespacePasskeyCandidateSnapshot, CloudBackupError> {
     let mut seen_namespaces = HashSet::new();
     let unique_namespaces = namespaces
@@ -511,7 +469,6 @@ async fn load_candidate_snapshot(
     let mut loads =
         stream::iter(unique_namespaces.into_iter().enumerate().map(|(index, namespace_id)| {
             let cloud = cloud.clone();
-            let cancellation = cancellation.clone();
 
             Ok(async move {
                 Ok::<_, CloudBackupError>((
@@ -542,21 +499,18 @@ async fn load_candidate_snapshot(
 async fn load_namespace_candidate(
     cloud: &CloudStorageClient,
     namespace_id: String,
-    cancellation: Option<Arc<AtomicBool>>,
+    cancellation: &AtomicBool,
 ) -> Result<NamespaceCandidateLoad, CloudBackupError> {
-    if cancellation_requested(cancellation.as_deref()) {
+    if cancellation_requested(cancellation) {
         return Err(CloudBackupError::Cancelled);
     }
 
-    let started_at = Instant::now();
-    let upload_state =
-        cloud.is_backup_uploaded(namespace_id.clone(), MASTER_KEY_RECORD_ID.to_string()).await;
-    info!(
-        "Passkey candidate upload-state read elapsed_ms={} success={}",
-        started_at.elapsed().as_millis(),
-        upload_state.is_ok()
-    );
-    if cancellation_requested(cancellation.as_deref()) {
+    let upload_state = log_elapsed(
+        "Passkey candidate upload-state read",
+        cloud.is_backup_uploaded(namespace_id.clone(), MASTER_KEY_RECORD_ID.to_string()),
+    )
+    .await;
+    if cancellation_requested(cancellation) {
         return Err(CloudBackupError::Cancelled);
     }
 
@@ -570,19 +524,16 @@ async fn load_namespace_candidate(
         CloudBackupUploadStatus::Pending => Ok(NamespaceCandidateLoad::Pending),
         CloudBackupUploadStatus::NotFound => Ok(NamespaceCandidateLoad::Missing),
         CloudBackupUploadStatus::Uploaded => {
-            if cancellation_requested(cancellation.as_deref()) {
+            if cancellation_requested(cancellation) {
                 return Err(CloudBackupError::Cancelled);
             }
 
-            let started_at = Instant::now();
-            let wrapper = cloud.download_master_key_backup(namespace_id.clone()).await;
-            let elapsed = started_at.elapsed();
-            info!(
-                "Passkey candidate wrapper read elapsed_ms={} success={}",
-                elapsed.as_millis(),
-                wrapper.is_ok()
-            );
-            if cancellation_requested(cancellation.as_deref()) {
+            let wrapper = log_elapsed(
+                "Passkey candidate wrapper read",
+                cloud.download_master_key_backup(namespace_id.clone()),
+            )
+            .await;
+            if cancellation_requested(cancellation) {
                 return Err(CloudBackupError::Cancelled);
             }
 
@@ -599,7 +550,7 @@ async fn load_namespace_candidate(
                         }
                         Err(error) => {
                             warn!("Failed to deserialize cloud backup master key: {error}");
-                            NamespaceWrapperLoad::Unreadable
+                            NamespaceWrapperLoad::Failed
                         }
                     }
                 }
@@ -618,8 +569,8 @@ async fn load_namespace_candidate(
     }
 }
 
-fn cancellation_requested(cancellation: Option<&AtomicBool>) -> bool {
-    cancellation.is_some_and(|cancellation| cancellation.load(Ordering::Acquire))
+fn cancellation_requested(cancellation: &AtomicBool) -> bool {
+    cancellation.load(Ordering::Acquire)
 }
 
 impl NamespacePasskeyCandidateSnapshot {
@@ -645,40 +596,30 @@ impl NamespacePasskeyCandidateSnapshot {
     }
 
     fn add_passkey_hint(&mut self, encrypted: &EncryptedMasterKeyBackup, namespace_id: &str) {
-        if encrypted.remote_metadata.normalized_master_key(namespace_id).is_err() {
-            return;
-        }
-
-        let Some(provider_hint) = encrypted.passkey_provider_hint.as_ref() else {
+        let Ok(Some(hint)) =
+            CloudBackupPasskeyHint::from_master_key_wrapper(encrypted, namespace_id)
+        else {
             return;
         };
-        let hint = CloudBackupPasskeyHint::from_provider_hint(provider_hint);
-        if self
-            .best_passkey_hint
-            .as_ref()
-            .is_none_or(|current| hint.registered_at > current.registered_at)
-        {
+
+        if self.best_passkey_hint.as_ref().is_none_or(|current| hint.is_newer_than(current)) {
             self.best_passkey_hint = Some(hint);
         }
     }
 
     fn add_uploaded_candidate(&mut self, namespace_id: String, wrapper: NamespaceWrapperLoad) {
-        if let NamespaceWrapperLoad::Loaded(wrapper) = &wrapper {
-            self.add_passkey_hint(&wrapper.encrypted, &namespace_id);
-        }
-
         let loaded_wrapper = match wrapper {
-            NamespaceWrapperLoad::Loaded(wrapper) => wrapper,
+            NamespaceWrapperLoad::Loaded(wrapper) => {
+                // unsupported wrapper versions still name the passkey that created them
+                self.add_passkey_hint(&wrapper.encrypted, &namespace_id);
+                wrapper
+            }
             NamespaceWrapperLoad::Missing => {
                 info!("Ignoring stale cloud backup namespace with no master key wrapper");
                 self.candidate_outcomes.push(NamespaceCandidateOutcome::Missing);
                 return;
             }
             NamespaceWrapperLoad::Failed => {
-                self.candidate_outcomes.push(NamespaceCandidateOutcome::Inconclusive);
-                return;
-            }
-            NamespaceWrapperLoad::Unreadable => {
                 self.candidate_outcomes.push(NamespaceCandidateOutcome::Inconclusive);
                 return;
             }

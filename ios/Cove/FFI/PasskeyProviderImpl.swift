@@ -52,7 +52,6 @@ enum PasskeyRequestMode: String, Equatable {
 final class PasskeyRequestDiagnostics: @unchecked Sendable {
     let requestID = UUID()
     let rpId: String
-    let operation: String
     let requestMode: PasskeyRequestMode
 
     private let lock = NSLock()
@@ -62,9 +61,8 @@ final class PasskeyRequestDiagnostics: @unchecked Sendable {
     private var presentationSceneActivation: String?
     private var completionTime: ContinuousClock.Instant?
 
-    init(rpId: String, operation: String, requestMode: PasskeyRequestMode) {
+    init(rpId: String, requestMode: PasskeyRequestMode) {
         self.rpId = rpId
-        self.operation = operation
         self.requestMode = requestMode
     }
 
@@ -76,6 +74,11 @@ final class PasskeyRequestDiagnostics: @unchecked Sendable {
         lock.withLock {
             nativeSubmissionTime = time
         }
+    }
+
+    func logNativeSubmission() {
+        markNativeSubmission()
+        Log.info("[PASSKEY] native request submitted \(logFields())")
     }
 
     func markPresentationAnchorRequest(
@@ -115,7 +118,7 @@ final class PasskeyRequestDiagnostics: @unchecked Sendable {
 
             return "request_id=\(requestID.uuidString) " +
                 "rpId=\(rpId) " +
-                "operation=\(operation) " +
+                "operation=\(requestMode.rawValue) " +
                 "request_mode=\(requestMode.rawValue) " +
                 "submission_to_anchor_ms=\(submissionToAnchor) " +
                 "submission_to_completion_ms=\(submissionToCompletion) " +
@@ -298,10 +301,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             let ctrl = ASAuthorizationController(authorizationRequests: [request])
             ctrl.delegate = delegate
             ctrl.presentationContextProvider = delegate
-            delegate.diagnostics.markNativeSubmission()
-            Log.info(
-                "[PASSKEY] native request submitted \(delegate.diagnostics.logFields())"
-            )
+            delegate.diagnostics.logNativeSubmission()
             ctrl.performRequests(options: .preferImmediatelyAvailableCredentials)
             return ctrl
         }
@@ -375,10 +375,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             let ctrl = ASAuthorizationController(authorizationRequests: [request])
             ctrl.delegate = delegate
             ctrl.presentationContextProvider = delegate
-            delegate.diagnostics.markNativeSubmission()
-            Log.info(
-                "[PASSKEY] native request submitted \(delegate.diagnostics.logFields())"
-            )
+            delegate.diagnostics.logNativeSubmission()
             ctrl.performRequests()
             return ctrl
         }
@@ -483,10 +480,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             let ctrl = ASAuthorizationController(authorizationRequests: [request])
             ctrl.delegate = delegate
             ctrl.presentationContextProvider = delegate
-            delegate.diagnostics.markNativeSubmission()
-            Log.info(
-                "[PASSKEY] native request submitted \(delegate.diagnostics.logFields())"
-            )
+            delegate.diagnostics.logNativeSubmission()
             ctrl.performRequests()
             return ctrl
         }
@@ -606,6 +600,19 @@ private func passkeyPresentationAnchor() -> PasskeyPresentationAnchorResolution 
     return resolution(for: nil, scene: foregroundScene)
 }
 
+private func passkeyPresentationAnchor(
+    recordingIn diagnostics: PasskeyRequestDiagnostics
+) -> ASPresentationAnchor {
+    let resolution = passkeyPresentationAnchor()
+    diagnostics.markPresentationAnchorRequest(
+        isAvailable: resolution.isAvailable,
+        sceneActivation: resolution.sceneActivation
+    )
+    Log.info("[PASSKEY] \(diagnostics.logFields())")
+
+    return resolution.anchor
+}
+
 final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     ASAuthorizationControllerPresentationContextProviding
 {
@@ -625,11 +632,7 @@ final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     ) {
         self.context = context
         self.timeout = timeout
-        diagnostics = PasskeyRequestDiagnostics(
-            rpId: rpId,
-            operation: context.requestMode.rawValue,
-            requestMode: context.requestMode
-        )
+        diagnostics = PasskeyRequestDiagnostics(rpId: rpId, requestMode: context.requestMode)
     }
 
     func waitForResult(
@@ -662,14 +665,7 @@ final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
     }
 
     func presentationAnchor(for _: ASAuthorizationController) -> ASPresentationAnchor {
-        let resolution = passkeyPresentationAnchor()
-        diagnostics.markPresentationAnchorRequest(
-            isAvailable: resolution.isAvailable,
-            sceneActivation: resolution.sceneActivation
-        )
-        Log.info("[PASSKEY] \(diagnostics.logFields())")
-
-        return resolution.anchor
+        passkeyPresentationAnchor(recordingIn: diagnostics)
     }
 
     func authorizationController(
@@ -819,21 +815,11 @@ private class PasskeyExistenceDelegate: NSObject, ASAuthorizationControllerDeleg
     let diagnostics: PasskeyRequestDiagnostics
 
     init(rpId: String) {
-        diagnostics = PasskeyRequestDiagnostics(
-            rpId: rpId,
-            operation: PasskeyRequestMode.presence.rawValue,
-            requestMode: .presence
-        )
+        diagnostics = PasskeyRequestDiagnostics(rpId: rpId, requestMode: .presence)
     }
 
     func presentationAnchor(for _: ASAuthorizationController) -> ASPresentationAnchor {
-        let resolution = passkeyPresentationAnchor()
-        diagnostics.markPresentationAnchorRequest(
-            isAvailable: resolution.isAvailable,
-            sceneActivation: resolution.sceneActivation
-        )
-        Log.info("[PASSKEY] \(diagnostics.logFields())")
-        return resolution.anchor
+        passkeyPresentationAnchor(recordingIn: diagnostics)
     }
 
     func authorizationController(

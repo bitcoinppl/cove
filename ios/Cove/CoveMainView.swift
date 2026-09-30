@@ -293,7 +293,7 @@ private struct CoveWipePresentationModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .alert(
-                auth.wipePresentationState.failureTitle,
+                WipePresentationState.failureTitle,
                 isPresented: Binding(
                     get: { blockedAttempt != nil },
                     set: { _ in }
@@ -308,10 +308,10 @@ private struct CoveWipePresentationModifier: ViewModifier {
                     }
                 }
             } message: {
-                Text(auth.wipePresentationState.failureMessage)
+                Text(WipePresentationState.failureMessage)
             }
             .alert(
-                auth.wipePresentationState.failureTitle,
+                WipePresentationState.failureTitle,
                 isPresented: Binding(
                     get: {
                         auth.wipePresentationState == .failed
@@ -323,7 +323,7 @@ private struct CoveWipePresentationModifier: ViewModifier {
             ) {
                 Button("OK", role: .cancel) { auth.clearWipeFailure() }
             } message: {
-                Text(auth.wipePresentationState.failureMessage)
+                Text(WipePresentationState.failureMessage)
             }
     }
 

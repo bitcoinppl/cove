@@ -4,33 +4,7 @@ use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,
     GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
 };
-
-fn restore_master_wrapper_for_test(
-    master_key: &cove_cspp::master_key::MasterKey,
-    prf_key: &[u8; 32],
-    prf_salt: &[u8; 32],
-    registered_at: u64,
-) -> Vec<u8> {
-    let namespace = master_key.namespace_id();
-    let encrypted = cove_cspp::master_key_crypto::encrypt_master_key_with_remote_metadata(
-        master_key,
-        prf_key,
-        prf_salt,
-        Some(cove_cspp::backup_data::PasskeyProviderHint {
-            aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
-            registered_platform: cove_cspp::backup_data::PasskeyRegistrationPlatform::Android,
-            registered_at,
-            name_suffix: format!("{registered_at}"),
-        }),
-        cove_cspp::backup_data::remote_payload::RemotePayloadMetadata::master_key(
-            &namespace,
-            registered_at,
-        ),
-    )
-    .unwrap();
-
-    serde_json::to_vec(&encrypted).unwrap()
-}
+use crate::test_support::raw_wallet_keychain_entries;
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_downloaded_wallet_does_not_reupload_wallet_or_mutate_backup_counts() {
@@ -410,11 +384,11 @@ async fn assert_terminal_native_stop_restores_retained_matches(targeted_auth_err
     let second_namespace = second_master_key.namespace_id();
     globals.cloud.set_master_key_backup(
         first_namespace.clone(),
-        restore_master_wrapper_for_test(&first_master_key, &prf_key, &[9; 32], 2),
+        master_wrapper_for_test(&first_master_key, &prf_key, &[9; 32], 2),
     );
     globals.cloud.set_master_key_backup(
         second_namespace.clone(),
-        restore_master_wrapper_for_test(&second_master_key, &prf_key, &[8; 32], 1),
+        master_wrapper_for_test(&second_master_key, &prf_key, &[8; 32], 1),
     );
     globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
         prf_output: prf_key.to_vec(),
@@ -494,11 +468,11 @@ async fn restore_cancellation_retains_exclusive_claim_until_native_call_returns(
     let matching_namespace = matching_master_key.namespace_id();
     globals.cloud.set_master_key_backup(
         mismatch_namespace,
-        restore_master_wrapper_for_test(&mismatch_master_key, &[8; 32], &[9; 32], 2),
+        master_wrapper_for_test(&mismatch_master_key, &[8; 32], &[9; 32], 2),
     );
     globals.cloud.set_master_key_backup(
         matching_namespace,
-        restore_master_wrapper_for_test(&matching_master_key, &discovered_prf_key, &[8; 32], 1),
+        master_wrapper_for_test(&matching_master_key, &discovered_prf_key, &[8; 32], 1),
     );
     globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
         prf_output: discovered_prf_key.to_vec(),
@@ -1803,17 +1777,6 @@ async fn restore_fails_when_all_listed_wallet_backups_are_missing() {
     );
 }
 
-/// The raw stored values, so adopting an item is distinguishable from rewriting it
-fn raw_wallet_keychain_entries(
-    globals: &TestGlobals,
-    wallet_id: &cove_types::WalletId,
-) -> Vec<Option<String>> {
-    crate::test_support::WALLET_KEYCHAIN_KEY_SUFFIXES
-        .iter()
-        .map(|suffix| globals.keychain.get_entry(&format!("{wallet_id}{suffix}")))
-        .collect()
-}
-
 /// A hot wallet whose keychain items survived an app reinstall that removed the database
 fn hot_wallet_with_surviving_keychain_items() -> WalletMetadata {
     use crate::wallet_secret::WalletSecretExt as _;
@@ -1882,10 +1845,8 @@ async fn restore_after_reinstall_adopts_surviving_keychain_items() {
     }
     globals.cloud.set_wallet_files(namespace, wallet_files);
 
-    let before = [
-        raw_wallet_keychain_entries(globals, &hot_wallet.id),
-        raw_wallet_keychain_entries(globals, &xpub_wallet.id),
-    ];
+    let before =
+        [raw_wallet_keychain_entries(&hot_wallet.id), raw_wallet_keychain_entries(&xpub_wallet.id)];
 
     let operation = new_restore_operation_for_test(&manager).await;
     let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
@@ -1895,10 +1856,7 @@ async fn restore_after_reinstall_adopts_surviving_keychain_items() {
         (2, 0, Vec::new())
     );
     assert_eq!(
-        [
-            raw_wallet_keychain_entries(globals, &hot_wallet.id),
-            raw_wallet_keychain_entries(globals, &xpub_wallet.id),
-        ],
+        [raw_wallet_keychain_entries(&hot_wallet.id), raw_wallet_keychain_entries(&xpub_wallet.id),],
         before
     );
     for wallet in [&hot_wallet, &xpub_wallet] {
@@ -1954,7 +1912,7 @@ async fn restore_keeps_the_conflict_category_when_every_wallet_conflicts() {
             .unwrap()
             .xpub(wallet.network.into());
     Keychain::global().save_wallet_xpub(&wallet.id, unrelated_xpub).unwrap();
-    let before = raw_wallet_keychain_entries(globals, &wallet.id);
+    let before = raw_wallet_keychain_entries(&wallet.id);
 
     let operation = new_restore_operation_for_test(&manager).await;
     let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();
@@ -1963,7 +1921,7 @@ async fn restore_keeps_the_conflict_category_when_every_wallet_conflicts() {
         error,
         CloudBackupError::LocalWalletConflict(crate::backup::import::LocalWalletConflict::Mismatch)
     ));
-    assert_eq!(raw_wallet_keychain_entries(globals, &wallet.id), before);
+    assert_eq!(raw_wallet_keychain_entries(&wallet.id), before);
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Disabled

@@ -109,7 +109,7 @@ class AndroidPasskeyProviderTest {
         val unexpectedCredential = CustomCredential("unexpected", Bundle())
         val error =
             assertThrows(PasskeyException.RequestFailed::class.java) {
-                requireDiscoveredPublicKeyCredential(unexpectedCredential)
+                requirePublicKeyCredential(unexpectedCredential, PasskeyOperation.DISCOVER_ASSERTION)
             }
 
         assertEquals(PasskeyOperation.DISCOVER_ASSERTION, error.operation)

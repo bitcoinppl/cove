@@ -121,15 +121,22 @@ impl UnsignedTransactionsTable {
     pub(crate) fn delete_by_wallet_id(&self, wallet_id: &WalletId) -> Result<(), Error> {
         let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
-        {
+        let removed_tx_ids = {
             let mut by_wallet =
                 write_txn.open_table(BY_WALLET_TABLE).map_err_str(Error::TableAccess)?;
-            let tx_ids = by_wallet
+
+            by_wallet
                 .remove(wallet_id)
                 .map_err_str(UnsignedTransactionsTableError::Save)?
                 .map(|value| value.value())
-                .unwrap_or_default();
+        };
 
+        let Some(tx_ids) = removed_tx_ids else {
+            write_txn.abort().map_err_str(Error::DatabaseAccess)?;
+            return Ok(());
+        };
+
+        {
             let mut main = write_txn.open_table(MAIN_TABLE).map_err_str(Error::TableAccess)?;
             for tx_id in &tx_ids {
                 main.remove(tx_id).map_err_str(UnsignedTransactionsTableError::Save)?;

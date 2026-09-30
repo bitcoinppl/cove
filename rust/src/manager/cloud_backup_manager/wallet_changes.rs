@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use act_zero::send;
-use cove_cspp::backup_data::wallet_record_id;
 use tracing::{error, warn};
 
 use super::RustCloudBackupManager;
@@ -37,13 +36,8 @@ impl RustCloudBackupManager {
         };
 
         let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
-        let record_id = wallet_record_id(wallet_id.as_ref());
-        let sync_state = PersistedCloudBlobSyncState::wallet(
-            namespace_id,
-            wallet_id.clone(),
-            record_id,
-            PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
-        );
+        let sync_state =
+            PersistedCloudBlobSyncState::dirty_wallet(namespace_id, wallet_id.clone(), changed_at);
 
         if let Err(error) = Database::global().cloud_blob_sync_states.set(&sync_state) {
             error!("Failed to persist dirty cloud backup state: {error}");

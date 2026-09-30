@@ -186,28 +186,16 @@ final class ICloudMetadataIndex {
         let timeoutTask: Task<Void, Never>
     }
 
-    private struct SettledGeneration {
-        let generation: UInt64
-        let interval: TimeInterval
-
-        func satisfies(generation: UInt64, interval: TimeInterval) -> Bool {
-            self.generation == generation && self.interval >= interval
-        }
-    }
-
-    private struct DeletionTombstone {
-        let recordedAt: Date
-    }
-
     private let source: ICloudMetadataQuerySource
     private let settleSleep: ICloudMetadataSettleSleep
     private let now: @MainActor @Sendable () -> Date
     private let deletionTombstoneMaxAge: TimeInterval
     private var phase = Phase.idle
     private var records: [ICloudMetadataRecord] = []
-    private var deletionTombstones: [String: DeletionTombstone] = [:]
+    private var deletionTombstones: [String: Date] = [:]
     private var generation: UInt64 = 0
-    private var settledGeneration: SettledGeneration?
+    // quiet interval observed for the current generation; `apply` resets it when records change
+    private var settledInterval: TimeInterval?
     private var snapshotWaiters: [UUID: SnapshotWaiter] = [:]
     private var itemWaiters: [UUID: ItemWaiter] = [:]
     private var observers: [UUID: @MainActor @Sendable () -> Void] = [:]
@@ -229,7 +217,7 @@ final class ICloudMetadataIndex {
     func markDeleted(resolvedPaths: [String]) {
         let recordedAt = now()
         for path in resolvedPaths {
-            deletionTombstones[path] = DeletionTombstone(recordedAt: recordedAt)
+            deletionTombstones[path] = recordedAt
         }
 
         records.removeAll { record in
@@ -265,7 +253,7 @@ final class ICloudMetadataIndex {
             throw ICloudMetadataIndexError.timedOut
         }
 
-        if settledGeneration?.satisfies(generation: generation, interval: settleInterval) == true {
+        if let settledInterval, settledInterval >= settleInterval {
             return records
         }
 
@@ -280,13 +268,7 @@ final class ICloudMetadataIndex {
             try Task.checkCancellation()
             guard generation == observedGeneration else { continue }
 
-            let priorInterval = settledGeneration.flatMap { settled in
-                settled.generation == observedGeneration ? settled.interval : nil
-            } ?? 0
-            settledGeneration = SettledGeneration(
-                generation: observedGeneration,
-                interval: max(priorInterval, quietInterval)
-            )
+            settledInterval = max(settledInterval ?? 0, quietInterval)
             return records
         }
     }
@@ -404,7 +386,7 @@ final class ICloudMetadataIndex {
         }
 
         generation &+= 1
-        settledGeneration = nil
+        settledInterval = nil
         resumeMatchingItemWaiters()
 
         for observer in observers.values {
@@ -415,9 +397,11 @@ final class ICloudMetadataIndex {
     private func reconcileTombstones(
         with records: [ICloudMetadataRecord]
     ) -> [ICloudMetadataRecord] {
+        guard !deletionTombstones.isEmpty else { return records }
+
         let currentTime = now()
-        deletionTombstones = deletionTombstones.filter { _, tombstone in
-            currentTime.timeIntervalSince(tombstone.recordedAt) < deletionTombstoneMaxAge
+        deletionTombstones = deletionTombstones.filter { _, recordedAt in
+            currentTime.timeIntervalSince(recordedAt) < deletionTombstoneMaxAge
         }
 
         if case .live = phase {

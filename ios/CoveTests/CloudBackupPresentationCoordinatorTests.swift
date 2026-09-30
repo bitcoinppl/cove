@@ -13,7 +13,7 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
         let transition = try XCTUnwrap(
             transitions.dismissCurrentPresentationForTransition()
         )
-        _ = handoff.stage(
+        handoff.stage(
             action: .startVerification(.rootPrompt),
             presentation: .verificationPrompt,
             transition: transition
@@ -22,7 +22,7 @@ final class CloudBackupPresentationCoordinatorTests: XCTestCase {
 
         XCTAssertNil(dispatchedAction)
 
-        _ = handoff.presenterDidBecomeReady(
+        handoff.presenterDidBecomeReady(
             transition.readinessRequestID,
             currentPresentation: .verificationPrompt,
             isHostAvailable: true,

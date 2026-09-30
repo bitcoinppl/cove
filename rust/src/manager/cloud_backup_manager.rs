@@ -18,6 +18,7 @@ mod recovery_coverage;
 mod remote_inventory;
 mod store;
 mod sync_health;
+mod timing;
 mod verify;
 mod wallet_changes;
 mod wallets;
@@ -849,8 +850,7 @@ impl RustCloudBackupManager {
             .mutate(mutation)
             .map_err(|source| CloudBackupError::internal_context(context, source))?;
 
-        self.reconcile_runtime_status(Self::runtime_status_for(&committed.state));
-        self.refresh_persisted_flags();
+        self.reconcile_persisted_state(&committed.state);
 
         Ok(committed.outcome)
     }
@@ -971,22 +971,6 @@ mod manager_test_support {
     use super::*;
 
     impl RustCloudBackupManager {
-        pub(crate) fn persist_cloud_backup_state(
-            &self,
-            state: &PersistedCloudBackupState,
-            context: &str,
-        ) -> Result<(), CloudBackupError> {
-            Database::global()
-                .cloud_backup_state
-                .set(state)
-                .map_err(|source| CloudBackupError::internal_context(context, source))?;
-
-            self.reconcile_runtime_status(Self::runtime_status_for(state));
-            self.refresh_persisted_flags();
-
-            Ok(())
-        }
-
         pub(crate) fn model_snapshot(&self) -> test_support::CloudBackupModelSnapshot {
             self.state.read().snapshot()
         }

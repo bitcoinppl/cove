@@ -11,13 +11,21 @@ pub(crate) const CSPP_PRF_SALT_KEY: &str = "cspp::v1::prf_salt";
 pub(crate) const CSPP_NAMESPACE_ID_KEY: &str = "cspp::v1::namespace_id";
 pub(crate) const CSPP_PENDING_ENABLE_JOURNAL_KEY: &str = "cspp::v1::pending_enable_journal";
 
-const RESTORE_ACTIVATION_METADATA_KEYS: [&str; 3] =
-    [CSPP_CREDENTIAL_ID_KEY, CSPP_PRF_SALT_KEY, CSPP_NAMESPACE_ID_KEY];
-
 #[derive(Clone)]
 pub(crate) struct RestoreActivationKeychainSnapshot {
-    metadata_entries: Vec<(String, Option<String>)>,
+    metadata: PendingEnableLocalMetadataSnapshot,
     master_key: ActiveMasterKeySnapshot,
+}
+
+impl PendingEnableLocalMetadataSnapshot {
+    /// The keychain entries this snapshot restores, in save order
+    fn keychain_entries(&self) -> [(String, Option<String>); 3] {
+        [
+            (CSPP_CREDENTIAL_ID_KEY.into(), self.credential_id.clone()),
+            (CSPP_PRF_SALT_KEY.into(), self.prf_salt.clone()),
+            (CSPP_NAMESPACE_ID_KEY.into(), self.namespace_id.clone()),
+        ]
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -108,10 +116,7 @@ impl CloudBackupKeychain {
 
     pub(crate) fn capture_restore_activation_snapshot(&self) -> RestoreActivationKeychainSnapshot {
         RestoreActivationKeychainSnapshot {
-            metadata_entries: RESTORE_ACTIVATION_METADATA_KEYS
-                .iter()
-                .map(|key| ((*key).to_owned(), self.0.get((*key).into())))
-                .collect(),
+            metadata: self.snapshot_passkey_metadata(),
             master_key: Cspp::new(self.0.clone()).capture_active_master_key_snapshot(),
         }
     }
@@ -120,7 +125,7 @@ impl CloudBackupKeychain {
         &self,
         snapshot: &RestoreActivationKeychainSnapshot,
     ) -> Result<(), CloudBackupKeychainError> {
-        let metadata = self.restore_all_entries(&snapshot.metadata_entries);
+        let metadata = self.restore_all_entries(&snapshot.metadata.keychain_entries());
         let master_key =
             Cspp::new(self.0.clone()).restore_active_master_key_snapshot(&snapshot.master_key);
 
@@ -153,11 +158,7 @@ impl CloudBackupKeychain {
         &self,
         snapshot: &PendingEnableLocalMetadataSnapshot,
     ) -> Result<(), CloudBackupKeychainError> {
-        self.restore_entries(&[
-            (CSPP_CREDENTIAL_ID_KEY.into(), snapshot.credential_id.clone()),
-            (CSPP_PRF_SALT_KEY.into(), snapshot.prf_salt.clone()),
-            (CSPP_NAMESPACE_ID_KEY.into(), snapshot.namespace_id.clone()),
-        ])?;
+        self.restore_entries(&snapshot.keychain_entries())?;
         Ok(())
     }
 
@@ -322,21 +323,13 @@ impl CloudBackupKeychain {
             }
         }
 
-        match first_error {
-            Some(error) => Err(error),
-            None => Ok(()),
-        }
+        first_error.map_or(Ok(()), Err)
     }
 
     fn restore_entry(&self, key: &str, previous_value: Option<&str>) -> Result<(), KeychainError> {
         match previous_value {
             Some(value) => self.0.save(key.to_owned(), value.to_owned()),
-            None => {
-                if self.0.get(key.to_owned()).is_some() && !self.0.delete(key.to_owned()) {
-                    return Err(KeychainError::Delete);
-                }
-                Ok(())
-            }
+            None => self.delete_keychain_item_if_present(key),
         }
     }
 
