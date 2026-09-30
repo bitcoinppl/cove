@@ -163,11 +163,8 @@ impl RecoveryCleanup {
     /// The session is not a wallet keychain item, so the wallet sweep leaves it
     /// behind and the next receive start would resume it after a wipe
     pub(crate) fn delete_key_teleport_receive_session(&self) -> Result<(), String> {
-        if Keychain::global().delete_key_teleport_receive_session() {
-            return Ok(());
-        }
-
-        Err("unable to delete KeyTeleport receive session".to_string())
+        crate::manager::key_teleport_manager::delete_persisted_receive_session()
+            .map_err_str(std::convert::identity)
     }
 
     pub(crate) fn purge_orphan_wallet_artifacts(&self) -> std::io::Result<()> {
