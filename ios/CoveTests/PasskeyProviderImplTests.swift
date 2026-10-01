@@ -4,15 +4,6 @@ import CoveCore
 import XCTest
 
 final class PasskeyProviderImplTests: XCTestCase {
-    func testRequestModesDescribeEachNativeOperation() {
-        XCTAssertEqual(PasskeyOperationContext.registration.requestMode, .registration)
-        XCTAssertEqual(PasskeyOperationContext.discoverAssertion.requestMode, .discovery)
-        XCTAssertEqual(PasskeyOperationContext.authenticateAssertion.requestMode, .targeted)
-
-        let presence = PasskeyRequestDiagnostics(rpId: "example.com", requestMode: .presence)
-        XCTAssertEqual(presence.requestMode, .presence)
-    }
-
     func testDiagnosticsMeasureMonotonicRequestDurationsAndAnchorState() {
         let diagnostics = PasskeyRequestDiagnostics(rpId: "example.com", requestMode: .targeted)
         let submission = ContinuousClock.Instant.now

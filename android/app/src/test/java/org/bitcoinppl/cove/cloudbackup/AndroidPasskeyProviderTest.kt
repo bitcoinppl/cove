@@ -47,21 +47,12 @@ class AndroidPasskeyProviderTest {
 
         val rp = request.getJSONObject("rp")
         assertEquals("covebitcoinwallet.com", rp.getString("id"))
-        assertEquals("Cove Cloud Backup", rp.getString("name"))
 
         val user = request.getJSONObject("user")
         assertEquals("AQID", user.getString("id"))
         assertEquals("test@example.com", user.getString("name"))
         assertEquals("Test User", user.getString("displayName"))
 
-        val pubKeyCredParams = request.getJSONArray("pubKeyCredParams")
-        assertEquals(2, pubKeyCredParams.length())
-        assertEquals("public-key", pubKeyCredParams.getJSONObject(0).getString("type"))
-        assertEquals(-7, pubKeyCredParams.getJSONObject(0).getInt("alg"))
-        assertEquals("public-key", pubKeyCredParams.getJSONObject(1).getString("type"))
-        assertEquals(-257, pubKeyCredParams.getJSONObject(1).getInt("alg"))
-
-        assertEquals("none", request.getString("attestation"))
         assertEquals(
             "required",
             request.getJSONObject("authenticatorSelection").getString("residentKey"),

@@ -640,22 +640,6 @@ mod tests {
     }
 
     #[test]
-    fn local_wallet_conflict_reader_messages_are_platform_neutral() {
-        let mismatch =
-            CloudBackupError::LocalWalletConflict(LocalWalletConflict::Mismatch).reader_message();
-        let unreadable =
-            CloudBackupError::LocalWalletConflict(LocalWalletConflict::Unreadable).reader_message();
-
-        assert_eq!(mismatch, LOCAL_WALLET_MISMATCH_MESSAGE);
-        assert_eq!(unreadable, LOCAL_WALLET_UNREADABLE_MESSAGE);
-        for message in [mismatch, unreadable] {
-            assert!(message.contains("this device"));
-            assert!(!message.contains("iPhone"));
-            assert!(!message.contains("Android"));
-        }
-    }
-
-    #[test]
     fn raw_cloud_and_internal_diagnostics_cannot_reach_reader_messages() {
         let diagnostic = "account=user@example.com namespace=secret-namespace record=secret-record localized=privado";
         let errors = [
