@@ -758,8 +758,8 @@ fn reject_zip_unsafe_entry_type(name: &str, unix_mode: Option<u32>) -> Result<()
 
     let file_type = unix_mode & 0o170000;
     match file_type {
-        0o120000 => color_eyre::eyre::bail!("Artifact ZIP entry is a symlink: {name}"),
-        0o010000 => color_eyre::eyre::bail!("Artifact ZIP entry is a FIFO: {name}"),
+        0o120000 => Err(color_eyre::eyre::eyre!("Artifact ZIP entry is a symlink: {name}")),
+        0o010000 => Err(color_eyre::eyre::eyre!("Artifact ZIP entry is a FIFO: {name}")),
         _ => Ok(()),
     }
 }

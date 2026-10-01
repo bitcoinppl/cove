@@ -143,7 +143,7 @@ fn calculate_bumped_version(current_version: &str, bump_type: &str) -> Result<St
         "patch" => {
             patch += 1;
         }
-        _ => color_eyre::eyre::bail!("Bump type must be 'major', 'minor', or 'patch'"),
+        _ => return Err(color_eyre::eyre::eyre!("Bump type must be 'major', 'minor', or 'patch'")),
     }
 
     Ok(format!("{major}.{minor}.{patch}"))

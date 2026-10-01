@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use eyre::{Context as _, Result, bail};
+use eyre::{Context as _, Result, bail, eyre};
 use tracing::{error, info, warn};
 
 use crate::bootstrap::Migration;
@@ -162,8 +162,8 @@ fn checkpoint_plaintext_auxiliary_files(path: &Path) -> Result<()> {
             clean_auxiliary_files(path);
             Ok(())
         }
-        Ok(busy) => bail!("plaintext WAL checkpoint busy={busy} at {}", path.display()),
-        Err(error) => bail!("plaintext WAL checkpoint failed at {}: {error}", path.display()),
+        Ok(busy) => Err(eyre!("plaintext WAL checkpoint busy={busy} at {}", path.display())),
+        Err(error) => Err(eyre!("plaintext WAL checkpoint failed at {}: {error}", path.display())),
     }
 }
 
