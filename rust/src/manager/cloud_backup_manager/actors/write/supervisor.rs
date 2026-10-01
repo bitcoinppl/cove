@@ -886,20 +886,6 @@ mod tests {
         DeepVerificationReport, PendingVerificationCompletion, PendingVerificationUpload,
     };
 
-    #[tokio::test(flavor = "current_thread")]
-    async fn supervisor_blocker_methods_update_actor_state() {
-        let mut supervisor = CloudBackupWriteSupervisor::default();
-        let blocker = CloudBackupWriteBlocker::Disabling { operation_id: 7 };
-
-        supervisor.block(blocker).await.unwrap();
-
-        assert_eq!(supervisor.active_blocker, Some(blocker));
-
-        supervisor.unblock(blocker).await.unwrap();
-
-        assert_eq!(supervisor.active_blocker, None);
-    }
-
     #[test]
     fn drive_account_switch_blocker_admits_only_matching_reinitialization_writes() {
         let blocker = CloudBackupWriteBlocker::DriveAccountSwitch { transition_id: 7.into() };

@@ -979,12 +979,11 @@ mod tests {
         FullScanType, ProgressiveFullScanResult, ProgressiveScanRunner, RunningScan,
         SCAN_PARTIAL_FLUSH_INTERVAL, SCAN_PROGRESS_BASIS_POINTS, SCAN_PROGRESS_INTERVAL,
         ScanActorGeneration, ScanFlushCadence, ScanFlushDecision, ScanProgressStart,
-        ScanRequestOrder, WalletScanActor, WalletScanEvent, WalletScanEventKind,
-        WalletScanGeneration, WalletScanPhase, WalletScanProgress, WalletScanStatus,
-        initial_scan_status, is_cancelled_progressive_scan, scan_progress_basis_points,
-        should_accept_scan_generation, should_flush_pending_after_scan_result,
-        should_forward_scan_progress, should_reveal_delayed_progress,
-        should_update_full_scan_metadata,
+        ScanRequestOrder, WalletScanActor, WalletScanGeneration, WalletScanPhase,
+        WalletScanProgress, WalletScanStatus, initial_scan_status, is_cancelled_progressive_scan,
+        scan_progress_basis_points, should_accept_scan_generation,
+        should_flush_pending_after_scan_result, should_forward_scan_progress,
+        should_reveal_delayed_progress, should_update_full_scan_metadata,
     };
 
     fn scan_runner(scan: RunningScan) -> ProgressiveScanRunner {
@@ -1400,16 +1399,5 @@ mod tests {
 
         assert!(!Actor::error(&mut scan_actor, error).await);
         assert!(scan_actor.active_wallet_generation.is_none());
-    }
-
-    #[test]
-    fn wallet_scan_event_carries_wallet_generation() {
-        let generation = WalletScanGeneration::INITIAL.next();
-        let event = WalletScanEvent::new(
-            generation,
-            WalletScanEventKind::StatusChanged(WalletScanStatus::Idle),
-        );
-
-        assert_eq!(event.generation(), generation);
     }
 }

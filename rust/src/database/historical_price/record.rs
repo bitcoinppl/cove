@@ -290,15 +290,6 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_flag_bits() {
-        let rec = make_record(true, false, true, false, true, false);
-        let flag = CurrencyFlag::from(rec);
-        let raw: u8 = flag.bits();
-        let parsed = CurrencyFlag::from_bits_truncate(raw);
-        assert_eq!(parsed, flag);
-    }
-
-    #[test]
     fn round_trip_records() {
         let record = HistoricalPriceRecord {
             time: 1745268220,

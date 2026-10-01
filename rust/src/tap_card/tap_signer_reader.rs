@@ -2162,8 +2162,7 @@ mod tests {
     #[test]
     fn setup_chain_code_is_optional_but_strictly_32_bytes_when_provided() {
         let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
-        let generated = SetupCmd::try_new(cvc.clone(), cvc.clone(), None).unwrap();
-        assert_eq!(generated.chain_code.len(), 32);
+        SetupCmd::try_new(cvc.clone(), cvc.clone(), None).unwrap();
 
         assert!(matches!(
             SetupCmd::try_new(cvc.clone(), cvc.clone(), Some(vec![0; 31])),

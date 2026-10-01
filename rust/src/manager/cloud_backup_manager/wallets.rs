@@ -95,8 +95,3 @@ pub(crate) use payload::{
 pub(crate) use restore::{
     WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
 };
-
-#[cfg(test)]
-pub(crate) mod tests {
-    pub(crate) use super::payload::convert_cloud_secret;
-}

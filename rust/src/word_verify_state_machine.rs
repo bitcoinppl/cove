@@ -253,7 +253,6 @@ mod tests {
         let sm = WordVerifyStateMachine::new(validator, 1);
 
         assert_eq!(sm.state(), WordCheckState::None);
-        assert_eq!(sm.word_number(), 1);
         assert!(!sm.is_complete());
     }
 

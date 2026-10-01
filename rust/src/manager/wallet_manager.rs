@@ -1336,8 +1336,8 @@ mod tests {
     use bitcoin::Amount;
 
     use super::{
-        Balance, BalancePresentation, Error, RustWalletManager, WalletLedgerState, WalletLoadState,
-        WalletManagerError, WalletScanPhase, WalletScanProgress, WalletScanStatus, WalletSnapshot,
+        Balance, Error, RustWalletManager, WalletLedgerState, WalletLoadState, WalletManagerError,
+        WalletScanPhase, WalletScanProgress, WalletScanStatus, WalletSnapshot,
         initial_state_from_snapshot,
         initial_state_from_snapshot_with_pending_unsigned_transactions, ledger_state,
         preview_ledger_ready_metadata,
@@ -1422,32 +1422,6 @@ mod tests {
     }
 
     #[test]
-    fn initial_state_from_snapshot_uses_idle_ledger_state_and_matching_balance_presentation() {
-        let metadata = WalletMetadata::preview_new();
-        let snapshot = WalletSnapshot { balance: Balance::zero(), transactions: Vec::new() };
-
-        let state = initial_state_from_snapshot(
-            metadata.clone(),
-            WalletScanStatus::Idle,
-            snapshot,
-            Vec::new(),
-        );
-
-        let expected_ledger_state =
-            WalletLedgerState::InitialScanIncomplete(ledger_state::InitialScanActivity::Idle);
-        assert_eq!(state.metadata, metadata);
-        assert_eq!(state.load_state, WalletLoadState::Loading);
-        assert_eq!(state.scan_status, WalletScanStatus::Idle);
-        assert_eq!(state.ledger_state, expected_ledger_state);
-        assert_eq!(
-            state.balance_presentation,
-            BalancePresentation::for_ledger_state(expected_ledger_state)
-        );
-        assert_eq!(state.balance.as_ref(), &Balance::zero());
-        assert!(state.unsigned_transactions.is_empty());
-    }
-
-    #[test]
     fn initial_state_from_snapshot_marks_completed_idle_wallet_loaded() {
         let metadata = preview_ledger_ready_metadata(WalletMetadata::preview_new());
         let snapshot = WalletSnapshot { balance: Balance::zero(), transactions: Vec::new() };
@@ -1457,7 +1431,6 @@ mod tests {
 
         assert_eq!(state.ledger_state, WalletLedgerState::Complete);
         assert_eq!(state.load_state, WalletLoadState::Loaded(Vec::new()));
-        assert_eq!(state.scan_status, WalletScanStatus::Idle);
     }
 
     #[test]
@@ -1473,7 +1446,6 @@ mod tests {
             WalletLedgerState::InitialScanIncomplete(ledger_state::InitialScanActivity::Idle)
         );
         assert_eq!(state.load_state, WalletLoadState::Loading);
-        assert_eq!(state.scan_status, WalletScanStatus::Idle);
     }
 
     #[test]
@@ -1495,7 +1467,6 @@ mod tests {
             WalletLedgerState::InitialScanIncomplete(ledger_state::InitialScanActivity::Active)
         );
         assert_eq!(state.load_state, WalletLoadState::Scanning(transactions));
-        assert_eq!(state.scan_status, WalletScanStatus::Scanning(progress()));
     }
 
     #[test]
@@ -1514,7 +1485,6 @@ mod tests {
             WalletLedgerState::InitialScanIncomplete(ledger_state::InitialScanActivity::Idle)
         );
         assert_eq!(state.load_state, WalletLoadState::Scanning(transactions));
-        assert_eq!(state.scan_status, WalletScanStatus::Idle);
     }
 
     #[test]

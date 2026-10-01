@@ -207,17 +207,8 @@ pub mod tests {
 
     #[test]
     fn test_parse_data_into_word_indexes_12_words() {
-        let bytes: Vec<u8> = vec![
-            0b01011011, 0b10111101, 0b10011101, 0b01110001, 0b10101000, 0b11101100, 0b01111001,
-            0b10010000, 0b10000011, 0b00011010, 0b11111111, 0b00110101, 0b10011101, 0b01000010,
-            0b01100101, 0b01000101,
-        ];
-
         let hex = "5bbd9d71a8ec7990831aff359d426545";
-        let hex_bytes = hex::decode(hex).unwrap();
-
-        assert_eq!(bytes, hex_bytes);
-        let bytes = hex_bytes;
+        let bytes = hex::decode(hex).unwrap();
 
         let seed_qr = SeedQr::try_from_data(&bytes).unwrap();
         let expected = "forum undo fragile fade shy sign arrest garment culture tube off merit"

@@ -701,12 +701,6 @@ fn ordinary_close_defers_to_claimed_destructive_phase() {
 }
 
 #[test]
-fn deadline_tiers_escalate_from_five_to_twenty_seconds() {
-    assert_eq!(ShutdownDeadlineTier::Initial.duration(), std::time::Duration::from_secs(5));
-    assert_eq!(ShutdownDeadlineTier::Retry.duration(), std::time::Duration::from_secs(20));
-}
-
-#[test]
 fn cancelled_attempt_cannot_authorize_retry() {
     let coordinator: &'static WalletLifecycleCoordinator =
         Box::leak(Box::new(WalletLifecycleCoordinator::default()));

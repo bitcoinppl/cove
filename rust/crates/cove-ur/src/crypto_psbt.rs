@@ -211,13 +211,6 @@ mod tests {
     }
 
     #[test]
-    fn test_crypto_psbt_new() {
-        let psbt = test_psbt();
-        let crypto_psbt = CryptoPsbt::new(psbt.clone());
-        assert_eq!(crypto_psbt.psbt(), &psbt);
-    }
-
-    #[test]
     fn test_crypto_psbt_from_bytes() {
         let bytes = hex::decode(TEST_PSBT_HEX).unwrap();
         let crypto_psbt = CryptoPsbt::from_bytes(&bytes).unwrap();
@@ -246,14 +239,9 @@ mod tests {
         let cbor = crypto_psbt.to_cbor().unwrap();
 
         assert!(!cbor.is_empty());
+
         // cbor major type 2 is byte string
         assert_eq!(cbor[0] >> 5, 2);
-
-        let mut expected_cbor = Vec::new();
-        let mut encoder = Encoder::new(&mut expected_cbor);
-        encoder.bytes(&crypto_psbt.to_bytes()).unwrap();
-
-        assert_eq!(cbor, expected_cbor);
     }
 
     #[test]

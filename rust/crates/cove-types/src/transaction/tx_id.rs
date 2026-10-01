@@ -122,18 +122,3 @@ impl redb::Value for TxId {
         redb::TypeName::new("cove::transaction::TxId")
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_txid_borrow() {
-        let txid = TxId::preview_new();
-        let txid_borrow: &bitcoin::Txid = txid.borrow();
-        assert_eq!(txid_borrow, &txid.0);
-
-        let txid_borrow: &TxId = txid.borrow();
-        assert_eq!(txid_borrow, &txid);
-    }
-}

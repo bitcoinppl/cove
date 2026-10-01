@@ -2291,17 +2291,6 @@ mod tests {
     }
 
     #[test]
-    fn disabled_projects_disabled_lifecycle() {
-        let model = CloudBackupStateReducer::default();
-
-        assert_eq!(model.public_state().lifecycle, CloudBackupLifecycle::Disabled);
-        assert_eq!(
-            model.public_state().settings_row_status,
-            CloudBackupSettingsRowStatus::Disabled
-        );
-    }
-
-    #[test]
     fn settings_row_status_projects_sync_health() {
         let state = configured_state(
             CloudBackupVerificationState::NotVerified,

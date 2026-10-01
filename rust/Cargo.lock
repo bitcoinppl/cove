@@ -1586,7 +1586,6 @@ dependencies = [
  "hex",
  "minicbor 2.2.1",
  "pubport",
- "serde_json",
  "thiserror 2.0.18",
  "tracing",
  "uniffi",

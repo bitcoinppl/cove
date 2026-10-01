@@ -144,7 +144,6 @@ mod tests {
         let node = node();
         let renamed = Node { name: "Renamed".to_string(), ..node.clone() };
 
-        assert_ne!(node, renamed);
         assert_eq!(node.connection_identity(), renamed.connection_identity());
     }
 

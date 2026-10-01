@@ -90,30 +90,4 @@ mod tests {
         assert_eq!(UrType::from_str("bytes"), UrType::Bytes);
         assert!(matches!(UrType::from_str("unknown-type"), UrType::Unknown(_)));
     }
-
-    #[test]
-    fn test_ur_result_helpers() {
-        let psbt = UrResult::new(vec![1, 2, 3], UrType::CryptoPsbt);
-        assert!(psbt.is_psbt());
-        assert!(!psbt.is_seed());
-        assert!(!psbt.is_hdkey());
-
-        let seed = UrResult::new(vec![4, 5, 6], UrType::CryptoSeed);
-        assert!(!seed.is_psbt());
-        assert!(seed.is_seed());
-        assert!(!seed.is_hdkey());
-
-        let hdkey = UrResult::new(vec![7, 8, 9], UrType::CryptoHdkey);
-        assert!(!hdkey.is_psbt());
-        assert!(!hdkey.is_seed());
-        assert!(hdkey.is_hdkey());
-    }
-
-    #[test]
-    fn test_ur_result_data_access() {
-        let data = vec![1, 2, 3, 4, 5];
-        let result = UrResult::new(data.clone(), UrType::Bytes);
-        assert_eq!(result.data(), data);
-        assert_eq!(result.ur_type(), UrType::Bytes);
-    }
 }

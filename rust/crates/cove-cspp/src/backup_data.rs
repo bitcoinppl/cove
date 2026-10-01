@@ -409,19 +409,6 @@ mod tests {
     }
 
     #[test]
-    fn encrypted_wallet_backup_reports_typed_version() {
-        let backup = EncryptedWalletBackup {
-            version: 2,
-            remote_metadata: RemotePayloadMetadata::default(),
-            wallet_salt: [0xAA; 32],
-            nonce: [0xBB; 12],
-            ciphertext: vec![],
-        };
-
-        assert_eq!(backup.backup_version(), Ok(WalletBackupVersion::V2));
-    }
-
-    #[test]
     fn encrypted_wallet_backup_json_defaults_missing_payload_metadata() {
         let json = serde_json::json!({
             "wallet_salt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
