@@ -45,6 +45,9 @@ async fn restore_downloaded_wallet_does_not_reupload_wallet_or_mutate_backup_cou
             .unwrap()
             .is_some()
     );
+
+    // a watch-only backup must never restore as spendable secret material
+    assert!(Keychain::global().get_wallet_secret(&metadata.id).unwrap().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]

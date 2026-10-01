@@ -217,7 +217,9 @@ pub(crate) fn prevout_fetch_plan(update: &TxUpdate<ConfirmationBlockTime>) -> Ve
 
 #[cfg(test)]
 mod tests {
-    use bdk_wallet::chain::bitcoin::{ScriptBuf, Transaction, absolute, transaction};
+    use bdk_wallet::chain::bitcoin::{
+        OutPoint, ScriptBuf, Transaction, TxIn, absolute, transaction,
+    };
     use bdk_wallet::chain::spk_client::SpkWithExpectedTxids;
 
     use super::{SpkBatcher, StopGapTracker, prevout_fetch_plan};
@@ -264,7 +266,7 @@ mod tests {
             Transaction {
                 version: transaction::Version::TWO,
                 lock_time: absolute::LockTime::ZERO,
-                input: Vec::new(),
+                input: vec![TxIn { previous_output: OutPoint::null(), ..TxIn::default() }],
                 output: Vec::new(),
             }
             .into(),

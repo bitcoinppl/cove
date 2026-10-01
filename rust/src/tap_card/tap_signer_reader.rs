@@ -2440,8 +2440,11 @@ mod tests {
         };
         let response = TapSignerResponse::Backup(vec![0xde, 0xad, 0xbe, 0xef]);
 
-        assert!(!format!("{complete:?}").contains("deadbeef"));
-        assert!(!format!("{response:?}").contains("deadbeef"));
+        // derived Debug prints bytes as decimal, so check both encodings
+        for debug in [format!("{complete:?}"), format!("{response:?}")] {
+            assert!(!debug.contains("deadbeef"), "{debug}");
+            assert!(!debug.contains("222, 173, 190, 239"), "{debug}");
+        }
     }
 
     #[test]
