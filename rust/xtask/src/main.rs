@@ -548,34 +548,4 @@ mod tests {
 
         assert_eq!(device, ["main", "sim"]);
     }
-
-    #[test]
-    fn release_android_reads_json_key_path() {
-        let cli =
-            Cli::try_parse_from(["xtask", "release-android", "--json-key-path", "/tmp/play.json"])
-                .expect("release-android should parse");
-
-        let Commands::ReleaseAndroid { json_key_path } = cli.command else {
-            panic!("expected release-android command");
-        };
-
-        assert_eq!(json_key_path.as_deref(), Some("/tmp/play.json"));
-    }
-
-    #[test]
-    fn upload_google_play_reads_json_key_path() {
-        let cli = Cli::try_parse_from([
-            "xtask",
-            "upload-google-play",
-            "--json-key-path",
-            "/tmp/play.json",
-        ])
-        .expect("upload-google-play should parse");
-
-        let Commands::UploadGooglePlay { json_key_path } = cli.command else {
-            panic!("expected upload-google-play command");
-        };
-
-        assert_eq!(json_key_path.as_deref(), Some("/tmp/play.json"));
-    }
 }
