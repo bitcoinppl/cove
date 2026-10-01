@@ -134,6 +134,8 @@ private struct SettingsRouteContent: View {
             AnyView(AboutScreen())
         case .cloudBackup:
             AnyView(CloudBackupDetailScreen())
+        case .ohttpRelay:
+            AnyView(OhttpRelaySettingsView())
         }
     }
 

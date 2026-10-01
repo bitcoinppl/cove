@@ -293,6 +293,7 @@ mod tests {
                     color_scheme: None,
                     selected_nodes: Vec::new(),
                     custom_block_explorers: BTreeMap::new(),
+                    ohttp_relay_urls: Vec::new(),
                 },
             }),
             payload_digest: digest.to_string(),

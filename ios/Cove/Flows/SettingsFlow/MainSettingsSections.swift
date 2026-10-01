@@ -27,6 +27,18 @@ struct MainSettingsGeneralSection: View {
     }
 }
 
+struct MainSettingsAdvancedSection: View {
+    var body: some View {
+        Section(header: Text("Advanced")) {
+            SettingsRow(
+                title: "PayJoin Relay",
+                route: .ohttpRelay,
+                symbol: "arrow.triangle.2.circlepath"
+            )
+        }
+    }
+}
+
 struct MainSettingsBackupSection: View {
     let isVisible: Bool
     let exportAll: () -> Void
