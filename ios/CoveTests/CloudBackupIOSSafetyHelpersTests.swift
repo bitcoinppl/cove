@@ -457,7 +457,8 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
 
     @MainActor
     func testBackupReadUsesLocalTargetBeforeMetadata() async throws {
-        let fixture = makeICloudMetadataFixture()
+        // a slow simulator can exceed a short deadline on the direct read and fall back to metadata
+        let fixture = makeICloudMetadataFixture(defaultTimeout: 60)
         defer { fixture.removeContainer() }
 
         let location = try XCTUnwrap(backupLocations().first)
