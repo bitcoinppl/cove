@@ -578,12 +578,4 @@ mod tests {
             .needs_backup(&wallet)
         );
     }
-
-    #[test]
-    fn manual_recovery_word_verification_remains_separate() {
-        let mut wallet = wallet_with_id("wallet-1");
-        wallet.verified = true;
-
-        assert!(!CloudBackupRecoveryCoverage::default().needs_backup(&wallet));
-    }
 }

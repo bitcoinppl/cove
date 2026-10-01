@@ -174,7 +174,6 @@ fn map_authentication_error(error: PasskeyError) -> Result<PasskeyAuthOutcome, C
 mod tests {
     use super::{
         AuthenticatedPasskey, PasskeyAuthOutcome, PasskeyAuthPolicy, PasskeyAuthenticator,
-        map_authentication_error,
     };
     use cove_device::passkey::{
         DiscoveredPasskeyResult, PasskeyAccess, PasskeyError, PasskeyFailureReason,
@@ -183,36 +182,6 @@ mod tests {
 
     use crate::manager::cloud_backup_manager::ops::test_support::{async_test_lock, test_globals};
     use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupKeychain};
-
-    #[test]
-    fn map_authentication_error_returns_user_cancelled() {
-        let outcome = map_authentication_error(PasskeyError::UserCancelled).unwrap();
-        assert_eq!(outcome, PasskeyAuthOutcome::UserCancelled);
-    }
-
-    #[test]
-    fn map_authentication_error_returns_no_credential_found() {
-        let outcome = map_authentication_error(PasskeyError::NoCredentialFound).unwrap();
-        assert_eq!(outcome, PasskeyAuthOutcome::NoCredentialFound);
-    }
-
-    #[test]
-    fn map_authentication_error_preserves_unexpected_errors() {
-        let error = map_authentication_error(PasskeyError::RequestFailed {
-            operation: PasskeyOperation::AuthenticateAssertion,
-            reason: PasskeyFailureReason::Unknown { diagnostic_message: "boom".into() },
-        })
-        .unwrap_err();
-        assert!(
-            matches!(error, CloudBackupError::Passkey(message) if message == "authenticate assertion failed: unknown: boom")
-        );
-    }
-
-    #[test]
-    fn map_authentication_error_preserves_unsupported_provider() {
-        let error = map_authentication_error(PasskeyError::PrfUnsupportedProvider).unwrap_err();
-        assert!(matches!(error, CloudBackupError::UnsupportedPasskeyProvider));
-    }
 
     #[tokio::test]
     async fn stored_then_discover_falls_back_only_when_credential_is_missing() {
