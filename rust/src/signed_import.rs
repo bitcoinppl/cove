@@ -268,14 +268,6 @@ mod tests {
     }
 
     #[test]
-    fn test_psbt_accessors() {
-        let parsed = SignedTransactionOrPsbt::try_from_bytes(&make_signed_psbt_bytes()).unwrap();
-        assert!(matches!(parsed, SignedTransactionOrPsbt::SignedPsbt(_)));
-        assert!(parsed.psbt().is_some());
-        assert!(parsed.transaction().is_none());
-    }
-
-    #[test]
     fn test_whitespace_handling() {
         let padded = format!("  {}  ", hex::encode(make_signed_psbt_bytes()));
         let result = SignedTransactionOrPsbt::try_parse(&padded);

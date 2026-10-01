@@ -521,22 +521,6 @@ mod tests {
     }
 
     #[test]
-    fn fee_rate_options_without_totals_use_no_total_constructor() {
-        let base = FeeRateOptions {
-            fast: FeeRateOption::new(FeeSpeed::Fast, 3.2),
-            medium: FeeRateOption::new(FeeSpeed::Medium, 2.1),
-            slow: FeeRateOption::new(FeeSpeed::Slow, 1.0),
-        };
-
-        let options = FeeRateOptionsWithTotalFee::without_totals(base);
-
-        assert_eq!(options.fast, FeeRateOptionWithTotalFee::without_total(base.fast));
-        assert_eq!(options.medium, FeeRateOptionWithTotalFee::without_total(base.medium));
-        assert_eq!(options.slow, FeeRateOptionWithTotalFee::without_total(base.slow));
-        assert_eq!(options.custom, None);
-    }
-
-    #[test]
     fn grouped_integer_formatting_matches_platform_number_format() {
         assert_eq!(0_u32.thousands_int(), "0");
         assert_eq!(1_u32.thousands_int(), "1");

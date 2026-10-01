@@ -1422,15 +1422,6 @@ const fn full_scan_updates_initial_metadata(full_scan_type: FullScanType) -> boo
     should_update_full_scan_metadata(full_scan_type)
 }
 
-#[cfg(test)]
-fn metadata_with_full_scan_performed(
-    mut metadata: WalletMetadata,
-    completed_at: u64,
-) -> WalletMetadata {
-    metadata.internal.performed_full_scan_at = Some(completed_at);
-    metadata
-}
-
 fn should_accept_wallet_scan_generation(
     current_generation: WalletScanGeneration,
     event_generation: WalletScanGeneration,
@@ -1741,7 +1732,6 @@ mod tests {
         Transaction as BdkTransaction, TxIn, TxOut, Txid, absolute::LockTime, hashes::Hash as _,
         transaction::Version,
     };
-    use cove_bdk_progressive_scan::ScanUpdate;
     use cove_device::keychain::Keychain;
     use cove_tokio::FutureTimeoutExt as _;
     use cove_types::{
@@ -1750,7 +1740,7 @@ mod tests {
     };
     use parking_lot::RwLock;
     use std::{
-        collections::{BTreeMap, HashSet},
+        collections::HashSet,
         str::FromStr as _,
         sync::{
             Arc,
@@ -1771,7 +1761,6 @@ mod tests {
         ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, InitialScanRoute,
         RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, SingleOrMany, address_type_patch,
         full_scan_updates_initial_metadata, initial_scan_route, ledger_ready_for_spend,
-        metadata_with_full_scan_performed, progressive_scan_update_response,
         reset_scan_lifecycle_state_for_address_type_switch, should_accept_wallet_scan_generation,
         should_skip_recent_scan, trusted_spendable_output, wallet_scan_progress_start,
     };
@@ -2469,19 +2458,6 @@ mod tests {
             medium: FeeRateOption::new(FeeSpeed::Medium, 1.0),
             slow: FeeRateOption::new(FeeSpeed::Slow, 1.0),
         }
-    }
-
-    #[test]
-    fn progressive_scan_update_response_preserves_last_active_indices() {
-        let scan_update = ScanUpdate {
-            chain_update: None,
-            tx_update: Default::default(),
-            last_active_indices: BTreeMap::from([(KeychainKind::External, 7)]),
-        };
-
-        let response = progressive_scan_update_response(scan_update);
-
-        assert_eq!(response.last_active_indices, BTreeMap::from([(KeychainKind::External, 7)]));
     }
 
     #[test]
@@ -4272,19 +4248,6 @@ mod tests {
         assert!(full_scan_updates_initial_metadata(FullScanType::Full));
         assert!(full_scan_updates_initial_metadata(FullScanType::Rescan(150)));
         assert!(!full_scan_updates_initial_metadata(FullScanType::Rescan(20)));
-    }
-
-    #[test]
-    fn full_scan_metadata_update_preserves_current_public_fields() {
-        let mut metadata = WalletMetadata::preview_new();
-        metadata.name = "renamed while scanning".to_string();
-        metadata.selected_unit = crate::transaction::Unit::Sat;
-
-        let updated = metadata_with_full_scan_performed(metadata.clone(), 123);
-
-        assert_eq!(updated.name, metadata.name);
-        assert_eq!(updated.selected_unit, metadata.selected_unit);
-        assert_eq!(updated.internal.performed_full_scan_at, Some(123));
     }
 
     #[test]

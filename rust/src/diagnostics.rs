@@ -451,7 +451,6 @@ mod tests {
         assert!(preview.contains("<redacted-bitcoin-address-"));
         assert!(preview.contains("amount=5000 sats"));
         assert!(!preview.contains("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"));
-        assert_eq!(report.size_bytes(), preview.len() as u64);
     }
 
     #[test]

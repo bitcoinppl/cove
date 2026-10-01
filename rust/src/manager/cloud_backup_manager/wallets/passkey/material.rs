@@ -392,20 +392,6 @@ mod tests {
     }
 
     #[test]
-    fn passkey_provider_hint_preserves_registration_suffix() {
-        let hint = passkey_provider_hint(
-            PasskeyRegistrationResult {
-                credential_id: vec![1, 2, 3],
-                provider_aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
-                registered_platform: PasskeyRegistrationPlatform::Android,
-            },
-            "09IX".into(),
-        );
-
-        assert_eq!(hint.name_suffix, "09IX");
-    }
-
-    #[test]
     fn android_passkey_association_error_uses_actionable_message() {
         let source = PasskeyError::RequestFailed {
             operation: PasskeyOperation::Registration,

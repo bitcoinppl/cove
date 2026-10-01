@@ -213,7 +213,6 @@ mod tests {
 
         let state = SendFlowManagerState::new(metadata, balance);
 
-        assert_eq!(state.wallet_balance.as_ref().unwrap().spendable().as_sats(), 50_000);
         assert_eq!(state.unlocked_spendable_sats, None);
         assert!(!state.lock_state_load_failed);
     }

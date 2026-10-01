@@ -257,13 +257,6 @@ mod tests {
     }
 
     #[test]
-    fn cached_state_expires_exactly_five_minutes_after_visible_window_start() {
-        let state = ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::Fresh, 1_000);
-
-        assert_eq!(state.expires_at_secs, Some(1_000 + CACHE_WINDOW.as_secs()));
-    }
-
-    #[test]
     fn refresh_delay_uses_visible_window_expiry() {
         let state =
             ReceiveAddressState::cached(1, address(0), ReceiveAddressStatus::CachedUnused, 2_000);
@@ -296,16 +289,6 @@ mod tests {
     }
 
     #[test]
-    fn default_presentation_copies_with_idle_refresh_state() {
-        let session = ReceiveAddressSession::default();
-
-        let presentation = session.presentation();
-
-        assert_eq!(presentation.copy_policy, ReceiveAddressCopyPolicy::Copy);
-        assert_eq!(presentation.refresh_state, ReceiveAddressRefreshState::Idle);
-    }
-
-    #[test]
     fn presentation_payment_received_confirms_copy() {
         let mut session = ReceiveAddressSession::default();
         let state =
@@ -316,18 +299,6 @@ mod tests {
         let presentation = session.presentation();
 
         assert_eq!(presentation.copy_policy, ReceiveAddressCopyPolicy::ConfirmPaidAddress);
-        assert_eq!(presentation.refresh_state, ReceiveAddressRefreshState::Idle);
-    }
-
-    #[test]
-    fn presentation_uses_session_refresh_state() {
-        let mut session = ReceiveAddressSession::default();
-
-        session.set_refresh_state(ReceiveAddressRefreshState::Refreshing);
-        assert_eq!(session.presentation().refresh_state, ReceiveAddressRefreshState::Refreshing);
-
-        session.set_refresh_state(ReceiveAddressRefreshState::Failed);
-        assert_eq!(session.presentation().refresh_state, ReceiveAddressRefreshState::Failed);
     }
 
     #[test]

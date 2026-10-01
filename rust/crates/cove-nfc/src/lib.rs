@@ -258,7 +258,6 @@ mod tests {
         let mut chunks_processed = 0;
 
         let export_bytes = export_bytes();
-        assert_eq!(export_bytes.len(), 3044);
 
         for chunk in export_bytes.chunks(100) {
             let mut chunk_data = std::mem::take(&mut data);

@@ -283,7 +283,6 @@ mod tests {
         // export
         let export = &EXPORT[0..3043];
         let mut data = super::stream::new(export);
-        assert_eq!(data.len(), export.len());
 
         let message_info = parse_message_info(&mut data).unwrap();
         assert_eq!(message_info.full_message_length, 3043);

@@ -335,7 +335,7 @@ fn preserved_plaintext_path(source: &Path) -> Result<PathBuf> {
         return Ok(candidate);
     }
 
-    eyre::bail!("failed to find a path for preserving plaintext source {}", source.display())
+    Err(eyre::eyre!("failed to find a path for preserving plaintext source {}", source.display()))
 }
 
 fn main_table_policy(source_path: &Path) -> TableCopyPolicy {

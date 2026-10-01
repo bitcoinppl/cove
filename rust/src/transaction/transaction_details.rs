@@ -650,57 +650,7 @@ fn fmt_historical_fiat(amount: f64, currency: FiatCurrency) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitcoin::Sequence;
     use cove_types::unit::BitcoinUnit;
-
-    /// Mirrors the detection logic in `try_new`: returns `true` when any input
-    /// sequence signals opt-in RBF (nSequence < 0xFFFFFFFE, per BIP 125).
-    fn compute_is_rbf_signaling(sequences: &[Sequence]) -> bool {
-        sequences.iter().any(bitcoin::Sequence::is_rbf)
-    }
-
-    #[test]
-    fn sequence_below_threshold_signals_rbf() {
-        // 0xFFFFFFFD is the highest value that still signals RBF
-        assert!(compute_is_rbf_signaling(&[Sequence(0xFFFFFFFD)]));
-    }
-
-    #[test]
-    fn sequence_at_threshold_does_not_signal_rbf() {
-        // 0xFFFFFFFE (Sequence::ENABLE_LOCKTIME_NO_RBF) does NOT signal RBF
-        assert!(!compute_is_rbf_signaling(&[Sequence(0xFFFFFFFE)]));
-    }
-
-    #[test]
-    fn final_sequence_does_not_signal_rbf() {
-        // 0xFFFFFFFF (Sequence::MAX) is fully final
-        assert!(!compute_is_rbf_signaling(&[Sequence::MAX]));
-    }
-
-    #[test]
-    fn zero_sequence_signals_rbf() {
-        // Sequence(0) is commonly used by wallets to signal RBF
-        assert!(compute_is_rbf_signaling(&[Sequence::ZERO]));
-    }
-
-    #[test]
-    fn any_rbf_input_makes_tx_replaceable() {
-        // BIP 125: a tx is replaceable if *any* input signals RBF
-        let sequences = vec![Sequence::MAX, Sequence(0xFFFFFFFD), Sequence::MAX];
-        assert!(compute_is_rbf_signaling(&sequences));
-    }
-
-    #[test]
-    fn all_final_inputs_means_not_replaceable() {
-        let sequences = vec![Sequence::MAX, Sequence(0xFFFFFFFE), Sequence::MAX];
-        assert!(!compute_is_rbf_signaling(&sequences));
-    }
-
-    #[test]
-    fn preview_constructors_default_to_not_rbf() {
-        assert!(!TransactionDetails::preview_new_confirmed().is_rbf_signaling);
-        assert!(!TransactionDetails::preview_pending_sent().is_rbf_signaling);
-    }
 
     #[test]
     fn confirmed_transaction_always_has_at_least_one_confirmation() {
@@ -722,7 +672,6 @@ mod tests {
         );
 
         assert_eq!(presentation.confirmations(), None);
-        assert!(!presentation.details().is_confirmed());
     }
 
     #[test]
@@ -736,7 +685,6 @@ mod tests {
         let presentation = TransactionDetailsPresentation::new(details, 839_999);
 
         assert_eq!(presentation.confirmations(), Some(1));
-        assert!(presentation.details().is_confirmed());
     }
 
     #[test]

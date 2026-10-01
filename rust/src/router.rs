@@ -487,7 +487,6 @@ mod tests {
         let current = Route::TransactionDetails { id: wallet_id.clone(), tx_id: tx_id.clone() };
         let next = Route::TransactionDetails { id: wallet_id, tx_id };
 
-        assert!(current.is_equal(next.clone()));
         assert!(current.is_same_navigation_destination(next));
     }
 

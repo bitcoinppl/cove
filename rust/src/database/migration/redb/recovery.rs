@@ -273,5 +273,5 @@ fn preserve_corrupt_file(path: &Path) -> Result<std::path::PathBuf> {
         return Ok(candidate);
     }
 
-    eyre::bail!("failed to find a path for preserving corrupt database {}", path.display())
+    Err(eyre::eyre!("failed to find a path for preserving corrupt database {}", path.display()))
 }

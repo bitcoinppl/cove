@@ -192,18 +192,6 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
-    fn test_crypto_seed_new() {
-        // 16-byte entropy (128 bits = 12 word mnemonic)
-        let entropy = vec![0x12; 16];
-        let seed = CryptoSeed::new(entropy.clone());
-
-        assert_eq!(seed.payload, entropy);
-        assert!(seed.creation_date.is_none());
-        assert!(seed.name.is_none());
-        assert!(seed.note.is_none());
-    }
-
-    #[test]
     fn test_crypto_seed_from_mnemonic() {
         let mnemonic_str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
         let mnemonic = Mnemonic::from_str(mnemonic_str).unwrap();

@@ -399,12 +399,19 @@ impl Wallet {
     }
 
     pub fn unreserve_tx_change_addresses(&mut self, tx: &bdk_wallet::bitcoin::Transaction) {
-        for txout in &tx.output {
-            if let Some((KeychainKind::Internal, index)) =
-                self.bdk.derivation_of_spk(txout.script_pubkey.clone())
-            {
-                self.bdk.unmark_used(KeychainKind::Internal, index);
-            }
+        unreserve_tx_change_addresses(&mut self.bdk, tx);
+    }
+}
+
+fn unreserve_tx_change_addresses(
+    wallet: &mut bdk_wallet::Wallet,
+    tx: &bdk_wallet::bitcoin::Transaction,
+) {
+    for txout in &tx.output {
+        if let Some((KeychainKind::Internal, index)) =
+            wallet.derivation_of_spk(txout.script_pubkey.clone())
+        {
+            wallet.unmark_used(KeychainKind::Internal, index);
         }
     }
 }
@@ -639,19 +646,6 @@ mod tests {
         wallet.list_unused_addresses(keychain).any(|address| address.index == index)
     }
 
-    fn unreserve_tx_change_addresses(
-        wallet: &mut bdk_wallet::Wallet,
-        tx: &bdk_wallet::bitcoin::Transaction,
-    ) {
-        for txout in &tx.output {
-            if let Some((KeychainKind::Internal, index)) =
-                wallet.derivation_of_spk(txout.script_pubkey.clone())
-            {
-                wallet.unmark_used(KeychainKind::Internal, index);
-            }
-        }
-    }
-
     #[test]
     fn unreserve_tx_change_addresses_releases_reserved_change_index() {
         let (mut wallet, _) = get_funded_wallet_wpkh();
@@ -736,13 +730,16 @@ mod tests {
         let mut wallet = test_bdk_wallet();
         let gap_limit = u32::from(GAP_LIMIT);
         let _ = wallet.reveal_addresses_to(KeychainKind::External, gap_limit + 2).last();
+
+        // a used index ahead of the unused ones separates the capped prefix from the normal scan
+        assert!(wallet.mark_used(KeychainKind::External, 0));
         let mut request = receive_prioritized_full_scan_request(&wallet);
 
         let indexes = scan_indexes(&mut request, KeychainKind::External, GAP_LIMIT as usize + 2);
-        let expected_prefix = (0..gap_limit).collect::<Vec<_>>();
+        let expected_prefix = (1..=gap_limit).collect::<Vec<_>>();
 
         assert_eq!(&indexes[..GAP_LIMIT as usize], expected_prefix.as_slice());
-        assert_eq!(indexes[GAP_LIMIT as usize], gap_limit);
+        assert_eq!(indexes[GAP_LIMIT as usize], 0);
     }
 
     #[test]

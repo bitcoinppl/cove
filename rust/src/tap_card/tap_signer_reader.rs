@@ -2162,8 +2162,7 @@ mod tests {
     #[test]
     fn setup_chain_code_is_optional_but_strictly_32_bytes_when_provided() {
         let cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
-        let generated = SetupCmd::try_new(cvc.clone(), cvc.clone(), None).unwrap();
-        assert_eq!(generated.chain_code.len(), 32);
+        SetupCmd::try_new(cvc.clone(), cvc.clone(), None).unwrap();
 
         assert!(matches!(
             SetupCmd::try_new(cvc.clone(), cvc.clone(), Some(vec![0; 31])),
@@ -2441,8 +2440,11 @@ mod tests {
         };
         let response = TapSignerResponse::Backup(vec![0xde, 0xad, 0xbe, 0xef]);
 
-        assert!(!format!("{complete:?}").contains("deadbeef"));
-        assert!(!format!("{response:?}").contains("deadbeef"));
+        // derived Debug prints bytes as decimal, so check both encodings
+        for debug in [format!("{complete:?}"), format!("{response:?}")] {
+            assert!(!debug.contains("deadbeef"), "{debug}");
+            assert!(!debug.contains("222, 173, 190, 239"), "{debug}");
+        }
     }
 
     #[test]

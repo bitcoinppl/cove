@@ -567,6 +567,31 @@ fn empty_wallet_data_directory_is_not_an_occupied_restore_artifact() {
     fs::remove_dir(directory).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn unreadable_wallet_data_blocks_restore_snapshot() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    crate::database::test_support::delete_database();
+    crate::test_support::init_test_keychain();
+    crate::test_support::shared_mock_keychain().reset();
+
+    let wallet_id = WalletId::preview_new_random();
+    let directory = crate::database::wallet_data::wallet_data_directory_path(&wallet_id);
+    fs::create_dir_all(&directory).unwrap();
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o000)).unwrap();
+
+    let id = ValidatedRestoreWalletId::validate(&wallet_id).unwrap();
+    let result = RestoreArtifactSnapshot::capture(&id);
+
+    fs::set_permissions(&directory, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::remove_dir(&directory).unwrap();
+
+    // unreadable wallet data must not look like an empty restore target
+    assert!(matches!(result, Err(BackupError::Restore(_))));
+}
+
 #[test]
 fn nested_wallet_data_cleanup_preserves_existing_entries() {
     let _guard = crate::test_support::global_state_test_lock().blocking_lock();

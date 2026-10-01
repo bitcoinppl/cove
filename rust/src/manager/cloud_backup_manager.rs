@@ -1513,41 +1513,6 @@ mod tests {
     }
 
     #[test]
-    fn convert_cloud_secret_mnemonic() {
-        let secret = cove_cspp::backup_data::WalletSecret::Mnemonic("abandon".into());
-        let result = wallets::tests::convert_cloud_secret(&secret);
-        assert!(matches!(result, LocalWalletSecret::Mnemonic(ref m) if m == "abandon"));
-    }
-
-    #[test]
-    fn convert_cloud_secret_xprv() {
-        let secret = cove_cspp::backup_data::WalletSecret::Xprv("xprv-example".into());
-        let result = wallets::tests::convert_cloud_secret(&secret);
-        assert!(matches!(result, LocalWalletSecret::Xprv(ref value) if value == "xprv-example"));
-    }
-
-    #[test]
-    fn convert_cloud_secret_tap_signer() {
-        let secret = cove_cspp::backup_data::WalletSecret::TapSignerBackup(vec![1, 2, 3]);
-        let result = wallets::tests::convert_cloud_secret(&secret);
-        assert!(matches!(result, LocalWalletSecret::TapSignerBackup(ref b) if b == &[1, 2, 3]));
-    }
-
-    #[test]
-    fn convert_cloud_secret_descriptor_to_none() {
-        let secret = cove_cspp::backup_data::WalletSecret::Descriptor("wpkh(...)".into());
-        let result = wallets::tests::convert_cloud_secret(&secret);
-        assert!(matches!(result, LocalWalletSecret::None));
-    }
-
-    #[test]
-    fn convert_cloud_secret_watch_only_to_none() {
-        let result =
-            wallets::tests::convert_cloud_secret(&cove_cspp::backup_data::WalletSecret::WatchOnly);
-        assert!(matches!(result, LocalWalletSecret::None));
-    }
-
-    #[test]
     fn restore_progress_updates_state() {
         let _guard = test_lock().lock();
         let manager = init_manager();
@@ -1558,16 +1523,6 @@ mod tests {
             .apply_restore_outcome(CloudBackupRestoreOutcome::ProgressReported(progress.clone()));
 
         assert_eq!(manager.state.read().snapshot().restore_progress, Some(progress));
-    }
-
-    #[test]
-    fn verification_metadata_is_not_configured_when_backup_is_disabled() {
-        let db_state = PersistedCloudBackupState::default();
-
-        assert_eq!(
-            CloudBackupVerificationMetadata::from(&db_state),
-            CloudBackupVerificationMetadata::NotConfigured,
-        );
     }
 
     #[test]

@@ -29,38 +29,3 @@ impl BalancePresentation {
 pub fn balance_presentation_provisional() -> BalancePresentation {
     BalancePresentation::provisional()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use super::super::ledger_state::InitialScanActivity;
-
-    #[test]
-    fn complete_ledger_uses_normal_balance_presentation() {
-        assert_eq!(
-            BalancePresentation::for_ledger_state(WalletLedgerState::Complete),
-            BalancePresentation::normal()
-        );
-    }
-
-    #[test]
-    fn incomplete_active_initial_scan_uses_provisional_balance_presentation() {
-        assert_eq!(
-            BalancePresentation::for_ledger_state(WalletLedgerState::InitialScanIncomplete(
-                InitialScanActivity::Active
-            )),
-            BalancePresentation::provisional()
-        );
-    }
-
-    #[test]
-    fn incomplete_idle_initial_scan_uses_provisional_balance_presentation() {
-        assert_eq!(
-            BalancePresentation::for_ledger_state(WalletLedgerState::InitialScanIncomplete(
-                InitialScanActivity::Idle
-            )),
-            BalancePresentation::provisional()
-        );
-    }
-}

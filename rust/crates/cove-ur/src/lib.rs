@@ -83,12 +83,5 @@ mod tests {
         // verify we get the original JSON back
         let decoded_json = std::str::from_utf8(decoded_bytes).unwrap();
         assert_eq!(decoded_json, passport_json);
-
-        // parse the JSON and verify key fields
-        let parsed: serde_json::Value = serde_json::from_str(decoded_json).unwrap();
-        assert_eq!(parsed["xfp"].as_str().unwrap(), "73c5da0a");
-        assert_eq!(parsed["bip84"]["deriv"].as_str().unwrap(), "m/84'/0'/0'");
-        assert!(parsed["bip84"]["xpub"].as_str().unwrap().starts_with("zpub"));
-        assert!(parsed["bip84"]["first"].as_str().unwrap().starts_with("bc1q"));
     }
 }

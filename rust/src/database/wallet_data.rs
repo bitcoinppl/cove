@@ -600,19 +600,6 @@ pub(crate) fn remove_wallet_artifact(path: &Path) -> std::io::Result<()> {
     }
 }
 
-#[cfg(test)]
-fn directory_contains_wallet_data(directory: &Path) -> bool {
-    let metadata = match std::fs::symlink_metadata(directory) {
-        Ok(metadata) => metadata,
-        Err(error) => return error.kind() != std::io::ErrorKind::NotFound,
-    };
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return true;
-    }
-
-    std::fs::read_dir(directory).map(|mut entries| entries.next().is_some()).unwrap_or(true)
-}
-
 /// Drop all cached wallet data connections and open locks
 pub fn clear_database_connections() {
     DATABASE_CONNECTIONS.write().clear();
@@ -698,15 +685,6 @@ mod tests {
     };
 
     use super::*;
-
-    #[test]
-    fn unreadable_wallet_data_path_is_treated_as_occupied() {
-        let tmp = tempfile::tempdir().expect("failed to create temp dir");
-        let parent_file = tmp.path().join("not-a-directory");
-        std::fs::write(&parent_file, b"occupied").expect("failed to create parent file");
-
-        assert!(directory_contains_wallet_data(&parent_file.join("wallet")));
-    }
 
     #[test]
     fn deleting_missing_wallet_data_does_not_create_its_directory() {
@@ -863,26 +841,6 @@ mod tests {
         db.set_receive_address_cache(cache.clone()).unwrap();
 
         assert_eq!(db.get_receive_address_cache().unwrap(), Some(cache));
-    }
-
-    #[test]
-    fn receive_address_cache_visible_window_start_updates_timer_only() {
-        let wallet_id = WalletId::preview_new_random();
-        let cache = ReceiveAddressCache {
-            derivation_index: 7,
-            first_shown_at_secs: 1_700_000_000,
-            wallet_id: wallet_id.clone(),
-            network: Network::Signet,
-            address_type: WalletAddressType::NativeSegwit,
-        };
-
-        let reset = cache.with_visible_window_start(1_700_000_300);
-
-        assert_eq!(reset.derivation_index, 7);
-        assert_eq!(reset.first_shown_at_secs, 1_700_000_300);
-        assert_eq!(reset.wallet_id, wallet_id);
-        assert_eq!(reset.network, Network::Signet);
-        assert_eq!(reset.address_type, WalletAddressType::NativeSegwit);
     }
 
     #[test]

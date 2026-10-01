@@ -268,7 +268,7 @@ fn resolve_serial(devices: &[AndroidDevice], serial: &str) -> Result<AndroidDevi
 
 fn select_from_devices(devices: &[AndroidDevice]) -> Result<AndroidDevice> {
     match devices {
-        [] => color_eyre::eyre::bail!("No connected Android device found"),
+        [] => Err(color_eyre::eyre::eyre!("No connected Android device found")),
         [device] => Ok(device.clone()),
         _ => select_with_fzf(devices),
     }

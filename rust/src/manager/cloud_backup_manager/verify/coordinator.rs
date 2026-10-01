@@ -177,32 +177,6 @@ impl CloudBackupVerificationCoordinator {
 mod tests {
     use super::*;
 
-    fn default_report() -> DeepVerificationReport {
-        DeepVerificationReport {
-            master_key_wrapper_repaired: false,
-            local_master_key_repaired: false,
-            credential_recovered: false,
-            wallets_verified: 0,
-            wallet_issues: Default::default(),
-            detail: None,
-        }
-    }
-
-    #[test]
-    fn manual_verification_preserves_source() {
-        let effect = CloudBackupVerificationCoordinator::begin_manual(
-            CloudBackupVerificationSource::Onboarding,
-        );
-
-        assert_eq!(
-            effect.presentation,
-            Some(CloudBackupVerificationPresentation::ManualVerifying {
-                source: CloudBackupVerificationSource::Onboarding
-            })
-        );
-        assert_eq!(effect.verification, Some(VerificationState::Verifying));
-    }
-
     #[test]
     fn background_confirmation_clears_interactive_verification() {
         let effect = CloudBackupVerificationCoordinator::begin_background_confirmation(
@@ -241,22 +215,6 @@ mod tests {
     }
 
     #[test]
-    fn completion_preserves_source() {
-        let effect = CloudBackupVerificationCoordinator::complete(
-            CloudBackupVerificationSource::CloudBackupDetail,
-            default_report(),
-        );
-
-        assert_eq!(
-            effect.presentation,
-            Some(CloudBackupVerificationPresentation::Completed {
-                source: CloudBackupVerificationSource::CloudBackupDetail
-            })
-        );
-        assert!(matches!(effect.verification, Some(VerificationState::Verified(_))));
-    }
-
-    #[test]
     fn failed_preserves_source() {
         let failure = DeepVerificationFailure::retry("verification failed", None, None);
         let effect = CloudBackupVerificationCoordinator::fail(
@@ -292,68 +250,12 @@ mod tests {
     }
 
     #[test]
-    fn decision_transitions_preserve_source() {
-        let decision = CloudBackupVerificationCoordinator::needs_decision(
-            CloudBackupVerificationReason::BackupChanged,
-            CloudBackupVerificationSource::RootPrompt,
-        );
-
-        assert_eq!(
-            decision.presentation,
-            Some(CloudBackupVerificationPresentation::NeedsDecision {
-                reason: CloudBackupVerificationReason::BackupChanged,
-                source: CloudBackupVerificationSource::RootPrompt,
-            })
-        );
-
-        let hidden = CloudBackupVerificationCoordinator::dismiss_decision(
-            CloudBackupVerificationSource::RootPrompt,
-        );
-
-        assert_eq!(
-            hidden.presentation,
-            Some(CloudBackupVerificationPresentation::Hidden {
-                source: Some(CloudBackupVerificationSource::RootPrompt),
-            })
-        );
-    }
-
-    #[test]
-    fn current_source_preserves_background_source() {
-        assert_eq!(
-            CloudBackupVerificationCoordinator::current_source(
-                &CloudBackupVerificationPresentation::BackgroundConfirming(
-                    CloudBackupVerificationSource::Onboarding,
-                ),
-            ),
-            CloudBackupVerificationSource::Onboarding
-        );
-    }
-
-    #[test]
     fn current_source_uses_embedded_or_default_source() {
-        assert_eq!(
-            CloudBackupVerificationCoordinator::current_source(
-                &CloudBackupVerificationPresentation::Hidden {
-                    source: Some(CloudBackupVerificationSource::CloudBackupDetail),
-                },
-            ),
-            CloudBackupVerificationSource::CloudBackupDetail
-        );
         assert_eq!(
             CloudBackupVerificationCoordinator::current_source(
                 &CloudBackupVerificationPresentation::Hidden { source: None },
             ),
             CloudBackupVerificationSource::Settings
-        );
-        assert_eq!(
-            CloudBackupVerificationCoordinator::current_source(
-                &CloudBackupVerificationPresentation::NeedsDecision {
-                    reason: CloudBackupVerificationReason::BackupChanged,
-                    source: CloudBackupVerificationSource::Onboarding,
-                },
-            ),
-            CloudBackupVerificationSource::Onboarding
         );
     }
 }

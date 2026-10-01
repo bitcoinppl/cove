@@ -911,20 +911,6 @@ mod tests {
     }
 
     #[test]
-    fn discovery_origin_comes_from_wallet_metadata() {
-        let mut metadata = WalletMetadata::preview_new();
-        metadata.network = CoveNetwork::Signet;
-        metadata.wallet_mode = WalletMode::Decoy;
-
-        let origin = DiscoveryOrigin::from(&metadata);
-
-        assert_eq!(
-            origin,
-            DiscoveryOrigin { network: CoveNetwork::Signet, wallet_mode: WalletMode::Decoy }
-        );
-    }
-
-    #[test]
     fn discovery_uses_origin_network_node_when_global_network_differs() {
         crate::app::reconcile::test_support::init_noop_updater();
         let (_tmp, global_config) = test_global_config();

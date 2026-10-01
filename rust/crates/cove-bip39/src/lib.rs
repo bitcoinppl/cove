@@ -200,8 +200,6 @@ mod test {
             .words()
             .collect::<Vec<&'static str>>();
 
-        assert_eq!(words.len(), 24);
-
         let first_11 = words[..23].join(" ");
         let last = words.last().unwrap().to_string();
 

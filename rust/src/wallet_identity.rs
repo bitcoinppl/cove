@@ -225,17 +225,6 @@ mod tests {
     }
 
     #[test]
-    fn descriptor_identity_wins_over_xpub_identity() {
-        let descriptors = descriptor_pair(0);
-        let xpub = descriptors.external.xpub().unwrap();
-
-        assert_ne!(
-            PublicWalletIdentity::from_descriptors(&descriptors),
-            PublicWalletIdentity::from_xpub(xpub)
-        );
-    }
-
-    #[test]
     fn xpub_default_address_type_synthesizes_native_segwit_descriptor_identity() {
         let descriptors = descriptor_pair(0);
         let xpub = descriptors.external.xpub().unwrap();

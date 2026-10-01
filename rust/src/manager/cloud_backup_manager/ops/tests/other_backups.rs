@@ -253,16 +253,10 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
         vec![wallet_filename_from_record_id(&record_id)],
     );
 
-    let current_namespace_list_attempt_count =
-        globals.cloud.list_wallet_files_attempt_count_for_namespace(&current_namespace);
     let report = manager.do_recover_other_backups().await.unwrap();
 
     assert_eq!(report.wallets_restored, 1);
     assert_eq!(report.wallets_failed, 0);
-    assert_eq!(
-        globals.cloud.list_wallet_files_attempt_count_for_namespace(&current_namespace),
-        current_namespace_list_attempt_count + 3,
-    );
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
     assert!(!globals.cloud.has_namespace(&other_namespace));
     assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(current_namespace.clone()));

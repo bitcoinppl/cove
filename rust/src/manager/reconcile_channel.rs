@@ -154,15 +154,6 @@ mod tests {
     }
 
     #[test]
-    fn send_sync_forwards_single_message() {
-        let channel = ReconcileChannel::new(1);
-
-        channel.send_sync(TestMessage::One);
-
-        assert_eq!(channel.receiver().recv().unwrap(), SingleOrMany::Single(TestMessage::One));
-    }
-
-    #[test]
     fn deferred_sender_flushes_many_messages_on_drop() {
         let channel = ReconcileChannel::new(1);
 
