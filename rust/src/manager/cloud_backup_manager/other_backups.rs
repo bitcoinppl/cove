@@ -80,17 +80,6 @@ impl RustCloudBackupManager {
         Ok(CloudBackupOtherBackupsSummary { namespace_count, wallet_count, passkey_hints })
     }
 
-    pub(crate) async fn best_passkey_hint_for_namespaces(
-        &self,
-        cloud: &CloudStorageClient,
-        namespaces: &[String],
-    ) -> Option<CloudBackupPasskeyHint> {
-        self.passkey_hints_for_namespaces(cloud, namespaces)
-            .await
-            .into_iter()
-            .max_by_key(|hint| hint.registered_at)
-    }
-
     async fn passkey_hints_for_namespaces(
         &self,
         cloud: &CloudStorageClient,
@@ -115,20 +104,20 @@ impl RustCloudBackupManager {
             }) else {
                 continue;
             };
-            if encrypted.remote_metadata.normalized_master_key(namespace).is_err() {
-                warn!("Failed to normalize passkey hint for namespace {namespace}");
-                continue;
-            }
-
-            let Some(provider_hint) = encrypted.passkey_provider_hint.as_ref() else {
-                continue;
+            let hint = match CloudBackupPasskeyHint::from_master_key_wrapper(&encrypted, namespace)
+            {
+                Ok(Some(hint)) => hint,
+                Ok(None) => continue,
+                Err(_) => {
+                    warn!("Failed to normalize passkey hint for namespace {namespace}");
+                    continue;
+                }
             };
-            let hint = CloudBackupPasskeyHint::from_provider_hint(provider_hint);
 
             hints_by_suffix
                 .entry(hint.name_suffix.clone())
                 .and_modify(|current| {
-                    if hint.registered_at > current.registered_at {
+                    if hint.is_newer_than(current) {
                         *current = hint.clone();
                     }
                 })

@@ -7,12 +7,26 @@ enum PresentationTransitionHostState: Equatable {
     case awaitingPresenterReadiness(UUID)
 }
 
+struct PresentationTransitionRequest: Equatable {
+    let readinessRequestID: UUID
+}
+
+struct PendingPresentationAction<Presentation: Equatable, Action> {
+    let presentation: Presentation
+    let transition: PresentationTransitionRequest
+    let action: Action
+}
+
 @MainActor
 @Observable
 final class PresentationTransitionCoordinator<Presentation> {
     private(set) var currentPresentation: TaggedItem<Presentation>?
     private(set) var queuedPresentation: Presentation?
     private(set) var readinessRequestID: UUID?
+
+    var transitionRequest: PresentationTransitionRequest? {
+        readinessRequestID.map(PresentationTransitionRequest.init)
+    }
 
     var hostState: PresentationTransitionHostState {
         if let readinessRequestID {
@@ -47,6 +61,7 @@ final class PresentationTransitionCoordinator<Presentation> {
 
         queuedPresentation = nil
         currentPresentation = TaggedItem(presentation)
+        readinessRequestID = nil
     }
 
     func queue(_ presentation: Presentation) {
@@ -84,10 +99,15 @@ final class PresentationTransitionCoordinator<Presentation> {
     }
 
     func dismissCurrentPresentation() {
-        guard currentPresentation != nil else { return }
+        _ = dismissCurrentPresentationForTransition()
+    }
+
+    @discardableResult
+    func dismissCurrentPresentationForTransition() -> PresentationTransitionRequest? {
+        guard currentPresentation != nil else { return nil }
 
         currentPresentation = nil
-        beginWaitingForPresenterReadiness()
+        return beginWaitingForPresenterReadiness()
     }
 
     func discard(where shouldDiscard: (Presentation) -> Bool) {
@@ -114,12 +134,19 @@ final class PresentationTransitionCoordinator<Presentation> {
         _ requestID: UUID,
         presentQueuedPresentation: Bool = true
     ) {
-        guard readinessRequestID == requestID else { return }
+        guard consumePresenterReadiness(requestID) else { return }
 
-        readinessRequestID = nil
         if presentQueuedPresentation {
             self.presentQueuedPresentation()
         }
+    }
+
+    @discardableResult
+    func consumePresenterReadiness(_ requestID: UUID) -> Bool {
+        guard readinessRequestID == requestID else { return false }
+
+        readinessRequestID = nil
+        return true
     }
 
     func hostDidDisappear() {
@@ -192,8 +219,11 @@ final class PresentationTransitionCoordinator<Presentation> {
         )
     }
 
-    private func beginWaitingForPresenterReadiness() {
-        readinessRequestID = UUID()
+    @discardableResult
+    private func beginWaitingForPresenterReadiness() -> PresentationTransitionRequest {
+        let requestID = UUID()
+        readinessRequestID = requestID
+        return PresentationTransitionRequest(readinessRequestID: requestID)
     }
 
     private func presentQueuedPresentation() {
@@ -201,6 +231,113 @@ final class PresentationTransitionCoordinator<Presentation> {
 
         currentPresentation = TaggedItem(queuedPresentation)
         self.queuedPresentation = nil
+        readinessRequestID = nil
+    }
+}
+
+extension PresentationTransitionCoordinator where Presentation: Equatable {
+    /// Move toward a presentable `desired` presentation
+    ///
+    /// `beforeReplacingCurrent` runs only when a different visible presentation is about to be
+    /// dismissed, so hosts can ignore the dismissal their binding reports for it
+    func reconcile(
+        toward desired: Presentation,
+        beforeReplacingCurrent: () -> Void
+    ) {
+        if currentPresentation?.item == desired {
+            discardQueued { _ in true }
+            return
+        }
+
+        // present queues behind a pending readiness request on its own
+        guard currentPresentation != nil else {
+            present(desired)
+            return
+        }
+
+        beforeReplacingCurrent()
+        transition(to: desired)
+    }
+}
+
+@MainActor
+final class PresentationActionHandoff<Presentation: Equatable, Action> {
+    private(set) var pendingAction: PendingPresentationAction<Presentation, Action>?
+
+    var pendingPresentation: Presentation? {
+        pendingAction?.presentation
+    }
+
+    func stage(
+        action: Action,
+        presentation: Presentation,
+        transition: PresentationTransitionRequest
+    ) {
+        guard pendingAction == nil else { return }
+
+        pendingAction = PendingPresentationAction(
+            presentation: presentation,
+            transition: transition,
+            action: action
+        )
+    }
+
+    func cancel() {
+        pendingAction = nil
+    }
+
+    /// Drop any staged action along with the host's presentation state
+    func hostDidDisappear(using coordinator: PresentationTransitionCoordinator<Presentation>) {
+        cancel()
+        coordinator.hostDidDisappear()
+    }
+
+    /// Route presenter readiness to the staged action, or to the coordinator when none is staged
+    ///
+    /// `withoutPendingAction` replaces the plain coordinator advance for hosts that apply their
+    /// own presentability checks before presenting queued work
+    func presenterDidBecomeReady(
+        _ requestID: UUID,
+        currentPresentation: Presentation?,
+        isHostAvailable: Bool,
+        using coordinator: PresentationTransitionCoordinator<Presentation>,
+        withoutPendingAction fallback: ((UUID) -> Void)? = nil,
+        dispatch: (Action) -> Void
+    ) {
+        guard let pendingAction else {
+            if let fallback {
+                fallback(requestID)
+            } else {
+                coordinator.presenterDidBecomeReady(requestID)
+            }
+            return
+        }
+
+        // an unrelated readiness signal must leave the staged action waiting for its own request
+        guard pendingAction.transition.readinessRequestID == requestID else { return }
+
+        let canDispatch = pendingAction.presentation == currentPresentation &&
+            pendingAction.transition == coordinator.transitionRequest &&
+            isHostAvailable &&
+            (coordinator.queuedPresentation == nil ||
+                coordinator.queuedPresentation == pendingAction.presentation)
+
+        guard canDispatch else {
+            self.pendingAction = nil
+            coordinator.discardQueued { $0 == pendingAction.presentation }
+            coordinator.presenterDidBecomeReady(requestID)
+            return
+        }
+
+        coordinator.discardQueued { $0 == pendingAction.presentation }
+
+        guard coordinator.consumePresenterReadiness(requestID) else {
+            self.pendingAction = nil
+            return
+        }
+
+        self.pendingAction = nil
+        dispatch(pendingAction.action)
     }
 }
 

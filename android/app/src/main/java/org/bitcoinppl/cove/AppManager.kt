@@ -369,11 +369,18 @@ class AppManager private constructor() : FfiReconcile {
      * clears all cached data and reinitializes
      */
     fun reset() {
+        clearSessionForReset()
+        resetRustProjection()
+    }
+
+    private fun clearSessionForReset() {
         // close managers before clearing them
         clearWalletManager()
         clearKeyTeleportManager()
         corruptedWalletDeletionRetry = null
+    }
 
+    private fun resetRustProjection() {
         database = Database()
         needsOnboarding =
             withRustOr(needsOnboarding) {
@@ -381,10 +388,39 @@ class AppManager private constructor() : FfiReconcile {
             }
 
         val routerState =
-            withRustOr(null) {
+            withRustOr<AppState?>(null) {
                 state()
-            }
-        router.reset(routerState?.router)
+            } ?: return
+
+        router.reset(routerState.router)
+    }
+
+    /**
+     * Apply the committed post-wipe state from Rust before authentication is released
+     *
+     * Rust decides what a wiped app looks like; this only clears Android-owned presentation state
+     */
+    internal fun applyWipeCompletion(completion: FullWipeCompletion) {
+        // replace everything visible first so a cleanup failure below cannot leave pre-wipe state on screen
+        router.isSidebarVisible = false
+        isLoading = false
+        alertState = null
+        sheetState = null
+        needsOnboarding = completion.needsOnboarding
+        selectedNetwork = completion.selectedNetwork
+        colorSchemeSelection = completion.colorScheme
+        selectedNode = completion.selectedNode
+        selectedFiatCurrency = completion.fiatCurrency
+        wallets = completion.wallets
+        router.reset(completion.router)
+
+        // the data is already gone, so a manager cleanup failure must not keep the app locked
+        runCatching {
+            clearSessionForReset()
+            database = Database()
+        }.onFailure { error ->
+            Log.e(tag, "failed to clear the app session after wipe", error)
+        }
     }
 
     val currentRoute: Route
@@ -822,17 +858,15 @@ class AppManager private constructor() : FfiReconcile {
             unverifiedWalletIds()
         }
 
-    internal fun dangerousWipeAllData() {
+    internal fun dangerousWipeAllData(): FullWipeCompletion =
         withRust {
             dangerousWipeAllData()
         }
-    }
 
-    internal fun retryDangerousWipeAllData(attemptId: ShutdownAttemptId) {
+    internal fun retryDangerousWipeAllData(attemptId: ShutdownAttemptId): FullWipeCompletion =
         withRust {
             retryDangerousWipeAllData(attemptId)
         }
-    }
 
     internal fun cancelDangerousWipe(attemptId: ShutdownAttemptId) {
         withRust {

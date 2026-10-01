@@ -606,6 +606,7 @@ impl RustCloudBackupManager {
             | CloudBackupError::PasskeyMismatch
             | CloudBackupError::NoBackupFound
             | CloudBackupError::PasskeyDiscoveryCancelled
+            | CloudBackupError::LocalWalletConflict(_)
             | CloudBackupError::Cancelled => false,
         }
     }

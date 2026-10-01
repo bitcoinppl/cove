@@ -1317,8 +1317,6 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_converter_parse_fiat_str(
     ): Short
-    external fun uniffi_cove_checksum_method_database_dangerous_reset_all_data(
-    ): Short
     external fun uniffi_cove_checksum_method_database_diagnostics_reports(
     ): Short
     external fun uniffi_cove_checksum_method_database_global_config(
@@ -2214,7 +2212,7 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_ffiapp_cancel_wallet_deletion_attempt(`ptr`: Long,`attemptId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_ffiapp_delete_corrupted_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_ffiapp_dispatch(`ptr`: Long,`action`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2256,7 +2254,7 @@ internal object UniffiLib {
     external fun uniffi_cove_fn_method_ffiapp_reset_nested_routes_to(`ptr`: Long,`defaultRoute`: RustBuffer.ByValue,`nestedRoutes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_ffiapp_retry_dangerous_wipe_all_data(`ptr`: Long,`attemptId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_ffiapp_retry_delete_corrupted_wallet(`ptr`: Long,`id`: RustBufferWalletId.ByValue,`attemptId`: RustBuffer.ByValue,
     ): Long
     external fun uniffi_cove_fn_method_ffiapp_save_tap_signer_backup(`ptr`: Long,`tapSigner`: Long,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -2373,8 +2371,6 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_constructor_database_new(uniffi_out_err: UniffiRustCallStatus,
     ): Long
-    external fun uniffi_cove_fn_method_database_dangerous_reset_all_data(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
     external fun uniffi_cove_fn_method_database_diagnostics_reports(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_method_database_global_config(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -4080,7 +4076,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_cancel_wallet_deletion_attempt() != 29231.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 1643.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_dangerous_wipe_all_data() != 55578.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_delete_corrupted_wallet() != 8180.toShort()) {
@@ -4143,7 +4139,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_ffiapp_reset_nested_routes_to() != 57261.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_ffiapp_retry_dangerous_wipe_all_data() != 38709.toShort()) {
+    if (lib.uniffi_cove_checksum_method_ffiapp_retry_dangerous_wipe_all_data() != 62726.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_ffiapp_retry_delete_corrupted_wallet() != 50275.toShort()) {
@@ -4237,9 +4233,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_converter_parse_fiat_str() != 59628.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
-    if (lib.uniffi_cove_checksum_method_database_dangerous_reset_all_data() != 1221.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_database_diagnostics_reports() != 32801.toShort()) {
@@ -10744,8 +10737,6 @@ public object FfiConverterTypeConverter: FfiConverter<Converter, Long> {
 
 public interface DatabaseInterface {
 
-    fun `dangerousResetAllData`()
-
     fun `diagnosticsReports`(): DiagnosticsReportsTable
 
     fun `globalConfig`(): GlobalConfigTable
@@ -10869,19 +10860,6 @@ open class Database: Disposable, AutoCloseable, DatabaseInterface
             UniffiLib.uniffi_cove_fn_clone_database(handle, status)
         }
     }
-
-
-    @Throws(DatabaseException::class)override fun `dangerousResetAllData`()
-        =
-    callWithHandle {
-    uniffiRustCallWithError(DatabaseException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_database_dangerous_reset_all_data(
-        it,
-        _status)
-}
-    }
-
-
 
     override fun `diagnosticsReports`(): DiagnosticsReportsTable {
             return FfiConverterTypeDiagnosticsReportsTable.lift(
@@ -11747,8 +11725,10 @@ public interface FfiAppInterface {
 
     /**
      * DANGER: This will wipe all wallet data on this device
+     *
+     * Returns the committed post-wipe state the frontend applies before releasing authentication
      */
-    fun `dangerousWipeAllData`()
+    fun `dangerousWipeAllData`(): FullWipeCompletion
 
     /**
      * Delete a wallet with a corrupted database, cleaning up all associated data
@@ -11834,7 +11814,7 @@ public interface FfiAppInterface {
     /**
      * Retry a full wipe after a typed shutdown block
      */
-    fun `retryDangerousWipeAllData`(`attemptId`: ShutdownAttemptId)
+    fun `retryDangerousWipeAllData`(`attemptId`: ShutdownAttemptId): FullWipeCompletion
 
     /**
      * Retry a corrupted-wallet deletion after a typed shutdown block
@@ -12038,9 +12018,11 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
 
     /**
      * DANGER: This will wipe all wallet data on this device
+     *
+     * Returns the committed post-wipe state the frontend applies before releasing authentication
      */
-    @Throws(AppException::class)override fun `dangerousWipeAllData`()
-        =
+    @Throws(AppException::class)override fun `dangerousWipeAllData`(): FullWipeCompletion {
+            return FfiConverterTypeFullWipeCompletion.lift(
     callWithHandle {
     uniffiRustCallWithError(AppException) { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_dangerous_wipe_all_data(
@@ -12048,7 +12030,8 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
         _status)
 }
     }
-
+    )
+    }
 
 
 
@@ -12382,8 +12365,8 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
     /**
      * Retry a full wipe after a typed shutdown block
      */
-    @Throws(AppException::class)override fun `retryDangerousWipeAllData`(`attemptId`: ShutdownAttemptId)
-        =
+    @Throws(AppException::class)override fun `retryDangerousWipeAllData`(`attemptId`: ShutdownAttemptId): FullWipeCompletion {
+            return FfiConverterTypeFullWipeCompletion.lift(
     callWithHandle {
     uniffiRustCallWithError(AppException) { _status ->
     UniffiLib.uniffi_cove_fn_method_ffiapp_retry_dangerous_wipe_all_data(
@@ -12392,7 +12375,8 @@ open class FfiApp: Disposable, AutoCloseable, FfiAppInterface
         FfiConverterTypeShutdownAttemptId.lower(`attemptId`),_status)
 }
     }
-
+    )
+    }
 
 
 
@@ -32254,6 +32238,61 @@ public object FfiConverterTypeAppState: FfiConverterRustBuffer<AppState> {
 
 
 /**
+ * Authentication settings a frontend mirrors
+ */
+data class AuthSettings (
+    /**
+     * How the app is unlocked
+     */
+    var `authType`: AuthType
+    ,
+    /**
+     * Whether a wipe data PIN is set
+     */
+    var `isWipeDataPinEnabled`: kotlin.Boolean
+    ,
+    /**
+     * Whether a decoy PIN is set
+     */
+    var `isDecoyPinEnabled`: kotlin.Boolean
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAuthSettings: FfiConverterRustBuffer<AuthSettings> {
+    override fun read(buf: ByteBuffer): AuthSettings {
+        return AuthSettings(
+            FfiConverterTypeAuthType.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: AuthSettings) = (
+            FfiConverterTypeAuthType.allocationSize(value.`authType`) +
+            FfiConverterBoolean.allocationSize(value.`isWipeDataPinEnabled`) +
+            FfiConverterBoolean.allocationSize(value.`isDecoyPinEnabled`)
+    )
+
+    override fun write(value: AuthSettings, buf: ByteBuffer) {
+            FfiConverterTypeAuthType.write(value.`authType`, buf)
+            FfiConverterBoolean.write(value.`isWipeDataPinEnabled`, buf)
+            FfiConverterBoolean.write(value.`isDecoyPinEnabled`, buf)
+    }
+}
+
+
+
+/**
  * Report of what happened during a backup import
  */
 data class BackupImportReport (
@@ -33825,6 +33864,104 @@ public object FfiConverterTypeFoundAddress: FfiConverterRustBuffer<FoundAddress>
     override fun write(value: FoundAddress, buf: ByteBuffer) {
             FfiConverterTypeWalletAddressType.write(value.`type`, buf)
             FfiConverterString.write(value.`firstAddress`, buf)
+    }
+}
+
+
+
+/**
+ * Committed app and authentication state after a successful full wipe
+ *
+ * Frontends apply this synchronously before releasing authentication, so no frontend has
+ * to decide on its own what a wiped app looks like
+ */
+data class FullWipeCompletion (
+    /**
+     * Navigation after the wipe, starting at new-wallet selection with no pushed routes
+     */
+    var `router`: Router
+    ,
+    /**
+     * Whether the app must show onboarding, carried over from before the wipe
+     */
+    var `needsOnboarding`: kotlin.Boolean
+    ,
+    var `selectedNetwork`: Network
+    ,
+    var `colorScheme`: ColorSchemeSelection
+    ,
+    var `selectedNode`: Node
+    ,
+    var `fiatCurrency`: FiatCurrency
+    ,
+    /**
+     * Always empty, included so frontends replace their wallet list instead of re-reading it
+     */
+    var `wallets`: List<WalletMetadata>
+    ,
+    var `auth`: AuthSettings
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`router`,
+        this.`needsOnboarding`,
+        this.`selectedNetwork`,
+        this.`colorScheme`,
+        this.`selectedNode`,
+        this.`fiatCurrency`,
+        this.`wallets`,
+        this.`auth`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFullWipeCompletion: FfiConverterRustBuffer<FullWipeCompletion> {
+    override fun read(buf: ByteBuffer): FullWipeCompletion {
+        return FullWipeCompletion(
+            FfiConverterTypeRouter.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterTypeNetwork.read(buf),
+            FfiConverterTypeColorSchemeSelection.read(buf),
+            FfiConverterTypeNode.read(buf),
+            FfiConverterTypeFiatCurrency.read(buf),
+            FfiConverterSequenceTypeWalletMetadata.read(buf),
+            FfiConverterTypeAuthSettings.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FullWipeCompletion) = (
+            FfiConverterTypeRouter.allocationSize(value.`router`) +
+            FfiConverterBoolean.allocationSize(value.`needsOnboarding`) +
+            FfiConverterTypeNetwork.allocationSize(value.`selectedNetwork`) +
+            FfiConverterTypeColorSchemeSelection.allocationSize(value.`colorScheme`) +
+            FfiConverterTypeNode.allocationSize(value.`selectedNode`) +
+            FfiConverterTypeFiatCurrency.allocationSize(value.`fiatCurrency`) +
+            FfiConverterSequenceTypeWalletMetadata.allocationSize(value.`wallets`) +
+            FfiConverterTypeAuthSettings.allocationSize(value.`auth`)
+    )
+
+    override fun write(value: FullWipeCompletion, buf: ByteBuffer) {
+            FfiConverterTypeRouter.write(value.`router`, buf)
+            FfiConverterBoolean.write(value.`needsOnboarding`, buf)
+            FfiConverterTypeNetwork.write(value.`selectedNetwork`, buf)
+            FfiConverterTypeColorSchemeSelection.write(value.`colorScheme`, buf)
+            FfiConverterTypeNode.write(value.`selectedNode`, buf)
+            FfiConverterTypeFiatCurrency.write(value.`fiatCurrency`, buf)
+            FfiConverterSequenceTypeWalletMetadata.write(value.`wallets`, buf)
+            FfiConverterTypeAuthSettings.write(value.`auth`, buf)
     }
 }
 
@@ -38792,11 +38929,29 @@ sealed class AuthManagerReconcileMessage {
         companion object
     }
 
-    object WipeDataPinChanged : AuthManagerReconcileMessage()
+    /**
+     * Whether a wipe data PIN is now set
+     */
+    data class WipeDataPinChanged(
+        val v1: kotlin.Boolean) : AuthManagerReconcileMessage()
+
+    {
 
 
-    object DecoyPinChanged : AuthManagerReconcileMessage()
+        companion object
+    }
 
+    /**
+     * Whether a decoy PIN is now set
+     */
+    data class DecoyPinChanged(
+        val v1: kotlin.Boolean) : AuthManagerReconcileMessage()
+
+    {
+
+
+        companion object
+    }
 
 
 
@@ -38817,8 +38972,12 @@ public object FfiConverterTypeAuthManagerReconcileMessage : FfiConverterRustBuff
             1 -> AuthManagerReconcileMessage.AuthTypeChanged(
                 FfiConverterTypeAuthType.read(buf),
                 )
-            2 -> AuthManagerReconcileMessage.WipeDataPinChanged
-            3 -> AuthManagerReconcileMessage.DecoyPinChanged
+            2 -> AuthManagerReconcileMessage.WipeDataPinChanged(
+                FfiConverterBoolean.read(buf),
+                )
+            3 -> AuthManagerReconcileMessage.DecoyPinChanged(
+                FfiConverterBoolean.read(buf),
+                )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
         }
     }
@@ -38835,12 +38994,14 @@ public object FfiConverterTypeAuthManagerReconcileMessage : FfiConverterRustBuff
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterBoolean.allocationSize(value.v1)
             )
         }
         is AuthManagerReconcileMessage.DecoyPinChanged -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
                 4UL
+                + FfiConverterBoolean.allocationSize(value.v1)
             )
         }
     }
@@ -38854,10 +39015,12 @@ public object FfiConverterTypeAuthManagerReconcileMessage : FfiConverterRustBuff
             }
             is AuthManagerReconcileMessage.WipeDataPinChanged -> {
                 buf.putInt(2)
+                FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
             is AuthManagerReconcileMessage.DecoyPinChanged -> {
                 buf.putInt(3)
+                FfiConverterBoolean.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -51110,6 +51273,10 @@ enum class LocalDataResetStage {
      */
     WALLET_KEYCHAIN,
     /**
+     * Persisted KeyTeleport receive session
+     */
+    KEY_TELEPORT,
+    /**
      * Orphan BDK stores and wallet-data directories
      */
     WALLET_ARTIFACTS,
@@ -62080,6 +62247,14 @@ enum class WalletDeletionStage {
      * Parent-directory durability synchronization
      */
     DIRECTORY_SYNC,
+    /**
+     * Unsigned transaction rows that belong to the wallet
+     */
+    UNSIGNED_TRANSACTIONS,
+    /**
+     * Selected-wallet references in global config
+     */
+    WALLET_SELECTION,
     /**
      * Exact durable metadata rows
      */

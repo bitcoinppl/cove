@@ -56,8 +56,11 @@ sealed interface WipePresentationState {
     data object Idle : WipePresentationState
     data object Running : WipePresentationState
     data class ShutdownBlocked(val attemptId: ShutdownAttemptId) : WipePresentationState
-    data class Failed(val message: String) : WipePresentationState
+    data object Failed : WipePresentationState
 }
+
+internal const val WIPE_FAILURE_TITLE = "Unable to Open Cove"
+internal const val WIPE_FAILURE_MESSAGE = "Please try again."
 
 /**
  * auth manager - manages authentication state
@@ -72,8 +75,7 @@ class AuthManager internal constructor(
     private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val wipeCommand = OwnerScopedCommand<UnlockMode>(mainScope)
 
-    private var rust: RustAuthManager = RustAuthManager()
-        private set
+    private val rust = RustAuthManager()
     private val isRustClosed = AtomicBoolean(false)
     private val rustGuard =
         RustHandleGuard(
@@ -190,9 +192,7 @@ class AuthManager internal constructor(
     }
 
     internal fun completeMainBiometricAuthentication() {
-        if (isInDecoyMode()) {
-            switchToMainMode()
-        }
+        if (isInDecoyMode() && !switchToMainMode()) return
 
         recordMainCredentialAuthentication()
         unlock()
@@ -258,8 +258,8 @@ class AuthManager internal constructor(
         }
 
     private fun unlockWithMainPin(): UnlockMode {
-        if (Database().globalConfig().isInDecoyMode()) {
-            switchToMainMode()
+        if (Database().globalConfig().isInDecoyMode() && !switchToMainMode()) {
+            return UnlockMode.LOCKED
         }
 
         recordMainCredentialAuthentication()
@@ -318,30 +318,33 @@ class AuthManager internal constructor(
                 }
             }
 
-        result.exceptionOrNull()?.let { error ->
-            val lifecycle = (error as? AppException.WalletLifecycle)?.v1
+        val wipeError = result.exceptionOrNull()
+        if (wipeError != null) {
+            val lifecycle = (wipeError as? AppException.WalletLifecycle)?.v1
             if (lifecycle is WalletLifecycleFailure.ShutdownBlocked) {
                 wipePresentationState = WipePresentationState.ShutdownBlocked(lifecycle.attemptId)
             } else {
-                android.util.Log.e(tag, "failed to wipe all data", error)
-                wipePresentationState =
-                    WipePresentationState.Failed(error.message ?: "Unable to remove local data")
+                android.util.Log.e(tag, "failed to wipe all data", wipeError)
+                wipePresentationState = WipePresentationState.Failed
             }
 
             return UnlockMode.LOCKED
         }
 
-        val oldRust = rust
-        rust = RustAuthManager()
-        rustGuard.markOpen()
-        rust.listenForUpdates(this)
-        oldRust.close()
-        unlock()
-        type = AuthType.NONE
-        wipePresentationState = WipePresentationState.Idle
-        App.reset()
+        val completion = result.getOrThrow()
+        App.applyWipeCompletion(completion)
+        apply(completion.auth)
 
+        unlock()
+        wipePresentationState = WipePresentationState.Idle
         return UnlockMode.WIPE
+    }
+
+    private fun apply(settings: AuthSettings) {
+        type = settings.authType
+        isWipeDataPinEnabled = settings.isWipeDataPinEnabled
+        isDecoyPinEnabled = settings.isDecoyPinEnabled
+        isUsingBiometrics = false
     }
 
     private fun recordMainCredentialAuthentication() {
@@ -350,17 +353,21 @@ class AuthManager internal constructor(
 
     /**
      * switch to main mode from decoy mode
+     *
+     * returns false when the switch failed so callers keep the app locked
+     * instead of unlocking into the decoy projection with the main credential
      */
-    fun switchToMainMode() {
+    fun switchToMainMode(): Boolean =
         try {
             withRust {
                 switchToMainMode()
             }
             resetAppAndSelectWallet()
+            true
         } catch (e: Exception) {
             android.util.Log.e(tag, "failed to switch to main mode", e)
+            false
         }
-    }
 
     override fun reconcile(message: AuthManagerReconcileMessage) {
         logDebug("reconcile: $message")
@@ -371,17 +378,11 @@ class AuthManager internal constructor(
                 }
 
                 is AuthManagerReconcileMessage.WipeDataPinChanged -> {
-                    isWipeDataPinEnabled =
-                        withRustOr(isWipeDataPinEnabled) {
-                            isWipeDataPinEnabled()
-                        }
+                    isWipeDataPinEnabled = message.v1
                 }
 
                 is AuthManagerReconcileMessage.DecoyPinChanged -> {
-                    isDecoyPinEnabled =
-                        withRustOr(isDecoyPinEnabled) {
-                            isDecoyPinEnabled()
-                        }
+                    isDecoyPinEnabled = message.v1
                 }
             }
         }

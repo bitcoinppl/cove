@@ -37,6 +37,8 @@ If you need one subdirectory, start with the appropriate iCloud scope and narrow
 
 Cove owns one main-actor metadata query for the lifetime of the process. The query searches the ubiquitous data scope, publishes value snapshots to async consumers, and remains running so later `didUpdate` events can satisfy upload-confirmation checks, downloads, listings, and sync-health checks. Do not create short-lived queries for individual operations or call `stop()` during normal app operation. Tearing down a query while CloudDocs is delivering progress notifications can race inside `NSMetadataQuery` cleanup.
 
+Complete listings reuse a metadata generation that has already completed the required quiet interval. A later metadata event invalidates that settled generation, so the next complete listing waits for stability again.
+
 The initial result is authoritative only after `NSMetadataQueryDidFinishGathering`. Updates received while gathering may reveal an item early, but an empty partial snapshot must not be interpreted as proof that an item is absent. A transient `start()` failure is not process-fatal: the shared index surfaces it to the operation that attempted startup and permits a later consumer to retry.
 
 ### Cold start timing
@@ -162,6 +164,19 @@ Rust owns upload confirmation. Its pending-upload worker later calls
 `isBackupUploaded`, then downloads the backup and verifies its revision before
 marking the blob confirmed. Do not make the upload methods wait for metadata
 visibility; provider confirmation belongs to that retryable background flow.
+
+### Deleting files
+
+After a coordinated delete succeeds, the iOS storage helper records the resolved
+path in the process-wide metadata index before it returns. The index immediately
+removes that path and its descendants from all metadata readers. It also filters
+stale provider snapshots for up to 60 seconds.
+
+A complete snapshot that no longer contains the deleted path releases the
+temporary record. A partial update during initial gathering cannot release it.
+A successful upload releases only the exact file path after local handoff
+validation. This is a process-local consistency bound, not proof that the
+provider completed its remote delete.
 
 ### Timeouts and retries in this app
 

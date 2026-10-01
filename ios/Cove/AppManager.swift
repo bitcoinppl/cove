@@ -244,18 +244,48 @@ struct CorruptedWalletDeletionRetry: Equatable {
     }
 
     /// Reset the manager state
+    @MainActor
     public func reset() {
+        clearSession()
+        resetProjectionFromCommittedRustState()
+    }
+
+    @MainActor
+    private func clearSession() {
         navigationCoordinator.reset()
         corruptedWalletDeletionRetry = nil
 
-        database = Database()
-        needsOnboarding = rust.needsOnboarding()
         clearWalletManager()
-        managerCache.clearCoinControlManager()
         clearKeyTeleportManager()
 
-        let state = rust.state()
-        router = state.router
+        // a mode switch must not leave the previous mode's NFC session running
+        tapSignerNfc?.cancel()
+        tapSignerNfc = nil
+    }
+
+    /// Apply the committed post-wipe state from Rust before authentication is released
+    ///
+    /// Rust decides what a wiped app looks like; this only clears iOS-owned presentation state
+    @MainActor
+    func applyWipeCompletion(_ completion: FullWipeCompletion) async {
+        isSidebarVisible = false
+        isLoading = false
+        alertState = nil
+        sheetState = nil
+        isPastHeader = false
+        clearSession()
+
+        database = Database()
+        needsOnboarding = completion.needsOnboarding
+        selectedNetwork = completion.selectedNetwork
+        colorSchemeSelection = completion.colorScheme
+        selectedNode = completion.selectedNode
+        selectedFiatCurrency = completion.fiatCurrency
+        wallets = completion.wallets
+        router = completion.router
+        routeId = UUID()
+
+        await PopupStack.dismissAllPopups()
     }
 
     func deleteCorruptedWallet(id: WalletId, databaseError: String) {
@@ -752,6 +782,21 @@ struct CorruptedWalletDeletionRetry: Equatable {
 }
 
 extension AppManager {
+    private func resetProjectionFromCommittedRustState() {
+        database = Database()
+        needsOnboarding = rust.needsOnboarding()
+
+        let globalConfig = database.globalConfig()
+        selectedNetwork = globalConfig.selectedNetwork()
+        colorSchemeSelection = globalConfig.colorScheme()
+        selectedNode = globalConfig.selectedNode()
+        selectedFiatCurrency = globalConfig.selectedFiatCurrency()
+        wallets = (try? database.wallets().all()) ?? []
+
+        router = rust.state().router
+        routeId = UUID()
+    }
+
     @MainActor
     private func applyConfigurationMessage(_ message: AppStateReconcileMessage) {
         switch message {

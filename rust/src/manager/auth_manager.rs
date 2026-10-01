@@ -21,8 +21,21 @@ pub static AUTH_MANAGER: LazyLock<Arc<RustAuthManager>> = LazyLock::new(RustAuth
 #[allow(clippy::enum_variant_names)] // all variants describe state changes, postfix is intentional
 pub enum AuthManagerReconcileMessage {
     AuthTypeChanged(AuthType),
-    WipeDataPinChanged,
-    DecoyPinChanged,
+    /// Whether a wipe data PIN is now set
+    WipeDataPinChanged(bool),
+    /// Whether a decoy PIN is now set
+    DecoyPinChanged(bool),
+}
+
+/// Authentication settings a frontend mirrors
+#[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
+pub struct AuthSettings {
+    /// How the app is unlocked
+    pub auth_type: AuthType,
+    /// Whether a wipe data PIN is set
+    pub is_wipe_data_pin_enabled: bool,
+    /// Whether a decoy PIN is set
+    pub is_decoy_pin_enabled: bool,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
@@ -146,6 +159,21 @@ impl RustAuthManager {
     fn init() -> Arc<Self> {
         Self { reconciler: ReconcileChannel::new(1000) }.into()
     }
+
+    /// Sends every setting in `settings` so frontends end on those values
+    pub(crate) fn publish(&self, settings: &AuthSettings) {
+        self.send(Message::AuthTypeChanged(settings.auth_type));
+        self.send(Message::WipeDataPinChanged(settings.is_wipe_data_pin_enabled));
+        self.send(Message::DecoyPinChanged(settings.is_decoy_pin_enabled));
+    }
+
+    pub(crate) fn settings(&self) -> AuthSettings {
+        AuthSettings {
+            auth_type: self.auth_type(),
+            is_wipe_data_pin_enabled: self.is_wipe_data_pin_enabled(),
+            is_decoy_pin_enabled: self.is_decoy_pin_enabled(),
+        }
+    }
 }
 
 #[uniffi::export]
@@ -221,7 +249,7 @@ impl RustAuthManager {
             error!("unable to delete decoy pin: {error:?}");
         }
 
-        self.send(Message::DecoyPinChanged);
+        self.send(Message::DecoyPinChanged(self.is_decoy_pin_enabled()));
     }
 
     /// Set the decoy pin
@@ -230,7 +258,7 @@ impl RustAuthManager {
 
         // set the pin
         Database::global().global_config.set_decoy_pin(pin)?;
-        self.send(Message::DecoyPinChanged);
+        self.send(Message::DecoyPinChanged(true));
 
         Ok(())
     }
@@ -264,7 +292,7 @@ impl RustAuthManager {
 
         // set the pin
         Database::global().global_config.set_wipe_data_pin(pin)?;
-        self.send(Message::WipeDataPinChanged);
+        self.send(Message::WipeDataPinChanged(true));
 
         Ok(())
     }
@@ -282,7 +310,7 @@ impl RustAuthManager {
             error!("unable to delete wipe data pin: {error:?}");
         }
 
-        self.send(Message::WipeDataPinChanged);
+        self.send(Message::WipeDataPinChanged(self.is_wipe_data_pin_enabled()));
     }
 
     // private

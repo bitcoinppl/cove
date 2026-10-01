@@ -1,5 +1,128 @@
 use super::*;
 
+async fn configure_trusted_local_snapshot_with_two_cloud_only_wallets(
+    manager: &RustCloudBackupManager,
+    globals: &TestGlobals,
+) {
+    configure_enabled_cloud_backup(manager, globals, 2);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .unwrap()
+        .unwrap();
+    let first_wallet = xpub_only_wallet_metadata();
+    let mut second_wallet = xpub_only_wallet_metadata();
+    second_wallet.network = crate::network::Network::Testnet;
+    let first_record_id = wallet_record_id(first_wallet.id.as_ref());
+    let second_record_id = wallet_record_id(second_wallet.id.as_ref());
+
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        first_record_id.clone(),
+        encrypted_wallet_backup_bytes_for_entry(
+            &wallet_entry_with_labels(&first_wallet, None),
+            &master_key,
+            1,
+        ),
+    );
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        second_record_id.clone(),
+        encrypted_wallet_backup_bytes_for_entry(
+            &wallet_entry_with_labels(&second_wallet, None),
+            &master_key,
+            1,
+        ),
+    );
+
+    let wallet_files = vec![
+        wallet_filename_from_record_id(&first_record_id),
+        wallet_filename_from_record_id(&second_record_id),
+    ];
+    globals.cloud.set_wallet_files(namespace.clone(), wallet_files.clone());
+    globals.cloud.set_wallet_files_snapshot(namespace, wallet_files, false);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn trusted_local_snapshot_is_confirmed_by_provider_in_background() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_trusted_local_snapshot_with_two_cloud_only_wallets(&manager, globals).await;
+    let initial_list_attempts = globals.cloud.list_wallet_files_attempt_count();
+
+    call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+
+    wait_for_test_condition(Duration::from_secs(2), "expected provider-confirmed detail", || {
+        matches!(
+            manager.state().lifecycle,
+            CloudBackupLifecycle::Configured(ref configured)
+                if matches!(
+                    configured.detail,
+                    CloudBackupDetailState::Complete { ref state }
+                        if state.inventory_authority
+                            == CloudBackupInventoryAuthority::ProviderConfirmed
+                )
+                && matches!(
+                    configured.restore_all,
+                    CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 }
+                )
+        )
+    })
+    .await;
+
+    assert!(globals.cloud.list_wallet_files_attempt_count() > initial_list_attempts);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn provider_confirmation_failure_keeps_trusted_local_detail_complete() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_trusted_local_snapshot_with_two_cloud_only_wallets(&manager, globals).await;
+    globals.cloud.fail_list_wallet_files("metadata timed out");
+    let initial_list_attempts = globals.cloud.list_wallet_files_attempt_count();
+
+    call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+
+    wait_for_test_condition(
+        Duration::from_secs(2),
+        "expected retained trusted local detail",
+        || {
+            globals.cloud.list_wallet_files_attempt_count() > initial_list_attempts
+                && matches!(
+                    manager.state().lifecycle,
+                    CloudBackupLifecycle::Configured(ref configured)
+                        if matches!(
+                            configured.detail,
+                            CloudBackupDetailState::Complete { ref state }
+                                if state.inventory_authority
+                                    == CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount
+                        )
+                        && matches!(
+                            configured.restore_all,
+                            CloudBackupRestoreAllState::StartDisabled { wallet_count: 2 }
+                        )
+                )
+        },
+    )
+    .await;
+
+    assert_test_condition_stays_true(
+        Duration::from_millis(150),
+        "provider confirmation failure should keep trusted local detail",
+        || {
+            matches!(
+                manager.state().lifecycle,
+                CloudBackupLifecycle::Configured(ref configured)
+                    if matches!(configured.detail, CloudBackupDetailState::Complete { .. })
+            )
+        },
+    )
+    .await;
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn connectivity_reconnect_preserves_failed_wallet_upload_health() {
     let _guard = async_test_lock().lock().await;
@@ -125,7 +248,7 @@ async fn manual_detail_refresh_recovers_after_automatic_retry_fails() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn provider_signal_does_not_reopen_a_ready_detail_inventory() {
+async fn provider_signal_reopens_only_incomplete_ready_detail_inventory() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -156,18 +279,24 @@ async fn provider_signal_does_not_reopen_a_ready_detail_inventory() {
     ));
     assert_eq!(globals.cloud.list_wallet_files_snapshot_attempt_count(), active_snapshot_attempts);
 
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(complete_detail));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithAuthority {
+        detail: complete_detail,
+        authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
+    });
     let snapshot_attempts = globals.cloud.list_wallet_files_snapshot_attempt_count();
 
     manager.cloud_storage_did_change();
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    wait_for_test_condition(Duration::from_secs(6), "expected provider signal refresh", || {
+        globals.cloud.list_wallet_files_snapshot_attempt_count() > snapshot_attempts
+    })
+    .await;
 
     assert!(matches!(
         manager.state().lifecycle,
         CloudBackupLifecycle::Configured(ref configured)
             if matches!(&configured.detail, CloudBackupDetailState::Complete { .. })
     ));
-    assert_eq!(globals.cloud.list_wallet_files_snapshot_attempt_count(), snapshot_attempts);
+    assert!(globals.cloud.list_wallet_files_snapshot_attempt_count() > snapshot_attempts);
 }
 
 #[tokio::test(flavor = "current_thread")]

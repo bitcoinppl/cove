@@ -27,7 +27,8 @@ private struct SelectedWalletSheetContent: View {
         case .xpubQrExport:
             XpubQrExportSheet(manager: context.manager)
 
-        case .labelsFileImport, .exportLabelsConfirmation, .exportXpubConfirmation:
+        case .labelsFileImport, .exportLabelsConfirmation, .exportXpubConfirmation,
+             .labelsShare, .xpubShare:
             EmptyView()
         }
     }

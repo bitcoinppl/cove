@@ -8,11 +8,14 @@ enum WipePresentationState: Equatable {
     case idle
     case running
     case shutdownBlocked(ShutdownAttemptId)
-    case failed(String)
+    case failed
+
+    static let failureTitle = "Unable to Open Cove"
+    static let failureMessage = "Please try again."
 }
 
 private enum WipeCallResult: Sendable {
-    case success
+    case success(FullWipeCompletion)
     case failure(AppError)
     case unexpectedFailure(String)
 }
@@ -160,18 +163,26 @@ private enum WipeCallResult: Sendable {
     }
 
     @MainActor
+    private func apply(_ settings: AuthSettings) {
+        type = settings.authType
+        isWipeDataPinEnabled = settings.isWipeDataPinEnabled
+        isDecoyPinEnabled = settings.isDecoyPinEnabled
+        isUsingBiometrics = false
+    }
+
+    @MainActor
     private func finishWipe(call: WipeCall) async -> UnlockMode {
-        let app = AppManager.shared.rust
+        let rustApp = AppManager.shared.rust
         let result = await Task.detached(priority: .userInitiated) {
             do {
-                switch call {
+                let completion = switch call {
                 case .initial:
-                    try app.dangerousWipeAllData()
+                    try rustApp.dangerousWipeAllData()
                 case let .retry(attemptId):
-                    try app.retryDangerousWipeAllData(attemptId: attemptId)
+                    try rustApp.retryDangerousWipeAllData(attemptId: attemptId)
                 }
 
-                return WipeCallResult.success
+                return WipeCallResult.success(completion)
             } catch let error as AppError {
                 return WipeCallResult.failure(error)
             } catch {
@@ -180,12 +191,11 @@ private enum WipeCallResult: Sendable {
         }.value
 
         switch result {
-        case .success:
-            rust = RustAuthManager()
+        case let .success(completion):
+            await AppManager.shared.applyWipeCompletion(completion)
+            apply(completion.auth)
             unlock()
-            type = .none
             wipePresentationState = .idle
-            AppManager.shared.reset()
             return .wipe
 
         case let .failure(.WalletLifecycle(.shutdownBlocked(attemptId, _, _))):
@@ -194,12 +204,12 @@ private enum WipeCallResult: Sendable {
 
         case let .failure(error):
             logger.error("Failed to wipe all data: \(error)")
-            wipePresentationState = .failed(error.localizedDescription)
+            wipePresentationState = .failed
             return .locked
 
         case let .unexpectedFailure(message):
             logger.error("Failed to wipe all data: \(message)")
-            wipePresentationState = .failed(message)
+            wipePresentationState = .failed
             return .locked
         }
     }
@@ -243,11 +253,11 @@ private enum WipeCallResult: Sendable {
             case let .authTypeChanged(authType):
                 type = authType
 
-            case .wipeDataPinChanged:
-                isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
+            case let .wipeDataPinChanged(enabled):
+                isWipeDataPinEnabled = enabled
 
-            case .decoyPinChanged:
-                isDecoyPinEnabled = rust.isDecoyPinEnabled()
+            case let .decoyPinChanged(enabled):
+                isDecoyPinEnabled = enabled
             }
         }
     }

@@ -10,8 +10,8 @@ import SwiftUI
 
 public struct ChooseWalletTypeView: View {
     @Environment(\.dismiss) private var dismiss
-    @State var manager: WalletManager
-    @State var foundAddresses: [FoundAddress]
+    let manager: WalletManager
+    let foundAddresses: [FoundAddress]
 
     /// private
     /// first native segwit address
