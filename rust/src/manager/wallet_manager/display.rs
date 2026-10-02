@@ -111,8 +111,8 @@ impl RustWalletManager {
     #[uniffi::method]
     pub fn convert_to_fiat(&self, amount: Arc<Amount>, prices: Arc<PriceResponse>) -> f64 {
         let currency = self.selected_fiat_currency();
-        let price = prices.get_for_currency(currency) as f64;
-        ((amount.as_btc() * price) * 100.0).ceil() / 100.0
+
+        amount_display::convert_amount_to_fiat(&amount, &prices, currency)
     }
 
     #[uniffi::method(default(with_suffix = true))]
