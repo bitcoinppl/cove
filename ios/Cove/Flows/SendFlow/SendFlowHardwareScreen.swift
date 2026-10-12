@@ -531,9 +531,9 @@ private struct SendFlowHardwareAddressRow: View {
             Spacer()
             Spacer()
 
-            Text(address.spacedOut())
+            Text(address: address)
                 .lineLimit(4, reservesSpace: false)
-                .font(.system(.footnote, design: .none))
+                .font(.footnote)
                 .fontWeight(.semibold)
                 .padding(16)
                 .contentShape(

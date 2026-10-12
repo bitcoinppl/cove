@@ -94,8 +94,8 @@ private struct SendFlowDetailsAddressRow: View {
             Spacer()
             Spacer()
 
-            Text(address.spacedOut())
-                .font(.system(.footnote, design: .none))
+            Text(address: address)
+                .font(.footnote)
                 .fontWeight(.semibold)
                 .padding(.leading, 60)
                 .lineLimit(3)

@@ -75,7 +75,7 @@ private struct CurrentWalletTypeButton: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(.blue)
 
-                Text(address)
+                Text(addressString: address)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -95,7 +95,7 @@ private struct FoundWalletTypeButton: View {
                     .font(.title3)
                     .fontWeight(.semibold)
 
-                Text(foundAddress.firstAddress)
+                Text(addressString: foundAddress.firstAddress)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

@@ -147,7 +147,7 @@ impl AppAlertState {
             } => {
                 format!(
                     "The address {} is on the wrong network. You are on {}, and the address was for {}.",
-                    address,
+                    address.spaced_out(),
                     current_network,
                     network
                 )

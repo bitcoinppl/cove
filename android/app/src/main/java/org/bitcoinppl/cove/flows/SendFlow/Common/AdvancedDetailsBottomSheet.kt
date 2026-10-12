@@ -19,6 +19,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.views.AddressText
 
 data class UtxoItem(
     val label: String,
@@ -277,8 +278,8 @@ private fun UtxoCard(item: UtxoItem) {
 
                     Spacer(modifier = Modifier.height(4.dp))
                 }
-                Text(
-                    text = item.address,
+                AddressText(
+                    address = item.address,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Normal,
@@ -318,8 +319,8 @@ private fun SentToSelfCard(items: List<UtxoItem>) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top,
                 ) {
-                    Text(
-                        text = item.address,
+                    AddressText(
+                        address = item.address,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Normal,

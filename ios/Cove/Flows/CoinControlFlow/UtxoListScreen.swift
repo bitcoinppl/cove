@@ -573,8 +573,7 @@ private struct UtxoRow: View {
 
                 // Address (semi-bold caption)
                 HStack {
-                    Text(utxo.address.spacedOut())
-                        .truncationMode(.middle)
+                    Text(address: utxo.address)
                         .font(.caption2)
                         .fontWeight(.semibold)
                         .lineLimit(1)

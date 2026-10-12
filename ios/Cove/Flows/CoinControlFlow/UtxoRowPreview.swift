@@ -13,7 +13,7 @@ struct UtxoRowPreview: View {
 
     var body: some View {
         VStack {
-            Text(utxo.address.spacedOut())
+            Text(address: utxo.address)
                 .font(.footnote)
                 .fontWeight(.semibold)
                 .foregroundColor(.secondary)

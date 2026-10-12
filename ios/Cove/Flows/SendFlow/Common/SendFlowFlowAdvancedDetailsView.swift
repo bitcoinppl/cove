@@ -248,8 +248,8 @@ private struct TxRow: View {
                         }
                     }
 
-                    Text(model.address.spacedOut())
-                        .font(.caption2.monospaced())
+                    Text(address: model.address)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .multilineTextAlignment(.leading)

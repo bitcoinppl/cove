@@ -6317,6 +6317,12 @@ public func addressIsValidForNetwork(address: String, network: Network)throws   
     )
 }
 }
+/**
+ * Groups an address into space-separated 4 character chunks, the single display format
+ * shared by every screen
+ *
+ * Existing whitespace is ignored so already grouped input is regrouped identically
+ */
 public func addressStringSpacedOut(address: String) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
@@ -6432,7 +6438,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_types_checksum_func_address_is_valid_for_network() != 43002) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_types_checksum_func_address_string_spaced_out() != 18228) {
+    if (uniffi_cove_types_checksum_func_address_string_spaced_out() != 52242) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_func_all_color_schemes() != 49693) {

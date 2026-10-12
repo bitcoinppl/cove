@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 
 @Composable
@@ -70,8 +71,8 @@ internal fun TransactionDetailsSheet(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
                 Spacer(Modifier.weight(1f))
-                Text(
-                    text = details.sendingTo().spacedOut(),
+                AddressText(
+                    address = details.sendingTo().unformatted(),
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.End,

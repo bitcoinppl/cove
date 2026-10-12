@@ -49,6 +49,7 @@ import org.bitcoinppl.cove.OnboardingManager
 import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.caption
+import org.bitcoinppl.cove.views.AddressText
 
 @Composable
 internal fun OnboardingExchangeFundingView(
@@ -178,8 +179,8 @@ internal fun OnboardingExchangeFundingView(
                                         style = MaterialTheme.typography.caption,
                                         fontWeight = FontWeight.SemiBold,
                                     )
-                                    Text(
-                                        text = addressText!!,
+                                    AddressText(
+                                        address = addressText!!,
                                         color = Color.White,
                                         style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
                                     )

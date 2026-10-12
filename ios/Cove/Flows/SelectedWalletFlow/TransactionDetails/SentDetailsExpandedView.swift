@@ -86,7 +86,7 @@ private struct SentTransactionDestination: View {
                         Button("Copy", systemImage: "doc.on.doc", action: copyAddress)
                     }
                 } label: {
-                    Text(transactionDetails.addressSpacedOut() ?? "Address unavailable")
+                    (transactionDetails.address().map { Text(address: $0) } ?? Text("Address unavailable"))
                         .multilineTextAlignment(.leading)
                 }
                 .fontWeight(.semibold)

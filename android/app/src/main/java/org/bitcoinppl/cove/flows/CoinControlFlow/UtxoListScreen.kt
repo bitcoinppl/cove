@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import kotlinx.coroutines.launch
@@ -498,12 +499,12 @@ private fun UtxoItemRow(
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    text = utxo.address.unformatted(),
+                AddressText(
+                    address = utxo.address.unformatted(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    overflow = TextOverflow.MiddleEllipsis,
                 )
             }
             Column(horizontalAlignment = Alignment.End) {

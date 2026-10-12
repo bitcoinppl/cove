@@ -148,7 +148,7 @@ private struct ReceivedAddressDetails: View {
                 .multilineTextAlignment(.leading)
 
             HStack {
-                Text(transactionDetails.addressSpacedOut() ?? "Address unavailable")
+                (transactionDetails.address().map { Text(address: $0) } ?? Text("Address unavailable"))
                     .fontWeight(.semibold)
                     .multilineTextAlignment(.leading)
                     .padding(.bottom, 14)

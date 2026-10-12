@@ -39,7 +39,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
-import org.bitcoinppl.cove_core.types.addressStringSpacedOut
+import org.bitcoinppl.cove.views.AddressText
 
 @Composable
 fun EnterAddressView(
@@ -134,8 +134,8 @@ fun EnterAddressView(
             )
             // show spaced-out address when not focused
             if (!isFocused && address.isNotEmpty()) {
-                Text(
-                    text = addressStringSpacedOut(address),
+                AddressText(
+                    address = address,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,

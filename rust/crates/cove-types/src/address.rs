@@ -414,14 +414,23 @@ impl AddressInfoWithDerivation {
     }
 }
 
+/// Characters per display group, matching Coldcard so users can compare addresses
+/// group by group against the hardware wallet screen
+const ADDRESS_GROUP_SIZE: usize = 4;
+
+/// Groups an address into space-separated 4 character chunks, the single display format
+/// shared by every screen
+///
+/// Existing whitespace is ignored so already grouped input is regrouped identically
 #[uniffi::export]
 #[allow(clippy::needless_pass_by_value)] // uniffi requires owned String
 fn address_string_spaced_out(address: String) -> String {
-    let groups = address.len() / 5;
+    let groups = address.len() / ADDRESS_GROUP_SIZE;
     let mut final_address = String::with_capacity(address.len() + groups);
+    let chars = address.chars().filter(|char| !char.is_whitespace());
 
-    for (i, char) in address.chars().enumerate() {
-        if i > 0 && i % 5 == 0 {
+    for (i, char) in chars.enumerate() {
+        if i > 0 && i % ADDRESS_GROUP_SIZE == 0 {
             final_address.push(' ');
         }
 
@@ -549,8 +558,14 @@ mod tests {
     #[test]
     fn test_address_string_spaced_out() {
         let address = "bc1pkdj04w4lxsv570j5nsd249lqe4w4j608r2nq9997ruh0wv96cnksy5jeny";
-        let expected = "bc1pk dj04w 4lxsv 570j5 nsd24 9lqe4 w4j60 8r2nq 9997r uh0wv 96cnk sy5je ny";
+        let expected =
+            "bc1p kdj0 4w4l xsv5 70j5 nsd2 49lq e4w4 j608 r2nq 9997 ruh0 wv96 cnks y5je ny";
         assert_eq!(address_string_spaced_out(address.to_string()), expected);
+        assert_eq!(address_string_spaced_out(expected.to_string()), expected);
+        assert_eq!(
+            address_string_spaced_out(" bc1pk dj04w\n4lxsv ".to_string()),
+            "bc1p kdj0 4w4l xsv"
+        );
     }
 
     #[test]

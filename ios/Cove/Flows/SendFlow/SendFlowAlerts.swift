@@ -226,7 +226,7 @@ private extension SendFlowError {
         case let .InvalidAddress(address):
             "The address \(address) is invalid"
         case let .WrongNetwork(address: address, validFor: validFor, current: currentNetwork):
-            "The address \(address) is on the wrong network, is it for (\(validFor). You are on \(currentNetwork)"
+            "The address \(address.addressSpacedOut()) is on the wrong network, is it for (\(validFor). You are on \(currentNetwork)"
         case .InsufficientFunds:
             "You do not have enough bitcoin in your wallet to cover the amount plus fees"
         case .SendBelowDustLimit:
