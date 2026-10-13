@@ -1,4 +1,4 @@
-use redb::TableDefinition;
+use redb::{ReadableTable as _, TableDefinition};
 use std::sync::Arc;
 use tracing::debug;
 
@@ -61,37 +61,76 @@ impl UnsignedTransactionsTable {
         self.get(tx_id)
     }
 
+    /// Save a record and add it to its wallet's index in one write transaction
+    ///
+    /// Wallet actor pruning deletes records concurrently with send flow saves, so the index
+    /// read and write must not span separate transactions
     pub fn save_tx(&self, tx_id: TxId, record: UnsignedTransactionRecord) -> Result<(), Error> {
-        let wallet_id = record.wallet_id.clone();
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
-        // get all the tx ids for the wallet
-        let mut wallet_tx_ids = self.get_tx_ids_for_wallet_id(&wallet_id)?;
+        {
+            let mut by_wallet =
+                write_txn.open_table(BY_WALLET_TABLE).map_err_str(Error::TableAccess)?;
 
-        // save the tx id for the wallet
-        wallet_tx_ids.push(tx_id);
+            let mut wallet_tx_ids = by_wallet
+                .get(&record.wallet_id)
+                .map_err_str(UnsignedTransactionsTableError::Read)?
+                .map(|value| value.value())
+                .unwrap_or_default();
 
-        // save the wallet tx ids
-        self.set_by_wallet_id(wallet_id, wallet_tx_ids)?;
+            if !wallet_tx_ids.contains(&tx_id) {
+                wallet_tx_ids.push(tx_id);
+            }
 
-        // save the tx id
-        self.set(tx_id, record)?;
+            by_wallet
+                .insert(&record.wallet_id, wallet_tx_ids)
+                .map_err_str(UnsignedTransactionsTableError::Save)?;
+        }
+
+        {
+            let mut main = write_txn.open_table(MAIN_TABLE).map_err_str(Error::TableAccess)?;
+            main.insert(tx_id, record).map_err_str(UnsignedTransactionsTableError::Save)?;
+        }
+
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
 
         Ok(())
     }
 
+    /// Delete a record and remove it from its wallet's index in one write transaction
     pub fn delete_tx(&self, tx_id: &TxId) -> Result<UnsignedTransactionRecord, Error> {
-        let record = self.get(tx_id)?.ok_or(UnsignedTransactionsTableError::NoRecordFound)?;
+        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
-        // remove the tx id from the wallet
+        let removed = {
+            let mut main = write_txn.open_table(MAIN_TABLE).map_err_str(Error::TableAccess)?;
+
+            main.remove(tx_id)
+                .map_err_str(UnsignedTransactionsTableError::Save)?
+                .map(|value| value.value())
+        };
+
+        let Some(record) = removed else {
+            write_txn.abort().map_err_str(Error::DatabaseAccess)?;
+            return Err(UnsignedTransactionsTableError::NoRecordFound.into());
+        };
+
         {
-            let wallet_id = &record.wallet_id;
-            let mut wallet_tx_ids = self.get_tx_ids_for_wallet_id(wallet_id)?;
+            let mut by_wallet =
+                write_txn.open_table(BY_WALLET_TABLE).map_err_str(Error::TableAccess)?;
+
+            let mut wallet_tx_ids = by_wallet
+                .get(&record.wallet_id)
+                .map_err_str(UnsignedTransactionsTableError::Read)?
+                .map(|value| value.value())
+                .unwrap_or_default();
+
             wallet_tx_ids.retain(|id| id != tx_id);
-            self.set_by_wallet_id(wallet_id.clone(), wallet_tx_ids)?;
+            by_wallet
+                .insert(&record.wallet_id, wallet_tx_ids)
+                .map_err_str(UnsignedTransactionsTableError::Save)?;
         }
 
-        // delete the actual tx id
-        self.delete_tx_id(tx_id)?;
+        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
 
         Ok(record)
     }
@@ -113,20 +152,6 @@ impl UnsignedTransactionsTable {
             .collect::<Result<Vec<UnsignedTransactionRecord>, _>>()?;
 
         Ok(records)
-    }
-
-    fn delete_tx_id(&self, key: &TxId) -> Result<(), Error> {
-        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
-
-        {
-            let mut table = write_txn.open_table(MAIN_TABLE).map_err_str(Error::TableAccess)?;
-
-            table.remove(key).map_err_str(UnsignedTransactionsTableError::Save)?;
-        }
-
-        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
-
-        Ok(())
     }
 
     fn get(&self, key: &TxId) -> Result<Option<UnsignedTransactionRecord>, Error> {
@@ -154,35 +179,6 @@ impl UnsignedTransactionsTable {
             .unwrap_or_default();
 
         Ok(ids)
-    }
-
-    fn set(&self, key: TxId, value: UnsignedTransactionRecord) -> Result<(), Error> {
-        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
-
-        {
-            let mut table = write_txn.open_table(MAIN_TABLE).map_err_str(Error::TableAccess)?;
-
-            table.insert(key, value).map_err_str(UnsignedTransactionsTableError::Save)?;
-        }
-
-        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
-
-        Ok(())
-    }
-
-    fn set_by_wallet_id(&self, key: WalletId, value: Vec<TxId>) -> Result<(), Error> {
-        let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
-
-        {
-            let mut table =
-                write_txn.open_table(BY_WALLET_TABLE).map_err_str(Error::TableAccess)?;
-
-            table.insert(key, value).map_err_str(UnsignedTransactionsTableError::Save)?;
-        }
-
-        write_txn.commit().map_err_str(Error::DatabaseAccess)?;
-
-        Ok(())
     }
 }
 
@@ -225,5 +221,46 @@ impl UnsignedTransactionRecord {
     #[uniffi::method]
     pub const fn created_at(&self) -> u64 {
         self.created_at
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{UnsignedTransactionRecord, UnsignedTransactionsTable};
+    use crate::transaction::TxId;
+    use cove_types::WalletId;
+
+    fn test_table() -> (tempfile::TempDir, UnsignedTransactionsTable) {
+        let tmp = tempfile::tempdir().unwrap();
+        let db = std::sync::Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());
+        let write_txn = db.begin_write().unwrap();
+        let table = UnsignedTransactionsTable::new(db, &write_txn);
+        write_txn.commit().unwrap();
+
+        (tmp, table)
+    }
+
+    fn record(wallet_id: &WalletId) -> UnsignedTransactionRecord {
+        UnsignedTransactionRecord {
+            wallet_id: wallet_id.clone(),
+            tx_id: TxId::preview_new(),
+            confirm_details: cove_types::confirm::confirm_details_preview_new(),
+            created_at: 0,
+        }
+    }
+
+    #[test]
+    fn delete_tx_removes_the_record_and_its_wallet_index_entry() {
+        let (_tmp, table) = test_table();
+        let wallet_id = WalletId::preview_new_random();
+        let deleted = record(&wallet_id);
+        let kept = record(&wallet_id);
+
+        table.save_tx(deleted.tx_id, deleted.clone()).unwrap();
+        table.save_tx(kept.tx_id, kept.clone()).unwrap();
+
+        assert_eq!(table.delete_tx(&deleted.tx_id).unwrap(), deleted);
+        assert_eq!(table.get_by_wallet_id(&wallet_id).unwrap(), vec![kept]);
+        assert!(table.delete_tx(&deleted.tx_id).is_err());
     }
 }
