@@ -154,10 +154,10 @@ impl SignedTransactionOrPsbt {
         Err(Error::UnrecognizedFormat)
     }
 
-    /// Get the transaction ID (works for both variants)
-    pub fn tx_id(&self) -> TxId {
+    /// Get the unsigned transaction ID that keys the saved unsigned transaction record
+    pub fn unsigned_tx_id(&self) -> TxId {
         match self {
-            Self::Transaction(txn) => txn.tx_id(),
+            Self::Transaction(txn) => txn.unsigned_tx_id(),
             Self::SignedPsbt(psbt) => psbt.tx_id(),
         }
     }
@@ -199,10 +199,10 @@ fn signed_transaction_or_psbt_try_from_nfc_message(
 // UniFFI methods for the enum
 #[uniffi::export]
 impl SignedTransactionOrPsbt {
-    /// Get the transaction ID
-    #[uniffi::method(name = "txId")]
-    pub fn ffi_tx_id(&self) -> TxId {
-        self.tx_id()
+    /// Get the unsigned transaction ID that keys the saved unsigned transaction record
+    #[uniffi::method(name = "unsignedTxId")]
+    pub fn ffi_unsigned_tx_id(&self) -> TxId {
+        self.unsigned_tx_id()
     }
 
     /// Get the inner transaction (returns None if PSBT)
@@ -259,10 +259,10 @@ mod tests {
     }
 
     #[test]
-    fn test_tx_id_from_signed_psbt() {
+    fn test_unsigned_tx_id_from_signed_psbt() {
         let parsed = SignedTransactionOrPsbt::try_from_bytes(&make_signed_psbt_bytes()).unwrap();
         assert_eq!(
-            parsed.tx_id().to_string(),
+            parsed.unsigned_tx_id().to_string(),
             "82efd652d7ab1197f01a5f4d9a30cb4c68bb79ab6fec58dfa1bf112291d1617b"
         );
     }

@@ -222,11 +222,11 @@ class ScanManager private constructor() {
         Log.d(tag, "Received BitcoinTransaction: $transaction: ${transaction.txIdHash()}")
 
         val db = Database().unsignedTransactions()
-        val txnRecord = db.getTx(transaction.txId())
+        val txnRecord = db.getTx(transaction.unsignedTxId())
 
         if (txnRecord == null) {
-            Log.e(tag, "No unsigned transaction found for ${transaction.txId()}")
-            app.alertState = TaggedItem(AppAlertState.NoUnsignedTransactionFound(transaction.txId()))
+            Log.e(tag, "No unsigned transaction found for ${transaction.unsignedTxId()}")
+            app.alertState = TaggedItem(AppAlertState.NoUnsignedTransactionFound(transaction.unsignedTxId()))
             return
         }
 

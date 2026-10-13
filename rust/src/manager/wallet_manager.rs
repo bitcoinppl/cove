@@ -802,15 +802,11 @@ impl RustWalletManager {
         self.ensure_ledger_ready_for_spend()?;
 
         let txn = Arc::unwrap_or_clone(signed_transaction);
-        let tx_id = txn.tx_id();
 
+        // the actor prunes the matching unsigned transaction record once the broadcast lands
         call!(self.actor.broadcast_transaction(txn.into()))
             .await
             .map_err(|_| Error::ActorNotFound)??;
-
-        if let Err(error) = self.delete_unsigned_transaction(tx_id.into()) {
-            error!("unable to delete unsigned transaction record: {error}");
-        }
 
         self.force_wallet_scan().await?;
 

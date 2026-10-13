@@ -78,7 +78,7 @@ internal fun parseSignedImport(input: String): Pair<UnsignedTransactionRecord, S
     val db = Database().unsignedTransactions()
     val record =
         try {
-            db.getTxThrow(txId = parsed.txId())
+            db.getTxThrow(txId = parsed.unsignedTxId())
         } catch (e: Exception) {
             throw IllegalArgumentException(TransactionImportErrors.TRANSACTION_NOT_FOUND, e)
         }

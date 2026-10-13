@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -25,7 +26,7 @@ use tap::TapFallible as _;
 use tracing::{debug, error, warn};
 
 use crate::{
-    database::Database,
+    database::{Database, unsigned_transactions::UnsignedTransactionRecord},
     manager::wallet_manager::{
         Error, SendFlowErrorAlert, WalletManagerBuildTxError, WalletManagerError,
         WalletManagerFeesError, WalletManagerReconcileMessage,
@@ -205,6 +206,60 @@ impl WalletActor {
     // release reserved change addresses for a discarded unsigned transaction
     pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
         self.wallet.unreserve_tx_change_addresses(&txn);
+
+        // the caller already deleted the record, so persist now or a restart keeps the reservation
+        if let Err(error) = self.wallet.persist() {
+            warn!("failed to persist released change addresses for discarded transaction: {error}");
+        }
+    }
+
+    /// Delete saved unsigned transactions that the wallet graph shows can no longer be signed
+    /// and broadcast, then tell the UI when any were removed
+    pub(crate) fn prune_settled_unsigned_transactions(&mut self) {
+        // in-memory wallets never persist unsigned transactions
+        if !self.wallet.uses_persistent_storage() {
+            return;
+        }
+
+        let table = Database::global().unsigned_transactions();
+        let records = match table.get_by_wallet_id(&self.wallet.id) {
+            Ok(records) => records,
+            Err(error) => {
+                warn!("failed to load unsigned transactions for pruning: {error}");
+                return;
+            }
+        };
+
+        let settled = settled_unsigned_transactions(&self.wallet.bdk, records);
+        if settled.is_empty() {
+            return;
+        }
+
+        for record in &settled {
+            self.wallet.unreserve_tx_change_addresses(&record.confirm_details.psbt.0.unsigned_tx);
+        }
+
+        // released change reservations must be durable before the records that own them are
+        // deleted, otherwise a restart restores the reservations with nothing left to release them
+        if let Err(error) = self.wallet.persist() {
+            warn!("failed to persist released change addresses, keeping settled records: {error}");
+            return;
+        }
+
+        let mut pruned = false;
+        for record in settled {
+            if let Err(error) = table.delete_tx(&record.tx_id) {
+                warn!("failed to prune settled unsigned transaction {}: {error}", record.tx_id);
+                continue;
+            }
+
+            debug!("pruned settled unsigned transaction {}", record.tx_id);
+            pruned = true;
+        }
+
+        if pruned {
+            self.send(WalletManagerReconcileMessage::UnsignedTransactionsChanged);
+        }
     }
 
     pub async fn list_unspent(&mut self) -> ActorResult<Result<Vec<LocalOutput>, Error>> {
@@ -712,9 +767,13 @@ impl WalletActor {
         self.wallet.bdk.apply_unconfirmed_txs([(transaction, now)]);
 
         // persist the wallet to save the new transaction
-        if let Err(error) = self.wallet.persist() {
-            error!("Failed to persist wallet after inserting broadcast tx: {error}");
-        }
+        let persisted = match self.wallet.persist() {
+            Ok(()) => true,
+            Err(error) => {
+                error!("Failed to persist wallet after inserting broadcast tx: {error}");
+                false
+            }
+        };
 
         // send updated balance to UI
         let balance = self.wallet.balance();
@@ -723,6 +782,11 @@ impl WalletActor {
         // send updated transactions to UI
         let transactions = self.do_transactions().await;
         self.send(Msg::UpdatedTransactions(transactions));
+
+        // keep the unsigned record until the wallet state is durable, the next scan prunes it
+        if persisted {
+            self.prune_settled_unsigned_transactions();
+        }
 
         send!(self.addr.start_transaction_watcher(txid));
     }
@@ -1178,6 +1242,46 @@ async fn broadcast_payjoin_terminal_with_client(
     Ok(())
 }
 
+/// Pick the unsigned transaction records that are settled by the wallet's canonical transactions
+///
+/// A record is settled when the wallet already holds the same transaction, or when a confirmed
+/// transaction spends one of its inputs. Transactions are matched by unsigned txid because
+/// signing legacy and nested segwit inputs changes the regular txid. Unconfirmed conflicts are
+/// kept so a deliberate replacement of a pending transaction is not deleted before it is signed
+fn settled_unsigned_transactions(
+    wallet: &bdk_wallet::Wallet,
+    records: Vec<UnsignedTransactionRecord>,
+) -> Vec<UnsignedTransactionRecord> {
+    if records.is_empty() {
+        return records;
+    }
+
+    let mut wallet_tx_ids = HashSet::new();
+    let mut confirmed_spends = HashSet::new();
+    for tx in wallet.transactions() {
+        wallet_tx_ids.insert(TxId::for_unsigned(&tx.tx_node.tx));
+
+        if tx.chain_position.is_confirmed() {
+            confirmed_spends.extend(tx.tx_node.tx.input.iter().map(|input| input.previous_output));
+        }
+    }
+
+    records
+        .into_iter()
+        .filter(|record| {
+            wallet_tx_ids.contains(&record.tx_id)
+                || record
+                    .confirm_details
+                    .psbt
+                    .0
+                    .unsigned_tx
+                    .input
+                    .iter()
+                    .any(|input| confirmed_spends.contains(&input.previous_output))
+        })
+        .collect()
+}
+
 async fn broadcast_transaction_with_connection(
     addr: WeakAddr<WalletActor>,
     connection: Produces<Result<(), Error>>,
@@ -1267,13 +1371,28 @@ async fn broadcast_to_node_with_connection(
 mod tests {
     use std::sync::Arc;
 
-    use bdk_wallet::test_utils::{ReceiveTo, receive_output};
-    use bitcoin::Amount;
+    use bdk_wallet::{
+        SignOptions,
+        chain::{BlockId, ConfirmationBlockTime},
+        test_utils::{
+            ReceiveTo, get_funded_wallet_single, get_test_pkh, insert_anchor, insert_checkpoint,
+            insert_tx, receive_output,
+        },
+    };
+    use bitcoin::{
+        Address, Amount, BlockHash, Network, Psbt as BdkPsbt, Transaction as BdkTransaction,
+        hashes::Hash as _,
+    };
+    use cove_types::{WalletId, confirm::confirm_details_preview_new, psbt::Psbt};
     use parking_lot::RwLock;
+    use std::str::FromStr as _;
 
-    use super::{WalletActor, WalletManagerError};
+    use super::{WalletActor, WalletManagerError, settled_unsigned_transactions};
     use crate::{
-        database::wallet_data::{WalletDataDb, wallet_data_artifact_paths},
+        database::{
+            unsigned_transactions::UnsignedTransactionRecord,
+            wallet_data::{WalletDataDb, wallet_data_artifact_paths},
+        },
         manager::wallet_manager::{WalletScanStatus, WalletSnapshot},
         wallet::{Wallet, metadata::WalletMetadata},
     };
@@ -1330,5 +1449,79 @@ mod tests {
             WalletManagerError::FeesError(message)
                 if message.contains("needed amount below send amount")
         ));
+    }
+
+    fn build_legacy_psbt(wallet: &mut bdk_wallet::Wallet, amount: u64) -> BdkPsbt {
+        let address = Address::from_str("bcrt1q3qtze4ys45tgdvguj66zrk4fu6hq3a3v9pfly5")
+            .unwrap()
+            .require_network(Network::Regtest)
+            .unwrap();
+
+        let mut builder = wallet.build_tx();
+        builder.add_recipient(address.script_pubkey(), Amount::from_sat(amount));
+        builder.fee_absolute(Amount::from_sat(1_000));
+        builder.finish().unwrap()
+    }
+
+    #[allow(deprecated)] // SignOptions usage required by bdk_wallet API, no replacement yet
+    fn sign_and_extract(wallet: &bdk_wallet::Wallet, psbt: &BdkPsbt) -> BdkTransaction {
+        let mut psbt = psbt.clone();
+        assert!(wallet.sign(&mut psbt, SignOptions::default()).unwrap());
+        psbt.extract_tx().unwrap()
+    }
+
+    fn unsigned_record(psbt: &BdkPsbt) -> UnsignedTransactionRecord {
+        let psbt = Psbt(psbt.clone());
+        let confirm_details = cove_types::confirm::ConfirmDetails {
+            psbt: psbt.clone(),
+            ..confirm_details_preview_new()
+        };
+
+        UnsignedTransactionRecord {
+            wallet_id: WalletId::preview_new_random(),
+            tx_id: psbt.tx_id(),
+            confirm_details,
+            created_at: 0,
+        }
+    }
+
+    #[test]
+    fn signed_legacy_broadcast_settles_its_unsigned_record() {
+        let (mut wallet, _) = get_funded_wallet_single(get_test_pkh());
+        let psbt = build_legacy_psbt(&mut wallet, 10_000);
+        let record = unsigned_record(&psbt);
+        let signed = sign_and_extract(&wallet, &psbt);
+
+        // signing fills the legacy scriptSig, so the broadcast txid differs from the record key
+        assert_ne!(signed.compute_txid(), psbt.unsigned_tx.compute_txid());
+        assert!(settled_unsigned_transactions(&wallet, vec![record.clone()]).is_empty());
+
+        insert_tx(&mut wallet, signed);
+
+        assert_eq!(settled_unsigned_transactions(&wallet, vec![record.clone()]), vec![record]);
+    }
+
+    #[test]
+    fn only_confirmed_conflicts_settle_an_unsigned_record() {
+        let (mut wallet, _) = get_funded_wallet_single(get_test_pkh());
+        let record = unsigned_record(&build_legacy_psbt(&mut wallet, 10_000));
+        let conflict_psbt = build_legacy_psbt(&mut wallet, 20_000);
+        let conflict = sign_and_extract(&wallet, &conflict_psbt);
+        let conflict_txid = conflict.compute_txid();
+
+        insert_tx(&mut wallet, conflict);
+
+        assert!(settled_unsigned_transactions(&wallet, vec![record.clone()]).is_empty());
+
+        let height = wallet.latest_checkpoint().height() + 1;
+        let block_id = BlockId { height, hash: BlockHash::hash(b"conflict block") };
+        insert_checkpoint(&mut wallet, block_id);
+        insert_anchor(
+            &mut wallet,
+            conflict_txid,
+            ConfirmationBlockTime { block_id, confirmation_time: 1 },
+        );
+
+        assert_eq!(settled_unsigned_transactions(&wallet, vec![record.clone()]), vec![record]);
     }
 }

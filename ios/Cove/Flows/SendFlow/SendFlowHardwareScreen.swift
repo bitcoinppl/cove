@@ -246,7 +246,7 @@ struct SendFlowHardwareScreen: View {
         do {
             let parsed = try SignedTransactionOrPsbt.tryFromNfcMessage(nfcMessage: txn)
             let db = Database().unsignedTransactions()
-            let txnRecord = try db.getTxThrow(txId: parsed.txId())
+            let txnRecord = try db.getTxThrow(txId: parsed.unsignedTxId())
 
             let route = parsed.sendConfirmRoute(
                 id: txnRecord.walletId(),
@@ -265,7 +265,7 @@ struct SendFlowHardwareScreen: View {
         Log.info("parseSignedImport")
         let parsed = try SignedTransactionOrPsbt.tryParse(input: input)
         let db = Database().unsignedTransactions()
-        let record = try db.getTxThrow(txId: parsed.txId())
+        let record = try db.getTxThrow(txId: parsed.unsignedTxId())
         return (record, parsed)
     }
 

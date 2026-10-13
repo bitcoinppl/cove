@@ -2357,6 +2357,11 @@ public protocol BitcoinTransactionProtocol: AnyObject, Sendable {
 
     func txIdHash()  -> String
 
+    /**
+     * Id of the unsigned transaction this was signed from, used to find its saved record
+     */
+    func unsignedTxId()  -> TxId
+
 }
 open class BitcoinTransaction: BitcoinTransactionProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -2442,6 +2447,18 @@ open func txIdHash() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_fn_method_bitcointransaction_tx_id_hash(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Id of the unsigned transaction this was signed from, used to find its saved record
+     */
+open func unsignedTxId() -> TxId  {
+    return try!  FfiConverterTypeTxId_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_bitcointransaction_unsigned_tx_id(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -37346,12 +37363,12 @@ public func transaction() -> BitcoinTransaction?  {
 }
 
     /**
-     * Get the transaction ID
+     * Get the unsigned transaction ID that keys the saved unsigned transaction record
      */
-public func txId() -> TxId  {
+public func unsignedTxId() -> TxId  {
     return try!  FfiConverterTypeTxId_lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_cove_fn_method_signedtransactionorpsbt_txid(
+    uniffi_cove_fn_method_signedtransactionorpsbt_unsignedtxid(
             FfiConverterTypeSignedTransactionOrPsbt_lower(self),uniffiCallStatus
     )
 })
@@ -48146,6 +48163,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_bitcointransaction_tx_id_hash() != 59698) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_bitcointransaction_unsigned_tx_id() != 31829) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_transactiondetails_address() != 1840) {
