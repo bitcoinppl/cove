@@ -236,7 +236,9 @@ impl Distribution {
             ExternalBetaState::BetaApproved
             | ExternalBetaState::ReadyForBetaTesting
             | ExternalBetaState::InBetaTesting => {}
-            state => bail!("TestFlight cannot start external testing in state {state:?}"),
+            state => {
+                bail!("TestFlight cannot start external testing in state {state:?}");
+            }
         }
 
         Ok(())
