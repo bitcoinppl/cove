@@ -1316,7 +1316,7 @@
     <ID>UnreachableCode:QrCodeScanView.kt:result.haptic.trigger(context)</ID>
     <ID>UnreachableCode:QrCodeScanView.kt:val result = scanner.scan(qrData)</ID>
     <ID>UnreachableCode:SendFlowHardwareImportRoute.kt:return Pair(record, parsed)</ID>
-    <ID>UnreachableCode:SendFlowHardwareImportRoute.kt:val record = try { db.getTxThrow(txId = parsed.txId()) } catch (e: Exception) { throw IllegalArgumentException(TransactionImportErrors.TRANSACTION_NOT_FOUND, e) }</ID>
+    <ID>UnreachableCode:SendFlowHardwareImportRoute.kt:val record = try { db.getTxThrow(txId = parsed.unsignedTxId()) } catch (e: Exception) { throw IllegalArgumentException(TransactionImportErrors.TRANSACTION_NOT_FOUND, e) }</ID>
     <ID>UnreachableCode:TapSignerNfcHelper.kt:TapSignerNfcHelper$return performTapSignerCmd(TapSignerCmd.Setup(cmd)) { resp -&gt; when (resp) { is TapSignerResponse.Setup -&gt; resp.v1 else -&gt; throw Exception( &quot;Unexpected response type for Setup command: ${resp?.javaClass?.simpleName}&quot;, ) } }</ID>
     <ID>UnreachableCode:TapSignerNfcHelper.kt:TapSignerNfcHelper$return performTapSignerCmd(TapSignerCmd.Setup(cmd)) { response -&gt; when (response) { is TapSignerResponse.Setup -&gt; response.v1 else -&gt; throw Exception( &quot;Unexpected response type for Setup command: ${response?.javaClass?.simpleName}&quot;, ) } }</ID>
     <ID>UnsafeCallOnNullableType:CloudBackupDetailContent.kt:manager.detail!!</ID>
