@@ -752,9 +752,13 @@ impl WalletActor {
         self.wallet.bdk.apply_unconfirmed_txs([(transaction, now)]);
 
         // persist the wallet to save the new transaction
-        if let Err(error) = self.wallet.persist() {
-            error!("Failed to persist wallet after inserting broadcast tx: {error}");
-        }
+        let persisted = match self.wallet.persist() {
+            Ok(()) => true,
+            Err(error) => {
+                error!("Failed to persist wallet after inserting broadcast tx: {error}");
+                false
+            }
+        };
 
         // send updated balance to UI
         let balance = self.wallet.balance();
@@ -763,7 +767,11 @@ impl WalletActor {
         // send updated transactions to UI
         let transactions = self.do_transactions().await;
         self.send(Msg::UpdatedTransactions(transactions));
-        self.prune_settled_unsigned_transactions();
+
+        // keep the unsigned record until the wallet state is durable, the next scan prunes it
+        if persisted {
+            self.prune_settled_unsigned_transactions();
+        }
 
         send!(self.addr.start_transaction_watcher(txid));
     }
