@@ -206,6 +206,11 @@ impl WalletActor {
     // release reserved change addresses for a discarded unsigned transaction
     pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
         self.wallet.unreserve_tx_change_addresses(&txn);
+
+        // the caller already deleted the record, so persist now or a restart keeps the reservation
+        if let Err(error) = self.wallet.persist() {
+            warn!("failed to persist released change addresses for discarded transaction: {error}");
+        }
     }
 
     /// Delete saved unsigned transactions that the wallet graph shows can no longer be signed
