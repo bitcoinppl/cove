@@ -230,6 +230,17 @@ impl WalletActor {
             return;
         }
 
+        for record in &settled {
+            self.wallet.unreserve_tx_change_addresses(&record.confirm_details.psbt.0.unsigned_tx);
+        }
+
+        // released change reservations must be durable before the records that own them are
+        // deleted, otherwise a restart restores the reservations with nothing left to release them
+        if let Err(error) = self.wallet.persist() {
+            warn!("failed to persist released change addresses, keeping settled records: {error}");
+            return;
+        }
+
         let mut pruned = false;
         for record in settled {
             if let Err(error) = table.delete_tx(&record.tx_id) {
@@ -238,7 +249,6 @@ impl WalletActor {
             }
 
             debug!("pruned settled unsigned transaction {}", record.tx_id);
-            self.wallet.unreserve_tx_change_addresses(&record.confirm_details.psbt.0.unsigned_tx);
             pruned = true;
         }
 
