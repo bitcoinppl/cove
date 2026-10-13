@@ -422,7 +422,7 @@ private struct UtxoRowIdentity: View {
             }
 
             HStack {
-                Text(utxo.address.spacedOut())
+                Text(address: utxo.address)
                     .font(.caption2)
                     .fontWeight(.semibold)
                     .lineLimit(1)

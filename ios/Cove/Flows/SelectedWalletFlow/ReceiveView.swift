@@ -254,8 +254,8 @@ private struct ReceiveAddressCardBottom: View {
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.white.opacity(0.7))
 
-                Text(address.addressSpacedOut())
-                    .font(.system(.body, design: .monospaced))
+                Text(address: address.address())
+                    .font(.body)
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
 

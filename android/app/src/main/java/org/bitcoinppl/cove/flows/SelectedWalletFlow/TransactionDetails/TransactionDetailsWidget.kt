@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.KeyValueRow
@@ -79,13 +80,24 @@ internal fun TransactionDetailsWidget(
                         fontSize = 13.sp,
                     )
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        transactionDetails.addressSpacedOut() ?: stringResource(R.string.address_unavailable),
-                        color = fg,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        lineHeight = 20.sp,
-                    )
+                    val address = transactionDetails.addressSpacedOut()
+                    if (address != null) {
+                        AddressText(
+                            address = address,
+                            color = fg,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 20.sp,
+                        )
+                    } else {
+                        Text(
+                            stringResource(R.string.address_unavailable),
+                            color = fg,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 20.sp,
+                        )
+                    }
 
                     // show block number and confirmations for confirmed sent transactions
                     if (isConfirmed) {

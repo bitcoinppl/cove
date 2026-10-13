@@ -834,8 +834,8 @@ private struct OnboardingExchangeFundingAddress: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.coveLightGray.opacity(0.72))
 
-                Text(addressInfo.addressUnformatted().addressSpacedOut())
-                    .font(.system(.body, design: .monospaced))
+                Text(addressString: addressInfo.addressUnformatted())
+                    .font(.body)
                     .foregroundStyle(.white)
                     .textSelection(.enabled)
             }

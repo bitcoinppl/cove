@@ -41,6 +41,7 @@ import org.bitcoinppl.cove.AppSheetState
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BitcoinShieldIcon
 import org.bitcoinppl.cove_core.AfterPinAction
@@ -181,8 +182,8 @@ internal fun AddressSection(
 
         Spacer(Modifier.weight(1f))
 
-        Text(
-            text = address,
+        AddressText(
+            address = address,
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,

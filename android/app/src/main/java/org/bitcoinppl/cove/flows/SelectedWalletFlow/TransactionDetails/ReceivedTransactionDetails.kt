@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.bitcoinppl.cove.R
+import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove_core.TransactionDetails
 
 @Composable
@@ -122,13 +123,23 @@ internal fun ReceivedTransactionDetails(
                     fontSize = 12.sp,
                 )
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    transactionDetails.addressSpacedOut() ?: stringResource(R.string.address_unavailable),
-                    color = fg,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    lineHeight = 22.sp,
-                )
+                if (address != null) {
+                    AddressText(
+                        address = address.unformatted(),
+                        color = fg,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 22.sp,
+                    )
+                } else {
+                    Text(
+                        stringResource(R.string.address_unavailable),
+                        color = fg,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 22.sp,
+                    )
+                }
             }
 
             // only show copy button when address is available

@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -56,6 +57,7 @@ import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove.views.AsyncText
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
@@ -66,7 +68,6 @@ import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.SetAmountFocusField
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.types.BitcoinUnit
-import org.bitcoinppl.cove_core.types.addressStringSpacedOut
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -488,6 +489,7 @@ private fun AddressWidget(
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
                         fontWeight = FontWeight.Medium,
+                        fontFamily = FontFamily.Monospace,
                     ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { onDone() }),
@@ -502,8 +504,8 @@ private fun AddressWidget(
             )
             // show spaced-out address when not focused
             if (!isFocused && address.isNotEmpty()) {
-                Text(
-                    text = addressStringSpacedOut(address),
+                AddressText(
+                    address = address,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,

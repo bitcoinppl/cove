@@ -147,7 +147,7 @@ class SendFlowPresenter(
                 "The address ${error.v1} is invalid"
 
             is SendFlowException.WrongNetwork ->
-                "The address ${error.address} is on the wrong network, it is for ${error.validFor}. You are on ${error.current}"
+                "The address ${addressStringSpacedOut(error.address)} is on the wrong network, it is for ${error.validFor}. You are on ${error.current}"
 
             is SendFlowException.InsufficientFunds ->
                 "You do not have enough bitcoin in your wallet to cover the amount plus fees"

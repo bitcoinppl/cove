@@ -34,12 +34,13 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
-import org.bitcoinppl.cove_core.types.addressStringSpacedOut
+import org.bitcoinppl.cove.views.AddressText
 
 @Composable
 fun EnterAddressView(
@@ -120,6 +121,7 @@ fun EnterAddressView(
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
                         fontWeight = FontWeight.Medium,
+                        fontFamily = FontFamily.Monospace,
                     ),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { onDone() }),
@@ -134,8 +136,8 @@ fun EnterAddressView(
             )
             // show spaced-out address when not focused
             if (!isFocused && address.isNotEmpty()) {
-                Text(
-                    text = addressStringSpacedOut(address),
+                AddressText(
+                    address = address,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,

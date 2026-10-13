@@ -33,6 +33,7 @@ import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.WalletAddressType
@@ -159,8 +160,8 @@ private fun ChooseWalletTypeSheetContent(
                     fontWeight = FontWeight.SemiBold,
                 )
                 if (currentAddress != null) {
-                    Text(
-                        text = currentAddress,
+                    AddressText(
+                        address = currentAddress,
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.7f),
                     )
@@ -185,8 +186,8 @@ private fun ChooseWalletTypeSheetContent(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    Text(
-                        text = foundAddress.firstAddress,
+                    AddressText(
+                        address = foundAddress.firstAddress,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

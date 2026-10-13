@@ -21,7 +21,7 @@ private struct AppAlertMessage: View {
         let text = alert.message()
 
         if case .foundAddress = alert {
-            Text(text.map { "\($0)\u{200B}" }.joined())
+            Text(text)
                 .font(.system(.caption2, design: .monospaced))
                 .minimumScaleFactor(0.5)
                 .lineLimit(2)

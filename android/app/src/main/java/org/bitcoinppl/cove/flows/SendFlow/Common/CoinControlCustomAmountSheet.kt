@@ -31,6 +31,7 @@ import org.bitcoinppl.cove.flows.CoinControlFlow.displayDate
 import org.bitcoinppl.cove.flows.CoinControlFlow.displayName
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
+import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.ffiConservativeDustLimitSats
 import org.bitcoinppl.cove_core.types.Amount
@@ -376,12 +377,12 @@ private fun UtxoDetailRow(
                 }
             }
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = utxo.address.unformatted(),
+            AddressText(
+                address = utxo.address.unformatted(),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                overflow = TextOverflow.MiddleEllipsis,
             )
         }
         Column(horizontalAlignment = Alignment.End) {

@@ -37,13 +37,12 @@ struct AddressTextEditor: View {
                 .fontWeight(.semibold)
 
             if !isFocused {
-                Text(text.addressSpacedOut())
+                Text(addressString: text)
                     .lineLimit(3)
                     .onTapGesture {
                         presenter.focusField = .address
                     }
                     .font(.footnote)
-                    .fontDesign(.monospaced)
                     .fontWeight(.semibold)
             }
 

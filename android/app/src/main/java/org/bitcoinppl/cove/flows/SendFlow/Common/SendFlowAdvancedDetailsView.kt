@@ -39,12 +39,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.caption
+import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.WalletManagerAction
@@ -372,10 +372,9 @@ private fun TxRow(
                     }
                 }
 
-                Text(
-                    text = model.address,
+                AddressText(
+                    address = model.address,
                     style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
             }

@@ -54,6 +54,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.ui.theme.isLight
 import org.bitcoinppl.cove.ui.theme.title3
+import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove_core.ReceiveAddressCopyPolicy
 import org.bitcoinppl.cove_core.ReceiveAddressPresentation
 import org.bitcoinppl.cove_core.ReceiveAddressRefreshState
@@ -326,10 +327,9 @@ private fun ReceiveAddressSheetContent(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 if (addressText != null) {
-                    Text(
-                        text = addressText,
+                    AddressText(
+                        address = addressText,
                         style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                         color = Color.White,
                         modifier = Modifier.fillMaxWidth(),
                     )

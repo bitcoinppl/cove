@@ -58,6 +58,7 @@ import org.bitcoinppl.cove.flows.SendFlow.SendState
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.coveColors
+import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.KeyValueRow
 import org.bitcoinppl.cove_core.WalletManagerAction
@@ -414,16 +415,30 @@ private fun SummaryWidget(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Spacer(Modifier.height(28.dp))
-        SummaryKeyValueRow(
-            label = stringResource(R.string.label_address),
-            value = address,
+        KeyValueRow(
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onAddressClick),
-            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            valueColor = MaterialTheme.colorScheme.onSurface,
-            valueFontWeight = FontWeight.SemiBold,
+            valueWeight = 2f,
+            labelContent = {
+                Text(
+                    text = stringResource(R.string.label_address),
+                    modifier = Modifier.fillMaxWidth(),
+                    style = TextStyle(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            valueContent = {
+                AddressText(
+                    address = address,
+                    modifier = Modifier.fillMaxWidth(),
+                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Right,
+                    maxLines = 4,
+                )
+            },
         )
         Spacer(Modifier.height(20.dp))
         SummaryKeyValueRow(

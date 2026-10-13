@@ -1450,7 +1450,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_types_checksum_func_address_is_valid_for_network() != 43002.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_types_checksum_func_address_string_spaced_out() != 18228.toShort()) {
+    if (lib.uniffi_cove_types_checksum_func_address_string_spaced_out() != 52242.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_func_all_color_schemes() != 49693.toShort()) {
@@ -11040,7 +11040,13 @@ public typealias FfiConverterTypeWalletId = FfiConverterString
 }
 
 
- fun `addressStringSpacedOut`(`address`: kotlin.String): kotlin.String {
+
+        /**
+         * Groups an address into space-separated 4 character chunks, the single display format
+         * shared by every screen
+         *
+         * Existing whitespace is ignored so already grouped input is regrouped identically
+         */ fun `addressStringSpacedOut`(`address`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_func_address_string_spaced_out(
