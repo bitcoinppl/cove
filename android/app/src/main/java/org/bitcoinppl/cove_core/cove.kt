@@ -1913,6 +1913,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_bitcointransaction_tx_id_hash(
     ): Short
+    external fun uniffi_cove_checksum_method_bitcointransaction_unsigned_tx_id(
+    ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_address(
     ): Short
     external fun uniffi_cove_checksum_method_transactiondetails_address_spaced_out(
@@ -3233,6 +3235,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_bitcointransaction_tx_id_hash(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_bitcointransaction_unsigned_tx_id(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Long
     external fun uniffi_cove_fn_clone_transactiondetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_free_transactiondetails(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -3575,7 +3579,7 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_signedtransactionorpsbt_transaction(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_signedtransactionorpsbt_txid(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_signedtransactionorpsbt_unsignedtxid(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_fn_method_transporterror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -5131,6 +5135,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_bitcointransaction_tx_id_hash() != 59698.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_bitcointransaction_unsigned_tx_id() != 31829.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_transactiondetails_address() != 1840.toShort()) {
@@ -9303,6 +9310,11 @@ public interface BitcoinTransactionInterface {
 
     fun `txIdHash`(): kotlin.String
 
+    /**
+     * Id of the unsigned transaction this was signed from, used to find its saved record
+     */
+    fun `unsignedTxId`(): TxId
+
     companion object
 }
 
@@ -9434,6 +9446,22 @@ open class BitcoinTransaction: Disposable, AutoCloseable, BitcoinTransactionInte
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_fn_method_bitcointransaction_tx_id_hash(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Id of the unsigned transaction this was signed from, used to find its saved record
+     */override fun `unsignedTxId`(): TxId {
+            return FfiConverterTypeTxId.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_bitcointransaction_unsigned_tx_id(
         it,
         _status)
 }
@@ -58395,11 +58423,11 @@ sealed class SignedTransactionOrPsbt: Disposable  {
 
 
     /**
-     * Get the transaction ID
-     */ fun `txId`(): TxId {
+     * Get the unsigned transaction ID that keys the saved unsigned transaction record
+     */ fun `unsignedTxId`(): TxId {
             return FfiConverterTypeTxId.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_signedtransactionorpsbt_txid(FfiConverterTypeSignedTransactionOrPsbt.lower(this),
+    UniffiLib.uniffi_cove_fn_method_signedtransactionorpsbt_unsignedtxid(FfiConverterTypeSignedTransactionOrPsbt.lower(this),
         _status)
 }
     )

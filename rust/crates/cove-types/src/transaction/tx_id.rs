@@ -35,6 +35,21 @@ impl TxId {
 }
 
 impl TxId {
+    /// Txid of a transaction with every input's scriptSig and witness cleared
+    ///
+    /// This matches the id of the PSBT `unsigned_tx` the transaction was signed from. Signing
+    /// fills the scriptSig of legacy and nested segwit inputs, which changes the regular txid
+    #[must_use]
+    pub fn for_unsigned(tx: &bitcoin::Transaction) -> Self {
+        let mut unsigned = tx.clone();
+        for input in &mut unsigned.input {
+            input.script_sig = bitcoin::ScriptBuf::new();
+            input.witness = bitcoin::Witness::new();
+        }
+
+        unsigned.compute_txid().into()
+    }
+
     #[must_use]
     pub fn preview_new() -> Self {
         let random_bytes = random::<[u8; 32]>();

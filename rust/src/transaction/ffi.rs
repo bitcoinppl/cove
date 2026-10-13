@@ -112,6 +112,12 @@ impl BitcoinTransaction {
         self.0.compute_txid().into()
     }
 
+    /// Id of the unsigned transaction this was signed from, used to find its saved record
+    #[uniffi::method]
+    pub fn unsigned_tx_id(&self) -> TxId {
+        TxId::for_unsigned(&self.0)
+    }
+
     #[uniffi::method]
     pub fn tx_id_hash(&self) -> String {
         self.tx_id().0.to_raw_hash().to_string()

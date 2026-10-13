@@ -270,11 +270,11 @@ import SwiftUI
         )
 
         let db = Database().unsignedTransactions()
-        let txnRecord = db.getTx(txId: transaction.txId())
+        let txnRecord = db.getTx(txId: transaction.unsignedTxId())
 
         guard let txnRecord else {
-            Log.error("No unsigned transaction found for \(transaction.txId())")
-            app.alertState = .init(.noUnsignedTransactionFound(txId: transaction.txId()))
+            Log.error("No unsigned transaction found for \(transaction.unsignedTxId())")
+            app.alertState = .init(.noUnsignedTransactionFound(txId: transaction.unsignedTxId()))
             return
         }
 

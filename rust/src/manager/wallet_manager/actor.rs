@@ -1273,6 +1273,7 @@ impl WalletActor {
             self.transactions().await?.await.map_err_str(Error::TransactionsRetrievalError)?;
 
         self.send(Msg::ScanComplete(transactions));
+        self.prune_settled_unsigned_transactions();
 
         Produces::ok(())
     }
