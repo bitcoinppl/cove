@@ -182,7 +182,7 @@ impl WalletDataDb {
         Self::new_with_db(id, Arc::new(db), WalletDataStorage::InMemory)
     }
 
-    fn new_with_db_location(id: WalletId, db_location: &Path) -> Result<Self> {
+    pub(crate) fn new_with_db_location(id: WalletId, db_location: &Path) -> Result<Self> {
         let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_persistence_operation(id.clone())?;
         let storage_gate = wallet_data_storage_gate(&id);
@@ -205,7 +205,8 @@ impl WalletDataDb {
         write_txn
             .open_table(TABLE)
             .map_err(|e| WalletDataError::TableAccess { id: id.clone(), error: e.to_string() })?;
-        let labels = LabelsTable::new(id.clone(), db.clone(), &write_txn);
+        let labels = LabelsTable::new(id.clone(), db.clone(), &write_txn)
+            .map_err_str(|error| WalletDataError::TableAccess { id: id.clone(), error })?;
 
         // commit the write transaction
         write_txn.commit().map_err(|e| WalletDataError::DatabaseAccess {

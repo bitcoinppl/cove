@@ -21,7 +21,7 @@ use crate::transaction::TxId;
 type SerdeRecord<T> = Cbor<Record<T>>;
 pub type Error = LabelDbError;
 
-mod outpoint_v2_migration;
+pub(crate) mod outpoint_v2_migration;
 
 enum ImportedLabelAction {
     Insert(Label),
@@ -59,20 +59,20 @@ pub struct LabelsTable {
 }
 
 impl LabelsTable {
-    pub fn new(id: WalletId, db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
-        outpoint_v2_migration::migrate_v2_outpoint_tables(write_txn)
-            .expect("failed to migrate outpoint record tables");
+    pub fn new(
+        id: WalletId,
+        db: Arc<redb::Database>,
+        write_txn: &redb::WriteTransaction,
+    ) -> Result<Self, DatabaseError> {
+        outpoint_v2_migration::migrate_v2_outpoint_tables(write_txn)?;
 
-        // create tables  if it doesn't exist
-        write_txn.open_table(TXN_TABLE).expect("failed to transactions create table");
+        // create tables if they don't exist
+        write_txn.open_table(TXN_TABLE)?;
+        write_txn.open_table(ADDRESS_TABLE)?;
+        write_txn.open_table(INPUT_TABLE)?;
+        write_txn.open_table(OUTPUT_TABLE)?;
 
-        write_txn.open_table(ADDRESS_TABLE).expect("failed to create address table");
-
-        write_txn.open_table(INPUT_TABLE).expect("failed to create input table");
-
-        write_txn.open_table(OUTPUT_TABLE).expect("failed to create output table");
-
-        Self { id, db }
+        Ok(Self { id, db })
     }
 
     pub fn has_labels(&self) -> Result<bool, Error> {

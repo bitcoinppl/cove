@@ -9,17 +9,19 @@ use redb::{ReadableTable as _, TableDefinition, TableHandle as _, WriteTransacti
 use super::{INPUT_TABLE, OUTPUT_TABLE, SerdeRecord};
 use crate::database::{error::DatabaseError, key::OutPointKey};
 
-const LEGACY_INPUT_TABLE: TableDefinition<LegacyOutPointKey, SerdeRecord<InputRecord>> =
+pub(crate) const LEGACY_INPUT_TABLE: TableDefinition<LegacyOutPointKey, SerdeRecord<InputRecord>> =
     TableDefinition::new("input_records_v2.cbor");
 
-const LEGACY_OUTPUT_TABLE: TableDefinition<LegacyOutPointKey, SerdeRecord<OutputRecord>> =
-    TableDefinition::new("output_records_v2.cbor");
+pub(crate) const LEGACY_OUTPUT_TABLE: TableDefinition<
+    LegacyOutPointKey,
+    SerdeRecord<OutputRecord>,
+> = TableDefinition::new("output_records_v2.cbor");
 
 /// Key as written by earlier builds: txid bytes followed by the vout in native (little-endian) order
 #[derive(Debug)]
-struct LegacyOutPointKey {
-    id: [u8; 32],
-    index: u32,
+pub(crate) struct LegacyOutPointKey {
+    pub(crate) id: [u8; 32],
+    pub(crate) index: u32,
 }
 
 impl From<LegacyOutPointKey> for OutPointKey {
@@ -79,7 +81,7 @@ impl redb::Value for LegacyOutPointKey {
 /// Copies every v2 row into the v3 tables and deletes the v2 tables, within the caller's transaction
 ///
 /// Rows already present in v3 are kept. Does nothing when the v2 tables do not exist
-pub(super) fn migrate_v2_outpoint_tables(
+pub(crate) fn migrate_v2_outpoint_tables(
     write_txn: &WriteTransaction,
 ) -> Result<(), DatabaseError> {
     migrate_table(write_txn, LEGACY_INPUT_TABLE, INPUT_TABLE)?;
