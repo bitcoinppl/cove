@@ -21,8 +21,6 @@ use crate::transaction::TxId;
 type SerdeRecord<T> = Cbor<Record<T>>;
 pub type Error = LabelDbError;
 
-pub(crate) mod outpoint_v2_migration;
-
 enum ImportedLabelAction {
     Insert(Label),
     Ignore,
@@ -47,10 +45,10 @@ pub(crate) const ADDRESS_TABLE: TableDefinition<
 > = TableDefinition::new("address_labels.cbor");
 
 pub(crate) const INPUT_TABLE: TableDefinition<OutPointKey, SerdeRecord<InputRecord>> =
-    TableDefinition::new("input_records_v3.cbor");
+    TableDefinition::new("input_records_v2.cbor");
 
 pub(crate) const OUTPUT_TABLE: TableDefinition<OutPointKey, SerdeRecord<OutputRecord>> =
-    TableDefinition::new("output_records_v3.cbor");
+    TableDefinition::new("output_records_v2.cbor");
 
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct LabelsTable {
@@ -59,20 +57,17 @@ pub struct LabelsTable {
 }
 
 impl LabelsTable {
-    pub fn new(
-        id: WalletId,
-        db: Arc<redb::Database>,
-        write_txn: &redb::WriteTransaction,
-    ) -> Result<Self, DatabaseError> {
-        outpoint_v2_migration::migrate_v2_outpoint_tables(write_txn)?;
+    pub fn new(id: WalletId, db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
+        // create tables  if it doesn't exist
+        write_txn.open_table(TXN_TABLE).expect("failed to transactions create table");
 
-        // create tables if they don't exist
-        write_txn.open_table(TXN_TABLE)?;
-        write_txn.open_table(ADDRESS_TABLE)?;
-        write_txn.open_table(INPUT_TABLE)?;
-        write_txn.open_table(OUTPUT_TABLE)?;
+        write_txn.open_table(ADDRESS_TABLE).expect("failed to create address table");
 
-        Ok(Self { id, db })
+        write_txn.open_table(INPUT_TABLE).expect("failed to create input table");
+
+        write_txn.open_table(OUTPUT_TABLE).expect("failed to create output table");
+
+        Self { id, db }
     }
 
     pub fn has_labels(&self) -> Result<bool, Error> {
@@ -640,7 +635,7 @@ pub(crate) mod test_support {
     };
 
     const MISMATCHED_OUTPUT_TABLE: TableDefinition<&'static str, &'static str> =
-        TableDefinition::new("output_records_v3.cbor");
+        TableDefinition::new("output_records_v2.cbor");
 
     pub(crate) fn wallet_data_db_with_mismatched_output_table(
         id: WalletId,

@@ -11,9 +11,6 @@ use tracing::{error, info, warn};
 
 use crate::bootstrap::Migration;
 use crate::database::encrypted_backend::EncryptedBackend;
-use crate::database::wallet_data::label::outpoint_v2_migration::{
-    LEGACY_INPUT_TABLE, LEGACY_OUTPUT_TABLE,
-};
 use cove_common::consts::{ROOT_DATA_DIR, WALLET_DATA_DIR};
 use cove_types::{WalletId, redb::Json};
 
@@ -373,9 +370,6 @@ fn wallet_table_policy(source_path: &Path) -> TableCopyPolicy {
             crate::database::wallet_data::label::ADDRESS_TABLE.name(),
             crate::database::wallet_data::label::INPUT_TABLE.name(),
             crate::database::wallet_data::label::OUTPUT_TABLE.name(),
-            // copied as-is so the normal open path can rewrite them into v3
-            LEGACY_INPUT_TABLE.name(),
-            LEGACY_OUTPUT_TABLE.name(),
         ]
         .into_iter()
         .collect(),
@@ -539,8 +533,6 @@ fn migrate_wallet_database(source_path: &Path) -> Result<()> {
             copy_table(src_db, dst_db, crate::database::wallet_data::label::ADDRESS_TABLE)?;
             copy_table(src_db, dst_db, crate::database::wallet_data::label::INPUT_TABLE)?;
             copy_table(src_db, dst_db, crate::database::wallet_data::label::OUTPUT_TABLE)?;
-            copy_table(src_db, dst_db, LEGACY_INPUT_TABLE)?;
-            copy_table(src_db, dst_db, LEGACY_OUTPUT_TABLE)?;
             Ok(())
         },
     )?;
@@ -1547,85 +1539,6 @@ mod tests {
             missing.is_empty(),
             "Tables in source but not in destination (migration missed them): {missing:?}"
         );
-    }
-
-    #[test]
-    fn migrate_wallet_database_preserves_v2_outpoint_records_for_v3_rewrite() {
-        use bip329::{InputRecord, OutputRecord};
-        use bitcoin::{OutPoint, Txid, hashes::Hash as _};
-
-        use crate::database::wallet_data::label::outpoint_v2_migration::LegacyOutPointKey;
-        use crate::database::{Record, record::Timestamps};
-
-        setup_test_key();
-
-        let wallet_id = WalletId::preview_new_random();
-        let txid = Txid::from_byte_array([7; 32]);
-
-        let dir = TempDir::new().unwrap();
-        let source_path = create_plaintext_wallet_db_named(&dir, wallet_id.as_str());
-
-        // seed v2 rows the way an older build wrote them
-        {
-            let db = redb::Database::open(&source_path).unwrap();
-            let write_txn = db.begin_write().unwrap();
-            {
-                let mut inputs = write_txn.open_table(LEGACY_INPUT_TABLE).unwrap();
-                let mut outputs = write_txn.open_table(LEGACY_OUTPUT_TABLE).unwrap();
-
-                for vout in [1, 256] {
-                    let ref_ = OutPoint { txid, vout };
-                    let timestamps = Timestamps::new(1, 2);
-                    let key = || LegacyOutPointKey { id: *txid.as_ref(), index: vout };
-
-                    let input = InputRecord { ref_, label: Some(format!("input {vout}")) };
-                    inputs.insert(key(), Record::with_timestamps(input, timestamps)).unwrap();
-
-                    let output = OutputRecord {
-                        ref_,
-                        label: Some(format!("output {vout}")),
-                        spendable: Some(false),
-                    };
-                    outputs.insert(key(), Record::with_timestamps(output, timestamps)).unwrap();
-                }
-            }
-            write_txn.commit().unwrap();
-        }
-
-        migrate_wallet_database(&source_path).unwrap();
-
-        let wallet_data =
-            wallet_data::WalletDataDb::new_with_db_location(wallet_id, dir.path()).unwrap();
-
-        let inputs = wallet_data
-            .labels
-            .txn_input_records_iter(txid)
-            .unwrap()
-            .map(|record| (record.item.ref_.vout, record.item.label))
-            .collect::<Vec<_>>();
-
-        let outputs = wallet_data
-            .labels
-            .txn_output_records_iter(txid)
-            .unwrap()
-            .map(|record| (record.item.ref_.vout, record.item.label, record.item.spendable))
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            inputs,
-            vec![(1, Some("input 1".to_string())), (256, Some("input 256".to_string()))]
-        );
-        assert_eq!(
-            outputs,
-            vec![
-                (1, Some("output 1".to_string()), Some(false)),
-                (256, Some("output 256".to_string()), Some(false)),
-            ]
-        );
-
-        let tables = table_names(&wallet_data.db).unwrap();
-        assert!(!tables.contains(LEGACY_INPUT_TABLE.name()));
-        assert!(!tables.contains(LEGACY_OUTPUT_TABLE.name()));
     }
 
     #[test]

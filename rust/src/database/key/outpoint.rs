@@ -2,9 +2,11 @@ use std::cmp::Ordering;
 
 const KEY_LEN: usize = 36;
 
-/// Key for per-outpoint records, encoded as the 32 txid bytes followed by the big-endian vout
+/// Key for per-outpoint records, encoded as the 32 txid bytes followed by the little-endian vout
 ///
-/// Big-endian makes the byte order match the numeric order, so keys sort by (txid, vout)
+/// The layout matches what earlier builds wrote through a native-endian `#[repr(C)]` struct on
+/// every shipped target, so existing tables stay readable without a migration. Keys group by txid
+/// but do not sort by vout within a txid
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct OutPointKey {
     pub id: [u8; 32],
@@ -46,8 +48,9 @@ impl redb::Value for OutPointKey {
     where
         Self: 'a;
 
+    // redb stores the fixed width in table metadata, so this must stay variable-width
     fn fixed_width() -> Option<usize> {
-        Some(KEY_LEN)
+        None
     }
 
     fn from_bytes<'a>(data: &'a [u8]) -> Self::SelfType<'a>
@@ -55,7 +58,7 @@ impl redb::Value for OutPointKey {
         Self: 'a,
     {
         let id = data[..32].try_into().expect("id is 32 bytes");
-        let index = u32::from_be_bytes(data[32..KEY_LEN].try_into().expect("index is 4 bytes"));
+        let index = u32::from_le_bytes(data[32..KEY_LEN].try_into().expect("index is 4 bytes"));
 
         Self { id, index }
     }
@@ -66,14 +69,13 @@ impl redb::Value for OutPointKey {
     {
         let mut bytes = [0; KEY_LEN];
         bytes[..32].copy_from_slice(&value.id);
-        bytes[32..].copy_from_slice(&value.index.to_be_bytes());
+        bytes[32..].copy_from_slice(&value.index.to_le_bytes());
 
         bytes
     }
 
-    // distinct from the legacy little-endian name so a v2 table can never be opened with this decoder
     fn type_name() -> redb::TypeName {
-        redb::TypeName::new("OutPointKey::bitcoin::OutPoint::BigEndian")
+        redb::TypeName::new("OutPointKey::bitcoin::OutPoint")
     }
 }
 
@@ -84,13 +86,13 @@ mod tests {
     use super::OutPointKey;
 
     #[test]
-    fn key_round_trips_non_zero_index() {
+    fn key_keeps_stored_layout_and_decodes_non_zero_index() {
         let key = OutPointKey { id: [7; 32], index: 256 };
 
         let bytes = OutPointKey::as_bytes(&key);
-        let decoded = OutPointKey::from_bytes(&bytes);
 
-        assert_eq!(decoded, key);
-        assert_eq!(&bytes[32..], &[0, 0, 1, 0]);
+        // existing rows were written with this exact layout, so it must not change
+        assert_eq!(&bytes[32..], &[0, 1, 0, 0]);
+        assert_eq!(OutPointKey::from_bytes(&bytes), key);
     }
 }
