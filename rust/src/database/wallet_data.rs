@@ -238,17 +238,19 @@ impl WalletDataDb {
     }
 
     fn required_tables_exist(id: &WalletId, db: &redb::Database) -> Result<bool> {
-        let read_txn = db.begin_read().map_err(|e| WalletDataError::DatabaseAccess {
-            id: id.clone(),
-            error: e.to_string(),
-        })?;
+        let read_txn = db
+            .begin_read()
+            .map_err_str(|error| WalletDataError::DatabaseAccess { id: id.clone(), error })?;
 
         for_each_required_table!(table => {
             match read_txn.open_table(table) {
                 Ok(_) => {}
                 Err(redb::TableError::TableDoesNotExist(_)) => return Ok(false),
                 Err(e) => {
-                    return Err(WalletDataError::TableAccess { id: id.clone(), error: e.to_string() });
+                    return Err(e).map_err_str(|error| WalletDataError::TableAccess {
+                        id: id.clone(),
+                        error,
+                    });
                 }
             }
         });
@@ -257,21 +259,19 @@ impl WalletDataDb {
     }
 
     fn create_required_tables(id: &WalletId, db: &redb::Database) -> Result<()> {
-        let write_txn = db.begin_write().map_err(|e| WalletDataError::DatabaseAccess {
-            id: id.clone(),
-            error: e.to_string(),
-        })?;
+        let write_txn = db
+            .begin_write()
+            .map_err_str(|error| WalletDataError::DatabaseAccess { id: id.clone(), error })?;
 
         for_each_required_table!(table => {
-            write_txn.open_table(table).map_err(|e| WalletDataError::TableAccess {
-                id: id.clone(),
-                error: e.to_string(),
-            })?;
+            write_txn
+                .open_table(table)
+                .map_err_str(|error| WalletDataError::TableAccess { id: id.clone(), error })?;
         });
 
         write_txn
             .commit()
-            .map_err(|e| WalletDataError::DatabaseAccess { id: id.clone(), error: e.to_string() })
+            .map_err_str(|error| WalletDataError::DatabaseAccess { id: id.clone(), error })
     }
 
     pub(crate) const fn is_in_memory(&self) -> bool {

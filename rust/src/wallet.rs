@@ -291,7 +291,11 @@ impl Wallet {
     pub fn transactions(&self) -> Vec<crate::transaction::Transaction> {
         let db = self
             .uses_persistent_storage()
-            .then(|| WalletDataDb::new_or_existing(self.id.clone()).ok())
+            .then(|| {
+                WalletDataDb::new_or_existing(self.id.clone())
+                    .inspect_err(|error| warn!("failed to open wallet data for labels: {error}"))
+                    .ok()
+            })
             .flatten();
 
         crate::transaction::Transaction::all_from_wallet(
@@ -476,10 +480,15 @@ mod tests {
                 panic!("transaction should be unconfirmed");
             };
 
-            assert_eq!(
-                unconfirmed.labels.clone().into_vec().len(),
-                1,
-                "transaction {index} lost its label"
+            let labels = unconfirmed.labels.clone().into_vec();
+            let expected = format!("label {index}");
+
+            assert!(
+                matches!(
+                    labels.as_slice(),
+                    [Label::Transaction(TransactionRecord { label: Some(label), .. })] if *label == expected
+                ),
+                "transaction {index} has labels {labels:?}"
             );
         }
     }
