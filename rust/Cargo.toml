@@ -237,7 +237,6 @@ serde_json = { workspace = true }
 minicbor = { workspace = true }
 serde_urlencoded = { workspace = true }
 
-zerocopy = { version = "0.8.48", features = ["derive"] }
 uniffi = { workspace = true, features = ["tokio"] }
 
 # bit manipulation# bindings
