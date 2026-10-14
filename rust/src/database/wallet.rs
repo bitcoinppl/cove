@@ -528,55 +528,74 @@ impl WalletsTable {
         let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_unscoped_persistence_operation()?;
 
-        let wallets = self.get_all(network, mode)?;
+        // read, validate and write in one write transaction so a concurrent metadata patch
+        // cannot be overwritten by a stale copy of the row
+        let write_txn = self.db.begin_write()?;
 
-        if wallets.len() != wallet_ids.len() {
-            warn!(
-                current_len = wallets.len(),
-                requested_len = wallet_ids.len(),
-                ?network,
-                ?mode,
-                "Ignoring wallet reorder with mismatched id count"
-            );
+        let reordered = {
+            let mut table = write_txn.open_table(TABLE)?;
+            let key = WalletKey::from((network, mode)).to_string();
+            let wallets = table
+                .get(key.as_str())
+                .map_err_str(WalletTableError::ReadError)?
+                .map(|value| value.value())
+                .unwrap_or_default();
 
-            return Ok(wallets);
-        }
-
-        let mut requested_id_set = HashSet::with_capacity(wallet_ids.len());
-        for wallet_id in &wallet_ids {
-            if !requested_id_set.insert(wallet_id.clone()) {
-                warn!(?wallet_id, ?network, ?mode, "Ignoring wallet reorder with duplicate id");
+            // ignored requests return early and drop the transaction without committing
+            if wallets.len() != wallet_ids.len() {
+                warn!(
+                    current_len = wallets.len(),
+                    requested_len = wallet_ids.len(),
+                    ?network,
+                    ?mode,
+                    "Ignoring wallet reorder with mismatched id count"
+                );
 
                 return Ok(wallets);
             }
-        }
 
-        let current_id_set = wallets.iter().map(|wallet| wallet.id.clone()).collect::<HashSet<_>>();
-        if requested_id_set != current_id_set {
-            warn!(?network, ?mode, "Ignoring wallet reorder with unknown or missing id");
+            let mut requested_id_set = HashSet::with_capacity(wallet_ids.len());
+            for wallet_id in &wallet_ids {
+                if !requested_id_set.insert(wallet_id.clone()) {
+                    warn!(?wallet_id, ?network, ?mode, "Ignoring wallet reorder with duplicate id");
 
-            return Ok(wallets);
-        }
+                    return Ok(wallets);
+                }
+            }
 
-        let is_identical_order = wallets
-            .iter()
-            .zip(&wallet_ids)
-            .all(|(wallet, requested_id)| wallet.id == *requested_id);
-        if is_identical_order {
-            return Ok(wallets);
-        }
+            let current_id_set =
+                wallets.iter().map(|wallet| wallet.id.clone()).collect::<HashSet<_>>();
+            if requested_id_set != current_id_set {
+                warn!(?network, ?mode, "Ignoring wallet reorder with unknown or missing id");
 
-        let mut wallets_by_id = wallets
-            .into_iter()
-            .map(|wallet| (wallet.id.clone(), wallet))
-            .collect::<HashMap<_, _>>();
-        let reordered = wallet_ids
-            .into_iter()
-            .map(|wallet_id| wallets_by_id.remove(&wallet_id).expect("validated wallet id set"))
-            .collect::<Vec<_>>();
+                return Ok(wallets);
+            }
 
-        self.save_all_wallets(network, mode, reordered.clone())?;
+            let is_identical_order = wallets
+                .iter()
+                .zip(&wallet_ids)
+                .all(|(wallet, requested_id)| wallet.id == *requested_id);
+            if is_identical_order {
+                return Ok(wallets);
+            }
 
+            let mut wallets_by_id = wallets
+                .into_iter()
+                .map(|wallet| (wallet.id.clone(), wallet))
+                .collect::<HashMap<_, _>>();
+            let reordered = wallet_ids
+                .into_iter()
+                .map(|wallet_id| wallets_by_id.remove(&wallet_id).expect("validated wallet id set"))
+                .collect::<Vec<_>>();
+
+            table.insert(&*key, reordered.clone()).map_err_str(WalletTableError::SaveError)?;
+
+            reordered
+        };
+
+        write_txn.commit().map_err_str(WalletTableError::SaveError)?;
+
+        Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
         Updater::send_update(Update::WalletsChanged);
 
         Ok(reordered)
@@ -588,31 +607,6 @@ impl WalletsTable {
 
     pub fn save_restored_wallet_metadata(&self, wallet: WalletMetadata) -> Result<(), Error> {
         self.save_new_wallet_metadata_with_backup_behavior(wallet, false)
-    }
-
-    pub fn save_all_wallets(
-        &self,
-        network: Network,
-        mode: WalletMode,
-        wallets: Vec<WalletMetadata>,
-    ) -> Result<(), Error> {
-        let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
-            .begin_unscoped_persistence_operation()?;
-
-        let write_txn = self.db.begin_write()?;
-
-        {
-            let mut table = write_txn.open_table(TABLE)?;
-            let key = WalletKey::from((network, mode)).to_string();
-
-            table.insert(&*key, wallets).map_err_str(WalletTableError::SaveError)?;
-        }
-
-        write_txn.commit().map_err_str(WalletTableError::SaveError)?;
-
-        Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
-
-        Ok(())
     }
 
     fn update_wallets<T>(
@@ -670,6 +664,39 @@ impl WalletsTable {
 }
 
 // redb::Key for WalletId is now implemented in the cove-types crate
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    impl WalletsTable {
+        /// Overwrites a wallet bucket for test setup
+        pub fn save_all_wallets(
+            &self,
+            network: Network,
+            mode: WalletMode,
+            wallets: Vec<WalletMetadata>,
+        ) -> Result<(), Error> {
+            let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
+                .begin_unscoped_persistence_operation()?;
+
+            let write_txn = self.db.begin_write()?;
+
+            {
+                let mut table = write_txn.open_table(TABLE)?;
+                let key = WalletKey::from((network, mode)).to_string();
+
+                table.insert(&*key, wallets).map_err_str(WalletTableError::SaveError)?;
+            }
+
+            write_txn.commit().map_err_str(WalletTableError::SaveError)?;
+
+            Updater::send_update(AppStateReconcileMessage::DatabaseUpdated);
+
+            Ok(())
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
