@@ -565,6 +565,7 @@ impl WalletsTable {
 
             let current_id_set =
                 wallets.iter().map(|wallet| wallet.id.clone()).collect::<HashSet<_>>();
+
             if requested_id_set != current_id_set {
                 warn!(?network, ?mode, "Ignoring wallet reorder with unknown or missing id");
 
@@ -583,6 +584,7 @@ impl WalletsTable {
                 .into_iter()
                 .map(|wallet| (wallet.id.clone(), wallet))
                 .collect::<HashMap<_, _>>();
+
             let reordered = wallet_ids
                 .into_iter()
                 .map(|wallet_id| wallets_by_id.remove(&wallet_id).expect("validated wallet id set"))
@@ -667,7 +669,14 @@ impl WalletsTable {
 
 #[cfg(test)]
 pub(crate) mod test_support {
-    use super::*;
+    use cove_util::result_ext::ResultExt as _;
+
+    use super::{Error, TABLE, WalletKey, WalletTableError, WalletsTable};
+    use crate::{
+        app::reconcile::{AppStateReconcileMessage, Updater},
+        network::Network,
+        wallet::metadata::{WalletMetadata, WalletMode},
+    };
 
     impl WalletsTable {
         /// Overwrites a wallet bucket for test setup
