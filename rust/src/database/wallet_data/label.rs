@@ -57,16 +57,7 @@ pub struct LabelsTable {
 }
 
 impl LabelsTable {
-    pub fn new(id: WalletId, db: Arc<redb::Database>, write_txn: &redb::WriteTransaction) -> Self {
-        // create tables  if it doesn't exist
-        write_txn.open_table(TXN_TABLE).expect("failed to transactions create table");
-
-        write_txn.open_table(ADDRESS_TABLE).expect("failed to create address table");
-
-        write_txn.open_table(INPUT_TABLE).expect("failed to create input table");
-
-        write_txn.open_table(OUTPUT_TABLE).expect("failed to create output table");
-
+    pub fn new(id: WalletId, db: Arc<redb::Database>) -> Self {
         Self { id, db }
     }
 

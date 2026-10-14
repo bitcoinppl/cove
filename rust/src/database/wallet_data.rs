@@ -46,6 +46,36 @@ fn database_location(id: &WalletId, location: &Path) -> Result<PathBuf, std::io:
 pub(crate) const TABLE: TableDefinition<&'static str, Json<WalletData>> =
     TableDefinition::new("wallet_data.json");
 
+/// Runs `$body` once per table every wallet-data database must contain, binding the table
+/// definition to `$table`
+///
+/// The definitions have different key and value types, so this is a macro instead of a list.
+/// Add new tables here so the existence check and creation stay in sync
+macro_rules! for_each_required_table {
+    ($table:ident => $body:expr) => {{
+        {
+            let $table = TABLE;
+            $body
+        }
+        {
+            let $table = label::TXN_TABLE;
+            $body
+        }
+        {
+            let $table = label::ADDRESS_TABLE;
+            $body
+        }
+        {
+            let $table = label::INPUT_TABLE;
+            $body
+        }
+        {
+            let $table = label::OUTPUT_TABLE;
+            $body
+        }
+    }};
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WalletData {
     /// number of addresses scanned
@@ -196,24 +226,52 @@ impl WalletDataDb {
         db: Arc<redb::Database>,
         storage: WalletDataStorage,
     ) -> Result<Self> {
+        // opening an existing wallet only needs a read, so the write transaction (and its commit)
+        // is reserved for first open or when a required table is missing
+        if !Self::required_tables_exist(&id, &db)? {
+            Self::create_required_tables(&id, &db)?;
+        }
+
+        let labels = LabelsTable::new(id.clone(), db.clone());
+
+        Ok(Self { id, db, labels, storage })
+    }
+
+    fn required_tables_exist(id: &WalletId, db: &redb::Database) -> Result<bool> {
+        let read_txn = db.begin_read().map_err(|e| WalletDataError::DatabaseAccess {
+            id: id.clone(),
+            error: e.to_string(),
+        })?;
+
+        for_each_required_table!(table => {
+            match read_txn.open_table(table) {
+                Ok(_) => {}
+                Err(redb::TableError::TableDoesNotExist(_)) => return Ok(false),
+                Err(e) => {
+                    return Err(WalletDataError::TableAccess { id: id.clone(), error: e.to_string() });
+                }
+            }
+        });
+
+        Ok(true)
+    }
+
+    fn create_required_tables(id: &WalletId, db: &redb::Database) -> Result<()> {
         let write_txn = db.begin_write().map_err(|e| WalletDataError::DatabaseAccess {
             id: id.clone(),
             error: e.to_string(),
         })?;
 
-        // create table if it doesn't exist
+        for_each_required_table!(table => {
+            write_txn.open_table(table).map_err(|e| WalletDataError::TableAccess {
+                id: id.clone(),
+                error: e.to_string(),
+            })?;
+        });
+
         write_txn
-            .open_table(TABLE)
-            .map_err(|e| WalletDataError::TableAccess { id: id.clone(), error: e.to_string() })?;
-        let labels = LabelsTable::new(id.clone(), db.clone(), &write_txn);
-
-        // commit the write transaction
-        write_txn.commit().map_err(|e| WalletDataError::DatabaseAccess {
-            id: id.clone(),
-            error: e.to_string(),
-        })?;
-
-        Ok(Self { id, db, labels, storage })
+            .commit()
+            .map_err(|e| WalletDataError::DatabaseAccess { id: id.clone(), error: e.to_string() })
     }
 
     pub(crate) const fn is_in_memory(&self) -> bool {

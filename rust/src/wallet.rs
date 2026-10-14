@@ -7,7 +7,7 @@ pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;
 
-use crate::database::global_config::SelectedWalletTarget;
+use crate::database::{global_config::SelectedWalletTarget, wallet_data::WalletDataDb};
 use std::{str::FromStr as _, sync::Arc};
 
 use crate::{
@@ -289,29 +289,15 @@ impl Wallet {
 
     /// Read cached transactions from the BDK wallet
     pub fn transactions(&self) -> Vec<crate::transaction::Transaction> {
-        use crate::transaction::{Amount, Transaction};
+        let db = self
+            .uses_persistent_storage()
+            .then(|| WalletDataDb::new_or_existing(self.id.clone()).ok())
+            .flatten();
 
-        let zero = Amount::ZERO;
-
-        let mut transactions = self
-            .bdk
-            .transactions()
-            .map(|tx| {
-                let sent_and_received = self.bdk.sent_and_received(&tx.tx_node.tx).into();
-                (tx, sent_and_received)
-            })
-            .map(|(tx, sent_and_received)| {
-                if self.uses_persistent_storage() {
-                    Transaction::new(&self.id, sent_and_received, tx)
-                } else {
-                    Transaction::new_without_labels(sent_and_received, tx)
-                }
-            })
-            .filter(|tx| tx.sent_and_received().amount() > zero)
-            .collect::<Vec<Transaction>>();
-
-        transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
-        transactions
+        crate::transaction::Transaction::all_from_wallet(
+            &self.bdk,
+            db.as_ref().map(|db| &db.labels),
+        )
     }
 
     pub fn persist(&mut self) -> Result<(), WalletError> {
@@ -433,5 +419,68 @@ mod tests {
         assert!(!wallet.uses_persistent_storage());
         assert!(bdk_paths.iter().all(|path| !path.exists()));
         assert!(wallet_data_paths.iter().all(|path| !path.exists()));
+    }
+
+    #[test]
+    fn persisted_wallet_transactions_include_saved_labels() {
+        use bdk_wallet::test_utils::{ReceiveTo, receive_output};
+        use bip329::{Label, TransactionRecord};
+        use bitcoin::Amount;
+
+        use crate::{database::record::Timestamps, transaction::Transaction};
+
+        crate::test_support::ensure_tokio_runtime();
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+
+        let mnemonic = Mnemonic::parse_normalized(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
+        let metadata = WalletMetadata::preview_new();
+        let mut wallet =
+            Wallet::try_new_persisted_from_mnemonic_segwit(metadata.clone(), mnemonic, None)
+                .expect("failed to build persisted wallet");
+
+        let txids = (1..=3u64)
+            .map(|seen_at| {
+                let outpoint = receive_output(
+                    &mut wallet.bdk,
+                    Amount::from_sat(10_000 * seen_at),
+                    ReceiveTo::Mempool(seen_at),
+                );
+                outpoint.txid
+            })
+            .collect::<Vec<_>>();
+
+        let labels = txids.iter().enumerate().map(|(index, txid)| {
+            Label::Transaction(TransactionRecord {
+                ref_: *txid,
+                label: Some(format!("label {index}")),
+                origin: None,
+            })
+        });
+
+        WalletDataDb::new_or_existing(wallet.id.clone())
+            .expect("failed to open wallet data")
+            .labels
+            .insert_labels_with_timestamps(labels, Timestamps::now())
+            .expect("failed to save labels");
+
+        let transactions = wallet.transactions();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(transactions.len(), 3);
+        for (index, txid) in txids.iter().enumerate() {
+            let tx =
+                transactions.iter().find(|tx| tx.id().0 == *txid).expect("transaction is listed");
+            let Transaction::Unconfirmed(unconfirmed) = tx else {
+                panic!("transaction should be unconfirmed");
+            };
+
+            assert_eq!(
+                unconfirmed.labels.clone().into_vec().len(),
+                1,
+                "transaction {index} lost its label"
+            );
+        }
     }
 }

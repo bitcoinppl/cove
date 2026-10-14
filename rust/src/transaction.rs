@@ -9,11 +9,11 @@ use bdk_wallet::chain::{
     ChainPosition as BdkChainPosition, ConfirmationBlockTime, tx_graph::CanonicalTx,
 };
 use bip329::Labels;
+use tracing::warn;
 
 use crate::{
-    database::{Database, wallet_data::WalletDataDb},
+    database::{Database, wallet_data::label::LabelsTable},
     fiat::FiatAmount,
-    wallet::metadata::WalletId,
 };
 
 pub type Amount = cove_types::amount::Amount;
@@ -66,17 +66,45 @@ impl Transaction {
         }
     }
 
-    pub fn new(
-        wallet_id: &WalletId,
-        sent_and_received: SentAndReceived,
-        tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
-    ) -> Self {
-        let labels = WalletDataDb::new_or_existing(wallet_id.clone())
-            .ok()
-            .and_then(|db| db.labels.all_labels_for_txn(tx.tx_node.txid).ok())
+    /// Builds every non-zero transaction in the wallet, newest first
+    ///
+    /// Labels for all transactions come from a single read transaction, `None` skips label loading
+    pub(crate) fn all_from_wallet(
+        bdk: &bdk_wallet::Wallet,
+        labels: Option<&LabelsTable>,
+    ) -> Vec<Self> {
+        let zero = Amount::ZERO;
+
+        let transaction_data = bdk
+            .transactions()
+            .map(|tx| {
+                let sent_and_received = bdk.sent_and_received(&tx.tx_node.tx).into();
+                (tx, sent_and_received)
+            })
+            .collect::<Vec<_>>();
+
+        let mut labels_by_txid = labels
+            .map(|labels| {
+                labels
+                    .all_labels_for_txns(transaction_data.iter().map(|(tx, _)| tx.tx_node.txid))
+                    .unwrap_or_else(|error| {
+                        warn!("failed to batch load transaction labels: {error}");
+                        Default::default()
+                    })
+            })
             .unwrap_or_default();
 
-        Self::new_with_labels(sent_and_received, tx, labels.into())
+        let mut transactions = transaction_data
+            .into_iter()
+            .map(|(tx, sent_and_received)| {
+                let labels = labels_by_txid.remove(&tx.tx_node.txid).unwrap_or_default().into();
+                Self::new_with_labels(sent_and_received, tx, labels)
+            })
+            .filter(|tx| tx.sent_and_received().amount() > zero)
+            .collect::<Vec<Self>>();
+
+        transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
+        transactions
     }
 
     pub(crate) fn new_with_labels(
@@ -85,13 +113,6 @@ impl Transaction {
         labels: Labels,
     ) -> Self {
         Self::new_with_label_values(sent_and_received, tx, labels)
-    }
-
-    pub(crate) fn new_without_labels(
-        sent_and_received: SentAndReceived,
-        tx: CanonicalTx<Arc<BdkTransaction>, ConfirmationBlockTime>,
-    ) -> Self {
-        Self::new_with_label_values(sent_and_received, tx, Labels::default())
     }
 
     fn new_with_label_values(
