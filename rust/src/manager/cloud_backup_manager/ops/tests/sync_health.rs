@@ -503,8 +503,9 @@ async fn incomplete_inventory_snapshot_is_provisional_and_final_failure_remains_
     assert_eq!(globals.cloud.wallet_backup_download_attempt_count(), initial_download_attempts);
 
     globals.cloud.fail_list_wallet_files("metadata timed out");
-    let Some(CloudBackupDetailResult::AccessError(error)) =
-        manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
+    let Some(CloudBackupDetailSnapshotCompletion::Final(CloudBackupDetailResult::AccessError(
+        error,
+    ))) = manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
     else {
         panic!("expected authoritative inventory failure");
     };
@@ -533,10 +534,12 @@ async fn complete_inventory_snapshot_avoids_relisting_current_namespace() {
     assert_eq!(snapshot.authority, Some(CloudBackupInventoryAuthority::ProviderConfirmed));
     assert!(snapshot.provisional_detail.is_none());
 
-    let Some(CloudBackupDetailResult::SuccessWithAuthority {
-        authority: CloudBackupInventoryAuthority::ProviderConfirmed,
-        ..
-    }) = manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
+    let Some(CloudBackupDetailSnapshotCompletion::Final(
+        CloudBackupDetailResult::SuccessWithAuthority {
+            authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+            ..
+        },
+    )) = manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
     else {
         panic!("expected complete cloud backup detail");
     };
@@ -572,10 +575,11 @@ async fn complete_local_snapshot_matching_known_count_avoids_metadata_relisting(
         encrypted_wallet_backup_bytes(&metadata, &master_key, "snapshot-revision", 1).await,
     );
     globals.cloud.set_wallet_files_snapshot(
-        namespace,
+        namespace.clone(),
         vec![wallet_filename_from_record_id(&record_id)],
         false,
     );
+    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
     let Some(CloudBackupDetailInventorySnapshotResult::Success(snapshot)) =
         manager.load_cloud_backup_detail_inventory_snapshot().await
@@ -589,16 +593,49 @@ async fn complete_local_snapshot_matching_known_count_avoids_metadata_relisting(
     );
     assert!(snapshot.provisional_detail.is_none());
 
+    let initial_list_attempts = globals.cloud.list_wallet_files_attempt_count();
     globals.cloud.fail_list_wallet_files("metadata query should not run");
-    let Some(CloudBackupDetailResult::SuccessWithAuthority {
-        authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
-        detail,
-    }) = manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
+    let Some(CloudBackupDetailSnapshotCompletion::TrustedLocal { detail, confirmation }) =
+        manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
     else {
         panic!("expected detail from the trusted local snapshot");
     };
 
     assert_eq!(detail.up_to_date.len() + detail.needs_sync.len(), 1);
+    assert_eq!(globals.cloud.list_wallet_files_attempt_count(), initial_list_attempts);
+
+    globals.cloud.clear_list_wallet_files_error();
+    let Some(CloudBackupDetailResult::SuccessWithAuthority {
+        authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+        ..
+    }) = manager.confirm_cloud_backup_detail_inventory(confirmation).await
+    else {
+        panic!("expected provider-confirmed cloud backup detail");
+    };
+
+    assert_eq!(globals.cloud.list_wallet_files_attempt_count(), initial_list_attempts + 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn provider_confirmation_rejects_a_changed_namespace() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+
+    let Some(CloudBackupDetailResult::AccessError(error)) = manager
+        .confirm_cloud_backup_detail_inventory(CloudBackupDetailProviderConfirmation {
+            namespace: "different-namespace".into(),
+        })
+        .await
+    else {
+        panic!("expected namespace mismatch error");
+    };
+
+    assert!(
+        error.to_string().contains("namespace changed during inventory confirmation"),
+        "{error}"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

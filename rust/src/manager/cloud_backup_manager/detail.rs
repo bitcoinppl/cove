@@ -279,7 +279,7 @@ impl RustCloudBackupManager {
 }
 
 impl RustCloudBackupManager {
-    fn detail_inventory_is_complete(&self) -> bool {
+    pub(crate) fn detail_inventory_is_complete(&self) -> bool {
         self.state.read().detail_inventory_is_complete()
     }
 

@@ -293,6 +293,7 @@ private struct CloudOnlyWalletRows: View {
             VStack(alignment: .leading, spacing: 8) {
                 CloudOnlyWalletActionButton(
                     item: item,
+                    manager: manager,
                     isOperating: isOperating,
                     isCurrentOperation: operatingRecordId == item.recordId,
                     presentationCoordinator: presentationCoordinator
@@ -316,13 +317,14 @@ private struct CloudOnlyWalletRows: View {
 
 private struct CloudOnlyWalletActionButton: View {
     let item: CloudBackupWalletItem
+    let manager: CloudBackupManager
     let isOperating: Bool
     let isCurrentOperation: Bool
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     var body: some View {
         Button {
-            presentationCoordinator.present(.dialog(.cloudOnlyWalletActions(item)))
+            presentationCoordinator.present(.cloudOnlyWalletDialog(item))
         } label: {
             CloudOnlyWalletActionLabel(
                 item: item,
@@ -332,6 +334,11 @@ private struct CloudOnlyWalletActionButton: View {
         .buttonStyle(.plain)
         .foregroundStyle(.primary)
         .disabled(isOperating)
+        .cloudOnlyWalletActionDialog(
+            wallet: item,
+            manager: manager,
+            coordinator: presentationCoordinator
+        )
     }
 }
 

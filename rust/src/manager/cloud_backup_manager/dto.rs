@@ -222,6 +222,24 @@ impl CloudBackupPasskeyHint {
             registered_at: hint.registered_at,
         }
     }
+
+    /// The passkey hint a master key wrapper advertises
+    ///
+    /// Fails when the wrapper metadata does not belong to `namespace_id`, because
+    /// a hint copied from another namespace would point the user at the wrong passkey
+    pub(crate) fn from_master_key_wrapper(
+        encrypted: &cove_cspp::backup_data::EncryptedMasterKeyBackup,
+        namespace_id: &str,
+    ) -> Result<Option<Self>, cove_cspp::backup_data::remote_payload::RemotePayloadError> {
+        encrypted.remote_metadata.normalized_master_key(namespace_id)?;
+
+        Ok(encrypted.passkey_provider_hint.as_ref().map(Self::from_provider_hint))
+    }
+
+    /// Whether this hint was registered after `other`, so it describes the newer passkey
+    pub(crate) fn is_newer_than(&self, other: &Self) -> bool {
+        self.registered_at > other.registered_at
+    }
 }
 
 /// Operation state for recovering or deleting other backup namespaces
