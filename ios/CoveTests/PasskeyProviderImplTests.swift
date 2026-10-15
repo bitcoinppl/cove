@@ -9,6 +9,7 @@ final class PasskeyProviderImplTests: XCTestCase {
         let request = ASAuthorizationPlatformPublicKeyCredentialProvider(
             relyingPartyIdentifier: "example.com"
         ).createCredentialAssertionRequest(challenge: Data(count: 32))
+
         delegate.authorizationController(
             controller: ASAuthorizationController(authorizationRequests: [request]),
             didCompleteWithError: NSError(
