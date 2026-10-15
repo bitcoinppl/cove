@@ -18,7 +18,7 @@ env:
 
 jobs:
   rustfmt:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
         uses: actions/checkout@v6
@@ -52,7 +52,7 @@ jobs:
         run: swift run --package-path tools/cove-swift-lint cove-swift-lint ios --config .swift-ast-lint.yml
 
   ktlint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - name: Setup Java
@@ -66,7 +66,7 @@ jobs:
         run: cd android && ./gradlew detekt
 
   compile-android:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -D warnings
     steps:
@@ -170,7 +170,7 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
     env:
       RUSTFLAGS: -D warnings
@@ -191,7 +191,7 @@ jobs:
         run: cd rust && cargo test --locked --workspace
 
   clippy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -D warnings
     steps:

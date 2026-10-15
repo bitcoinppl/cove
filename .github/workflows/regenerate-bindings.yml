@@ -9,7 +9,7 @@ concurrency:
 
 jobs:
   regenerate-android-bindings:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -D warnings
     permissions:
