@@ -91,7 +91,8 @@ pub(crate) use self::model::{
     CloudBackupDetailInventorySnapshotResult, CloudBackupDetailProviderConfirmation,
     CloudBackupDetailResult, CloudBackupDetailSnapshotCompletion, CloudBackupDisableOutcome,
     CloudBackupEnableState, CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
-    CloudBackupStateReducer, CloudBackupStateReducerEvent, CloudBackupStatus,
+    CloudBackupListedDetail, CloudBackupStateReducer, CloudBackupStateReducerEvent,
+    CloudBackupStatus,
 };
 pub use self::model::{
     CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason, CloudBackupLifecycle,
@@ -277,7 +278,6 @@ impl DeepVerificationFailure {
 pub struct RustCloudBackupManager {
     pub(crate) state: Arc<RwLock<CloudBackupStateReducer>>,
     pub(crate) reconciler: ReconcileChannel<Message>,
-    cloud_only_detail_snapshot: Arc<RwLock<Option<CloudBackupDetail>>>,
     pub(crate) pending_enable: PendingEnableCoordinator,
     cloud_writes: Addr<CloudBackupWriteSupervisor>,
     pub(crate) supervisor: Addr<CloudBackupSupervisor>,
@@ -597,7 +597,6 @@ impl RustCloudBackupManager {
             Self {
                 state: Arc::new(RwLock::new(CloudBackupStateReducer::default())),
                 reconciler: ReconcileChannel::new(1000),
-                cloud_only_detail_snapshot: Arc::new(RwLock::new(None)),
                 pending_enable: PendingEnableCoordinator::new(Keychain::global().clone()),
                 cloud_writes: cloud_writes.clone(),
                 supervisor: spawn_actor(CloudBackupSupervisor::new(manager.clone(), cloud_writes)),
@@ -1849,12 +1848,19 @@ mod tests {
         let authenticate_count = globals.passkey.authenticate_count();
 
         manager.sync_persisted_state();
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(CloudBackupDetail {
-            last_sync: None,
-            up_to_date: Vec::new(),
-            needs_sync: Vec::new(),
-            cloud_only_count: 1,
-        }));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(
+            CloudBackupListedDetail {
+                detail: CloudBackupDetail {
+                    last_sync: None,
+                    up_to_date: Vec::new(),
+                    needs_sync: Vec::new(),
+                    cloud_only_count: 1,
+                },
+                cloud_only_record_ids: std::collections::HashSet::from([
+                    "remaining-record".to_owned()
+                ]),
+            },
+        ));
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
             CloudBackupWalletItem {
                 name: "Remaining wallet".into(),

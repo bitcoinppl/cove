@@ -283,7 +283,10 @@ async fn provider_signal_reopens_only_incomplete_ready_detail_inventory() {
     assert_eq!(globals.cloud.list_wallet_files_snapshot_attempt_count(), active_snapshot_attempts);
 
     manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithAuthority {
-        detail: complete_detail,
+        listed: crate::manager::cloud_backup_manager::CloudBackupListedDetail {
+            detail: complete_detail,
+            cloud_only_record_ids: Default::default(),
+        },
         authority: CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
     });
     let snapshot_attempts = globals.cloud.list_wallet_files_snapshot_attempt_count();

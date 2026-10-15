@@ -431,11 +431,12 @@ async fn refresh_cloud_backup_detail_uses_interactive_wallet_listing() {
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
     globals.cloud.fail_list_wallet_files_non_interactive("offline");
 
-    let Some(CloudBackupDetailResult::SuccessWithAuthority { detail, .. }) =
+    let Some(CloudBackupDetailResult::SuccessWithAuthority { listed, .. }) =
         manager.refresh_cloud_backup_detail().await
     else {
         panic!("expected cloud backup detail");
     };
+    let detail = listed.detail;
 
     assert_eq!(1, detail.up_to_date.len() + detail.needs_sync.len());
     let listed_record_id = detail
@@ -595,11 +596,12 @@ async fn complete_local_snapshot_matching_known_count_avoids_metadata_relisting(
 
     let initial_list_attempts = globals.cloud.list_wallet_files_attempt_count();
     globals.cloud.fail_list_wallet_files("metadata query should not run");
-    let Some(CloudBackupDetailSnapshotCompletion::TrustedLocal { detail, confirmation }) =
+    let Some(CloudBackupDetailSnapshotCompletion::TrustedLocal { listed, confirmation }) =
         manager.complete_cloud_backup_detail_inventory_snapshot(snapshot).await
     else {
         panic!("expected detail from the trusted local snapshot");
     };
+    let detail = listed.detail;
 
     assert_eq!(detail.up_to_date.len() + detail.needs_sync.len(), 1);
     assert_eq!(globals.cloud.list_wallet_files_attempt_count(), initial_list_attempts);
@@ -758,11 +760,12 @@ async fn refresh_cloud_backup_detail_marks_listed_wallet_unknown_when_master_key
     cspp.delete_master_key();
     cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
 
-    let Some(CloudBackupDetailResult::SuccessWithAuthority { detail, .. }) =
+    let Some(CloudBackupDetailResult::SuccessWithAuthority { listed, .. }) =
         manager.refresh_cloud_backup_detail().await
     else {
         panic!("expected cloud backup detail");
     };
+    let detail = listed.detail;
 
     assert_eq!(detail.needs_sync.len(), 1);
     assert_eq!(detail.needs_sync[0].record_id, record_id);

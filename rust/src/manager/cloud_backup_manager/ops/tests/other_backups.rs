@@ -196,11 +196,12 @@ async fn detail_refresh_keeps_current_detail_when_other_namespace_inspection_fai
         .cloud
         .fail_master_key_download_offline(other_namespace, "offline while inspecting namespace");
 
-    let Some(CloudBackupDetailResult::SuccessWithAuthority { detail, .. }) =
+    let Some(CloudBackupDetailResult::SuccessWithAuthority { listed, .. }) =
         manager.refresh_cloud_backup_detail().await
     else {
         panic!("expected usable current cloud backup detail");
     };
+    let detail = listed.detail;
 
     let other_backups = manager.other_backup_state(&CloudStorage::global_explicit_client()).await;
     let CloudBackupOtherBackupsState::LoadFailed { reason } = other_backups else {

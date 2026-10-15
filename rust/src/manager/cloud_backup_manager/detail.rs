@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use act_zero::send;
 use serde::{Deserialize, Serialize};
@@ -7,11 +7,12 @@ use tracing::error;
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use super::{
     CLOUD_BACKUP_MANAGER, CloudBackupDetail, CloudBackupExclusiveOperationClaim,
-    CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason, CloudBackupManagerAction,
-    CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent, CloudBackupRestoreAllState,
-    CloudBackupRestoreFlow, CloudBackupStateReducerEvent, CloudBackupWalletItem,
-    CloudBackupWalletRestoreFailure, CloudBackupWalletStatus, DeepVerificationFailure,
-    DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RustCloudBackupManager,
+    CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason, CloudBackupListedDetail,
+    CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
+    CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupStateReducerEvent,
+    CloudBackupWalletItem, CloudBackupWalletRestoreFailure, CloudBackupWalletStatus,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation,
+    RustCloudBackupManager,
 };
 
 type Action = CloudBackupManagerAction;
@@ -156,9 +157,18 @@ pub(crate) enum CloudBackupDetailOutcome {
     Cleared,
     Checking,
     Provisional(CloudBackupDetail),
-    Refreshed(CloudBackupDetail),
-    RefreshedWithAuthority { detail: CloudBackupDetail, authority: CloudBackupInventoryAuthority },
-    Failed { reason: CloudBackupInventoryIncompleteReason, error: String },
+    Refreshed(CloudBackupListedDetail),
+    RefreshedWithAuthority {
+        listed: CloudBackupListedDetail,
+        authority: CloudBackupInventoryAuthority,
+    },
+    /// Detail from a path whose report carries no listing, so loaded cloud-only rows cannot be
+    /// matched to a listing and are reset
+    RefreshedWithoutListing(CloudBackupDetail),
+    Failed {
+        reason: CloudBackupInventoryIncompleteReason,
+        error: String,
+    },
 }
 
 #[uniffi::export]
@@ -418,7 +428,9 @@ impl RustCloudBackupManager {
             }
             DeepVerificationResult::AwaitingUploadConfirmation(report) => {
                 if let Some(detail) = report.detail {
-                    self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
+                    self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(
+                        detail,
+                    ));
                 }
                 self.apply_verification_effect(
                     CloudBackupVerificationCoordinator::begin_background_confirmation(
@@ -428,20 +440,26 @@ impl RustCloudBackupManager {
             }
             DeepVerificationResult::PasskeyConfirmed(detail) => {
                 if let Some(detail) = detail {
-                    self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
+                    self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(
+                        detail,
+                    ));
                 }
                 self.apply_verification_state(VerificationState::PasskeyConfirmed);
             }
             DeepVerificationResult::PasskeyMissing(detail) => {
                 if let Some(detail) = detail {
-                    self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
+                    self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(
+                        detail,
+                    ));
                 }
                 self.apply_verification_state(VerificationState::Idle);
                 self.apply_recovery_state(RecoveryState::Idle);
             }
             DeepVerificationResult::UserCancelled(detail) => {
                 if let Some(detail) = detail {
-                    self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
+                    self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(
+                        detail,
+                    ));
                 }
                 self.apply_verification_state(VerificationState::Cancelled);
             }
@@ -457,33 +475,10 @@ impl RustCloudBackupManager {
 }
 
 impl RustCloudBackupManager {
+    /// Applies a detail refresh, keeping loaded cloud-only rows only when they are exactly the
+    /// wallets the listing found that are not local
     pub(crate) fn apply_detail_outcome(&self, outcome: CloudBackupDetailOutcome) {
-        self.apply_detail_outcome_with_cloud_only_policy(
-            outcome,
-            CloudOnlyRefreshPolicy::ResetIfStale,
-        );
-    }
-
-    /// Applies a detail refresh, keeping loaded cloud-only rows only when the listing still has them
-    ///
-    /// `cloud_record_ids` are the wallet record IDs the listing found
-    pub(crate) fn apply_detail_outcome_preserving_cloud_only_if_consistent(
-        &self,
-        outcome: CloudBackupDetailOutcome,
-        cloud_record_ids: &[String],
-    ) {
-        self.apply_detail_outcome_with_cloud_only_policy(
-            outcome,
-            CloudOnlyRefreshPolicy::PreserveLoadedIfListed(cloud_record_ids),
-        );
-    }
-
-    fn apply_detail_outcome_with_cloud_only_policy(
-        &self,
-        outcome: CloudBackupDetailOutcome,
-        cloud_only_policy: CloudOnlyRefreshPolicy<'_>,
-    ) {
-        match outcome {
+        let (detail, authority, listed_cloud_only_ids) = match outcome {
             CloudBackupDetailOutcome::Checking => {
                 self.apply_model_event(CloudBackupStateReducerEvent::DetailRefreshStarted);
                 return;
@@ -501,64 +496,45 @@ impl RustCloudBackupManager {
                 });
                 return;
             }
-            CloudBackupDetailOutcome::Cleared
-            | CloudBackupDetailOutcome::Refreshed(_)
-            | CloudBackupDetailOutcome::RefreshedWithAuthority { .. } => {}
-        }
-
-        let detail = match outcome {
-            CloudBackupDetailOutcome::Cleared => None,
-            CloudBackupDetailOutcome::Refreshed(detail) => {
-                Some((detail, CloudBackupInventoryAuthority::ProviderConfirmed))
+            CloudBackupDetailOutcome::Cleared => {
+                self.apply_model_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+                    detail: None,
+                    reset_cloud_only: false,
+                });
+                return;
             }
-            CloudBackupDetailOutcome::RefreshedWithAuthority { detail, authority } => {
-                Some((detail, authority))
+            CloudBackupDetailOutcome::Refreshed(listed) => (
+                listed.detail,
+                CloudBackupInventoryAuthority::ProviderConfirmed,
+                Some(listed.cloud_only_record_ids),
+            ),
+            CloudBackupDetailOutcome::RefreshedWithAuthority { listed, authority } => {
+                (listed.detail, authority, Some(listed.cloud_only_record_ids))
             }
-            CloudBackupDetailOutcome::Checking
-            | CloudBackupDetailOutcome::Provisional(_)
-            | CloudBackupDetailOutcome::Failed { .. } => {
-                unreachable!("non-success returned above")
+            CloudBackupDetailOutcome::RefreshedWithoutListing(detail) => {
+                (detail, CloudBackupInventoryAuthority::ProviderConfirmed, None)
             }
         };
-        let detail_snapshot = self.cloud_only_detail_snapshot.read().clone();
-        let cloud_only = self.state.read().cloud_only();
-        let preserve_cloud_only = detail.as_ref().is_some_and(|(detail, _)| {
-            let CloudOnlyRefreshPolicy::PreserveLoadedIfListed(cloud_record_ids) =
-                cloud_only_policy
-            else {
-                return false;
-            };
 
-            loaded_cloud_only_matches_listing(&cloud_only, detail, cloud_record_ids)
-        });
-        let reset_cloud_only = detail.as_ref().is_some_and(|(detail, _)| match cloud_only_policy {
-            // an unchanged count-only detail cannot show that the listing replaced a wallet
-            CloudOnlyRefreshPolicy::PreserveLoadedIfListed(_) => {
-                !preserve_cloud_only && matches!(cloud_only, CloudOnlyState::Loaded { .. })
-            }
-            CloudOnlyRefreshPolicy::ResetIfStale => {
-                cloud_only_cache_is_stale(&cloud_only, detail, detail_snapshot.as_ref())
-            }
-        });
+        let reset_cloud_only = match self.state.read().cloud_only() {
+            CloudOnlyState::Loaded { wallets } => {
+                let loaded_ids: HashSet<_> =
+                    wallets.iter().map(|wallet| wallet.record_id.clone()).collect();
 
-        if reset_cloud_only {
-            *self.cloud_only_detail_snapshot.write() = None;
-        }
-        if preserve_cloud_only && let Some((detail, _)) = detail.as_ref() {
-            *self.cloud_only_detail_snapshot.write() = Some(detail.clone());
-        }
+                listed_cloud_only_ids.as_ref() != Some(&loaded_ids)
+            }
+            CloudOnlyState::NotFetched
+            | CloudOnlyState::Loading
+            | CloudOnlyState::Failed { .. } => false,
+        };
 
         self.apply_model_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-            detail,
+            detail: Some((detail, authority)),
             reset_cloud_only,
         });
     }
 
     fn apply_cloud_only_state(&self, cloud_only: CloudOnlyState) {
-        if !matches!(cloud_only, CloudOnlyState::Loaded { .. }) {
-            *self.cloud_only_detail_snapshot.write() = None;
-        }
-
         self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(cloud_only));
     }
 
@@ -580,8 +556,6 @@ impl RustCloudBackupManager {
             }
         }
 
-        let detail = self.state.read().detail();
-        *self.cloud_only_detail_snapshot.write() = detail;
         self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
             CloudOnlyState::Loaded { wallets },
         ));
@@ -670,15 +644,21 @@ impl RustCloudBackupManager {
         configured.restore_all
     }
 
-    pub(crate) fn restore_all_eligible_wallets(&self) -> Vec<CloudBackupWalletItem> {
+    /// Wallets Restore All can restore, or `None` while the cloud-only cache is not `Loaded`
+    ///
+    /// An unloaded cache means the listing changed or a fetch is pending, which is not the same
+    /// as nothing left to restore
+    pub(crate) fn restore_all_eligible_wallets(&self) -> Option<Vec<CloudBackupWalletItem>> {
         let CloudOnlyState::Loaded { wallets } = self.state.read().cloud_only() else {
-            return Vec::new();
+            return None;
         };
 
-        wallets
-            .into_iter()
-            .filter(|wallet| wallet.sync_status == CloudBackupWalletStatus::DeletedFromDevice)
-            .collect()
+        Some(
+            wallets
+                .into_iter()
+                .filter(|wallet| wallet.sync_status == CloudBackupWalletStatus::DeletedFromDevice)
+                .collect(),
+        )
     }
 
     pub(crate) fn apply_restore_all_started(
@@ -752,57 +732,6 @@ impl RustCloudBackupManager {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CloudOnlyRefreshPolicy<'a> {
-    ResetIfStale,
-    PreserveLoadedIfListed(&'a [String]),
-}
-
-fn cloud_only_cache_is_stale(
-    cloud_only: &CloudOnlyState,
-    detail: &CloudBackupDetail,
-    detail_snapshot: Option<&CloudBackupDetail>,
-) -> bool {
-    let CloudOnlyState::Loaded { wallets } = cloud_only else {
-        return false;
-    };
-
-    if detail_snapshot != Some(detail) {
-        return true;
-    }
-
-    !cloud_only_wallets_match_detail(wallets, detail)
-}
-
-// an equal count alone cannot tell {A, B} from {B, C}, so every loaded row must still be listed
-fn loaded_cloud_only_matches_listing(
-    cloud_only: &CloudOnlyState,
-    detail: &CloudBackupDetail,
-    cloud_record_ids: &[String],
-) -> bool {
-    let CloudOnlyState::Loaded { wallets } = cloud_only else {
-        return false;
-    };
-
-    cloud_only_wallets_match_detail(wallets, detail)
-        && wallets.iter().all(|wallet| cloud_record_ids.contains(&wallet.record_id))
-}
-
-fn cloud_only_wallets_match_detail(
-    wallets: &[CloudBackupWalletItem],
-    detail: &CloudBackupDetail,
-) -> bool {
-    // detail carries only a cloud-only count, so identity consistency is limited to local overlap
-    wallets.len() as u32 == detail.cloud_only_count
-        && wallets.iter().all(|cloud_wallet| {
-            detail
-                .up_to_date
-                .iter()
-                .chain(detail.needs_sync.iter())
-                .all(|local_wallet| local_wallet.record_id != cloud_wallet.record_id)
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::ops::test_support::{
@@ -834,12 +763,18 @@ mod tests {
         }
     }
 
-    fn cloud_backup_detail(cloud_only_count: u32) -> CloudBackupDetail {
-        CloudBackupDetail {
-            last_sync: None,
-            up_to_date: Vec::new(),
-            needs_sync: Vec::new(),
-            cloud_only_count,
+    fn listed_detail(cloud_only_record_ids: &[&str]) -> CloudBackupListedDetail {
+        CloudBackupListedDetail {
+            detail: CloudBackupDetail {
+                last_sync: None,
+                up_to_date: Vec::new(),
+                needs_sync: Vec::new(),
+                cloud_only_count: cloud_only_record_ids.len() as u32,
+            },
+            cloud_only_record_ids: cloud_only_record_ids
+                .iter()
+                .map(|record_id| (*record_id).to_owned())
+                .collect(),
         }
     }
 
@@ -850,7 +785,9 @@ mod tests {
 
         manager
             .apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(Vec::new()));
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(1)));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+            "wallet-1",
+        ])));
 
         assert!(matches!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched));
     }
@@ -863,19 +800,21 @@ mod tests {
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
             cloud_backup_wallet_item("wallet-1"),
         ]));
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(0)));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[])));
 
         assert!(matches!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched));
     }
 
     #[test]
-    fn detail_refresh_preserves_loaded_cloud_only_cache_after_delete_when_count_matches() {
+    fn detail_refresh_preserves_loaded_cloud_only_cache_after_delete_when_listing_matches() {
         let _guard = test_lock().lock();
         let manager = init_manager();
         let wallet_a = cloud_backup_wallet_item("wallet-a");
         let wallet_b = cloud_backup_wallet_item("wallet-b");
 
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(2)));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+            "wallet-a", "wallet-b",
+        ])));
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
             wallet_a.clone(),
             wallet_b.clone(),
@@ -883,10 +822,9 @@ mod tests {
         manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Deleted {
             record_id: wallet_a.record_id,
         });
-        manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
-            CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(1)),
-            std::slice::from_ref(&wallet_b.record_id),
-        );
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+            "wallet-b",
+        ])));
 
         assert_eq!(
             manager.state.read().cloud_only(),
@@ -895,12 +833,14 @@ mod tests {
     }
 
     #[test]
-    fn detail_refresh_preserves_empty_loaded_cloud_only_cache_after_restore_when_count_matches() {
+    fn detail_refresh_preserves_empty_loaded_cloud_only_cache_after_restore_when_listing_matches() {
         let _guard = test_lock().lock();
         let manager = init_manager();
         let wallet = cloud_backup_wallet_item("wallet-a");
 
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(1)));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+            "wallet-a",
+        ])));
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
             wallet.clone(),
         ]));
@@ -908,10 +848,7 @@ mod tests {
             record_id: wallet.record_id,
             warning: None,
         });
-        manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
-            CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(0)),
-            &[],
-        );
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[])));
 
         assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::Loaded { wallets: vec![] });
     }
@@ -922,17 +859,33 @@ mod tests {
         let manager = init_manager();
         let wallet_a = cloud_backup_wallet_item("wallet-a");
         let wallet_b = cloud_backup_wallet_item("wallet-b");
-        let wallet_c = cloud_backup_wallet_item("wallet-c");
 
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(2)));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+            "wallet-a", "wallet-b",
+        ])));
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
-            wallet_a,
-            wallet_b.clone(),
+            wallet_a, wallet_b,
         ]));
-        manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
-            CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(2)),
-            &[wallet_b.record_id, wallet_c.record_id],
-        );
+
+        // same count and same local rows, so only the listing's identity shows the replacement
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+            "wallet-b", "wallet-c",
+        ])));
+
+        assert!(matches!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched));
+    }
+
+    #[test]
+    fn detail_without_a_listing_resets_loaded_cloud_only_cache() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+        let wallet = cloud_backup_wallet_item("wallet-a");
+
+        manager
+            .apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![wallet]));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(
+            listed_detail(&["wallet-a"]).detail,
+        ));
 
         assert!(matches!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched));
     }
@@ -942,12 +895,12 @@ mod tests {
         let _guard = test_lock().lock();
         let manager = init_manager();
         let wallet = cloud_backup_wallet_item("wallet-1");
-        let mut detail = cloud_backup_detail(1);
-        detail.up_to_date.push(wallet.clone());
+        let mut listed = listed_detail(&[]);
+        listed.detail.up_to_date.push(wallet.clone());
 
         manager
             .apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![wallet]));
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed));
 
         assert!(matches!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched));
     }
@@ -957,7 +910,9 @@ mod tests {
         let _guard = test_lock().lock();
         let manager = init_manager();
         let wallet = cloud_backup_wallet_item("wallet-1");
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(1)));
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+            "wallet-1",
+        ])));
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
             wallet.clone(),
         ]));
