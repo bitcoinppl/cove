@@ -62,8 +62,11 @@ struct PersistedReceiveSession {
 
 impl ReceiveSessionStore {
     pub(crate) fn create(&self) -> Result<ActiveReceiveSession, KeyTeleportAlert> {
+        // generate and save under one lock so a full wipe's delete cannot land between them and
+        // leave a private key created before the wipe in the keychain
+        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
         let session = ActiveReceiveSession::new();
-        self.save(&session)?;
+        Self::save_unlocked(&session)?;
 
         Ok(session)
     }
@@ -82,7 +85,7 @@ impl ReceiveSessionStore {
         ActiveReceiveSession::restore(&persisted).map(LoadedReceiveSession::Active).map(Some)
     }
 
-    pub(crate) fn save(&self, session: &ActiveReceiveSession) -> Result<(), KeyTeleportAlert> {
+    fn save_unlocked(session: &ActiveReceiveSession) -> Result<(), KeyTeleportAlert> {
         let mut private_key = session.receiver.private_key_bytes();
         let persisted = PersistedReceiveSession {
             session_id: Some(session.id.0.clone()),
@@ -93,9 +96,6 @@ impl ReceiveSessionStore {
         };
 
         private_key.zeroize();
-
-        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
-
         persisted.save_unlocked()
     }
 

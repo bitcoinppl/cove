@@ -323,7 +323,13 @@ mod tests {
     #[test]
     fn delete_by_wallet_id_is_a_no_op_for_unknown_wallets() {
         let (_tmp, table) = test_table();
+        let kept = WalletId::preview_new_random();
+        let kept_record = record(&kept);
+        table.save_tx(kept_record.tx_id, kept_record.clone()).unwrap();
 
         table.delete_by_wallet_id(&WalletId::preview_new_random()).unwrap();
+
+        assert_eq!(table.get_by_wallet_id(&kept).unwrap(), vec![kept_record.clone()]);
+        assert_eq!(table.get_tx(&kept_record.tx_id).unwrap(), Some(kept_record));
     }
 }
