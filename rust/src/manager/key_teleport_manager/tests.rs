@@ -247,7 +247,7 @@ fn receive_start_queued_across_a_full_wipe_cannot_save_a_session() {
     let pre_wipe_manager = RustKeyTeleportManager::new();
 
     // frontends queue actions on their own threads, so one can reach Rust mid-wipe
-    let reset = super::reset_persisted_receive_session().unwrap();
+    let reset = super::ReceiveSessionReset::begin().unwrap();
     assert!(pre_wipe_manager.start_receive().is_err());
     assert!(RustKeyTeleportManager::new().start_receive().is_err());
     assert!(!has_session());
@@ -273,7 +273,7 @@ fn failed_full_wipe_reopens_receive_for_existing_managers() {
     init_globals();
     let manager = RustKeyTeleportManager::new();
 
-    let reset = super::reset_persisted_receive_session().unwrap();
+    let reset = super::ReceiveSessionReset::begin().unwrap();
     assert!(manager.restart_receive().is_err());
 
     // a failed wipe drops the reset, and frontends keep their cached manager
