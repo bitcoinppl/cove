@@ -63,6 +63,9 @@ const REPO_ENVRC_PATH: &str = "../.envrc";
 const ANDROID_KEYSTORE_PROPERTIES_PATH: &str = "../android/keystore.properties";
 const DEFAULT_UPLOAD_KEYSTORE_REL: &str = ".secrets/cove-upload.keystore";
 const DEFAULT_UPLOAD_KEY_ALIAS: &str = "upload";
+// build output dirs that may be symlinked onto an external cache disk
+const ANDROID_BUILD_OUTPUT_DIRS: &[&str] =
+    &[JNI_LIBS_DIR, "../android/.gradle", "../android/build", "../android/app/build"];
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuildProfile {
@@ -108,6 +111,50 @@ impl BuildProfile {
             Self::Custom(profile) => profile,
         }
     }
+}
+
+/// Fails when an Android build output dir or the Gradle user home points at a missing location
+///
+/// These are often symlinked or configured onto an external cache disk; when it is unmounted
+/// the failure otherwise surfaces as an opaque "File exists" error from create_dir or a Gradle
+/// lock file error after the Rust libraries have already been built
+fn ensure_android_build_output_dirs_resolve() -> Result<()> {
+    let gradle_user_home = env_nonempty("GRADLE_USER_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env_nonempty("HOME").map(|home| PathBuf::from(home).join(".gradle")));
+
+    let missing: Vec<String> = ANDROID_BUILD_OUTPUT_DIRS
+        .iter()
+        .map(PathBuf::from)
+        .chain(gradle_user_home)
+        .filter(|path| !path.exists())
+        .filter_map(|path| {
+            // a missing plain dir is fine since the build creates it, unless its volume is gone
+            let dangling_link = path.is_symlink();
+            let target = if dangling_link { fs::read_link(&path).ok()? } else { path.clone() };
+
+            match (dangling_link, is_on_missing_volume(&target)) {
+                (true, _) => Some(format!("  {} -> {}", path.display(), target.display())),
+                (false, true) => Some(format!("  {}", path.display())),
+                (false, false) => None,
+            }
+        })
+        .collect();
+
+    if !missing.is_empty() {
+        bail!(
+            "Android build paths point to missing locations (is the cache disk mounted?):\n{}",
+            missing.join("\n")
+        );
+    }
+
+    Ok(())
+}
+
+/// Whether a path lives under a macOS `/Volumes/<name>` mount that does not exist
+fn is_on_missing_volume(path: &Path) -> bool {
+    let volume: PathBuf = path.components().take(3).collect();
+    volume.starts_with("/Volumes") && volume.components().count() == 3 && !volume.exists()
 }
 
 fn allows_android_version_downgrade(profile: BuildProfile) -> bool {
@@ -177,6 +224,7 @@ pub fn build_android(
     }
 
     // prepare directories
+    ensure_android_build_output_dirs_resolve()?;
     sh.create_dir(JNI_LIBS_DIR).wrap_err("Failed to create jniLibs directory")?;
     sh.create_dir(ANDROID_KOTLIN_DIR).wrap_err("Failed to create kotlin directory")?;
     let _ = sh.remove_path(BINDINGS_DIR);

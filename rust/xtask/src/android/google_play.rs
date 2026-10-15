@@ -46,9 +46,10 @@ pub fn release_android(json_key_path: Option<&str>, verbose: bool) -> Result<()>
     let sh = Shell::new()?;
     ensure_rust_directory(&sh)?;
 
-    // fail before bumping if Play credentials or store signing are missing
+    // fail before bumping if Play credentials, store signing, or build output dirs are missing
     let credentials = GooglePlayCredentials::resolve(json_key_path)?;
     super::ensure_store_release_signing()?;
+    super::ensure_android_build_output_dirs_resolve()?;
 
     BuildNumberFile::AndroidGradle.bump_for_release(&sh, || {
         build_android(BuildProfile::from_str("release-speed"), AndroidBuildTargets::All, verbose)?;
