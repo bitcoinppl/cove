@@ -22,13 +22,17 @@ use cove_util::result_ext::ResultExt as _;
 const RECEIVE_SESSION_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 static RECEIVE_SESSION_STORAGE_LOCK: Mutex<()> = Mutex::new(());
 
-// bumped by a full wipe under the storage lock, so a manager created before the wipe cannot
-// persist a new session from a receive action that was still queued when the wipe ran
+// bumped by a full wipe under the storage lock, so a receive action that was dispatched before
+// the wipe cannot persist a new session once it runs
 static RECEIVE_SESSION_WIPE_EPOCH: AtomicU64 = AtomicU64::new(0);
 
-/// Receive session storage bound to the full-wipe epoch its manager was created in
+/// Receive session storage bound to the full-wipe epoch of the action it is serving
 #[derive(Debug)]
-pub(crate) struct ReceiveSessionStore(u64);
+pub(crate) struct ReceiveSessionStore(AtomicU64);
+
+/// Full-wipe epoch observed when an action was dispatched
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ReceiveSessionEpoch(u64);
 
 #[derive(Debug)]
 pub(crate) enum LoadedReceiveSession {
@@ -69,9 +73,20 @@ struct PersistedReceiveSession {
     wallet_mode: WalletMode,
 }
 
-impl ReceiveSessionStore {
+impl ReceiveSessionEpoch {
     pub(crate) fn current() -> Self {
         Self(RECEIVE_SESSION_WIPE_EPOCH.load(Ordering::Acquire))
+    }
+}
+
+impl ReceiveSessionStore {
+    pub(crate) fn current() -> Self {
+        Self(AtomicU64::new(ReceiveSessionEpoch::current().0))
+    }
+
+    /// Binds the store to the epoch of the action that holds the manager's action lock
+    pub(crate) fn bind(&self, epoch: ReceiveSessionEpoch) {
+        self.0.store(epoch.0, Ordering::Release);
     }
 
     /// Deletes the persisted session and stops every existing store from creating another
@@ -86,7 +101,7 @@ impl ReceiveSessionStore {
         // check the epoch, generate, and save under one lock so a full wipe cannot land between
         // them and leave a private key in the keychain
         let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
-        if self.0 != RECEIVE_SESSION_WIPE_EPOCH.load(Ordering::Acquire) {
+        if self.0.load(Ordering::Acquire) != RECEIVE_SESSION_WIPE_EPOCH.load(Ordering::Acquire) {
             return Err(KeyTeleportAlert::Keychain(
                 "receive sessions were reset by a full wipe".into(),
             ));

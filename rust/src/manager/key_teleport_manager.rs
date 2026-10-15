@@ -29,7 +29,7 @@ pub(crate) use send::is_send_eligible_wallet_id;
 /// Deletes the persisted receive session and its private key under the session store lock
 ///
 /// Deleting outside the lock would let a concurrent load that upgrades a legacy session write
-/// the old private key back after the delete. Managers created before this call can no longer
+/// the old private key back after the delete. Actions dispatched before this call can no longer
 /// create a session, so a receive action still queued during the wipe cannot save a new key
 pub(crate) fn delete_persisted_receive_session() -> Result<(), KeyTeleportAlert> {
     ReceiveSessionStore::reset_for_full_wipe()

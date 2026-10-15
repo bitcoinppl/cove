@@ -2,6 +2,7 @@ use super::{
     Action, KeyTeleportAlert, KeyTeleportInput, RustKeyTeleportManager,
     model::{Phase, StateMachine},
     receive::ReceiveWorkflow,
+    receive_session::ReceiveSessionEpoch,
     send::SendWorkflow,
 };
 
@@ -19,7 +20,11 @@ impl ManagerController<'_> {
     }
 
     pub(crate) fn handle(&self, action: Action) -> Result<(), KeyTeleportAlert> {
+        // capture the epoch before waiting on the action lock, so an action queued behind a full
+        // wipe stays blocked while actions dispatched after a failed wipe can still create sessions
+        let epoch = ReceiveSessionEpoch::current();
         let _action_guard = self.0.action_lock.lock();
+        self.0.receive_sessions.bind(epoch);
 
         match action {
             Action::StartReceive => ReceiveWorkflow::new(self.0).start(),
