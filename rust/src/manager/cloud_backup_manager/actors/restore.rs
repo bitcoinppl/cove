@@ -869,30 +869,21 @@ pub(crate) fn save_restore_keychain_entries(
     let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
     let cspp = cove_cspp::Cspp::new(keychain.clone());
 
-    let metadata_save_result = match passkey {
+    // the master key is saved only after the metadata save succeeds
+    let saved = match passkey {
         Some(passkey) => cloud_keychain
             .save_passkey_and_namespace(&passkey.credential_id, passkey.prf_salt, &namespace_id)
-            .map_err(|error| ("save cspp credentials", error)),
+            .map_err(|error| CloudBackupError::internal_context("save cspp credentials", error)),
         None => cloud_keychain
             .save_namespace_id(&namespace_id)
-            .map_err(|error| ("save namespace_id", error)),
-    };
-
-    if let Err((context, error)) = metadata_save_result {
-        return Err(rollback_restore_activation_keychain(
-            snapshot,
-            CloudBackupError::internal_context(context, error),
-        ));
+            .map_err(|error| CloudBackupError::internal_context("save namespace_id", error)),
     }
+    .and_then(|()| {
+        cspp.save_master_key(&master_key)
+            .map_err(|error| CloudBackupError::internal_context("save master key", error))
+    });
 
-    if let Err(error) = cspp.save_master_key(&master_key) {
-        return Err(rollback_restore_activation_keychain(
-            snapshot,
-            CloudBackupError::internal_context("save master key", error),
-        ));
-    }
-
-    Ok(())
+    saved.map_err(|error| rollback_restore_activation_keychain(snapshot, error))
 }
 
 pub(crate) fn rollback_restore_activation_keychain(
