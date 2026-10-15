@@ -253,6 +253,9 @@ pub(crate) mod test_support {
 
     static TEST_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
+    // held for the process lifetime so another run's sweep can tell the root is still in use
+    static TEST_ROOT_LOCK: OnceLock<std::fs::File> = OnceLock::new();
+
     /// Install the process test root before any test can touch the real data directory
     ///
     /// `ROOT_DATA_DIR` resolves lazily and cannot be redirected afterwards, so a test
@@ -311,6 +314,11 @@ pub(crate) mod test_support {
             // keep the directory for the process lifetime; Drop would delete it too early
             let path = tempdir.keep();
 
+            let lock = std::fs::File::create(test_root_lock_path(&path))
+                .expect("failed to create test root lock");
+            lock.lock().expect("failed to lock test root");
+            let _ = TEST_ROOT_LOCK.set(lock);
+
             cove_common::consts::set_root_data_dir(path.clone())
                 .expect("test root must be installed before any data directory access");
             assert_eq!(
@@ -355,10 +363,28 @@ pub(crate) mod test_support {
             };
 
             // nextest runs binaries in parallel, so only remove dirs older than one hour
-            if age > STALE_TEST_DATA_DIR_AGE {
-                let _ = std::fs::remove_dir_all(entry.path());
+            if age <= STALE_TEST_DATA_DIR_AGE {
+                continue;
             }
+
+            // a run that still holds its lock is alive however long it has been running
+            let lock_path = test_root_lock_path(&entry.path());
+            if let Ok(lock) = std::fs::File::options().write(true).open(&lock_path)
+                && lock.try_lock().is_err()
+            {
+                continue;
+            }
+
+            let _ = std::fs::remove_dir_all(entry.path());
+            let _ = std::fs::remove_file(lock_path);
         }
+    }
+
+    // a sibling of the root so tests that inspect or wipe the root never see it
+    fn test_root_lock_path(root: &Path) -> PathBuf {
+        let mut name = root.as_os_str().to_owned();
+        name.push(".lock");
+        PathBuf::from(name)
     }
 
     #[test]
