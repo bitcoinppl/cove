@@ -404,30 +404,8 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
 // MARK: - PasskeyDelegate
 
 private func passkeyPresentationAnchor() -> ASPresentationAnchor {
-    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-    let activeScene = scenes.first { $0.activationState == .foregroundActive }
-    let foregroundScene = activeScene ?? scenes.first { $0.activationState == .foregroundInactive }
-
-    if let window = foregroundScene?.windows.first(where: \.isKeyWindow) {
+    if let window = PresenterIdle.presentationWindow() {
         return window
-    }
-
-    if let window = foregroundScene?.windows.first(where: {
-        !$0.isHidden && $0.windowLevel == .normal
-    }) {
-        return window
-    }
-
-    for scene in scenes {
-        if let window = scene.windows.first(where: \.isKeyWindow) {
-            return window
-        }
-
-        if let window = scene.windows.first(where: {
-            !$0.isHidden && $0.windowLevel == .normal
-        }) {
-            return window
-        }
     }
 
     Log.warn("[PASSKEY] no foreground presentation anchor found")
