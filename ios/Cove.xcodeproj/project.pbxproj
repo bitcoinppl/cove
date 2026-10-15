@@ -27,7 +27,6 @@
 		C0C000012F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C000022F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */; };
 		C0C000032F10000000000001 /* PasskeyProviderImplTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C000042F10000000000001 /* PasskeyProviderImplTests.swift */; };
 		C0D000012F10000000000001 /* WalletTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D000022F10000000000001 /* WalletTransitionTests.swift */; };
-		C0F000012F50000000000001 /* KeyTeleportSecurityHelpersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000022F50000000000001 /* KeyTeleportSecurityHelpersTests.swift */; };
 		C0D000012F20000000000001 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC9AB5782C34956C00BAE3BE /* Logger.swift */; };
 		C0D000022F20000000000001 /* CoveCore in Frameworks */ = {isa = PBXBuildFile; productRef = ACD0053B2DB5309A003DC493 /* CoveCore */; };
 		C0D000032F20000000000001 /* KeychainSwift in Frameworks */ = {isa = PBXBuildFile; productRef = ACA4CBEE2C2365430008F63E /* KeychainSwift */; };
@@ -36,6 +35,7 @@
 		C0E000012F20000000000001 /* OnboardingFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */; };
 		C0E0000C2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */; };
 		C0F000012F40000000000001 /* PresentationTransitionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000022F40000000000001 /* PresentationTransitionCoordinatorTests.swift */; };
+		C0F000012F50000000000001 /* KeyTeleportSecurityHelpersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000022F50000000000001 /* KeyTeleportSecurityHelpersTests.swift */; };
 		C0F000032F40000000000001 /* WalletSettingsPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000042F40000000000001 /* WalletSettingsPresentationTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -95,11 +95,11 @@
 		C0C000022F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupIOSSafetyHelpersTests.swift; sourceTree = "<group>"; };
 		C0C000042F10000000000001 /* PasskeyProviderImplTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyProviderImplTests.swift; sourceTree = "<group>"; };
 		C0D000022F10000000000001 /* WalletTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletTransitionTests.swift; sourceTree = "<group>"; };
-		C0F000022F50000000000001 /* KeyTeleportSecurityHelpersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportSecurityHelpersTests.swift; sourceTree = "<group>"; };
 		C0D000062F20000000000001 /* CoveCloudBackupUITestHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CoveCloudBackupUITestHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0E000022F20000000000001 /* CoveCloudBackupUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveCloudBackupUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupInventoryFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F000022F40000000000001 /* PresentationTransitionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentationTransitionCoordinatorTests.swift; sourceTree = "<group>"; };
+		C0F000022F50000000000001 /* KeyTeleportSecurityHelpersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportSecurityHelpersTests.swift; sourceTree = "<group>"; };
 		C0F000042F40000000000001 /* WalletSettingsPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletSettingsPresentationTests.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
