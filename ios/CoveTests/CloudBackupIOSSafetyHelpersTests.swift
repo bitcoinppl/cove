@@ -1248,9 +1248,10 @@ extension CloudBackupIOSSafetyHelpersTests {
     }
 
     @MainActor
-    func testMetadataDeletionReleasesAfterCompleteAbsence() async throws {
+    func testMetadataDeletionSurvivesSnapshotsThatOmitThePath() async throws {
         let record = metadataRecord(name: "wallet.json", parentPath: "/cloud/namespace")
 
+        // an empty cold-start gather is not proof of deletion
         let initialFixture = makeICloudMetadataFixture()
         initialFixture.index.markDeleted(resolvedPaths: [record.resolvedPath])
         let initial = Task { try await initialFixture.index.currentOrInitialRecords(timeout: 1) }
@@ -1259,10 +1260,10 @@ extension CloudBackupIOSSafetyHelpersTests {
         let absentInitialRecords = try await initial.value
         XCTAssertEqual(absentInitialRecords, [])
         initialFixture.source.send(.updated([record]))
-        let returnedInitialRecord = try await initialFixture.index.currentOrInitialRecords(
+        let staleInitialRecords = try await initialFixture.index.currentOrInitialRecords(
             timeout: 1
         )
-        XCTAssertEqual(returnedInitialRecord, [record])
+        XCTAssertEqual(staleInitialRecords, [])
 
         let liveFixture = makeICloudMetadataFixture()
         let live = Task { try await liveFixture.index.currentOrInitialRecords(timeout: 1) }
@@ -1272,8 +1273,13 @@ extension CloudBackupIOSSafetyHelpersTests {
         liveFixture.index.markDeleted(resolvedPaths: [record.resolvedPath])
         liveFixture.source.send(.updated([]))
         liveFixture.source.send(.updated([record]))
-        let returnedLiveRecord = try await liveFixture.index.currentOrInitialRecords(timeout: 1)
-        XCTAssertEqual(returnedLiveRecord, [record])
+        let staleLiveRecords = try await liveFixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(staleLiveRecords, [])
+
+        // a later upload of the same file releases the tombstone without another event
+        liveFixture.index.clearDeletion(resolvedPath: record.resolvedPath)
+        let reuploadedRecords = try await liveFixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(reuploadedRecords, [record])
     }
 
     @MainActor

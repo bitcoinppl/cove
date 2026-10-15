@@ -172,10 +172,10 @@ path in the process-wide metadata index before it returns. The index immediately
 removes that path and its descendants from all metadata readers. It also filters
 stale provider snapshots for up to 60 seconds.
 
-A complete snapshot that no longer contains the deleted path releases the
-temporary record. A partial update during initial gathering cannot release it.
-A successful upload releases only the exact file path after local handoff
-validation. This is a process-local consistency bound, not proof that the
+A snapshot that omits the deleted path does not release the temporary record,
+since a cold-start gather can be empty while the files still exist. Only the
+60-second age or a successful upload releases it, and an upload releases only
+the exact file path after local handoff validation. This is a process-local consistency bound, not proof that the
 provider completed its remote delete.
 
 ### Timeouts and retries in this app

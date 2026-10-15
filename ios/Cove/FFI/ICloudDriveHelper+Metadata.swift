@@ -404,18 +404,15 @@ final class ICloudMetadataIndex {
         }
     }
 
+    /// Drops expired tombstones
+    ///
+    /// A snapshot that omits the path is not proof of deletion, since a cold-start gather can be
+    /// empty while the files still exist, so only age or a later upload releases a tombstone
     private func pruneTombstones() {
         guard !deletionTombstones.isEmpty else { return }
 
         let activePaths = activeTombstonePaths(at: Date())
-
-        // a live query that no longer reports the path has confirmed the deletion
-        deletionTombstones = deletionTombstones.filter { path, _ in
-            guard activePaths.contains(path) else { return false }
-            guard case .live = phase else { return true }
-
-            return queryRecords.contains { record in Self.covers(path: path, record: record) }
-        }
+        deletionTombstones = deletionTombstones.filter { path, _ in activePaths.contains(path) }
     }
 
     private static func covers(path: String, record: ICloudMetadataRecord) -> Bool {
