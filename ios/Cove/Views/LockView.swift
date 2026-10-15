@@ -72,7 +72,6 @@ struct LockView<Content: View>: View {
     ) {
         self.lockType = lockType
 
-        innerLockState = .locked
         lockStateBinding = lockState
 
         self.isPinCorrect = isPinCorrect
