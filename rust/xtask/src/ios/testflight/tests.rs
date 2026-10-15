@@ -290,6 +290,38 @@ fn sets_missing_compliance_before_group_assignment() {
 }
 
 #[test]
+fn previous_build_without_notes_still_adds_the_new_build_to_the_group() {
+    let server = Server::new(vec![
+        page(json!([{"id": "app", "attributes": {"bundleId": "org.bitcoinppl.cove"}}])),
+        page(
+            json!([{"id": "private-group", "attributes": {"name": "me-only", "isInternalGroup": true}}]),
+        ),
+        page(
+            json!([{"id": "old-build", "attributes": {"version": "202", "processingState": "VALID"}}]),
+        ),
+        page(json!([
+            {"id": "old-en", "attributes": {"locale": "en-US", "whatsNew": " \n"}},
+            {"id": "old-it", "attributes": {"locale": "it-IT"}}
+        ])),
+        build("VALID"),
+        page(json!([])),
+        page(json!([])),
+        json!({}),
+    ]);
+    let distribution = Distribution::prepare_with_api(server.api(), "org.bitcoinppl.cove").unwrap();
+    distribution
+        .distribute_with_timeout(&identity(), Duration::from_secs(2), Duration::ZERO)
+        .unwrap();
+
+    let requests = server.handle.join().unwrap();
+    assert!(!requests
+        .iter()
+        .any(|request| request.url.path().starts_with("/v1/betaBuildLocalizations")));
+    assert_eq!(requests[7].method, "POST");
+    assert_eq!(requests[7].url.path(), "/v1/betaGroups/private-group/relationships/builds");
+}
+
+#[test]
 fn requires_one_exact_group() {
     let group = |name: &str| Resource {
         id: "id".to_owned(),

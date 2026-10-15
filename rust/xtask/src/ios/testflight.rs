@@ -200,8 +200,13 @@ impl Distribution {
             self.submit_for_external_testing(build)?;
         }
 
+        let copied = if self.notes.is_empty() {
+            "without test descriptions"
+        } else {
+            "with copied test descriptions"
+        };
         print_success(&format!(
-            "Copied test descriptions and added build {} to {GROUP_NAME}",
+            "Added build {} to {GROUP_NAME} {copied}",
             build.attributes.version
         ));
         Ok(())
