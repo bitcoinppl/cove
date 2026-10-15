@@ -391,9 +391,9 @@ mod tests {
         let first_keychain = keychain.clone();
         let first_id = id.clone();
         let first_secret = expected.clone();
-        let second_keychain = keychain.clone();
-        let second_id = id.clone();
-        let second_secret = expected.clone();
+        let second_keychain = keychain;
+        let second_id = id;
+        let second_secret = expected;
         let first =
             std::thread::spawn(move || first_keychain.save_wallet_secret(&first_id, first_secret));
         let second = std::thread::spawn(move || {

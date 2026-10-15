@@ -36,20 +36,21 @@ impl AndroidDevice {
     /// - an exact adb serial
     pub(crate) fn select(device: Option<&str>) -> Result<Self> {
         let devices = list_connected()?;
-        let selector = AndroidDeviceSelector::from_arg(device)?;
+        let selector = AndroidDeviceSelector::from_arg(device);
         selector.resolve(&devices)
     }
 
     pub(crate) fn select_many(device_args: &[String]) -> Result<Vec<Self>> {
         let devices = list_connected()?;
         let selectors = if device_args.is_empty() {
-            vec![AndroidDeviceSelector::from_arg(None)?]
+            vec![AndroidDeviceSelector::from_arg(None)]
         } else {
             device_args
                 .iter()
                 .map(|device| AndroidDeviceSelector::from_arg(Some(device)))
-                .collect::<Result<Vec<_>>>()?
+                .collect::<Vec<_>>()
         };
+
         let mut selected = Vec::with_capacity(selectors.len());
 
         for selector in selectors {
@@ -180,16 +181,16 @@ enum AndroidDeviceSelector {
 }
 
 impl AndroidDeviceSelector {
-    fn from_arg(device: Option<&str>) -> Result<Self> {
+    fn from_arg(device: Option<&str>) -> Self {
         let Some(device) = device.map(str::trim).filter(|value| !value.is_empty()) else {
             print_info("No Android device specified; defaulting to alias 'main'");
-            return Ok(Self::Main);
+            return Self::Main;
         };
 
         match device.to_ascii_lowercase().as_str() {
-            "main" => Ok(Self::Main),
-            "sim" => Ok(Self::Sim),
-            _ => Ok(Self::Serial(device.to_string())),
+            "main" => Self::Main,
+            "sim" => Self::Sim,
+            _ => Self::Serial(device.to_string()),
         }
     }
 
@@ -464,20 +465,11 @@ mod tests {
 
     #[test]
     fn android_device_selector_parses_aliases_and_serials() {
+        assert_eq!(AndroidDeviceSelector::from_arg(None), AndroidDeviceSelector::Main);
+        assert_eq!(AndroidDeviceSelector::from_arg(Some("main")), AndroidDeviceSelector::Main);
+        assert_eq!(AndroidDeviceSelector::from_arg(Some("SIM")), AndroidDeviceSelector::Sim);
         assert_eq!(
-            AndroidDeviceSelector::from_arg(None).expect("default"),
-            AndroidDeviceSelector::Main
-        );
-        assert_eq!(
-            AndroidDeviceSelector::from_arg(Some("main")).expect("main"),
-            AndroidDeviceSelector::Main
-        );
-        assert_eq!(
-            AndroidDeviceSelector::from_arg(Some("SIM")).expect("sim"),
-            AndroidDeviceSelector::Sim
-        );
-        assert_eq!(
-            AndroidDeviceSelector::from_arg(Some("emulator-5554")).expect("serial"),
+            AndroidDeviceSelector::from_arg(Some("emulator-5554")),
             AndroidDeviceSelector::Serial("emulator-5554".to_string())
         );
     }

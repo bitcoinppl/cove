@@ -641,13 +641,13 @@ mod tests {
         );
 
         assert!(address_with_network.is_ok());
-        let address_with_network = address_with_network.unwrap().clone();
+        let address_with_network = address_with_network.unwrap();
 
         assert_eq!(
             address_with_network.address.to_string(),
             "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm"
         );
-        assert_eq!(address_with_network.clone().network, Network::Bitcoin);
+        assert_eq!(address_with_network.network, Network::Bitcoin);
         assert_eq!(address_with_network.amount, Some(Amount::from_btc(0.002).unwrap()));
 
         assert_eq!(

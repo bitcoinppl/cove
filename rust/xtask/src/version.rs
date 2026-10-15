@@ -19,9 +19,10 @@ pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()
     let targets_str = targets_opt
         .as_ref()
         .filter(|s| !s.is_empty())
-        .map(|s| s.as_str())
+        .map(String::as_str)
         .unwrap_or_else(|| if is_build_bump { "ios,android" } else { "rust,ios,android" });
-    let targets: Vec<&str> = targets_str.split(',').map(|s| s.trim()).collect();
+
+    let targets: Vec<&str> = targets_str.split(',').map(str::trim).collect();
 
     // validate targets
     let valid_targets =
