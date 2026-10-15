@@ -178,29 +178,6 @@ fn apply_refresh_detail_result(manager: &RustCloudBackupManager, result: &CloudB
     }
 }
 
-fn apply_provider_confirmation_result(
-    manager: &RustCloudBackupManager,
-    result: &CloudBackupDetailResult,
-) {
-    match result {
-        CloudBackupDetailResult::SuccessWithAuthority { listed, authority } => {
-            manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithAuthority {
-                listed: listed.clone(),
-                authority: *authority,
-            });
-        }
-        // the local rows stay retained, but an unconfirmed inventory is incomplete so the user
-        // sees why restore and destructive actions are unavailable and can check again
-        CloudBackupDetailResult::AccessError(error) => {
-            warn!("provider confirmation of trusted local inventory failed: {error}");
-            manager.apply_detail_outcome(CloudBackupDetailOutcome::Failed {
-                reason: CloudBackupInventoryIncompleteReason::from(CloudStorageIssue::from(error)),
-                error: error.reader_message(),
-            });
-        }
-    }
-}
-
 fn refresh_detail_needs_connectivity_retry(
     manager: &RustCloudBackupManager,
     attempt: DetailRefreshAttempt,
@@ -1065,7 +1042,9 @@ impl CloudBackupSupervisor {
         if completion.apply
             && let Some(result) = result
         {
-            apply_provider_confirmation_result(&manager, &result);
+            // the local rows stay retained, but an unconfirmed inventory is incomplete so the user
+            // sees why restore and destructive actions are unavailable and can check again
+            apply_refresh_detail_result(&manager, &result);
         }
 
         self.ensure_supplemental_inventory_discovery(manager.clone());
@@ -1197,16 +1176,7 @@ impl CloudBackupSupervisor {
             self.schedule_other_backups_scan(manager.clone());
         }
 
-        self.begin_cloud_only_fetch_if_inventory_ready(manager);
-    }
-
-    pub(crate) fn begin_cloud_only_fetch_if_inventory_ready(
-        &mut self,
-        manager: Arc<RustCloudBackupManager>,
-    ) {
-        if manager.detail_inventory_is_ready() {
-            self.begin_background_cloud_only_fetch_if_needed(manager);
-        }
+        self.begin_cloud_only_fetch_if_needed(manager);
     }
 
     fn schedule_other_backups_scan(&mut self, manager: Arc<RustCloudBackupManager>) {

@@ -9,17 +9,18 @@ impl CloudBackupSupervisor {
     /// Starts a fetch when the cache is unloaded and the detail inventory can say what to fetch
     pub async fn ensure_cloud_only_fetch(&mut self) -> ActorResult<()> {
         if let Some(manager) = self.manager() {
-            self.begin_cloud_only_fetch_if_inventory_ready(manager);
+            self.begin_cloud_only_fetch_if_needed(manager);
         }
 
         Produces::ok(())
     }
 
-    pub(crate) fn begin_background_cloud_only_fetch_if_needed(
+    pub(crate) fn begin_cloud_only_fetch_if_needed(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
     ) {
         if self.active_cloud_only_fetch_request.is_some()
+            || !manager.detail_inventory_is_ready()
             || !matches!(
                 manager.state.read().cloud_only(),
                 CloudOnlyState::NotFetched | CloudOnlyState::Failed { .. }

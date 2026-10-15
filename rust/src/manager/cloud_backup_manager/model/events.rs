@@ -153,8 +153,9 @@ pub(crate) enum CloudBackupStateReducerEvent {
     UndecryptableWalletDeletionStateResolved(CloudBackupUndecryptableWalletDeletionState),
     DetailRefreshStarted,
     DetailRefreshProvisional(CloudBackupDetail),
+    DetailCleared,
     DetailRefreshApplied {
-        detail: Option<(CloudBackupDetail, super::CloudBackupInventoryAuthority)>,
+        detail: (CloudBackupDetail, super::CloudBackupInventoryAuthority),
         cloud_only_listing: CloudOnlyListingUpdate,
     },
     DetailRefreshFailed {
@@ -181,8 +182,6 @@ pub(crate) struct CloudBackupStateReducerEffects {
     pub(crate) verification_decision_pending: bool,
     /// Applying the event invalidated cloud-only rows that a fetch has to repopulate
     pub(crate) cloud_only_refetch_needed: bool,
-    /// A cloud-only fetch result was dropped because its listing is no longer current
-    pub(crate) cloud_only_fetch_discarded: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
