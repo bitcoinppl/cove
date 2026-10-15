@@ -151,9 +151,11 @@ impl CloudBackupSupervisor {
             prepared.authoritative_fetch().clone(),
         ));
 
+        // listed wallets whose downloads failed leave the queue empty without restoring anything,
+        // so an empty queue goes through the same proof as a finished one
         let ordered_queue = prepared.ordered_queue().to_vec();
         if ordered_queue.is_empty() {
-            self.finish_restore_all_clean(&manager, claim);
+            self.finish_restore_all_from_cache(manager, claim);
             return Produces::ok(());
         }
 
@@ -307,6 +309,16 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
+        self.finish_restore_all_from_cache(manager, claim);
+        Produces::ok(())
+    }
+
+    /// Finishes a run clean only when the cloud-only cache proves nothing is left to restore
+    fn finish_restore_all_from_cache(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) {
         // an unloaded, incomplete or outdated cache is unknown rather than empty, so the marker stays
         match manager.restore_all_proven_eligible_wallets() {
             Some(eligible) if eligible.is_empty() => self.finish_restore_all_clean(&manager, claim),
@@ -317,7 +329,6 @@ impl CloudBackupSupervisor {
                 self.begin_cloud_only_fetch_if_needed(manager);
             }
         }
-        Produces::ok(())
     }
 
     fn finish_restore_all_clean(

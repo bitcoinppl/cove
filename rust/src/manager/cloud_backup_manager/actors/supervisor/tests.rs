@@ -3512,6 +3512,50 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn restore_all_preparation_with_only_unreadable_wallets_keeps_its_marker() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    let namespace = manager.current_namespace_id().unwrap();
+    CloudBackupStore::global().persist_restore_all_marker(namespace.clone()).unwrap();
+    manager.sync_persisted_state();
+
+    // the selected wallet is listed but its download fails, so preparation queues nothing
+    let record_id = cove_cspp::backup_data::wallet_record_id("selected-but-unreadable");
+    globals.cloud.set_wallet_files(
+        namespace,
+        vec![cove_cspp::backup_data::wallet_filename_from_record_id(&record_id)],
+    );
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        record_id.as_str(),
+    ])));
+    let generation = manager.state.read().cloud_only_listing_generation();
+    let prepared = manager
+        .prepare_restore_all_cloud_wallets(vec![test_cloud_only_wallet(&record_id)], generation)
+        .await;
+
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    let claim = supervisor
+        .begin_exclusive_operation(
+            &manager,
+            CloudBackupExclusiveOperation::RestoreAllCloudWallets,
+        )
+        .unwrap();
+    supervisor.active_operation.start_restore_all(RestoreRun {
+        claim,
+        cancellation: Arc::new(AtomicBool::new(false)),
+    });
+    supervisor.complete_restore_all_preparation(claim, prepared).await.unwrap();
+
+    assert_eq!(supervisor.active_operation, None);
+    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
