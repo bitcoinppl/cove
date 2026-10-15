@@ -9,18 +9,8 @@ async fn enable_uses_one_wrapper_download_per_namespace() {
     let manager = init_manager();
 
     reset_cloud_backup_test_state(&manager, globals);
-    let first_master_key = cove_cspp::master_key::MasterKey::generate();
-    let second_master_key = cove_cspp::master_key::MasterKey::generate();
-    let first_namespace = first_master_key.namespace_id();
-    let second_namespace = second_master_key.namespace_id();
-    globals.cloud.set_master_key_backup(
-        first_namespace,
-        master_wrapper_for_test(&first_master_key, &[7; 32], &[9; 32], 1),
-    );
-    globals.cloud.set_master_key_backup(
-        second_namespace,
-        master_wrapper_for_test(&second_master_key, &[8; 32], &[9; 32], 2),
-    );
+    seed_master_key_wrapper(globals, &[7; 32], &[9; 32], 1);
+    seed_master_key_wrapper(globals, &[8; 32], &[9; 32], 2);
 
     let preparation =
         manager.prepare_enable(CloudBackupEnableContext::settings_manual()).await.unwrap();
@@ -37,12 +27,7 @@ async fn passkey_candidate_loads_are_limited_to_four_concurrent_wrapper_reads() 
 
     let mut namespaces = Vec::new();
     for registered_at in 0..8 {
-        let master_key = cove_cspp::master_key::MasterKey::generate();
-        let namespace = master_key.namespace_id();
-        globals.cloud.set_master_key_backup(
-            namespace.clone(),
-            master_wrapper_for_test(&master_key, &[7; 32], &[9; 32], registered_at),
-        );
+        let namespace = seed_master_key_wrapper(globals, &[7; 32], &[9; 32], registered_at);
         namespaces.push(namespace);
     }
 
@@ -75,12 +60,7 @@ async fn passkey_candidate_cancellation_does_not_start_queued_wrapper_reads() {
 
     let mut namespaces = Vec::new();
     for registered_at in 0..8 {
-        let master_key = cove_cspp::master_key::MasterKey::generate();
-        let namespace = master_key.namespace_id();
-        globals.cloud.set_master_key_backup(
-            namespace.clone(),
-            master_wrapper_for_test(&master_key, &[7; 32], &[9; 32], registered_at),
-        );
+        let namespace = seed_master_key_wrapper(globals, &[7; 32], &[9; 32], registered_at);
         namespaces.push(namespace);
     }
 
@@ -125,12 +105,7 @@ async fn passkey_matches_keep_registration_order_after_concurrent_loads() {
     let prf_salt = [9; 32];
     let mut candidates = Vec::new();
     for registered_at in [10, 30, 20] {
-        let master_key = cove_cspp::master_key::MasterKey::generate();
-        let namespace = master_key.namespace_id();
-        globals.cloud.set_master_key_backup(
-            namespace.clone(),
-            master_wrapper_for_test(&master_key, &prf_key, &prf_salt, registered_at),
-        );
+        let namespace = seed_master_key_wrapper(globals, &prf_key, &prf_salt, registered_at);
         candidates.push((registered_at, namespace));
     }
 
@@ -169,12 +144,7 @@ async fn pending_and_missing_upload_states_skip_wrapper_downloads() {
     let globals = test_globals();
     globals.reset();
 
-    let pending_master_key = cove_cspp::master_key::MasterKey::generate();
-    let pending_namespace = pending_master_key.namespace_id();
-    globals.cloud.set_master_key_backup(
-        pending_namespace.clone(),
-        master_wrapper_for_test(&pending_master_key, &[7; 32], &[9; 32], 1),
-    );
+    let pending_namespace = seed_master_key_wrapper(globals, &[7; 32], &[9; 32], 1);
     globals.cloud.set_uploaded_master_key_pending_confirmation(true);
     let missing_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
 
@@ -920,12 +890,7 @@ async fn passkey_match_stops_after_terminal_targeted_auth_failure() {
     for (registered_at, wrapper_prf_key) in
         [(3, [7u8; 32]), (2, discovered_prf_key), (1, discovered_prf_key)]
     {
-        let master_key = cove_cspp::master_key::MasterKey::generate();
-        let namespace = master_key.namespace_id();
-        globals.cloud.set_master_key_backup(
-            namespace.clone(),
-            master_wrapper_for_test(&master_key, &wrapper_prf_key, &[9; 32], registered_at),
-        );
+        let namespace = seed_master_key_wrapper(globals, &wrapper_prf_key, &[9; 32], registered_at);
         candidates.push(namespace);
     }
 
@@ -962,12 +927,8 @@ async fn passkey_match_keeps_earlier_matches_after_terminal_targeted_auth_failur
     let discovered_prf_key = [8u8; 32];
     let mut candidates = Vec::new();
     for registered_at in [3, 2, 1] {
-        let master_key = cove_cspp::master_key::MasterKey::generate();
-        let namespace = master_key.namespace_id();
-        globals.cloud.set_master_key_backup(
-            namespace.clone(),
-            master_wrapper_for_test(&master_key, &discovered_prf_key, &[9; 32], registered_at),
-        );
+        let namespace =
+            seed_master_key_wrapper(globals, &discovered_prf_key, &[9; 32], registered_at);
         candidates.push(namespace);
     }
 
