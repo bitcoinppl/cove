@@ -3,6 +3,7 @@ use crate::common::{
     cargo_target_dir, command_exists, print_error, print_info, print_success, print_warning,
     trim_generated_trailing_whitespace,
 };
+use crate::version::KeepBuildNumber;
 use color_eyre::{
     eyre::{bail, Context, ContextCompat},
     Result,
@@ -16,6 +17,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use xshell::{cmd, Shell};
+
+mod google_play;
+
+pub use google_play::{release_android, upload_google_play};
 
 // Android build constants
 const ANDROID_TARGETS: &[&str] =
@@ -59,6 +64,9 @@ const REPO_ENVRC_PATH: &str = "../.envrc";
 const ANDROID_KEYSTORE_PROPERTIES_PATH: &str = "../android/keystore.properties";
 const DEFAULT_UPLOAD_KEYSTORE_REL: &str = ".secrets/cove-upload.keystore";
 const DEFAULT_UPLOAD_KEY_ALIAS: &str = "upload";
+// build output dirs that may be symlinked onto an external cache disk
+const ANDROID_BUILD_OUTPUT_DIRS: &[&str] =
+    &[JNI_LIBS_DIR, "../android/.gradle", "../android/build", "../android/app/build"];
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuildProfile {
@@ -104,6 +112,48 @@ impl BuildProfile {
             Self::Custom(profile) => profile,
         }
     }
+}
+
+/// Fails when an Android build output dir or the Gradle user home points at a missing location
+///
+/// These are often symlinked or configured onto an external cache disk; when it is unmounted
+/// the failure otherwise surfaces as an opaque "File exists" error from create_dir or a Gradle
+/// lock file error after the Rust libraries have already been built
+fn ensure_android_build_output_dirs_resolve() -> Result<()> {
+    let gradle_user_home = env_nonempty("GRADLE_USER_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env_nonempty("HOME").map(|home| PathBuf::from(home).join(".gradle")));
+
+    let missing: Vec<String> = ANDROID_BUILD_OUTPUT_DIRS
+        .iter()
+        .map(PathBuf::from)
+        .chain(gradle_user_home)
+        .filter(|path| !path.exists())
+        .filter_map(|path| {
+            // a missing plain dir is fine since the build creates it, unless its volume is gone
+            if path.is_symlink() {
+                let target = fs::read_link(&path).ok()?;
+                return Some(format!("  {} -> {}", path.display(), target.display()));
+            }
+
+            is_on_missing_volume(&path).then(|| format!("  {}", path.display()))
+        })
+        .collect();
+
+    if !missing.is_empty() {
+        bail!(
+            "Android build paths point to missing locations (is the cache disk mounted?):\n{}",
+            missing.join("\n")
+        );
+    }
+
+    Ok(())
+}
+
+/// Whether a path lives under a macOS `/Volumes/<name>` mount that does not exist
+fn is_on_missing_volume(path: &Path) -> bool {
+    let volume: PathBuf = path.components().take(3).collect();
+    volume.starts_with("/Volumes") && volume.components().count() == 3 && !volume.exists()
 }
 
 fn allows_android_version_downgrade(profile: BuildProfile) -> bool {
@@ -173,6 +223,7 @@ pub fn build_android(
     }
 
     // prepare directories
+    ensure_android_build_output_dirs_resolve()?;
     sh.create_dir(JNI_LIBS_DIR).wrap_err("Failed to create jniLibs directory")?;
     sh.create_dir(ANDROID_KOTLIN_DIR).wrap_err("Failed to create kotlin directory")?;
     let _ = sh.remove_path(BINDINGS_DIR);
@@ -560,6 +611,11 @@ impl AndroidReleaseSigning {
     }
 }
 
+/// Path to the signed store bundle relative to `rust/`
+fn play_aab_path() -> PathBuf {
+    Path::new(ANDROID_PROJECT_DIR).join(AAB_OUTPUT_PATH)
+}
+
 pub fn bundle_android(verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
 
@@ -612,42 +668,132 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
     let aab_dest = format!("{}/Downloads/{}", home_dir, aab_filename);
     let apk_filename = format!("cove-{}-{}.apk", version_name, version_code);
     let apk_dest = format!("{}/Downloads/{}", home_dir, apk_filename);
+    let symbols_filename = format!("cove-{}-{}-symbols.zip", version_name, version_code);
+    let symbols_path = format!("{}/Downloads/{}", home_dir, symbols_filename);
 
-    // copy AAB to Downloads
+    // a release rolls back versionCode when this fails, so no Downloads file may keep the bumped one
+    let mut outputs = StagedOutputs::default();
+    let result = stage_store_outputs(&sh, &mut outputs, &aab_dest, &apk_dest, &symbols_path)
+        .and_then(|()| outputs.publish());
+
+    let Err(error) = result else {
+        for path in &outputs.published {
+            print_success(&format!("Saved {}", path.display()));
+        }
+
+        return Ok(());
+    };
+
+    let leftovers = outputs.discard();
+    if leftovers.is_empty() {
+        return Err(error);
+    }
+
+    Err(error.wrap_err(KeepBuildNumber(leftovers)))
+}
+
+fn stage_store_outputs(
+    sh: &Shell,
+    outputs: &mut StagedOutputs,
+    aab_dest: &str,
+    apk_dest: &str,
+    symbols_path: &str,
+) -> Result<()> {
+    let project_dir = sh.current_dir();
+
     print_info(&format!("Copying AAB to {}...", aab_dest));
-    sh.copy_file(AAB_OUTPUT_PATH, &aab_dest)
-        .wrap_err_with(|| format!("Failed to copy AAB to {}", aab_dest))?;
-    print_success(&format!("AAB saved to {}", aab_dest));
+    outputs.copy(&project_dir.join(AAB_OUTPUT_PATH), Path::new(aab_dest))?;
 
-    // copy APK to Downloads
     if sh.path_exists(APK_STORE_RELEASE_PATH) {
         print_info(&format!("Copying APK to {}...", apk_dest));
-        sh.copy_file(APK_STORE_RELEASE_PATH, &apk_dest)
-            .wrap_err_with(|| format!("Failed to copy APK to {}", apk_dest))?;
-        print_success(&format!("APK saved to {}", apk_dest));
+        outputs.copy(&project_dir.join(APK_STORE_RELEASE_PATH), Path::new(apk_dest))?;
     }
 
     // create native debug symbols zip for every ABI shipped in the app bundle
-    let symbols_filename = format!("cove-{}-{}-symbols.zip", version_name, version_code);
-    let symbols_path = format!("{}/Downloads/{}", home_dir, symbols_filename);
     let native_libs_path =
         "app/build/intermediates/merged_native_libs/storeRelease/mergeStoreReleaseNativeLibs/out/lib";
 
     if sh.path_exists(native_libs_path) {
         print_info("Creating native debug symbols zip...");
-        let current_dir = sh.current_dir();
-        sh.change_dir(native_libs_path);
-        cmd!(sh, "zip -r {symbols_path} arm64-v8a armeabi-v7a x86_64")
+        let staging = outputs.reserve(Path::new(symbols_path))?;
+        let _dir = sh.push_dir(native_libs_path);
+        cmd!(sh, "zip -r {staging} arm64-v8a armeabi-v7a x86_64")
             .quiet()
             .run()
             .wrap_err("Failed to create debug symbols zip")?;
-        sh.change_dir(current_dir);
-        print_success(&format!("Debug symbols saved to {}", symbols_path));
     } else {
         print_info("Native libs not found, skipping debug symbols zip");
     }
 
     Ok(())
+}
+
+/// Release outputs written to staging files next to their destinations and moved into place
+/// only once every output succeeded
+///
+/// A failed release must not leave files carrying a versionCode that gets rolled back, and must
+/// not delete files an earlier run left at the same destinations, so only files this attempt
+/// wrote are ever removed
+#[derive(Debug, Default)]
+struct StagedOutputs {
+    staged: Vec<(PathBuf, PathBuf)>,
+    published: Vec<PathBuf>,
+}
+
+impl StagedOutputs {
+    /// Claims a fresh staging path for `destination` that an external command can write to
+    fn reserve(&mut self, destination: &Path) -> Result<PathBuf> {
+        let file_name = destination
+            .file_name()
+            .and_then(|name| name.to_str())
+            .with_context(|| format!("Invalid output path {}", destination.display()))?;
+        let staging = destination.with_file_name(format!(".{file_name}.partial"));
+
+        // zip appends to an existing archive, so a staging file left by a crashed run must go
+        remove_file_if_exists(&staging)
+            .wrap_err_with(|| format!("Failed to clear {}", staging.display()))?;
+        self.staged.push((staging.clone(), destination.to_owned()));
+
+        Ok(staging)
+    }
+
+    fn copy(&mut self, source: &Path, destination: &Path) -> Result<()> {
+        let staging = self.reserve(destination)?;
+        fs::copy(source, &staging).wrap_err_with(|| {
+            format!("Failed to copy {} to {}", source.display(), staging.display())
+        })?;
+
+        Ok(())
+    }
+
+    fn publish(&mut self) -> Result<()> {
+        // an entry stays staged until its own move succeeds, so a failed move leaves it and
+        // every later entry for discard to remove
+        while let Some((staging, destination)) = self.staged.first() {
+            fs::rename(staging, destination).wrap_err_with(|| {
+                format!("Failed to move {} to {}", staging.display(), destination.display())
+            })?;
+
+            let (_, destination) = self.staged.remove(0);
+            self.published.push(destination);
+        }
+
+        Ok(())
+    }
+
+    /// Removes every file this attempt wrote and returns the ones that could not be removed
+    fn discard(self) -> Vec<PathBuf> {
+        let staged = self.staged.into_iter().map(|(staging, _)| staging);
+
+        staged.chain(self.published).filter(|path| remove_file_if_exists(path).is_err()).collect()
+    }
+}
+
+fn remove_file_if_exists(path: impl AsRef<Path>) -> std::io::Result<()> {
+    match fs::remove_file(path) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    }
 }
 
 pub fn download_android_screenshots() -> Result<()> {
@@ -1139,9 +1285,9 @@ fn extract_version_code(content: &str) -> Option<u32> {
 mod tests {
     use super::{
         allows_android_version_downgrade, parse_export_env_file, parse_keystore_properties,
-        target_for_abi, target_path_for_android_file, BuildProfile,
+        target_for_abi, target_path_for_android_file, BuildProfile, StagedOutputs,
     };
-    use std::fs;
+    use std::{fs, path::PathBuf};
 
     #[test]
     fn parses_android_signing_envrc_assignments() {
@@ -1226,5 +1372,62 @@ mod tests {
         .unwrap();
 
         assert_eq!(target, temp_dir.path().join("Screenshot-2.png"));
+    }
+
+    #[test]
+    fn staged_outputs_only_replace_destinations_after_every_output_succeeds() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("app.aab");
+        let aab = dir.path().join("cove-1.4.0-29.aab");
+        let apk = dir.path().join("cove-1.4.0-29.apk");
+        fs::write(&source, "new bundle").unwrap();
+        fs::write(&aab, "earlier bundle").unwrap();
+
+        // the second copy fails, so the earlier file at the AAB destination must survive untouched
+        let mut outputs = StagedOutputs::default();
+        outputs.copy(&source, &aab).unwrap();
+        assert!(outputs.copy(&dir.path().join("missing.apk"), &apk).is_err());
+        assert!(outputs.discard().is_empty());
+
+        assert_eq!(fs::read_to_string(&aab).unwrap(), "earlier bundle");
+        assert!(!apk.exists());
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 2);
+
+        let mut outputs = StagedOutputs::default();
+        outputs.copy(&source, &aab).unwrap();
+        outputs.publish().unwrap();
+
+        assert_eq!(fs::read_to_string(&aab).unwrap(), "new bundle");
+        assert!(outputs.staged.is_empty());
+        assert_eq!(outputs.published, std::slice::from_ref(&aab));
+        assert_eq!(outputs.discard(), Vec::<PathBuf>::new());
+        assert!(!aab.exists());
+    }
+
+    #[test]
+    fn staged_outputs_discard_everything_after_a_failed_move() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("app.aab");
+        let aab = dir.path().join("cove-1.4.0-29.aab");
+        let apk = dir.path().join("cove-1.4.0-29.apk");
+        fs::write(&source, "new bundle").unwrap();
+
+        // a non-empty directory at the APK destination makes its move fail after the AAB moved
+        fs::create_dir(&apk).unwrap();
+        fs::write(apk.join("keep"), "").unwrap();
+
+        let mut outputs = StagedOutputs::default();
+        outputs.copy(&source, &aab).unwrap();
+        outputs.copy(&source, &apk).unwrap();
+        assert!(outputs.publish().is_err());
+        assert!(outputs.discard().is_empty());
+
+        assert!(!aab.exists());
+        let mut left = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect::<Vec<_>>();
+        left.sort();
+        assert_eq!(left, ["app.aab", "cove-1.4.0-29.apk"]);
     }
 }

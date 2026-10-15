@@ -1,11 +1,15 @@
-use crate::common::{ensure_rust_directory, print_success, print_warning};
-use color_eyre::{eyre::ContextCompat, Result};
+use crate::common::{ensure_rust_directory, print_error, print_success, print_warning};
+use color_eyre::{
+    eyre::{Context, ContextCompat},
+    Result,
+};
 use colored::Colorize;
+use std::path::PathBuf;
 use xshell::{cmd, Shell};
 
 // Version file paths
 const CARGO_TOML_PATH: &str = "Cargo.toml";
-pub(crate) const IOS_PROJECT_PATH: &str = "../ios/Cove.xcodeproj/project.pbxproj";
+const IOS_PROJECT_PATH: &str = "../ios/Cove.xcodeproj/project.pbxproj";
 const ANDROID_GRADLE_PATH: &str = "../android/app/build.gradle.kts";
 
 pub fn bump_version(bump_type: String, targets_opt: Option<String>) -> Result<()> {
@@ -197,19 +201,98 @@ fn prepare_android(sh: &Shell, current_version: &str, new_version: &str) -> Resu
     Ok(Some(new_gradle))
 }
 
-pub(crate) fn snapshot_ios_project(sh: &Shell) -> Result<Option<String>> {
-    if !sh.path_exists(IOS_PROJECT_PATH) {
-        return Ok(None);
+/// Platform version file whose build number a store release consumes
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum BuildNumberFile {
+    IosProject,
+    AndroidGradle,
+}
+
+impl BuildNumberFile {
+    fn path(self) -> &'static str {
+        match self {
+            Self::IosProject => IOS_PROJECT_PATH,
+            Self::AndroidGradle => ANDROID_GRADLE_PATH,
+        }
     }
 
-    Ok(sh.read_file(IOS_PROJECT_PATH).map(Some)?)
+    fn build_number_label(self) -> &'static str {
+        match self {
+            Self::IosProject => "iOS build number",
+            Self::AndroidGradle => "Android versionCode",
+        }
+    }
+
+    fn release_label(self) -> &'static str {
+        match self {
+            Self::IosProject => "TestFlight",
+            Self::AndroidGradle => "Google Play release",
+        }
+    }
+
+    fn bump(self, sh: &Shell) -> Result<()> {
+        match self {
+            Self::IosProject => bump_ios_build_number(sh),
+            Self::AndroidGradle => bump_android_build_number(sh),
+        }
+    }
+
+    /// Bumps the build number, then runs the release steps that happen before the store may have
+    /// accepted the build, restoring the original file if the bump or any of those steps fail
+    ///
+    /// Steps that run once the store may hold the build, such as distribution or an upload whose
+    /// failure can still mean acceptance, belong after this call so the consumed build number is
+    /// kept
+    pub(crate) fn bump_for_release<T>(
+        self,
+        sh: &Shell,
+        before_store_accepts: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        let snapshot =
+            sh.path_exists(self.path()).then(|| sh.read_file(self.path())).transpose()?;
+        let error = match self.bump(sh).and_then(|()| before_store_accepts()) {
+            Ok(value) => return Ok(value),
+            Err(error) => error,
+        };
+
+        let release = self.release_label();
+        let build_number = self.build_number_label();
+        if let Some(keep) = error.downcast_ref::<KeepBuildNumber>() {
+            print_error(&format!("{release} failed; kept {build_number} because {keep}"));
+            return Err(error);
+        }
+
+        let Some(snapshot) = snapshot else {
+            print_error(&format!("{release} failed"));
+            return Err(error);
+        };
+
+        if let Err(restore_error) = sh.write_file(self.path(), &snapshot) {
+            return Err(error).wrap_err(format!(
+                "Failed to restore {build_number} after {release} failure: {restore_error:#}"
+            ));
+        }
+
+        print_error(&format!("{release} failed; restored {build_number}"));
+        Err(error)
+    }
 }
 
-pub(crate) fn restore_ios_project(sh: &Shell, snapshot: &str) -> Result<()> {
-    Ok(sh.write_file(IOS_PROJECT_PATH, snapshot)?)
+/// Release failure context that keeps the bumped build number
+///
+/// Restoring the old number is only safe when no signed artifact carrying the new one survives;
+/// otherwise uploading that artifact and the next release would collide on the same number
+#[derive(Debug)]
+pub(crate) struct KeepBuildNumber(pub(crate) Vec<PathBuf>);
+
+impl std::fmt::Display for KeepBuildNumber {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let paths = self.0.iter().map(|path| path.display().to_string()).collect::<Vec<_>>();
+        write!(f, "these signed outputs could not be removed: {}", paths.join(", "))
+    }
 }
 
-pub(crate) fn bump_ios_build_number(sh: &Shell) -> Result<()> {
+fn bump_ios_build_number(sh: &Shell) -> Result<()> {
     if !sh.path_exists(IOS_PROJECT_PATH) {
         print_warning(&format!("iOS project file not found at {}", IOS_PROJECT_PATH));
         return Ok(());
@@ -337,9 +420,9 @@ fn replace_u32_values(
 #[cfg(test)]
 mod tests {
     use super::{
-        bump_ios_build_number, increment_and_replace_ios, prepare_android, prepare_ios,
-        restore_ios_project, snapshot_ios_project, IOS_PROJECT_PATH,
+        increment_and_replace_ios, prepare_android, prepare_ios, BuildNumberFile, KeepBuildNumber,
     };
+    use color_eyre::eyre::eyre;
     use xshell::Shell;
 
     #[test]
@@ -407,34 +490,73 @@ CURRENT_PROJECT_VERSION = 76;
         );
     }
 
-    #[test]
-    fn restores_ios_project_snapshot_after_failed_testflight_flow() {
-        let unique_id =
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let temp_dir = std::env::temp_dir()
-            .join(format!("cove-xtask-version-test-{}-{unique_id}", std::process::id()));
-        let rust_dir = temp_dir.join("rust");
-        let ios_project_dir = temp_dir.join("ios/Cove.xcodeproj");
+    // keep the tempdir alive for the test so the files it holds are not removed early
+    fn fixture(rel_file: &str, contents: &str) -> (tempfile::TempDir, Shell, std::path::PathBuf) {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let rust_dir = temp_dir.path().join("rust");
+        let file_path = temp_dir.path().join(rel_file);
         std::fs::create_dir_all(&rust_dir).unwrap();
-        std::fs::create_dir_all(&ios_project_dir).unwrap();
-
-        let project_path = temp_dir.join("ios/Cove.xcodeproj/project.pbxproj");
-        let original = "\
-CURRENT_PROJECT_VERSION = 89;
-CURRENT_PROJECT_VERSION = 89;
-";
-        std::fs::write(&project_path, original).unwrap();
+        std::fs::create_dir_all(file_path.parent().unwrap()).unwrap();
+        std::fs::write(&file_path, contents).unwrap();
 
         let sh = Shell::new().unwrap();
         sh.change_dir(&rust_dir);
 
-        let snapshot = snapshot_ios_project(&sh).unwrap().unwrap();
-        bump_ios_build_number(&sh).unwrap();
-        restore_ios_project(&sh, &snapshot).unwrap();
+        (temp_dir, sh, file_path)
+    }
 
+    const IOS_PROJECT: &str = "ios/Cove.xcodeproj/project.pbxproj";
+    const ANDROID_GRADLE: &str = "android/app/build.gradle.kts";
+    const GRADLE_28: &str = "versionCode = 28\nversionName = \"1.4.0\"\n";
+
+    #[test]
+    fn restores_ios_build_number_when_testflight_fails_before_store_accepts() {
+        let original = "\
+CURRENT_PROJECT_VERSION = 89;
+CURRENT_PROJECT_VERSION = 89;
+";
+        let (_temp_dir, sh, project_path) = fixture(IOS_PROJECT, original);
+
+        let result = BuildNumberFile::IosProject.bump_for_release(&sh, || {
+            assert!(std::fs::read_to_string(&project_path).unwrap().contains("= 90;"));
+            Err::<(), _>(eyre!("upload failed"))
+        });
+
+        assert!(result.is_err());
         assert_eq!(std::fs::read_to_string(&project_path).unwrap(), original);
-        assert!(sh.path_exists(IOS_PROJECT_PATH));
+    }
 
-        std::fs::remove_dir_all(&temp_dir).unwrap();
+    #[test]
+    fn keeps_android_version_code_once_release_steps_succeed() {
+        let (_temp_dir, sh, gradle_path) = fixture(ANDROID_GRADLE, GRADLE_28);
+
+        BuildNumberFile::AndroidGradle.bump_for_release(&sh, || Ok(())).unwrap();
+
+        assert!(std::fs::read_to_string(&gradle_path).unwrap().contains("versionCode = 29\n"));
+    }
+
+    #[test]
+    fn restores_android_version_code_when_bundle_fails() {
+        let (_temp_dir, sh, gradle_path) = fixture(ANDROID_GRADLE, GRADLE_28);
+
+        let result = BuildNumberFile::AndroidGradle
+            .bump_for_release(&sh, || Err::<(), _>(eyre!("bundle failed")));
+
+        assert!(result.is_err());
+        assert_eq!(std::fs::read_to_string(&gradle_path).unwrap(), GRADLE_28);
+    }
+
+    #[test]
+    fn keeps_android_version_code_when_signed_outputs_survive() {
+        let (_temp_dir, sh, gradle_path) = fixture(ANDROID_GRADLE, GRADLE_28);
+
+        let result = BuildNumberFile::AndroidGradle.bump_for_release(&sh, || {
+            Err::<(), _>(
+                eyre!("bundle failed").wrap_err(KeepBuildNumber(vec!["cove-1.4.0-29.aab".into()])),
+            )
+        });
+
+        assert!(result.is_err());
+        assert!(std::fs::read_to_string(&gradle_path).unwrap().contains("versionCode = 29\n"));
     }
 }
