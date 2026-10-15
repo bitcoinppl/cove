@@ -275,31 +275,6 @@ struct CorruptedWalletDeletionRetry: Equatable {
         tapSignerNfc = nil
     }
 
-    /// Apply the committed post-wipe state from Rust before authentication is released
-    ///
-    /// Rust decides what a wiped app looks like; this only clears iOS-owned presentation state
-    @MainActor
-    func applyWipeCompletion(_ completion: FullWipeCompletion) async {
-        isSidebarVisible = false
-        isLoading = false
-        alertState = nil
-        sheetState = nil
-        isPastHeader = false
-        clearSession()
-
-        database = Database()
-        needsOnboarding = completion.needsOnboarding
-        selectedNetwork = completion.selectedNetwork
-        colorSchemeSelection = completion.colorScheme
-        selectedNode = completion.selectedNode
-        selectedFiatCurrency = completion.fiatCurrency
-        wallets = completion.wallets
-        router = completion.router
-        routeId = UUID()
-
-        await PopupStack.dismissAllPopups()
-    }
-
     func deleteCorruptedWallet(id: WalletId, databaseError: String) {
         performCorruptedWalletDeletion(.initial(walletId: id, databaseError: databaseError))
     }
@@ -912,6 +887,34 @@ extension AppManager {
 
     func navigateToKeyTeleport(_ route: KeyTeleportRoute) {
         pushRoute(.keyTeleport(route))
+    }
+}
+
+/// Wipe handling, kept out of the class body because that body is at the SwiftLint length limit
+extension AppManager {
+    /// Apply the committed post-wipe state from Rust before authentication is released
+    ///
+    /// Rust decides what a wiped app looks like; this only clears iOS-owned presentation state
+    @MainActor
+    func applyWipeCompletion(_ completion: FullWipeCompletion) async {
+        isSidebarVisible = false
+        isLoading = false
+        alertState = nil
+        sheetState = nil
+        isPastHeader = false
+        clearSession()
+
+        database = Database()
+        needsOnboarding = completion.needsOnboarding
+        selectedNetwork = completion.selectedNetwork
+        colorSchemeSelection = completion.colorScheme
+        selectedNode = completion.selectedNode
+        selectedFiatCurrency = completion.fiatCurrency
+        wallets = completion.wallets
+        router = completion.router
+        routeId = UUID()
+
+        await PopupStack.dismissAllPopups()
     }
 }
 
