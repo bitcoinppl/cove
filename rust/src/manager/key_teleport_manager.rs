@@ -23,16 +23,18 @@ use crate::{
 use controller::ManagerController;
 use model::ManagerModel;
 use receive::ReceiveWorkflow;
+pub(crate) use receive_session::ReceiveSessionReset;
 use receive_session::ReceiveSessionStore;
 pub(crate) use send::is_send_eligible_wallet_id;
 
 /// Deletes the persisted receive session and its private key under the session store lock
 ///
 /// Deleting outside the lock would let a concurrent load that upgrades a legacy session write
-/// the old private key back after the delete. Actions dispatched before this call can no longer
-/// create a session, so a receive action still queued during the wipe cannot save a new key
-pub(crate) fn delete_persisted_receive_session() -> Result<(), KeyTeleportAlert> {
-    ReceiveSessionStore::reset_for_full_wipe()
+/// the old private key back after the delete. No manager can create a session until the returned
+/// reset commits or is dropped, and committing keeps managers created before the wipe from ever
+/// creating one, so a receive action still queued during the wipe cannot save a new key
+pub(crate) fn reset_persisted_receive_session() -> Result<ReceiveSessionReset, KeyTeleportAlert> {
+    ReceiveSessionStore::begin_reset()
 }
 
 type Message = KeyTeleportManagerReconcileMessage;

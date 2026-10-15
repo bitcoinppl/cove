@@ -5,9 +5,13 @@ use cove_util::ResultExt as _;
 use crate::{
     database::Database,
     keychain::Keychain,
-    manager::cloud_backup_manager::{
-        CloudBackupError, CloudBackupRecoveryCleanupPermit, CloudBackupResetPermit,
-        CloudBackupResetRecovery, begin_recovery_cleanup as begin_cloud_backup_recovery_cleanup,
+    manager::{
+        cloud_backup_manager::{
+            CloudBackupError, CloudBackupRecoveryCleanupPermit, CloudBackupResetPermit,
+            CloudBackupResetRecovery,
+            begin_recovery_cleanup as begin_cloud_backup_recovery_cleanup,
+        },
+        key_teleport_manager::ReceiveSessionReset,
     },
     network::Network,
     wallet::metadata::{WalletId, WalletMetadata, WalletMode},
@@ -66,6 +70,7 @@ pub(crate) struct PreparedFullWipe {
     _lifecycle: PreparedWalletLifecycle,
     cloud_reset: CloudBackupResetPermit,
     recovery_cleanup: RecoveryCleanup,
+    receive_session_reset: Option<ReceiveSessionReset>,
 }
 
 impl PreparedFullWipe {
@@ -77,6 +82,7 @@ impl PreparedFullWipe {
             _lifecycle: lifecycle,
             cloud_reset,
             recovery_cleanup: RecoveryCleanup { proof: RecoveryCleanupProof::FullWipe },
+            receive_session_reset: None,
         }
     }
 
@@ -95,8 +101,19 @@ impl PreparedFullWipe {
         self.recovery_cleanup.delete_all_wallet_items()
     }
 
-    pub(crate) fn delete_key_teleport_receive_session(&self) -> Result<(), String> {
-        self.recovery_cleanup.delete_key_teleport_receive_session()
+    pub(crate) fn delete_key_teleport_receive_session(&mut self) -> Result<(), String> {
+        let reset = self.recovery_cleanup.delete_key_teleport_receive_session()?;
+        self.receive_session_reset = Some(reset);
+
+        Ok(())
+    }
+
+    /// Keeps managers from before the wipe from creating receive sessions; call at the
+    /// database reset, since a failed wipe must leave those managers usable
+    pub(crate) fn commit_key_teleport_receive_reset(&mut self) {
+        if let Some(reset) = self.receive_session_reset.take() {
+            reset.commit();
+        }
     }
 
     pub(crate) fn purge_orphan_wallet_artifacts(&self) -> std::io::Result<()> {
@@ -161,9 +178,12 @@ impl RecoveryCleanup {
     /// Remove the persisted KeyTeleport receive session and its private key
     ///
     /// The session is not a wallet keychain item, so the wallet sweep leaves it
-    /// behind and the next receive start would resume it after a wipe
-    pub(crate) fn delete_key_teleport_receive_session(&self) -> Result<(), String> {
-        crate::manager::key_teleport_manager::delete_persisted_receive_session()
+    /// behind and the next receive start would resume it after a wipe. Commit the
+    /// returned reset once the wipe can no longer fail
+    pub(crate) fn delete_key_teleport_receive_session(
+        &self,
+    ) -> Result<ReceiveSessionReset, String> {
+        crate::manager::key_teleport_manager::reset_persisted_receive_session()
             .map_err_str(std::convert::identity)
     }
 

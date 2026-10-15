@@ -243,15 +243,35 @@ fn legacy_receive_session_json_is_migrated_without_changing_the_request() {
 fn receive_start_queued_across_a_full_wipe_cannot_save_a_session() {
     let _guard = crate::test_support::global_state_test_lock().blocking_lock();
     init_globals();
+    let has_session = || Keychain::global().get_key_teleport_receive_session().unwrap().is_some();
+    let pre_wipe_manager = RustKeyTeleportManager::new();
+
+    // frontends queue actions on their own threads, so one can reach Rust mid-wipe
+    let reset = super::reset_persisted_receive_session().unwrap();
+    assert!(pre_wipe_manager.start_receive().is_err());
+    assert!(RustKeyTeleportManager::new().start_receive().is_err());
+    assert!(!has_session());
+
+    reset.commit();
+    assert!(pre_wipe_manager.start_receive().is_err());
+    assert!(!has_session());
+
+    RustKeyTeleportManager::new().start_receive().unwrap();
+    assert!(has_session());
+}
+
+#[test]
+fn failed_full_wipe_reopens_receive_for_existing_managers() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
     let manager = RustKeyTeleportManager::new();
 
-    super::delete_persisted_receive_session().unwrap();
+    let reset = super::reset_persisted_receive_session().unwrap();
+    assert!(manager.restart_receive().is_err());
 
-    assert!(manager.start_receive().is_err());
-    assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_none());
-
-    // frontends keep their manager when a later wipe step fails, so a new dispatch must work
-    manager.dispatch(Action::RestartReceive);
+    // a failed wipe drops the reset, and frontends keep their cached manager
+    drop(reset);
+    manager.restart_receive().unwrap();
     assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_some());
 }
 

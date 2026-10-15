@@ -734,9 +734,12 @@ async fn wipe_all_data_with_tier(
         crate::diagnostics::clear_diagnostics_logs()
             .map_err(|source| local_reset_error(LocalDataResetStage::Diagnostics, source))?;
 
-        database
+        let completed_onboarding = database
             .dangerous_reset_all_data()
-            .map_err(|source| local_reset_error(LocalDataResetStage::Database, source))
+            .map_err(|source| local_reset_error(LocalDataResetStage::Database, source))?;
+
+        prepared.commit_key_teleport_receive_reset();
+        Ok(completed_onboarding)
     }
     .await;
 
