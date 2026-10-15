@@ -26,6 +26,14 @@ use receive::ReceiveWorkflow;
 use receive_session::ReceiveSessionStore;
 pub(crate) use send::is_send_eligible_wallet_id;
 
+/// Deletes the persisted receive session and its private key under the session store lock
+///
+/// Deleting outside the lock would let a concurrent load that upgrades a legacy session write
+/// the old private key back after the delete
+pub(crate) fn delete_persisted_receive_session() -> Result<(), KeyTeleportAlert> {
+    ReceiveSessionStore.delete()
+}
+
 type Message = KeyTeleportManagerReconcileMessage;
 type Action = KeyTeleportManagerAction;
 type Reconciler = dyn KeyTeleportManagerReconciler;
