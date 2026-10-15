@@ -195,18 +195,19 @@ struct SelectedWalletScreen: View {
 
     private func shareXpubFile() {
         Task { @MainActor in
-            // the share sheet or error alert presents onto the top controller, which is still the
-            // dismissing dialog
-            await PresenterIdle.wait()
-
             do {
                 let result = try await manager.exportXpubForShare()
+
+                // the share sheet presents onto the top controller, which can be the dismissing
+                // dialog or another one opened while the export was running
+                await PresenterIdle.wait()
                 ShareSheet.present(data: result.content, filename: result.filename) { success in
                     if !success {
                         Log.warn("Xpub Export Failed: cancelled or failed")
                     }
                 }
             } catch {
+                await PresenterIdle.wait()
                 app.alertState = .init(
                     .general(
                         title: "Xpub Export Failed",
@@ -220,18 +221,19 @@ struct SelectedWalletScreen: View {
 
     private func shareLabelsFile() {
         Task { @MainActor in
-            // the share sheet or error alert presents onto the top controller, which is still the
-            // dismissing dialog
-            await PresenterIdle.wait()
-
             do {
                 let result = try await manager.exportLabelsForShare()
+
+                // the share sheet presents onto the top controller, which can be the dismissing
+                // dialog or another one opened while the export was running
+                await PresenterIdle.wait()
                 ShareSheet.present(data: result.content, filename: result.filename) { success in
                     if !success {
                         Log.warn("Label Export Failed: cancelled or failed")
                     }
                 }
             } catch {
+                await PresenterIdle.wait()
                 app.alertState = .init(
                     .general(
                         title: "Label Export Failed",
