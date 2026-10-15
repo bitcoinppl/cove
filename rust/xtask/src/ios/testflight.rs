@@ -1,4 +1,4 @@
-use crate::common::{http_client_without_redirects, print_info, print_success};
+use crate::common::{http_client_without_redirects, print_info, print_success, print_warning};
 use color_eyre::eyre::{bail, ensure, eyre, Context, Result};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use reqwest::blocking::{Client, Response};
@@ -90,16 +90,18 @@ impl Distribution {
             .filter_map(|note| note.attributes.into_description())
             .collect::<Vec<_>>();
 
-        ensure!(
-            !notes.is_empty(),
-            "Previous iOS build {} has no test description to copy",
-            previous.attributes.version
-        );
-
-        print_info(&format!(
-            "Will copy test descriptions from iOS build {} to {GROUP_NAME}",
-            previous.attributes.version
-        ));
+        // a build uploaded without notes must not block every later release
+        if notes.is_empty() {
+            print_warning(&format!(
+                "Previous iOS build {} has no test description, the new build will have none",
+                previous.attributes.version
+            ));
+        } else {
+            print_info(&format!(
+                "Will copy test descriptions from iOS build {} to {GROUP_NAME}",
+                previous.attributes.version
+            ));
+        }
 
         Ok(Self { api, app_id: app.id, group, notes })
     }
