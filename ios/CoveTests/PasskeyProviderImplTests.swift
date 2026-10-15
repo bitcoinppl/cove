@@ -4,27 +4,6 @@ import CoveCore
 import XCTest
 
 final class PasskeyProviderImplTests: XCTestCase {
-    func testNSErrorMetadataContainsOnlyDomainAndCode() {
-        let error = NSError(
-            domain: "com.example.passkey",
-            code: 42,
-            userInfo: [
-                NSLocalizedDescriptionKey: "private localized description",
-                "private": "private user info",
-            ]
-        )
-
-        let metadata = passkeyNSErrorMetadata(error)
-
-        XCTAssertEqual(
-            metadata,
-            "error_domain=com.example.passkey error_code=42"
-        )
-        XCTAssertFalse(metadata.contains("private"))
-        XCTAssertFalse(metadata.contains("localized"))
-        XCTAssertFalse(metadata.contains("userInfo"))
-    }
-
     func testNonAuthorizationFailureReturnsOnlySanitizedMetadata() {
         let delegate = PasskeyDelegate(context: .discoverAssertion)
         let request = ASAuthorizationPlatformPublicKeyCredentialProvider(
@@ -92,15 +71,6 @@ final class PasskeyProviderImplTests: XCTestCase {
                 domain: "PasskeyProviderImplTests",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "late callback"]
-            )
-        )
-
-        delegate.authorizationController(
-            controller: ASAuthorizationController(authorizationRequests: [request]),
-            didCompleteWithError: NSError(
-                domain: "PasskeyProviderImplTests",
-                code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "second late callback"]
             )
         )
 

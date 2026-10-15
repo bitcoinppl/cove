@@ -32,7 +32,7 @@ enum PasskeyOperationContext: Equatable {
 }
 
 /// Domain and code only, so localized text never reaches the error surfaced to Rust
-func passkeyNSErrorMetadata(_ error: Error) -> String {
+private func passkeyNSErrorMetadata(_ error: Error) -> String {
     let nsError = error as NSError
     return "error_domain=\(nsError.domain) error_code=\(nsError.code)"
 }
@@ -95,10 +95,6 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
     func createPasskey(rpId: String, challenge: Data, user: PasskeyRegistrationUser) throws -> PasskeyRegistrationResult {
         precondition(!Thread.isMainThread, "createPasskey must not be called from the main thread")
 
-        // wait before building the controller and before any timeout starts, so the wait never
-        // eats the request timeout
-        PresenterIdle.waitBlocking()
-
         let registration = try performRegistrationRequest(
             rpId: rpId,
             challenge: challenge,
@@ -130,10 +126,6 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             !Thread.isMainThread,
             "authenticateWithPrf must not be called from the main thread"
         )
-
-        // wait before building the controller and before any timeout starts, so the wait never
-        // eats the request timeout
-        PresenterIdle.waitBlocking()
 
         let (prfOutput, _) = try performPrfAssertion(
             rpId: rpId,
@@ -212,10 +204,6 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             "discoverAndAuthenticateWithPrf must not be called from the main thread"
         )
 
-        // wait before building the controller and before any timeout starts, so the wait never
-        // eats the request timeout
-        PresenterIdle.waitBlocking()
-
         let (prfOutput, assertion) = try performPrfAssertion(
             rpId: rpId,
             credentialId: nil,
@@ -234,6 +222,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         challenge: Data,
         user: PasskeyRegistrationUser
     ) throws -> ASAuthorizationPlatformPublicKeyCredentialRegistration {
+        // wait before building the controller and before any timeout starts, so the wait never
+        // eats the request timeout
+        PresenterIdle.waitBlocking()
+
         let delegate = PasskeyDelegate(context: .registration)
         let controller: ASAuthorizationController
 
@@ -330,6 +322,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
         challenge: Data,
         context: PasskeyOperationContext
     ) throws -> ASAuthorizationPlatformPublicKeyCredentialAssertion {
+        // wait before building the controller and before any timeout starts, so the wait never
+        // eats the request timeout
+        PresenterIdle.waitBlocking()
+
         let delegate = PasskeyDelegate(context: context)
         let controller: ASAuthorizationController
 
