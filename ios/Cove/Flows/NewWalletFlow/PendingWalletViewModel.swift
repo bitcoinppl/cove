@@ -39,10 +39,6 @@ extension WeakReconciler: PendingWalletManagerReconciler where Reconciler == Pen
         logger.debug("Reconcile: \(message)")
     }
 
-    func logReconcileMany(messages: [Message]) {
-        messages.forEach(logReconcile)
-    }
-
     public func dispatch(action: PendingWalletManagerAction) {
         rust.dispatch(action: action)
     }

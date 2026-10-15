@@ -370,17 +370,7 @@ class AppManager private constructor() : FfiReconcile {
      */
     fun reset() {
         clearSessionForReset()
-        resetRustProjection()
-    }
 
-    private fun clearSessionForReset() {
-        // close managers before clearing them
-        clearWalletManager()
-        clearKeyTeleportManager()
-        corruptedWalletDeletionRetry = null
-    }
-
-    private fun resetRustProjection() {
         database = Database()
         needsOnboarding =
             withRustOr(needsOnboarding) {
@@ -393,6 +383,13 @@ class AppManager private constructor() : FfiReconcile {
             } ?: return
 
         router.reset(routerState.router)
+    }
+
+    private fun clearSessionForReset() {
+        // close managers before clearing them
+        clearWalletManager()
+        clearKeyTeleportManager()
+        corruptedWalletDeletionRetry = null
     }
 
     /**

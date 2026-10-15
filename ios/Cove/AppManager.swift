@@ -247,7 +247,19 @@ struct CorruptedWalletDeletionRetry: Equatable {
     @MainActor
     public func reset() {
         clearSession()
-        resetProjectionFromCommittedRustState()
+
+        database = Database()
+        needsOnboarding = rust.needsOnboarding()
+
+        let globalConfig = database.globalConfig()
+        selectedNetwork = globalConfig.selectedNetwork()
+        colorSchemeSelection = globalConfig.colorScheme()
+        selectedNode = globalConfig.selectedNode()
+        selectedFiatCurrency = globalConfig.selectedFiatCurrency()
+        wallets = (try? database.wallets().all()) ?? []
+
+        router = rust.state().router
+        routeId = UUID()
     }
 
     @MainActor
@@ -782,21 +794,6 @@ struct CorruptedWalletDeletionRetry: Equatable {
 }
 
 extension AppManager {
-    private func resetProjectionFromCommittedRustState() {
-        database = Database()
-        needsOnboarding = rust.needsOnboarding()
-
-        let globalConfig = database.globalConfig()
-        selectedNetwork = globalConfig.selectedNetwork()
-        colorSchemeSelection = globalConfig.colorScheme()
-        selectedNode = globalConfig.selectedNode()
-        selectedFiatCurrency = globalConfig.selectedFiatCurrency()
-        wallets = (try? database.wallets().all()) ?? []
-
-        router = rust.state().router
-        routeId = UUID()
-    }
-
     @MainActor
     private func applyConfigurationMessage(_ message: AppStateReconcileMessage) {
         switch message {
