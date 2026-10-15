@@ -245,7 +245,7 @@ mod tests {
         let file_string = String::from_utf8(file_contents.to_vec()).unwrap();
 
         let bytes: Vec<u8> =
-            file_string.split(',').map(|s| s.trim()).map(|s| s.parse::<u8>().unwrap()).collect();
+            file_string.split(',').map(str::trim).map(|s| s.parse::<u8>().unwrap()).collect();
 
         bytes
     }
