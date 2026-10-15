@@ -214,10 +214,14 @@ fn apply_provider_confirmation_result(
                 },
             );
         }
+        // the local rows stay retained, but an unconfirmed inventory is incomplete so the user
+        // sees why restore and destructive actions are unavailable and can check again
         CloudBackupDetailResult::AccessError(error) => {
-            warn!(
-                "provider confirmation of trusted local inventory failed; keeping local snapshot detail: {error}"
-            );
+            warn!("provider confirmation of trusted local inventory failed: {error}");
+            manager.apply_detail_outcome(CloudBackupDetailOutcome::Failed {
+                reason: CloudBackupInventoryIncompleteReason::from(CloudStorageIssue::from(error)),
+                error: error.reader_message(),
+            });
         }
     }
 }

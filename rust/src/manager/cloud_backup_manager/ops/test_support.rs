@@ -168,6 +168,8 @@ impl MockPasskeyCallGate {
     }
 
     pub(crate) fn release(&self) {
+        // set the flag under the waiter's lock so it cannot be missed between its check and wait
+        let _guard = self.wait_lock.lock().expect("passkey call gate lock");
         self.released.store(true, Ordering::Release);
         self.wait_condvar.notify_all();
     }

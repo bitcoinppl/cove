@@ -1444,7 +1444,7 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn provider_confirmation_failure_keeps_trusted_local_detail() {
+async fn provider_confirmation_failure_marks_trusted_local_detail_incomplete() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
@@ -1487,7 +1487,7 @@ async fn provider_confirmation_failure_keeps_trusted_local_detail() {
         CloudBackupLifecycle::Configured(ref configured)
             if matches!(
                 configured.detail,
-                CloudBackupDetailState::Complete { ref state }
+                CloudBackupDetailState::Failed { retained: Some(ref state), .. }
                     if state.inventory_authority
                         == CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount
             )
