@@ -181,13 +181,9 @@ class AndroidPasskeyProviderTest {
 
         val localizedDiagnostic = mapPasskeyCreateError(Exception("RP ID cannot be validated."))
         assertTrue(localizedDiagnostic is PasskeyException.RequestFailed)
-        assertTrue(
-            (localizedDiagnostic as PasskeyException.RequestFailed).reason
-                is PasskeyFailureReason.Unknown,
-        )
         assertEquals(
             PasskeyFailureReason.Unknown("passkey creation failed"),
-            localizedDiagnostic.reason,
+            (localizedDiagnostic as PasskeyException.RequestFailed).reason,
         )
 
         val createSecurityError = mapPasskeyCreateError(CreatePublicKeyCredentialDomException(SecurityError()))
