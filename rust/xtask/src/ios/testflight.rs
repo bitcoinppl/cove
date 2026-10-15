@@ -3,8 +3,10 @@ use color_eyre::eyre::{bail, ensure, eyre, Context, Result};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use reqwest::blocking::{Client, Response};
 use reqwest::{Method, StatusCode, Url};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde::{
+    de::{DeserializeOwned, IgnoredAny},
+    Deserialize, Serialize,
+};
 use std::collections::HashSet;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -56,20 +58,16 @@ impl Distribution {
 
         let group = exact_group(groups)?;
         let builds: Page<Build> = api
-            .request(
-                Method::GET,
-                api.url(
-                    "v1/builds",
-                    &[
-                        ("filter[app]", &app.id),
-                        ("filter[preReleaseVersion.platform]", "IOS"),
-                        ("filter[processingState]", "VALID"),
-                        ("sort", "-uploadedDate"),
-                        ("limit", "1"),
-                    ],
-                )?,
-                None,
-            )?
+            .get(api.url(
+                "v1/builds",
+                &[
+                    ("filter[app]", &app.id),
+                    ("filter[preReleaseVersion.platform]", "IOS"),
+                    ("filter[processingState]", "VALID"),
+                    ("sort", "-uploadedDate"),
+                    ("limit", "1"),
+                ],
+            )?)?
             .json()
             .wrap_err("Invalid previous-build response")?;
 
@@ -167,12 +165,15 @@ impl Distribution {
     fn assign(&self, build: &Resource<Build>) -> Result<()> {
         if build.attributes.uses_non_exempt_encryption != Some(false) {
             let path = format!("v1/builds/{}", build.id);
-            let body = json!({"data": {
-                "type": "builds", "id": build.id,
-                "attributes": {"usesNonExemptEncryption": false}
-            }});
+            let body = Document {
+                data: Update {
+                    kind: BUILDS,
+                    id: &build.id,
+                    attributes: EncryptionAttributes { uses_non_exempt_encryption: false },
+                },
+            };
 
-            self.api.request(Method::PATCH, self.api.url(&path, &[])?, Some(&body))?;
+            self.api.send(Method::PATCH, self.api.url(&path, &[])?, &body)?;
             print_info("Set Uses Non-Exempt Encryption to No");
         }
 
@@ -182,18 +183,17 @@ impl Distribution {
         // write descriptions before group membership so testers receive the intended notes
         for note in &self.notes {
             let current = existing.iter().find(|entry| entry.attributes.locale == note.locale);
-            let (method, path, body) = localization_request(&build.id, note, current);
-            self.api.request(method, self.api.url(&path, &[])?, Some(&body))?;
+            self.write_localization(&build.id, note, current)?;
         }
 
         // the API permits only one relationship filter; build IDs already identify the app
-        let groups: Vec<Resource<Value>> =
+        let groups: Vec<Resource<IgnoredAny>> =
             self.api.list("v1/betaGroups", &[("filter[builds]", &build.id)])?;
 
         if !groups.iter().any(|group| group.id == self.group.id) {
             let path = format!("v1/betaGroups/{}/relationships/builds", self.group.id);
-            let body = json!({"data": [{"type": "builds", "id": build.id}]});
-            self.api.request(Method::POST, self.api.url(&path, &[])?, Some(&body))?;
+            let body = Document { data: [Identifier::build(&build.id)] };
+            self.api.send(Method::POST, self.api.url(&path, &[])?, &body)?;
         }
 
         if !self.group.attributes.is_internal_group {
@@ -211,21 +211,24 @@ impl Distribution {
         let path = format!("v1/builds/{}/buildBetaDetail", build.id);
         let detail: BuildBetaDetailResponse = self
             .api
-            .request(Method::GET, self.api.url(&path, &[])?, None)?
+            .get(self.api.url(&path, &[])?)?
             .json()
             .wrap_err("Invalid TestFlight beta status response")?;
 
         match detail.data.attributes.external_build_state {
             ExternalBetaState::ReadyForBetaSubmission => {
-                let body = json!({"data": {
-                    "type": "betaAppReviewSubmissions",
-                    "relationships": {"build": {"data": {"type": "builds", "id": build.id}}}
-                }});
+                let body = Document {
+                    data: Create::<()> {
+                        kind: "betaAppReviewSubmissions",
+                        attributes: None,
+                        relationships: BuildRelationship::new(&build.id),
+                    },
+                };
 
-                self.api.request(
+                self.api.send(
                     Method::POST,
                     self.api.url("v1/betaAppReviewSubmissions", &[])?,
-                    Some(&body),
+                    &body,
                 )?;
 
                 print_info("Submitted the build for TestFlight beta review");
@@ -245,6 +248,38 @@ impl Distribution {
 
         Ok(())
     }
+
+    fn write_localization(
+        &self,
+        build_id: &str,
+        note: &TestDescription,
+        current: Option<&Resource<Localization>>,
+    ) -> Result<()> {
+        if let Some(current) = current {
+            let path = format!("v1/betaBuildLocalizations/{}", current.id);
+            let body = Document {
+                data: Update {
+                    kind: BETA_BUILD_LOCALIZATIONS,
+                    id: &current.id,
+                    attributes: WhatsNew { whats_new: &note.whats_new },
+                },
+            };
+
+            self.api.send(Method::PATCH, self.api.url(&path, &[])?, &body)?;
+            return Ok(());
+        }
+
+        let body = Document {
+            data: Create {
+                kind: BETA_BUILD_LOCALIZATIONS,
+                attributes: Some(note),
+                relationships: BuildRelationship::new(build_id),
+            },
+        };
+
+        self.api.send(Method::POST, self.api.url("v1/betaBuildLocalizations", &[])?, &body)?;
+        Ok(())
+    }
 }
 
 fn exact_group(groups: Vec<Resource<Group>>) -> Result<Resource<Group>> {
@@ -254,31 +289,6 @@ fn exact_group(groups: Vec<Resource<Group>>) -> Result<Resource<Group>> {
 
     ensure!(matches.next().is_none(), "Multiple TestFlight groups are named {GROUP_NAME}");
     Ok(group)
-}
-
-fn localization_request(
-    build_id: &str,
-    note: &TestDescription,
-    current: Option<&Resource<Localization>>,
-) -> (Method, String, Value) {
-    if let Some(current) = current {
-        return (
-            Method::PATCH,
-            format!("v1/betaBuildLocalizations/{}", current.id),
-            json!({
-                "data": {"type": "betaBuildLocalizations", "id": current.id, "attributes": {"whatsNew": note.whats_new}}
-            }),
-        );
-    }
-
-    (
-        Method::POST,
-        "v1/betaBuildLocalizations".to_owned(),
-        json!({
-            "data": {"type": "betaBuildLocalizations", "attributes": note,
-                "relationships": {"build": {"data": {"type": "builds", "id": build_id}}}}
-        }),
-    )
 }
 
 struct Api {
@@ -329,10 +339,8 @@ impl Api {
 
         loop {
             ensure!(seen.insert(url.to_string()), "App Store Connect repeated a pagination URL");
-            let page: Page<T> = self
-                .request(Method::GET, url, None)?
-                .json()
-                .wrap_err("Invalid App Store Connect response")?;
+            let page: Page<T> =
+                self.get(url)?.json().wrap_err("Invalid App Store Connect response")?;
 
             data.extend(page.data);
             let Some(next) = page.links.next else { return Ok(data) };
@@ -340,12 +348,30 @@ impl Api {
         }
     }
 
-    fn request(&self, method: Method, url: Url, body: Option<&Value>) -> Result<Response> {
+    fn get(&self, url: Url) -> Result<Response> {
+        self.request::<()>(Method::GET, url, None)
+    }
+
+    fn send<B: Serialize>(&self, method: Method, url: Url, body: &B) -> Result<Response> {
+        self.request(method, url, Some(body))
+    }
+
+    fn request<B: Serialize>(
+        &self,
+        method: Method,
+        url: Url,
+        body: Option<&B>,
+    ) -> Result<Response> {
         for attempt in 0..3 {
             let issued_at = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
             let mut header = Header::new(Algorithm::ES256);
             header.kid = Some(self.key_id.clone());
-            let claims = json!({"iss": self.issuer_id, "iat": issued_at, "exp": issued_at + 600, "aud": "appstoreconnect-v1"});
+            let claims = Claims {
+                iss: &self.issuer_id,
+                iat: issued_at,
+                exp: issued_at + 600,
+                aud: "appstoreconnect-v1",
+            };
             let token = jsonwebtoken::encode(&header, &claims, &self.key)
                 .wrap_err("Failed to sign App Store Connect request")?;
 
@@ -376,6 +402,80 @@ impl Api {
 
         unreachable!("the last request attempt always returns")
     }
+}
+
+const BUILDS: &str = "builds";
+const BETA_BUILD_LOCALIZATIONS: &str = "betaBuildLocalizations";
+
+/// App Store Connect API token claims
+#[derive(Serialize)]
+struct Claims<'a> {
+    iss: &'a str,
+    iat: u64,
+    exp: u64,
+    aud: &'static str,
+}
+
+/// JSON:API request document
+#[derive(Serialize)]
+struct Document<T> {
+    data: T,
+}
+
+/// JSON:API resource identifier
+#[derive(Serialize)]
+struct Identifier<'a> {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    id: &'a str,
+}
+
+impl<'a> Identifier<'a> {
+    fn build(id: &'a str) -> Self {
+        Self { kind: BUILDS, id }
+    }
+}
+
+/// JSON:API update of an existing resource's attributes
+#[derive(Serialize)]
+struct Update<'a, A> {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    id: &'a str,
+    attributes: A,
+}
+
+/// JSON:API create of a resource related to a build
+#[derive(Serialize)]
+struct Create<'a, A> {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attributes: Option<A>,
+    relationships: BuildRelationship<'a>,
+}
+
+#[derive(Serialize)]
+struct BuildRelationship<'a> {
+    build: Document<Identifier<'a>>,
+}
+
+impl<'a> BuildRelationship<'a> {
+    fn new(build_id: &'a str) -> Self {
+        Self { build: Document { data: Identifier::build(build_id) } }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EncryptionAttributes {
+    uses_non_exempt_encryption: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WhatsNew<'a> {
+    whats_new: &'a str,
 }
 
 #[derive(Deserialize)]

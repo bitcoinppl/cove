@@ -53,7 +53,12 @@ pub fn release_android(json_key_path: Option<&str>, verbose: bool) -> Result<()>
 
     BuildNumberFile::AndroidGradle.bump_for_release(&sh, || {
         build_android(BuildProfile::from_str("release-speed"), AndroidBuildTargets::All, verbose)?;
-        bundle_android(verbose)
+
+        // the rollback restores the old versionCode, so a bundle signed with the new one must not
+        // stay behind for `just ugp` to upload
+        bundle_android(verbose).inspect_err(|_| {
+            let _ = sh.remove_path(PLAY_AAB_PATH);
+        })
     })?;
 
     // Google may have accepted the bundle; keep versionCode if supply fails
