@@ -62,7 +62,9 @@ pub fn release_android(json_key_path: Option<&str>, verbose: bool) -> Result<()>
     })?;
 
     // Google may have accepted the bundle; keep versionCode if supply fails
-    upload_with_credentials(&sh, &credentials, verbose)
+    upload_with_credentials(&sh, &credentials, verbose).wrap_err(
+        "Kept the new versionCode because Google Play may have accepted the bundle; retry the upload with just ugp",
+    )
 }
 
 fn upload_with_credentials(

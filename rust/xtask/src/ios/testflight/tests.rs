@@ -147,7 +147,8 @@ fn copies_snapshot_for_each_locale_before_adding_exact_build_to_group() {
             {"id": "old-en", "attributes": {"locale": "en-US", "whatsNew": description}},
             {"id": "old-fr", "attributes": {"locale": "fr-FR", "whatsNew": "Correction"}},
             {"id": "old-de", "attributes": {"locale": "de-DE", "whatsNew": null}},
-            {"id": "old-es", "attributes": {"locale": "es-ES", "whatsNew": ""}}
+            {"id": "old-es", "attributes": {"locale": "es-ES", "whatsNew": ""}},
+            {"id": "old-it", "attributes": {"locale": "it-IT"}}
         ])),
         build("PROCESSING"),
         build("VALID"),
