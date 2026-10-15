@@ -47,7 +47,7 @@ pub(crate) fn raw_wallet_keychain_entries(
 /// module's init wins that race is nondeterministic. Sharing one clonable
 /// instance keeps entry inspection and failure injection working no matter
 /// which module installs it
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub(crate) struct MockKeychain {
     entries: Arc<Mutex<HashMap<String, String>>>,
     fail_save_at: Arc<Mutex<Option<usize>>>,
@@ -55,6 +55,19 @@ pub(crate) struct MockKeychain {
     save_count: Arc<Mutex<usize>>,
     delete_count: Arc<Mutex<usize>>,
     after_save: Arc<Mutex<Option<AfterSaveHook>>>,
+}
+
+// the after-save hook is a closure, which has no Debug impl
+impl std::fmt::Debug for MockKeychain {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MockKeychain")
+            .field("entries", &self.entries)
+            .field("fail_save_at", &self.fail_save_at)
+            .field("fail_delete_at", &self.fail_delete_at)
+            .field("save_count", &self.save_count)
+            .field("delete_count", &self.delete_count)
+            .finish_non_exhaustive()
+    }
 }
 
 impl MockKeychain {
