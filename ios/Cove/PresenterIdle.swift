@@ -103,15 +103,27 @@ enum PresenterIdle {
         settled.wait()
     }
 
+    /// The window a passkey request anchors to, so the idle check inspects that same window
+    ///
+    /// Prefers the active scene, then an inactive foreground scene (during system overlays),
+    /// then any connected scene
+    static func presentationWindow() -> UIWindow? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let foregroundScene = scenes.first { $0.activationState == .foregroundActive }
+            ?? scenes.first { $0.activationState == .foregroundInactive }
+
+        for scene in [foregroundScene].compactMap(\.self) + scenes {
+            let window = scene.windows.first { $0.isKeyWindow && !$0.isHidden }
+                ?? scene.windows.first { !$0.isHidden && $0.windowLevel == .normal }
+
+            if let window { return window }
+        }
+
+        return nil
+    }
+
     @MainActor
     private static func foregroundRootViewController() -> UIViewController? {
-        let scene = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first { $0.activationState == .foregroundActive }
-
-        let window = scene?.windows.first { $0.isKeyWindow && !$0.isHidden }
-            ?? scene?.windows.first { !$0.isHidden && $0.windowLevel == .normal }
-
-        return window?.rootViewController
+        presentationWindow()?.rootViewController
     }
 }
