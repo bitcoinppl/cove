@@ -154,28 +154,16 @@ struct SelectedWalletScreen: View {
         Log.debug("discoveryState: \(discoveryState)")
 
         switch discoveryState {
-        case let .foundAddressesFromMnemonic(foundAddresses):
+        case let .foundAddressesFromMnemonic(foundAddresses),
+             let .foundAddressesFromXprv(foundAddresses),
+             let .foundAddressesFromJson(foundAddresses, _):
             presentationCoordinator.present(.chooseAddressType(foundAddresses))
-        case let .foundAddressesFromXprv(foundAddresses):
-            presentationCoordinator.present(.chooseAddressType(foundAddresses))
-        case let .foundAddressesFromJson(foundAddress, _):
-            presentationCoordinator.present(.chooseAddressType(foundAddress))
         default: ()
         }
     }
 
     func showReceiveSheet() {
         presentationCoordinator.present(.receive)
-    }
-
-    private func present(_ state: SelectedWalletPresentationState) {
-        presentationCoordinator.present(state)
-    }
-
-    /// Dialog buttons run while the dialog is still dismissing, so the next
-    /// presentation is queued until the presenter is free again
-    private func transition(to state: SelectedWalletPresentationState) {
-        presentationCoordinator.transition(to: state)
     }
 
     private func showRenameFromTitleMenu() {
@@ -193,54 +181,46 @@ struct SelectedWalletScreen: View {
         }
     }
 
-    private func shareXpubFile() {
+    private func shareExport(
+        name: String,
+        failureMessage: String,
+        export: @escaping () async throws -> (content: String, filename: String)
+    ) {
         Task { @MainActor in
             do {
-                let result = try await manager.exportXpubForShare()
+                let (content, filename) = try await export()
 
                 // the share sheet presents onto the top controller, which can be the dismissing
                 // dialog or another one opened while the export was running
                 await PresenterIdle.wait()
-                ShareSheet.present(data: result.content, filename: result.filename) { success in
+                ShareSheet.present(data: content, filename: filename) { success in
                     if !success {
-                        Log.warn("Xpub Export Failed: cancelled or failed")
+                        Log.warn("\(name) Export Failed: cancelled or failed")
                     }
                 }
             } catch {
                 await PresenterIdle.wait()
                 app.alertState = .init(
                     .general(
-                        title: "Xpub Export Failed",
-                        message:
-                        "Unable to export public descriptors: \(error.localizedDescription)"
+                        title: "\(name) Export Failed",
+                        message: "\(failureMessage): \(error.localizedDescription)"
                     )
                 )
             }
         }
     }
 
-    private func shareLabelsFile() {
-        Task { @MainActor in
-            do {
-                let result = try await manager.exportLabelsForShare()
+    private func shareXpubFile() {
+        shareExport(name: "Xpub", failureMessage: "Unable to export public descriptors") {
+            let result = try await manager.exportXpubForShare()
+            return (result.content, result.filename)
+        }
+    }
 
-                // the share sheet presents onto the top controller, which can be the dismissing
-                // dialog or another one opened while the export was running
-                await PresenterIdle.wait()
-                ShareSheet.present(data: result.content, filename: result.filename) { success in
-                    if !success {
-                        Log.warn("Label Export Failed: cancelled or failed")
-                    }
-                }
-            } catch {
-                await PresenterIdle.wait()
-                app.alertState = .init(
-                    .general(
-                        title: "Label Export Failed",
-                        message: "Unable to export labels: \(error.localizedDescription)"
-                    )
-                )
-            }
+    private func shareLabelsFile() {
+        shareExport(name: "Label", failureMessage: "Unable to export labels") {
+            let result = try await manager.exportLabelsForShare()
+            return (result.content, result.filename)
         }
     }
 
@@ -325,7 +305,7 @@ struct SelectedWalletScreen: View {
                 shouldShowNavBar: shouldShowNavBar,
                 reduceTransparency: reduceTransparency,
                 toolbarTextColor: toolbarTextColor,
-                present: present,
+                present: presentationCoordinator.present,
                 sheetPresentationState: sheetPresentationState,
                 labelsFileImportIsPresented: labelsFileImportIsPresented,
                 exportLabelsConfirmationIsPresented: exportLabelsConfirmationIsPresented,
@@ -338,9 +318,9 @@ struct SelectedWalletScreen: View {
                 changeName: showRenameFromTitleMenu,
                 importLabelsFile: importLabelsFile,
                 scannedLabelsChanged: onChangeOfScannedLabels,
-                showLabelsQrExport: { transition(to: .labelsQrExport) },
+                showLabelsQrExport: { presentationCoordinator.present(.labelsQrExport) },
                 shareLabelsFile: shareLabelsFile,
-                showXpubQrExport: { transition(to: .xpubQrExport) },
+                showXpubQrExport: { presentationCoordinator.present(.xpubQrExport) },
                 shareXpubFile: shareXpubFile
             ),
             refresh: beginRefresh,
