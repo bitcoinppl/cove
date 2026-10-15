@@ -136,7 +136,7 @@ impl RustCloudBackupManager {
 
     pub(crate) fn apply_verification_effect(&self, effect: CloudBackupVerificationEffect) {
         if let Some(detail) = effect.detail {
-            self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
+            self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(detail));
         }
 
         if let Some(pending_upload_verification) = effect.pending_upload_verification {

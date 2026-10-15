@@ -124,9 +124,9 @@ impl RustCloudBackupManager {
                     .await;
 
                 Some(match result {
-                    CloudBackupDetailResult::SuccessWithAuthority { detail, .. } => {
+                    CloudBackupDetailResult::SuccessWithAuthority { listed, .. } => {
                         CloudBackupDetailSnapshotCompletion::TrustedLocal {
-                            detail,
+                            listed,
                             confirmation: CloudBackupDetailProviderConfirmation {
                                 namespace: snapshot.namespace,
                             },
@@ -243,11 +243,7 @@ impl RustCloudBackupManager {
             .build_cloud_backup_detail_with_remote_truth(&wallet_record_ids, remote_wallet_truth)
             .await
         {
-            Ok(detail) => CloudBackupDetailResult::SuccessWithAuthority {
-                detail,
-                authority,
-                cloud_record_ids: wallet_record_ids,
-            },
+            Ok(listed) => CloudBackupDetailResult::SuccessWithAuthority { listed, authority },
             Err(error) => CloudBackupDetailResult::AccessError(error),
         }
     }
@@ -299,7 +295,7 @@ impl RustCloudBackupManager {
         )
         .await?;
 
-        Ok(inventory.build_detail())
+        Ok(inventory.build_detail().detail)
     }
 
     pub(crate) fn cleanup_confirmed_pending_blobs(&self, remote_wallet_truth: &RemoteWalletTruth) {

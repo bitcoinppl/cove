@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::*;
 use super::enable::{
     EnableRecoveryFinalization, EnableUploadFinalization,
@@ -20,7 +22,7 @@ use crate::manager::cloud_backup_manager::wallets::{
     StagedPrfKey, UnpersistedPrfKey,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupDetail, CloudBackupInventoryAuthority, CloudBackupLifecycle,
+    CloudBackupDetail, CloudBackupInventoryAuthority, CloudBackupLifecycle, CloudBackupListedDetail,
     CloudBackupOtherBackupsSummary,
     CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery, CloudBackupStore,
     CloudBackupSettingsRowStatus, CloudOnlyState, PendingEnableJournal,
@@ -110,6 +112,13 @@ fn test_cloud_backup_detail(cloud_only_count: u32) -> CloudBackupDetail {
     }
 }
 
+fn test_listed_detail(cloud_only_record_ids: &[&str]) -> CloudBackupListedDetail {
+    CloudBackupListedDetail {
+        detail: test_cloud_backup_detail(cloud_only_record_ids.len() as u32),
+        cloud_only_record_ids: cloud_only_record_ids.iter().map(|id| (*id).to_owned()).collect(),
+    }
+}
+
 fn begin_test_detail_refresh(
     supervisor: &mut CloudBackupSupervisor,
     manager: &RustCloudBackupManager,
@@ -168,11 +177,9 @@ fn prepare_restore_all_queue_fixture(
             .map(|record_id| cove_cspp::backup_data::wallet_filename_from_record_id(record_id))
             .collect(),
     );
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(CloudBackupDetail {
-        last_sync: None,
-        up_to_date: Vec::new(),
-        needs_sync: Vec::new(),
-        cloud_only_count: items.len().try_into().unwrap(),
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(CloudBackupListedDetail {
+        detail: test_cloud_backup_detail(items.len().try_into().unwrap()),
+        cloud_only_record_ids: record_ids.iter().cloned().collect(),
     }));
     manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(items.clone()));
     assert!(matches!(
@@ -1354,14 +1361,8 @@ async fn repair_passkey_refresh_failure_resolves_superseded_detail_refresh() {
     supervisor
         .complete_refresh_detail(
             Some(CloudBackupDetailResult::SuccessWithAuthority {
-                detail: CloudBackupDetail {
-                    last_sync: None,
-                    up_to_date: Vec::new(),
-                    needs_sync: Vec::new(),
-                    cloud_only_count: 0,
-                },
+                listed: test_listed_detail(&[]),
                 authority: CloudBackupInventoryAuthority::ProviderConfirmed,
-                cloud_record_ids: Vec::new(),
             }),
             DetailRefreshAttempt::Initial,
             superseded_refresh,
@@ -1389,12 +1390,12 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
     let confirmation = CloudBackupDetailProviderConfirmation {
         namespace: manager.current_namespace_id().unwrap(),
     };
-    let detail = test_cloud_backup_detail(2);
+    let listed = test_listed_detail(&["first", "second"]);
 
     supervisor
         .complete_refresh_detail_from_snapshot(
             Some(CloudBackupDetailSnapshotCompletion::TrustedLocal {
-                detail: detail.clone(),
+                listed: listed.clone(),
                 confirmation: confirmation.clone(),
             }),
             DetailRefreshAttempt::Initial,
@@ -1418,9 +1419,8 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
         .complete_confirm_refresh_detail(
             confirmation,
             Some(CloudBackupDetailResult::SuccessWithAuthority {
-                detail,
+                listed,
                 authority: CloudBackupInventoryAuthority::ProviderConfirmed,
-                cloud_record_ids: wallets.iter().map(|wallet| wallet.record_id.clone()).collect(),
             }),
             DetailRefreshAttempt::Initial,
             claim,
@@ -1462,7 +1462,7 @@ async fn provider_confirmation_failure_marks_trusted_local_detail_incomplete() {
     supervisor
         .complete_refresh_detail_from_snapshot(
             Some(CloudBackupDetailSnapshotCompletion::TrustedLocal {
-                detail: test_cloud_backup_detail(2),
+                listed: test_listed_detail(&[]),
                 confirmation: confirmation.clone(),
             }),
             DetailRefreshAttempt::Initial,
@@ -1513,7 +1513,7 @@ async fn provider_confirmation_connectivity_failure_retries_once() {
     supervisor
         .complete_refresh_detail_from_snapshot(
             Some(CloudBackupDetailSnapshotCompletion::TrustedLocal {
-                detail: test_cloud_backup_detail(2),
+                listed: test_listed_detail(&[]),
                 confirmation: confirmation.clone(),
             }),
             DetailRefreshAttempt::Initial,
@@ -1549,6 +1549,16 @@ async fn provider_confirmation_connectivity_failure_retries_once() {
         .unwrap();
 
     assert!(!supervisor.detail_workflow.is_refresh_active(claim));
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::Configured(ref configured)
+            if matches!(
+                configured.detail,
+                CloudBackupDetailState::Failed { retained: Some(ref state), .. }
+                    if state.inventory_authority
+                        == CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount
+            )
+    ));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1568,7 +1578,7 @@ async fn trailing_detail_refresh_is_scheduled_after_provider_confirmation() {
     supervisor
         .complete_refresh_detail_from_snapshot(
             Some(CloudBackupDetailSnapshotCompletion::TrustedLocal {
-                detail: test_cloud_backup_detail(2),
+                listed: test_listed_detail(&[]),
                 confirmation: confirmation.clone(),
             }),
             DetailRefreshAttempt::Initial,
@@ -1583,9 +1593,8 @@ async fn trailing_detail_refresh_is_scheduled_after_provider_confirmation() {
         .complete_confirm_refresh_detail(
             confirmation,
             Some(CloudBackupDetailResult::SuccessWithAuthority {
-                detail: test_cloud_backup_detail(2),
+                listed: test_listed_detail(&[]),
                 authority: CloudBackupInventoryAuthority::ProviderConfirmed,
-                cloud_record_ids: Vec::new(),
             }),
             DetailRefreshAttempt::Initial,
             claim,
@@ -1614,7 +1623,7 @@ async fn stale_provider_confirmation_does_not_overwrite_newer_operation_result()
     supervisor
         .complete_refresh_detail_from_snapshot(
             Some(CloudBackupDetailSnapshotCompletion::TrustedLocal {
-                detail: test_cloud_backup_detail(2),
+                listed: test_listed_detail(&[]),
                 confirmation: confirmation.clone(),
             }),
             DetailRefreshAttempt::Initial,
@@ -1625,15 +1634,17 @@ async fn stale_provider_confirmation_does_not_overwrite_newer_operation_result()
 
     supervisor.detail_workflow.start_operation_result();
     let newer_detail = test_cloud_backup_detail(1);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(newer_detail.clone()));
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(CloudBackupListedDetail {
+        detail: newer_detail.clone(),
+        cloud_only_record_ids: HashSet::from(["only".to_owned()]),
+    }));
 
     supervisor
         .complete_confirm_refresh_detail(
             confirmation,
             Some(CloudBackupDetailResult::SuccessWithAuthority {
-                detail: test_cloud_backup_detail(3),
+                listed: test_listed_detail(&[]),
                 authority: CloudBackupInventoryAuthority::ProviderConfirmed,
-                cloud_record_ids: Vec::new(),
             }),
             DetailRefreshAttempt::Initial,
             claim,
@@ -2928,10 +2939,136 @@ async fn cloud_only_refetch_failure_retains_restore_all_marker() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn restore_all_whose_cloud_only_rows_were_reset_mid_run_keeps_its_marker() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    prepare_restore_all_marker(&manager);
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[
+        "a", "b",
+    ])));
+    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
+        test_cloud_only_wallet("a"),
+        test_cloud_only_wallet("b"),
+    ]));
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    // keeps the reset from starting a real fetch that would reload the cache before the assertion
+    supervisor.active_cloud_only_fetch_request = Some(99);
+    let claim = supervisor
+        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets)
+        .unwrap();
+    supervisor.active_operation.start_restore_all(RestoreRun {
+        claim,
+        cancellation: Arc::new(AtomicBool::new(false)),
+    });
+    let detail_claim = supervisor.detail_workflow.start_operation_result();
+
+    // the listing replaced wallet a with c at the same count
+    supervisor
+        .complete_restore_all_record_refresh(
+            claim,
+            detail_claim,
+            Some(CloudBackupDetailResult::SuccessWithAuthority {
+                listed: test_listed_detail(&["b", "c"]),
+                authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+            }),
+        )
+        .await
+        .unwrap()
+        .await
+        .unwrap();
+
+    assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched);
+
+    supervisor.complete_restore_all_queue_finished(claim).await.unwrap();
+
+    assert_eq!(supervisor.active_operation, None);
+    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn cloud_only_operation_refresh_that_resets_the_cache_starts_a_fetch() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 2);
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[
+        "a", "b",
+    ])));
+    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
+        test_cloud_only_wallet("a"),
+        test_cloud_only_wallet("b"),
+    ]));
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    let claim = supervisor
+        .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RestoreCloudWallet)
+        .unwrap();
+    let detail_claim = supervisor.detail_workflow.start_operation_result();
+
+    supervisor
+        .complete_operation_refresh_detail(
+            claim,
+            detail_claim,
+            Some(CloudBackupDetailResult::SuccessWithAuthority {
+                listed: test_listed_detail(&["b", "c"]),
+                authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+            }),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::Loading);
+    assert!(supervisor.active_cloud_only_fetch_request.is_some());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn trusted_local_detail_resets_cloud_only_rows_the_listing_replaced() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 2);
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[
+        "first", "second",
+    ])));
+    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
+        test_cloud_only_wallet("first"),
+        test_cloud_only_wallet("second"),
+    ]));
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    let claim = begin_test_detail_refresh(&mut supervisor, &manager);
+    let confirmation = CloudBackupDetailProviderConfirmation {
+        namespace: manager.current_namespace_id().unwrap(),
+    };
+
+    // same count and local rows, so only the carried record IDs show the replacement
+    supervisor
+        .complete_refresh_detail_from_snapshot(
+            Some(CloudBackupDetailSnapshotCompletion::TrustedLocal {
+                listed: test_listed_detail(&["second", "third"]),
+                confirmation,
+            }),
+            DetailRefreshAttempt::Initial,
+            claim,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::Loading);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn restore_all_queue_completion_without_remaining_wallets_clears_marker_and_claim() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[])));
+    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(Vec::new()));
     let mut supervisor = CloudBackupSupervisor::new(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),

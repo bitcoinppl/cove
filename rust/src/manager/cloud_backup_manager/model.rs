@@ -16,6 +16,7 @@ use super::{
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use cove_device::cloud_storage::CloudSyncHealth;
+use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod events;
@@ -72,14 +73,23 @@ pub(crate) enum CloudBackupDisableOutcome {
     Failed { message: String, can_keep_enabled: bool },
 }
 
+/// Detail built from a provider listing, paired with the listing's cloud-only identity
+///
+/// The exported detail carries only a cloud-only count, which cannot tell loaded rows `{A, B}`
+/// from a listing that now has `{B, C}`, so every listing-backed detail travels with the IDs
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CloudBackupListedDetail {
+    pub(crate) detail: CloudBackupDetail,
+    /// Wallet record IDs the listing found that are not local wallets
+    pub(crate) cloud_only_record_ids: HashSet<String>,
+}
+
 /// Remote detail fetch result that keeps access errors distinguishable from failed detail state
 #[derive(Debug)]
 pub(crate) enum CloudBackupDetailResult {
     SuccessWithAuthority {
-        detail: CloudBackupDetail,
+        listed: CloudBackupListedDetail,
         authority: CloudBackupInventoryAuthority,
-        /// Wallet record IDs the listing found, since the detail carries only a cloud-only count
-        cloud_record_ids: Vec<String>,
     },
     AccessError(CloudBackupError),
 }
@@ -110,7 +120,10 @@ pub(crate) enum CloudBackupDetailSnapshotCompletion {
     /// The refresh is finished with this result
     Final(CloudBackupDetailResult),
     /// Trusted local rows can be shown now; the provider must still confirm them
-    TrustedLocal { detail: CloudBackupDetail, confirmation: CloudBackupDetailProviderConfirmation },
+    TrustedLocal {
+        listed: CloudBackupListedDetail,
+        confirmation: CloudBackupDetailProviderConfirmation,
+    },
 }
 
 #[derive(Debug)]
@@ -622,10 +635,6 @@ impl CloudBackupReducerState {
             ) => *progress,
             _ => None,
         }
-    }
-
-    fn detail(&self) -> Option<CloudBackupDetail> {
-        self.loaded_detail().map(|state| state.detail.clone())
     }
 
     fn verification(&self) -> VerificationState {
@@ -1348,10 +1357,6 @@ impl CloudBackupStateReducer {
         &self.state.verification_presentation
     }
 
-    pub(crate) fn detail(&self) -> Option<CloudBackupDetail> {
-        self.state.detail()
-    }
-
     pub(crate) fn detail_inventory_is_complete(&self) -> bool {
         self.state.detail_inventory_is_complete()
     }
@@ -1685,6 +1690,12 @@ pub(crate) mod test_support {
                 detail: None,
                 verification: VerificationState::Idle,
             }
+        }
+    }
+
+    impl CloudBackupReducerState {
+        pub(crate) fn detail(&self) -> Option<CloudBackupDetail> {
+            self.loaded_detail().map(|state| state.detail.clone())
         }
     }
 

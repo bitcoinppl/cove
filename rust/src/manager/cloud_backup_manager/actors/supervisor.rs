@@ -162,35 +162,11 @@ fn should_retry_connectivity_failure(status: ConnectivityStatus) -> bool {
 
 fn apply_refresh_detail_result(manager: &RustCloudBackupManager, result: &CloudBackupDetailResult) {
     match result {
-        CloudBackupDetailResult::SuccessWithAuthority { detail, authority, .. } => {
+        CloudBackupDetailResult::SuccessWithAuthority { listed, authority } => {
             manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithAuthority {
-                detail: detail.clone(),
+                listed: listed.clone(),
                 authority: *authority,
             });
-        }
-        CloudBackupDetailResult::AccessError(error) => {
-            error!("Failed to refresh detail: {error}");
-            manager.apply_detail_outcome(CloudBackupDetailOutcome::Failed {
-                reason: CloudBackupInventoryIncompleteReason::from(CloudStorageIssue::from(error)),
-                error: error.reader_message(),
-            });
-        }
-    }
-}
-
-fn apply_cloud_only_operation_refresh_detail_result(
-    manager: &RustCloudBackupManager,
-    result: &CloudBackupDetailResult,
-) {
-    match result {
-        CloudBackupDetailResult::SuccessWithAuthority { detail, authority, cloud_record_ids } => {
-            manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
-                CloudBackupDetailOutcome::RefreshedWithAuthority {
-                    detail: detail.clone(),
-                    authority: *authority,
-                },
-                cloud_record_ids,
-            );
         }
         CloudBackupDetailResult::AccessError(error) => {
             error!("Failed to refresh detail: {error}");
@@ -207,14 +183,11 @@ fn apply_provider_confirmation_result(
     result: &CloudBackupDetailResult,
 ) {
     match result {
-        CloudBackupDetailResult::SuccessWithAuthority { detail, authority, cloud_record_ids } => {
-            manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
-                CloudBackupDetailOutcome::RefreshedWithAuthority {
-                    detail: detail.clone(),
-                    authority: *authority,
-                },
-                cloud_record_ids,
-            );
+        CloudBackupDetailResult::SuccessWithAuthority { listed, authority } => {
+            manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithAuthority {
+                listed: listed.clone(),
+                authority: *authority,
+            });
         }
         // the local rows stay retained, but an unconfirmed inventory is incomplete so the user
         // sees why restore and destructive actions are unavailable and can check again
@@ -1046,11 +1019,11 @@ impl CloudBackupSupervisor {
             Some(CloudBackupDetailSnapshotCompletion::Final(result)) => {
                 self.complete_refresh_detail(Some(result), attempt, claim).await
             }
-            Some(CloudBackupDetailSnapshotCompletion::TrustedLocal { detail, confirmation }) => {
+            Some(CloudBackupDetailSnapshotCompletion::TrustedLocal { listed, confirmation }) => {
                 if self.detail_workflow.is_latest_refresh(claim) {
                     manager.apply_detail_outcome(
                         CloudBackupDetailOutcome::RefreshedWithAuthority {
-                            detail,
+                            listed,
                             authority:
                                 CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
                         },
@@ -1170,15 +1143,9 @@ impl CloudBackupSupervisor {
         if self.detail_workflow.is_latest_result(detail_claim)
             && let Some(result) = result
         {
-            if matches!(
-                claim.operation(),
-                CloudBackupExclusiveOperation::RestoreCloudWallet
-                    | CloudBackupExclusiveOperation::DeleteCloudWallet
-            ) {
-                apply_cloud_only_operation_refresh_detail_result(&manager, &result);
-            } else {
-                apply_refresh_detail_result(&manager, &result);
-            }
+            apply_refresh_detail_result(&manager, &result);
+            // a refresh that reset the cloud-only cache needs a fetch, since nothing else starts one
+            self.ensure_supplemental_inventory_discovery(manager.clone());
         }
 
         self.active_operation.clear();
@@ -1232,6 +1199,13 @@ impl CloudBackupSupervisor {
             self.schedule_other_backups_scan(manager.clone());
         }
 
+        self.begin_cloud_only_fetch_if_inventory_ready(manager);
+    }
+
+    pub(crate) fn begin_cloud_only_fetch_if_inventory_ready(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+    ) {
         if manager.detail_inventory_is_ready() {
             self.begin_background_cloud_only_fetch_if_needed(manager);
         }

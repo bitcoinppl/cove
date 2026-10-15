@@ -45,7 +45,7 @@ impl CloudBackupSupervisor {
     pub(crate) fn begin_restore_all_operation(&mut self, retry: bool) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
-        let frozen_wallets = manager.restore_all_eligible_wallets();
+        let Some(frozen_wallets) = manager.restore_all_eligible_wallets() else { return };
         let frozen_count = frozen_wallets.len() as u32;
         let projected_state = manager.projected_restore_all_state();
         let can_start = match (retry, projected_state) {
@@ -244,7 +244,8 @@ impl CloudBackupSupervisor {
         if self.detail_workflow.is_latest_result(detail_claim)
             && let Some(result) = result
         {
-            apply_cloud_only_operation_refresh_detail_result(&manager, &result);
+            apply_refresh_detail_result(&manager, &result);
+            self.begin_cloud_only_fetch_if_inventory_ready(manager.clone());
             if let CloudBackupDetailResult::AccessError(error) = result
                 && restore_all_must_stop(&error)
             {
@@ -303,10 +304,14 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        if manager.restore_all_eligible_wallets().is_empty() {
-            self.finish_restore_all_clean(&manager, claim);
-        } else {
-            self.finish_restore_all_retry_remaining(&manager, claim);
+        // an unloaded cache means a refresh reset the rows mid-run, so nothing is known to be left
+        match manager.restore_all_eligible_wallets() {
+            Some(eligible) if eligible.is_empty() => self.finish_restore_all_clean(&manager, claim),
+            Some(_) => self.finish_restore_all_retry_remaining(&manager, claim),
+            None => {
+                self.finish_restore_all_retry_remaining(&manager, claim);
+                self.begin_cloud_only_fetch_if_inventory_ready(manager);
+            }
         }
         Produces::ok(())
     }

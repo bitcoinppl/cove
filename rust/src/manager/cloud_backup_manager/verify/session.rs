@@ -702,7 +702,7 @@ impl VerificationSession {
 
         let unsynced = match inventory_result {
             Ok(inventory) => {
-                let detail = inventory.build_detail();
+                let detail = inventory.build_detail().detail;
                 self.report.detail = Some(detail);
                 if inventory.has_unknown_remote_wallets() {
                     return CloudBackupDeepVerificationStep::Complete(
@@ -807,7 +807,7 @@ impl VerificationSession {
         let listed: std::collections::HashSet<_> = updated_ids.iter().cloned().collect();
         let remaining_unsynced = inventory.upload_candidate_wallets();
 
-        self.report.detail = Some(inventory.build_detail());
+        self.report.detail = Some(inventory.build_detail().detail);
         self.wallet_record_ids = Some(updated_ids);
 
         if inventory.has_unknown_remote_wallets() {

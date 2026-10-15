@@ -331,7 +331,9 @@ impl RustCloudBackupManager {
         completion: &PendingVerificationCompletion,
     ) -> Option<CloudBackupDetail> {
         match self.refresh_cloud_backup_detail().await {
-            Some(CloudBackupDetailResult::SuccessWithAuthority { detail, .. }) => Some(detail),
+            Some(CloudBackupDetailResult::SuccessWithAuthority { listed, .. }) => {
+                Some(listed.detail)
+            }
             Some(CloudBackupDetailResult::AccessError(error)) => {
                 warn!("Pending verification: failed to refresh detail: {error}");
                 completion.report().detail

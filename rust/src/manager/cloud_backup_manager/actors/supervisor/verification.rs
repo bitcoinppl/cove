@@ -538,6 +538,8 @@ impl CloudBackupSupervisor {
 
         manager.persist_verification_result(&result);
         manager.handle_deep_verification_result(result);
+        // a verification detail has no listing, so it resets loaded cloud-only rows that need a refetch
+        self.ensure_supplemental_inventory_discovery(manager.clone());
 
         if should_refresh_open_detail {
             let plan = self.detail_workflow.request_refresh();
