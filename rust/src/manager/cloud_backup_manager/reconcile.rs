@@ -1,3 +1,4 @@
+use act_zero::send;
 use cove_device::cloud_storage::CloudSyncHealth;
 
 use crate::database::Database;
@@ -95,6 +96,11 @@ impl RustCloudBackupManager {
 
         if let Some(context) = effects.enable_completed {
             self.send(Message::EnableCompleted(context));
+        }
+
+        // the supervisor owns fetches, so it decides from fresh state whether one can start
+        if effects.cloud_only_refetch_needed {
+            send!(self.supervisor.ensure_cloud_only_fetch());
         }
     }
 

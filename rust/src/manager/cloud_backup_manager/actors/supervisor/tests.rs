@@ -10,14 +10,17 @@ use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
     PersistedDriveAccountSwitchPhase,
 };
+use crate::manager::cloud_backup_manager::CloudBackupWalletStatus;
 use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::ops::test_support::{
-    async_test_lock, configure_enabled_cloud_backup, encrypted_wallet_backup_bytes_for_entry,
+    async_test_lock, complete_cloud_only_fetch, complete_loaded_outcome,
+    configure_enabled_cloud_backup, encrypted_wallet_backup_bytes_for_entry,
     persisted_enabled_cloud_backup_state, reset_cloud_backup_test_state, test_globals,
     staged_pending_enable_journal, wait_for_test_condition, wallet_entry_with_labels,
     xpub_only_wallet_metadata,
 };
 use crate::manager::cloud_backup_manager::reconcile::CloudBackupReconcileMessage;
+use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationEffect;
 use crate::manager::cloud_backup_manager::wallets::{
     StagedPrfKey, UnpersistedPrfKey,
 };
@@ -119,6 +122,14 @@ fn test_listed_detail(cloud_only_record_ids: &[&str]) -> CloudBackupListedDetail
     }
 }
 
+/// Waits for the reset cache to be repopulated, which only a fetch started by the manager does
+async fn wait_for_cloud_only_refetch(manager: &RustCloudBackupManager) {
+    wait_for_test_condition(Duration::from_secs(5), "a reset cache should start a fetch", || {
+        manager.state.read().cloud_only() != CloudOnlyState::NotFetched
+    })
+    .await;
+}
+
 fn begin_test_detail_refresh(
     supervisor: &mut CloudBackupSupervisor,
     manager: &RustCloudBackupManager,
@@ -181,7 +192,7 @@ fn prepare_restore_all_queue_fixture(
         detail: test_cloud_backup_detail(items.len().try_into().unwrap()),
         cloud_only_record_ids: record_ids.iter().cloned().collect(),
     }));
-    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(items.clone()));
+    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(manager, items.clone()));
     assert!(matches!(
         manager.projected_restore_all_state(),
         CloudBackupRestoreAllState::StartAvailable { .. }
@@ -1407,7 +1418,7 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
     assert!(supervisor.detail_workflow.is_refresh_active(claim));
 
     let wallets = vec![test_cloud_only_wallet("first"), test_cloud_only_wallet("second")];
-    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(
+    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, 
         wallets.clone(),
     ));
     assert_eq!(
@@ -1719,11 +1730,11 @@ async fn supervisor_ignores_stale_cloud_only_fetch_completion() {
     );
     supervisor.active_cloud_only_fetch_request = Some(7);
 
-    supervisor.complete_cloud_only_fetch_request(6, Ok(Vec::new())).await.unwrap();
+    supervisor.complete_cloud_only_fetch_request(6, Ok(complete_cloud_only_fetch(&manager, Vec::new()))).await.unwrap();
 
     assert_eq!(supervisor.active_cloud_only_fetch_request, Some(7));
 
-    supervisor.complete_cloud_only_fetch_request(7, Ok(Vec::new())).await.unwrap();
+    supervisor.complete_cloud_only_fetch_request(7, Ok(complete_cloud_only_fetch(&manager, Vec::new()))).await.unwrap();
 
     assert_eq!(supervisor.active_cloud_only_fetch_request, None);
 }
@@ -2858,9 +2869,10 @@ async fn cloud_only_refetch_clears_exhausted_restore_all_marker() {
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[])));
     supervisor.active_cloud_only_fetch_request = Some(7);
 
-    supervisor.complete_cloud_only_fetch_request(7, Ok(Vec::new())).await.unwrap();
+    supervisor.complete_cloud_only_fetch_request(7, Ok(complete_cloud_only_fetch(&manager, Vec::new()))).await.unwrap();
 
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
 }
@@ -2887,7 +2899,7 @@ async fn overlapping_cloud_only_refetch_preserves_active_restore_all_marker_and_
     manager.apply_restore_all_started(claim, 2);
     supervisor.active_cloud_only_fetch_request = Some(10);
 
-    supervisor.complete_cloud_only_fetch_request(10, Ok(Vec::new())).await.unwrap();
+    supervisor.complete_cloud_only_fetch_request(10, Ok(complete_cloud_only_fetch(&manager, Vec::new()))).await.unwrap();
 
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
     assert!(matches!(
@@ -2909,7 +2921,10 @@ async fn cloud_only_refetch_retains_restore_all_marker_when_wallets_remain() {
     supervisor.active_cloud_only_fetch_request = Some(8);
 
     supervisor
-        .complete_cloud_only_fetch_request(8, Ok(vec![test_cloud_only_wallet("remaining")]))
+        .complete_cloud_only_fetch_request(
+            8,
+            Ok(complete_cloud_only_fetch(&manager, vec![test_cloud_only_wallet("remaining")])),
+        )
         .await
         .unwrap();
 
@@ -2946,7 +2961,7 @@ async fn restore_all_whose_cloud_only_rows_were_reset_mid_run_keeps_its_marker()
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[
         "a", "b",
     ])));
-    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
+    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
         test_cloud_only_wallet("a"),
         test_cloud_only_wallet("b"),
     ]));
@@ -2954,8 +2969,6 @@ async fn restore_all_whose_cloud_only_rows_were_reset_mid_run_keeps_its_marker()
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    // keeps the reset from starting a real fetch that would reload the cache before the assertion
-    supervisor.active_cloud_only_fetch_request = Some(99);
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets)
         .unwrap();
@@ -2980,7 +2993,11 @@ async fn restore_all_whose_cloud_only_rows_were_reset_mid_run_keeps_its_marker()
         .await
         .unwrap();
 
-    assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched);
+    // the reset asks for a replacement fetch, which may already be running
+    assert!(!matches!(
+        manager.state.read().cloud_only(),
+        CloudOnlyState::Loaded { wallets } if wallets.iter().any(|wallet| wallet.record_id == "a")
+    ));
 
     supervisor.complete_restore_all_queue_finished(claim).await.unwrap();
 
@@ -2996,7 +3013,7 @@ async fn cloud_only_operation_refresh_that_resets_the_cache_starts_a_fetch() {
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[
         "a", "b",
     ])));
-    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
+    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
         test_cloud_only_wallet("a"),
         test_cloud_only_wallet("b"),
     ]));
@@ -3021,8 +3038,7 @@ async fn cloud_only_operation_refresh_that_resets_the_cache_starts_a_fetch() {
         .await
         .unwrap();
 
-    assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::Loading);
-    assert!(supervisor.active_cloud_only_fetch_request.is_some());
+    wait_for_cloud_only_refetch(&manager).await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3033,7 +3049,7 @@ async fn trusted_local_detail_resets_cloud_only_rows_the_listing_replaced() {
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[
         "first", "second",
     ])));
-    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
+    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
         test_cloud_only_wallet("first"),
         test_cloud_only_wallet("second"),
     ]));
@@ -3059,7 +3075,7 @@ async fn trusted_local_detail_resets_cloud_only_rows_the_listing_replaced() {
         .await
         .unwrap();
 
-    assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::Loading);
+    wait_for_cloud_only_refetch(&manager).await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3068,7 +3084,7 @@ async fn restore_all_queue_completion_without_remaining_wallets_clears_marker_an
     let manager = test_supervisor_manager();
     prepare_restore_all_marker(&manager);
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[])));
-    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(Vec::new()));
+    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, Vec::new()));
     let mut supervisor = CloudBackupSupervisor::new(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
@@ -3459,7 +3475,7 @@ async fn ordinary_restore_all_record_failure_keeps_batch_claim_for_next_record()
         .unwrap();
     manager.sync_persisted_state();
     let wallet = test_cloud_only_wallet("ordinary-failure");
-    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
+    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
         wallet.clone(),
     ]));
     let mut supervisor = CloudBackupSupervisor::new(
@@ -3491,4 +3507,96 @@ async fn ordinary_restore_all_record_failure_keeps_batch_claim_for_next_record()
 
     assert!(should_continue);
     assert_eq!(supervisor.active_operation, Some(claim));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn cloud_only_fetch_started_before_a_listing_change_is_discarded_and_refetched() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 2);
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[
+        "a", "b",
+    ])));
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    supervisor.active_cloud_only_fetch_request = Some(5);
+    let stale_fetch = complete_cloud_only_fetch(
+        &manager,
+        vec![test_cloud_only_wallet("a"), test_cloud_only_wallet("b")],
+    );
+    manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Started);
+
+    // provider confirmation replaces wallet a with c at the same count while the fetch runs
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[
+        "b", "c",
+    ])));
+    supervisor.complete_cloud_only_fetch_request(5, Ok(stale_fetch)).await.unwrap();
+
+    assert_eq!(supervisor.active_cloud_only_fetch_request, None);
+    assert!(!matches!(
+        manager.state.read().cloud_only(),
+        CloudOnlyState::Loaded { wallets } if wallets.iter().any(|wallet| wallet.record_id == "a")
+    ));
+    wait_for_cloud_only_refetch(&manager).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    let namespace = manager.current_namespace_id().unwrap();
+    CloudBackupStore::global().persist_restore_all_marker(namespace.clone()).unwrap();
+    manager.sync_persisted_state();
+
+    // the provider lists the record but its download is not available yet
+    let record_id = cove_cspp::backup_data::wallet_record_id("listed-but-unreadable");
+    globals.cloud.set_wallet_files(
+        namespace,
+        vec![cove_cspp::backup_data::wallet_filename_from_record_id(&record_id)],
+    );
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[
+        record_id.as_str(),
+    ])));
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+    supervisor.active_cloud_only_fetch_request = Some(3);
+    let generation = manager.state.read().cloud_only_listing_generation();
+    let fetch = manager
+        .do_fetch_cloud_only_wallets_with_client(CloudStorage::global_silent_client(), generation)
+        .await
+        .unwrap();
+    assert_eq!(fetch.unresolved_record_ids, vec![record_id]);
+
+    supervisor.complete_cloud_only_fetch_request(3, Ok(fetch)).await.unwrap();
+
+    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 2);
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(test_listed_detail(&[
+        "a", "b",
+    ])));
+    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
+        test_cloud_only_wallet("a"),
+        test_cloud_only_wallet("b"),
+    ]));
+
+    // a background report carries no listing, so the loaded rows cannot be matched and reset
+    manager.apply_verification_effect(CloudBackupVerificationEffect {
+        detail: Some(test_cloud_backup_detail(2)),
+        ..Default::default()
+    });
+    assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched);
+
+    wait_for_cloud_only_refetch(&manager).await;
 }

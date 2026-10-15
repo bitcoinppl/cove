@@ -66,8 +66,8 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupRestoreReport, CloudBackupReuploadedWallets, CloudBackupSavedPasskeyConfirmation,
     CloudBackupStatus, CloudBackupStore, CloudBackupUndecryptableWalletDeletionState,
     CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
-    CloudBackupVerificationSource, CloudBackupWalletItem, CloudBackupWalletStatus,
-    CloudOnlyOperation, DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    CloudBackupVerificationSource, CloudBackupWalletItem, CloudOnlyOperation,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
     DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction,
     EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation,
     PendingEnableJournal, PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot,
@@ -1144,8 +1144,6 @@ impl CloudBackupSupervisor {
             && let Some(result) = result
         {
             apply_refresh_detail_result(&manager, &result);
-            // a refresh that reset the cloud-only cache needs a fetch, since nothing else starts one
-            self.ensure_supplemental_inventory_discovery(manager.clone());
         }
 
         self.active_operation.clear();
