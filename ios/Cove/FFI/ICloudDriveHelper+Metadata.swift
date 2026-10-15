@@ -191,7 +191,8 @@ final class ICloudMetadataIndex {
     // bounds how long a deletion hides records the query has not yet confirmed gone
     private static let deletionTombstoneMaxAge: TimeInterval = 60
     private var phase = Phase.idle
-    private var records: [ICloudMetadataRecord] = []
+    // latest query snapshot; reads go through `records` so tombstones expire without a new event
+    private var queryRecords: [ICloudMetadataRecord] = []
     private var deletionTombstones: [String: Date] = [:]
     private var generation: UInt64 = 0
     // quiet interval observed for the current generation; `apply` resets it when records change
@@ -214,10 +215,6 @@ final class ICloudMetadataIndex {
         let recordedAt = Date()
         for path in resolvedPaths {
             deletionTombstones[path] = recordedAt
-        }
-
-        records.removeAll { record in
-            resolvedPaths.contains { path in Self.covers(path: path, record: record) }
         }
     }
 
@@ -375,10 +372,12 @@ final class ICloudMetadataIndex {
         switch event {
         case let .finishedGathering(records):
             phase = .live
-            self.records = reconcileTombstones(with: records)
+            queryRecords = records
+            pruneTombstones()
             resumeSnapshotWaiters()
         case let .updated(records):
-            self.records = reconcileTombstones(with: records)
+            queryRecords = records
+            pruneTombstones()
         }
 
         generation &+= 1
@@ -390,26 +389,32 @@ final class ICloudMetadataIndex {
         }
     }
 
-    private func reconcileTombstones(
-        with records: [ICloudMetadataRecord]
-    ) -> [ICloudMetadataRecord] {
-        guard !deletionTombstones.isEmpty else { return records }
+    private var records: [ICloudMetadataRecord] {
+        let hiddenPaths = activeTombstonePaths(at: Date())
+        guard !hiddenPaths.isEmpty else { return queryRecords }
 
-        let currentTime = Date()
-        deletionTombstones = deletionTombstones.filter { _, recordedAt in
-            currentTime.timeIntervalSince(recordedAt) < Self.deletionTombstoneMaxAge
+        return queryRecords.filter { record in
+            !hiddenPaths.contains { path in Self.covers(path: path, record: record) }
         }
+    }
 
-        if case .live = phase {
-            deletionTombstones = deletionTombstones.filter { path, _ in
-                records.contains { record in Self.covers(path: path, record: record) }
-            }
+    private func activeTombstonePaths(at currentTime: Date) -> [String] {
+        deletionTombstones.compactMap { path, recordedAt in
+            currentTime.timeIntervalSince(recordedAt) < Self.deletionTombstoneMaxAge ? path : nil
         }
+    }
 
-        return records.filter { record in
-            !deletionTombstones.keys.contains { path in
-                Self.covers(path: path, record: record)
-            }
+    private func pruneTombstones() {
+        guard !deletionTombstones.isEmpty else { return }
+
+        let activePaths = activeTombstonePaths(at: Date())
+
+        // a live query that no longer reports the path has confirmed the deletion
+        deletionTombstones = deletionTombstones.filter { path, _ in
+            guard activePaths.contains(path) else { return false }
+            guard case .live = phase else { return true }
+
+            return queryRecords.contains { record in Self.covers(path: path, record: record) }
         }
     }
 
