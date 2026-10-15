@@ -10,8 +10,35 @@ import UIKit
 /// work that legitimately runs from inside a sheet is not delayed
 enum PresenterIdle {
     private static let pollInterval = Duration.milliseconds(50)
-    private static let requiredConsecutiveIdleChecks = 2
     private static let timeout = Duration.milliseconds(1500)
+
+    /// Counts consecutive idle checks against a deadline for both the async and blocking waits
+    ///
+    /// A single idle check can land between a dismissal ending and the next presentation
+    /// starting, so the chain must read idle twice in a row before it counts as settled
+    struct Settle {
+        enum Step: Equatable {
+            case settled
+            case poll
+            case timedOut
+        }
+
+        private static let requiredConsecutiveIdleChecks = 2
+
+        private let deadline: ContinuousClock.Instant
+        private var consecutiveIdleChecks = 0
+
+        init(deadline: ContinuousClock.Instant) {
+            self.deadline = deadline
+        }
+
+        mutating func record(idle: Bool, at now: ContinuousClock.Instant) -> Step {
+            consecutiveIdleChecks = idle ? consecutiveIdleChecks + 1 : 0
+            if consecutiveIdleChecks >= Self.requiredConsecutiveIdleChecks { return .settled }
+
+            return now < deadline ? .poll : .timedOut
+        }
+    }
 
     /// Returns whether no controller in the foreground presenter chain is mid-transition or an alert
     @MainActor
@@ -45,22 +72,23 @@ enum PresenterIdle {
     @MainActor
     static func wait() async {
         let clock = ContinuousClock()
-        let deadline = clock.now + timeout
-        var consecutiveIdleChecks = 0
+        var settle = Settle(deadline: clock.now + timeout)
 
         while true {
-            consecutiveIdleChecks = isIdle() ? consecutiveIdleChecks + 1 : 0
-            if consecutiveIdleChecks >= requiredConsecutiveIdleChecks { return }
+            switch settle.record(idle: isIdle(), at: clock.now) {
+            case .settled:
+                return
 
-            guard clock.now < deadline else {
+            case .timedOut:
                 Log.warn("[PRESENTER] still busy after \(timeout), proceeding anyway")
                 return
-            }
 
-            do {
-                try await Task.sleep(for: pollInterval)
-            } catch {
-                return
+            case .poll:
+                do {
+                    try await Task.sleep(for: pollInterval)
+                } catch {
+                    return
+                }
             }
         }
     }
@@ -73,20 +101,22 @@ enum PresenterIdle {
         precondition(!Thread.isMainThread, "PresenterIdle.waitBlocking must not run on the main thread")
 
         let clock = ContinuousClock()
-        let deadline = clock.now + timeout
-        var consecutiveIdleChecks = 0
+        var settle = Settle(deadline: clock.now + timeout)
 
         while true {
             let idle = DispatchQueue.main.sync { MainActor.assumeIsolated { PresenterIdle.isIdle() } }
-            consecutiveIdleChecks = idle ? consecutiveIdleChecks + 1 : 0
-            if consecutiveIdleChecks >= requiredConsecutiveIdleChecks { return }
 
-            guard clock.now < deadline else {
+            switch settle.record(idle: idle, at: clock.now) {
+            case .settled:
+                return
+
+            case .timedOut:
                 Log.warn("[PRESENTER] still busy after \(timeout), proceeding anyway")
                 return
-            }
 
-            Thread.sleep(forTimeInterval: 0.05)
+            case .poll:
+                Thread.sleep(forTimeInterval: 0.05)
+            }
         }
     }
 
