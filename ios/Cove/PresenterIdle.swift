@@ -12,7 +12,7 @@ enum PresenterIdle {
     private static let pollInterval = Duration.milliseconds(50)
     private static let timeout = Duration.milliseconds(1500)
 
-    /// Counts consecutive idle checks against a deadline for both the async and blocking waits
+    /// Counts consecutive idle checks against a deadline
     ///
     /// A single idle check can land between a dismissal ending and the next presentation
     /// starting, so the chain must read idle twice in a row before it counts as settled
@@ -38,12 +38,6 @@ enum PresenterIdle {
 
             return now < deadline ? .poll : .timedOut
         }
-    }
-
-    /// Returns whether no controller in the foreground presenter chain is mid-transition or an alert
-    @MainActor
-    static func isIdle() -> Bool {
-        isIdle(from: foregroundRootViewController())
     }
 
     /// Returns whether no controller from `rootViewController` down its presented chain is busy
@@ -75,7 +69,7 @@ enum PresenterIdle {
         var settle = Settle(deadline: clock.now + timeout)
 
         while true {
-            switch settle.record(idle: isIdle(), at: clock.now) {
+            switch settle.record(idle: isIdle(from: foregroundRootViewController()), at: clock.now) {
             case .settled:
                 return
 
@@ -100,24 +94,13 @@ enum PresenterIdle {
     static func waitBlocking() {
         precondition(!Thread.isMainThread, "PresenterIdle.waitBlocking must not run on the main thread")
 
-        let clock = ContinuousClock()
-        var settle = Settle(deadline: clock.now + timeout)
-
-        while true {
-            let idle = DispatchQueue.main.sync { MainActor.assumeIsolated { PresenterIdle.isIdle() } }
-
-            switch settle.record(idle: idle, at: clock.now) {
-            case .settled:
-                return
-
-            case .timedOut:
-                Log.warn("[PRESENTER] still busy after \(timeout), proceeding anyway")
-                return
-
-            case .poll:
-                Thread.sleep(forTimeInterval: 0.05)
-            }
+        let settled = DispatchSemaphore(value: 0)
+        Task { @MainActor in
+            await wait()
+            settled.signal()
         }
+
+        settled.wait()
     }
 
     @MainActor
