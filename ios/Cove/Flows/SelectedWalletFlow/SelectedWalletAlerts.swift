@@ -38,7 +38,12 @@ extension WalletErrorAlert: TaggedAlertPresentable {
                 actions: {
                     Button("Receive Funds") {
                         context.dismissWalletError()
-                        context.presentReceive()
+
+                        // the receive sheet would otherwise present onto this dismissing alert
+                        Task { @MainActor in
+                            await PresenterIdle.wait()
+                            context.presentReceive()
+                        }
                     }
 
                     Button("Cancel", role: .cancel) {
