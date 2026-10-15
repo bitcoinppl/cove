@@ -753,9 +753,11 @@ async fn wipe_all_data_with_tier(
 
     // the database reset is the commit point, so a failed runtime reset must not turn the wipe
     // into an error that leaves frontends locked on the old state; dropping the reset permit
-    // unblocks Cloud Backup writers and leaves Cloud Backup disabled, which matches the wiped data
+    // unblocks Cloud Backup writers and leaves Cloud Backup disabled, which matches the wiped data.
+    // The log starts fresh after the reset and the wipe PIN can be entered under duress, so this
+    // message must not mention the wipe
     if let Err(error) = prepared.complete_after_database_reset().await {
-        error!("Cloud Backup runtime reset failed after full wipe: {error}");
+        error!("Cloud Backup runtime cleanup failed: {error}");
     }
 
     Ok(completion)

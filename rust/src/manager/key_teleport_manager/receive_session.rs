@@ -102,15 +102,11 @@ impl ReceiveSessionStore {
         // between them and leave a private key in the keychain
         let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
         if RECEIVE_SESSION_RESETS_IN_PROGRESS.load(Ordering::Acquire) > 0 {
-            return Err(KeyTeleportAlert::Keychain(
-                "receive sessions are being reset by a full wipe".into(),
-            ));
+            return Err(receive_session_unavailable());
         }
 
         if self.0 != RECEIVE_SESSION_WIPE_EPOCH.load(Ordering::Acquire) {
-            return Err(KeyTeleportAlert::Keychain(
-                "receive sessions were reset by a full wipe".into(),
-            ));
+            return Err(receive_session_unavailable());
         }
 
         let session = ActiveReceiveSession::new();
@@ -407,6 +403,12 @@ fn ensure_authoritative_receive_session_unlocked(
     }
 
     Ok(())
+}
+
+// the wipe PIN can be entered under duress and a queued action can surface this alert, so it reads
+// like any other keychain failure instead of revealing that a wipe ran
+fn receive_session_unavailable() -> KeyTeleportAlert {
+    KeyTeleportAlert::Keychain("unable to save KeyTeleport receive session".into())
 }
 
 fn delete_receive_session_unlocked() -> Result<(), KeyTeleportAlert> {
