@@ -237,18 +237,6 @@ impl BuildNumberFile {
         }
     }
 
-    fn snapshot(self, sh: &Shell) -> Result<Option<String>> {
-        if !sh.path_exists(self.path()) {
-            return Ok(None);
-        }
-
-        Ok(sh.read_file(self.path()).map(Some)?)
-    }
-
-    fn restore(self, sh: &Shell, snapshot: &str) -> Result<()> {
-        Ok(sh.write_file(self.path(), snapshot)?)
-    }
-
     /// Bumps the build number, then runs the release steps that happen before the store may have
     /// accepted the build, restoring the original file if the bump or any of those steps fail
     ///
@@ -260,7 +248,8 @@ impl BuildNumberFile {
         sh: &Shell,
         before_store_accepts: impl FnOnce() -> Result<T>,
     ) -> Result<T> {
-        let snapshot = self.snapshot(sh)?;
+        let snapshot =
+            sh.path_exists(self.path()).then(|| sh.read_file(self.path())).transpose()?;
         let error = match self.bump(sh).and_then(|()| before_store_accepts()) {
             Ok(value) => return Ok(value),
             Err(error) => error,
@@ -278,7 +267,7 @@ impl BuildNumberFile {
             return Err(error);
         };
 
-        if let Err(restore_error) = self.restore(sh, &snapshot) {
+        if let Err(restore_error) = sh.write_file(self.path(), &snapshot) {
             return Err(error).wrap_err(format!(
                 "Failed to restore {build_number} after {release} failure: {restore_error:#}"
             ));
@@ -501,23 +490,32 @@ CURRENT_PROJECT_VERSION = 76;
         );
     }
 
-    #[test]
-    fn restores_ios_build_number_when_testflight_fails_before_store_accepts() {
+    // keep the tempdir alive for the test so the files it holds are not removed early
+    fn fixture(rel_file: &str, contents: &str) -> (tempfile::TempDir, Shell, std::path::PathBuf) {
         let temp_dir = tempfile::tempdir().unwrap();
         let rust_dir = temp_dir.path().join("rust");
-        let ios_project_dir = temp_dir.path().join("ios/Cove.xcodeproj");
+        let file_path = temp_dir.path().join(rel_file);
         std::fs::create_dir_all(&rust_dir).unwrap();
-        std::fs::create_dir_all(&ios_project_dir).unwrap();
+        std::fs::create_dir_all(file_path.parent().unwrap()).unwrap();
+        std::fs::write(&file_path, contents).unwrap();
 
-        let project_path = ios_project_dir.join("project.pbxproj");
+        let sh = Shell::new().unwrap();
+        sh.change_dir(&rust_dir);
+
+        (temp_dir, sh, file_path)
+    }
+
+    const IOS_PROJECT: &str = "ios/Cove.xcodeproj/project.pbxproj";
+    const ANDROID_GRADLE: &str = "android/app/build.gradle.kts";
+    const GRADLE_28: &str = "versionCode = 28\nversionName = \"1.4.0\"\n";
+
+    #[test]
+    fn restores_ios_build_number_when_testflight_fails_before_store_accepts() {
         let original = "\
 CURRENT_PROJECT_VERSION = 89;
 CURRENT_PROJECT_VERSION = 89;
 ";
-        std::fs::write(&project_path, original).unwrap();
-
-        let sh = Shell::new().unwrap();
-        sh.change_dir(&rust_dir);
+        let (_temp_dir, sh, project_path) = fixture(IOS_PROJECT, original);
 
         let result = BuildNumberFile::IosProject.bump_for_release(&sh, || {
             assert!(std::fs::read_to_string(&project_path).unwrap().contains("= 90;"));
@@ -530,17 +528,7 @@ CURRENT_PROJECT_VERSION = 89;
 
     #[test]
     fn keeps_android_version_code_once_release_steps_succeed() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let rust_dir = temp_dir.path().join("rust");
-        let android_app_dir = temp_dir.path().join("android/app");
-        std::fs::create_dir_all(&rust_dir).unwrap();
-        std::fs::create_dir_all(&android_app_dir).unwrap();
-
-        let gradle_path = android_app_dir.join("build.gradle.kts");
-        std::fs::write(&gradle_path, "versionCode = 28\nversionName = \"1.4.0\"\n").unwrap();
-
-        let sh = Shell::new().unwrap();
-        sh.change_dir(&rust_dir);
+        let (_temp_dir, sh, gradle_path) = fixture(ANDROID_GRADLE, GRADLE_28);
 
         BuildNumberFile::AndroidGradle.bump_for_release(&sh, || Ok(())).unwrap();
 
@@ -549,39 +537,18 @@ CURRENT_PROJECT_VERSION = 89;
 
     #[test]
     fn restores_android_version_code_when_bundle_fails() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let rust_dir = temp_dir.path().join("rust");
-        let android_app_dir = temp_dir.path().join("android/app");
-        std::fs::create_dir_all(&rust_dir).unwrap();
-        std::fs::create_dir_all(&android_app_dir).unwrap();
-
-        let gradle_path = android_app_dir.join("build.gradle.kts");
-        let original = "versionCode = 28\nversionName = \"1.4.0\"\n";
-        std::fs::write(&gradle_path, original).unwrap();
-
-        let sh = Shell::new().unwrap();
-        sh.change_dir(&rust_dir);
+        let (_temp_dir, sh, gradle_path) = fixture(ANDROID_GRADLE, GRADLE_28);
 
         let result = BuildNumberFile::AndroidGradle
             .bump_for_release(&sh, || Err::<(), _>(eyre!("bundle failed")));
 
         assert!(result.is_err());
-        assert_eq!(std::fs::read_to_string(&gradle_path).unwrap(), original);
+        assert_eq!(std::fs::read_to_string(&gradle_path).unwrap(), GRADLE_28);
     }
 
     #[test]
     fn keeps_android_version_code_when_signed_outputs_survive() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let rust_dir = temp_dir.path().join("rust");
-        let android_app_dir = temp_dir.path().join("android/app");
-        std::fs::create_dir_all(&rust_dir).unwrap();
-        std::fs::create_dir_all(&android_app_dir).unwrap();
-
-        let gradle_path = android_app_dir.join("build.gradle.kts");
-        std::fs::write(&gradle_path, "versionCode = 28\nversionName = \"1.4.0\"\n").unwrap();
-
-        let sh = Shell::new().unwrap();
-        sh.change_dir(&rust_dir);
+        let (_temp_dir, sh, gradle_path) = fixture(ANDROID_GRADLE, GRADLE_28);
 
         let result = BuildNumberFile::AndroidGradle.bump_for_release(&sh, || {
             Err::<(), _>(

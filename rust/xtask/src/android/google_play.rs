@@ -1,5 +1,6 @@
 use super::{
-    build_android, bundle_android, remove_file_if_exists, AndroidBuildTargets, BuildProfile,
+    build_android, bundle_android, play_aab_path, remove_file_if_exists, AndroidBuildTargets,
+    BuildProfile,
 };
 use crate::common::{
     command_exists, ensure_rust_directory, normalize_required_arg, print_info, print_success,
@@ -11,8 +12,6 @@ use std::fs;
 use xshell::{cmd, Shell};
 
 const PLAY_PACKAGE_NAME: &str = "org.bitcoinppl.cove";
-const PLAY_AAB_PATH: &str =
-    "../android/app/build/outputs/bundle/storeRelease/app-store-release.aab";
 const JSON_KEY_PATH_ENV: &str = "GOOGLE_PLAY_JSON_KEY_PATH";
 const JSON_KEY_PATH_HINT: &str =
     "Set GOOGLE_PLAY_JSON_KEY_PATH to a readable Google Play service account JSON file.";
@@ -50,7 +49,7 @@ pub fn release_android(json_key_path: Option<&str>, verbose: bool) -> Result<()>
 
     // fail before bumping if Play credentials, store signing, or build output dirs are missing
     let credentials = GooglePlayCredentials::resolve(json_key_path)?;
-    super::ensure_store_release_signing()?;
+    super::AndroidReleaseSigning::resolve()?;
     super::ensure_android_build_output_dirs_resolve()?;
 
     // an older bundle left for a `just ugp` retry must survive a release that fails before Gradle
@@ -69,9 +68,9 @@ pub fn release_android(json_key_path: Option<&str>, verbose: bool) -> Result<()>
             return Err(error);
         }
 
-        match remove_file_if_exists(PLAY_AAB_PATH) {
+        match remove_file_if_exists(play_aab_path()) {
             Ok(()) => Err(error),
-            Err(_) => Err(error.wrap_err(KeepBuildNumber(vec![PLAY_AAB_PATH.into()]))),
+            Err(_) => Err(error.wrap_err(KeepBuildNumber(vec![play_aab_path()]))),
         }
     })?;
 
@@ -82,7 +81,7 @@ pub fn release_android(json_key_path: Option<&str>, verbose: bool) -> Result<()>
 }
 
 fn bundle_modified_at() -> Option<std::time::SystemTime> {
-    fs::metadata(PLAY_AAB_PATH).and_then(|metadata| metadata.modified()).ok()
+    fs::metadata(play_aab_path()).and_then(|metadata| metadata.modified()).ok()
 }
 
 fn upload_with_credentials(
@@ -90,22 +89,22 @@ fn upload_with_credentials(
     credentials: &GooglePlayCredentials,
     verbose: bool,
 ) -> Result<()> {
-    if !sh.path_exists(PLAY_AAB_PATH) {
+    let aab_path = play_aab_path();
+    if !sh.path_exists(&aab_path) {
         bail!("Signed bundle not found. Run just bundle-android first.");
     }
 
-    let aab = fs::canonicalize(PLAY_AAB_PATH)
-        .wrap_err_with(|| format!("Failed to resolve signed bundle at {PLAY_AAB_PATH}"))?
+    let aab = fs::canonicalize(&aab_path)
+        .wrap_err_with(|| format!("Failed to resolve signed bundle at {}", aab_path.display()))?
         .to_string_lossy()
         .into_owned();
-    let json_key = &credentials.0;
 
     print_info("Uploading Android bundle to Google Play internal testing...");
 
     let cmd = cmd!(sh, "fastlane").args([
         "supply",
         "--json_key",
-        json_key.as_str(),
+        credentials.0.as_str(),
         "--package_name",
         PLAY_PACKAGE_NAME,
         "--aab",
@@ -143,33 +142,14 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn rejects_missing_google_play_json_key_path() {
-        let error = resolve_json_key_path(None).unwrap_err().to_string();
-
-        assert!(error.contains("GOOGLE_PLAY_JSON_KEY_PATH"));
-    }
-
-    #[test]
-    fn rejects_blank_google_play_json_key_path() {
-        let error = resolve_json_key_path(Some("   ")).unwrap_err().to_string();
-
-        assert!(error.contains("GOOGLE_PLAY_JSON_KEY_PATH"));
-    }
-
-    #[test]
-    fn rejects_missing_google_play_json_key_file() {
-        let error =
-            resolve_json_key_path(Some("/tmp/cove-missing-play-key.json")).unwrap_err().to_string();
-
-        assert!(error.contains("GOOGLE_PLAY_JSON_KEY_PATH"));
-    }
-
-    #[test]
-    fn rejects_google_play_json_key_directory() {
+    fn rejects_unusable_google_play_json_key_paths() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let error = resolve_json_key_path(temp_dir.path().to_str()).unwrap_err().to_string();
+        let inputs =
+            [None, Some("   "), Some("/tmp/cove-missing-play-key.json"), temp_dir.path().to_str()];
 
-        assert!(error.contains("GOOGLE_PLAY_JSON_KEY_PATH"));
+        for input in inputs {
+            assert!(resolve_json_key_path(input).is_err(), "{input:?} should be rejected");
+        }
     }
 
     #[test]

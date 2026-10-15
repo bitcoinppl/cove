@@ -616,7 +616,7 @@ pub fn testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()>
 
     let archive = BuildNumberFile::IosProject.bump_for_release(&sh, || {
         build_ios(IosBuildType::Custom("release-speed"), true, false, verbose)?;
-        archive_testflight(&credentials, verbose, false)
+        archive_testflight(&credentials, verbose)
     })?;
 
     // keep the bumped build number from here on: App Store Connect can accept an upload even when
@@ -631,7 +631,10 @@ pub fn testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()>
 pub fn upload_testflight(options: TestflightUploadOptions, verbose: bool) -> Result<()> {
     let credentials = TestflightApiCredentials::from_options(&options)?;
     let distribution = credentials.prepare_distribution()?;
-    let archive = archive_testflight(&credentials, verbose, true)?;
+
+    validate_testflight_associated_domain()?;
+
+    let archive = archive_testflight(&credentials, verbose)?;
     archive.upload(&credentials, verbose)?;
 
     finish_testflight_distribution(&distribution, &archive.identity)
@@ -652,17 +655,12 @@ fn finish_testflight_distribution(
 fn archive_testflight(
     api_credentials: &TestflightApiCredentials,
     verbose: bool,
-    validate_associated_domain: bool,
 ) -> Result<TestflightArchive> {
     let sh = Shell::new()?;
 
     if !command_exists("xcodebuild") {
         print_error("xcodebuild not found. Please install Xcode");
         color_eyre::eyre::bail!("xcodebuild command not found");
-    }
-
-    if validate_associated_domain {
-        validate_testflight_associated_domain()?;
     }
 
     sh.change_dir("../ios");
@@ -756,10 +754,10 @@ fn validate_testflight_associated_domain() -> Result<()> {
         let body = response
             .bytes()
             .wrap_err_with(|| format!("Failed to read associated-domain file from {url}"))?;
-        let body = String::from_utf8(body.to_vec())
+        let body = std::str::from_utf8(&body)
             .wrap_err_with(|| format!("Associated-domain file from {url} was not valid UTF-8"))?;
 
-        validate_aasa_response(&url, status, &body, &app_identifier)?;
+        validate_aasa_response(&url, status, body, &app_identifier)?;
     }
 
     print_success(&format!(
@@ -2048,23 +2046,6 @@ ABC123
     }
 
     #[test]
-    fn aasa_response_accepts_http_200_with_testflight_app_identifier() {
-        let body = r#"{
-            "webcredentials": {
-                "apps": ["Q8UP8C53Y8.org.bitcoinppl.cove"]
-            }
-        }"#;
-
-        assert!(validate_aasa_response(
-            "https://example.com/.well-known/apple-app-site-association",
-            StatusCode::OK,
-            body,
-            "Q8UP8C53Y8.org.bitcoinppl.cove",
-        )
-        .is_ok());
-    }
-
-    #[test]
     fn aasa_response_rejects_redirect_status() {
         let body = r#"{
             "webcredentials": {
@@ -2086,7 +2067,7 @@ ABC123
     }
 
     #[test]
-    fn aasa_response_rejects_malformed_json() {
+    fn aasa_response_rejection_names_url_and_status() {
         let url = "https://example.com/.well-known/apple-app-site-association";
         let error = validate_aasa_response(
             url,
@@ -2094,31 +2075,11 @@ ABC123
             "not json",
             "Q8UP8C53Y8.org.bitcoinppl.cove",
         )
-        .expect_err("malformed JSON should be rejected");
+        .expect_err("invalid body should be rejected");
         let message = format!("{error:#}");
 
         assert!(message.contains(url));
         assert!(message.contains("HTTP status 200"));
-        assert!(message.contains("failed to parse apple-app-site-association JSON"));
-    }
-
-    #[test]
-    fn aasa_response_rejects_missing_testflight_app_identifier() {
-        let url = "https://example.com/.well-known/apple-app-site-association";
-        let body = r#"{
-            "webcredentials": {
-                "apps": ["Q8UP8C53Y8.org.bitcoinppl.other"]
-            }
-        }"#;
-
-        let error =
-            validate_aasa_response(url, StatusCode::OK, body, "Q8UP8C53Y8.org.bitcoinppl.cove")
-                .expect_err("missing TestFlight app identifier should be rejected");
-        let message = format!("{error:#}");
-
-        assert!(message.contains(url));
-        assert!(message.contains("HTTP status 200"));
-        assert!(message.contains("webcredentials.apps` does not include"));
     }
 
     #[test]

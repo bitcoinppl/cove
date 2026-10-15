@@ -164,7 +164,6 @@ impl Distribution {
 
     fn assign(&self, build: &Resource<Build>) -> Result<()> {
         if build.attributes.uses_non_exempt_encryption != Some(false) {
-            let path = format!("v1/builds/{}", build.id);
             let body = Document {
                 data: Update {
                     kind: BUILDS,
@@ -173,7 +172,7 @@ impl Distribution {
                 },
             };
 
-            self.api.send(Method::PATCH, self.api.url(&path, &[])?, &body)?;
+            self.api.send(Method::PATCH, &format!("v1/builds/{}", build.id), &body)?;
             print_info("Set Uses Non-Exempt Encryption to No");
         }
 
@@ -193,7 +192,7 @@ impl Distribution {
         if !groups.iter().any(|group| group.id == self.group.id) {
             let path = format!("v1/betaGroups/{}/relationships/builds", self.group.id);
             let body = Document { data: [Identifier::build(&build.id)] };
-            self.api.send(Method::POST, self.api.url(&path, &[])?, &body)?;
+            self.api.send(Method::POST, &path, &body)?;
         }
 
         if !self.group.attributes.is_internal_group {
@@ -214,7 +213,7 @@ impl Distribution {
 
     fn submit_for_external_testing(&self, build: &Resource<Build>) -> Result<()> {
         let path = format!("v1/builds/{}/buildBetaDetail", build.id);
-        let detail: BuildBetaDetailResponse = self
+        let detail: Document<Resource<BuildBetaDetail>> = self
             .api
             .get(self.api.url(&path, &[])?)?
             .json()
@@ -230,11 +229,7 @@ impl Distribution {
                     },
                 };
 
-                self.api.send(
-                    Method::POST,
-                    self.api.url("v1/betaAppReviewSubmissions", &[])?,
-                    &body,
-                )?;
+                self.api.send(Method::POST, "v1/betaAppReviewSubmissions", &body)?;
 
                 print_info("Submitted the build for TestFlight beta review");
             }
@@ -261,7 +256,6 @@ impl Distribution {
         current: Option<&Resource<Localization>>,
     ) -> Result<()> {
         if let Some(current) = current {
-            let path = format!("v1/betaBuildLocalizations/{}", current.id);
             let body = Document {
                 data: Update {
                     kind: BETA_BUILD_LOCALIZATIONS,
@@ -270,7 +264,11 @@ impl Distribution {
                 },
             };
 
-            self.api.send(Method::PATCH, self.api.url(&path, &[])?, &body)?;
+            self.api.send(
+                Method::PATCH,
+                &format!("v1/betaBuildLocalizations/{}", current.id),
+                &body,
+            )?;
             return Ok(());
         }
 
@@ -282,7 +280,7 @@ impl Distribution {
             },
         };
 
-        self.api.send(Method::POST, self.api.url("v1/betaBuildLocalizations", &[])?, &body)?;
+        self.api.send(Method::POST, "v1/betaBuildLocalizations", &body)?;
         Ok(())
     }
 }
@@ -357,8 +355,8 @@ impl Api {
         self.request::<()>(Method::GET, url, None)
     }
 
-    fn send<B: Serialize>(&self, method: Method, url: Url, body: &B) -> Result<Response> {
-        self.request(method, url, Some(body))
+    fn send<B: Serialize>(&self, method: Method, path: &str, body: &B) -> Result<Response> {
+        self.request(method, self.url(path, &[])?, Some(body))
     }
 
     fn request<B: Serialize>(
@@ -421,8 +419,8 @@ struct Claims<'a> {
     aud: &'static str,
 }
 
-/// JSON:API request document
-#[derive(Serialize)]
+/// JSON:API document
+#[derive(Serialize, Deserialize)]
 struct Document<T> {
     data: T,
 }
@@ -512,11 +510,6 @@ struct App {
 struct Group {
     name: String,
     is_internal_group: bool,
-}
-
-#[derive(Deserialize)]
-struct BuildBetaDetailResponse {
-    data: Resource<BuildBetaDetail>,
 }
 
 #[derive(Deserialize)]

@@ -131,14 +131,12 @@ fn ensure_android_build_output_dirs_resolve() -> Result<()> {
         .filter(|path| !path.exists())
         .filter_map(|path| {
             // a missing plain dir is fine since the build creates it, unless its volume is gone
-            let dangling_link = path.is_symlink();
-            let target = if dangling_link { fs::read_link(&path).ok()? } else { path.clone() };
-
-            match (dangling_link, is_on_missing_volume(&target)) {
-                (true, _) => Some(format!("  {} -> {}", path.display(), target.display())),
-                (false, true) => Some(format!("  {}", path.display())),
-                (false, false) => None,
+            if path.is_symlink() {
+                let target = fs::read_link(&path).ok()?;
+                return Some(format!("  {} -> {}", path.display(), target.display()));
             }
+
+            is_on_missing_volume(&path).then(|| format!("  {}", path.display()))
         })
         .collect();
 
@@ -613,9 +611,9 @@ impl AndroidReleaseSigning {
     }
 }
 
-pub(crate) fn ensure_store_release_signing() -> Result<()> {
-    AndroidReleaseSigning::resolve()?;
-    Ok(())
+/// Path to the signed store bundle relative to `rust/`
+fn play_aab_path() -> PathBuf {
+    Path::new(ANDROID_PROJECT_DIR).join(AAB_OUTPUT_PATH)
 }
 
 pub fn bundle_android(verbose: bool) -> Result<()> {
@@ -679,7 +677,7 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
         .and_then(|()| outputs.publish());
 
     let Err(error) = result else {
-        for path in outputs.published() {
+        for path in &outputs.published {
             print_success(&format!("Saved {}", path.display()));
         }
 
@@ -779,10 +777,6 @@ impl StagedOutputs {
         Ok(())
     }
 
-    fn published(&self) -> &[PathBuf] {
-        &self.published
-    }
-
     /// Removes every file this attempt wrote and returns the ones that could not be removed
     fn discard(self) -> Vec<PathBuf> {
         let staged = self.staged.into_iter().map(|(staging, _)| staging);
@@ -791,7 +785,7 @@ impl StagedOutputs {
     }
 }
 
-fn remove_file_if_exists(path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+fn remove_file_if_exists(path: impl AsRef<Path>) -> std::io::Result<()> {
     match fs::remove_file(path) {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
         _ => Ok(()),
@@ -1400,7 +1394,7 @@ mod tests {
         outputs.publish().unwrap();
 
         assert_eq!(fs::read_to_string(&aab).unwrap(), "new bundle");
-        assert_eq!(outputs.published(), std::slice::from_ref(&aab));
+        assert_eq!(outputs.published, std::slice::from_ref(&aab));
         assert_eq!(outputs.discard(), Vec::<PathBuf>::new());
         assert!(!aab.exists());
     }

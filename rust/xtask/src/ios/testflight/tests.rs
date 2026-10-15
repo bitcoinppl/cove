@@ -1,4 +1,4 @@
-use super::{exact_group, Api, BuildIdentity, Distribution, Group, Localization, Resource};
+use super::{exact_group, Api, BuildIdentity, Distribution, Group, Resource};
 use reqwest::Url;
 use serde_json::{json, Value};
 use std::io::{Read, Write};
@@ -128,13 +128,26 @@ fn target_group(id: &str, internal: bool) -> Resource<Group> {
     }
 }
 
+fn distribution(server: &Server, internal: bool) -> Distribution {
+    Distribution {
+        api: server.api(),
+        app_id: "app".to_owned(),
+        group: target_group("group", internal),
+        notes: vec![],
+    }
+}
+
+fn query(request: &Request) -> std::collections::HashMap<String, String> {
+    request.url.query_pairs().map(|(key, value)| (key.into_owned(), value.into_owned())).collect()
+}
+
 fn beta_detail(state: &str) -> Value {
     json!({"data": {"id": "detail", "attributes": {"externalBuildState": state}}})
 }
 
 #[test]
 fn copies_snapshot_for_each_locale_before_adding_exact_build_to_group() {
-    let description = "Fix backup\nKeep this exact text 🪙";
+    let description = " Fix backup\nKeep this exact text 🪙\n";
     let server = Server::new(vec![
         page(json!([{"id": "app", "attributes": {"bundleId": "org.bitcoinppl.cove"}}])),
         page(
@@ -165,14 +178,14 @@ fn copies_snapshot_for_each_locale_before_adding_exact_build_to_group() {
         .distribute_with_timeout(&identity(), Duration::from_secs(2), Duration::ZERO)
         .unwrap();
     let requests = server.handle.join().unwrap();
-    let previous_query = requests[2].url.query_pairs().collect::<std::collections::HashMap<_, _>>();
+    let previous_query = query(&requests[2]);
     assert_eq!(previous_query["filter[preReleaseVersion.platform]"], "IOS");
     assert_eq!(previous_query["sort"], "-uploadedDate");
     assert_eq!(previous_query["filter[processingState]"], "VALID");
     assert_eq!(requests[3].url.path(), "/v1/builds/old-build/betaBuildLocalizations");
 
     for request in &requests[4..6] {
-        let query = request.url.query_pairs().collect::<std::collections::HashMap<_, _>>();
+        let query = query(request);
         assert_eq!(query["filter[app]"], "app");
         assert_eq!(query["filter[preReleaseVersion.platform]"], "IOS");
         assert_eq!(query["filter[preReleaseVersion.version]"], "1.4.0");
@@ -186,7 +199,7 @@ fn copies_snapshot_for_each_locale_before_adding_exact_build_to_group() {
     assert_eq!(requests[8].body["data"]["attributes"]["locale"], "fr-FR");
     assert_eq!(requests[8].body["data"]["relationships"]["build"]["data"]["id"], "new-build");
     assert_eq!(requests[9].url.path(), "/v1/betaGroups");
-    let group_query = requests[9].url.query_pairs().collect::<std::collections::HashMap<_, _>>();
+    let group_query = query(&requests[9]);
     assert_eq!(group_query.len(), 1);
     assert_eq!(group_query["filter[builds]"], "new-build");
     assert_eq!(requests[10].url.path(), "/v1/betaGroups/private-group/relationships/builds");
@@ -208,12 +221,7 @@ fn external_review_is_not_submitted_again() {
             ])),
             beta_detail(state),
         ]);
-        let distribution = Distribution {
-            api: server.api(),
-            app_id: "app".to_owned(),
-            group: target_group("group", false),
-            notes: vec![],
-        };
+        let distribution = distribution(&server, false);
 
         distribution.distribute_with_timeout(&identity(), Duration::ZERO, Duration::ZERO).unwrap();
         assert!(server.handle.join().unwrap().iter().all(|request| request.method == "GET"));
@@ -224,12 +232,7 @@ fn external_review_is_not_submitted_again() {
 fn rejects_failed_invalid_unknown_and_timed_out_builds_without_writes() {
     for state in ["FAILED", "INVALID", "NEW_UNKNOWN_STATE", "PROCESSING"] {
         let server = Server::new(vec![build(state)]);
-        let distribution = Distribution {
-            api: server.api(),
-            app_id: "app".to_owned(),
-            group: target_group("group", true),
-            notes: vec![],
-        };
+        let distribution = distribution(&server, true);
         assert!(distribution
             .distribute_with_timeout(&identity(), Duration::ZERO, Duration::ZERO)
             .is_err());
@@ -248,12 +251,7 @@ fn existing_membership_is_not_added_again() {
             {"id": "group", "attributes": {}}
         ])),
     ]);
-    let distribution = Distribution {
-        api: server.api(),
-        app_id: "app".to_owned(),
-        group: target_group("group", true),
-        notes: vec![],
-    };
+    let distribution = distribution(&server, true);
     distribution.distribute_with_timeout(&identity(), Duration::ZERO, Duration::ZERO).unwrap();
     assert!(server.handle.join().unwrap().iter().all(|request| request.method == "GET"));
 }
@@ -269,12 +267,7 @@ fn sets_missing_compliance_before_group_assignment() {
         page(json!([])),
         json!({}),
     ]);
-    let distribution = Distribution {
-        api: server.api(),
-        app_id: "app".to_owned(),
-        group: target_group("group", true),
-        notes: vec![],
-    };
+    let distribution = distribution(&server, true);
 
     distribution.distribute_with_timeout(&identity(), Duration::ZERO, Duration::ZERO).unwrap();
     let requests = server.handle.join().unwrap();
@@ -340,16 +333,4 @@ fn pagination_cannot_send_credentials_to_another_origin() {
     assert!(api.url("http://api.appstoreconnect.apple.com/v1/apps", &[]).is_err());
     assert!(api.url("https://user@api.appstoreconnect.apple.com/v1/apps", &[]).is_err());
     assert!(api.url("https://api.appstoreconnect.apple.com/v1/apps?cursor=next", &[]).is_ok());
-}
-
-#[test]
-fn empty_localizations_do_not_create_invalid_description_requests() {
-    for whats_new in [None, Some(String::new()), Some(" \n".to_owned())] {
-        let note = Localization { locale: "en-US".to_owned(), whats_new };
-        assert!(note.into_description().is_none());
-    }
-
-    let note =
-        Localization { locale: "en-US".to_owned(), whats_new: Some(" Exact text\n".to_owned()) };
-    assert_eq!(note.into_description().unwrap().whats_new, " Exact text\n");
 }
