@@ -162,7 +162,7 @@ fn should_retry_connectivity_failure(status: ConnectivityStatus) -> bool {
 
 fn apply_refresh_detail_result(manager: &RustCloudBackupManager, result: &CloudBackupDetailResult) {
     match result {
-        CloudBackupDetailResult::SuccessWithAuthority { detail, authority } => {
+        CloudBackupDetailResult::SuccessWithAuthority { detail, authority, .. } => {
             manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithAuthority {
                 detail: detail.clone(),
                 authority: *authority,
@@ -183,12 +183,13 @@ fn apply_cloud_only_operation_refresh_detail_result(
     result: &CloudBackupDetailResult,
 ) {
     match result {
-        CloudBackupDetailResult::SuccessWithAuthority { detail, authority } => {
+        CloudBackupDetailResult::SuccessWithAuthority { detail, authority, cloud_record_ids } => {
             manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
                 CloudBackupDetailOutcome::RefreshedWithAuthority {
                     detail: detail.clone(),
                     authority: *authority,
                 },
+                cloud_record_ids,
             );
         }
         CloudBackupDetailResult::AccessError(error) => {
@@ -206,12 +207,13 @@ fn apply_provider_confirmation_result(
     result: &CloudBackupDetailResult,
 ) {
     match result {
-        CloudBackupDetailResult::SuccessWithAuthority { detail, authority } => {
+        CloudBackupDetailResult::SuccessWithAuthority { detail, authority, cloud_record_ids } => {
             manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
                 CloudBackupDetailOutcome::RefreshedWithAuthority {
                     detail: detail.clone(),
                     authority: *authority,
                 },
+                cloud_record_ids,
             );
         }
         // the local rows stay retained, but an unconfirmed inventory is incomplete so the user

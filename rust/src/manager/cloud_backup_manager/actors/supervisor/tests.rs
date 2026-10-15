@@ -1361,6 +1361,7 @@ async fn repair_passkey_refresh_failure_resolves_superseded_detail_refresh() {
                     cloud_only_count: 0,
                 },
                 authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+                cloud_record_ids: Vec::new(),
             }),
             DetailRefreshAttempt::Initial,
             superseded_refresh,
@@ -1419,6 +1420,7 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
             Some(CloudBackupDetailResult::SuccessWithAuthority {
                 detail,
                 authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+                cloud_record_ids: wallets.iter().map(|wallet| wallet.record_id.clone()).collect(),
             }),
             DetailRefreshAttempt::Initial,
             claim,
@@ -1583,6 +1585,7 @@ async fn trailing_detail_refresh_is_scheduled_after_provider_confirmation() {
             Some(CloudBackupDetailResult::SuccessWithAuthority {
                 detail: test_cloud_backup_detail(2),
                 authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+                cloud_record_ids: Vec::new(),
             }),
             DetailRefreshAttempt::Initial,
             claim,
@@ -1630,6 +1633,7 @@ async fn stale_provider_confirmation_does_not_overwrite_newer_operation_result()
             Some(CloudBackupDetailResult::SuccessWithAuthority {
                 detail: test_cloud_backup_detail(3),
                 authority: CloudBackupInventoryAuthority::ProviderConfirmed,
+                cloud_record_ids: Vec::new(),
             }),
             DetailRefreshAttempt::Initial,
             claim,
