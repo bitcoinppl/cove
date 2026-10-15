@@ -767,10 +767,14 @@ impl StagedOutputs {
     }
 
     fn publish(&mut self) -> Result<()> {
-        for (staging, destination) in std::mem::take(&mut self.staged) {
-            fs::rename(&staging, &destination).wrap_err_with(|| {
+        // an entry stays staged until its own move succeeds, so a failed move leaves it and
+        // every later entry for discard to remove
+        while let Some((staging, destination)) = self.staged.first() {
+            fs::rename(staging, destination).wrap_err_with(|| {
                 format!("Failed to move {} to {}", staging.display(), destination.display())
             })?;
+
+            let (_, destination) = self.staged.remove(0);
             self.published.push(destination);
         }
 
@@ -1394,8 +1398,36 @@ mod tests {
         outputs.publish().unwrap();
 
         assert_eq!(fs::read_to_string(&aab).unwrap(), "new bundle");
+        assert!(outputs.staged.is_empty());
         assert_eq!(outputs.published, std::slice::from_ref(&aab));
         assert_eq!(outputs.discard(), Vec::<PathBuf>::new());
         assert!(!aab.exists());
+    }
+
+    #[test]
+    fn staged_outputs_discard_everything_after_a_failed_move() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("app.aab");
+        let aab = dir.path().join("cove-1.4.0-29.aab");
+        let apk = dir.path().join("cove-1.4.0-29.apk");
+        fs::write(&source, "new bundle").unwrap();
+
+        // a non-empty directory at the APK destination makes its move fail after the AAB moved
+        fs::create_dir(&apk).unwrap();
+        fs::write(apk.join("keep"), "").unwrap();
+
+        let mut outputs = StagedOutputs::default();
+        outputs.copy(&source, &aab).unwrap();
+        outputs.copy(&source, &apk).unwrap();
+        assert!(outputs.publish().is_err());
+        assert!(outputs.discard().is_empty());
+
+        assert!(!aab.exists());
+        let mut left = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect::<Vec<_>>();
+        left.sort();
+        assert_eq!(left, ["app.aab", "cove-1.4.0-29.apk"]);
     }
 }
