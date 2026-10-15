@@ -481,41 +481,14 @@ impl WalletActor {
 
     #[act_zero_ext::into_actor_result]
     pub async fn transactions(&mut self) -> Vec<Transaction> {
-        let zero = Amount::ZERO.into();
+        let transactions = Transaction::all_from_wallet(&self.wallet.bdk, Some(&self.db.labels));
 
-        let transaction_data = self
-            .wallet
-            .bdk
-            .transactions()
-            .map(|tx| {
-                let sent_and_received = self.wallet.bdk.sent_and_received(&tx.tx_node.tx).into();
-                (tx, sent_and_received)
-            })
-            .collect::<Vec<_>>();
+        for tx in &transactions {
+            if let Transaction::Unconfirmed(unconfirmed) = tx {
+                send!(self.addr.start_transaction_watcher(unconfirmed.txid.0));
+            }
+        }
 
-        let mut labels_by_txid = self
-            .db
-            .labels
-            .all_labels_for_txns(transaction_data.iter().map(|(tx, _)| tx.tx_node.txid))
-            .unwrap_or_else(|error| {
-                warn!("failed to batch load transaction labels: {error}");
-                Default::default()
-            });
-        let mut transactions = transaction_data
-            .into_iter()
-            .map(|(tx, sent_and_received)| {
-                let labels = labels_by_txid.remove(&tx.tx_node.txid).unwrap_or_default().into();
-                Transaction::new_with_labels(sent_and_received, tx, labels)
-            })
-            .filter(|tx| tx.sent_and_received().amount() > zero)
-            .inspect(|tx| {
-                if let Transaction::Unconfirmed(unconfirmed) = &tx {
-                    send!(self.addr.start_transaction_watcher(unconfirmed.txid.0));
-                }
-            })
-            .collect::<Vec<Transaction>>();
-
-        transactions.sort_unstable_by(|a, b| a.cmp(b).reverse());
         transactions
     }
 
