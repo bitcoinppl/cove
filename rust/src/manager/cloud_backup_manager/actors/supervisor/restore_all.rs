@@ -18,7 +18,6 @@ impl CloudBackupSupervisor {
     pub(crate) fn reconcile_restore_all_after_cloud_only_fetch(
         &self,
         manager: &RustCloudBackupManager,
-        eligible_count: usize,
     ) {
         if self.active_operation.is_restore_all()
             || !restore_all_marker_matches_active_namespace(manager)
@@ -26,7 +25,13 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        if eligible_count != 0 {
+        // only a loaded, complete and current cache proves nothing is left, anything else keeps
+        // the marker so a later fetch can decide
+        let Some(eligible) = manager.restore_all_proven_eligible_wallets() else {
+            manager.apply_restore_all_retry_required();
+            return;
+        };
+        if !eligible.is_empty() {
             manager.apply_restore_all_retry_required();
             return;
         }
@@ -46,6 +51,7 @@ impl CloudBackupSupervisor {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
         let Some(frozen_wallets) = manager.restore_all_eligible_wallets() else { return };
+        let listing_generation = manager.state.read().cloud_only_listing_generation();
         let frozen_count = frozen_wallets.len() as u32;
         let projected_state = manager.projected_restore_all_state();
         let can_start = match (retry, projected_state) {
@@ -84,7 +90,8 @@ impl CloudBackupSupervisor {
         manager.apply_restore_all_started(claim, frozen_count);
 
         addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_restore_all_cloud_wallets(frozen_wallets).await;
+            let result =
+                manager.prepare_restore_all_cloud_wallets(frozen_wallets, listing_generation).await;
             send!(addr.complete_restore_all_preparation(claim, result));
         });
     }
@@ -144,7 +151,7 @@ impl CloudBackupSupervisor {
             }
         };
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(
-            prepared.authoritative_wallets().to_vec(),
+            prepared.authoritative_fetch().clone(),
         ));
 
         let ordered_queue = prepared.ordered_queue().to_vec();
@@ -245,7 +252,6 @@ impl CloudBackupSupervisor {
             && let Some(result) = result
         {
             apply_refresh_detail_result(&manager, &result);
-            self.begin_cloud_only_fetch_if_inventory_ready(manager.clone());
             if let CloudBackupDetailResult::AccessError(error) = result
                 && restore_all_must_stop(&error)
             {
@@ -304,12 +310,13 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        // an unloaded cache means a refresh reset the rows mid-run, so nothing is known to be left
-        match manager.restore_all_eligible_wallets() {
+        // an unloaded, incomplete or outdated cache is unknown rather than empty, so the marker stays
+        match manager.restore_all_proven_eligible_wallets() {
             Some(eligible) if eligible.is_empty() => self.finish_restore_all_clean(&manager, claim),
             Some(_) => self.finish_restore_all_retry_remaining(&manager, claim),
             None => {
                 self.finish_restore_all_retry_remaining(&manager, claim);
+                // a reset already asked for a fetch, this covers a cache left in `Failed`
                 self.begin_cloud_only_fetch_if_inventory_ready(manager);
             }
         }

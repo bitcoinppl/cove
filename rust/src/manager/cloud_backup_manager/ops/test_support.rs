@@ -34,7 +34,8 @@ use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup, PersistedPasskeyState,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupKeychain, CloudBackupStore, PendingEnableJournal,
+    CloudBackupCloudOnlyFetchOutcome, CloudBackupEnableContext, CloudBackupKeychain,
+    CloudBackupStore, CloudBackupWalletItem, CloudOnlyFetch, PendingEnableJournal,
     PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership, PendingEnableSession,
     PendingUploadVerificationState, actors::restore::RestoreOperation,
 };
@@ -43,6 +44,25 @@ use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
 use crate::network::Network;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
+
+/// A complete fetch result stamped with the manager's current listing generation
+pub(crate) fn complete_cloud_only_fetch(
+    manager: &RustCloudBackupManager,
+    wallets: Vec<CloudBackupWalletItem>,
+) -> CloudOnlyFetch {
+    CloudOnlyFetch {
+        wallets,
+        unresolved_record_ids: Vec::new(),
+        listing_generation: manager.state.read().cloud_only_listing_generation(),
+    }
+}
+
+pub(crate) fn complete_loaded_outcome(
+    manager: &RustCloudBackupManager,
+    wallets: Vec<CloudBackupWalletItem>,
+) -> CloudBackupCloudOnlyFetchOutcome {
+    CloudBackupCloudOnlyFetchOutcome::Loaded(complete_cloud_only_fetch(manager, wallets))
+}
 
 pub(crate) fn staged_pending_enable_journal(
     context: CloudBackupEnableContext,

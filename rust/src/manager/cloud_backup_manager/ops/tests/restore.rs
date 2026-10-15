@@ -1406,10 +1406,10 @@ async fn restore_all_matches_individual_restore_for_the_same_record() {
         .expect("individual restore artifacts are removed before the batch restore");
 
     let mut prepared = manager
-        .prepare_restore_all_cloud_wallets(vec![frozen_restore_all_wallet(
-            &wallet,
-            CloudBackupWalletStatus::DeletedFromDevice,
-        )])
+        .prepare_restore_all_cloud_wallets(
+            vec![frozen_restore_all_wallet(&wallet, CloudBackupWalletStatus::DeletedFromDevice)],
+            0,
+        )
         .await
         .unwrap();
     let batch_outcome = prepared.restore_record(&record_id).await.unwrap();
@@ -1478,10 +1478,19 @@ async fn restore_all_preparation_reuses_one_session_and_authentication_for_order
     );
 
     let mut prepared = manager
-        .prepare_restore_all_cloud_wallets(vec![
-            frozen_restore_all_wallet(&first_wallet, CloudBackupWalletStatus::DeletedFromDevice),
-            frozen_restore_all_wallet(&second_wallet, CloudBackupWalletStatus::DeletedFromDevice),
-        ])
+        .prepare_restore_all_cloud_wallets(
+            vec![
+                frozen_restore_all_wallet(
+                    &first_wallet,
+                    CloudBackupWalletStatus::DeletedFromDevice,
+                ),
+                frozen_restore_all_wallet(
+                    &second_wallet,
+                    CloudBackupWalletStatus::DeletedFromDevice,
+                ),
+            ],
+            0,
+        )
         .await
         .unwrap();
 
@@ -1602,12 +1611,13 @@ async fn restore_all_preparation_intersects_authoritative_rows_in_frozen_order()
         frozen_restore_all_wallet(&stale_wallet, CloudBackupWalletStatus::DeletedFromDevice),
         frozen_restore_all_wallet(&first_wallet, CloudBackupWalletStatus::DeletedFromDevice),
     ];
-    let prepared = manager.prepare_restore_all_cloud_wallets(frozen_wallets).await.unwrap();
+    let prepared = manager.prepare_restore_all_cloud_wallets(frozen_wallets, 0).await.unwrap();
 
     assert_eq!(globals.cloud.list_wallet_files_attempt_count_for_namespace(&namespace), 1);
 
     let authoritative_record_ids = prepared
-        .authoritative_wallets()
+        .authoritative_fetch()
+        .wallets
         .iter()
         .map(|wallet| wallet.record_id.as_str())
         .collect::<Vec<_>>();
@@ -1648,10 +1658,10 @@ async fn restore_all_preparation_propagates_wallet_authorization_failure() {
     );
 
     let result = manager
-        .prepare_restore_all_cloud_wallets(vec![frozen_restore_all_wallet(
-            &wallet,
-            CloudBackupWalletStatus::DeletedFromDevice,
-        )])
+        .prepare_restore_all_cloud_wallets(
+            vec![frozen_restore_all_wallet(&wallet, CloudBackupWalletStatus::DeletedFromDevice)],
+            0,
+        )
         .await;
     let error = match result {
         Ok(_) => panic!("expected authorization failure"),
@@ -1681,14 +1691,17 @@ async fn restore_all_preparation_avoids_authentication_for_empty_intersection() 
 
     let frozen_wallet = xpub_only_wallet_metadata();
     let mut prepared = manager
-        .prepare_restore_all_cloud_wallets(vec![frozen_restore_all_wallet(
-            &frozen_wallet,
-            CloudBackupWalletStatus::DeletedFromDevice,
-        )])
+        .prepare_restore_all_cloud_wallets(
+            vec![frozen_restore_all_wallet(
+                &frozen_wallet,
+                CloudBackupWalletStatus::DeletedFromDevice,
+            )],
+            0,
+        )
         .await
         .unwrap();
 
-    assert!(prepared.authoritative_wallets().is_empty());
+    assert!(prepared.authoritative_fetch().wallets.is_empty());
     assert!(prepared.ordered_queue().is_empty());
     assert_eq!(globals.passkey.authenticate_count(), 0);
     assert_eq!(globals.passkey.discover_count(), 0);
