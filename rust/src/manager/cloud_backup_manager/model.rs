@@ -16,7 +16,7 @@ use super::{
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
 use cove_device::cloud_storage::CloudSyncHealth;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod cloud_only_inventory;
@@ -1179,16 +1179,11 @@ impl CloudBackupReducerState {
     /// Applies a refreshed detail and returns whether it invalidated loaded cloud-only rows
     fn apply_detail_refresh(
         &mut self,
-        detail: Option<(CloudBackupDetail, CloudBackupInventoryAuthority)>,
+        (detail, inventory_authority): (CloudBackupDetail, CloudBackupInventoryAuthority),
         cloud_only_listing: CloudOnlyListingUpdate,
     ) -> bool {
         let previous_loaded = self.loaded_detail().cloned();
         self.configured.detail_refresh = DetailRefreshActivity::Idle;
-
-        let Some((detail, inventory_authority)) = detail else {
-            self.configured.detail = CloudBackupDetailState::NotLoaded;
-            return false;
-        };
 
         if let CloudOnlyListingUpdate::Listed(record_ids) = &cloud_only_listing {
             self.cloud_only_inventory.record_listing(record_ids);
@@ -1204,7 +1199,6 @@ impl CloudBackupReducerState {
                         self.cloud_only_inventory.keep_loaded_for_listing(&loaded_ids)
                     }
                     CloudOnlyListingUpdate::Unlisted => false,
-                    CloudOnlyListingUpdate::Retained => true,
                 };
 
                 if keep {
@@ -1255,10 +1249,10 @@ impl CloudBackupReducerState {
                 .filter_map(|wallet| {
                     wallet.restore_failure.map(|failure| (wallet.record_id, failure))
                 })
-                .collect::<std::collections::HashMap<_, _>>(),
+                .collect::<HashMap<_, _>>(),
             CloudOnlyState::NotFetched
             | CloudOnlyState::Loading
-            | CloudOnlyState::Failed { .. } => std::collections::HashMap::new(),
+            | CloudOnlyState::Failed { .. } => HashMap::new(),
         };
         for wallet in &mut fetch.wallets {
             if wallet.restore_failure.is_none() {
@@ -1266,10 +1260,15 @@ impl CloudBackupReducerState {
             }
         }
 
-        self.resolve_cloud_only_state(CloudOnlyState::Loaded { wallets: fetch.wallets.clone() });
         self.cloud_only_inventory.record_loaded(&fetch);
+        self.resolve_cloud_only_state(CloudOnlyState::Loaded { wallets: fetch.wallets });
 
         true
+    }
+
+    fn apply_detail_cleared(&mut self) {
+        self.configured.detail_refresh = DetailRefreshActivity::Idle;
+        self.configured.detail = CloudBackupDetailState::NotLoaded;
     }
 
     fn apply_detail_refresh_started(&mut self) {
@@ -1661,6 +1660,9 @@ impl CloudBackupStateReducer {
                 effects.cloud_only_refetch_needed =
                     self.state.apply_detail_refresh(detail, cloud_only_listing);
             }
+            CloudBackupStateReducerEvent::DetailCleared => {
+                self.state.apply_detail_cleared();
+            }
             CloudBackupStateReducerEvent::DetailRefreshFailed { reason, error } => {
                 self.state.apply_detail_refresh_failure(reason, error);
             }
@@ -1670,7 +1672,6 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::CloudOnlyFetchLoaded(fetch) => {
                 let applied = self.state.apply_cloud_only_fetch_loaded(fetch);
 
-                effects.cloud_only_fetch_discarded = !applied;
                 effects.cloud_only_refetch_needed = !applied;
             }
             CloudBackupStateReducerEvent::CloudOnlyInventoryInvalidated => {
@@ -1922,16 +1923,38 @@ mod tests {
             ),
         };
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-            detail: Some((
+            detail: (
                 test_detail(wallets.len() as u32),
                 CloudBackupInventoryAuthority::ProviderConfirmed,
-            )),
-            cloud_only_listing: CloudOnlyListingUpdate::Retained,
+            ),
+            cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
         });
         model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
             CloudOnlyState::Loaded { wallets },
         ));
         model
+    }
+
+    fn listed_record_ids(wallets: &[CloudBackupWalletItem]) -> HashSet<String> {
+        wallets.iter().map(|wallet| wallet.record_id.clone()).collect()
+    }
+
+    // records the listing and loads a complete fetch for it, so a later detail listing the same
+    // wallets keeps the rows
+    fn load_listed_cloud_only(
+        model: &mut CloudBackupStateReducer,
+        detail: &CloudBackupDetail,
+        wallets: &[CloudBackupWalletItem],
+    ) {
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+            detail: (detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed),
+            cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(wallets)),
+        });
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyFetchLoaded(CloudOnlyFetch {
+            wallets: wallets.to_vec(),
+            unresolved_record_ids: Vec::new(),
+            listing_generation: model.state.cloud_only_inventory.generation(),
+        }));
     }
 
     fn restore_all_state(model: &CloudBackupStateReducer) -> CloudBackupRestoreAllState {
@@ -2172,10 +2195,10 @@ mod tests {
     #[test]
     fn restore_all_retry_allows_one_remaining_wallet_only_when_complete() {
         let detail = test_detail(1);
-        let mut model = configured_model_with_cloud_only(vec![cloud_only_wallet(
-            "wallet-1",
-            CloudBackupWalletStatus::DeletedFromDevice,
-        )]);
+        let wallets =
+            vec![cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice)];
+        let mut model = configured_model_with_cloud_only(wallets.clone());
+        load_listed_cloud_only(&mut model, &detail, &wallets);
 
         model.apply_event(CloudBackupStateReducerEvent::RestoreAllRetryRequired);
         assert_eq!(
@@ -2190,8 +2213,8 @@ mod tests {
         );
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-            detail: Some((detail, CloudBackupInventoryAuthority::ProviderConfirmed)),
-            cloud_only_listing: CloudOnlyListingUpdate::Retained,
+            detail: (detail, CloudBackupInventoryAuthority::ProviderConfirmed),
+            cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(&wallets)),
         });
         assert_eq!(
             restore_all_state(&model),
@@ -2267,8 +2290,8 @@ mod tests {
         let detail = test_detail(2);
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-            detail: Some((detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed)),
-            cloud_only_listing: CloudOnlyListingUpdate::Retained,
+            detail: (detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed),
+            cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
         });
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
             reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
@@ -2301,8 +2324,8 @@ mod tests {
         let detail = test_detail(2);
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-            detail: Some((detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed)),
-            cloud_only_listing: CloudOnlyListingUpdate::Retained,
+            detail: (detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed),
+            cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
         });
         assert!(model.detail_inventory_is_complete());
 
@@ -2358,11 +2381,8 @@ mod tests {
         };
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-            detail: Some((
-                test_detail(1),
-                CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
-            )),
-            cloud_only_listing: CloudOnlyListingUpdate::Retained,
+            detail: (test_detail(1), CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount),
+            cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
         });
 
         assert!(!model.detail_inventory_is_complete());
@@ -2384,15 +2404,14 @@ mod tests {
         ];
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-            detail: Some((
-                detail.clone(),
-                CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount,
-            )),
-            cloud_only_listing: CloudOnlyListingUpdate::Retained,
+            detail: (detail.clone(), CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount),
+            cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(&wallets)),
         });
-        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
-            CloudOnlyState::Loaded { wallets: wallets.clone() },
-        ));
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyFetchLoaded(CloudOnlyFetch {
+            wallets: wallets.clone(),
+            unresolved_record_ids: Vec::new(),
+            listing_generation: model.state.cloud_only_inventory.generation(),
+        }));
 
         assert_eq!(
             restore_all_state(&model),
@@ -2400,8 +2419,8 @@ mod tests {
         );
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-            detail: Some((detail, CloudBackupInventoryAuthority::ProviderConfirmed)),
-            cloud_only_listing: CloudOnlyListingUpdate::Retained,
+            detail: (detail, CloudBackupInventoryAuthority::ProviderConfirmed),
+            cloud_only_listing: CloudOnlyListingUpdate::Listed(listed_record_ids(&wallets)),
         });
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
@@ -2429,8 +2448,8 @@ mod tests {
         let retained = test_detail(3);
 
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-            detail: Some((retained.clone(), CloudBackupInventoryAuthority::ProviderConfirmed)),
-            cloud_only_listing: CloudOnlyListingUpdate::Retained,
+            detail: (retained.clone(), CloudBackupInventoryAuthority::ProviderConfirmed),
+            cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
         });
         model.apply_event(CloudBackupStateReducerEvent::DetailRefreshProvisional(test_detail(0)));
 

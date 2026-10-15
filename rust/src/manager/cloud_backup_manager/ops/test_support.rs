@@ -34,10 +34,11 @@ use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup, PersistedPasskeyState,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupCloudOnlyFetchOutcome, CloudBackupEnableContext, CloudBackupKeychain,
-    CloudBackupStore, CloudBackupWalletItem, CloudOnlyFetch, PendingEnableJournal,
-    PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership, PendingEnableSession,
-    PendingUploadVerificationState, actors::restore::RestoreOperation,
+    CloudBackupCloudOnlyFetchOutcome, CloudBackupDetail, CloudBackupEnableContext,
+    CloudBackupKeychain, CloudBackupListedDetail, CloudBackupStore, CloudBackupWalletItem,
+    CloudOnlyFetch, PendingEnableJournal, PendingEnableLocalMetadataSnapshot,
+    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
+    actors::restore::RestoreOperation,
 };
 
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
@@ -62,6 +63,22 @@ pub(crate) fn complete_loaded_outcome(
     wallets: Vec<CloudBackupWalletItem>,
 ) -> CloudBackupCloudOnlyFetchOutcome {
     CloudBackupCloudOnlyFetchOutcome::Loaded(complete_cloud_only_fetch(manager, wallets))
+}
+
+/// A listed detail with no local wallets and the given cloud-only record IDs
+pub(crate) fn listed_detail(cloud_only_record_ids: &[&str]) -> CloudBackupListedDetail {
+    CloudBackupListedDetail {
+        detail: CloudBackupDetail {
+            last_sync: None,
+            up_to_date: Vec::new(),
+            needs_sync: Vec::new(),
+            cloud_only_count: cloud_only_record_ids.len() as u32,
+        },
+        cloud_only_record_ids: cloud_only_record_ids
+            .iter()
+            .map(|record_id| (*record_id).to_owned())
+            .collect(),
+    }
 }
 
 pub(crate) fn staged_pending_enable_journal(
@@ -911,7 +928,6 @@ pub(crate) struct MockPasskeyProviderImpl {
     create_count: Arc<Mutex<usize>>,
     authenticate_count: Arc<Mutex<usize>>,
     discover_count: Arc<Mutex<usize>>,
-    authenticated_credential_ids: Arc<Mutex<Vec<Vec<u8>>>>,
     authenticated_requests: Arc<Mutex<Vec<MockPasskeyAuthenticationRequest>>>,
     authenticate_gate: Arc<Mutex<Option<Arc<MockPasskeyCallGate>>>>,
 }
@@ -933,7 +949,6 @@ impl MockPasskeyProviderImpl {
         *self.create_count.lock() = 0;
         *self.authenticate_count.lock() = 0;
         *self.discover_count.lock() = 0;
-        self.authenticated_credential_ids.lock().clear();
         self.authenticated_requests.lock().clear();
         *self.authenticate_gate.lock() = None;
     }
@@ -986,7 +1001,11 @@ impl MockPasskeyProviderImpl {
     }
 
     pub(crate) fn authenticated_credential_ids(&self) -> Vec<Vec<u8>> {
-        self.authenticated_credential_ids.lock().clone()
+        self.authenticated_requests
+            .lock()
+            .iter()
+            .map(|request| request.credential_id.clone())
+            .collect()
     }
 
     pub(crate) fn authenticated_requests(&self) -> Vec<MockPasskeyAuthenticationRequest> {
@@ -1026,7 +1045,6 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
         challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
         *self.authenticate_count.lock() += 1;
-        self.authenticated_credential_ids.lock().push(credential_id.clone());
         self.authenticated_requests.lock().push(MockPasskeyAuthenticationRequest {
             rp_id,
             credential_id,
@@ -1617,6 +1635,23 @@ pub(crate) async fn new_restore_operation_for_test(
     manager: &RustCloudBackupManager,
 ) -> RestoreOperation {
     call!(manager.supervisor.new_restore_operation()).await.expect("create restore operation")
+}
+
+/// Stores a freshly generated master key wrapper in the mock cloud and returns its namespace
+pub(crate) fn seed_master_key_wrapper(
+    globals: &TestGlobals,
+    prf_key: &[u8; 32],
+    prf_salt: &[u8; 32],
+    registered_at: u64,
+) -> String {
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    globals.cloud.set_master_key_backup(
+        namespace.clone(),
+        master_wrapper_for_test(&master_key, prf_key, prf_salt, registered_at),
+    );
+
+    namespace
 }
 
 /// A master key wrapper whose passkey hint and metadata are stamped with `registered_at`

@@ -120,12 +120,6 @@ pub(crate) struct NamespacePasskeyCandidateSnapshot {
     best_passkey_hint: Option<CloudBackupPasskeyHint>,
 }
 
-impl NamespacePasskeyCandidateSnapshot {
-    pub(crate) fn best_passkey_hint(&self) -> Option<CloudBackupPasskeyHint> {
-        self.best_passkey_hint.clone()
-    }
-}
-
 enum CredentialSelection {
     NotAttempted,
     NoCredentialFound,
@@ -193,7 +187,7 @@ impl NamespacePasskeyMatcher {
     }
 
     /// Loads cloud wrappers once and derives both display hints and candidates
-    pub(crate) async fn inspect_namespaces(
+    async fn inspect_namespaces(
         &self,
         namespaces: &[String],
     ) -> Result<NamespacePasskeyCandidateSnapshot, CloudBackupError> {
@@ -215,7 +209,7 @@ impl NamespacePasskeyMatcher {
     ) -> Result<(NamespaceMatchOutcome, Option<CloudBackupPasskeyHint>), CloudBackupError> {
         let mut session = self.start_session();
         let snapshot = self.inspect_namespaces(namespaces).await?;
-        let passkey_hint = snapshot.best_passkey_hint();
+        let passkey_hint = snapshot.best_passkey_hint.clone();
         let outcome = match session.match_inspection(namespaces.len(), snapshot).await? {
             NamespaceMatchSnapshotOutcome::Matched(matches) => {
                 NamespaceMatchOutcome::Matched(matches)
@@ -242,7 +236,7 @@ impl NamespacePasskeyMatcher {
         &self,
         namespaces: &[String],
     ) -> Option<CloudBackupPasskeyHint> {
-        self.inspect_namespaces(namespaces).await.ok()?.best_passkey_hint()
+        self.inspect_namespaces(namespaces).await.ok()?.best_passkey_hint
     }
 }
 
