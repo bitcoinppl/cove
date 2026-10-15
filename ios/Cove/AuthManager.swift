@@ -10,6 +10,7 @@ enum WipePresentationState: Equatable {
     case shutdownBlocked(ShutdownAttemptId)
     case failed
 
+    // the wipe PIN can be entered under duress, so this copy must not reveal that a wipe ran
     static let failureTitle = "Unable to Open Cove"
     static let failureMessage = "Please try again."
 }

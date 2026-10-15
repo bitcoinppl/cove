@@ -59,6 +59,7 @@ sealed interface WipePresentationState {
     data object Failed : WipePresentationState
 }
 
+// the wipe PIN can be entered under duress, so this copy must not reveal that a wipe ran
 internal const val WIPE_FAILURE_TITLE = "Unable to Open Cove"
 internal const val WIPE_FAILURE_MESSAGE = "Please try again."
 
