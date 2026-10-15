@@ -1,5 +1,7 @@
 package org.bitcoinppl.cove.cloudbackup
 
+import android.os.Bundle
+import androidx.credentials.CustomCredential
 import androidx.credentials.exceptions.CreateCredentialCancellationException
 import androidx.credentials.exceptions.CreateCredentialInterruptedException
 import androidx.credentials.exceptions.CreateCredentialUnsupportedException
@@ -26,7 +28,7 @@ import org.junit.Test
 
 class AndroidPasskeyProviderTest {
     @Test
-    fun createRequestJsonRequestsPrfExtension() {
+    fun createRequestJsonRequiresUserVerificationAndPreservesFields() {
         val request =
             JSONObject(
                 buildPasskeyCreateRequestJson(
@@ -41,6 +43,25 @@ class AndroidPasskeyProviderTest {
                 ),
             )
 
+        assertEquals("BAUG", request.getString("challenge"))
+
+        val rp = request.getJSONObject("rp")
+        assertEquals("covebitcoinwallet.com", rp.getString("id"))
+
+        val user = request.getJSONObject("user")
+        assertEquals("AQID", user.getString("id"))
+        assertEquals("test@example.com", user.getString("name"))
+        assertEquals("Test User", user.getString("displayName"))
+
+        assertEquals(
+            "required",
+            request.getJSONObject("authenticatorSelection").getString("residentKey"),
+        )
+        assertEquals(
+            "required",
+            request.getJSONObject("authenticatorSelection").getString("userVerification"),
+        )
+
         val prf = request.getJSONObject("extensions").getJSONObject("prf")
 
         assertEquals(0, prf.length())
@@ -48,7 +69,7 @@ class AndroidPasskeyProviderTest {
     }
 
     @Test
-    fun assertionRequestJsonDoesNotBoundInteractiveAuthorization() {
+    fun assertionRequestJsonRequiresUserVerificationAndPreservesFields() {
         val request =
             JSONObject(
                 buildPasskeyAssertionRequestJson(
@@ -59,7 +80,31 @@ class AndroidPasskeyProviderTest {
                 ),
             )
 
+        assertEquals("BwgJ", request.getString("challenge"))
+        assertEquals("covebitcoinwallet.com", request.getString("rpId"))
+        assertEquals("required", request.getString("userVerification"))
+
+        val prf = request.getJSONObject("extensions").getJSONObject("prf")
+        assertEquals("BAUG", prf.getJSONObject("eval").getString("first"))
+
+        val allowCredentials = request.getJSONArray("allowCredentials")
+        assertEquals(1, allowCredentials.length())
+        assertEquals("public-key", allowCredentials.getJSONObject(0).getString("type"))
+        assertEquals("AQID", allowCredentials.getJSONObject(0).getString("id"))
+
         assertTrue(!request.has("timeout"))
+    }
+
+    @Test
+    fun discoveryRejectsUnexpectedCredentialTypeAsAuthenticationFailure() {
+        val unexpectedCredential = CustomCredential("unexpected", Bundle())
+        val error =
+            assertThrows(PasskeyException.RequestFailed::class.java) {
+                requirePublicKeyCredential(unexpectedCredential, PasskeyOperation.DISCOVER_ASSERTION)
+            }
+
+        assertEquals(PasskeyOperation.DISCOVER_ASSERTION, error.operation)
+        assertEquals(PasskeyFailureReason.UnexpectedCredentialType, error.reason)
     }
 
     @Test
@@ -139,6 +184,10 @@ class AndroidPasskeyProviderTest {
         assertTrue(
             (localizedDiagnostic as PasskeyException.RequestFailed).reason
                 is PasskeyFailureReason.Unknown,
+        )
+        assertEquals(
+            PasskeyFailureReason.Unknown("passkey creation failed"),
+            localizedDiagnostic.reason,
         )
 
         val createSecurityError = mapPasskeyCreateError(CreatePublicKeyCredentialDomException(SecurityError()))
@@ -235,7 +284,7 @@ class AndroidPasskeyProviderTest {
             (diagnostic as PasskeyException.RequestFailed).operation,
         )
         assertEquals(
-            PasskeyFailureReason.Unknown("credential provider diagnostic"),
+            PasskeyFailureReason.Unknown("passkey authentication failed"),
             diagnostic.reason,
         )
     }

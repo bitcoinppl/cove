@@ -93,10 +93,8 @@ struct MainSettingsScreen: View {
             set: { enable in
                 // enable
                 if enable {
-                    if !app.rust.unverifiedWalletIds().isEmpty {
-                        alertState = .init(
-                            .unverifiedWallets(app.rust.unverifiedWalletIds().first!)
-                        )
+                    if let walletId = app.rust.unverifiedWalletIds().first {
+                        alertState = .init(.unverifiedWallets(walletId))
 
                         return
                     }

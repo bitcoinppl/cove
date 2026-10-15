@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -7,9 +7,39 @@ use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
 use parking_lot::Mutex;
 
 use crate::wallet::fingerprint::Fingerprint;
-use crate::wallet::metadata::{WalletMetadata, WalletType};
+use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
 
 static FAIL_KEYCHAIN_DELETES: AtomicBool = AtomicBool::new(false);
+type AfterSaveHook = Arc<dyn Fn(&str) + Send + Sync>;
+
+pub(crate) const WALLET_MNEMONIC_KEY_SUFFIX: &str = "::wallet_mnemonic";
+pub(crate) const WALLET_MNEMONIC_CRYPTOR_KEY_SUFFIX: &str =
+    "::wallet_mnemonic_encryption_key_and_nonce";
+pub(crate) const WALLET_XPUB_KEY_SUFFIX: &str = "::wallet_xpub";
+
+pub(crate) const WALLET_KEYCHAIN_KEY_SUFFIXES: [&str; 6] = [
+    WALLET_MNEMONIC_KEY_SUFFIX,
+    WALLET_MNEMONIC_CRYPTOR_KEY_SUFFIX,
+    WALLET_XPUB_KEY_SUFFIX,
+    "::wallet_public_descriptor",
+    "::tap_signer_backup",
+    "::wallet_tap_signer_encryption_key_and_nonce_key_name",
+];
+
+/// The raw stored wallet keychain values keyed by suffix
+///
+/// Comparing raw values makes a rewrite of an adopted item visible even when the
+/// decrypted value would still compare equal
+pub(crate) fn raw_wallet_keychain_entries(
+    wallet_id: &WalletId,
+) -> BTreeMap<&'static str, Option<String>> {
+    let keychain = shared_mock_keychain();
+
+    WALLET_KEYCHAIN_KEY_SUFFIXES
+        .iter()
+        .map(|suffix| (*suffix, keychain.get_entry(&format!("{wallet_id}{suffix}"))))
+        .collect()
+}
 
 /// In-memory keychain shared by every test module
 ///
@@ -24,6 +54,7 @@ pub(crate) struct MockKeychain {
     fail_delete_at: Arc<Mutex<Option<usize>>>,
     save_count: Arc<Mutex<usize>>,
     delete_count: Arc<Mutex<usize>>,
+    after_save: Arc<Mutex<Option<AfterSaveHook>>>,
 }
 
 impl MockKeychain {
@@ -33,6 +64,7 @@ impl MockKeychain {
         *self.fail_delete_at.lock() = None;
         *self.save_count.lock() = 0;
         *self.delete_count.lock() = 0;
+        *self.after_save.lock() = None;
     }
 
     pub(crate) fn set_entries(&self, entries: Vec<(&str, &str)>) {
@@ -53,6 +85,10 @@ impl MockKeychain {
         *self.delete_count.lock() = 0;
         *self.fail_delete_at.lock() = Some(delete_attempt);
     }
+
+    pub(crate) fn set_after_save(&self, hook: impl Fn(&str) + Send + Sync + 'static) {
+        *self.after_save.lock() = Some(Arc::new(hook));
+    }
 }
 
 impl KeychainAccess for MockKeychain {
@@ -65,7 +101,12 @@ impl KeychainAccess for MockKeychain {
             }
         }
 
-        self.entries.lock().insert(key, value);
+        self.entries.lock().insert(key.clone(), value);
+
+        let hook = self.after_save.lock().clone();
+        if let Some(hook) = hook {
+            hook(&key);
+        }
 
         Ok(())
     }
@@ -89,16 +130,9 @@ impl KeychainAccess for MockKeychain {
     }
 
     fn delete_all_wallet_items(&self) -> Result<(), KeychainError> {
-        let suffixes = [
-            "::wallet_mnemonic",
-            "::wallet_mnemonic_encryption_key_and_nonce",
-            "::wallet_xpub",
-            "::wallet_public_descriptor",
-            "::tap_signer_backup",
-            "::wallet_tap_signer_encryption_key_and_nonce_key_name",
-        ];
-
-        self.entries.lock().retain(|key, _| !suffixes.iter().any(|suffix| key.ends_with(suffix)));
+        self.entries.lock().retain(|key, _| {
+            !WALLET_KEYCHAIN_KEY_SUFFIXES.iter().any(|suffix| key.ends_with(suffix))
+        });
         Ok(())
     }
 }

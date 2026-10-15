@@ -1,4 +1,4 @@
-use std::{fmt, sync::Arc, time::Duration};
+use std::{fmt, sync::Arc};
 
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
@@ -526,28 +526,6 @@ impl RustOnboardingManager {
                 Self::apply_restore_event(&state, &reconciler, internal_event);
             }
         });
-
-        let state = self.state.clone();
-        let reconciler = self.reconciler.sender().clone();
-        cove_tokio::task::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(120)).await;
-
-            if !Self::is_restore_attempt_current(&state, attempt_id) {
-                return;
-            }
-
-            CLOUD_BACKUP_MANAGER.cancel_restore_and_wait().await;
-
-            Self::apply_restore_event(
-                &state,
-                &reconciler,
-                InternalEvent::RestoreFailed { attempt_id, message: "Restore timed out".into() },
-            );
-        });
-    }
-
-    fn is_restore_attempt_current(state: &Arc<RwLock<InternalState>>, attempt_id: u64) -> bool {
-        state.read().flow.is_restore_attempt_current(attempt_id)
     }
 
     fn apply_restore_event(
@@ -1648,30 +1626,6 @@ mod tests {
 
         assert_eq!(command, TransitionCommand::None);
         assert!(matches!(flow, FlowState::Welcome { error_message: None }));
-    }
-
-    #[test]
-    fn timeout_failure_enters_restore_failed_with_timeout_message() {
-        let mut flow = FlowState::Restoring {
-            origin: RestoreOrigin::Welcome,
-            attempt_id: 3,
-            flow: CloudBackupRestoreFlow::Finding,
-        };
-        let mut discovery = CloudRestoreDiscovery::BackupFound(None);
-
-        flow.apply_event(
-            InternalEvent::RestoreFailed { attempt_id: 3, message: "Restore timed out".into() },
-            &mut discovery,
-            true,
-        );
-
-        assert!(matches!(
-            flow,
-            FlowState::RestoreFailed {
-                origin: RestoreOrigin::Welcome,
-                message,
-            } if message == "Restore timed out"
-        ));
     }
 
     #[test]
