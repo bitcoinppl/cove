@@ -483,10 +483,6 @@ extension ICloudDriveHelper {
         return deletedURL
     }
 
-    private func performCoordinatedDelete(at url: URL, missingItemID: String) throws -> URL {
-        try coordinatedDeleter(url, missingItemID)
-    }
-
     private static func coordinatedRead(
         from url: URL,
         coordinator: NSFileCoordinator
@@ -1107,7 +1103,7 @@ extension ICloudDriveHelper {
             guard !Task.isCancelled else { break }
 
             do {
-                let deletedURL = try performCoordinatedDelete(at: url, missingItemID: recordId)
+                let deletedURL = try coordinatedDeleter(url, recordId)
                 deletedURLs.append(deletedURL)
                 deletedURLs.append(url)
             } catch CloudStorageError.NotFound {
@@ -1147,7 +1143,7 @@ extension ICloudDriveHelper {
         }
 
         let deletedURL = try await runFileOperation {
-            try self.performCoordinatedDelete(at: deleteURL, missingItemID: namespace)
+            try self.coordinatedDeleter(deleteURL, namespace)
         }
         await recordMetadataDeletions(of: [requestedURL, deleteURL, deletedURL])
     }

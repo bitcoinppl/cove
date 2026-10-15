@@ -1169,6 +1169,18 @@ extension CloudBackupIOSSafetyHelpersTests {
         )
     }
 
+    /// Completes the index's initial gather with `records`
+    @MainActor
+    private func seedFinishedGathering(
+        _ fixture: ICloudMetadataFixture,
+        _ records: [ICloudMetadataRecord]
+    ) async throws {
+        let initial = Task { try await fixture.index.currentOrInitialRecords(timeout: 1) }
+        await fixture.source.waitUntilStarted()
+        fixture.source.send(.finishedGathering(records))
+        _ = try await initial.value
+    }
+
     private func writeTestBackup(at url: URL) throws {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
@@ -1266,10 +1278,7 @@ extension CloudBackupIOSSafetyHelpersTests {
         XCTAssertEqual(staleInitialRecords, [])
 
         let liveFixture = makeICloudMetadataFixture()
-        let live = Task { try await liveFixture.index.currentOrInitialRecords(timeout: 1) }
-        await liveFixture.source.waitUntilStarted()
-        liveFixture.source.send(.finishedGathering([record]))
-        _ = try await live.value
+        try await seedFinishedGathering(liveFixture, [record])
         liveFixture.index.markDeleted(resolvedPaths: [record.resolvedPath])
         liveFixture.source.send(.updated([]))
         liveFixture.source.send(.updated([record]))
@@ -1289,10 +1298,7 @@ extension CloudBackupIOSSafetyHelpersTests {
         let child = metadataRecord(name: "wallet.json", parentPath: directoryPath)
         let nested = metadataRecord(name: "key.json", parentPath: directoryPath + "/nested")
         let sibling = metadataRecord(name: "other.json", parentPath: directoryPath + "-other")
-        let initial = Task { try await fixture.index.currentOrInitialRecords(timeout: 1) }
-        await fixture.source.waitUntilStarted()
-        fixture.source.send(.finishedGathering([child, nested, sibling]))
-        _ = try await initial.value
+        try await seedFinishedGathering(fixture, [child, nested, sibling])
 
         fixture.index.markDeleted(resolvedPaths: [directoryPath, directoryPath])
         let records = try await fixture.index.currentOrInitialRecords(timeout: 1)
@@ -1327,10 +1333,7 @@ extension CloudBackupIOSSafetyHelpersTests {
                 name: url.lastPathComponent,
                 parentPath: url.deletingLastPathComponent().path
             )
-            let initial = Task { try await fixture.index.currentOrInitialRecords(timeout: 1) }
-            await fixture.source.waitUntilStarted()
-            fixture.source.send(.finishedGathering([record]))
-            _ = try await initial.value
+            try await seedFinishedGathering(fixture, [record])
 
             try await fixture.helper.deleteExistingBackupFile(
                 namespace: testNamespace,
@@ -1381,10 +1384,7 @@ extension CloudBackupIOSSafetyHelpersTests {
             url: redirectedURL,
             resolvedPath: redirectedURL.resolvingSymlinksInPath().path
         )
-        let initial = Task { try await fixture.index.currentOrInitialRecords(timeout: 1) }
-        await fixture.source.waitUntilStarted()
-        fixture.source.send(.finishedGathering([providerRecord]))
-        _ = try await initial.value
+        try await seedFinishedGathering(fixture, [providerRecord])
 
         try await fixture.helper.deleteExistingBackupFile(
             namespace: testNamespace,
@@ -1419,10 +1419,7 @@ extension CloudBackupIOSSafetyHelpersTests {
         let records = urls.map {
             metadataRecord(name: $0.lastPathComponent, parentPath: $0.deletingLastPathComponent().path)
         }
-        let initial = Task { try await fixture.index.currentOrInitialRecords(timeout: 1) }
-        await fixture.source.waitUntilStarted()
-        fixture.source.send(.finishedGathering(records))
-        _ = try await initial.value
+        try await seedFinishedGathering(fixture, records)
 
         do {
             try await fixture.helper.deleteExistingBackupFile(
@@ -1451,10 +1448,7 @@ extension CloudBackupIOSSafetyHelpersTests {
             ),
             metadataRecord(name: localChild.lastPathComponent, parentPath: localURL.path),
         ]
-        let localInitial = Task { try await localFixture.index.currentOrInitialRecords(timeout: 1) }
-        await localFixture.source.waitUntilStarted()
-        localFixture.source.send(.finishedGathering(localRecords))
-        _ = try await localInitial.value
+        try await seedFinishedGathering(localFixture, localRecords)
 
         try await localFixture.helper.deleteNamespaceDirectory(namespace: testNamespace)
         var visibleRecords = try await localFixture.index.currentOrInitialRecords(timeout: 1)
