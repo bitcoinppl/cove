@@ -32,6 +32,25 @@ enum PasskeyOperationContext: Equatable {
     }
 }
 
+/// Domain and code only, so localized text never reaches the error surfaced to Rust
+func passkeyNSErrorMetadata(_ error: Error) -> String {
+    let nsError = error as NSError
+    return "error_domain=\(nsError.domain) error_code=\(nsError.code)"
+}
+
+/// Drop the last references to a finished request on the main thread
+///
+/// The blocking caller otherwise releases the controller off the main thread while
+/// AuthenticationServices is still unwinding its delegate callback for that controller
+private func releasePasskeyRequestOnMain(
+    _ controller: ASAuthorizationController,
+    _ delegate: AnyObject
+) {
+    DispatchQueue.main.async {
+        withExtendedLifetime((controller, delegate)) {}
+    }
+}
+
 func passkeyUnexpectedCredentialError(
     operation: PasskeyOperation
 ) -> PasskeyError {
@@ -77,6 +96,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
     func createPasskey(rpId: String, challenge: Data, user: PasskeyRegistrationUser) throws -> PasskeyRegistrationResult {
         precondition(!Thread.isMainThread, "createPasskey must not be called from the main thread")
 
+        // wait before building the controller and before any timeout starts, so the wait never
+        // eats the request timeout
+        PresenterIdle.waitBlocking()
+
         let registration = try performRegistrationRequest(
             rpId: rpId,
             challenge: challenge,
@@ -109,6 +132,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             "authenticateWithPrf must not be called from the main thread"
         )
 
+        // wait before building the controller and before any timeout starts, so the wait never
+        // eats the request timeout
+        PresenterIdle.waitBlocking()
+
         let (prfOutput, _) = try performPrfAssertion(
             rpId: rpId,
             credentialId: credentialId,
@@ -124,6 +151,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             !Thread.isMainThread,
             "checkPasskeyPresence must not be called from the main thread"
         )
+
+        // wait before building the controller and before any timeout starts, so the wait never
+        // eats the request timeout
+        PresenterIdle.waitBlocking()
 
         // passkey authorization requests can present iOS UI, so do not use this for background polling
         let credentialSummary = credentialSummary(credentialId)
@@ -153,6 +184,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             ctrl.performRequests(options: .preferImmediatelyAvailableCredentials)
             return ctrl
         }
+        defer { releasePasskeyRequestOnMain(controller, delegate) }
 
         // .notInteractive returns almost instantly when no credential exists.
         // if iOS doesn't respond quickly enough to prove presence or absence,
@@ -180,6 +212,10 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             !Thread.isMainThread,
             "discoverAndAuthenticateWithPrf must not be called from the main thread"
         )
+
+        // wait before building the controller and before any timeout starts, so the wait never
+        // eats the request timeout
+        PresenterIdle.waitBlocking()
 
         let (prfOutput, assertion) = try performPrfAssertion(
             rpId: rpId,
@@ -225,6 +261,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             ctrl.performRequests()
             return ctrl
         }
+        defer { releasePasskeyRequestOnMain(controller, delegate) }
 
         let credential = try delegate.waitForResult {
             controller.cancel()
@@ -329,6 +366,7 @@ final class PasskeyProviderImpl: PasskeyProvider, @unchecked Sendable {
             ctrl.performRequests()
             return ctrl
         }
+        defer { releasePasskeyRequestOnMain(controller, delegate) }
 
         let credential = try delegate.waitForResult {
             controller.cancel()
@@ -475,17 +513,18 @@ final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
         let result: Result<ASAuthorizationCredential, Error>
         let logMessage: String
         let shouldWarn: Bool
+        let errorMetadata = passkeyNSErrorMetadata(error)
 
         switch error as? ASAuthorizationError {
         case let authError?:
             switch passkeyAuthorizationFailure(
                 for: authError.code,
                 didRequestPresentationAnchor: didRequestPresentationAnchor,
-                diagnosticMessage: error.localizedDescription
+                diagnosticMessage: errorMetadata
             ) {
             case .userCancelled:
                 result = .failure(PasskeyError.UserCancelled)
-                logMessage = "[PASSKEY] \(context.logDescription) cancelled code=\(authError.code.rawValue) description=\(error.localizedDescription)"
+                logMessage = "[PASSKEY] \(context.logDescription) cancelled \(errorMetadata)"
                 shouldWarn = false
             case let .requestFailed(reason):
                 result = .failure(
@@ -494,17 +533,17 @@ final class PasskeyDelegate: NSObject, ASAuthorizationControllerDelegate,
                         reason: reason
                     )
                 )
-                logMessage = "[PASSKEY] \(context.logDescription) failed code=\(authError.code.rawValue) requested_ui=\(didRequestPresentationAnchor) description=\(error.localizedDescription)"
+                logMessage = "[PASSKEY] \(context.logDescription) failed requested_ui=\(didRequestPresentationAnchor) \(errorMetadata)"
                 shouldWarn = true
             }
         case nil:
             result = .failure(
                 PasskeyError.RequestFailed(
                     operation: context.operation,
-                    reason: .unknown(diagnosticMessage: error.localizedDescription)
+                    reason: .unknown(diagnosticMessage: errorMetadata)
                 )
             )
-            logMessage = "[PASSKEY] \(context.logDescription) failed with non-auth error: \(error.localizedDescription)"
+            logMessage = "[PASSKEY] \(context.logDescription) failed with non-auth error \(errorMetadata)"
             shouldWarn = true
         }
 
@@ -611,24 +650,26 @@ private class PasskeyExistenceDelegate: NSObject, ASAuthorizationControllerDeleg
         controller _: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
+        let errorMetadata = passkeyNSErrorMetadata(error)
+
         if let authError = error as? ASAuthorizationError {
             if authError.code == .notInteractive {
                 presence = .missing
                 Log.info(
-                    "[PASSKEY] presence check classified missing code=\(authError.code.rawValue) requested_ui=\(didRequestPresentationAnchor) description=\(error.localizedDescription)"
+                    "[PASSKEY] presence check classified missing requested_ui=\(didRequestPresentationAnchor) \(errorMetadata)"
                 )
             } else if authError.code == .canceled, !didRequestPresentationAnchor {
                 presence = .missing
                 Log.info(
-                    "[PASSKEY] presence check classified missing after silent cancellation code=\(authError.code.rawValue) requested_ui=\(didRequestPresentationAnchor) description=\(error.localizedDescription)"
+                    "[PASSKEY] presence check classified missing after silent cancellation requested_ui=\(didRequestPresentationAnchor) \(errorMetadata)"
                 )
             } else {
                 Log.warn(
-                    "[PASSKEY] presence check failed with auth error code=\(authError.code.rawValue) requested_ui=\(didRequestPresentationAnchor) description=\(error.localizedDescription)"
+                    "[PASSKEY] presence check failed with auth error requested_ui=\(didRequestPresentationAnchor) \(errorMetadata)"
                 )
             }
         } else {
-            Log.warn("[PASSKEY] presence check failed with non-auth error: \(error.localizedDescription)")
+            Log.warn("[PASSKEY] presence check failed with non-auth error \(errorMetadata)")
         }
         semaphore.signal()
     }
