@@ -5,7 +5,7 @@ use crate::common::{
     command_exists, ensure_rust_directory, normalize_required_arg, print_info, print_success,
     resolve_readable_file,
 };
-use crate::version::BuildNumberFile;
+use crate::version::{BuildNumberFile, KeepBuildNumber};
 use color_eyre::eyre::{bail, Context, Result};
 use std::fs;
 use xshell::{cmd, Shell};
@@ -71,9 +71,7 @@ pub fn release_android(json_key_path: Option<&str>, verbose: bool) -> Result<()>
 
         match remove_file_if_exists(PLAY_AAB_PATH) {
             Ok(()) => Err(error),
-            Err(remove_error) => Err(error).wrap_err(format!(
-                "Failed to remove {PLAY_AAB_PATH} ({remove_error}); delete it before running just ugp"
-            )),
+            Err(_) => Err(error.wrap_err(KeepBuildNumber(vec![PLAY_AAB_PATH.into()]))),
         }
     })?;
 

@@ -4,6 +4,7 @@ use color_eyre::{
     Result,
 };
 use colored::Colorize;
+use std::path::PathBuf;
 use xshell::{cmd, Shell};
 
 // Version file paths
@@ -267,6 +268,11 @@ impl BuildNumberFile {
 
         let release = self.release_label();
         let build_number = self.build_number_label();
+        if let Some(keep) = error.downcast_ref::<KeepBuildNumber>() {
+            print_error(&format!("{release} failed; kept {build_number} because {keep}"));
+            return Err(error);
+        }
+
         let Some(snapshot) = snapshot else {
             print_error(&format!("{release} failed"));
             return Err(error);
@@ -280,6 +286,20 @@ impl BuildNumberFile {
 
         print_error(&format!("{release} failed; restored {build_number}"));
         Err(error)
+    }
+}
+
+/// Release failure context that keeps the bumped build number
+///
+/// Restoring the old number is only safe when no signed artifact carrying the new one survives;
+/// otherwise uploading that artifact and the next release would collide on the same number
+#[derive(Debug)]
+pub(crate) struct KeepBuildNumber(pub(crate) Vec<PathBuf>);
+
+impl std::fmt::Display for KeepBuildNumber {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let paths = self.0.iter().map(|path| path.display().to_string()).collect::<Vec<_>>();
+        write!(f, "these signed outputs could not be removed: {}", paths.join(", "))
     }
 }
 
@@ -410,7 +430,9 @@ fn replace_u32_values(
 
 #[cfg(test)]
 mod tests {
-    use super::{increment_and_replace_ios, prepare_android, prepare_ios, BuildNumberFile};
+    use super::{
+        increment_and_replace_ios, prepare_android, prepare_ios, BuildNumberFile, KeepBuildNumber,
+    };
     use color_eyre::eyre::eyre;
     use xshell::Shell;
 
@@ -545,5 +567,29 @@ CURRENT_PROJECT_VERSION = 89;
 
         assert!(result.is_err());
         assert_eq!(std::fs::read_to_string(&gradle_path).unwrap(), original);
+    }
+
+    #[test]
+    fn keeps_android_version_code_when_signed_outputs_survive() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let rust_dir = temp_dir.path().join("rust");
+        let android_app_dir = temp_dir.path().join("android/app");
+        std::fs::create_dir_all(&rust_dir).unwrap();
+        std::fs::create_dir_all(&android_app_dir).unwrap();
+
+        let gradle_path = android_app_dir.join("build.gradle.kts");
+        std::fs::write(&gradle_path, "versionCode = 28\nversionName = \"1.4.0\"\n").unwrap();
+
+        let sh = Shell::new().unwrap();
+        sh.change_dir(&rust_dir);
+
+        let result = BuildNumberFile::AndroidGradle.bump_for_release(&sh, || {
+            Err::<(), _>(
+                eyre!("bundle failed").wrap_err(KeepBuildNumber(vec!["cove-1.4.0-29.aab".into()])),
+            )
+        });
+
+        assert!(result.is_err());
+        assert!(std::fs::read_to_string(&gradle_path).unwrap().contains("versionCode = 29\n"));
     }
 }
