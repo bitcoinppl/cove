@@ -9,8 +9,6 @@ pub(crate) enum CloudOnlyListingUpdate {
     Listed(HashSet<String>),
     /// Built without a listing, so loaded cloud-only rows cannot be matched and are reset
     Unlisted,
-    /// Not related to the listing, loaded rows are kept as they are
-    Retained,
 }
 
 /// Result of one cloud-only fetch, stamped with the listing generation it started under
@@ -20,13 +18,6 @@ pub(crate) struct CloudOnlyFetch {
     /// Listed records that could not be read, so `wallets` is not the whole cloud-only set
     pub(crate) unresolved_record_ids: Vec<String>,
     pub(crate) listing_generation: u64,
-}
-
-/// What the loaded cloud-only rows were fetched for
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct LoadedFetch {
-    listing_generation: u64,
-    complete: bool,
 }
 
 /// Identity of the latest provider listing and proof of what the loaded cloud-only rows cover
@@ -39,7 +30,8 @@ pub(crate) struct CloudOnlyInventory {
     /// listing can be told apart from one that matches the current listing
     generation: u64,
     listed_record_ids: Option<HashSet<String>>,
-    loaded: Option<LoadedFetch>,
+    /// Listing generation the loaded rows completely read, unset when nothing complete is loaded
+    complete_fetch_generation: Option<u64>,
 }
 
 impl CloudOnlyInventory {
@@ -58,37 +50,34 @@ impl CloudOnlyInventory {
     pub(crate) fn invalidate(&mut self) {
         self.generation += 1;
         self.listed_record_ids = None;
-        self.loaded = None;
+        self.complete_fetch_generation = None;
     }
 
     pub(crate) fn record_loaded(&mut self, fetch: &CloudOnlyFetch) {
-        self.loaded = Some(LoadedFetch {
-            listing_generation: fetch.listing_generation,
-            complete: fetch.unresolved_record_ids.is_empty(),
-        });
+        self.complete_fetch_generation =
+            fetch.unresolved_record_ids.is_empty().then_some(fetch.listing_generation);
     }
 
     pub(crate) fn clear_loaded(&mut self) {
-        self.loaded = None;
+        self.complete_fetch_generation = None;
     }
 
     /// Keeps loaded rows only when they are a complete read of exactly the listed wallets
     pub(crate) fn keep_loaded_for_listing(&mut self, loaded_ids: &HashSet<String>) -> bool {
-        let complete = self.loaded.as_ref().is_some_and(|loaded| loaded.complete);
-        if !complete || self.listed_record_ids.as_ref() != Some(loaded_ids) {
+        if self.complete_fetch_generation.is_none()
+            || self.listed_record_ids.as_ref() != Some(loaded_ids)
+        {
             return false;
         }
 
         // the rows match the latest listing, so they are current for it
-        self.loaded = Some(LoadedFetch { listing_generation: self.generation, complete: true });
+        self.complete_fetch_generation = Some(self.generation);
         true
     }
 
     /// Whether loaded rows are a complete read of exactly the latest listing
     pub(crate) fn loaded_is_complete_and_current(&self, loaded_ids: &HashSet<String>) -> bool {
         self.listed_record_ids.as_ref() == Some(loaded_ids)
-            && self.loaded.as_ref().is_some_and(|loaded| {
-                loaded.complete && loaded.listing_generation == self.generation
-            })
+            && self.complete_fetch_generation == Some(self.generation)
     }
 }

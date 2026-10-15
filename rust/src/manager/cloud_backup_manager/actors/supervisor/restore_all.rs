@@ -27,11 +27,8 @@ impl CloudBackupSupervisor {
 
         // only a loaded, complete and current cache proves nothing is left, anything else keeps
         // the marker so a later fetch can decide
-        let Some(eligible) = manager.restore_all_proven_eligible_wallets() else {
-            manager.apply_restore_all_retry_required();
-            return;
-        };
-        if !eligible.is_empty() {
+        if manager.restore_all_proven_eligible_wallets().is_none_or(|eligible| !eligible.is_empty())
+        {
             manager.apply_restore_all_retry_required();
             return;
         }
@@ -317,7 +314,7 @@ impl CloudBackupSupervisor {
             None => {
                 self.finish_restore_all_retry_remaining(&manager, claim);
                 // a reset already asked for a fetch, this covers a cache left in `Failed`
-                self.begin_cloud_only_fetch_if_inventory_ready(manager);
+                self.begin_cloud_only_fetch_if_needed(manager);
             }
         }
         Produces::ok(())
