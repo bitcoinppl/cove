@@ -1,4 +1,6 @@
-use super::{build_android, bundle_android, AndroidBuildTargets, BuildProfile};
+use super::{
+    build_android, bundle_android, remove_file_if_exists, AndroidBuildTargets, BuildProfile,
+};
 use crate::common::{
     command_exists, ensure_rust_directory, normalize_required_arg, print_info, print_success,
     resolve_readable_file,
@@ -51,20 +53,38 @@ pub fn release_android(json_key_path: Option<&str>, verbose: bool) -> Result<()>
     super::ensure_store_release_signing()?;
     super::ensure_android_build_output_dirs_resolve()?;
 
+    // an older bundle left for a `just ugp` retry must survive a release that fails before Gradle
+    // replaces it
+    let previous_bundle = bundle_modified_at();
     BuildNumberFile::AndroidGradle.bump_for_release(&sh, || {
         build_android(BuildProfile::from_str("release-speed"), AndroidBuildTargets::All, verbose)?;
 
         // the rollback restores the old versionCode, so a bundle signed with the new one must not
         // stay behind for `just ugp` to upload
-        bundle_android(verbose).inspect_err(|_| {
-            let _ = sh.remove_path(PLAY_AAB_PATH);
-        })
+        let Err(error) = bundle_android(verbose) else {
+            return Ok(());
+        };
+
+        if bundle_modified_at() == previous_bundle {
+            return Err(error);
+        }
+
+        match remove_file_if_exists(PLAY_AAB_PATH) {
+            Ok(()) => Err(error),
+            Err(remove_error) => Err(error).wrap_err(format!(
+                "Failed to remove {PLAY_AAB_PATH} ({remove_error}); delete it before running just ugp"
+            )),
+        }
     })?;
 
     // Google may have accepted the bundle; keep versionCode if supply fails
     upload_with_credentials(&sh, &credentials, verbose).wrap_err(
         "Kept the new versionCode because Google Play may have accepted the bundle; retry the upload with just ugp",
     )
+}
+
+fn bundle_modified_at() -> Option<std::time::SystemTime> {
+    fs::metadata(PLAY_AAB_PATH).and_then(|metadata| metadata.modified()).ok()
 }
 
 fn upload_with_credentials(

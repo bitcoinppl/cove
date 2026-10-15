@@ -669,29 +669,58 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
     let aab_dest = format!("{}/Downloads/{}", home_dir, aab_filename);
     let apk_filename = format!("cove-{}-{}.apk", version_name, version_code);
     let apk_dest = format!("{}/Downloads/{}", home_dir, apk_filename);
+    let symbols_filename = format!("cove-{}-{}-symbols.zip", version_name, version_code);
+    let symbols_path = format!("{}/Downloads/{}", home_dir, symbols_filename);
 
+    // a release rolls back versionCode when this fails, so no Downloads file may keep the bumped one
+    let mut saved = Vec::new();
+    let Err(error) = save_store_outputs(&sh, &aab_dest, &apk_dest, &symbols_path, &mut saved)
+    else {
+        return Ok(());
+    };
+
+    let leftovers =
+        saved.into_iter().filter(|path| remove_file_if_exists(path).is_err()).collect::<Vec<_>>();
+    if leftovers.is_empty() {
+        return Err(error);
+    }
+
+    Err(error).wrap_err(format!(
+        "Failed to remove partial release outputs, delete them before uploading: {}",
+        leftovers.join(", ")
+    ))
+}
+
+fn save_store_outputs(
+    sh: &Shell,
+    aab_dest: &str,
+    apk_dest: &str,
+    symbols_path: &str,
+    saved: &mut Vec<String>,
+) -> Result<()> {
     // copy AAB to Downloads
     print_info(&format!("Copying AAB to {}...", aab_dest));
-    sh.copy_file(AAB_OUTPUT_PATH, &aab_dest)
+    saved.push(aab_dest.to_owned());
+    sh.copy_file(AAB_OUTPUT_PATH, aab_dest)
         .wrap_err_with(|| format!("Failed to copy AAB to {}", aab_dest))?;
     print_success(&format!("AAB saved to {}", aab_dest));
 
     // copy APK to Downloads
     if sh.path_exists(APK_STORE_RELEASE_PATH) {
         print_info(&format!("Copying APK to {}...", apk_dest));
-        sh.copy_file(APK_STORE_RELEASE_PATH, &apk_dest)
+        saved.push(apk_dest.to_owned());
+        sh.copy_file(APK_STORE_RELEASE_PATH, apk_dest)
             .wrap_err_with(|| format!("Failed to copy APK to {}", apk_dest))?;
         print_success(&format!("APK saved to {}", apk_dest));
     }
 
     // create native debug symbols zip for every ABI shipped in the app bundle
-    let symbols_filename = format!("cove-{}-{}-symbols.zip", version_name, version_code);
-    let symbols_path = format!("{}/Downloads/{}", home_dir, symbols_filename);
     let native_libs_path =
         "app/build/intermediates/merged_native_libs/storeRelease/mergeStoreReleaseNativeLibs/out/lib";
 
     if sh.path_exists(native_libs_path) {
         print_info("Creating native debug symbols zip...");
+        saved.push(symbols_path.to_owned());
         let current_dir = sh.current_dir();
         sh.change_dir(native_libs_path);
         cmd!(sh, "zip -r {symbols_path} arm64-v8a armeabi-v7a x86_64")
@@ -705,6 +734,13 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn remove_file_if_exists(path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+    match fs::remove_file(path) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    }
 }
 
 pub fn download_android_screenshots() -> Result<()> {
