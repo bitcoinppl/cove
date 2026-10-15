@@ -76,7 +76,7 @@ async fn trusted_local_snapshot_is_confirmed_by_provider_in_background() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn provider_confirmation_failure_keeps_trusted_local_detail_complete() {
+async fn provider_confirmation_failure_marks_trusted_local_detail_incomplete() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -88,7 +88,7 @@ async fn provider_confirmation_failure_keeps_trusted_local_detail_complete() {
 
     wait_for_test_condition(
         Duration::from_secs(2),
-        "expected retained trusted local detail",
+        "expected incomplete detail retaining trusted local rows",
         || {
             globals.cloud.list_wallet_files_attempt_count() > initial_list_attempts
                 && matches!(
@@ -96,7 +96,7 @@ async fn provider_confirmation_failure_keeps_trusted_local_detail_complete() {
                     CloudBackupLifecycle::Configured(ref configured)
                         if matches!(
                             configured.detail,
-                            CloudBackupDetailState::Complete { ref state }
+                            CloudBackupDetailState::Failed { retained: Some(ref state), .. }
                                 if state.inventory_authority
                                     == CloudBackupInventoryAuthority::LocalSnapshotMatchesKnownCount
                         )
@@ -111,12 +111,15 @@ async fn provider_confirmation_failure_keeps_trusted_local_detail_complete() {
 
     assert_test_condition_stays_true(
         Duration::from_millis(150),
-        "provider confirmation failure should keep trusted local detail",
+        "provider confirmation failure should stay incomplete with the local rows",
         || {
             matches!(
                 manager.state().lifecycle,
                 CloudBackupLifecycle::Configured(ref configured)
-                    if matches!(configured.detail, CloudBackupDetailState::Complete { .. })
+                    if matches!(
+                        configured.detail,
+                        CloudBackupDetailState::Failed { retained: Some(_), .. }
+                    )
             )
         },
     )
