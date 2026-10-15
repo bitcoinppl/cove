@@ -328,7 +328,21 @@ impl App {
                 Updater::send_update(AppMessage::DatabaseUpdated);
 
                 // reconcile restored settings so frontends update without restart
-                send_imported_settings_updates();
+                let config = &Database::global().global_config;
+
+                Updater::send_update(AppMessage::SelectedNetworkChanged(config.selected_network()));
+
+                match config.color_scheme() {
+                    Ok(scheme) => Updater::send_update(AppMessage::ColorSchemeChanged(scheme)),
+                    Err(e) => warn!("failed to read color scheme after import: {e}"),
+                }
+
+                match config.fiat_currency() {
+                    Ok(fiat) => Updater::send_update(AppMessage::FiatCurrencyChanged(fiat)),
+                    Err(e) => warn!("failed to read fiat currency after import: {e}"),
+                }
+
+                Updater::send_update(AppMessage::SelectedNodeChanged(config.selected_node()));
             }
         }
 
@@ -709,7 +723,7 @@ async fn wipe_all_data_with_tier(
             .delete_all_wallet_items()
             .map_err(|source| local_reset_error(LocalDataResetStage::WalletKeychain, source))?;
 
-        prepared
+        let receive_session_reset = prepared
             .delete_key_teleport_receive_session()
             .map_err(|source| local_reset_error(LocalDataResetStage::KeyTeleport, source))?;
 
@@ -738,7 +752,7 @@ async fn wipe_all_data_with_tier(
             .dangerous_reset_all_data()
             .map_err(|source| local_reset_error(LocalDataResetStage::Database, source))?;
 
-        prepared.commit_key_teleport_receive_reset();
+        receive_session_reset.commit();
         Ok(completed_onboarding)
     }
     .await;
@@ -761,28 +775,6 @@ async fn wipe_all_data_with_tier(
     }
 
     Ok(completion)
-}
-
-/// Pushes the stored global settings to frontends after an import replaced the database
-///
-/// A setting that cannot be read is logged and skipped, so a read failure never
-/// overwrites the frontend's value with a guessed default
-fn send_imported_settings_updates() {
-    let config = &Database::global().global_config;
-
-    Updater::send_update(AppMessage::SelectedNetworkChanged(config.selected_network()));
-
-    match config.color_scheme() {
-        Ok(scheme) => Updater::send_update(AppMessage::ColorSchemeChanged(scheme)),
-        Err(e) => warn!("failed to read color scheme after import: {e}"),
-    }
-
-    match config.fiat_currency() {
-        Ok(fiat) => Updater::send_update(AppMessage::FiatCurrencyChanged(fiat)),
-        Err(e) => warn!("failed to read fiat currency after import: {e}"),
-    }
-
-    Updater::send_update(AppMessage::SelectedNodeChanged(config.selected_node()));
 }
 
 fn failed_wipe_error(

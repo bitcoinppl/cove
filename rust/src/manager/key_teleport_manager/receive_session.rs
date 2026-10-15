@@ -86,17 +86,6 @@ impl ReceiveSessionStore {
         Self(RECEIVE_SESSION_WIPE_EPOCH.load(Ordering::Acquire))
     }
 
-    /// Deletes the persisted session and blocks every store from creating another until the
-    /// returned reset commits or is dropped
-    pub(crate) fn begin_reset() -> Result<ReceiveSessionReset, KeyTeleportAlert> {
-        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
-        delete_receive_session_unlocked()?;
-
-        // the reset's Drop takes the storage lock, so it must only be built once nothing can fail
-        RECEIVE_SESSION_RESETS_IN_PROGRESS.fetch_add(1, Ordering::AcqRel);
-        Ok(ReceiveSessionReset(()))
-    }
-
     /// Takes the storage lock for a store whose manager predates no committed wipe
     ///
     /// A manager from before the wipe can still have actions queued; letting them load or delete
@@ -182,6 +171,22 @@ impl ReceiveSessionStore {
 }
 
 impl ReceiveSessionReset {
+    /// Deletes the persisted receive session and its private key under the session store lock
+    ///
+    /// Deleting outside the lock would let a concurrent load that upgrades a legacy session write
+    /// the old private key back after the delete. No manager can create a session until the
+    /// returned reset commits or is dropped, and committing keeps managers created before the wipe
+    /// from ever creating one, so a receive action still queued during the wipe cannot save a new
+    /// key
+    pub(crate) fn begin() -> Result<Self, KeyTeleportAlert> {
+        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        delete_receive_session_unlocked()?;
+
+        // the reset's Drop takes the storage lock, so it must only be built once nothing can fail
+        RECEIVE_SESSION_RESETS_IN_PROGRESS.fetch_add(1, Ordering::AcqRel);
+        Ok(Self(()))
+    }
+
     /// Marks every manager created before the reset stale, then reopens session creation
     pub(crate) fn commit(self) {
         let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();

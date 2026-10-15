@@ -535,25 +535,6 @@ mod tests {
     use cove_types::Network;
 
     #[test]
-    fn mode_switch_clears_selection_when_target_mode_has_no_wallet() {
-        crate::app::reconcile::test_support::init_noop_updater();
-        let (_tmp, table) = test_table();
-        let main = cove_types::WalletId::preview_new_random();
-        table.select_wallet(main.clone()).unwrap();
-
-        table.set_decoy_mode().unwrap();
-
-        assert!(table.is_in_decoy_mode());
-        assert_eq!(table.selected_wallet(), None);
-
-        table.set_main_mode().unwrap();
-
-        assert!(table.is_in_main_mode());
-        assert_eq!(table.selected_wallet(), Some(main));
-        assert_eq!(table.get(super::GlobalConfigKey::DecoySelectedWalletId).unwrap(), None);
-    }
-
-    #[test]
     fn mode_switch_forgets_cleared_selection_and_preserves_other_mode() {
         crate::app::reconcile::test_support::init_noop_updater();
         let (_tmp, table) = test_table();
@@ -561,6 +542,8 @@ mod tests {
         let decoy = cove_types::WalletId::preview_new_random();
         table.select_wallet(main.clone()).unwrap();
         table.set_decoy_mode().unwrap();
+        assert_eq!(table.selected_wallet(), None);
+
         table.select_wallet(decoy.clone()).unwrap();
         table.set_main_mode().unwrap();
         assert_eq!(table.selected_wallet(), Some(main));

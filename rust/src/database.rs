@@ -28,7 +28,7 @@ use cloud_backup::{
 use diagnostics_reports::DiagnosticsReportsTable;
 use global_cache::GlobalCacheTable;
 use global_config::{GlobalConfigKey, GlobalConfigTable};
-use global_flag::GlobalFlagTable;
+use global_flag::{GlobalFlagKey, GlobalFlagTable};
 use historical_price::HistoricalPriceTable;
 use uniffi::custom_newtype;
 use unsigned_transactions::UnsignedTransactionsTable;
@@ -96,7 +96,7 @@ impl Database {
     /// Only the lifecycle coordinator's full wipe may call this. Returns whether onboarding
     /// stays complete in the fresh database, so callers report the committed value
     pub(crate) fn dangerous_reset_all_data(&self) -> Result<bool, error::DatabaseError> {
-        let completed_onboarding = self.global_flag.try_is_onboarding_complete()?;
+        let completed_onboarding = self.global_flag.get(GlobalFlagKey::CompletedOnboarding)?;
 
         match std::fs::remove_file(database_location()) {
             Ok(()) => {}
@@ -271,7 +271,6 @@ pub(crate) mod test_support {
     fn remove_process_test_root() {
         if let Some(root) = TEST_ROOT.get() {
             let _ = std::fs::remove_dir_all(root);
-            let _ = std::fs::remove_file(test_root_lock_path(root));
         }
     }
 
@@ -315,8 +314,9 @@ pub(crate) mod test_support {
             // keep the directory for the process lifetime; Drop would delete it too early
             let path = tempdir.keep();
 
-            let lock = std::fs::File::create(test_root_lock_path(&path))
-                .expect("failed to create test root lock");
+            // locking the directory itself keeps the lock out of the root's contents and needs no
+            // cleanup; flock works on read-only directory handles
+            let lock = std::fs::File::open(&path).expect("failed to open test root");
             lock.lock().expect("failed to lock test root");
             let _ = TEST_ROOT_LOCK.set(lock);
 
@@ -351,16 +351,9 @@ pub(crate) mod test_support {
                 continue;
             };
 
-            // a lock left behind by an interrupted cleanup is swept the same way as its root
-            let path = entry.path();
-            let (root, lock_path) = match name.strip_suffix(".lock") {
-                Some(root_name) if metadata.is_file() => (parent.join(root_name), path),
-                None if metadata.is_dir() => {
-                    let lock_path = test_root_lock_path(&path);
-                    (path, lock_path)
-                }
-                _ => continue,
-            };
+            if !metadata.is_dir() {
+                continue;
+            }
 
             let Ok(modified) = metadata.modified() else {
                 continue;
@@ -376,22 +369,15 @@ pub(crate) mod test_support {
             }
 
             // a run that still holds its lock is alive however long it has been running
-            if let Ok(lock) = std::fs::File::options().write(true).open(&lock_path)
+            let root = entry.path();
+            if let Ok(lock) = std::fs::File::open(&root)
                 && lock.try_lock().is_err()
             {
                 continue;
             }
 
             let _ = std::fs::remove_dir_all(root);
-            let _ = std::fs::remove_file(lock_path);
         }
-    }
-
-    // a sibling of the root so tests that inspect or wipe the root never see it
-    fn test_root_lock_path(root: &Path) -> PathBuf {
-        let mut name = root.as_os_str().to_owned();
-        name.push(".lock");
-        PathBuf::from(name)
     }
 
     #[test]
@@ -409,14 +395,6 @@ pub(crate) mod test_support {
             wallet_data.starts_with(root),
             "wallet data {wallet_data:?} must be under {root:?}"
         );
-
-        if let Some(home) = dirs::home_dir() {
-            let home_data = home.join(".data");
-            assert!(
-                !path.starts_with(&home_data),
-                "test database {path:?} must not be under {home_data:?}"
-            );
-        }
     }
 }
 

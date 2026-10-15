@@ -11,45 +11,19 @@ use crate::wallet::metadata::{WalletMetadata, WalletType};
 
 static FAIL_KEYCHAIN_DELETES: AtomicBool = AtomicBool::new(false);
 
-pub(crate) const WALLET_MNEMONIC_KEY_SUFFIX: &str = "::wallet_mnemonic";
-pub(crate) const WALLET_MNEMONIC_CRYPTOR_KEY_SUFFIX: &str =
-    "::wallet_mnemonic_encryption_key_and_nonce";
-pub(crate) const WALLET_XPUB_KEY_SUFFIX: &str = "::wallet_xpub";
-
-pub(crate) const WALLET_KEYCHAIN_KEY_SUFFIXES: [&str; 6] = [
-    WALLET_MNEMONIC_KEY_SUFFIX,
-    WALLET_MNEMONIC_CRYPTOR_KEY_SUFFIX,
-    WALLET_XPUB_KEY_SUFFIX,
-    "::wallet_public_descriptor",
-    "::tap_signer_backup",
-    "::wallet_tap_signer_encryption_key_and_nonce_key_name",
-];
-
 /// In-memory keychain shared by every test module
 ///
 /// The process-global [`Keychain`] can only be installed once, and which test
 /// module's init wins that race is nondeterministic. Sharing one clonable
 /// instance keeps entry inspection and failure injection working no matter
 /// which module installs it
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct MockKeychain {
     entries: Arc<Mutex<HashMap<String, String>>>,
     fail_save_at: Arc<Mutex<Option<usize>>>,
     fail_delete_at: Arc<Mutex<Option<usize>>>,
     save_count: Arc<Mutex<usize>>,
     delete_count: Arc<Mutex<usize>>,
-}
-
-impl std::fmt::Debug for MockKeychain {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MockKeychain")
-            .field("entries", &self.entries)
-            .field("fail_save_at", &self.fail_save_at)
-            .field("fail_delete_at", &self.fail_delete_at)
-            .field("save_count", &self.save_count)
-            .field("delete_count", &self.delete_count)
-            .finish_non_exhaustive()
-    }
 }
 
 impl MockKeychain {
@@ -115,9 +89,16 @@ impl KeychainAccess for MockKeychain {
     }
 
     fn delete_all_wallet_items(&self) -> Result<(), KeychainError> {
-        self.entries.lock().retain(|key, _| {
-            !WALLET_KEYCHAIN_KEY_SUFFIXES.iter().any(|suffix| key.ends_with(suffix))
-        });
+        let suffixes = [
+            "::wallet_mnemonic",
+            "::wallet_mnemonic_encryption_key_and_nonce",
+            "::wallet_xpub",
+            "::wallet_public_descriptor",
+            "::tap_signer_backup",
+            "::wallet_tap_signer_encryption_key_and_nonce_key_name",
+        ];
+
+        self.entries.lock().retain(|key, _| !suffixes.iter().any(|suffix| key.ends_with(suffix)));
         Ok(())
     }
 }

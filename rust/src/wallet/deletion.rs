@@ -70,7 +70,6 @@ pub(crate) struct PreparedFullWipe {
     _lifecycle: PreparedWalletLifecycle,
     cloud_reset: CloudBackupResetPermit,
     recovery_cleanup: RecoveryCleanup,
-    receive_session_reset: Option<ReceiveSessionReset>,
 }
 
 impl PreparedFullWipe {
@@ -82,7 +81,6 @@ impl PreparedFullWipe {
             _lifecycle: lifecycle,
             cloud_reset,
             recovery_cleanup: RecoveryCleanup { proof: RecoveryCleanupProof::FullWipe },
-            receive_session_reset: None,
         }
     }
 
@@ -101,19 +99,12 @@ impl PreparedFullWipe {
         self.recovery_cleanup.delete_all_wallet_items()
     }
 
-    pub(crate) fn delete_key_teleport_receive_session(&mut self) -> Result<(), String> {
-        let reset = self.recovery_cleanup.delete_key_teleport_receive_session()?;
-        self.receive_session_reset = Some(reset);
-
-        Ok(())
-    }
-
-    /// Keeps managers from before the wipe from creating receive sessions; call at the
-    /// database reset, since a failed wipe must leave those managers usable
-    pub(crate) fn commit_key_teleport_receive_reset(&mut self) {
-        if let Some(reset) = self.receive_session_reset.take() {
-            reset.commit();
-        }
+    /// Commit the returned reset at the database reset, since a failed wipe must leave
+    /// managers from before the wipe able to create receive sessions
+    pub(crate) fn delete_key_teleport_receive_session(
+        &self,
+    ) -> Result<ReceiveSessionReset, String> {
+        self.recovery_cleanup.delete_key_teleport_receive_session()
     }
 
     pub(crate) fn purge_orphan_wallet_artifacts(&self) -> std::io::Result<()> {
@@ -183,8 +174,7 @@ impl RecoveryCleanup {
     pub(crate) fn delete_key_teleport_receive_session(
         &self,
     ) -> Result<ReceiveSessionReset, String> {
-        crate::manager::key_teleport_manager::reset_persisted_receive_session()
-            .map_err_str(std::convert::identity)
+        ReceiveSessionReset::begin().map_err_str(std::convert::identity)
     }
 
     pub(crate) fn purge_orphan_wallet_artifacts(&self) -> std::io::Result<()> {
