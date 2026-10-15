@@ -97,15 +97,24 @@ impl ReceiveSessionStore {
         Ok(ReceiveSessionReset(()))
     }
 
-    pub(crate) fn create(&self) -> Result<ActiveReceiveSession, KeyTeleportAlert> {
-        // check the reset state, generate, and save under one lock so a full wipe cannot land
-        // between them and leave a private key in the keychain
-        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
-        if RECEIVE_SESSION_RESETS_IN_PROGRESS.load(Ordering::Acquire) > 0 {
+    /// Takes the storage lock for a store whose manager predates no committed wipe
+    ///
+    /// A manager from before the wipe can still have actions queued; letting them load or delete
+    /// would touch the session a newer manager created, so every storage access checks the epoch
+    fn lock_current(&self) -> Result<MutexGuard<'static, ()>, KeyTeleportAlert> {
+        let storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        if self.0 != RECEIVE_SESSION_WIPE_EPOCH.load(Ordering::Acquire) {
             return Err(receive_session_unavailable());
         }
 
-        if self.0 != RECEIVE_SESSION_WIPE_EPOCH.load(Ordering::Acquire) {
+        Ok(storage_guard)
+    }
+
+    pub(crate) fn create(&self) -> Result<ActiveReceiveSession, KeyTeleportAlert> {
+        // check the reset state, generate, and save under one lock so a full wipe cannot land
+        // between them and leave a private key in the keychain
+        let _storage_guard = self.lock_current()?;
+        if RECEIVE_SESSION_RESETS_IN_PROGRESS.load(Ordering::Acquire) > 0 {
             return Err(receive_session_unavailable());
         }
 
@@ -116,7 +125,7 @@ impl ReceiveSessionStore {
     }
 
     pub(crate) fn load(&self) -> Result<Option<LoadedReceiveSession>, KeyTeleportAlert> {
-        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        let _storage_guard = self.lock_current()?;
         let Some(persisted) = load_receive_session_unlocked()? else {
             return Ok(None);
         };
@@ -147,7 +156,7 @@ impl ReceiveSessionStore {
         &self,
         session: &ActiveReceiveSession,
     ) -> Result<AuthoritativeReceiveSession, KeyTeleportAlert> {
-        let storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        let storage_guard = self.lock_current()?;
         ensure_authoritative_receive_session_unlocked(session)?;
 
         Ok(AuthoritativeReceiveSession {
@@ -157,7 +166,7 @@ impl ReceiveSessionStore {
     }
 
     pub(crate) fn delete(&self) -> Result<(), KeyTeleportAlert> {
-        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        let _storage_guard = self.lock_current()?;
 
         delete_receive_session_unlocked()
     }
@@ -166,7 +175,7 @@ impl ReceiveSessionStore {
         &self,
         session_id: &ReceiveSessionId,
     ) -> Result<(), KeyTeleportAlert> {
-        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        let _storage_guard = self.lock_current()?;
 
         delete_receive_session_if_matches_unlocked(session_id)
     }

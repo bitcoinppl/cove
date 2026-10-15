@@ -257,7 +257,14 @@ fn receive_start_queued_across_a_full_wipe_cannot_save_a_session() {
     assert!(!has_session());
 
     RustKeyTeleportManager::new().start_receive().unwrap();
-    assert!(has_session());
+    let current = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
+
+    // a restart still queued on the old manager must not load, replace, or delete the new session
+    assert!(pre_wipe_manager.start_receive().is_err());
+    assert!(pre_wipe_manager.restart_receive().is_err());
+    assert!(pre_wipe_manager.end_receive().is_err());
+    let stored = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
+    assert_eq!(*stored, *current);
 }
 
 #[test]
