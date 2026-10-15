@@ -50,19 +50,20 @@ pub(crate) enum CloudBackupKeychainError {
     #[error("unsupported pending Cloud Backup enable state version {0}")]
     UnsupportedPendingEnableVersion(u8),
 
-    #[error("failed to restore Cloud Backup metadata: {0}")]
-    RestoreActivationMetadata(KeychainError),
+    #[error("failed to restore {}", describe_restore_activation_failure(.metadata, .master_key))]
+    RestoreActivation { metadata: Option<KeychainError>, master_key: Option<cove_cspp::CsppError> },
+}
 
-    #[error("failed to restore the CSPP master key: {0}")]
-    RestoreActivationMasterKey(cove_cspp::CsppError),
+fn describe_restore_activation_failure(
+    metadata: &Option<KeychainError>,
+    master_key: &Option<cove_cspp::CsppError>,
+) -> String {
+    let parts = [
+        metadata.as_ref().map(|error| format!("Cloud Backup metadata ({error})")),
+        master_key.as_ref().map(|error| format!("the CSPP master key ({error})")),
+    ];
 
-    #[error(
-        "failed to restore Cloud Backup metadata ({metadata}) and the CSPP master key ({master_key})"
-    )]
-    RestoreActivationMetadataAndMasterKey {
-        metadata: KeychainError,
-        master_key: cove_cspp::CsppError,
-    },
+    parts.into_iter().flatten().collect::<Vec<_>>().join(" and ")
 }
 
 impl CloudBackupKeychain {
@@ -129,21 +130,14 @@ impl CloudBackupKeychain {
         let master_key =
             Cspp::new(self.0.clone()).restore_active_master_key_snapshot(&snapshot.master_key);
 
-        match (metadata, master_key) {
-            (Ok(()), Ok(())) => Ok(()),
-            (Err(metadata), Ok(())) => {
-                Err(CloudBackupKeychainError::RestoreActivationMetadata(metadata))
-            }
-            (Ok(()), Err(master_key)) => {
-                Err(CloudBackupKeychainError::RestoreActivationMasterKey(master_key))
-            }
-            (Err(metadata), Err(master_key)) => {
-                Err(CloudBackupKeychainError::RestoreActivationMetadataAndMasterKey {
-                    metadata,
-                    master_key,
-                })
-            }
+        if metadata.is_ok() && master_key.is_ok() {
+            return Ok(());
         }
+
+        Err(CloudBackupKeychainError::RestoreActivation {
+            metadata: metadata.err(),
+            master_key: master_key.err(),
+        })
     }
 
     pub(crate) fn snapshot_passkey_metadata(&self) -> PendingEnableLocalMetadataSnapshot {

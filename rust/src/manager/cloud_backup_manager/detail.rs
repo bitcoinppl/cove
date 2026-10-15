@@ -502,10 +502,7 @@ impl RustCloudBackupManager {
                 return;
             }
             CloudBackupDetailOutcome::Cleared => {
-                self.apply_model_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-                    detail: None,
-                    cloud_only_listing: CloudOnlyListingUpdate::Retained,
-                });
+                self.apply_model_event(CloudBackupStateReducerEvent::DetailCleared);
                 return;
             }
             CloudBackupDetailOutcome::Refreshed(listed) => (
@@ -527,7 +524,7 @@ impl RustCloudBackupManager {
 
         // the reducer decides whether loaded rows survive and asks for a refetch when they do not
         self.apply_model_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
-            detail: Some((detail, authority)),
+            detail: (detail, authority),
             cloud_only_listing,
         });
     }
@@ -556,7 +553,7 @@ impl RustCloudBackupManager {
                     .state
                     .write()
                     .apply_event(CloudBackupStateReducerEvent::CloudOnlyFetchLoaded(fetch));
-                let discarded = effects.cloud_only_fetch_discarded;
+                let discarded = effects.cloud_only_refetch_needed;
                 self.send_model_effects(effects);
 
                 return if discarded {
@@ -745,7 +742,8 @@ impl RustCloudBackupManager {
 #[cfg(test)]
 mod tests {
     use super::super::ops::test_support::{
-        complete_loaded_outcome, ensure_cloud_backup_test_tokio_runtime, test_globals, test_lock,
+        complete_loaded_outcome, ensure_cloud_backup_test_tokio_runtime, listed_detail,
+        test_globals, test_lock,
     };
     use super::super::{CloudBackupWalletStatus, PersistedCloudBackupState};
     use super::*;
@@ -770,21 +768,6 @@ mod tests {
             sync_status: CloudBackupWalletStatus::DeletedFromDevice,
             restore_failure: None,
             record_id: record_id.into(),
-        }
-    }
-
-    fn listed_detail(cloud_only_record_ids: &[&str]) -> CloudBackupListedDetail {
-        CloudBackupListedDetail {
-            detail: CloudBackupDetail {
-                last_sync: None,
-                up_to_date: Vec::new(),
-                needs_sync: Vec::new(),
-                cloud_only_count: cloud_only_record_ids.len() as u32,
-            },
-            cloud_only_record_ids: cloud_only_record_ids
-                .iter()
-                .map(|record_id| (*record_id).to_owned())
-                .collect(),
         }
     }
 

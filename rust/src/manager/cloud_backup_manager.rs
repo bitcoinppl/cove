@@ -1317,7 +1317,8 @@ impl RustCloudBackupManager {
 mod tests {
     use super::actors::restore::RestoreOperation;
     use super::ops::test_support::{
-        async_test_lock, configure_enabled_cloud_backup, ensure_cloud_backup_test_tokio_runtime,
+        async_test_lock, complete_loaded_outcome, configure_enabled_cloud_backup,
+        ensure_cloud_backup_test_tokio_runtime, listed_detail,
         persisted_enabled_cloud_backup_state, test_globals, test_lock,
     };
     use super::*;
@@ -1848,38 +1849,23 @@ mod tests {
         let authenticate_count = globals.passkey.authenticate_count();
 
         manager.sync_persisted_state();
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(
-            CloudBackupListedDetail {
-                detail: CloudBackupDetail {
-                    last_sync: None,
-                    up_to_date: Vec::new(),
-                    needs_sync: Vec::new(),
-                    cloud_only_count: 1,
-                },
-                cloud_only_record_ids: std::collections::HashSet::from([
-                    "remaining-record".to_owned()
-                ]),
-            },
-        ));
-        // read the generation in its own statement; a read guard alive across the call deadlocks
-        let listing_generation = manager.state.read().cloud_only_listing_generation();
-        manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(
-            CloudOnlyFetch {
-                listing_generation,
-                unresolved_record_ids: Vec::new(),
-                wallets: vec![CloudBackupWalletItem {
-                    name: "Remaining wallet".into(),
-                    network: None,
-                    wallet_mode: None,
-                    wallet_type: None,
-                    fingerprint: None,
-                    label_count: None,
-                    backup_updated_at: None,
-                    sync_status: CloudBackupWalletStatus::DeletedFromDevice,
-                    record_id: "remaining-record".into(),
-                    restore_failure: None,
-                }],
-            },
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+            "remaining-record",
+        ])));
+        manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(
+            &manager,
+            vec![CloudBackupWalletItem {
+                name: "Remaining wallet".into(),
+                network: None,
+                wallet_mode: None,
+                wallet_type: None,
+                fingerprint: None,
+                label_count: None,
+                backup_updated_at: None,
+                sync_status: CloudBackupWalletStatus::DeletedFromDevice,
+                record_id: "remaining-record".into(),
+                restore_failure: None,
+            }],
         ));
 
         let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {

@@ -940,7 +940,7 @@ impl FlowState {
         self.is_restore_attempt_current(event_attempt_id)
     }
 
-    pub(crate) fn is_restore_attempt_current(&self, event_attempt_id: u64) -> bool {
+    fn is_restore_attempt_current(&self, event_attempt_id: u64) -> bool {
         matches!(self, Self::Restoring { attempt_id, .. } if *attempt_id == event_attempt_id)
     }
 

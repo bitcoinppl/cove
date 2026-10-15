@@ -92,15 +92,6 @@ impl CloudBackupRecoveryCoverage {
             return Self::default();
         }
 
-        if sync_states.iter().filter(|sync_state| sync_state.namespace_id == namespace).any(
-            |sync_state| {
-                sync_state.is_master_key_wrapper()
-                    && !matches!(&sync_state.state, PersistedCloudBlobState::Confirmed(_))
-            },
-        ) {
-            return Self::default();
-        }
-
         let mut covered = loaded
             .detail
             .up_to_date
@@ -109,10 +100,19 @@ impl CloudBackupRecoveryCoverage {
             .map(|wallet| wallet.record_id.clone())
             .collect::<HashSet<_>>();
 
-        for sync_state in sync_states.iter().filter(|sync_state| {
-            sync_state.namespace_id == namespace && sync_state.is_wallet_record()
-        }) {
-            if !matches!(&sync_state.state, PersistedCloudBlobState::Confirmed(_)) {
+        for sync_state in
+            sync_states.iter().filter(|sync_state| sync_state.namespace_id == namespace)
+        {
+            if matches!(&sync_state.state, PersistedCloudBlobState::Confirmed(_)) {
+                continue;
+            }
+
+            // an unconfirmed master key wrapper leaves nothing provably covered
+            if sync_state.is_master_key_wrapper() {
+                return Self::default();
+            }
+
+            if sync_state.is_wallet_record() {
                 covered.remove(sync_state.record_id());
             }
         }
@@ -166,7 +166,6 @@ mod tests {
     use crate::manager::cloud_backup_manager::{
         CloudBackupOtherBackupsState, CloudBackupVerificationPresentation, DeepVerificationResult,
     };
-    use cove_device::cloud_storage::CloudSyncHealth;
 
     fn persisted_verified_state() -> PersistedCloudBackupState {
         PersistedCloudBackupState::Configured(PersistedConfiguredCloudBackup {
