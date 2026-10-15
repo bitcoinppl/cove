@@ -36,7 +36,9 @@ struct SelectedWalletScreen: View {
     /// public
     var manager: WalletManager
 
-    @State private var presentationState: TaggedItem<SelectedWalletPresentationState>? = nil
+    /// sheets and dialogs must wait for the previous prompt to dismiss
+    @State private var presentationCoordinator =
+        PresentationTransitionCoordinator<SelectedWalletPresentationState>()
 
     @State private var shouldShowNavBar = false
     @State private var cloudBackupManager = CloudBackupManager.shared
@@ -123,7 +125,7 @@ struct SelectedWalletScreen: View {
         SelectedWalletPresentationContext(
             app: app,
             manager: manager,
-            presentationState: $presentationState,
+            presentReceive: showReceiveSheet,
             walletErrorAlert: Binding(
                 get: { manager.errorAlert },
                 set: { manager.errorAlert = $0 }
@@ -133,44 +135,19 @@ struct SelectedWalletScreen: View {
     }
 
     private var sheetPresentationState: Binding<TaggedItem<SelectedWalletPresentationState>?> {
-        Binding(
-            get: {
-                guard let presentationState, presentationState.item.isSheet else { return nil }
-                return presentationState
-            },
-            set: { newValue in
-                if let newValue {
-                    presentationState = newValue
-                } else if presentationState?.item.isSheet == true {
-                    presentationState = nil
-                }
-            }
-        )
+        presentationCoordinator.presentedItem(where: \.isSheet)
     }
 
     private var labelsFileImportIsPresented: Binding<Bool> {
-        isPresenting(.labelsFileImport)
+        presentationCoordinator.isPresented { $0 == .labelsFileImport }
     }
 
     private var exportLabelsConfirmationIsPresented: Binding<Bool> {
-        isPresenting(.exportLabelsConfirmation)
+        presentationCoordinator.isPresented { $0 == .exportLabelsConfirmation }
     }
 
     private var exportXpubConfirmationIsPresented: Binding<Bool> {
-        isPresenting(.exportXpubConfirmation)
-    }
-
-    private func isPresenting(_ state: SelectedWalletPresentationState) -> Binding<Bool> {
-        Binding(
-            get: { presentationState?.item == state },
-            set: { isPresented in
-                if isPresented {
-                    presentationState = TaggedItem(state)
-                } else if presentationState?.item == state {
-                    presentationState = nil
-                }
-            }
-        )
+        presentationCoordinator.isPresented { $0 == .exportXpubConfirmation }
     }
 
     private func setSheetState(_ discoveryState: DiscoveryState) {
@@ -178,25 +155,27 @@ struct SelectedWalletScreen: View {
 
         switch discoveryState {
         case let .foundAddressesFromMnemonic(foundAddresses):
-            presentationState = TaggedItem(.chooseAddressType(foundAddresses))
+            presentationCoordinator.present(.chooseAddressType(foundAddresses))
         case let .foundAddressesFromXprv(foundAddresses):
-            presentationState = TaggedItem(.chooseAddressType(foundAddresses))
+            presentationCoordinator.present(.chooseAddressType(foundAddresses))
         case let .foundAddressesFromJson(foundAddress, _):
-            presentationState = TaggedItem(.chooseAddressType(foundAddress))
+            presentationCoordinator.present(.chooseAddressType(foundAddress))
         default: ()
         }
     }
 
     func showReceiveSheet() {
-        presentationState = TaggedItem(.receive)
+        presentationCoordinator.present(.receive)
     }
 
-    func showQrExport() {
-        presentationState = TaggedItem(.labelsQrExport)
+    private func present(_ state: SelectedWalletPresentationState) {
+        presentationCoordinator.present(state)
     }
 
-    func presentXpubQrExport() {
-        presentationState = TaggedItem(.xpubQrExport)
+    /// Dialog buttons run while the dialog is still dismissing, so the next
+    /// presentation is queued until the presenter is free again
+    private func transition(to state: SelectedWalletPresentationState) {
+        presentationCoordinator.transition(to: state)
     }
 
     private func showRenameFromTitleMenu() {
@@ -214,10 +193,13 @@ struct SelectedWalletScreen: View {
         }
     }
 
-    func shareXpubFile() {
-        Task {
+    private func shareXpubFile() {
+        Task { @MainActor in
             do {
                 let result = try await manager.exportXpubForShare()
+
+                // the share sheet presents onto the top controller, which is still the dismissing dialog
+                await PresenterIdle.wait()
                 ShareSheet.present(data: result.content, filename: result.filename) { success in
                     if !success {
                         Log.warn("Xpub Export Failed: cancelled or failed")
@@ -235,10 +217,13 @@ struct SelectedWalletScreen: View {
         }
     }
 
-    func shareLabelsFile() {
-        Task {
+    private func shareLabelsFile() {
+        Task { @MainActor in
             do {
                 let result = try await manager.exportLabelsForShare()
+
+                // the share sheet presents onto the top controller, which is still the dismissing dialog
+                await PresenterIdle.wait()
                 ShareSheet.present(data: result.content, filename: result.filename) { success in
                     if !success {
                         Log.warn("Label Export Failed: cancelled or failed")
@@ -336,7 +321,7 @@ struct SelectedWalletScreen: View {
                 shouldShowNavBar: shouldShowNavBar,
                 reduceTransparency: reduceTransparency,
                 toolbarTextColor: toolbarTextColor,
-                presentationState: $presentationState,
+                present: present,
                 sheetPresentationState: sheetPresentationState,
                 labelsFileImportIsPresented: labelsFileImportIsPresented,
                 exportLabelsConfirmationIsPresented: exportLabelsConfirmationIsPresented,
@@ -349,9 +334,9 @@ struct SelectedWalletScreen: View {
                 changeName: showRenameFromTitleMenu,
                 importLabelsFile: importLabelsFile,
                 scannedLabelsChanged: onChangeOfScannedLabels,
-                showLabelsQrExport: showQrExport,
+                showLabelsQrExport: { transition(to: .labelsQrExport) },
                 shareLabelsFile: shareLabelsFile,
-                showXpubQrExport: presentXpubQrExport,
+                showXpubQrExport: { transition(to: .xpubQrExport) },
                 shareXpubFile: shareXpubFile
             ),
             refresh: beginRefresh,
@@ -361,6 +346,7 @@ struct SelectedWalletScreen: View {
             scrollToTransaction: handleScrollToTransaction
         )
         .modifier(OuterBackgroundModifier(iOS26OrLater: iOS26OrLater))
+        .presentationTransitionHost(presentationCoordinator)
         .onChange(of: manager.walletMetadata.discoveryState, discoveryStateChanged)
         .onAppear(perform: initializePresentation)
         .onAppear(perform: ensureWalletIsSelected)
@@ -470,7 +456,7 @@ private struct SelectedWalletPresentedContent: View {
     let shouldShowNavBar: Bool
     let reduceTransparency: Bool
     let toolbarTextColor: Color
-    @Binding var presentationState: TaggedItem<SelectedWalletPresentationState>?
+    let present: (SelectedWalletPresentationState) -> Void
     let sheetPresentationState: Binding<TaggedItem<SelectedWalletPresentationState>?>
     let labelsFileImportIsPresented: Binding<Bool>
     let exportLabelsConfirmationIsPresented: Binding<Bool>
@@ -504,7 +490,7 @@ private struct SelectedWalletPresentedContent: View {
             SelectedWalletToolbar(
                 manager: manager,
                 shouldShowNavBar: shouldShowNavBar,
-                presentationState: $presentationState,
+                present: present,
                 exportLabelsConfirmationIsPresented: exportLabelsConfirmationIsPresented,
                 exportXpubConfirmationIsPresented: exportXpubConfirmationIsPresented,
                 showLabelsQrExport: showLabelsQrExport,
@@ -539,7 +525,7 @@ private struct SelectedWalletToolbar: ToolbarContent {
 
     let manager: WalletManager
     let shouldShowNavBar: Bool
-    @Binding var presentationState: TaggedItem<SelectedWalletPresentationState>?
+    let present: (SelectedWalletPresentationState) -> Void
     let exportLabelsConfirmationIsPresented: Binding<Bool>
     let exportXpubConfirmationIsPresented: Binding<Bool>
     let showLabelsQrExport: () -> Void
@@ -594,15 +580,15 @@ private struct SelectedWalletToolbar: ToolbarContent {
     }
 
     private func showLabelsFileImport() {
-        presentationState = TaggedItem(.labelsFileImport)
+        present(.labelsFileImport)
     }
 
     private func showLabelsExportConfirmation() {
-        presentationState = TaggedItem(.exportLabelsConfirmation)
+        present(.exportLabelsConfirmation)
     }
 
     private func showXpubExportConfirmation() {
-        presentationState = TaggedItem(.exportXpubConfirmation)
+        present(.exportXpubConfirmation)
     }
 }
 
