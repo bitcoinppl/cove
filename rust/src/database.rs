@@ -271,6 +271,7 @@ pub(crate) mod test_support {
     fn remove_process_test_root() {
         if let Some(root) = TEST_ROOT.get() {
             let _ = std::fs::remove_dir_all(root);
+            let _ = std::fs::remove_file(test_root_lock_path(root));
         }
     }
 
@@ -350,9 +351,16 @@ pub(crate) mod test_support {
                 continue;
             };
 
-            if !metadata.is_dir() {
-                continue;
-            }
+            // a lock left behind by an interrupted cleanup is swept the same way as its root
+            let path = entry.path();
+            let (root, lock_path) = match name.strip_suffix(".lock") {
+                Some(root_name) if metadata.is_file() => (parent.join(root_name), path),
+                None if metadata.is_dir() => {
+                    let lock_path = test_root_lock_path(&path);
+                    (path, lock_path)
+                }
+                _ => continue,
+            };
 
             let Ok(modified) = metadata.modified() else {
                 continue;
@@ -368,14 +376,13 @@ pub(crate) mod test_support {
             }
 
             // a run that still holds its lock is alive however long it has been running
-            let lock_path = test_root_lock_path(&entry.path());
             if let Ok(lock) = std::fs::File::options().write(true).open(&lock_path)
                 && lock.try_lock().is_err()
             {
                 continue;
             }
 
-            let _ = std::fs::remove_dir_all(entry.path());
+            let _ = std::fs::remove_dir_all(root);
             let _ = std::fs::remove_file(lock_path);
         }
     }
