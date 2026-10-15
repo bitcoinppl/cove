@@ -745,14 +745,15 @@ async fn wipe_all_data_with_tier(
         Err(error) => return Err(failed_wipe_error(error, prepared.resume_after_failure().await)),
     };
 
-    // the database reset is the commit point, so frontends must see the wiped state even when
-    // the Cloud Backup runtime reset below fails and the caller only receives an error
     let completion = FullWipeCompletion::after_reset(completed_onboarding);
     completion.publish();
 
-    prepared.complete_after_database_reset().await.map_err(|_| {
-        AppError::WalletLifecycle(WalletLifecycleFailure::CloudBackupRecoveryRequired)
-    })?;
+    // the database reset is the commit point, so a failed runtime reset must not turn the wipe
+    // into an error that leaves frontends locked on the old state; dropping the reset permit
+    // unblocks Cloud Backup writers and leaves Cloud Backup disabled, which matches the wiped data
+    if let Err(error) = prepared.complete_after_database_reset().await {
+        error!("Cloud Backup runtime reset failed after full wipe: {error}");
+    }
 
     Ok(completion)
 }
