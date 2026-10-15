@@ -243,7 +243,11 @@ impl RustCloudBackupManager {
             .build_cloud_backup_detail_with_remote_truth(&wallet_record_ids, remote_wallet_truth)
             .await
         {
-            Ok(detail) => CloudBackupDetailResult::SuccessWithAuthority { detail, authority },
+            Ok(detail) => CloudBackupDetailResult::SuccessWithAuthority {
+                detail,
+                authority,
+                cloud_record_ids: wallet_record_ids,
+            },
             Err(error) => CloudBackupDetailResult::AccessError(error),
         }
     }

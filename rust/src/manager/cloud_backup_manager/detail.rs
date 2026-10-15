@@ -464,20 +464,24 @@ impl RustCloudBackupManager {
         );
     }
 
+    /// Applies a detail refresh, keeping loaded cloud-only rows only when the listing still has them
+    ///
+    /// `cloud_record_ids` are the wallet record IDs the listing found
     pub(crate) fn apply_detail_outcome_preserving_cloud_only_if_consistent(
         &self,
         outcome: CloudBackupDetailOutcome,
+        cloud_record_ids: &[String],
     ) {
         self.apply_detail_outcome_with_cloud_only_policy(
             outcome,
-            CloudOnlyRefreshPolicy::PreserveLoadedIfConsistent,
+            CloudOnlyRefreshPolicy::PreserveLoadedIfListed(cloud_record_ids),
         );
     }
 
     fn apply_detail_outcome_with_cloud_only_policy(
         &self,
         outcome: CloudBackupDetailOutcome,
-        cloud_only_policy: CloudOnlyRefreshPolicy,
+        cloud_only_policy: CloudOnlyRefreshPolicy<'_>,
     ) {
         match outcome {
             CloudBackupDetailOutcome::Checking => {
@@ -519,12 +523,22 @@ impl RustCloudBackupManager {
         let detail_snapshot = self.cloud_only_detail_snapshot.read().clone();
         let cloud_only = self.state.read().cloud_only();
         let preserve_cloud_only = detail.as_ref().is_some_and(|(detail, _)| {
-            cloud_only_policy == CloudOnlyRefreshPolicy::PreserveLoadedIfConsistent
-                && loaded_cloud_only_matches_detail(&cloud_only, detail)
+            let CloudOnlyRefreshPolicy::PreserveLoadedIfListed(cloud_record_ids) =
+                cloud_only_policy
+            else {
+                return false;
+            };
+
+            loaded_cloud_only_matches_listing(&cloud_only, detail, cloud_record_ids)
         });
-        let reset_cloud_only = detail.as_ref().is_some_and(|(detail, _)| {
-            !preserve_cloud_only
-                && cloud_only_cache_is_stale(&cloud_only, detail, detail_snapshot.as_ref())
+        let reset_cloud_only = detail.as_ref().is_some_and(|(detail, _)| match cloud_only_policy {
+            // an unchanged count-only detail cannot show that the listing replaced a wallet
+            CloudOnlyRefreshPolicy::PreserveLoadedIfListed(_) => {
+                !preserve_cloud_only && matches!(cloud_only, CloudOnlyState::Loaded { .. })
+            }
+            CloudOnlyRefreshPolicy::ResetIfStale => {
+                cloud_only_cache_is_stale(&cloud_only, detail, detail_snapshot.as_ref())
+            }
         });
 
         if reset_cloud_only {
@@ -739,9 +753,9 @@ impl RustCloudBackupManager {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CloudOnlyRefreshPolicy {
+enum CloudOnlyRefreshPolicy<'a> {
     ResetIfStale,
-    PreserveLoadedIfConsistent,
+    PreserveLoadedIfListed(&'a [String]),
 }
 
 fn cloud_only_cache_is_stale(
@@ -760,15 +774,18 @@ fn cloud_only_cache_is_stale(
     !cloud_only_wallets_match_detail(wallets, detail)
 }
 
-fn loaded_cloud_only_matches_detail(
+// an equal count alone cannot tell {A, B} from {B, C}, so every loaded row must still be listed
+fn loaded_cloud_only_matches_listing(
     cloud_only: &CloudOnlyState,
     detail: &CloudBackupDetail,
+    cloud_record_ids: &[String],
 ) -> bool {
     let CloudOnlyState::Loaded { wallets } = cloud_only else {
         return false;
     };
 
     cloud_only_wallets_match_detail(wallets, detail)
+        && wallets.iter().all(|wallet| cloud_record_ids.contains(&wallet.record_id))
 }
 
 fn cloud_only_wallets_match_detail(
@@ -868,6 +885,7 @@ mod tests {
         });
         manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
             CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(1)),
+            std::slice::from_ref(&wallet_b.record_id),
         );
 
         assert_eq!(
@@ -892,9 +910,31 @@ mod tests {
         });
         manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
             CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(0)),
+            &[],
         );
 
         assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::Loaded { wallets: vec![] });
+    }
+
+    #[test]
+    fn detail_refresh_resets_cloud_only_cache_when_listing_replaced_a_wallet() {
+        let _guard = test_lock().lock();
+        let manager = init_manager();
+        let wallet_a = cloud_backup_wallet_item("wallet-a");
+        let wallet_b = cloud_backup_wallet_item("wallet-b");
+        let wallet_c = cloud_backup_wallet_item("wallet-c");
+
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(2)));
+        manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
+            wallet_a,
+            wallet_b.clone(),
+        ]));
+        manager.apply_detail_outcome_preserving_cloud_only_if_consistent(
+            CloudBackupDetailOutcome::Refreshed(cloud_backup_detail(2)),
+            &[wallet_b.record_id, wallet_c.record_id],
+        );
+
+        assert!(matches!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched));
     }
 
     #[test]

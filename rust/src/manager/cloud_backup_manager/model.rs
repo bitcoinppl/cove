@@ -75,7 +75,12 @@ pub(crate) enum CloudBackupDisableOutcome {
 /// Remote detail fetch result that keeps access errors distinguishable from failed detail state
 #[derive(Debug)]
 pub(crate) enum CloudBackupDetailResult {
-    SuccessWithAuthority { detail: CloudBackupDetail, authority: CloudBackupInventoryAuthority },
+    SuccessWithAuthority {
+        detail: CloudBackupDetail,
+        authority: CloudBackupInventoryAuthority,
+        /// Wallet record IDs the listing found, since the detail carries only a cloud-only count
+        cloud_record_ids: Vec<String>,
+    },
     AccessError(CloudBackupError),
 }
 
