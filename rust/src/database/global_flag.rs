@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use redb::TableDefinition;
+use redb::{ReadableTable as _, TableDefinition};
 use tracing::{debug, warn};
 
 use cove_util::result_ext::ResultExt as _;
@@ -138,28 +138,41 @@ impl GlobalFlagTable {
     }
 
     pub fn toggle_bool_config(&self, key: GlobalFlagKey) -> Result<(), Error> {
-        let value = self.get(key)?;
-
-        let new_value = !value;
-        self.set(key, new_value)?;
-
-        Ok(())
+        self.set_inner_with(key, true, |current| !current)
     }
 }
 
 impl GlobalFlagTable {
     fn set_inner(&self, key: GlobalFlagKey, value: bool, notify: bool) -> Result<(), Error> {
-        debug!("setting global flag: {key:?} to {value}");
+        self.set_inner_with(key, notify, |_| value)
+    }
+
+    // reads and writes the flag in one write transaction so concurrent updates cannot be lost
+    fn set_inner_with(
+        &self,
+        key: GlobalFlagKey,
+        notify: bool,
+        next: impl FnOnce(bool) -> bool,
+    ) -> Result<(), Error> {
         let write_txn = self.db.begin_write().map_err_str(Error::DatabaseAccess)?;
 
-        {
+        let value = {
             let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
 
             let key: &'static str = key.into();
+            let current = table
+                .get(key)
+                .map_err_str(GlobalFlagTableError::Read)?
+                .is_some_and(|value| value.value());
+
+            let value = next(current);
             table.insert(key, value).map_err_str(GlobalFlagTableError::Save)?;
-        }
+
+            value
+        };
 
         write_txn.commit().map_err_str(Error::DatabaseAccess)?;
+        debug!("set global flag: {key:?} to {value}");
 
         if notify {
             Updater::send_update(Update::DatabaseUpdated);
