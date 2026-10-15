@@ -29,9 +29,10 @@ pub(crate) use send::is_send_eligible_wallet_id;
 /// Deletes the persisted receive session and its private key under the session store lock
 ///
 /// Deleting outside the lock would let a concurrent load that upgrades a legacy session write
-/// the old private key back after the delete
+/// the old private key back after the delete. Managers created before this call can no longer
+/// create a session, so a receive action still queued during the wipe cannot save a new key
 pub(crate) fn delete_persisted_receive_session() -> Result<(), KeyTeleportAlert> {
-    ReceiveSessionStore.delete()
+    ReceiveSessionStore::reset_for_full_wipe()
 }
 
 type Message = KeyTeleportManagerReconcileMessage;
@@ -428,7 +429,7 @@ impl RustKeyTeleportManager {
         Arc::new(Self {
             action_lock: Mutex::new(()),
             model: Arc::new(Mutex::new(ManagerModel::default())),
-            receive_sessions: ReceiveSessionStore,
+            receive_sessions: ReceiveSessionStore::current(),
             reconciler: ReconcileChannel::new(20),
         })
     }

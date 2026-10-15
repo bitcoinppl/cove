@@ -240,6 +240,22 @@ fn legacy_receive_session_json_is_migrated_without_changing_the_request() {
 }
 
 #[test]
+fn receive_start_queued_across_a_full_wipe_cannot_save_a_session() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let pre_wipe_manager = RustKeyTeleportManager::new();
+
+    super::delete_persisted_receive_session().unwrap();
+
+    assert!(pre_wipe_manager.start_receive().is_err());
+    assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_none());
+
+    let post_wipe_manager = RustKeyTeleportManager::new();
+    post_wipe_manager.start_receive().unwrap();
+    assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_some());
+}
+
+#[test]
 fn another_manager_restart_invalidates_the_displayed_receive_request() {
     let _guard = crate::test_support::global_state_test_lock().blocking_lock();
     init_globals();
