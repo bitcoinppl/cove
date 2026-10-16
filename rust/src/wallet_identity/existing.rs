@@ -56,7 +56,11 @@ fn existing_wallet_identity_key(
     }
 
     if let Some(fingerprint) = metadata.master_fingerprint.as_deref().copied() {
-        if metadata.wallet_type == WalletType::Hot {
+        // a hot wallet whose secret is missing or unreadable cannot cover a seed backup, so it
+        // matches by fingerprint like a degraded public wallet
+        if metadata.wallet_type == WalletType::Hot
+            && hot_wallet_secret_is_readable(&metadata, keychain)
+        {
             return Ok(WalletIdentityKey::HotFingerprint {
                 fingerprint,
                 network: metadata.network,
@@ -76,6 +80,22 @@ fn existing_wallet_identity_key(
         network: metadata.network,
         mode: metadata.wallet_mode,
     })
+}
+
+fn hot_wallet_secret_is_readable(metadata: &WalletMetadata, keychain: &Keychain) -> bool {
+    let id = &metadata.id;
+
+    match keychain.get_wallet_secret(id) {
+        Ok(Some(_)) => true,
+        Ok(None) => {
+            warn!("hot wallet {id} has no stored secret");
+            false
+        }
+        Err(error) => {
+            warn!("hot wallet {id} secret could not be read: {error}");
+            false
+        }
+    }
 }
 
 pub(crate) fn existing_public_wallet_by_identity_strict(

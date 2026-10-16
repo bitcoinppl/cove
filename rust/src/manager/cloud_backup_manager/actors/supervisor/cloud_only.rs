@@ -210,16 +210,13 @@ impl CloudBackupSupervisor {
                 },
                 true,
             ),
-            Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id }) => {
-                manager.handle_restored_secret_added(wallet_id);
-                (
-                    CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
-                        record_id,
-                        listing_generation,
-                    },
-                    true,
-                )
-            }
+            Ok(CloudOnlyRestoreOutcome::SecretAdded { .. }) => (
+                CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
+                    record_id,
+                    listing_generation,
+                },
+                true,
+            ),
             Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice) => (
                 CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                     record_id,

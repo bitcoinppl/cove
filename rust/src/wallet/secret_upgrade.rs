@@ -21,6 +21,11 @@ pub(crate) enum SecretUpgradeError {
     #[error("wallet already holds a private key")]
     AlreadyHoldsSecret(WalletId),
 
+    /// A secret is stored for the wallet but cannot be read, so it can neither be compared nor
+    /// replaced
+    #[error("wallet has a stored private key that cannot be read")]
+    UnreadableSecret(WalletId),
+
     #[error("multiple existing wallets could match the incoming secret")]
     IdentityCollision,
 
@@ -101,6 +106,7 @@ impl ExistingWalletSecretUpgrade {
         let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
             .begin_persistence_operation(id.clone())
             .map_err_str(SecretUpgradeError::Lifecycle)?;
+
         let existing_secret = match keychain.get_wallet_secret(&id) {
             Ok(secret) => secret,
             Err(error) => {
@@ -125,6 +131,7 @@ impl ExistingWalletSecretUpgrade {
             Some(existing_secret) => {
                 let existing_fingerprint: Fingerprint =
                     existing_secret.xpub(network).fingerprint().into();
+
                 if existing_fingerprint != fingerprint {
                     return Err(SecretUpgradeError::Identity(format!(
                         "stored secret for wallet {id} does not match the incoming fingerprint"
@@ -141,7 +148,7 @@ impl ExistingWalletSecretUpgrade {
                         warn!(
                             "wallet {id} has a stored secret that is present but unreadable, treating it as a duplicate"
                         );
-                        SecretUpgradeError::AlreadyHoldsSecret(id.clone())
+                        SecretUpgradeError::UnreadableSecret(id.clone())
                     }
                     error => error.into(),
                 })?;
@@ -282,6 +289,7 @@ fn existing_wallet_for_secret(
         .into_iter()
         .filter(|metadata| metadata.matches_fingerprint(fingerprint))
         .collect::<Vec<_>>();
+
     if same_fingerprint_wallets.is_empty() {
         return Ok(None);
     }

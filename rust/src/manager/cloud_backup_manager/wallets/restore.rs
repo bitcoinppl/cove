@@ -11,7 +11,8 @@ use zeroize::Zeroizing;
 use super::payload::{convert_cloud_secret, descriptor_pair_from_cloud};
 use super::{DownloadedWalletBackup, RemoteWalletBackupSummary, decode_cloud_labels_jsonl};
 use crate::backup::import::{
-    CloudRestoreError, LabelRestoreBehavior, LabelRestoreWarning, restore_wallet_labels,
+    CloudRestoreError, LabelRestoreBehavior, LabelRestoreWarning, LocalWalletConflict,
+    restore_wallet_labels,
 };
 use crate::backup::model::{WalletBackup, WalletSecret};
 use crate::database::Database;
@@ -335,8 +336,8 @@ impl DownloadedWalletBackup {
 
     /// Adds this backup's secret to the local wallet with its exact public identity
     ///
-    /// Returns `None` when no local wallet has that identity, such as another account under
-    /// the same fingerprint, so the backup restores as a new wallet
+    /// Returns `None` when no single local wallet has that identity, such as another account
+    /// under the same fingerprint, so the backup restores as a new wallet
     ///
     /// The upgrade writes only to the existing wallet and rolls itself back on failure, so it
     /// needs no restore journal for the backup's own wallet ID
@@ -350,17 +351,20 @@ impl DownloadedWalletBackup {
         let database = Database::global();
         let keychain = Keychain::global();
         let metadata = &self.metadata;
-        let upgrade = ExistingWalletSecretUpgrade::find(
+        let upgrade = match ExistingWalletSecretUpgrade::find(
             &database,
             keychain,
             &secret,
             metadata.network,
             metadata.wallet_mode,
-        )
-        .map_err(|source| CloudBackupError::internal_context("find wallet for secret", source))?;
-
-        let Some(upgrade) = upgrade else {
-            return Ok(None);
+        ) {
+            Ok(Some(upgrade)) => upgrade,
+            // several local wallets share this identity, such as one seed watched under two
+            // address types, so the seed restores as its own hot wallet instead of being stuck
+            Ok(None) | Err(SecretUpgradeError::IdentityCollision) => return Ok(None),
+            Err(error) => {
+                return Err(CloudBackupError::internal_context("find wallet for secret", error));
+            }
         };
 
         let source = SecretUpgradeSource::CloudBackup { verified: metadata.verified };
@@ -368,9 +372,14 @@ impl DownloadedWalletBackup {
             Ok(upgraded) => {
                 Ok(Some(CloudOnlyRestoreOutcome::SecretAdded { wallet_id: upgraded.id }))
             }
-            // the local wallet gained this secret after coverage was read
+            // the local wallet gained a readable secret after coverage was read
             Err(SecretUpgradeError::AlreadyHoldsSecret(_)) => {
                 Ok(Some(CloudOnlyRestoreOutcome::AlreadyOnDevice))
+            }
+            // the backup may hold the only readable copy of this secret, so the row stays
+            // restorable instead of becoming a deletable copy
+            Err(SecretUpgradeError::UnreadableSecret(_)) => {
+                Err(CloudBackupError::LocalWalletConflict(LocalWalletConflict::Unreadable))
             }
             Err(error) => {
                 Err(CloudBackupError::internal_context("add secret to local wallet", error))
