@@ -768,11 +768,7 @@ impl RustCloudBackupManager {
             self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
         }
 
-        let mut cloud_only = self.state.read().cloud_only();
-        if let CloudOnlyState::Loaded { wallets, .. } = &mut cloud_only {
-            wallets.retain(|wallet| wallet.record_id != record_id);
-        }
-        self.apply_cloud_only_state(cloud_only);
+        self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyRowRemoved(record_id));
     }
 }
 
