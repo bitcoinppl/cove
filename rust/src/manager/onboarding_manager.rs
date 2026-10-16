@@ -508,24 +508,44 @@ impl RustOnboardingManager {
         let reconciler = self.reconciler.sender().clone();
 
         cove_tokio::task::spawn(async move {
-            while let Ok(event) = receiver.recv_async().await {
-                let internal_event = match event {
-                    CloudBackupRestoreEvent::Progress(flow) => {
-                        InternalEvent::RestoreProgress { attempt_id, flow }
-                    }
-                    CloudBackupRestoreEvent::Complete(report) => {
-                        InternalEvent::RestoreComplete { attempt_id, report }
-                    }
-                    CloudBackupRestoreEvent::NoBackupFound => {
-                        InternalEvent::RestoreNoBackupFound { attempt_id }
-                    }
-                    CloudBackupRestoreEvent::Failed(message) => {
-                        InternalEvent::RestoreFailed { attempt_id, message }
-                    }
-                };
-                Self::apply_restore_event(&state, &reconciler, internal_event);
-            }
+            Self::forward_restore_events(receiver, attempt_id, &state, &reconciler).await;
         });
+    }
+
+    async fn forward_restore_events(
+        receiver: flume::Receiver<CloudBackupRestoreEvent>,
+        attempt_id: u64,
+        state: &Arc<RwLock<InternalState>>,
+        reconciler: &MessageSender<Message>,
+    ) {
+        while let Ok(event) = receiver.recv_async().await {
+            let internal_event = match event {
+                CloudBackupRestoreEvent::Progress(flow) => {
+                    InternalEvent::RestoreProgress { attempt_id, flow }
+                }
+                CloudBackupRestoreEvent::Complete(report) => {
+                    InternalEvent::RestoreComplete { attempt_id, report }
+                }
+                CloudBackupRestoreEvent::NoBackupFound => {
+                    InternalEvent::RestoreNoBackupFound { attempt_id }
+                }
+                CloudBackupRestoreEvent::Failed(message) => {
+                    InternalEvent::RestoreFailed { attempt_id, message }
+                }
+            };
+            Self::apply_restore_event(state, reconciler, internal_event);
+        }
+
+        // the restore can end without a terminal event (cancelled, superseded claim, or a
+        // dropped task), and Restoring has no user exit, so fail the attempt to offer retry
+        let interrupted = InternalEvent::RestoreFailed {
+            attempt_id,
+            message: "The restore stopped before it finished. Please try again.".into(),
+        };
+
+        if Self::apply_restore_event(state, reconciler, interrupted) {
+            warn!("Onboarding: restore attempt {attempt_id} ended without a terminal event");
+        }
     }
 
     fn apply_restore_event(
@@ -1428,6 +1448,47 @@ mod tests {
                 message,
             } if message == "passkey verification failed"
         ));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn restore_channel_closing_without_terminal_event_fails_the_attempt() {
+        let restoring = || FlowState::Restoring {
+            origin: RestoreOrigin::Welcome,
+            attempt_id: 3,
+            flow: CloudBackupRestoreFlow::Finding,
+        };
+
+        let manager = preview_manager(restoring(), CloudRestoreDiscovery::BackupFound(None));
+        let (sender, receiver) = flume::unbounded();
+        drop(sender);
+
+        RustOnboardingManager::forward_restore_events(
+            receiver,
+            3,
+            &manager.state,
+            manager.reconciler.sender(),
+        )
+        .await;
+
+        assert!(matches!(
+            manager.state.read().flow,
+            FlowState::RestoreFailed { origin: RestoreOrigin::Welcome, .. }
+        ));
+
+        let manager = preview_manager(restoring(), CloudRestoreDiscovery::BackupFound(None));
+        let (sender, receiver) = flume::unbounded();
+        sender.send(CloudBackupRestoreEvent::Complete(preview_restore_report())).unwrap();
+        drop(sender);
+
+        RustOnboardingManager::forward_restore_events(
+            receiver,
+            3,
+            &manager.state,
+            manager.reconciler.sender(),
+        )
+        .await;
+
+        assert!(matches!(manager.state.read().flow, FlowState::RestoreComplete { .. }));
     }
 
     #[test]
