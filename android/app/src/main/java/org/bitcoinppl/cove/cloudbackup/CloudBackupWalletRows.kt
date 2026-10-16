@@ -430,7 +430,7 @@ private fun StatusBadge(
     status: CloudBackupWalletStatus,
 ) {
     val colors = cloudBackupVisualColors()
-    val (label, color, fill, border, icon) =
+    val style =
         when (status) {
             CloudBackupWalletStatus.DIRTY -> StatusBadgeStyle("Dirty", colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber)
             CloudBackupWalletStatus.UPLOADING,
@@ -439,26 +439,33 @@ private fun StatusBadge(
             CloudBackupWalletStatus.CONFIRMED -> StatusBadgeStyle("Confirmed", colors.success, colors.successFill, colors.successBorder, Icons.Default.Check)
             CloudBackupWalletStatus.FAILED -> StatusBadgeStyle("Failed", colors.danger, colors.dangerFill, colors.dangerBorder, Icons.Default.WarningAmber)
             CloudBackupWalletStatus.DELETED_FROM_DEVICE -> StatusBadgeStyle("Not on device", colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.DoNotDisturbOn)
-            CloudBackupWalletStatus.ALREADY_ON_DEVICE -> StatusBadgeStyle("Already on this device", colors.cloudBlue, colors.cloudBlueFill, colors.cloudBlue.copy(alpha = 0.48f), Icons.Default.PhoneAndroid)
+            CloudBackupWalletStatus.ALREADY_ON_DEVICE ->
+                StatusBadgeStyle(
+                    "Already on this device",
+                    colors.cloudBlue,
+                    colors.cloudBlueFill,
+                    colors.cloudBlue.copy(alpha = 0.48f),
+                    Icons.Default.PhoneAndroid,
+                )
             CloudBackupWalletStatus.UNSUPPORTED_VERSION -> StatusBadgeStyle("Unsupported", colors.warning, colors.warningFill, colors.warningBorder, Icons.Default.WarningAmber)
             CloudBackupWalletStatus.REMOTE_STATE_UNKNOWN -> StatusBadgeStyle("Unknown", colors.secondaryText, colors.cardFill, colors.cardBorder, Icons.Default.WarningAmber)
         }
 
     Surface(
-        color = fill,
+        color = style.fill,
         shape = CircleShape,
-        border = BorderStroke(1.dp, border),
+        border = BorderStroke(1.dp, style.border),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(12.dp))
+            Icon(style.icon, contentDescription = null, tint = style.color, modifier = Modifier.size(12.dp))
             Text(
-                label,
+                style.label,
                 style = MaterialTheme.typography.caption,
-                color = color,
+                color = style.color,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
