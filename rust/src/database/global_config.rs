@@ -544,6 +544,14 @@ mod tests {
         table.set_decoy_mode().unwrap();
         assert_eq!(table.selected_wallet(), None);
 
+        // leaving decoy mode with nothing selected must not save a decoy selection
+        table.set_main_mode().unwrap();
+        assert_eq!(table.selected_wallet(), Some(main.clone()));
+        assert_eq!(table.get(super::GlobalConfigKey::DecoySelectedWalletId).unwrap(), None);
+
+        table.set_decoy_mode().unwrap();
+        assert_eq!(table.selected_wallet(), None);
+
         table.select_wallet(decoy.clone()).unwrap();
         table.set_main_mode().unwrap();
         assert_eq!(table.selected_wallet(), Some(main));

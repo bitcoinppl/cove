@@ -341,6 +341,8 @@ final class WalletTransitionTests: XCTestCase {
 
         cache.clearWalletManager()
 
+        XCTAssertNil(cache.cachedWalletManager(id: walletManager.id))
+        XCTAssertFalse(walletManager.canApplyReconcileMessages)
         XCTAssertNil(cache.coinControlManager)
         XCTAssertFalse(coinControlManager.canApplyReconcileMessages)
     }
