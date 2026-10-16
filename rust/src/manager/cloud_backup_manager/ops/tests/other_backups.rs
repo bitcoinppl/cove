@@ -20,7 +20,7 @@ async fn fetch_cloud_only_wallets_surfaces_unsupported_versions() {
     );
     globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
 
-    let wallets = manager.do_fetch_cloud_only_wallets().await.unwrap();
+    let wallets = manager.do_fetch_cloud_only_wallets(0).await.unwrap().wallets;
 
     assert_eq!(wallets.len(), 1);
     assert_eq!(wallets[0].record_id, record_id);
@@ -196,11 +196,12 @@ async fn detail_refresh_keeps_current_detail_when_other_namespace_inspection_fai
         .cloud
         .fail_master_key_download_offline(other_namespace, "offline while inspecting namespace");
 
-    let Some(CloudBackupDetailResult::SuccessWithAuthority { detail, .. }) =
+    let Some(CloudBackupDetailResult::SuccessWithAuthority { listed, .. }) =
         manager.refresh_cloud_backup_detail().await
     else {
         panic!("expected usable current cloud backup detail");
     };
+    let detail = listed.detail;
 
     let other_backups = manager.other_backup_state(&CloudStorage::global_explicit_client()).await;
     let CloudBackupOtherBackupsState::LoadFailed { reason } = other_backups else {

@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex as StdMutex, OnceLock};
 use std::time::Duration;
 
 use act_zero::call;
@@ -33,15 +34,52 @@ use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup, PersistedPasskeyState,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupEnableContext, CloudBackupKeychain, CloudBackupStore, PendingEnableJournal,
-    PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership, PendingEnableSession,
-    PendingUploadVerificationState, actors::restore::RestoreOperation,
+    CloudBackupCloudOnlyFetchOutcome, CloudBackupDetail, CloudBackupEnableContext,
+    CloudBackupKeychain, CloudBackupListedDetail, CloudBackupStore, CloudBackupWalletItem,
+    CloudOnlyFetch, PendingEnableJournal, PendingEnableLocalMetadataSnapshot,
+    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
+    actors::restore::RestoreOperation,
 };
 
 use crate::manager::connectivity_manager::CONNECTIVITY_MANAGER;
 use crate::mnemonic::MnemonicExt as _;
 use crate::network::Network;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletMode, WalletType};
+
+/// A complete fetch result stamped with the manager's current listing generation
+pub(crate) fn complete_cloud_only_fetch(
+    manager: &RustCloudBackupManager,
+    wallets: Vec<CloudBackupWalletItem>,
+) -> CloudOnlyFetch {
+    CloudOnlyFetch {
+        wallets,
+        unresolved_record_ids: Vec::new(),
+        listing_generation: manager.state.read().cloud_only_listing_generation(),
+    }
+}
+
+pub(crate) fn complete_loaded_outcome(
+    manager: &RustCloudBackupManager,
+    wallets: Vec<CloudBackupWalletItem>,
+) -> CloudBackupCloudOnlyFetchOutcome {
+    CloudBackupCloudOnlyFetchOutcome::Loaded(complete_cloud_only_fetch(manager, wallets))
+}
+
+/// A listed detail with no local wallets and the given cloud-only record IDs
+pub(crate) fn listed_detail(cloud_only_record_ids: &[&str]) -> CloudBackupListedDetail {
+    CloudBackupListedDetail {
+        detail: CloudBackupDetail {
+            last_sync: None,
+            up_to_date: Vec::new(),
+            needs_sync: Vec::new(),
+            cloud_only_count: cloud_only_record_ids.len() as u32,
+        },
+        cloud_only_record_ids: cloud_only_record_ids
+            .iter()
+            .map(|record_id| (*record_id).to_owned())
+            .collect(),
+    }
+}
 
 pub(crate) fn staged_pending_enable_journal(
     context: CloudBackupEnableContext,
@@ -89,6 +127,7 @@ impl cove_cspp::CsppStore for MockStoreHandle {
 
 type MockDiscoverResult = Result<(Vec<u8>, Vec<u8>), PasskeyError>;
 type MockPasskeyActionResults = Arc<Mutex<VecDeque<Result<Vec<u8>, PasskeyError>>>>;
+type MockPasskeyStickyResult = Arc<Mutex<Option<Result<Vec<u8>, PasskeyError>>>>;
 type MockPasskeyCreateResult = Arc<Mutex<Option<Result<PasskeyRegistrationResult, PasskeyError>>>>;
 #[derive(Debug, Default)]
 struct MockCloudState {
@@ -97,6 +136,9 @@ struct MockCloudState {
     master_key_download_errors: HashMap<String, CloudStorageError>,
     backup_upload_state_errors: HashMap<(String, String), CloudStorageError>,
     master_key_download_attempts: usize,
+    master_key_download_active: usize,
+    master_key_download_max_active: usize,
+    master_key_download_gate: Option<Arc<MockCloudDownloadGate>>,
     wallet_backups: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_overrides: HashMap<(String, String), Vec<u8>>,
     wallet_backup_download_errors: HashMap<(String, String), CloudStorageError>,
@@ -139,6 +181,35 @@ struct MockCloudState {
 pub(crate) struct MockCloudDownloadGate {
     started: tokio::sync::Notify,
     release: tokio::sync::Notify,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct MockPasskeyCallGate {
+    started: AtomicBool,
+    released: AtomicBool,
+    wait_lock: StdMutex<()>,
+    wait_condvar: Condvar,
+}
+
+impl MockPasskeyCallGate {
+    fn block(&self) {
+        self.started.store(true, Ordering::Release);
+        let mut guard = self.wait_lock.lock().expect("passkey call gate lock");
+        while !self.released.load(Ordering::Acquire) {
+            guard = self.wait_condvar.wait(guard).expect("passkey call gate wait");
+        }
+    }
+
+    pub(crate) fn is_started(&self) -> bool {
+        self.started.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn release(&self) {
+        // set the flag under the waiter's lock so it cannot be missed between its check and wait
+        let _guard = self.wait_lock.lock().expect("passkey call gate lock");
+        self.released.store(true, Ordering::Release);
+        self.wait_condvar.notify_all();
+    }
 }
 
 impl MockCloudDownloadGate {
@@ -430,6 +501,20 @@ impl MockCloudStorage {
         self.state.lock().master_key_download_attempts
     }
 
+    pub(crate) fn gate_master_key_downloads(&self) -> Arc<MockCloudDownloadGate> {
+        let gate = Arc::new(MockCloudDownloadGate::default());
+        self.state.lock().master_key_download_gate = Some(gate.clone());
+        gate
+    }
+
+    pub(crate) fn clear_master_key_download_gate(&self) {
+        self.state.lock().master_key_download_gate = None;
+    }
+
+    pub(crate) fn master_key_download_max_concurrency(&self) -> usize {
+        self.state.lock().master_key_download_max_active
+    }
+
     pub(crate) fn wallet_backup_download_attempt_count_for_record(
         &self,
         namespace: &str,
@@ -553,17 +638,34 @@ impl CloudStorageAccess for MockCloudStorage {
         _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
-        let mut state = self.state.lock();
-        state.master_key_download_attempts += 1;
-        if let Some(error) = state.master_key_download_errors.get(&namespace).cloned() {
-            return Err(error);
+        let gate = {
+            let mut state = self.state.lock();
+            state.master_key_download_attempts += 1;
+            state.master_key_download_active += 1;
+            state.master_key_download_max_active =
+                state.master_key_download_max_active.max(state.master_key_download_active);
+            state.master_key_download_gate.clone()
+        };
+
+        if let Some(gate) = gate {
+            gate.block().await;
         }
 
-        state
-            .master_key_backups
-            .get(&namespace)
-            .cloned()
-            .ok_or(CloudStorageError::NotFound(namespace))
+        let result = {
+            let state = self.state.lock();
+            if let Some(error) = state.master_key_download_errors.get(&namespace).cloned() {
+                Err(error)
+            } else {
+                state
+                    .master_key_backups
+                    .get(&namespace)
+                    .cloned()
+                    .ok_or(CloudStorageError::NotFound(namespace))
+            }
+        };
+
+        self.state.lock().master_key_download_active -= 1;
+        result
     }
 
     async fn download_wallet_backup(
@@ -652,6 +754,12 @@ impl CloudStorageAccess for MockCloudStorage {
         state.uploaded_wallet_backups.retain(|(uploaded_namespace, uploaded_record_id)| {
             uploaded_namespace != &namespace || uploaded_record_id != &record_id
         });
+
+        // a provider stops listing a deleted file, so later listings must not find it either
+        let filename = wallet_filename_from_record_id(&record_id);
+        if let Some(wallet_files) = state.wallet_files.get_mut(&namespace) {
+            wallet_files.retain(|wallet_file| wallet_file != &filename);
+        }
 
         Ok(())
     }
@@ -822,10 +930,20 @@ pub(crate) struct MockPasskeyProviderImpl {
     discover_results: Arc<Mutex<VecDeque<MockDiscoverResult>>>,
     create_result: MockPasskeyCreateResult,
     authenticate_results: MockPasskeyActionResults,
+    authenticate_result_default: MockPasskeyStickyResult,
     create_count: Arc<Mutex<usize>>,
     authenticate_count: Arc<Mutex<usize>>,
     discover_count: Arc<Mutex<usize>>,
-    authenticated_credential_ids: Arc<Mutex<Vec<Vec<u8>>>>,
+    authenticated_requests: Arc<Mutex<Vec<MockPasskeyAuthenticationRequest>>>,
+    authenticate_gate: Arc<Mutex<Option<Arc<MockPasskeyCallGate>>>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MockPasskeyAuthenticationRequest {
+    pub(crate) rp_id: String,
+    pub(crate) credential_id: Vec<u8>,
+    pub(crate) prf_salt: Vec<u8>,
+    pub(crate) challenge_len: usize,
 }
 
 impl MockPasskeyProviderImpl {
@@ -833,10 +951,12 @@ impl MockPasskeyProviderImpl {
         self.discover_results.lock().clear();
         *self.create_result.lock() = None;
         self.authenticate_results.lock().clear();
+        *self.authenticate_result_default.lock() = None;
         *self.create_count.lock() = 0;
         *self.authenticate_count.lock() = 0;
         *self.discover_count.lock() = 0;
-        self.authenticated_credential_ids.lock().clear();
+        self.authenticated_requests.lock().clear();
+        *self.authenticate_gate.lock() = None;
     }
 
     pub(crate) fn set_discover_result(
@@ -866,9 +986,8 @@ impl MockPasskeyProviderImpl {
     }
 
     pub(crate) fn set_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
-        let mut results = self.authenticate_results.lock();
-        results.clear();
-        results.push_back(result);
+        self.authenticate_results.lock().clear();
+        *self.authenticate_result_default.lock() = Some(result);
     }
 
     pub(crate) fn push_authenticate_result(&self, result: Result<Vec<u8>, PasskeyError>) {
@@ -888,7 +1007,21 @@ impl MockPasskeyProviderImpl {
     }
 
     pub(crate) fn authenticated_credential_ids(&self) -> Vec<Vec<u8>> {
-        self.authenticated_credential_ids.lock().clone()
+        self.authenticated_requests
+            .lock()
+            .iter()
+            .map(|request| request.credential_id.clone())
+            .collect()
+    }
+
+    pub(crate) fn authenticated_requests(&self) -> Vec<MockPasskeyAuthenticationRequest> {
+        self.authenticated_requests.lock().clone()
+    }
+
+    pub(crate) fn gate_next_authenticate(&self) -> Arc<MockPasskeyCallGate> {
+        let gate = Arc::new(MockPasskeyCallGate::default());
+        *self.authenticate_gate.lock() = Some(gate.clone());
+        gate
     }
 }
 
@@ -912,20 +1045,39 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
 
     fn authenticate_with_prf(
         &self,
-        _rp_id: String,
+        rp_id: String,
         credential_id: Vec<u8>,
-        _prf_salt: Vec<u8>,
-        _challenge: Vec<u8>,
+        prf_salt: Vec<u8>,
+        challenge: Vec<u8>,
     ) -> Result<Vec<u8>, PasskeyError> {
         *self.authenticate_count.lock() += 1;
-        self.authenticated_credential_ids.lock().push(credential_id);
-        self.authenticate_results.lock().pop_front().unwrap_or_else(|| {
-            Err(PasskeyError::RequestFailed {
-                operation: PasskeyOperation::AuthenticateAssertion,
-                reason: PasskeyFailureReason::Unknown {
-                    diagnostic_message: "unexpected authenticate_with_prf call".into(),
-                },
-            })
+        self.authenticated_requests.lock().push(MockPasskeyAuthenticationRequest {
+            rp_id,
+            credential_id,
+            prf_salt,
+            challenge_len: challenge.len(),
+        });
+
+        // take the gate first so the lock is released before blocking; an if-let scrutinee
+        // guard lives until the end of the then-block
+        let gate = self.authenticate_gate.lock().take();
+        if let Some(gate) = gate {
+            gate.block();
+        }
+
+        if let Some(result) = self.authenticate_results.lock().pop_front() {
+            return result;
+        }
+
+        if let Some(result) = self.authenticate_result_default.lock().clone() {
+            return result;
+        }
+
+        Err(PasskeyError::RequestFailed {
+            operation: PasskeyOperation::AuthenticateAssertion,
+            reason: PasskeyFailureReason::Unknown {
+                diagnostic_message: "unexpected authenticate_with_prf call".into(),
+            },
         })
     }
 
@@ -1123,6 +1275,7 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
 ) {
     ensure_cloud_backup_test_tokio_runtime();
     wait_for_cleanup_idle_for_test(manager);
+    crate::database::cloud_backup::restore_activation::test_support::reset();
     globals.reset();
     clear_local_wallets();
     let reset_manager = manager.clone();
@@ -1349,6 +1502,24 @@ pub(crate) async fn encrypted_remote_wallet_backup_bytes(
     bytes
 }
 
+/// Build a wallet backup, then leave the device as an app reinstall does
+///
+/// A reinstall removes local files and the database but keeps the iOS keychain items
+pub(crate) async fn encrypted_reinstalled_wallet_backup_bytes(
+    metadata: &WalletMetadata,
+    master_key: &cove_cspp::master_key::MasterKey,
+    revision_hash: &str,
+    version: u32,
+) -> Vec<u8> {
+    let bytes = encrypted_wallet_backup_bytes(metadata, master_key, revision_hash, version).await;
+
+    crate::wallet::delete_wallet_specific_data(&metadata.id)
+        .expect("reinstall fixture removes local wallet data");
+    assert!(Keychain::global().wallet_items_exist(&metadata.id));
+
+    bytes
+}
+
 pub(crate) fn wallet_entry_with_labels(
     metadata: &WalletMetadata,
     labels_jsonl: Option<&str>,
@@ -1473,4 +1644,49 @@ pub(crate) async fn new_restore_operation_for_test(
     manager: &RustCloudBackupManager,
 ) -> RestoreOperation {
     call!(manager.supervisor.new_restore_operation()).await.expect("create restore operation")
+}
+
+/// Stores a freshly generated master key wrapper in the mock cloud and returns its namespace
+pub(crate) fn seed_master_key_wrapper(
+    globals: &TestGlobals,
+    prf_key: &[u8; 32],
+    prf_salt: &[u8; 32],
+    registered_at: u64,
+) -> String {
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    globals.cloud.set_master_key_backup(
+        namespace.clone(),
+        master_wrapper_for_test(&master_key, prf_key, prf_salt, registered_at),
+    );
+
+    namespace
+}
+
+/// A master key wrapper whose passkey hint and metadata are stamped with `registered_at`
+pub(crate) fn master_wrapper_for_test(
+    master_key: &cove_cspp::master_key::MasterKey,
+    prf_key: &[u8; 32],
+    prf_salt: &[u8; 32],
+    registered_at: u64,
+) -> Vec<u8> {
+    let namespace = master_key.namespace_id();
+    let encrypted = cove_cspp::master_key_crypto::encrypt_master_key_with_remote_metadata(
+        master_key,
+        prf_key,
+        prf_salt,
+        Some(cove_cspp::backup_data::PasskeyProviderHint {
+            aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+            registered_platform: cove_cspp::backup_data::PasskeyRegistrationPlatform::Android,
+            registered_at,
+            name_suffix: format!("{registered_at}"),
+        }),
+        cove_cspp::backup_data::remote_payload::RemotePayloadMetadata::master_key(
+            &namespace,
+            registered_at,
+        ),
+    )
+    .unwrap();
+
+    serde_json::to_vec(&encrypted).unwrap()
 }

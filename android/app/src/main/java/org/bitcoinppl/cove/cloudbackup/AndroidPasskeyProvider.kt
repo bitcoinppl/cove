@@ -2,6 +2,7 @@ package org.bitcoinppl.cove.cloudbackup
 
 import android.content.Context
 import android.os.Looper
+import androidx.credentials.Credential
 import androidx.credentials.CreatePublicKeyCredentialRequest
 import androidx.credentials.CreatePublicKeyCredentialResponse
 import androidx.credentials.CredentialManager
@@ -9,13 +10,11 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential
 import androidx.credentials.exceptions.CreateCredentialCancellationException
-import androidx.credentials.exceptions.CreateCredentialException
 import androidx.credentials.exceptions.CreateCredentialInterruptedException
 import androidx.credentials.exceptions.CreateCredentialNoCreateOptionException
 import androidx.credentials.exceptions.CreateCredentialProviderConfigurationException
 import androidx.credentials.exceptions.CreateCredentialUnsupportedException
 import androidx.credentials.exceptions.GetCredentialCancellationException
-import androidx.credentials.exceptions.GetCredentialException
 import androidx.credentials.exceptions.GetCredentialInterruptedException
 import androidx.credentials.exceptions.GetCredentialProviderConfigurationException
 import androidx.credentials.exceptions.GetCredentialUnsupportedException
@@ -110,11 +109,10 @@ class AndroidPasskeyProvider(
                     )
 
                 val credential =
-                    response.credential as? PublicKeyCredential
-                        ?: throw passkeyRequestFailed(
-                            PasskeyOperation.AUTHENTICATE_ASSERTION,
-                            PasskeyFailureReason.UnexpectedCredentialType,
-                        )
+                    requirePublicKeyCredential(
+                        response.credential,
+                        PasskeyOperation.AUTHENTICATE_ASSERTION,
+                    )
 
                 extractPrfOutput(credential.authenticationResponseJson)
             } catch (error: Exception) {
@@ -144,8 +142,10 @@ class AndroidPasskeyProvider(
                     )
 
                 val credential =
-                    response.credential as? PublicKeyCredential
-                        ?: throw PasskeyException.NoCredentialFound()
+                    requirePublicKeyCredential(
+                        response.credential,
+                        PasskeyOperation.DISCOVER_ASSERTION,
+                    )
 
                 DiscoveredPasskeyResult(
                     prfOutput = extractPrfOutput(credential.authenticationResponseJson),
@@ -337,16 +337,10 @@ internal fun mapPasskeyCreateError(error: Exception): PasskeyException =
         is CreateCredentialUnsupportedException ->
             passkeyNotSupported(PasskeyFailureReason.ProviderConfiguration)
 
-        is CreateCredentialException ->
-            passkeyRequestFailed(
-                PasskeyOperation.REGISTRATION,
-                passkeyCreateFailureReason(error.passkeyMessage("passkey creation failed")),
-            )
-
         else ->
             passkeyRequestFailed(
                 PasskeyOperation.REGISTRATION,
-                passkeyCreateFailureReason(error.passkeyMessage("passkey creation failed")),
+                passkeyUnknownReason("passkey creation failed"),
             )
     }
 
@@ -384,16 +378,10 @@ internal fun mapPasskeyGetError(
         is GetCredentialUnsupportedException ->
             passkeyNotSupported(PasskeyFailureReason.ProviderConfiguration)
 
-        is GetCredentialException ->
-            passkeyRequestFailed(
-                operation,
-                passkeyUnknownReason(error.passkeyMessage("passkey authentication failed")),
-            )
-
         else ->
             passkeyRequestFailed(
                 operation,
-                passkeyUnknownReason(error.passkeyMessage("passkey authentication failed")),
+                passkeyUnknownReason("passkey authentication failed"),
             )
     }
 
@@ -410,9 +398,6 @@ private fun passkeyRequestFailed(
 
 private fun passkeyUnknownReason(message: String): PasskeyFailureReason =
     PasskeyFailureReason.Unknown(diagnosticMessage = message)
-
-private fun passkeyCreateFailureReason(message: String): PasskeyFailureReason =
-    passkeyUnknownReason(message)
 
 private fun passkeyCreateDomErrorReason(
     error: CreatePublicKeyCredentialDomException,
@@ -434,9 +419,6 @@ private fun passkeyDomErrorReason(domError: DomError): PasskeyFailureReason =
         is InvalidStateError -> PasskeyFailureReason.InvalidResponse
         else -> passkeyUnknownReason("passkey DOM error: ${domError.type}")
     }
-
-private fun Throwable.passkeyMessage(fallback: String): String =
-    message?.takeIf(String::isNotBlank) ?: fallback
 
 internal fun buildPasskeyCreateRequestJson(
     rpId: String,
@@ -466,7 +448,7 @@ internal fun buildPasskeyCreateRequestJson(
             "authenticatorSelection",
             JSONObject()
                 .put("residentKey", "required")
-                .put("userVerification", "preferred"),
+                .put("userVerification", "required"),
         ).put(
             "extensions",
             JSONObject().put("prf", JSONObject()),
@@ -482,7 +464,7 @@ internal fun buildPasskeyAssertionRequestJson(
         JSONObject()
             .put("challenge", challenge.toBase64Url())
             .put("rpId", rpId)
-            .put("userVerification", "preferred")
+            .put("userVerification", "required")
             .put(
                 "extensions",
                 JSONObject().put(
@@ -507,6 +489,16 @@ internal fun buildPasskeyAssertionRequestJson(
 
     return request.toString()
 }
+
+internal fun requirePublicKeyCredential(
+    credential: Credential,
+    operation: PasskeyOperation,
+): PublicKeyCredential =
+    credential as? PublicKeyCredential
+        ?: throw passkeyRequestFailed(
+            operation,
+            PasskeyFailureReason.UnexpectedCredentialType,
+        )
 
 internal fun validatePasskeyRegistrationPrf(responseJson: String) {
     val prf =

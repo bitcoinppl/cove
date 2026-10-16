@@ -3,7 +3,7 @@ mod types;
 
 use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::master_key_crypto;
-use cove_device::cloud_storage::CloudStorage;
+use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
 use cove_device::passkey::PasskeyAccess;
 use tracing::info;
@@ -11,6 +11,7 @@ use zeroize::Zeroizing;
 
 use super::{BlockingCloudStep, RustCloudBackupManager, blocking_cloud_error};
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
+use crate::manager::cloud_backup_manager::timing::log_elapsed;
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatchOutcome, NamespacePasskeyMatcher, PasskeyMaterialAcquirer,
     PasskeyMaterialOutcome, PreparedWalletBackup, StagedPrfKey,
@@ -30,6 +31,22 @@ pub(crate) use types::{
     CloudBackupSavedPasskeyConfirmation, CloudBackupUploadedEnableBackup,
     EnablePasskeyRegistrationFlow,
 };
+
+/// Lists the cloud backup namespaces an enable must account for, timed under `log_label`
+async fn list_existing_namespaces(
+    cloud: &CloudStorageClient,
+    log_label: &str,
+) -> Result<Vec<String>, CloudBackupError> {
+    log_elapsed(log_label, cloud.list_namespaces()).await.map_err(|error| {
+        blocking_cloud_error(
+            BlockingCloudStep::Enable,
+            CloudBackupError::cloud_storage_context(
+                "could not check for existing cloud backups, please try again when cloud storage is available",
+                error,
+            ),
+        )
+    })
+}
 
 impl RustCloudBackupManager {
     fn pending_verification_uploads(
@@ -71,18 +88,8 @@ impl RustCloudBackupManager {
             return Ok(CloudBackupEnablePreparation::CreateNew { context });
         }
 
-        let mut namespaces = cloud
-            .list_namespaces()
-            .await
-            .map_err(|error| {
-                blocking_cloud_error(
-                    BlockingCloudStep::Enable,
-                    CloudBackupError::cloud_storage_context(
-                        "could not check for existing cloud backups, please try again when cloud storage is available",
-                        error,
-                    ),
-                )
-            })?;
+        let mut namespaces =
+            list_existing_namespaces(&cloud, "Enable: cloud namespace listing").await?;
         namespaces.sort();
 
         if namespaces.is_empty() {
@@ -90,10 +97,8 @@ impl RustCloudBackupManager {
         }
 
         info!("Enable: found {} existing namespace(s), attempting recovery", namespaces.len());
-        let passkey_hint = self.best_passkey_hint_for_namespaces(&cloud, &namespaces).await;
-
         let matcher = NamespacePasskeyMatcher::new(&cloud, passkey);
-        let match_outcome = matcher.match_namespaces(&namespaces).await?;
+        let (match_outcome, passkey_hint) = matcher.match_namespaces_with_hint(&namespaces).await?;
         match match_outcome {
             NamespaceMatchOutcome::Matched(matches) => {
                 if matches.is_empty() {
@@ -196,15 +201,8 @@ impl RustCloudBackupManager {
         let existing_namespaces = if has_local_master_key {
             Vec::new()
         } else {
-            cloud.list_namespaces().await.map_err(|error| {
-                blocking_cloud_error(
-                    BlockingCloudStep::Enable,
-                    CloudBackupError::cloud_storage_context(
-                        "could not check for existing cloud backups, please try again when cloud storage is available",
-                        error,
-                    ),
-                )
-            })?
+            list_existing_namespaces(&cloud, "Enable (no discovery): cloud namespace listing")
+                .await?
         };
 
         if !existing_namespaces.is_empty() {
@@ -212,8 +210,8 @@ impl RustCloudBackupManager {
                 "Enable (no discovery): found {} existing namespace(s), waiting for confirmation before creating passkey",
                 existing_namespaces.len()
             );
-            let passkey_hint =
-                self.best_passkey_hint_for_namespaces(&cloud, &existing_namespaces).await;
+            let matcher = NamespacePasskeyMatcher::new(&cloud, PasskeyAccess::global());
+            let passkey_hint = matcher.passkey_hint_for_namespaces(&existing_namespaces).await;
             return Ok(CloudBackupNoDiscoveryEnablePreparation::ExistingBackupFound {
                 context,
                 passkey_hint,

@@ -1,4 +1,6 @@
 use std::future::Future;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use backon::{BackoffBuilder as _, ExponentialBuilder, Retryable as _};
@@ -75,19 +77,31 @@ pub(crate) fn is_pre_presentation_platform_authorization_failure(error: &Passkey
 pub(crate) struct PlatformAuthorizationRetrier {
     policy: PlatformAuthorizationRetryPolicy,
     deadline: Instant,
+    /// Set by the owning operation to stop retries and report the user cancelled
+    cancellation: Arc<AtomicBool>,
     #[cfg(test)]
     jitter_seed: Option<u64>,
 }
 
 impl PlatformAuthorizationRetrier {
+    /// A retrier nothing can cancel
     pub(crate) fn new() -> Self {
-        Self::from_policy(PlatformAuthorizationRetryPolicy::for_current_platform())
+        Self::with_cancellation(Arc::default())
     }
 
-    fn from_policy(policy: PlatformAuthorizationRetryPolicy) -> Self {
+    /// A retrier that stops with `UserCancelled` once `cancellation` is set
+    pub(crate) fn with_cancellation(cancellation: Arc<AtomicBool>) -> Self {
+        Self::from_policy(PlatformAuthorizationRetryPolicy::for_current_platform(), cancellation)
+    }
+
+    fn from_policy(
+        policy: PlatformAuthorizationRetryPolicy,
+        cancellation: Arc<AtomicBool>,
+    ) -> Self {
         Self {
             policy,
             deadline: Instant::now() + policy.config().total_delay,
+            cancellation,
             #[cfg(test)]
             jitter_seed: None,
         }
@@ -95,9 +109,13 @@ impl PlatformAuthorizationRetrier {
 
     #[cfg(test)]
     fn for_test(policy: PlatformAuthorizationRetryPolicy, jitter_seed: u64) -> Self {
-        let mut retrier = Self::from_policy(policy);
+        let mut retrier = Self::from_policy(policy, Arc::default());
         retrier.jitter_seed = Some(jitter_seed);
         retrier
+    }
+
+    fn cancelled(&self) -> bool {
+        self.cancellation.load(Ordering::Acquire)
     }
 
     fn retry_backoff(&self, total_delay: Duration) -> impl backon::Backoff {
@@ -121,17 +139,34 @@ impl PlatformAuthorizationRetrier {
 
     async fn retry<T, Operation, OperationFuture>(
         &self,
-        operation: Operation,
+        mut operation: Operation,
     ) -> Result<T, PasskeyError>
     where
         Operation: FnMut() -> OperationFuture,
         OperationFuture: Future<Output = Result<T, PasskeyError>>,
     {
+        if self.cancelled() {
+            return Err(PasskeyError::UserCancelled);
+        }
+
         let available_delay = self.deadline.saturating_duration_since(Instant::now());
         let deadline = self.deadline;
         let policy = self.policy;
 
-        operation
+        // each attempt rechecks cancellation so a retry never presents a new prompt after cancel
+        let attempt = || {
+            let attempt = operation();
+
+            async move {
+                if self.cancelled() {
+                    return Err(PasskeyError::UserCancelled);
+                }
+
+                attempt.await
+            }
+        };
+
+        attempt
             .retry(self.retry_backoff(available_delay))
             .when(move |error| policy.retries(error))
             .adjust(move |_error, delay| {
@@ -144,6 +179,7 @@ impl PlatformAuthorizationRetrier {
                 );
             })
             .await
+            .map_err(|error| if self.cancelled() { PasskeyError::UserCancelled } else { error })
     }
 
     pub(crate) async fn discover(
@@ -219,8 +255,7 @@ fn random_challenge() -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::AtomicUsize;
 
     use super::*;
 

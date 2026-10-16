@@ -14,9 +14,11 @@ mod pending;
 mod pending_enable;
 mod pending_verification;
 mod reconcile;
+mod recovery_coverage;
 mod remote_inventory;
 mod store;
 mod sync_health;
+mod timing;
 mod verify;
 mod wallet_changes;
 mod wallets;
@@ -51,7 +53,7 @@ use self::actors::{
 pub(crate) use self::detail::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupCloudOnlyOperationWarning,
     CloudBackupCloudOnlyWalletOutcome, CloudBackupDetailOutcome, CloudBackupOtherBackupsOutcome,
-    CloudBackupRestoreOutcome,
+    CloudBackupRestoreOutcome, CloudOnlyFetchApplication,
 };
 pub use self::detail::{
     CloudBackupVerificationPresentation, CloudBackupVerificationReason,
@@ -86,9 +88,11 @@ pub(crate) use self::keychain::CloudBackupKeychain;
 pub(crate) use self::model::test_support;
 pub(crate) use self::model::{
     CloudBackupAcceptedEnablePrompt, CloudBackupDetailInventorySnapshot,
-    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailResult, CloudBackupDisableOutcome,
+    CloudBackupDetailInventorySnapshotResult, CloudBackupDetailProviderConfirmation,
+    CloudBackupDetailResult, CloudBackupDetailSnapshotCompletion, CloudBackupDisableOutcome,
     CloudBackupEnableState, CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
-    CloudBackupStateReducer, CloudBackupStateReducerEvent, CloudBackupStatus,
+    CloudBackupListedDetail, CloudBackupStateReducer, CloudBackupStateReducerEvent,
+    CloudBackupStatus, CloudOnlyFetch, CloudOnlyListingUpdate,
 };
 pub use self::model::{
     CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason, CloudBackupLifecycle,
@@ -117,6 +121,7 @@ pub(crate) use self::pending_verification::{
 };
 use self::reconcile::CloudBackupReconcileMessage;
 pub use self::reconcile::{DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction};
+pub(crate) use self::recovery_coverage::CloudBackupRecoveryCoverage;
 pub(crate) use self::remote_inventory::current_namespace_wallet_record_ids;
 pub(crate) use self::store::CloudBackupStore;
 pub(crate) use self::sync_health::SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE;
@@ -273,7 +278,6 @@ impl DeepVerificationFailure {
 pub struct RustCloudBackupManager {
     pub(crate) state: Arc<RwLock<CloudBackupStateReducer>>,
     pub(crate) reconciler: ReconcileChannel<Message>,
-    cloud_only_detail_snapshot: Arc<RwLock<Option<CloudBackupDetail>>>,
     pub(crate) pending_enable: PendingEnableCoordinator,
     cloud_writes: Addr<CloudBackupWriteSupervisor>,
     pub(crate) supervisor: Addr<CloudBackupSupervisor>,
@@ -593,7 +597,6 @@ impl RustCloudBackupManager {
             Self {
                 state: Arc::new(RwLock::new(CloudBackupStateReducer::default())),
                 reconciler: ReconcileChannel::new(1000),
-                cloud_only_detail_snapshot: Arc::new(RwLock::new(None)),
                 pending_enable: PendingEnableCoordinator::new(Keychain::global().clone()),
                 cloud_writes: cloud_writes.clone(),
                 supervisor: spawn_actor(CloudBackupSupervisor::new(manager.clone(), cloud_writes)),
@@ -846,8 +849,7 @@ impl RustCloudBackupManager {
             .mutate(mutation)
             .map_err(|source| CloudBackupError::internal_context(context, source))?;
 
-        self.reconcile_runtime_status(Self::runtime_status_for(&committed.state));
-        self.refresh_persisted_flags();
+        self.reconcile_persisted_state(&committed.state);
 
         Ok(committed.outcome)
     }
@@ -968,22 +970,6 @@ mod manager_test_support {
     use super::*;
 
     impl RustCloudBackupManager {
-        pub(crate) fn persist_cloud_backup_state(
-            &self,
-            state: &PersistedCloudBackupState,
-            context: &str,
-        ) -> Result<(), CloudBackupError> {
-            Database::global()
-                .cloud_backup_state
-                .set(state)
-                .map_err(|source| CloudBackupError::internal_context(context, source))?;
-
-            self.reconcile_runtime_status(Self::runtime_status_for(state));
-            self.refresh_persisted_flags();
-
-            Ok(())
-        }
-
         pub(crate) fn model_snapshot(&self) -> test_support::CloudBackupModelSnapshot {
             self.state.read().snapshot()
         }
@@ -1308,12 +1294,6 @@ impl RustCloudBackupManager {
         send!(self.supervisor.cancel_restore());
     }
 
-    pub(crate) async fn cancel_restore_and_wait(&self) {
-        if let Err(error) = call!(self.supervisor.cancel_restore()).await {
-            warn!("restore_from_cloud_backup: failed to await restore cancellation: {error}");
-        }
-    }
-
     pub(crate) fn restore_from_cloud_backup(&self) {
         info!("restore_from_cloud_backup: enqueueing restore task");
         send!(self.supervisor.start_restore_from_cloud_backup());
@@ -1337,13 +1317,14 @@ impl RustCloudBackupManager {
 mod tests {
     use super::actors::restore::RestoreOperation;
     use super::ops::test_support::{
-        async_test_lock, configure_enabled_cloud_backup, ensure_cloud_backup_test_tokio_runtime,
+        async_test_lock, complete_loaded_outcome, configure_enabled_cloud_backup,
+        ensure_cloud_backup_test_tokio_runtime, listed_detail,
         persisted_enabled_cloud_backup_state, test_globals, test_lock,
     };
     use super::*;
     use crate::database::cloud_backup::{
         PersistedBackupSyncState, PersistedBackupVerificationState, PersistedConfiguredCloudBackup,
-        PersistedPasskeyState,
+        PersistedPasskeyState, PersistedVerificationRequirement,
     };
     use act_zero::call;
     use cove_device::cloud_storage::CloudStorageError;
@@ -1552,6 +1533,7 @@ mod tests {
     #[test]
     fn verification_metadata_is_needs_verification_when_unverified() {
         let db_state = persisted_configured_state(PersistedBackupVerificationState::Required {
+            reason: PersistedVerificationRequirement::Unknown,
             last_verified_at: Some(21),
             requested_at: None,
             dismissed_at: None,
@@ -1867,14 +1849,12 @@ mod tests {
         let authenticate_count = globals.passkey.authenticate_count();
 
         manager.sync_persisted_state();
-        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(CloudBackupDetail {
-            last_sync: None,
-            up_to_date: Vec::new(),
-            needs_sync: Vec::new(),
-            cloud_only_count: 1,
-        }));
-        manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(vec![
-            CloudBackupWalletItem {
+        manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+            "remaining-record",
+        ])));
+        manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(
+            &manager,
+            vec![CloudBackupWalletItem {
                 name: "Remaining wallet".into(),
                 network: None,
                 wallet_mode: None,
@@ -1885,8 +1865,8 @@ mod tests {
                 sync_status: CloudBackupWalletStatus::DeletedFromDevice,
                 record_id: "remaining-record".into(),
                 restore_failure: None,
-            },
-        ]));
+            }],
+        ));
 
         let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
             panic!("expected configured state");

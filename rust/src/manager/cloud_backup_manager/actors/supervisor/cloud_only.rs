@@ -1,14 +1,26 @@
 use cove_device::cloud_storage::CloudStorageClient;
 
 use super::*;
-use crate::manager::cloud_backup_manager::CloudOnlyState;
+use crate::manager::cloud_backup_manager::{
+    CloudOnlyFetch, CloudOnlyFetchApplication, CloudOnlyState,
+};
 
 impl CloudBackupSupervisor {
-    pub(crate) fn begin_background_cloud_only_fetch_if_needed(
+    /// Starts a fetch when the cache is unloaded and the detail inventory can say what to fetch
+    pub async fn ensure_cloud_only_fetch(&mut self) -> ActorResult<()> {
+        if let Some(manager) = self.manager() {
+            self.begin_cloud_only_fetch_if_needed(manager);
+        }
+
+        Produces::ok(())
+    }
+
+    pub(crate) fn begin_cloud_only_fetch_if_needed(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
     ) {
         if self.active_cloud_only_fetch_request.is_some()
+            || !manager.detail_inventory_is_ready()
             || !matches!(
                 manager.state.read().cloud_only(),
                 CloudOnlyState::NotFetched | CloudOnlyState::Failed { .. }
@@ -28,10 +40,13 @@ impl CloudBackupSupervisor {
     ) {
         let request_id = self.next_request_id();
         self.active_cloud_only_fetch_request = Some(request_id);
+        // read before the fetch is spawned so a listing applied while it runs makes it stale
+        let listing_generation = manager.state.read().cloud_only_listing_generation();
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Started);
 
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.do_fetch_cloud_only_wallets_with_client(cloud).await;
+            let result =
+                manager.do_fetch_cloud_only_wallets_with_client(cloud, listing_generation).await;
             send!(addr.complete_cloud_only_fetch_request(request_id, result));
         });
     }
@@ -75,7 +90,7 @@ impl CloudBackupSupervisor {
     pub async fn complete_cloud_only_fetch_request(
         &mut self,
         request_id: u64,
-        result: Result<Vec<CloudBackupWalletItem>, CloudBackupError>,
+        result: Result<CloudOnlyFetch, CloudBackupError>,
     ) -> ActorResult<()> {
         if self.active_cloud_only_fetch_request != Some(request_id) {
             return Produces::ok(());
@@ -86,17 +101,14 @@ impl CloudBackupSupervisor {
         };
 
         match result {
-            Ok(items) => {
-                let eligible_count = items
-                    .iter()
-                    .filter(|wallet| {
-                        wallet.sync_status == CloudBackupWalletStatus::DeletedFromDevice
-                    })
-                    .count();
-                manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(
-                    items,
-                ));
-                self.reconcile_restore_all_after_cloud_only_fetch(&manager, eligible_count);
+            Ok(fetch) => {
+                // a discarded fetch already asked for its replacement, and its rows prove nothing
+                let application = manager.apply_cloud_only_fetch_outcome(
+                    CloudBackupCloudOnlyFetchOutcome::Loaded(fetch),
+                );
+                if application == CloudOnlyFetchApplication::Applied {
+                    self.reconcile_restore_all_after_cloud_only_fetch(&manager);
+                }
             }
             Err(error) => {
                 error!("Failed to fetch cloud-only wallets: {error}");

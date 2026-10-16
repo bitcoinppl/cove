@@ -1,4 +1,4 @@
-use std::{fmt, sync::Arc, time::Duration};
+use std::{fmt, sync::Arc};
 
 use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
@@ -508,46 +508,44 @@ impl RustOnboardingManager {
         let reconciler = self.reconciler.sender().clone();
 
         cove_tokio::task::spawn(async move {
-            while let Ok(event) = receiver.recv_async().await {
-                let internal_event = match event {
-                    CloudBackupRestoreEvent::Progress(flow) => {
-                        InternalEvent::RestoreProgress { attempt_id, flow }
-                    }
-                    CloudBackupRestoreEvent::Complete(report) => {
-                        InternalEvent::RestoreComplete { attempt_id, report }
-                    }
-                    CloudBackupRestoreEvent::NoBackupFound => {
-                        InternalEvent::RestoreNoBackupFound { attempt_id }
-                    }
-                    CloudBackupRestoreEvent::Failed(message) => {
-                        InternalEvent::RestoreFailed { attempt_id, message }
-                    }
-                };
-                Self::apply_restore_event(&state, &reconciler, internal_event);
-            }
-        });
-
-        let state = self.state.clone();
-        let reconciler = self.reconciler.sender().clone();
-        cove_tokio::task::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(120)).await;
-
-            if !Self::is_restore_attempt_current(&state, attempt_id) {
-                return;
-            }
-
-            CLOUD_BACKUP_MANAGER.cancel_restore_and_wait().await;
-
-            Self::apply_restore_event(
-                &state,
-                &reconciler,
-                InternalEvent::RestoreFailed { attempt_id, message: "Restore timed out".into() },
-            );
+            Self::forward_restore_events(receiver, attempt_id, &state, &reconciler).await;
         });
     }
 
-    fn is_restore_attempt_current(state: &Arc<RwLock<InternalState>>, attempt_id: u64) -> bool {
-        state.read().flow.is_restore_attempt_current(attempt_id)
+    async fn forward_restore_events(
+        receiver: flume::Receiver<CloudBackupRestoreEvent>,
+        attempt_id: u64,
+        state: &Arc<RwLock<InternalState>>,
+        reconciler: &MessageSender<Message>,
+    ) {
+        while let Ok(event) = receiver.recv_async().await {
+            let internal_event = match event {
+                CloudBackupRestoreEvent::Progress(flow) => {
+                    InternalEvent::RestoreProgress { attempt_id, flow }
+                }
+                CloudBackupRestoreEvent::Complete(report) => {
+                    InternalEvent::RestoreComplete { attempt_id, report }
+                }
+                CloudBackupRestoreEvent::NoBackupFound => {
+                    InternalEvent::RestoreNoBackupFound { attempt_id }
+                }
+                CloudBackupRestoreEvent::Failed(message) => {
+                    InternalEvent::RestoreFailed { attempt_id, message }
+                }
+            };
+            Self::apply_restore_event(state, reconciler, internal_event);
+        }
+
+        // the restore can end without a terminal event (cancelled, superseded claim, or a
+        // dropped task), and Restoring has no user exit, so fail the attempt to offer retry
+        let interrupted = InternalEvent::RestoreFailed {
+            attempt_id,
+            message: "The restore stopped before it finished. Please try again.".into(),
+        };
+
+        if Self::apply_restore_event(state, reconciler, interrupted) {
+            warn!("Onboarding: restore attempt {attempt_id} ended without a terminal event");
+        }
     }
 
     fn apply_restore_event(
@@ -1452,6 +1450,47 @@ mod tests {
         ));
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn restore_channel_closing_without_terminal_event_fails_the_attempt() {
+        let restoring = || FlowState::Restoring {
+            origin: RestoreOrigin::Welcome,
+            attempt_id: 3,
+            flow: CloudBackupRestoreFlow::Finding,
+        };
+
+        let manager = preview_manager(restoring(), CloudRestoreDiscovery::BackupFound(None));
+        let (sender, receiver) = flume::unbounded();
+        drop(sender);
+
+        RustOnboardingManager::forward_restore_events(
+            receiver,
+            3,
+            &manager.state,
+            manager.reconciler.sender(),
+        )
+        .await;
+
+        assert!(matches!(
+            manager.state.read().flow,
+            FlowState::RestoreFailed { origin: RestoreOrigin::Welcome, .. }
+        ));
+
+        let manager = preview_manager(restoring(), CloudRestoreDiscovery::BackupFound(None));
+        let (sender, receiver) = flume::unbounded();
+        sender.send(CloudBackupRestoreEvent::Complete(preview_restore_report())).unwrap();
+        drop(sender);
+
+        RustOnboardingManager::forward_restore_events(
+            receiver,
+            3,
+            &manager.state,
+            manager.reconciler.sender(),
+        )
+        .await;
+
+        assert!(matches!(manager.state.read().flow, FlowState::RestoreComplete { .. }));
+    }
+
     #[test]
     fn start_restore_enters_restoring_finding() {
         let mut flow =
@@ -1648,30 +1687,6 @@ mod tests {
 
         assert_eq!(command, TransitionCommand::None);
         assert!(matches!(flow, FlowState::Welcome { error_message: None }));
-    }
-
-    #[test]
-    fn timeout_failure_enters_restore_failed_with_timeout_message() {
-        let mut flow = FlowState::Restoring {
-            origin: RestoreOrigin::Welcome,
-            attempt_id: 3,
-            flow: CloudBackupRestoreFlow::Finding,
-        };
-        let mut discovery = CloudRestoreDiscovery::BackupFound(None);
-
-        flow.apply_event(
-            InternalEvent::RestoreFailed { attempt_id: 3, message: "Restore timed out".into() },
-            &mut discovery,
-            true,
-        );
-
-        assert!(matches!(
-            flow,
-            FlowState::RestoreFailed {
-                origin: RestoreOrigin::Welcome,
-                message,
-            } if message == "Restore timed out"
-        ));
     }
 
     #[test]

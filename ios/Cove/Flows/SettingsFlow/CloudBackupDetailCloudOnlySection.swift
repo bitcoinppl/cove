@@ -131,6 +131,10 @@ private struct CloudOnlySectionContent: View {
             }
         )
 
+        if case .loaded(wallets: _, incomplete: true) = manager.cloudOnly {
+            CloudOnlyIncompleteNotice(manager: manager)
+        }
+
         if case let .failed(error) = manager.cloudOnlyOperation {
             Text(error)
                 .font(.caption)
@@ -139,6 +143,21 @@ private struct CloudOnlySectionContent: View {
             Text(message)
                 .font(.caption)
                 .foregroundStyle(Color.statusWarning)
+        }
+    }
+}
+
+/// Some listed backups could not be read, so the rows above may be missing wallets
+private struct CloudOnlyIncompleteNotice: View {
+    let manager: CloudBackupManager
+
+    var body: some View {
+        Text("Some backups could not be read.")
+            .font(.caption)
+            .foregroundStyle(Color.statusWarning)
+
+        Button("Check Again") {
+            manager.dispatch(action: .refreshDetail)
         }
     }
 }
@@ -293,6 +312,7 @@ private struct CloudOnlyWalletRows: View {
             VStack(alignment: .leading, spacing: 8) {
                 CloudOnlyWalletActionButton(
                     item: item,
+                    manager: manager,
                     isOperating: isOperating,
                     isCurrentOperation: operatingRecordId == item.recordId,
                     presentationCoordinator: presentationCoordinator
@@ -316,13 +336,14 @@ private struct CloudOnlyWalletRows: View {
 
 private struct CloudOnlyWalletActionButton: View {
     let item: CloudBackupWalletItem
+    let manager: CloudBackupManager
     let isOperating: Bool
     let isCurrentOperation: Bool
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     var body: some View {
         Button {
-            presentationCoordinator.present(.dialog(.cloudOnlyWalletActions(item)))
+            presentationCoordinator.present(.cloudOnlyWalletDialog(item))
         } label: {
             CloudOnlyWalletActionLabel(
                 item: item,
@@ -332,6 +353,11 @@ private struct CloudOnlyWalletActionButton: View {
         .buttonStyle(.plain)
         .foregroundStyle(.primary)
         .disabled(isOperating)
+        .cloudOnlyWalletActionDialog(
+            wallet: item,
+            manager: manager,
+            coordinator: presentationCoordinator
+        )
     }
 }
 
@@ -340,9 +366,14 @@ private struct CloudOnlyWalletActionLabel: View {
     let isCurrentOperation: Bool
 
     private var accessibilityAction: String {
-        item.syncStatus == .unsupportedVersion
-            ? "Restore requires a newer version of Cove; delete is available"
-            : "Restore or delete from iCloud"
+        switch item.syncStatus {
+        case .unsupportedVersion:
+            "Restore requires a newer version of Cove; delete is available"
+        case .alreadyOnDevice:
+            "Already on this device; delete is available"
+        default:
+            "Restore or delete from iCloud"
+        }
     }
 
     var body: some View {

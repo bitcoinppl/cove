@@ -1,11 +1,15 @@
+use act_zero::send;
 use cove_device::cloud_storage::CloudSyncHealth;
+
+use crate::database::Database;
+use crate::database::cloud_backup::PersistedCloudBackupState;
 
 use super::model::{CloudBackupStateReducerEffects, CloudBackupStateReducerEvent};
 use super::verify::coordinator::{
     CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
 };
 use super::{
-    CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupLifecycle,
+    CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupError, CloudBackupLifecycle,
     CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupVerificationMetadata,
     CloudBackupVerificationPresentation, CloudBackupVerificationSource,
     PendingUploadVerificationState, RustCloudBackupManager,
@@ -93,6 +97,11 @@ impl RustCloudBackupManager {
         if let Some(context) = effects.enable_completed {
             self.send(Message::EnableCompleted(context));
         }
+
+        // the supervisor owns fetches, so it decides from fresh state whether one can start
+        if effects.cloud_only_refetch_needed {
+            send!(self.supervisor.ensure_cloud_only_fetch());
+        }
     }
 
     pub(crate) fn reconcile_runtime_status(&self, status: CloudBackupStatus) {
@@ -133,7 +142,7 @@ impl RustCloudBackupManager {
 
     pub(crate) fn apply_verification_effect(&self, effect: CloudBackupVerificationEffect) {
         if let Some(detail) = effect.detail {
-            self.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(detail));
+            self.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(detail));
         }
 
         if let Some(pending_upload_verification) = effect.pending_upload_verification {
@@ -164,6 +173,28 @@ impl RustCloudBackupManager {
             metadata: verification_metadata,
             should_prompt: should_prompt_verification,
         });
+    }
+
+    /// Projects a just-persisted cloud backup state into runtime status and flags
+    pub(crate) fn reconcile_persisted_state(&self, state: &PersistedCloudBackupState) {
+        self.reconcile_runtime_status(Self::runtime_status_for(state));
+        self.refresh_persisted_flags();
+    }
+
+    /// Persists `state`, then projects it into runtime status and flags
+    pub(crate) fn persist_cloud_backup_state(
+        &self,
+        state: &PersistedCloudBackupState,
+        context: impl std::fmt::Display,
+    ) -> Result<(), CloudBackupError> {
+        Database::global()
+            .cloud_backup_state
+            .set(state)
+            .map_err(|source| CloudBackupError::internal_context(context, source))?;
+
+        self.reconcile_persisted_state(state);
+
+        Ok(())
     }
 
     fn apply_pending_upload_verification_value(&self, pending: PendingUploadVerificationState) {
