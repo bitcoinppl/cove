@@ -347,9 +347,14 @@ private struct CloudOnlyWalletActionLabel: View {
     let isCurrentOperation: Bool
 
     private var accessibilityAction: String {
-        item.syncStatus == .unsupportedVersion
-            ? "Restore requires a newer version of Cove; delete is available"
-            : "Restore or delete from iCloud"
+        switch item.syncStatus {
+        case .unsupportedVersion:
+            "Restore requires a newer version of Cove; delete is available"
+        case .alreadyOnDevice:
+            "Already on this device; delete is available"
+        default:
+            "Restore or delete from iCloud"
+        }
     }
 
     var body: some View {

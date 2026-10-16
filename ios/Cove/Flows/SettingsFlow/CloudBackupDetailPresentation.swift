@@ -73,10 +73,12 @@ private struct CloudOnlyWalletActionDialogModifier: ViewModifier {
             isPresented: isPresented,
             titleVisibility: .visible
         ) {
-            Button("Restore to This Device") {
-                restoreWallet()
+            if canRestore {
+                Button("Restore to This Device") {
+                    restoreWallet()
+                }
+                .disabled(!manager.isDetailInventoryReady)
             }
-            .disabled(!manager.isDetailInventoryReady)
 
             Button("Delete from iCloud", role: .destructive) {
                 requestDeletion()
@@ -84,7 +86,16 @@ private struct CloudOnlyWalletActionDialogModifier: ViewModifier {
             .disabled(!manager.isDetailInventoryReady)
 
             Button("Cancel", role: .cancel) {}
+        } message: {
+            if !canRestore {
+                Text("This wallet is already on this device. You can delete this extra copy from iCloud.")
+            }
         }
+    }
+
+    /// The wallet is already on this device under another backup, so only delete applies
+    private var canRestore: Bool {
+        wallet.syncStatus != .alreadyOnDevice
     }
 
     private func restoreWallet() {

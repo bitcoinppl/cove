@@ -130,7 +130,6 @@ impl RustCloudBackupManager {
             return Ok(CloudOnlyFetch {
                 wallets: Vec::new(),
                 unresolved_record_ids: Vec::new(),
-                duplicate_record_ids: HashSet::new(),
                 listing_generation,
             });
         }
@@ -151,7 +150,8 @@ impl RustCloudBackupManager {
             Zeroizing::new(master_key.critical_data_key()),
         );
 
-        // collected once per fetch, a record already present under another record ID is not cloud-only
+        // collected once per fetch, so a record already present under another record ID shows as
+        // already on this device instead of restorable
         let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
             .map_err(|source| {
                 CloudBackupError::internal_context("collect wallet identities", source)
@@ -160,7 +160,6 @@ impl RustCloudBackupManager {
 
         let mut items = Vec::new();
         let mut unresolved_record_ids = Vec::new();
-        let mut duplicate_record_ids = HashSet::new();
         let mut lookups = stream::iter(
             orphan_ids.into_iter().map(|record_id| lookup_wallet_backup(reader.clone(), record_id)),
         )
@@ -203,10 +202,11 @@ impl RustCloudBackupManager {
                 }
             };
 
-            if identity_session.is_duplicate(&wallet) {
-                duplicate_record_ids.insert(record_id);
-                continue;
-            }
+            let sync_status = if identity_session.is_duplicate(&wallet) {
+                CloudBackupWalletStatus::AlreadyOnDevice
+            } else {
+                CloudBackupWalletStatus::DeletedFromDevice
+            };
 
             let metadata = wallet.metadata;
             items.push(CloudBackupWalletItem {
@@ -221,18 +221,13 @@ impl RustCloudBackupManager {
                 label_count: Some(wallet.entry.labels_count),
                 backup_updated_at: (wallet.entry.updated_at != 0)
                     .then_some(wallet.entry.updated_at),
-                sync_status: CloudBackupWalletStatus::DeletedFromDevice,
+                sync_status,
                 restore_failure: None,
                 record_id: record_id.clone(),
             });
         }
 
-        Ok(CloudOnlyFetch {
-            wallets: items,
-            unresolved_record_ids,
-            duplicate_record_ids,
-            listing_generation,
-        })
+        Ok(CloudOnlyFetch { wallets: items, unresolved_record_ids, listing_generation })
     }
 
     pub(crate) async fn do_restore_cloud_wallet(

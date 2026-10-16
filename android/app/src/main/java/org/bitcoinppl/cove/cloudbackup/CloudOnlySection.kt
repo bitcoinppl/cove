@@ -211,6 +211,7 @@ internal fun CloudOnlySection(
     selectedWallet?.let { wallet ->
         CloudOnlyWalletActionSheet(
             wallet = wallet,
+            canRestore = cloudBackupCloudOnlyWalletCanRestore(wallet),
             actionsEnabled =
                 manager.isDetailInventoryReady && !manager.isRestoreAllRunning,
             onDismiss = { selectedWallet = null },
@@ -365,10 +366,15 @@ private fun CloudBackupRestoreAllProgress(
     }
 }
 
+// the wallet is already on this device under another backup, so only delete applies
+internal fun cloudBackupCloudOnlyWalletCanRestore(wallet: CloudBackupWalletItem): Boolean =
+    wallet.syncStatus != CloudBackupWalletStatus.ALREADY_ON_DEVICE
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CloudOnlyWalletActionSheet(
     wallet: CloudBackupWalletItem,
+    canRestore: Boolean,
     actionsEnabled: Boolean,
     onDismiss: () -> Unit,
     onRestore: () -> Unit,
@@ -381,6 +387,7 @@ private fun CloudOnlyWalletActionSheet(
         CloudOnlyWalletActionSheetContent(
             walletName = wallet.name,
             isRetry = wallet.restoreFailure != null,
+            canRestore = canRestore,
             actionsEnabled = actionsEnabled,
             onRestore = onRestore,
             onDelete = onDelete,
@@ -392,6 +399,7 @@ private fun CloudOnlyWalletActionSheet(
 private fun CloudOnlyWalletActionSheetContent(
     walletName: String,
     isRetry: Boolean,
+    canRestore: Boolean,
     actionsEnabled: Boolean,
     onRestore: () -> Unit,
     onDelete: () -> Unit,
@@ -408,10 +416,11 @@ private fun CloudOnlyWalletActionSheetContent(
         ) {
             Text(walletName, style = MaterialTheme.typography.titleLarge)
             Text(
-                if (isRetry) {
-                    "Retry restoring this wallet or delete it from Cloud Backup."
-                } else {
-                    "Restore this wallet to the device or delete it from Cloud Backup."
+                when {
+                    !canRestore ->
+                        "This wallet is already on this device. You can delete this extra copy from Cloud Backup."
+                    isRetry -> "Retry restoring this wallet or delete it from Cloud Backup."
+                    else -> "Restore this wallet to the device or delete it from Cloud Backup."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -423,35 +432,13 @@ private fun CloudOnlyWalletActionSheetContent(
             color = MaterialTheme.colorScheme.outlineVariant,
         )
 
-        ListItem(
-            headlineContent = { Text(cloudBackupWalletRestoreActionTitle(isRetry)) },
-            supportingContent = {
-                Text(
-                    if (isRetry) {
-                        "Try downloading and decrypting this backup again"
-                    } else {
-                        "Download and decrypt this backup"
-                    },
-                )
-            },
-            leadingContent = {
-                Icon(
-                    imageVector = Icons.Default.Restore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            },
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .cloudBackupActionEnabled(actionsEnabled)
-                    .clickable(
-                        enabled = actionsEnabled,
-                        role = Role.Button,
-                        onClick = onRestore,
-                    ),
-            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        )
+        if (canRestore) {
+            CloudOnlyWalletRestoreActionItem(
+                isRetry = isRetry,
+                actionsEnabled = actionsEnabled,
+                onRestore = onRestore,
+            )
+        }
 
         ListItem(
             headlineContent = {
@@ -483,6 +470,43 @@ private fun CloudOnlyWalletActionSheetContent(
 }
 
 @Composable
+private fun CloudOnlyWalletRestoreActionItem(
+    isRetry: Boolean,
+    actionsEnabled: Boolean,
+    onRestore: () -> Unit,
+) {
+    ListItem(
+        headlineContent = { Text(cloudBackupWalletRestoreActionTitle(isRetry)) },
+        supportingContent = {
+            Text(
+                if (isRetry) {
+                    "Try downloading and decrypting this backup again"
+                } else {
+                    "Download and decrypt this backup"
+                },
+            )
+        },
+        leadingContent = {
+            Icon(
+                imageVector = Icons.Default.Restore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        },
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .cloudBackupActionEnabled(actionsEnabled)
+                .clickable(
+                    enabled = actionsEnabled,
+                    role = Role.Button,
+                    onClick = onRestore,
+                ),
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+    )
+}
+
+@Composable
 internal fun CloudOnlyWalletActionSheetPreviewContent() {
     CoveTheme(darkTheme = false, dynamicColor = false) {
         Box(
@@ -500,6 +524,7 @@ internal fun CloudOnlyWalletActionSheetPreviewContent() {
                 CloudOnlyWalletActionSheetContent(
                     walletName = "Savings wallet",
                     isRetry = false,
+                    canRestore = true,
                     actionsEnabled = true,
                     onRestore = {},
                     onDelete = {},

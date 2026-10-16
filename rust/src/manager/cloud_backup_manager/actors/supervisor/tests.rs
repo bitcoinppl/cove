@@ -38,6 +38,10 @@ const VALID_NAMESPACE_ID: &str = "0123456789abcdef0123456789abcdef";
 
 fn test_supervisor_manager() -> Arc<RustCloudBackupManager> {
     let globals = test_globals();
+
+    // a new manager resumes any persisted transition on init and blocks its writes for it, so a
+    // transition an earlier test left behind must be gone first
+    let _ = Database::global().cloud_backup_state.delete();
     let manager = RustCloudBackupManager::init();
     reset_cloud_backup_test_state(&manager, globals);
     manager
@@ -120,6 +124,122 @@ async fn wait_for_cloud_only_refetch(manager: &RustCloudBackupManager) {
         manager.state.read().cloud_only() != CloudOnlyState::NotFetched
     })
     .await;
+}
+
+/// Waits until the loaded rows hold every expected record and none of the replaced ones, which
+/// only a fetch that read the provider again can produce
+async fn wait_for_cloud_only_rows(
+    manager: &RustCloudBackupManager,
+    present: &[&str],
+    absent: &[&str],
+) -> Vec<CloudBackupWalletItem> {
+    let loaded_rows = || match manager.state.read().cloud_only() {
+        CloudOnlyState::Loaded { wallets, .. } => Some(wallets),
+        CloudOnlyState::NotFetched | CloudOnlyState::Loading | CloudOnlyState::Failed { .. } => {
+            None
+        }
+    };
+
+    wait_for_test_condition(Duration::from_secs(5), "cloud-only rows should be refetched", || {
+        loaded_rows().is_some_and(|wallets| {
+            present.iter().all(|id| wallets.iter().any(|wallet| wallet.record_id == *id))
+                && absent.iter().all(|id| wallets.iter().all(|wallet| wallet.record_id != *id))
+        })
+    })
+    .await;
+
+    loaded_rows().expect("cloud-only rows should be loaded")
+}
+
+fn cloud_only_row_statuses(rows: &[CloudBackupWalletItem]) -> Vec<(&str, CloudBackupWalletStatus)> {
+    rows.iter().map(|row| (row.record_id.as_str(), row.sync_status.clone())).collect()
+}
+
+/// Uploads an encrypted backup of the wallet under its own record ID without listing it
+fn upload_test_wallet_backup(namespace: &str, wallet: &WalletMetadata) -> String {
+    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .unwrap()
+        .unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    test_globals().cloud.set_wallet_backup(
+        namespace.into(),
+        record_id.clone(),
+        encrypted_wallet_backup_bytes_for_entry(
+            &wallet_entry_with_labels(wallet, None),
+            &master_key,
+            1,
+        ),
+    );
+
+    record_id
+}
+
+fn list_test_wallet_files(namespace: &str, record_ids: &[&str]) {
+    test_globals().cloud.set_wallet_files(
+        namespace.into(),
+        record_ids
+            .iter()
+            .map(|record_id| cove_cspp::backup_data::wallet_filename_from_record_id(record_id))
+            .collect(),
+    );
+}
+
+fn local_wallet_exists(wallet: &WalletMetadata) -> bool {
+    Database::global()
+        .wallets
+        .get_all(wallet.network, wallet.wallet_mode)
+        .unwrap()
+        .iter()
+        .any(|local| local.id == wallet.id)
+}
+
+/// A local wallet restored under its own record ID, plus a listed cloud record of the same wallet
+/// identity under another record ID
+struct LocalWalletDuplicateFixture {
+    namespace: String,
+    local_wallet: WalletMetadata,
+    local_record_id: String,
+    duplicate_record_id: String,
+}
+
+async fn seed_local_wallet_with_cloud_duplicate(
+    manager: &RustCloudBackupManager,
+) -> LocalWalletDuplicateFixture {
+    configure_enabled_cloud_backup(manager, test_globals(), 0);
+    let namespace = manager.current_namespace_id().unwrap();
+
+    let local_wallet = xpub_only_wallet_metadata();
+    let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
+    let mut local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    local_restore.restore_record(&local_record_id).await.unwrap();
+    assert!(local_wallet_exists(&local_wallet));
+
+    // test xpub-only wallets share one xpub, so this is the same wallet under another record ID
+    let duplicate_record_id = upload_test_wallet_backup(&namespace, &xpub_only_wallet_metadata());
+    list_test_wallet_files(&namespace, &[duplicate_record_id.as_str()]);
+
+    LocalWalletDuplicateFixture { namespace, local_wallet, local_record_id, duplicate_record_id }
+}
+
+fn disabling_for_current_namespace(
+    manager: &RustCloudBackupManager,
+) -> PersistedDisablingCloudBackup {
+    let PersistedCloudBackupState::Configured(previous_configured) =
+        Database::global().cloud_backup_state.get().unwrap()
+    else {
+        panic!("expected configured cloud backup state");
+    };
+
+    PersistedDisablingCloudBackup {
+        previous_configured,
+        namespace_id: manager.current_namespace_id().unwrap(),
+        disable_generation: 1,
+        started_at: 1,
+        delete_started_at: None,
+        last_error: None,
+        retry_after: None,
+    }
 }
 
 fn begin_test_detail_refresh(
@@ -3558,63 +3678,29 @@ async fn restore_all_preparation_with_only_unreadable_wallets_keeps_its_marker()
 #[tokio::test(flavor = "current_thread")]
 async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_local_wallet() {
     let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
     let manager = test_supervisor_manager();
-    configure_enabled_cloud_backup(&manager, globals, 0);
-    let namespace = manager.current_namespace_id().unwrap();
-    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
-        .load_master_key_from_store()
-        .unwrap()
-        .unwrap();
-
-    // the device already has this wallet under one record ID
-    let local_wallet = xpub_only_wallet_metadata();
-    let local_record_id = cove_cspp::backup_data::wallet_record_id(local_wallet.id.as_ref());
-    globals.cloud.set_wallet_backup(
-        namespace.clone(),
-        local_record_id.clone(),
-        encrypted_wallet_backup_bytes_for_entry(
-            &wallet_entry_with_labels(&local_wallet, None),
-            &master_key,
-            1,
-        ),
-    );
-    let mut local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
-    local_restore.restore_record(&local_record_id).await.unwrap();
-
-    // the cloud lists the same wallet identity again under a different record ID
-    let duplicate_wallet = xpub_only_wallet_metadata();
-    let duplicate_record_id = cove_cspp::backup_data::wallet_record_id(duplicate_wallet.id.as_ref());
-    globals.cloud.set_wallet_backup(
-        namespace.clone(),
-        duplicate_record_id.clone(),
-        encrypted_wallet_backup_bytes_for_entry(
-            &wallet_entry_with_labels(&duplicate_wallet, None),
-            &master_key,
-            1,
-        ),
-    );
-    globals.cloud.set_wallet_files(
-        namespace.clone(),
-        vec![cove_cspp::backup_data::wallet_filename_from_record_id(&duplicate_record_id)],
-    );
-    CloudBackupStore::global().persist_restore_all_marker(namespace).unwrap();
+    let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
+    let duplicate_record_id = fixture.duplicate_record_id.as_str();
+    CloudBackupStore::global().persist_restore_all_marker(fixture.namespace.clone()).unwrap();
     manager.sync_persisted_state();
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
-        duplicate_record_id.as_str(),
+        duplicate_record_id,
     ])));
 
     let generation = manager.state.read().cloud_only_listing_generation();
     let prepared = manager
         .prepare_restore_all_cloud_wallets(
-            vec![test_cloud_only_wallet(&duplicate_record_id)],
+            vec![test_cloud_only_wallet(duplicate_record_id)],
             generation,
         )
         .await
         .unwrap();
 
-    // an identity duplicate is accounted for, not offered as a restorable cloud-only row
-    assert!(prepared.authoritative_fetch().wallets.is_empty());
+    // the duplicate is read as a row that Restore All never queues
+    assert_eq!(
+        cloud_only_row_statuses(&prepared.authoritative_fetch().wallets),
+        vec![(duplicate_record_id, CloudBackupWalletStatus::AlreadyOnDevice)]
+    );
     assert!(prepared.ordered_queue().is_empty());
 
     let mut supervisor = CloudBackupSupervisor::new(
@@ -3635,6 +3721,58 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
 
     assert_eq!(supervisor.active_operation, None);
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
+    let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
+        panic!("expected the duplicate row to stay loaded");
+    };
+    assert_eq!(
+        cloud_only_row_statuses(&wallets),
+        vec![(duplicate_record_id, CloudBackupWalletStatus::AlreadyOnDevice)]
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = test_supervisor_manager();
+    let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
+    let duplicate_record_id = fixture.duplicate_record_id.as_str();
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        duplicate_record_id,
+    ])));
+
+    call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
+    let rows = wait_for_cloud_only_rows(&manager, &[duplicate_record_id], &[]).await;
+
+    // the duplicate shows as a row, but Restore All has nothing to restore
+    assert_eq!(
+        cloud_only_row_statuses(&rows),
+        vec![(duplicate_record_id, CloudBackupWalletStatus::AlreadyOnDevice)]
+    );
+    assert_eq!(manager.restore_all_proven_eligible_wallets(), Some(Vec::new()));
+
+    let cloud = CloudStorage::global_silent_client();
+    let disabling = disabling_for_current_namespace(&manager);
+    assert!(matches!(
+        manager.check_disable_blockers(&cloud, &disabling).await,
+        Err(CloudBackupError::RecoveryRequired(_))
+    ));
+
+    call!(manager.supervisor.start_delete_cloud_wallet_operation(
+        fixture.duplicate_record_id.clone()
+    ))
+    .await
+    .unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "the duplicate delete should finish", || {
+        !globals.cloud.has_wallet_backup(&fixture.namespace, duplicate_record_id)
+            && manager.projected_exclusive_operation().is_none()
+    })
+    .await;
+
+    // only the cloud record went away, the local wallet and its own backup stay
+    assert!(local_wallet_exists(&fixture.local_wallet));
+    assert!(globals.cloud.has_wallet_backup(&fixture.namespace, &fixture.local_record_id));
+    assert!(manager.check_disable_blockers(&cloud, &disabling).await.is_ok());
 }
 
 #[tokio::test(flavor = "current_thread")]

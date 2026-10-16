@@ -165,8 +165,6 @@ pub(crate) enum CloudBackupStateReducerEvent {
     CloudOnlyStateResolved(CloudOnlyState),
     /// A cloud-only fetch finished, applied only if its listing generation is still current
     CloudOnlyFetchLoaded(CloudOnlyFetch),
-    /// A listed record finished as a duplicate of a local wallet and is accounted for without a row
-    CloudOnlyDuplicateAccounted(String),
     /// Cloud-only rows no longer belong to any known listing, such as after disable or reset
     CloudOnlyInventoryInvalidated,
     CloudOnlyOperationResolved(CloudOnlyOperation),
