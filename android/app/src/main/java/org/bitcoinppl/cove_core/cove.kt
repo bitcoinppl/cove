@@ -44286,6 +44286,11 @@ enum class CloudBackupWalletStatus {
     CONFIRMED,
     FAILED,
     DELETED_FROM_DEVICE,
+    /**
+     * Cloud-only record whose wallet already exists on this device under another record ID,
+     * so it can be deleted but not restored
+     */
+    ALREADY_ON_DEVICE,
     UNSUPPORTED_VERSION,
     REMOTE_STATE_UNKNOWN;
 

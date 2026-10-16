@@ -589,10 +589,8 @@ impl RustCloudBackupManager {
                 self.apply_finished_cloud_only_wallet_operation(record_id, warning);
             }
             CloudBackupCloudOnlyWalletOutcome::SkippedDuplicate { record_id } => {
-                self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyDuplicateAccounted(
-                    record_id.clone(),
-                ));
-                self.apply_finished_cloud_only_wallet_operation(record_id, None);
+                self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
+                self.apply_cloud_only_already_on_device(&record_id);
             }
             CloudBackupCloudOnlyWalletOutcome::Deleted { record_id } => {
                 self.apply_finished_cloud_only_wallet_operation(record_id, None);
@@ -625,6 +623,19 @@ impl RustCloudBackupManager {
             && let Some(wallet) = wallets.iter_mut().find(|wallet| wallet.record_id == record_id)
         {
             wallet.restore_failure = Some(CloudBackupWalletRestoreFailure { message: error });
+        }
+        self.apply_cloud_only_state(cloud_only);
+    }
+
+    /// Keeps a row that turned out to duplicate a local wallet visible and deletable, so the cloud
+    /// record stays accounted for without being offered for restore again
+    fn apply_cloud_only_already_on_device(&self, record_id: &str) {
+        let mut cloud_only = self.state.read().cloud_only();
+        if let CloudOnlyState::Loaded { wallets } = &mut cloud_only
+            && let Some(wallet) = wallets.iter_mut().find(|wallet| wallet.record_id == record_id)
+        {
+            wallet.sync_status = CloudBackupWalletStatus::AlreadyOnDevice;
+            wallet.restore_failure = None;
         }
         self.apply_cloud_only_state(cloud_only);
     }

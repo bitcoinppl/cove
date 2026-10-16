@@ -232,7 +232,9 @@ impl CloudWalletInventory {
 fn wallet_item_bucket(item: &CloudBackupWalletItem) -> Option<WalletItemBucket> {
     match item.sync_status {
         CloudBackupWalletStatus::Confirmed => Some(WalletItemBucket::UpToDate),
-        CloudBackupWalletStatus::DeletedFromDevice => None,
+        CloudBackupWalletStatus::DeletedFromDevice | CloudBackupWalletStatus::AlreadyOnDevice => {
+            None
+        }
         CloudBackupWalletStatus::Dirty
         | CloudBackupWalletStatus::Uploading
         | CloudBackupWalletStatus::UploadedPendingConfirmation

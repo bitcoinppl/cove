@@ -153,6 +153,9 @@ pub enum CloudBackupWalletStatus {
     Confirmed,
     Failed,
     DeletedFromDevice,
+    /// Cloud-only record whose wallet already exists on this device under another record ID,
+    /// so it can be deleted but not restored
+    AlreadyOnDevice,
     UnsupportedVersion,
     RemoteStateUnknown,
 }

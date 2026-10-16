@@ -26318,6 +26318,11 @@ public enum CloudBackupWalletStatus: Equatable, Hashable {
     case confirmed
     case failed
     case deletedFromDevice
+    /**
+     * Cloud-only record whose wallet already exists on this device under another record ID,
+     * so it can be deleted but not restored
+     */
+    case alreadyOnDevice
     case unsupportedVersion
     case remoteStateUnknown
 
@@ -26353,9 +26358,11 @@ public struct FfiConverterTypeCloudBackupWalletStatus: FfiConverterRustBuffer {
 
         case 6: return .deletedFromDevice
 
-        case 7: return .unsupportedVersion
+        case 7: return .alreadyOnDevice
 
-        case 8: return .remoteStateUnknown
+        case 8: return .unsupportedVersion
+
+        case 9: return .remoteStateUnknown
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -26389,12 +26396,16 @@ public struct FfiConverterTypeCloudBackupWalletStatus: FfiConverterRustBuffer {
             writeInt(&buf, Int32(6))
 
 
-        case .unsupportedVersion:
+        case .alreadyOnDevice:
             writeInt(&buf, Int32(7))
 
 
-        case .remoteStateUnknown:
+        case .unsupportedVersion:
             writeInt(&buf, Int32(8))
+
+
+        case .remoteStateUnknown:
+            writeInt(&buf, Int32(9))
 
         }
     }

@@ -54,7 +54,6 @@ pub(crate) fn complete_cloud_only_fetch(
     CloudOnlyFetch {
         wallets,
         unresolved_record_ids: Vec::new(),
-        duplicate_record_ids: std::collections::HashSet::new(),
         listing_generation: manager.state.read().cloud_only_listing_generation(),
     }
 }
@@ -755,6 +754,12 @@ impl CloudStorageAccess for MockCloudStorage {
         state.uploaded_wallet_backups.retain(|(uploaded_namespace, uploaded_record_id)| {
             uploaded_namespace != &namespace || uploaded_record_id != &record_id
         });
+
+        // a provider stops listing a deleted file, so later listings must not find it either
+        let filename = wallet_filename_from_record_id(&record_id);
+        if let Some(wallet_files) = state.wallet_files.get_mut(&namespace) {
+            wallet_files.retain(|wallet_file| wallet_file != &filename);
+        }
 
         Ok(())
     }

@@ -17,9 +17,6 @@ pub(crate) struct CloudOnlyFetch {
     pub(crate) wallets: Vec<CloudBackupWalletItem>,
     /// Listed records that could not be read, so `wallets` is not the whole cloud-only set
     pub(crate) unresolved_record_ids: Vec<String>,
-    /// Listed records whose wallet identity already exists on this device under another record
-    /// ID, so they are accounted for without being restorable rows
-    pub(crate) duplicate_record_ids: HashSet<String>,
     pub(crate) listing_generation: u64,
 }
 
@@ -35,9 +32,6 @@ pub(crate) struct CloudOnlyInventory {
     listed_record_ids: Option<HashSet<String>>,
     /// Listing generation the loaded rows completely read, unset when nothing complete is loaded
     complete_fetch_generation: Option<u64>,
-    /// Listed records accounted for by a local wallet with the same identity, which never show as
-    /// loaded rows but still count toward covering the listing
-    duplicate_record_ids: HashSet<String>,
 }
 
 impl CloudOnlyInventory {
@@ -57,33 +51,19 @@ impl CloudOnlyInventory {
         self.generation += 1;
         self.listed_record_ids = None;
         self.complete_fetch_generation = None;
-        self.duplicate_record_ids.clear();
     }
 
     pub(crate) fn record_loaded(&mut self, fetch: &CloudOnlyFetch) {
         self.complete_fetch_generation =
             fetch.unresolved_record_ids.is_empty().then_some(fetch.listing_generation);
-        self.duplicate_record_ids = fetch.duplicate_record_ids.clone();
-    }
-
-    /// Accounts for a record that finished as a duplicate of a local wallet, so removing its row
-    /// does not leave the loaded rows short of the listing
-    pub(crate) fn record_duplicate(&mut self, record_id: String) {
-        self.duplicate_record_ids.insert(record_id);
     }
 
     pub(crate) fn clear_loaded(&mut self) {
         self.complete_fetch_generation = None;
-        self.duplicate_record_ids.clear();
     }
 
     fn covers_listing(&self, loaded_ids: &HashSet<String>) -> bool {
-        let Some(listed) = &self.listed_record_ids else { return false };
-
-        listed.len() == loaded_ids.union(&self.duplicate_record_ids).count()
-            && listed
-                .iter()
-                .all(|id| loaded_ids.contains(id) || self.duplicate_record_ids.contains(id))
+        self.listed_record_ids.as_ref() == Some(loaded_ids)
     }
 
     /// Keeps loaded rows only when they are a complete read of exactly the listed wallets
