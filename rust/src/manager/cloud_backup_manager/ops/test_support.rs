@@ -54,6 +54,7 @@ pub(crate) fn complete_cloud_only_fetch(
     CloudOnlyFetch {
         wallets,
         unresolved_record_ids: Vec::new(),
+        duplicate_record_ids: std::collections::HashSet::new(),
         listing_generation: manager.state.read().cloud_only_listing_generation(),
     }
 }

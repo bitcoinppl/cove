@@ -130,6 +130,7 @@ impl RustCloudBackupManager {
             return Ok(CloudOnlyFetch {
                 wallets: Vec::new(),
                 unresolved_record_ids: Vec::new(),
+                duplicate_record_ids: HashSet::new(),
                 listing_generation,
             });
         }
@@ -150,8 +151,16 @@ impl RustCloudBackupManager {
             Zeroizing::new(master_key.critical_data_key()),
         );
 
+        // collected once per fetch, a record already present under another record ID is not cloud-only
+        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
+            .map_err(|source| {
+                CloudBackupError::internal_context("collect wallet identities", source)
+            })?;
+        let identity_session = WalletRestoreSession::new(existing_identities);
+
         let mut items = Vec::new();
         let mut unresolved_record_ids = Vec::new();
+        let mut duplicate_record_ids = HashSet::new();
         let mut lookups = stream::iter(
             orphan_ids.into_iter().map(|record_id| lookup_wallet_backup(reader.clone(), record_id)),
         )
@@ -194,6 +203,11 @@ impl RustCloudBackupManager {
                 }
             };
 
+            if identity_session.is_duplicate(&wallet) {
+                duplicate_record_ids.insert(record_id);
+                continue;
+            }
+
             let metadata = wallet.metadata;
             items.push(CloudBackupWalletItem {
                 name: metadata.name,
@@ -213,7 +227,12 @@ impl RustCloudBackupManager {
             });
         }
 
-        Ok(CloudOnlyFetch { wallets: items, unresolved_record_ids, listing_generation })
+        Ok(CloudOnlyFetch {
+            wallets: items,
+            unresolved_record_ids,
+            duplicate_record_ids,
+            listing_generation,
+        })
     }
 
     pub(crate) async fn do_restore_cloud_wallet(
