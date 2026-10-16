@@ -150,6 +150,9 @@ struct CloudBackupReducerState {
     active_enable_context: Option<CloudBackupEnableContext>,
     restore_all: CloudBackupRestoreAllRuntimeState,
     cloud_only_inventory: CloudOnlyInventory,
+    /// Restore failures shown on rows that a local wallet change reset, kept for the refetch
+    /// that replaces them so a failed restore stays marked
+    cloud_only_failures_awaiting_refetch: HashMap<String, super::CloudBackupWalletRestoreFailure>,
     sync_health: CloudSyncHealth,
     missing_passkey_dismissed: bool,
     should_prompt_verification: bool,
@@ -203,6 +206,7 @@ impl Default for CloudBackupReducerState {
             active_enable_context: None,
             restore_all: CloudBackupRestoreAllRuntimeState::Idle,
             cloud_only_inventory: CloudOnlyInventory::default(),
+            cloud_only_failures_awaiting_refetch: HashMap::new(),
             sync_health: CloudSyncHealth::Unknown,
             missing_passkey_dismissed: false,
             should_prompt_verification: false,
@@ -1250,19 +1254,14 @@ impl CloudBackupReducerState {
             return false;
         }
 
-        let retained_failures = match self.cloud_only() {
-            CloudOnlyState::Loaded { wallets, .. } => wallets
-                .into_iter()
-                .filter_map(|wallet| {
-                    wallet.restore_failure.map(|failure| (wallet.record_id, failure))
-                })
-                .collect::<HashMap<_, _>>(),
-            CloudOnlyState::NotFetched
-            | CloudOnlyState::Loading
-            | CloudOnlyState::Failed { .. } => HashMap::new(),
-        };
+        let mut retained_failures = std::mem::take(&mut self.cloud_only_failures_awaiting_refetch);
+        retained_failures.extend(self.loaded_cloud_only_failures());
+
+        // a row a local wallet now covers has nothing left to restore, so its failure is gone
         for wallet in &mut fetch.wallets {
-            if wallet.restore_failure.is_none() {
+            if wallet.restore_failure.is_none()
+                && wallet.sync_status == CloudBackupWalletStatus::DeletedFromDevice
+            {
                 wallet.restore_failure = retained_failures.get(&wallet.record_id).cloned();
             }
         }
@@ -1272,6 +1271,19 @@ impl CloudBackupReducerState {
         self.resolve_cloud_only_state(cloud_only);
 
         true
+    }
+
+    fn loaded_cloud_only_failures(
+        &self,
+    ) -> HashMap<String, super::CloudBackupWalletRestoreFailure> {
+        let CloudOnlyState::Loaded { wallets, .. } = self.cloud_only() else {
+            return HashMap::new();
+        };
+
+        wallets
+            .into_iter()
+            .filter_map(|wallet| wallet.restore_failure.map(|failure| (wallet.record_id, failure)))
+            .collect()
     }
 
     /// Loaded rows marked incomplete by the same check the Restore All marker proof uses, so the
@@ -1708,6 +1720,7 @@ impl CloudBackupStateReducer {
             }
             CloudBackupStateReducerEvent::CloudOnlyInventoryInvalidated => {
                 self.state.cloud_only_inventory.invalidate();
+                self.state.cloud_only_failures_awaiting_refetch.clear();
             }
             CloudBackupStateReducerEvent::CloudOnlyLocalWalletsChanged => {
                 self.state.cloud_only_inventory.invalidate();
@@ -1715,6 +1728,8 @@ impl CloudBackupStateReducer {
                 // a fetch still in flight is now stale, so it is discarded and replaced when it
                 // finishes
                 if matches!(self.state.cloud_only(), CloudOnlyState::Loaded { .. }) {
+                    let failures = self.state.loaded_cloud_only_failures();
+                    self.state.cloud_only_failures_awaiting_refetch.extend(failures);
                     self.state.resolve_cloud_only_state(CloudOnlyState::NotFetched);
                     effects.cloud_only_refetch_needed = true;
                 }

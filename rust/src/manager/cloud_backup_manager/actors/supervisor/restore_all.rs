@@ -205,6 +205,7 @@ impl CloudBackupSupervisor {
 
         match result {
             Ok(CloudOnlyRestoreOutcome::Restored { labels_warning }) => {
+                self.note_restore_all_committed_local_wallet(claim);
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::Restored {
                         record_id: wallet.record_id,
@@ -214,6 +215,7 @@ impl CloudBackupSupervisor {
                 manager.refresh_sync_health();
             }
             Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id }) => {
+                self.note_restore_all_committed_local_wallet(claim);
                 manager.handle_restored_secret_added(wallet_id);
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
@@ -374,14 +376,34 @@ impl CloudBackupSupervisor {
         self.finish_restore_all_claim(manager, claim, true);
     }
 
+    /// Defers reclassifying cloud-only rows to the end of the run, so the active batch is not
+    /// reset after every restored wallet
+    fn note_restore_all_committed_local_wallet(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) {
+        if let Some(run) = self.active_operation.restore_all_mut(claim) {
+            run.committed_local_wallet = true;
+        }
+    }
+
     fn finish_restore_all_claim(
         &mut self,
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
         retry_remaining: bool,
     ) {
+        let committed_local_wallet =
+            self.active_operation.restore_all(claim).is_some_and(|run| run.committed_local_wallet);
+
         self.active_operation.clear();
         manager.finish_restore_all_run(claim, retry_remaining);
+
+        // a restored wallet can turn other listed records into copies of it, which matching record
+        // IDs cannot show, so the rows are read again
+        if committed_local_wallet {
+            manager.apply_local_wallets_changed();
+        }
     }
 }
 
