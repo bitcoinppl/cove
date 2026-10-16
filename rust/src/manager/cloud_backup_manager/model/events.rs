@@ -167,6 +167,9 @@ pub(crate) enum CloudBackupStateReducerEvent {
     CloudOnlyFetchLoaded(CloudOnlyFetch),
     /// Cloud-only rows no longer belong to any known listing, such as after disable or reset
     CloudOnlyInventoryInvalidated,
+    /// The local wallet set changed, so the listing and any loaded rows may now count a record as
+    /// cloud-only, restorable, or a duplicate when it no longer is
+    CloudOnlyLocalWalletsChanged,
     CloudOnlyOperationResolved(CloudOnlyOperation),
     OtherBackupsOperationResolved(OtherBackupsOperation),
     OtherBackupsStateResolved(crate::manager::cloud_backup_manager::CloudBackupOtherBackupsState),

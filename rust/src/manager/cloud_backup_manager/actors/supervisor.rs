@@ -855,6 +855,21 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
+    pub async fn local_wallets_did_change(&mut self) -> ActorResult<()> {
+        let Some(manager) = self.manager() else {
+            return Produces::ok(());
+        };
+        manager.apply_local_wallets_changed();
+
+        // the shown detail sorts wallets by which ones are local, so it is stale as well
+        if self.detail_workflow.is_open() {
+            let plan = self.detail_workflow.request_refresh();
+            self.handle_detail_refresh_plan(manager, plan);
+        }
+
+        Produces::ok(())
+    }
+
     pub async fn start_background_inventory_discovery(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
         if !matches!(manager.state.read().status(), CloudBackupStatus::Enabled) {

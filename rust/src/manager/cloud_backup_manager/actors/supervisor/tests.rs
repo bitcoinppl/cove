@@ -3799,6 +3799,46 @@ async fn identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable()
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn deleting_the_matching_local_wallet_makes_its_cloud_duplicate_restorable() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let fixture = seed_local_wallet_with_cloud_duplicate(&manager).await;
+    let duplicate_record_id = fixture.duplicate_record_id.as_str();
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        duplicate_record_id,
+    ])));
+
+    call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
+    let rows = wait_for_cloud_only_rows(&manager, &[duplicate_record_id], &[]).await;
+    assert_eq!(
+        cloud_only_row_statuses(&rows),
+        vec![(duplicate_record_id, CloudBackupWalletStatus::AlreadyOnDevice)]
+    );
+
+    let local_wallet = &fixture.local_wallet;
+    Database::global()
+        .wallets
+        .remove_prepared_wallet_metadata(
+            local_wallet.network,
+            local_wallet.wallet_mode,
+            &local_wallet.id,
+        )
+        .unwrap();
+    manager.handle_local_wallets_changed();
+
+    // the loaded row still says already on this device until a fetch reads it again
+    wait_for_test_condition(Duration::from_secs(5), "the duplicate should become restorable", || {
+        matches!(
+            manager.state.read().cloud_only(),
+            CloudOnlyState::Loaded { wallets, .. }
+                if cloud_only_row_statuses(&wallets)
+                    == vec![(duplicate_record_id, CloudBackupWalletStatus::DeletedFromDevice)]
+        )
+    })
+    .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();

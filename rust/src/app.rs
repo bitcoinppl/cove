@@ -688,7 +688,14 @@ pub(crate) async fn delete_wallet_with_tier(
         return Ok(());
     };
 
-    PreparedWalletDeletion::new(lifecycle, target).delete().map_err(AppError::WalletDeletion)
+    PreparedWalletDeletion::new(lifecycle, target).delete().map_err(AppError::WalletDeletion)?;
+
+    // a cloud backup manager that never started has no cloud-only rows to re-check
+    if let Some(cloud_backup) = LazyLock::get(&CLOUD_BACKUP_MANAGER) {
+        cloud_backup.handle_local_wallets_changed();
+    }
+
+    Ok(())
 }
 
 async fn wipe_all_data_with_tier(
