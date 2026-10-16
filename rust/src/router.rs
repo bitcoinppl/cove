@@ -81,6 +81,7 @@ pub enum SettingsRoute {
     AllWallets,
     About,
     CloudBackup,
+    OhttpRelay,
 }
 
 #[derive(Debug, Clone, Default, Hash, From, Eq, PartialEq, uniffi::Enum)]
