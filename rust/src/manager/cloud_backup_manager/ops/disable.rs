@@ -229,7 +229,7 @@ impl RustCloudBackupManager {
 
         if matches!(
             state.cloud_only(),
-            crate::manager::cloud_backup_manager::CloudOnlyState::Loaded { wallets } if !wallets.is_empty()
+            crate::manager::cloud_backup_manager::CloudOnlyState::Loaded { wallets, .. } if !wallets.is_empty()
         ) {
             return Err(CloudBackupError::RecoveryRequired(CLOUD_ONLY_BLOCKER_MESSAGE.into()));
         }

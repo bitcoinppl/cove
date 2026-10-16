@@ -34,7 +34,7 @@ func cloudBackupHasVisibleWalletRows(
         return true
     }
 
-    guard case let .loaded(wallets) = cloudOnly else { return false }
+    guard case let .loaded(wallets, _) = cloudOnly else { return false }
     return !wallets.isEmpty
 }
 

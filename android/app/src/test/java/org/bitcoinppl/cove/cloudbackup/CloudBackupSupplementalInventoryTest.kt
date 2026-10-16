@@ -15,7 +15,11 @@ class CloudBackupSupplementalInventoryTest {
     fun cloudOnlySectionRequiresNonemptyLoadedInventory() {
         assertNull(cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.NotFetched))
         assertNull(cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.Loading))
-        assertNull(cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.Loaded(emptyList())))
+        assertNull(cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.Loaded(emptyList(), incomplete = false)))
+        assertEquals(
+            emptyList<CloudBackupWalletItem>(),
+            cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.Loaded(emptyList(), incomplete = true)),
+        )
         assertNull(
             cloudBackupVisibleCloudOnlyWallets(
                 CloudOnlyState.Failed(error = "still syncing"),
@@ -23,7 +27,9 @@ class CloudBackupSupplementalInventoryTest {
         )
         assertEquals(
             listOf(cloudBackupWallet()),
-            cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.Loaded(listOf(cloudBackupWallet()))),
+            cloudBackupVisibleCloudOnlyWallets(
+                CloudOnlyState.Loaded(listOf(cloudBackupWallet()), incomplete = false),
+            ),
         )
     }
 
@@ -65,7 +71,7 @@ class CloudBackupSupplementalInventoryTest {
         )
         assertNull(
             cloudBackupCloudOnlyFailureMessage(
-                CloudOnlyState.Loaded(emptyList()),
+                CloudOnlyState.Loaded(emptyList(), incomplete = false),
             ),
         )
 

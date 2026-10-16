@@ -291,7 +291,9 @@ impl CloudBackupReducerState {
                 cancellation_requested: *cancellation_requested,
             },
             CloudBackupRestoreAllRuntimeState::RetryRemaining => {
-                if wallet_count == 0 {
+                // backups that could not be read may still need restoring, so the retry stays
+                // reachable even when no loaded row is eligible
+                if wallet_count == 0 && !self.cloud_only_is_incomplete() {
                     return CloudBackupRestoreAllState::NotShown;
                 }
 
@@ -317,7 +319,8 @@ impl CloudBackupReducerState {
 
     fn restore_all_eligible_wallet_count(&self) -> u32 {
         let Some(LoadedCloudBackupDetail {
-            cloud_only: CloudOnlyState::Loaded { wallets }, ..
+            cloud_only: CloudOnlyState::Loaded { wallets, .. },
+            ..
         }) = self.loaded_detail()
         else {
             return 0;
@@ -329,6 +332,10 @@ impl CloudBackupReducerState {
             .count()
             .try_into()
             .unwrap_or(u32::MAX)
+    }
+
+    fn cloud_only_is_incomplete(&self) -> bool {
+        matches!(self.cloud_only(), CloudOnlyState::Loaded { incomplete: true, .. })
     }
 
     fn restore_all_action_is_available(&self) -> bool {
@@ -1190,7 +1197,7 @@ impl CloudBackupReducerState {
         }
 
         let (cloud_only, invalidated) = match previous_loaded.as_ref().map(|s| &s.cloud_only) {
-            Some(CloudOnlyState::Loaded { wallets }) => {
+            Some(CloudOnlyState::Loaded { wallets, incomplete }) => {
                 let keep = match &cloud_only_listing {
                     CloudOnlyListingUpdate::Listed(_) => {
                         let loaded_ids: HashSet<_> =
@@ -1202,7 +1209,13 @@ impl CloudBackupReducerState {
                 };
 
                 if keep {
-                    (CloudOnlyState::Loaded { wallets: wallets.clone() }, false)
+                    (
+                        CloudOnlyState::Loaded {
+                            wallets: wallets.clone(),
+                            incomplete: *incomplete,
+                        },
+                        false,
+                    )
                 } else {
                     self.cloud_only_inventory.clear_loaded();
                     (CloudOnlyState::NotFetched, true)
@@ -1244,7 +1257,7 @@ impl CloudBackupReducerState {
         }
 
         let retained_failures = match self.cloud_only() {
-            CloudOnlyState::Loaded { wallets } => wallets
+            CloudOnlyState::Loaded { wallets, .. } => wallets
                 .into_iter()
                 .filter_map(|wallet| {
                     wallet.restore_failure.map(|failure| (wallet.record_id, failure))
@@ -1261,7 +1274,11 @@ impl CloudBackupReducerState {
         }
 
         self.cloud_only_inventory.record_loaded(&fetch);
-        self.resolve_cloud_only_state(CloudOnlyState::Loaded { wallets: fetch.wallets });
+        let incomplete = !fetch.unresolved_record_ids.is_empty();
+        self.resolve_cloud_only_state(CloudOnlyState::Loaded {
+            wallets: fetch.wallets,
+            incomplete,
+        });
 
         true
     }
@@ -1446,7 +1463,7 @@ impl CloudBackupStateReducer {
 
     /// Whether the loaded cloud-only rows are a complete read of the latest provider listing
     pub(crate) fn cloud_only_is_complete_and_current(&self) -> bool {
-        let CloudOnlyState::Loaded { wallets } = self.cloud_only() else { return false };
+        let CloudOnlyState::Loaded { wallets, .. } = self.cloud_only() else { return false };
         let loaded_ids: HashSet<_> = wallets.into_iter().map(|wallet| wallet.record_id).collect();
 
         self.state.cloud_only_inventory.loaded_is_complete_and_current(&loaded_ids)
@@ -1940,7 +1957,7 @@ mod tests {
             cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
         });
         model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
-            CloudOnlyState::Loaded { wallets },
+            CloudOnlyState::Loaded { wallets, incomplete: false },
         ));
         model
     }
@@ -2035,7 +2052,7 @@ mod tests {
             CloudOnlyState::Loading,
         ));
         model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
-            CloudOnlyState::Loaded { wallets: loaded_wallets.clone() },
+            CloudOnlyState::Loaded { wallets: loaded_wallets.clone(), incomplete: false },
         ));
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
@@ -2045,7 +2062,10 @@ mod tests {
             panic!("expected complete detail after cloud-only fetch");
         };
 
-        assert_eq!(state.cloud_only, CloudOnlyState::Loaded { wallets: loaded_wallets });
+        assert_eq!(
+            state.cloud_only,
+            CloudOnlyState::Loaded { wallets: loaded_wallets, incomplete: false }
+        );
         assert_eq!(
             configured.restore_all,
             CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
@@ -2068,7 +2088,7 @@ mod tests {
             CloudOnlyState::Loading,
         ));
         model.apply_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(
-            CloudOnlyState::Loaded { wallets: loaded_wallets.clone() },
+            CloudOnlyState::Loaded { wallets: loaded_wallets.clone(), incomplete: false },
         ));
 
         let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
@@ -2077,7 +2097,10 @@ mod tests {
         let CloudBackupDetailState::Complete { state: retained } = configured.detail else {
             panic!("expected authoritative detail to remain available during refresh");
         };
-        assert_eq!(retained.cloud_only, CloudOnlyState::Loaded { wallets: loaded_wallets });
+        assert_eq!(
+            retained.cloud_only,
+            CloudOnlyState::Loaded { wallets: loaded_wallets, incomplete: false }
+        );
         assert_eq!(
             configured.restore_all,
             CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },
@@ -2440,7 +2463,7 @@ mod tests {
             panic!("expected complete detail");
         };
 
-        assert_eq!(state.cloud_only, CloudOnlyState::Loaded { wallets });
+        assert_eq!(state.cloud_only, CloudOnlyState::Loaded { wallets, incomplete: false });
         assert_eq!(
             configured.restore_all,
             CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 },

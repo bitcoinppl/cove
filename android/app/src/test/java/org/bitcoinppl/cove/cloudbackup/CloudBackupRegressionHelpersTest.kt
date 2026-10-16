@@ -233,8 +233,8 @@ class CloudBackupRegressionHelpersTest {
             )
 
         assertFalse(cloudBackupHasVisibleWalletRows(detail, CloudOnlyState.NotFetched))
-        assertFalse(cloudBackupHasVisibleWalletRows(null, CloudOnlyState.Loaded(listOf(wallet))))
-        assertTrue(cloudBackupHasVisibleWalletRows(detail, CloudOnlyState.Loaded(listOf(wallet))))
+        assertFalse(cloudBackupHasVisibleWalletRows(null, CloudOnlyState.Loaded(listOf(wallet), incomplete = false)))
+        assertTrue(cloudBackupHasVisibleWalletRows(detail, CloudOnlyState.Loaded(listOf(wallet), incomplete = false)))
     }
 
     @Test

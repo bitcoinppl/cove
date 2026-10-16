@@ -147,6 +147,22 @@ fn cloud_only_row_statuses(rows: &[CloudBackupWalletItem]) -> Vec<(&str, CloudBa
     rows.iter().map(|row| (row.record_id.as_str(), row.sync_status.clone())).collect()
 }
 
+/// The cloud-only state the frontends read, which only exists once the detail has loaded
+fn public_cloud_only(manager: &RustCloudBackupManager) -> Option<CloudOnlyState> {
+    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+        return None;
+    };
+
+    match configured.detail {
+        CloudBackupDetailState::Complete { state } => Some(state.cloud_only),
+        CloudBackupDetailState::Checking { retained }
+        | CloudBackupDetailState::Failed { retained, .. } => {
+            retained.map(|retained| retained.cloud_only)
+        }
+        CloudBackupDetailState::NotLoaded => None,
+    }
+}
+
 /// Uploads an encrypted backup of the wallet under its own record ID without listing it
 fn upload_test_wallet_backup(namespace: &str, wallet: &WalletMetadata) -> String {
     let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
@@ -1581,7 +1597,7 @@ async fn trusted_local_detail_stays_active_until_provider_confirmation() {
     };
 
     assert_eq!(state.inventory_authority, CloudBackupInventoryAuthority::ProviderConfirmed);
-    assert_eq!(state.cloud_only, CloudOnlyState::Loaded { wallets });
+    assert_eq!(state.cloud_only, CloudOnlyState::Loaded { wallets, incomplete: false });
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3066,7 +3082,7 @@ async fn restore_all_whose_cloud_only_rows_were_reset_mid_run_keeps_its_marker()
     // the reset asks for a replacement fetch, which may already be running
     assert!(!matches!(
         manager.state.read().cloud_only(),
-        CloudOnlyState::Loaded { wallets } if wallets.iter().any(|wallet| wallet.record_id == "a")
+        CloudOnlyState::Loaded { wallets, .. } if wallets.iter().any(|wallet| wallet.record_id == "a")
     ));
 
     supervisor.complete_restore_all_queue_finished(claim).await.unwrap();
@@ -3306,7 +3322,7 @@ async fn restore_all_mixed_failure_continues_through_later_success_and_settles()
             .is_none()
     );
     let failed_record_id = items[1].record_id.as_str();
-    let CloudOnlyState::Loaded { wallets } = manager.state.read().cloud_only() else {
+    let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
         panic!("expected retained cloud-only failure row");
     };
     let retained_failure = wallets
@@ -3613,7 +3629,7 @@ async fn cloud_only_fetch_started_before_a_listing_change_is_discarded_and_refet
     assert_eq!(supervisor.active_cloud_only_fetch_request, None);
     assert!(!matches!(
         manager.state.read().cloud_only(),
-        CloudOnlyState::Loaded { wallets } if wallets.iter().any(|wallet| wallet.record_id == a)
+        CloudOnlyState::Loaded { wallets, .. } if wallets.iter().any(|wallet| wallet.record_id == a)
     ));
     wait_for_cloud_only_rows(&manager, &[b, c], &[a]).await;
 }
@@ -3651,7 +3667,58 @@ async fn restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read() {
 
     supervisor.complete_cloud_only_fetch_request(3, Ok(fetch)).await.unwrap();
 
+    // the unread record keeps the list incomplete, so the retry stays reachable without any row
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
+    assert_eq!(
+        public_cloud_only(&manager),
+        Some(CloudOnlyState::Loaded { wallets: Vec::new(), incomplete: true })
+    );
+    assert_eq!(
+        manager.projected_restore_all_state(),
+        CloudBackupRestoreAllState::RetryAvailable { wallet_count: 0 }
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn incomplete_cloud_only_list_keeps_its_retry_and_check_again_reads_it_again() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    let namespace = manager.current_namespace_id().unwrap();
+    CloudBackupStore::global().persist_restore_all_marker(namespace.clone()).unwrap();
+    manager.sync_persisted_state();
+
+    // the provider lists the record before its download is available
+    let wallet = xpub_only_wallet_metadata();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    let record_id = record_id.as_str();
+    list_test_wallet_files(&namespace, &[record_id]);
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[record_id])));
+
+    call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "the incomplete list should load", || {
+        public_cloud_only(&manager)
+            == Some(CloudOnlyState::Loaded { wallets: Vec::new(), incomplete: true })
+    })
+    .await;
+    assert_eq!(
+        manager.projected_restore_all_state(),
+        CloudBackupRestoreAllState::RetryAvailable { wallet_count: 0 }
+    );
+
+    // Check Again refreshes the detail, which reads the incomplete list again
+    upload_test_wallet_backup(&namespace, &wallet);
+    call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+
+    let rows = wait_for_cloud_only_rows(&manager, &[record_id], &[]).await;
+    assert_eq!(
+        cloud_only_row_statuses(&rows),
+        vec![(record_id, CloudBackupWalletStatus::DeletedFromDevice)]
+    );
+    assert!(matches!(
+        public_cloud_only(&manager),
+        Some(CloudOnlyState::Loaded { incomplete: false, .. })
+    ));
 }
 
 #[tokio::test(flavor = "current_thread")]
