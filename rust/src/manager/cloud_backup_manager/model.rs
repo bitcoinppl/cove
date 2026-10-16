@@ -1296,6 +1296,27 @@ impl CloudBackupReducerState {
         CloudOnlyState::Loaded { wallets, incomplete }
     }
 
+    /// Keeps a row whose recovery material a local wallet holds visible and deletable, without
+    /// offering it for restore again
+    fn mark_cloud_only_row_already_on_device(&mut self, record_id: &str, listing_generation: u64) {
+        // a local wallet change since the restore read the local wallets bumped the generation
+        // and asked for a refetch, which classifies the row against the wallets that exist now
+        if listing_generation != self.cloud_only_inventory.generation() {
+            return;
+        }
+
+        let CloudOnlyState::Loaded { mut wallets, incomplete } = self.cloud_only() else {
+            return;
+        };
+
+        if let Some(wallet) = wallets.iter_mut().find(|wallet| wallet.record_id == record_id) {
+            wallet.sync_status = CloudBackupWalletStatus::AlreadyOnDevice;
+            wallet.restore_failure = None;
+        }
+
+        self.resolve_cloud_only_state(CloudOnlyState::Loaded { wallets, incomplete });
+    }
+
     /// Removes a row whose record stopped being cloud-only, keeping the listing in step with it
     fn remove_cloud_only_row(&mut self, record_id: &str) {
         let CloudOnlyState::Loaded { mut wallets, incomplete } = self.cloud_only() else {
@@ -1718,6 +1739,12 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::CloudOnlyRowRemoved(record_id) => {
                 self.state.remove_cloud_only_row(&record_id);
             }
+            CloudBackupStateReducerEvent::CloudOnlyRowAlreadyOnDevice {
+                record_id,
+                listing_generation,
+            } => {
+                self.state.mark_cloud_only_row_already_on_device(&record_id, listing_generation);
+            }
             CloudBackupStateReducerEvent::CloudOnlyInventoryInvalidated => {
                 self.state.cloud_only_inventory.invalidate();
                 self.state.cloud_only_failures_awaiting_refetch.clear();
@@ -2020,6 +2047,43 @@ mod tests {
         };
 
         configured.restore_all
+    }
+
+    #[test]
+    fn already_on_device_result_read_before_a_local_wallet_change_is_discarded() {
+        let wallet = cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice);
+        let detail = test_detail(1);
+        let mut model = configured_model_with_cloud_only(Vec::new());
+        load_listed_cloud_only(&mut model, &detail, std::slice::from_ref(&wallet));
+        let restore_generation = model.cloud_only_listing_generation();
+
+        // the matching local wallet is deleted and the refetch lands before the restore result
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyLocalWalletsChanged);
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyFetchLoaded(CloudOnlyFetch {
+            wallets: vec![wallet.clone()],
+            unresolved_record_ids: Vec::new(),
+            listing_generation: model.cloud_only_listing_generation(),
+        }));
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyRowAlreadyOnDevice {
+            record_id: wallet.record_id.clone(),
+            listing_generation: restore_generation,
+        });
+
+        let CloudOnlyState::Loaded { wallets, .. } = model.cloud_only() else {
+            panic!("expected the refetched rows");
+        };
+        assert_eq!(wallets[0].sync_status, CloudBackupWalletStatus::DeletedFromDevice);
+
+        // a result read under the current generation still marks the row
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyRowAlreadyOnDevice {
+            record_id: wallet.record_id,
+            listing_generation: model.cloud_only_listing_generation(),
+        });
+
+        let CloudOnlyState::Loaded { wallets, .. } = model.cloud_only() else {
+            panic!("expected the refetched rows");
+        };
+        assert_eq!(wallets[0].sync_status, CloudBackupWalletStatus::AlreadyOnDevice);
     }
 
     #[test]

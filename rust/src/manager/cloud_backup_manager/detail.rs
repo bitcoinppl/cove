@@ -147,8 +147,12 @@ pub(crate) enum CloudBackupCloudOnlyWalletOutcome {
         warning: Option<CloudBackupCloudOnlyOperationWarning>,
     },
     /// A local wallet holds everything the record can recover, so it stays as a deletable row
+    ///
+    /// `listing_generation` is the generation observed before the restore read the local
+    /// wallets, so a later local wallet change can discard the result
     AlreadyOnDevice {
         record_id: String,
+        listing_generation: u64,
     },
     Deleted {
         record_id: String,
@@ -611,9 +615,15 @@ impl RustCloudBackupManager {
             CloudBackupCloudOnlyWalletOutcome::Restored { record_id, warning } => {
                 self.apply_finished_cloud_only_wallet_operation(record_id, warning);
             }
-            CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice { record_id } => {
+            CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
+                record_id,
+                listing_generation,
+            } => {
                 self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
-                self.apply_cloud_only_already_on_device(&record_id);
+                self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyRowAlreadyOnDevice {
+                    record_id,
+                    listing_generation,
+                });
             }
             CloudBackupCloudOnlyWalletOutcome::Deleted { record_id } => {
                 self.apply_finished_cloud_only_wallet_operation(record_id, None);
@@ -646,19 +656,6 @@ impl RustCloudBackupManager {
             && let Some(wallet) = wallets.iter_mut().find(|wallet| wallet.record_id == record_id)
         {
             wallet.restore_failure = Some(CloudBackupWalletRestoreFailure { message: error });
-        }
-        self.apply_cloud_only_state(cloud_only);
-    }
-
-    /// Keeps a row that turned out to duplicate a local wallet visible and deletable, so the cloud
-    /// record stays accounted for without being offered for restore again
-    fn apply_cloud_only_already_on_device(&self, record_id: &str) {
-        let mut cloud_only = self.state.read().cloud_only();
-        if let CloudOnlyState::Loaded { wallets, .. } = &mut cloud_only
-            && let Some(wallet) = wallets.iter_mut().find(|wallet| wallet.record_id == record_id)
-        {
-            wallet.sync_status = CloudBackupWalletStatus::AlreadyOnDevice;
-            wallet.restore_failure = None;
         }
         self.apply_cloud_only_state(cloud_only);
     }

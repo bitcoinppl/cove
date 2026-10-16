@@ -222,41 +222,6 @@ impl WalletRestoreSession {
         Ok(WalletRestoreOutcome::Restored { labels_warning })
     }
 
-    /// Restores a cloud-only record, adding its secret to a matching local wallet that lacks it
-    ///
-    /// A local watch-only or cold wallet shares a secret backup's identity without holding its
-    /// secret, so skipping the backup as a duplicate would leave the only copy of that secret
-    /// in the cloud
-    pub(crate) fn restore_cloud_only(
-        &mut self,
-        wallet: &DownloadedWalletBackup,
-    ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
-        let (identity_key, identity_error) = wallet.identity_key();
-
-        match self.0.coverage(&identity_key, wallet.recovery_material()) {
-            LocalWalletCoverage::Covered => {
-                info!("Cloud-only wallet is already on this device");
-                return Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice);
-            }
-            LocalWalletCoverage::SecretMissing => {
-                if let Some(outcome) = wallet.add_secret_to_local_wallet()? {
-                    self.0.insert(identity_key);
-                    return Ok(outcome);
-                }
-            }
-            LocalWalletCoverage::Absent => {}
-        }
-
-        if let Some(error) = identity_error {
-            return Err(error);
-        }
-
-        let labels_warning = wallet.restore()?;
-        self.0.insert(identity_key);
-
-        Ok(CloudOnlyRestoreOutcome::Restored { labels_warning })
-    }
-
     fn should_skip_duplicate_wallet(&self, duplicate_key: &WalletIdentityKey) -> bool {
         if self.0.contains(duplicate_key) {
             info!("Skipping duplicate wallet during cloud restore");
@@ -280,6 +245,42 @@ fn cloud_restore_error(context: &str, error: CloudRestoreError) -> CloudBackupEr
 }
 
 impl DownloadedWalletBackup {
+    /// Restores a cloud-only record against the current local wallets, adding its secret to a
+    /// matching local wallet that lacks it
+    ///
+    /// A local watch-only or cold wallet shares a secret backup's identity without holding its
+    /// secret, so skipping the backup as a duplicate would leave the only copy of that secret
+    /// in the cloud
+    ///
+    /// `local_wallets` must be read after the download, since a local wallet can be deleted or
+    /// added while it waits
+    pub(crate) fn restore_cloud_only(
+        &self,
+        local_wallets: &ExistingWalletIdentitySet,
+    ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
+        let (identity_key, identity_error) = self.identity_key();
+
+        match local_wallets.coverage(&identity_key, self.recovery_material()) {
+            LocalWalletCoverage::Covered => {
+                info!("Cloud-only wallet is already on this device");
+                return Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice);
+            }
+            LocalWalletCoverage::SecretMissing => {
+                if let Some(outcome) = self.add_secret_to_local_wallet()? {
+                    return Ok(outcome);
+                }
+            }
+            LocalWalletCoverage::Absent => {}
+        }
+
+        if let Some(error) = identity_error {
+            return Err(error);
+        }
+
+        let labels_warning = self.restore()?;
+        Ok(CloudOnlyRestoreOutcome::Restored { labels_warning })
+    }
+
     /// How much of this backup the local wallets in `identities` already hold
     pub(crate) fn local_coverage(
         &self,
