@@ -1053,7 +1053,10 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
             challenge_len: challenge.len(),
         });
 
-        if let Some(gate) = self.authenticate_gate.lock().take() {
+        // take the gate first so the lock is released before blocking; an if-let scrutinee
+        // guard lives until the end of the then-block
+        let gate = self.authenticate_gate.lock().take();
+        if let Some(gate) = gate {
             gate.block();
         }
 
