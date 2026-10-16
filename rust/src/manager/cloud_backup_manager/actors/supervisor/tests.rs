@@ -4127,3 +4127,43 @@ async fn restore_all_adds_a_seed_backup_to_the_matching_watch_only_wallet() {
     assert_eq!(local_wallets[0].wallet_type, WalletType::Hot);
     assert_eq!(Keychain::global().get_wallet_secret(&local_wallet.id).unwrap(), Some(secret));
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn record_deleted_between_the_detail_and_fetch_listings_keeps_the_list_incomplete() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    let namespace = manager.current_namespace_id().unwrap();
+    CloudBackupStore::global().persist_restore_all_marker(namespace.clone()).unwrap();
+    manager.sync_persisted_state();
+
+    // the detail lists a record that another device deletes before the fetch lists again
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        "deleted-elsewhere",
+    ])));
+    list_test_wallet_files(&namespace, &[]);
+
+    call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "the fetch should load", || {
+        public_cloud_only(&manager)
+            == Some(CloudOnlyState::Loaded { wallets: Vec::new(), incomplete: true })
+    })
+    .await;
+
+    // the two listings disagree, so the marker stays and so does its retry
+    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
+    assert_eq!(
+        manager.projected_restore_all_state(),
+        CloudBackupRestoreAllState::RetryAvailable { wallet_count: 0 }
+    );
+
+    // Check Again lists the provider again, which settles the listing and clears the marker
+    call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "the new listing should settle", || {
+        public_cloud_only(&manager)
+            == Some(CloudOnlyState::Loaded { wallets: Vec::new(), incomplete: false })
+            && RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none()
+    })
+    .await;
+    assert_eq!(manager.projected_restore_all_state(), CloudBackupRestoreAllState::NotShown);
+}

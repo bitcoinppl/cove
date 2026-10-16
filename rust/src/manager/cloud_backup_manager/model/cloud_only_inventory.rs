@@ -20,6 +20,17 @@ pub(crate) struct CloudOnlyFetch {
     pub(crate) listing_generation: u64,
 }
 
+impl CloudOnlyFetch {
+    /// The cloud-only record IDs the fetch's own provider listing found
+    fn listed_record_ids(&self) -> HashSet<String> {
+        self.wallets
+            .iter()
+            .map(|wallet| wallet.record_id.clone())
+            .chain(self.unresolved_record_ids.iter().cloned())
+            .collect()
+    }
+}
+
 /// Identity of the latest provider listing and proof of what the loaded cloud-only rows cover
 ///
 /// Owned by the reducer next to the rows, so applying a detail and applying a fetch are decided
@@ -53,9 +64,31 @@ impl CloudOnlyInventory {
         self.complete_fetch_generation = None;
     }
 
+    /// Records a fetch applied under the current generation as the loaded proof, but only when
+    /// it read every record of exactly the latest listing
+    ///
+    /// A fetch lists the provider again, so it can find a different set than the detail listing
+    /// did, and then it proves nothing until a new listing settles which one is current
     pub(crate) fn record_loaded(&mut self, fetch: &CloudOnlyFetch) {
-        self.complete_fetch_generation =
-            fetch.unresolved_record_ids.is_empty().then_some(fetch.listing_generation);
+        let fetch_listing = fetch.listed_record_ids();
+
+        // the listing was forgotten before this fetch started, so the fetch's own listing is the
+        // latest one
+        if self.listed_record_ids.is_none() {
+            self.listed_record_ids = Some(fetch_listing.clone());
+        }
+
+        let complete = fetch.unresolved_record_ids.is_empty()
+            && self.listed_record_ids.as_ref() == Some(&fetch_listing);
+        self.complete_fetch_generation = complete.then_some(fetch.listing_generation);
+    }
+
+    /// Drops a record that stopped being cloud-only, because it was restored or deleted, so the
+    /// listing keeps matching the rows that remain
+    pub(crate) fn forget_record(&mut self, record_id: &str) {
+        if let Some(listed_record_ids) = &mut self.listed_record_ids {
+            listed_record_ids.remove(record_id);
+        }
     }
 
     pub(crate) fn clear_loaded(&mut self) {
@@ -78,6 +111,9 @@ impl CloudOnlyInventory {
     }
 
     /// Whether loaded rows are a complete read of exactly the latest listing
+    ///
+    /// The one completeness check behind both the exported `incomplete` flag and the Restore All
+    /// marker proof
     pub(crate) fn loaded_is_complete_and_current(&self, loaded_ids: &HashSet<String>) -> bool {
         self.covers_listing(loaded_ids) && self.complete_fetch_generation == Some(self.generation)
     }

@@ -1197,7 +1197,7 @@ impl CloudBackupReducerState {
         }
 
         let (cloud_only, invalidated) = match previous_loaded.as_ref().map(|s| &s.cloud_only) {
-            Some(CloudOnlyState::Loaded { wallets, incomplete }) => {
+            Some(CloudOnlyState::Loaded { wallets, .. }) => {
                 let keep = match &cloud_only_listing {
                     CloudOnlyListingUpdate::Listed(_) => {
                         let loaded_ids: HashSet<_> =
@@ -1209,13 +1209,7 @@ impl CloudBackupReducerState {
                 };
 
                 if keep {
-                    (
-                        CloudOnlyState::Loaded {
-                            wallets: wallets.clone(),
-                            incomplete: *incomplete,
-                        },
-                        false,
-                    )
+                    (self.loaded_cloud_only(wallets.clone()), false)
                 } else {
                     self.cloud_only_inventory.clear_loaded();
                     (CloudOnlyState::NotFetched, true)
@@ -1274,13 +1268,31 @@ impl CloudBackupReducerState {
         }
 
         self.cloud_only_inventory.record_loaded(&fetch);
-        let incomplete = !fetch.unresolved_record_ids.is_empty();
-        self.resolve_cloud_only_state(CloudOnlyState::Loaded {
-            wallets: fetch.wallets,
-            incomplete,
-        });
+        let cloud_only = self.loaded_cloud_only(fetch.wallets);
+        self.resolve_cloud_only_state(cloud_only);
 
         true
+    }
+
+    /// Loaded rows marked incomplete by the same check the Restore All marker proof uses, so the
+    /// retry stays visible whenever the marker cannot be cleared
+    fn loaded_cloud_only(&self, wallets: Vec<super::CloudBackupWalletItem>) -> CloudOnlyState {
+        let loaded_ids: HashSet<_> =
+            wallets.iter().map(|wallet| wallet.record_id.clone()).collect();
+        let incomplete = !self.cloud_only_inventory.loaded_is_complete_and_current(&loaded_ids);
+
+        CloudOnlyState::Loaded { wallets, incomplete }
+    }
+
+    /// Removes a row whose record stopped being cloud-only, keeping the listing in step with it
+    fn remove_cloud_only_row(&mut self, record_id: &str) {
+        let CloudOnlyState::Loaded { mut wallets, incomplete } = self.cloud_only() else {
+            return;
+        };
+
+        wallets.retain(|wallet| wallet.record_id != record_id);
+        self.cloud_only_inventory.forget_record(record_id);
+        self.resolve_cloud_only_state(CloudOnlyState::Loaded { wallets, incomplete });
     }
 
     fn apply_detail_cleared(&mut self) {
@@ -1690,6 +1702,9 @@ impl CloudBackupStateReducer {
                 let applied = self.state.apply_cloud_only_fetch_loaded(fetch);
 
                 effects.cloud_only_refetch_needed = !applied;
+            }
+            CloudBackupStateReducerEvent::CloudOnlyRowRemoved(record_id) => {
+                self.state.remove_cloud_only_row(&record_id);
             }
             CloudBackupStateReducerEvent::CloudOnlyInventoryInvalidated => {
                 self.state.cloud_only_inventory.invalidate();
