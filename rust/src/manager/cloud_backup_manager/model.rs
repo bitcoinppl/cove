@@ -1291,6 +1291,7 @@ impl CloudBackupReducerState {
     fn loaded_cloud_only(&self, wallets: Vec<super::CloudBackupWalletItem>) -> CloudOnlyState {
         let loaded_ids: HashSet<_> =
             wallets.iter().map(|wallet| wallet.record_id.clone()).collect();
+
         let incomplete = !self.cloud_only_inventory.loaded_is_complete_and_current(&loaded_ids);
 
         CloudOnlyState::Loaded { wallets, incomplete }

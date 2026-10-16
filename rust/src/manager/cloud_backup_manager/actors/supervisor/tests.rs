@@ -5,6 +5,7 @@ use super::enable::{
 };
 use super::verification::DeepVerificationContinuation;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
+use cove_cspp::CsppStore as _;
 use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
     PersistedDriveAccountSwitchPhase,
@@ -32,6 +33,7 @@ use crate::manager::cloud_backup_manager::{
 };
 use crate::manager::deferred_sender::SingleOrMany;
 use crate::network::Network;
+use crate::wallet::WalletAddressType;
 use crate::wallet::fingerprint::Fingerprint;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
 use crate::wallet_secret::WalletSecretExt as _;
@@ -208,6 +210,16 @@ fn upload_test_seed_backup(
     namespace: &str,
     secret: &KeychainWalletSecret,
 ) -> (WalletMetadata, String) {
+    let (wallet, entry) = test_seed_backup_entry(secret);
+    let record_id = upload_test_wallet_entry(namespace, &wallet, &entry);
+
+    (wallet, record_id)
+}
+
+/// A new hot wallet and the cloud backup entry holding its seed
+fn test_seed_backup_entry(
+    secret: &KeychainWalletSecret,
+) -> (WalletMetadata, cove_cspp::backup_data::WalletEntry) {
     let KeychainWalletSecret::Mnemonic(mnemonic) = secret else {
         panic!("seed backups in these tests hold a mnemonic");
     };
@@ -219,16 +231,23 @@ fn upload_test_seed_backup(
 
     let mut entry = wallet_entry_with_labels(&wallet, None);
     entry.secret = cove_cspp::backup_data::WalletSecret::Mnemonic(mnemonic.to_string());
-    let record_id = upload_test_wallet_entry(namespace, &wallet, &entry);
 
-    (wallet, record_id)
+    (wallet, entry)
 }
 
 /// Saves a local watch-only wallet with the public keys of `secret`, as importing its
 /// descriptors would
 fn save_local_watch_only_wallet(secret: &KeychainWalletSecret) -> WalletMetadata {
+    save_local_watch_only_wallet_with_address_type(secret, WalletAddressType::NativeSegwit)
+}
+
+fn save_local_watch_only_wallet_with_address_type(
+    secret: &KeychainWalletSecret,
+    address_type: WalletAddressType,
+) -> WalletMetadata {
     let mut wallet = WalletMetadata::preview_new();
     wallet.id = WalletId::new();
+    wallet.address_type = address_type;
     wallet.name = "Watch-only".into();
     wallet.wallet_type = WalletType::WatchOnly;
     wallet.verified = false;
@@ -4074,34 +4093,43 @@ async fn seed_backup_matching_a_local_hot_wallet_is_already_on_device() {
 async fn restore_all_adds_a_seed_backup_to_the_matching_watch_only_wallet() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
-    configure_enabled_cloud_backup(&manager, test_globals(), 0);
-    let namespace = manager.current_namespace_id().unwrap();
     let secret = test_seed_secret();
-    let local_wallet = save_local_watch_only_wallet(&secret);
-    let (_, seed_record_id) = upload_test_seed_backup(&namespace, &secret);
-    let seed_record_id = seed_record_id.as_str();
-    list_test_wallet_files(&namespace, &[seed_record_id]);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
-        seed_record_id,
-    ])));
-
-    let generation = manager.state.read().cloud_only_listing_generation();
-    let prepared = manager
-        .prepare_restore_all_cloud_wallets(vec![test_cloud_only_wallet(seed_record_id)], generation)
-        .await
-        .unwrap();
-    assert_eq!(
-        cloud_only_row_statuses(prepared.ordered_queue()),
-        vec![(seed_record_id, CloudBackupWalletStatus::DeletedFromDevice)]
+    let (seed_wallet, seed_entry) = test_seed_backup_entry(&secret);
+    let mut other_wallet = xpub_only_wallet_metadata();
+    other_wallet.network = Network::Testnet;
+    let (_, items) = prepare_restore_all_queue_fixture(
+        &manager,
+        vec![
+            (seed_wallet.clone(), seed_entry),
+            (other_wallet.clone(), wallet_entry_with_labels(&other_wallet, None)),
+        ],
     );
+    let seed_record_id = items[0].record_id.as_str();
 
-    let outcome = prepared.restore_record(seed_record_id).await.unwrap();
+    // the fixture starts from no local wallets, so the watch-only wallet is added afterwards
+    let local_wallet = save_local_watch_only_wallet(&secret);
 
-    assert_eq!(outcome, CloudOnlyRestoreOutcome::SecretAdded { wallet_id: local_wallet.id.clone() });
+    call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "Restore All should settle", || {
+        manager.projected_exclusive_operation().is_none()
+    })
+    .await;
+
+    // the seed went into the existing wallet instead of a second copy of it
     let local_wallets = local_wallets_like(&local_wallet);
     assert_eq!(local_wallets.len(), 1);
+    assert_eq!(local_wallets[0].id, local_wallet.id);
     assert_eq!(local_wallets[0].wallet_type, WalletType::Hot);
     assert_eq!(Keychain::global().get_wallet_secret(&local_wallet.id).unwrap(), Some(secret));
+    assert!(local_wallet_exists(&other_wallet));
+    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
+
+    // the seed record stays in the cloud, now as an extra copy of the upgraded wallet
+    wait_for_cloud_only_statuses(&manager, &[(
+        seed_record_id,
+        CloudBackupWalletStatus::AlreadyOnDevice,
+    )])
+    .await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -4245,4 +4273,84 @@ async fn restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_d
         CloudBackupWalletStatus::AlreadyOnDevice,
     )])
     .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn seed_backup_stays_restorable_when_the_local_secret_cannot_be_read() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    let namespace = manager.current_namespace_id().unwrap();
+    let secret = test_seed_secret();
+
+    // a hot wallet whose stored seed cannot be decrypted cannot sign with it
+    let mut local_wallet = save_local_watch_only_wallet(&secret);
+    local_wallet.wallet_type = WalletType::Hot;
+    Database::global().wallets.update_wallet_metadata(local_wallet.clone()).unwrap();
+    let secret_key = format!("{}::wallet_mnemonic", local_wallet.id);
+    let cryptor_key = format!("{}::wallet_mnemonic_encryption_key_and_nonce", local_wallet.id);
+    Keychain::global().save(secret_key.clone(), "garbage-secret".into()).unwrap();
+    Keychain::global().save(cryptor_key.clone(), "garbage-cryptor".into()).unwrap();
+
+    let (_, seed_record_id) = upload_test_seed_backup(&namespace, &secret);
+    let seed_record_id = seed_record_id.as_str();
+    list_test_wallet_files(&namespace, &[seed_record_id]);
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        seed_record_id,
+    ])));
+
+    call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
+    wait_for_cloud_only_statuses(&manager, &[(
+        seed_record_id,
+        CloudBackupWalletStatus::DeletedFromDevice,
+    )])
+    .await;
+
+    call!(manager.supervisor.start_restore_cloud_wallet_operation(seed_record_id.into()))
+        .await
+        .unwrap();
+    wait_for_test_condition(Duration::from_secs(5), "the restore should finish", || {
+        manager.projected_exclusive_operation().is_none()
+    })
+    .await;
+
+    // the restore fails without touching the unreadable seed, and the backup is not a copy
+    let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
+        panic!("expected the seed row to stay loaded");
+    };
+    assert_eq!(
+        cloud_only_row_statuses(&wallets),
+        vec![(seed_record_id, CloudBackupWalletStatus::DeletedFromDevice)]
+    );
+    assert!(wallets[0].restore_failure.is_some());
+    assert_eq!(Keychain::global().get(secret_key), Some("garbage-secret".to_string()));
+    assert_eq!(Keychain::global().get(cryptor_key), Some("garbage-cryptor".to_string()));
+    assert_eq!(local_wallets_like(&local_wallet).len(), 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn seed_backup_watched_under_two_address_types_restores_as_its_own_wallet() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    let namespace = manager.current_namespace_id().unwrap();
+    let secret = test_seed_secret();
+    let native_segwit = save_local_watch_only_wallet(&secret);
+    let wrapped_segwit =
+        save_local_watch_only_wallet_with_address_type(&secret, WalletAddressType::WrappedSegwit);
+    let (seed_wallet, seed_record_id) = upload_test_seed_backup(&namespace, &secret);
+
+    let prepared = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let outcome = prepared.restore_record(&seed_record_id).await.unwrap();
+
+    // both watch-only wallets match the seed, so it becomes its own hot wallet
+    assert!(matches!(outcome, CloudOnlyRestoreOutcome::Restored { .. }));
+    let local_wallets = local_wallets_like(&seed_wallet);
+    let wallet_type = |id: &WalletId| {
+        local_wallets.iter().find(|wallet| &wallet.id == id).map(|wallet| wallet.wallet_type)
+    };
+    assert_eq!(local_wallets.len(), 3);
+    assert_eq!(wallet_type(&seed_wallet.id), Some(WalletType::Hot));
+    assert_eq!(wallet_type(&native_segwit.id), Some(WalletType::WatchOnly));
+    assert_eq!(wallet_type(&wrapped_segwit.id), Some(WalletType::WatchOnly));
 }

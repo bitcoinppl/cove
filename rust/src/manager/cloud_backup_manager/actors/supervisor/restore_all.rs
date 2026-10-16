@@ -215,9 +215,8 @@ impl CloudBackupSupervisor {
                 );
                 manager.refresh_sync_health();
             }
-            Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id }) => {
+            Ok(CloudOnlyRestoreOutcome::SecretAdded { .. }) => {
                 self.note_restore_all_committed_local_wallet(claim);
-                manager.handle_restored_secret_added(wallet_id);
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                         record_id: wallet.record_id,
@@ -433,6 +432,7 @@ async fn run_restore_all_queue(
         // read before the restore reads the local wallets, so a later change can discard its result
         let listing_generation = manager.state.read().cloud_only_listing_generation();
         let result = prepared.restore_record(&wallet.record_id).await;
+        manager.handle_cloud_only_restore_committed(&result);
         completed = completed.saturating_add(1);
         let result = match result {
             Err(error) if restore_all_must_stop(&error) => {

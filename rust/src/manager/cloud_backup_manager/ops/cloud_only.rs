@@ -253,7 +253,22 @@ impl RustCloudBackupManager {
         record_id: &str,
     ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
         let prepared = self.prepare_active_namespace_wallet_restore().await?;
-        prepared.restore_record(record_id).await
+        let result = prepared.restore_record(record_id).await;
+        self.handle_cloud_only_restore_committed(&result);
+
+        result
+    }
+
+    /// Queues the upload of a local wallet a restore just added a secret to, straight after the
+    /// upgrade commits, so the wallet's own backup gains the secret even if the restore result is
+    /// never applied
+    pub(crate) fn handle_cloud_only_restore_committed(
+        &self,
+        result: &Result<CloudOnlyRestoreOutcome, CloudBackupError>,
+    ) {
+        if let Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id }) = result {
+            self.handle_restored_secret_added(wallet_id.clone());
+        }
     }
 
     pub(crate) async fn prepare_restore_all_cloud_wallets(

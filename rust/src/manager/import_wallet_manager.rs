@@ -59,7 +59,8 @@ pub type Error = ImportWalletError;
 impl From<SecretUpgradeError> for ImportWalletError {
     fn from(error: SecretUpgradeError) -> Self {
         match error {
-            SecretUpgradeError::AlreadyHoldsSecret(id) => Self::WalletAlreadyExists(id),
+            SecretUpgradeError::AlreadyHoldsSecret(id)
+            | SecretUpgradeError::UnreadableSecret(id) => Self::WalletAlreadyExists(id),
             SecretUpgradeError::IdentityCollision => Self::WalletIdentityCollision,
             SecretUpgradeError::Identity(error) => Self::WalletIdentity(error),
             SecretUpgradeError::Keychain(error) => Self::Keychain(error),
