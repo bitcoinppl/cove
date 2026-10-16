@@ -198,19 +198,20 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        let outcome = match result {
-            Ok(CloudOnlyRestoreOutcome::Restored { labels_warning }) => {
+        let (outcome, committed_local_wallet) = match result {
+            Ok(CloudOnlyRestoreOutcome::Restored { labels_warning }) => (
                 CloudBackupCloudOnlyWalletOutcome::Restored {
                     record_id,
                     warning: labels_warning.map(cloud_only_restore_warning),
-                }
-            }
+                },
+                true,
+            ),
             Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id }) => {
                 manager.handle_restored_secret_added(wallet_id);
-                CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice { record_id }
+                (CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice { record_id }, true)
             }
             Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice) => {
-                CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice { record_id }
+                (CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice { record_id }, false)
             }
             Err(error) => {
                 manager.apply_cloud_only_wallet_outcome(
@@ -227,6 +228,13 @@ impl CloudBackupSupervisor {
         };
 
         manager.apply_cloud_only_wallet_outcome(outcome);
+
+        // a restored wallet can turn other listed records into copies of it, which matching record
+        // IDs cannot show, so the rows are read again
+        if committed_local_wallet {
+            manager.apply_local_wallets_changed();
+        }
+
         manager.refresh_sync_health();
         let detail_claim = self.detail_workflow.start_operation_result();
         self.addr.send_fut_with(move |addr| async move {

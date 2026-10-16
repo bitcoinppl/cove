@@ -255,16 +255,24 @@ fn local_wallets_like(wallet: &WalletMetadata) -> Vec<WalletMetadata> {
     Database::global().wallets.get_all(wallet.network, wallet.wallet_mode).unwrap()
 }
 
+/// Waits until the loaded rows are exactly `expected`, in any order
 async fn wait_for_cloud_only_statuses(
     manager: &RustCloudBackupManager,
     expected: &[(&str, CloudBackupWalletStatus)],
 ) {
+    let mut expected: Vec<_> =
+        expected.iter().map(|(record_id, status)| (record_id.to_string(), status.clone())).collect();
+    expected.sort_by(|left, right| left.0.cmp(&right.0));
+
     wait_for_test_condition(Duration::from_secs(5), "cloud-only statuses should settle", || {
-        matches!(
-            manager.state.read().cloud_only(),
-            CloudOnlyState::Loaded { wallets, .. }
-                if cloud_only_row_statuses(&wallets) == expected
-        )
+        let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
+            return false;
+        };
+
+        let mut statuses: Vec<_> =
+            wallets.into_iter().map(|wallet| (wallet.record_id, wallet.sync_status)).collect();
+        statuses.sort_by(|left, right| left.0.cmp(&right.0));
+        statuses == expected
     })
     .await;
 }
@@ -680,10 +688,7 @@ fn local_reset_cancels_restore_without_releasing_its_claim() {
     );
     let cancellation = Arc::new(AtomicBool::new(false));
     let mut active = ActiveOperation::default();
-    active.start_restore(RestoreRun {
-        claim,
-        cancellation: Arc::clone(&cancellation),
-    });
+    active.start_restore(RestoreRun::new(claim, Arc::clone(&cancellation)));
 
     let released_claim = active.prepare_local_reset();
 
@@ -3064,10 +3069,7 @@ async fn overlapping_cloud_only_refetch_preserves_active_restore_all_marker_and_
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun {
-        claim,
-        cancellation: Arc::new(AtomicBool::new(false)),
-    });
+    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
     manager.apply_restore_all_started(claim, 2);
     supervisor.active_cloud_only_fetch_request = Some(10);
 
@@ -3144,10 +3146,7 @@ async fn restore_all_whose_cloud_only_rows_were_reset_mid_run_keeps_its_marker()
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RestoreAllCloudWallets)
         .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun {
-        claim,
-        cancellation: Arc::new(AtomicBool::new(false)),
-    });
+    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
     let detail_claim = supervisor.detail_workflow.start_operation_result();
 
     // the listing replaced wallet a with c at the same count
@@ -3274,10 +3273,7 @@ async fn restore_all_queue_completion_without_remaining_wallets_clears_marker_an
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun {
-        claim,
-        cancellation: Arc::new(AtomicBool::new(false)),
-    });
+    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
 
     supervisor.complete_restore_all_queue_finished(claim).await.unwrap();
 
@@ -3300,10 +3296,7 @@ async fn restore_all_cancellation_keeps_claim_until_record_boundary() {
         )
         .unwrap();
     let cancellation = Arc::new(AtomicBool::new(false));
-    supervisor.active_operation.start_restore_all(RestoreRun {
-        claim,
-        cancellation: cancellation.clone(),
-    });
+    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, cancellation.clone()));
 
     supervisor.request_restore_all_cancellation();
 
@@ -3327,10 +3320,7 @@ async fn supplemental_inventory_does_not_cancel_restore_all() {
         )
         .unwrap();
     let cancellation = Arc::new(AtomicBool::new(false));
-    supervisor.active_operation.start_restore_all(RestoreRun {
-        claim,
-        cancellation: cancellation.clone(),
-    });
+    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, cancellation.clone()));
 
     supervisor.ensure_supplemental_inventory_discovery(manager.clone());
 
@@ -3407,11 +3397,10 @@ async fn restore_all_mixed_failure_continues_through_later_success_and_settles()
             .unwrap()
             .is_none()
     );
+    // the restored wallets make the run read the rows again, and the failure survives that
     let failed_record_id = items[1].record_id.as_str();
-    let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
-        panic!("expected retained cloud-only failure row");
-    };
-    let retained_failure = wallets
+    let rows = wait_for_cloud_only_rows(&manager, &[failed_record_id], &[]).await;
+    let retained_failure = rows
         .iter()
         .find(|wallet| wallet.record_id == failed_record_id)
         .and_then(|wallet| wallet.restore_failure.as_ref());
@@ -3557,10 +3546,7 @@ async fn restore_all_cancellation_during_preparation_clears_marker_after_complet
         )
         .unwrap();
     let cancellation = Arc::new(AtomicBool::new(true));
-    supervisor.active_operation.start_restore_all(RestoreRun {
-        claim,
-        cancellation: cancellation.clone(),
-    });
+    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, cancellation.clone()));
 
     supervisor
         .complete_restore_all_preparation(
@@ -3620,10 +3606,7 @@ async fn restore_all_provider_failure_during_success_refresh_stops_with_marker_r
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun {
-        claim,
-        cancellation: Arc::new(AtomicBool::new(false)),
-    });
+    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
     let detail_claim = supervisor.detail_workflow.start_operation_result();
 
     let should_continue = supervisor
@@ -3667,10 +3650,7 @@ async fn ordinary_restore_all_record_failure_keeps_batch_claim_for_next_record()
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun {
-        claim,
-        cancellation: Arc::new(AtomicBool::new(false)),
-    });
+    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
 
     let should_continue = supervisor
         .complete_restore_all_record(
@@ -3841,10 +3821,7 @@ async fn restore_all_preparation_with_only_unreadable_wallets_keeps_its_marker()
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun {
-        claim,
-        cancellation: Arc::new(AtomicBool::new(false)),
-    });
+    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
     supervisor.complete_restore_all_preparation(claim, prepared).await.unwrap();
 
     assert_eq!(supervisor.active_operation, None);
@@ -3889,10 +3866,7 @@ async fn restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
         )
         .unwrap();
-    supervisor.active_operation.start_restore_all(RestoreRun {
-        claim,
-        cancellation: Arc::new(AtomicBool::new(false)),
-    });
+    supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
     supervisor.complete_restore_all_preparation(claim, Ok(prepared)).await.unwrap();
 
     assert_eq!(supervisor.active_operation, None);
@@ -4165,5 +4139,49 @@ async fn record_deleted_between_the_detail_and_fetch_listings_keeps_the_list_inc
             && RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none()
     })
     .await;
+    assert_eq!(manager.projected_restore_all_state(), CloudBackupRestoreAllState::NotShown);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn restoring_one_of_three_copies_leaves_the_others_already_on_device() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    let namespace = manager.current_namespace_id().unwrap();
+
+    // test xpub-only wallets share one xpub, so these are three copies of one wallet
+    let [first, second, third] = [(); 3]
+        .map(|()| upload_test_wallet_backup(&namespace, &xpub_only_wallet_metadata()));
+    let [first, second, third] = [first.as_str(), second.as_str(), third.as_str()];
+    list_test_wallet_files(&namespace, &[first, second, third]);
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        first, second, third,
+    ])));
+
+    call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
+    wait_for_cloud_only_statuses(&manager, &[
+        (first, CloudBackupWalletStatus::DeletedFromDevice),
+        (second, CloudBackupWalletStatus::DeletedFromDevice),
+        (third, CloudBackupWalletStatus::DeletedFromDevice),
+    ])
+    .await;
+    assert_eq!(
+        manager.projected_restore_all_state(),
+        CloudBackupRestoreAllState::StartAvailable { wallet_count: 3 }
+    );
+
+    call!(manager.supervisor.start_restore_cloud_wallet_operation(first.into())).await.unwrap();
+
+    // the same record IDs stay listed, but the restored wallet now covers both of them
+    wait_for_cloud_only_statuses(&manager, &[
+        (second, CloudBackupWalletStatus::AlreadyOnDevice),
+        (third, CloudBackupWalletStatus::AlreadyOnDevice),
+    ])
+    .await;
+    wait_for_test_condition(Duration::from_secs(5), "the restore should finish", || {
+        manager.projected_exclusive_operation().is_none()
+    })
+    .await;
+    assert_eq!(manager.restore_all_eligible_wallets(), Some(Vec::new()));
     assert_eq!(manager.projected_restore_all_state(), CloudBackupRestoreAllState::NotShown);
 }

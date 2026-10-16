@@ -218,6 +218,14 @@ struct PendingDisableWriteDrain {
 struct RestoreRun {
     claim: CloudBackupExclusiveOperationClaim,
     cancellation: Arc<AtomicBool>,
+    /// Set once the run commits a local wallet, so cloud-only rows are reclassified when it ends
+    committed_local_wallet: bool,
+}
+
+impl RestoreRun {
+    fn new(claim: CloudBackupExclusiveOperationClaim, cancellation: Arc<AtomicBool>) -> Self {
+        Self { claim, cancellation, committed_local_wallet: false }
+    }
 }
 
 #[derive(Debug)]
@@ -275,6 +283,18 @@ impl ActiveOperation {
 
     fn restore_all(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreRun> {
         match self.0.as_ref()? {
+            ActiveOperationRun::RestoreAll(run) if run.claim == claim => Some(run),
+            ActiveOperationRun::Standard(_)
+            | ActiveOperationRun::Restore(_)
+            | ActiveOperationRun::RestoreAll(_) => None,
+        }
+    }
+
+    fn restore_all_mut(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) -> Option<&mut RestoreRun> {
+        match self.0.as_mut()? {
             ActiveOperationRun::RestoreAll(run) if run.claim == claim => Some(run),
             ActiveOperationRun::Standard(_)
             | ActiveOperationRun::Restore(_)
@@ -490,10 +510,8 @@ impl CloudBackupSupervisor {
         let claim = CloudBackupExclusiveOperationClaim::new(operation, operation_id);
         manager.project_exclusive_operation_started(claim);
         if operation == CloudBackupExclusiveOperation::Restore {
-            self.active_operation.start_restore(RestoreRun {
-                claim,
-                cancellation: Arc::new(AtomicBool::new(false)),
-            });
+            self.active_operation
+                .start_restore(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
         } else {
             self.active_operation.start_standard(claim);
         }
@@ -513,7 +531,7 @@ impl CloudBackupSupervisor {
             operation_id,
         );
         let cancellation = Arc::new(AtomicBool::new(false));
-        self.active_operation.start_restore_all(RestoreRun { claim, cancellation });
+        self.active_operation.start_restore_all(RestoreRun::new(claim, cancellation));
 
         Some(claim)
     }
