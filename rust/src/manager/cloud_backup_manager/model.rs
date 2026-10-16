@@ -1674,6 +1674,9 @@ impl CloudBackupStateReducer {
 
                 effects.cloud_only_refetch_needed = !applied;
             }
+            CloudBackupStateReducerEvent::CloudOnlyDuplicateAccounted(record_id) => {
+                self.state.cloud_only_inventory.record_duplicate(record_id);
+            }
             CloudBackupStateReducerEvent::CloudOnlyInventoryInvalidated => {
                 self.state.cloud_only_inventory.invalidate();
             }
@@ -1953,6 +1956,7 @@ mod tests {
         model.apply_event(CloudBackupStateReducerEvent::CloudOnlyFetchLoaded(CloudOnlyFetch {
             wallets: wallets.to_vec(),
             unresolved_record_ids: Vec::new(),
+            duplicate_record_ids: HashSet::new(),
             listing_generation: model.state.cloud_only_inventory.generation(),
         }));
     }
@@ -2410,6 +2414,7 @@ mod tests {
         model.apply_event(CloudBackupStateReducerEvent::CloudOnlyFetchLoaded(CloudOnlyFetch {
             wallets: wallets.clone(),
             unresolved_record_ids: Vec::new(),
+            duplicate_record_ids: HashSet::new(),
             listing_generation: model.state.cloud_only_inventory.generation(),
         }));
 

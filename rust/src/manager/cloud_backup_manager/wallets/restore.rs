@@ -215,6 +215,14 @@ impl WalletRestoreSession {
         Ok(outcome)
     }
 
+    /// Whether the wallet's identity already exists locally, without claiming it for a restore
+    pub(crate) fn is_duplicate(&self, wallet: &DownloadedWalletBackup) -> bool {
+        match wallet.duplicate_key() {
+            Ok(duplicate_key) => self.0.contains(&duplicate_key),
+            Err(_) => self.0.contains(&wallet.fallback_duplicate_key()),
+        }
+    }
+
     fn should_skip_duplicate_wallet(&self, duplicate_key: &WalletIdentityKey) -> bool {
         if self.0.contains(duplicate_key) {
             info!("Skipping duplicate wallet during cloud restore");
