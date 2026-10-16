@@ -118,14 +118,6 @@ fn test_cloud_backup_detail(cloud_only_count: u32) -> CloudBackupDetail {
     }
 }
 
-/// Waits for the reset cache to be repopulated, which only a fetch started by the manager does
-async fn wait_for_cloud_only_refetch(manager: &RustCloudBackupManager) {
-    wait_for_test_condition(Duration::from_secs(5), "a reset cache should start a fetch", || {
-        manager.state.read().cloud_only() != CloudOnlyState::NotFetched
-    })
-    .await;
-}
-
 /// Waits until the loaded rows hold every expected record and none of the replaced ones, which
 /// only a fetch that read the provider again can produce
 async fn wait_for_cloud_only_rows(
@@ -173,6 +165,18 @@ fn upload_test_wallet_backup(namespace: &str, wallet: &WalletMetadata) -> String
     );
 
     record_id
+}
+
+/// Uploads readable backups of distinct wallets without listing them, returning their record IDs
+fn upload_distinct_test_wallet_backups(manager: &RustCloudBackupManager) -> [String; 3] {
+    let namespace = manager.current_namespace_id().unwrap();
+
+    // xpub-only test wallets share one xpub, so each needs its own network to be a distinct wallet
+    [Network::Bitcoin, Network::Testnet, Network::Signet].map(|network| {
+        let mut wallet = xpub_only_wallet_metadata();
+        wallet.network = network;
+        upload_test_wallet_backup(&namespace, &wallet)
+    })
 }
 
 fn list_test_wallet_files(namespace: &str, record_ids: &[&str]) {
@@ -3076,13 +3080,14 @@ async fn cloud_only_operation_refresh_that_resets_the_cache_starts_a_fetch() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
-        "a", "b",
-    ])));
+    let [a, b, c] = upload_distinct_test_wallet_backups(&manager);
+    let [a, b, c] = [a.as_str(), b.as_str(), c.as_str()];
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[a, b])));
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
-        test_cloud_only_wallet("a"),
-        test_cloud_only_wallet("b"),
+        test_cloud_only_wallet(a),
+        test_cloud_only_wallet(b),
     ]));
+    list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[b, c]);
     let mut supervisor = CloudBackupSupervisor::new(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
@@ -3097,14 +3102,14 @@ async fn cloud_only_operation_refresh_that_resets_the_cache_starts_a_fetch() {
             claim,
             detail_claim,
             Some(CloudBackupDetailResult::SuccessWithAuthority {
-                listed: listed_detail(&["b", "c"]),
+                listed: listed_detail(&[b, c]),
                 authority: CloudBackupInventoryAuthority::ProviderConfirmed,
             }),
         )
         .await
         .unwrap();
 
-    wait_for_cloud_only_refetch(&manager).await;
+    wait_for_cloud_only_rows(&manager, &[b, c], &[a]).await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3112,23 +3117,42 @@ async fn trusted_local_detail_resets_cloud_only_rows_the_listing_replaced() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
+    let [first, second, third] = upload_distinct_test_wallet_backups(&manager);
+    let [first, second, third] = [first.as_str(), second.as_str(), third.as_str()];
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
-        "first", "second",
+        first, second,
     ])));
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
-        test_cloud_only_wallet("first"),
-        test_cloud_only_wallet("second"),
+        test_cloud_only_wallet(first),
+        test_cloud_only_wallet(second),
     ]));
+    list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[second, third]);
     let mut supervisor = CloudBackupSupervisor::new(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
+    let claim = begin_test_detail_refresh(&mut supervisor, &manager);
+
+    // the trusted snapshot starts the fetch on this supervisor, so it must run as an actor for
+    // that fetch to complete
+    let supervisor = spawn_actor(supervisor);
+    let confirmation = CloudBackupDetailProviderConfirmation {
+        namespace: manager.current_namespace_id().unwrap(),
+    };
 
     // same count and local rows, so only the carried record IDs show the replacement
-    start_trusted_local_refresh(&mut supervisor, &manager, listed_detail(&["second", "third"]))
-        .await;
+    call!(supervisor.complete_refresh_detail_from_snapshot(
+        Some(CloudBackupDetailSnapshotCompletion::TrustedLocal {
+            listed: listed_detail(&[second, third]),
+            confirmation,
+        }),
+        DetailRefreshAttempt::Initial,
+        claim
+    ))
+    .await
+    .unwrap();
 
-    wait_for_cloud_only_refetch(&manager).await;
+    wait_for_cloud_only_rows(&manager, &[second, third], &[first]).await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3567,9 +3591,9 @@ async fn cloud_only_fetch_started_before_a_listing_change_is_discarded_and_refet
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
-        "a", "b",
-    ])));
+    let [a, b, c] = upload_distinct_test_wallet_backups(&manager);
+    let [a, b, c] = [a.as_str(), b.as_str(), c.as_str()];
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[a, b])));
     let mut supervisor = CloudBackupSupervisor::new(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
@@ -3577,22 +3601,21 @@ async fn cloud_only_fetch_started_before_a_listing_change_is_discarded_and_refet
     supervisor.active_cloud_only_fetch_request = Some(5);
     let stale_fetch = complete_cloud_only_fetch(
         &manager,
-        vec![test_cloud_only_wallet("a"), test_cloud_only_wallet("b")],
+        vec![test_cloud_only_wallet(a), test_cloud_only_wallet(b)],
     );
     manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Started);
 
     // provider confirmation replaces wallet a with c at the same count while the fetch runs
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
-        "b", "c",
-    ])));
+    list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[b, c]);
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[b, c])));
     supervisor.complete_cloud_only_fetch_request(5, Ok(stale_fetch)).await.unwrap();
 
     assert_eq!(supervisor.active_cloud_only_fetch_request, None);
     assert!(!matches!(
         manager.state.read().cloud_only(),
-        CloudOnlyState::Loaded { wallets } if wallets.iter().any(|wallet| wallet.record_id == "a")
+        CloudOnlyState::Loaded { wallets } if wallets.iter().any(|wallet| wallet.record_id == a)
     ));
-    wait_for_cloud_only_refetch(&manager).await;
+    wait_for_cloud_only_rows(&manager, &[b, c], &[a]).await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -3780,13 +3803,14 @@ async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 2);
-    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
-        "a", "b",
-    ])));
+    let [a, b, c] = upload_distinct_test_wallet_backups(&manager);
+    let [a, b, c] = [a.as_str(), b.as_str(), c.as_str()];
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[a, b])));
     manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
-        test_cloud_only_wallet("a"),
-        test_cloud_only_wallet("b"),
+        test_cloud_only_wallet(a),
+        test_cloud_only_wallet(b),
     ]));
+    list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[b, c]);
 
     // a background report carries no listing, so the loaded rows cannot be matched and reset
     manager.apply_verification_effect(CloudBackupVerificationEffect {
@@ -3795,5 +3819,5 @@ async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
     });
     assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched);
 
-    wait_for_cloud_only_refetch(&manager).await;
+    wait_for_cloud_only_rows(&manager, &[b, c], &[a]).await;
 }
