@@ -43,7 +43,7 @@ use crate::manager::cloud_backup_manager::verify::{
     CloudBackupUploadedDeepVerificationAutoSync, CloudBackupUploadedPasskeyWrapperRepair,
 };
 use crate::manager::cloud_backup_manager::wallets::{
-    UnpersistedPrfKey, WalletRestoreOutcome, delay_before_new_passkey_auth,
+    CloudOnlyRestoreOutcome, UnpersistedPrfKey, delay_before_new_passkey_auth,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_DISABLE_ERROR_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,

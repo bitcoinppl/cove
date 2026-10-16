@@ -32,6 +32,26 @@ pub(crate) enum WalletIdentityKey {
     },
 }
 
+/// What a backup can recover a wallet from
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BackupRecoveryMaterial {
+    /// A seed or extended private key that can sign
+    Secret,
+    /// Public keys only, which can watch but not sign
+    PublicOnly,
+}
+
+/// How much of a backup's recovery material the local wallets already hold
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LocalWalletCoverage {
+    /// A local wallet holds everything the backup can recover, so the backup is an extra copy
+    Covered,
+    /// A local wallet matches the backup's identity but lacks the secret only the backup holds
+    SecretMissing,
+    /// No local wallet matches the backup
+    Absent,
+}
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ExistingWalletIdentitySet {
     public_identities: HashSet<(PublicWalletIdentity, Network, WalletMode)>,
@@ -85,6 +105,47 @@ impl ExistingWalletIdentitySet {
                 self.wallet_ids.contains(&(id.clone(), *network, *mode))
             }
         }
+    }
+
+    /// Whether a local wallet already holds the recovery material of a backup with this key
+    ///
+    /// Stricter than `contains` for secret backups: a watch-only or cold wallet with the same
+    /// fingerprint cannot sign, so only a local hot wallet with that master fingerprint covers
+    /// the backup's secret
+    pub(crate) fn coverage(
+        &self,
+        key: &WalletIdentityKey,
+        material: BackupRecoveryMaterial,
+    ) -> LocalWalletCoverage {
+        let holds_identity = self.contains(key);
+
+        match material {
+            BackupRecoveryMaterial::PublicOnly if holds_identity => LocalWalletCoverage::Covered,
+            BackupRecoveryMaterial::Secret if self.holds_secret_for(key) => {
+                LocalWalletCoverage::Covered
+            }
+            BackupRecoveryMaterial::Secret if holds_identity => LocalWalletCoverage::SecretMissing,
+            BackupRecoveryMaterial::PublicOnly | BackupRecoveryMaterial::Secret => {
+                LocalWalletCoverage::Absent
+            }
+        }
+    }
+
+    /// Whether a local hot wallet holds the master secret behind this key's fingerprint
+    fn holds_secret_for(&self, key: &WalletIdentityKey) -> bool {
+        let (fingerprint, network, mode) = match key {
+            WalletIdentityKey::PublicIdentity { fingerprint, network, mode, .. } => {
+                let Some(fingerprint) = fingerprint else { return false };
+                (*fingerprint, *network, *mode)
+            }
+            WalletIdentityKey::Fingerprint { fingerprint, network, mode }
+            | WalletIdentityKey::HotFingerprint { fingerprint, network, mode } => {
+                (*fingerprint, *network, *mode)
+            }
+            WalletIdentityKey::WalletId { .. } => return false,
+        };
+
+        self.hot_fingerprints.contains(&(fingerprint, network, mode))
     }
 
     pub(crate) fn insert(&mut self, key: WalletIdentityKey) {

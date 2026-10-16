@@ -7,7 +7,9 @@ pub(crate) use backup::{fallback_identity_key_for_backup, identity_key_for_backu
 pub(crate) use existing::{
     collect_existing_wallet_identities, existing_public_wallet_by_identity_strict,
 };
-pub(crate) use identity_set::{ExistingWalletIdentitySet, WalletIdentityKey};
+pub(crate) use identity_set::{
+    BackupRecoveryMaterial, ExistingWalletIdentitySet, LocalWalletCoverage, WalletIdentityKey,
+};
 pub(crate) use public::{PublicWalletIdentity, PublicWalletIdentityError};
 
 #[cfg(test)]
