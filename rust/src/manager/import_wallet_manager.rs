@@ -4,7 +4,6 @@ use cove_device::keychain::WalletSecret;
 use cove_util::result_ext::ResultExt as _;
 
 use crate::{
-    app::reconcile::{Update, Updater},
     database::{self, Database},
     keychain::{Keychain, KeychainError},
     manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
@@ -12,13 +11,11 @@ use crate::{
     wallet::{
         Wallet,
         fingerprint::Fingerprint,
-        metadata::{WalletId, WalletMetadata, WalletMode, WalletType},
+        metadata::{WalletId, WalletMetadata, WalletMode},
+        secret_upgrade::{ExistingWalletSecretUpgrade, SecretUpgradeError, SecretUpgradeSource},
     },
-    wallet_identity::{PublicWalletIdentity, PublicWalletIdentityError},
     wallet_secret::WalletSecretExt as _,
 };
-
-use tracing::{info, warn};
 
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustImportWalletManager;
@@ -59,9 +56,17 @@ pub enum ImportWalletError {
 
 pub type Error = ImportWalletError;
 
-impl From<PublicWalletIdentityError> for ImportWalletError {
-    fn from(error: PublicWalletIdentityError) -> Self {
-        Self::WalletIdentity(error.to_string())
+impl From<SecretUpgradeError> for ImportWalletError {
+    fn from(error: SecretUpgradeError) -> Self {
+        match error {
+            SecretUpgradeError::AlreadyHoldsSecret(id) => Self::WalletAlreadyExists(id),
+            SecretUpgradeError::IdentityCollision => Self::WalletIdentityCollision,
+            SecretUpgradeError::Identity(error) => Self::WalletIdentity(error),
+            SecretUpgradeError::Keychain(error) => Self::Keychain(error),
+            SecretUpgradeError::Database(error) => Self::Database(error),
+            SecretUpgradeError::Lifecycle(error) => Self::WalletImportError(error),
+            SecretUpgradeError::Rollback(error) => Self::UpgradeRollback(error),
+        }
     }
 }
 
@@ -79,67 +84,6 @@ impl ImportedWalletDefaultName {
                 format!("KeyTeleport {}", fingerprint.as_uppercase())
             }
         }
-    }
-}
-
-#[derive(Clone, Copy)]
-enum UpgradeSecretState {
-    Created,
-    Preexisting,
-}
-
-impl UpgradeSecretState {
-    fn rollback(self, keychain: &Keychain, id: &WalletId) -> Result<(), KeychainError> {
-        match self {
-            Self::Created if !keychain.delete_wallet_secret(id) => Err(KeychainError::Delete),
-            Self::Created | Self::Preexisting => Ok(()),
-        }
-    }
-}
-
-struct ExistingWalletUpgradeRollback<'a> {
-    database: &'a Database,
-    keychain: &'a Keychain,
-    id: &'a WalletId,
-    secret: UpgradeSecretState,
-    previous_selected_wallet: Option<WalletId>,
-}
-
-impl ExistingWalletUpgradeRollback<'_> {
-    fn after_selection_failure(&self, cause: &database::Error) -> Result<(), Error> {
-        if self.secret.rollback(self.keychain, self.id).is_ok() {
-            return Ok(());
-        }
-
-        Err(ImportWalletError::UpgradeRollback(format!(
-            "database update: {cause}; secret rollback: {}",
-            KeychainError::Delete
-        )))
-    }
-
-    fn after_metadata_failure(&self, cause: &database::Error) -> Result<(), Error> {
-        let selection_rollback = match &self.previous_selected_wallet {
-            Some(previous_id) => self.database.global_config.select_wallet(previous_id.clone()),
-            None => self.database.global_config.clear_selected_wallet(),
-        };
-
-        let secret_rollback = self.secret.rollback(self.keychain, self.id);
-
-        if selection_rollback.is_ok() && secret_rollback.is_ok() {
-            return Ok(());
-        }
-
-        let mut message = format!("metadata update: {cause}");
-
-        if let Err(error) = selection_rollback {
-            message.push_str(&format!("; selection rollback: {error}"));
-        }
-
-        if let Err(error) = secret_rollback {
-            message.push_str(&format!("; secret rollback: {error}"));
-        }
-
-        Err(ImportWalletError::UpgradeRollback(message))
     }
 }
 
@@ -209,15 +153,15 @@ fn import_wallet_secret_with_default_name(
     let database = Database::global();
     let keychain = Keychain::global();
 
-    let existing_wallet =
-        existing_wallet_for_secret(&database, keychain, &secret, network, mode, fingerprint)?;
+    let upgrade = ExistingWalletSecretUpgrade::find(&database, keychain, &secret, network, mode)?;
+    let Some(upgrade) = upgrade else {
+        return create_new_wallet(secret, network, mode, fingerprint, default_name, &database);
+    };
 
-    match existing_wallet {
-        Some(metadata) => {
-            upgrade_existing_wallet(secret, network, fingerprint, metadata, &database, keychain)
-        }
-        None => create_new_wallet(secret, network, mode, fingerprint, default_name, &database),
-    }
+    let metadata = upgrade.apply(&database, keychain, SecretUpgradeSource::Import)?;
+    CLOUD_BACKUP_MANAGER.handle_wallet_backup_change_and_reverify(metadata.id.clone());
+
+    Ok(metadata)
 }
 
 fn create_new_wallet(
@@ -258,164 +202,6 @@ fn create_new_wallet(
     Ok(metadata)
 }
 
-fn upgrade_existing_wallet(
-    secret: WalletSecret,
-    network: Network,
-    fingerprint: Fingerprint,
-    mut metadata: WalletMetadata,
-    database: &Database,
-    keychain: &Keychain,
-) -> Result<WalletMetadata, Error> {
-    let id = metadata.id.clone();
-    let _persistence = crate::wallet_lifecycle::WalletLifecycleCoordinator::global()
-        .begin_persistence_operation(id.clone())
-        .map_err_str(ImportWalletError::WalletImportError)?;
-    let existing_secret = match keychain.get_wallet_secret(&id) {
-        Ok(secret) => secret,
-        Err(error) => {
-            warn!("failed to read wallet secret for existing wallet {id}: {error}");
-
-            None
-        }
-    };
-
-    // hot wallets with private key already in keychain, don't do anything else
-    if metadata.wallet_type == WalletType::Hot && existing_secret.is_some() {
-        warn!("attempted to import a secret for existing hot wallet {id}, showing duplicate alert");
-
-        return Err(ImportWalletError::WalletAlreadyExists(id));
-    }
-
-    info!("adding private key material to existing wallet {id}");
-
-    let previous_selected_wallet = database.global_config.selected_wallet();
-    let secret = match existing_secret {
-        Some(existing_secret) => {
-            let existing_fingerprint: Fingerprint =
-                existing_secret.xpub(network).fingerprint().into();
-            if existing_fingerprint != fingerprint {
-                return Err(ImportWalletError::WalletIdentity(format!(
-                    "stored secret for wallet {id} does not match the incoming fingerprint"
-                )));
-            }
-
-            info!("keeping existing private key material for wallet {id}");
-
-            UpgradeSecretState::Preexisting
-        }
-        None => {
-            keychain.save_wallet_secret(&id, secret).map_err(|error| match error {
-                KeychainError::WalletSecretExists => {
-                    warn!(
-                        "wallet {id} has a stored secret that is present but unreadable, showing duplicate alert"
-                    );
-                    ImportWalletError::WalletAlreadyExists(id.clone())
-                }
-                error => error.into(),
-            })?;
-
-            UpgradeSecretState::Created
-        }
-    };
-
-    let rollback = ExistingWalletUpgradeRollback {
-        database,
-        keychain,
-        id: &id,
-        secret,
-        previous_selected_wallet,
-    };
-
-    if let Err(error) = database.global_config.select_wallet(id.clone()) {
-        rollback.after_selection_failure(&error)?;
-
-        return Err(error.into());
-    }
-
-    // private key material means this wallet can now sign locally
-    metadata.wallet_type = WalletType::Hot;
-    metadata.hardware_metadata = None;
-    metadata.verified = true;
-
-    // commit metadata last so a database failure leaves the wallet non-hot and
-    // requires rolling back only the selection and newly created secret
-    metadata = match database.wallets.update_wallet_metadata(metadata) {
-        Ok(metadata) => metadata,
-        Err(error) => {
-            rollback.after_metadata_failure(&error)?;
-
-            return Err(error.into());
-        }
-    };
-
-    Updater::send_update(Update::ClearCachedWalletManager(id));
-    CLOUD_BACKUP_MANAGER.handle_wallet_backup_change_and_reverify(metadata.id.clone());
-
-    Ok(metadata)
-}
-
-fn existing_wallet_for_secret(
-    database: &Database,
-    keychain: &Keychain,
-    secret: &WalletSecret,
-    network: Network,
-    mode: WalletMode,
-    fingerprint: Fingerprint,
-) -> Result<Option<WalletMetadata>, Error> {
-    let same_fingerprint_wallets = database
-        .wallets
-        .get_all(network, mode)?
-        .into_iter()
-        .filter(|metadata| metadata.matches_fingerprint(fingerprint))
-        .collect::<Vec<_>>();
-    if same_fingerprint_wallets.is_empty() {
-        return Ok(None);
-    }
-
-    let mut exact_matches = Vec::new();
-    let mut degraded_matches = Vec::new();
-
-    for metadata in same_fingerprint_wallets {
-        let incoming_descriptors = secret.clone().into_descriptors(network, metadata.address_type);
-        let incoming_identity = PublicWalletIdentity::from_descriptors(&incoming_descriptors);
-        let Some(existing_identity) =
-            PublicWalletIdentity::from_existing_wallet(&metadata, keychain)?
-        else {
-            degraded_matches.push((metadata, incoming_identity.redacted_hash()));
-            continue;
-        };
-
-        if existing_identity != incoming_identity {
-            continue;
-        }
-
-        exact_matches.push(metadata);
-    }
-
-    if exact_matches.len() > 1 {
-        return Err(ImportWalletError::WalletIdentityCollision);
-    }
-
-    if let Some(exact_match) = exact_matches.pop() {
-        return Ok(Some(exact_match));
-    }
-
-    if degraded_matches.len() > 1 {
-        return Err(ImportWalletError::WalletIdentityCollision);
-    }
-
-    let Some((degraded_match, incoming_identity_hash)) = degraded_matches.pop() else {
-        return Ok(None);
-    };
-
-    let wallet_id = &degraded_match.id;
-    warn!(
-        "same-fingerprint wallet missing public identity wallet_id={wallet_id} incoming_identity_hash={incoming_identity_hash}, falling back to fingerprint match"
-    );
-
-    Ok(Some(degraded_match))
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
@@ -424,7 +210,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::wallet::WalletAddressType;
+    use crate::wallet::{WalletAddressType, metadata::WalletType};
     use bdk_wallet::bitcoin::bip32::Xpriv;
     use cove_cspp::CsppStore as _;
     use cove_device::keychain::WalletXprv;
@@ -720,69 +506,6 @@ mod tests {
         assert_eq!(upgraded.id, existing.id);
         assert_eq!(upgraded.wallet_type, WalletType::Hot);
         assert_eq!(Keychain::global().get_wallet_secret(&existing.id).unwrap(), Some(expected));
-    }
-
-    #[test]
-    fn failed_existing_wallet_upgrade_only_deletes_a_created_secret() {
-        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
-        init_globals();
-
-        let database = Database::global();
-        let keychain = Keychain::global();
-        let original_selected_wallet = database.global_config.selected_wallet();
-        let previous_selected_wallet = WalletId::new();
-        let created_secret_wallet = WalletId::new();
-        let preexisting_secret_wallet = WalletId::new();
-        let preexisting_secret = xpriv_secret(36);
-        let simulated_failure = database::Error::DatabaseAccess("simulated failure".to_string());
-        database.global_config.select_wallet(previous_selected_wallet.clone()).unwrap();
-
-        keychain.save_wallet_secret(&created_secret_wallet, xpriv_secret(37)).unwrap();
-        database.global_config.select_wallet(created_secret_wallet.clone()).unwrap();
-
-        ExistingWalletUpgradeRollback {
-            database: database.as_ref(),
-            keychain,
-            id: &created_secret_wallet,
-            secret: UpgradeSecretState::Created,
-            previous_selected_wallet: Some(previous_selected_wallet.clone()),
-        }
-        .after_metadata_failure(&simulated_failure)
-        .unwrap();
-
-        assert_eq!(
-            database.global_config.selected_wallet(),
-            Some(previous_selected_wallet.clone())
-        );
-        assert!(keychain.get_wallet_secret(&created_secret_wallet).unwrap().is_none());
-
-        keychain
-            .save_wallet_secret(&preexisting_secret_wallet, preexisting_secret.clone())
-            .unwrap();
-        database.global_config.select_wallet(preexisting_secret_wallet.clone()).unwrap();
-
-        ExistingWalletUpgradeRollback {
-            database: database.as_ref(),
-            keychain,
-            id: &preexisting_secret_wallet,
-            secret: UpgradeSecretState::Preexisting,
-            previous_selected_wallet: Some(previous_selected_wallet.clone()),
-        }
-        .after_metadata_failure(&simulated_failure)
-        .unwrap();
-
-        assert_eq!(database.global_config.selected_wallet(), Some(previous_selected_wallet));
-        assert_eq!(
-            keychain.get_wallet_secret(&preexisting_secret_wallet).unwrap(),
-            Some(preexisting_secret)
-        );
-
-        match original_selected_wallet {
-            Some(id) => database.global_config.select_wallet(id).unwrap(),
-            None => database.global_config.clear_selected_wallet().unwrap(),
-        }
-        assert!(keychain.delete_wallet_items(&created_secret_wallet));
-        assert!(keychain.delete_wallet_items(&preexisting_secret_wallet));
     }
 
     #[test]

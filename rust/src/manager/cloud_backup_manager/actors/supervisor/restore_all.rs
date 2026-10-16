@@ -193,7 +193,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         completed: u32,
         wallet: CloudBackupWalletItem,
-        result: Result<WalletRestoreOutcome, CloudBackupError>,
+        result: Result<CloudOnlyRestoreOutcome, CloudBackupError>,
     ) -> ActorResult<bool> {
         if self.active_operation.restore_all(claim).is_none() {
             return Produces::ok(false);
@@ -204,7 +204,7 @@ impl CloudBackupSupervisor {
         };
 
         match result {
-            Ok(WalletRestoreOutcome::Restored { labels_warning }) => {
+            Ok(CloudOnlyRestoreOutcome::Restored { labels_warning }) => {
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::Restored {
                         record_id: wallet.record_id,
@@ -213,9 +213,18 @@ impl CloudBackupSupervisor {
                 );
                 manager.refresh_sync_health();
             }
-            Ok(WalletRestoreOutcome::SkippedDuplicate) => {
+            Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id }) => {
+                manager.handle_restored_secret_added(wallet_id);
                 manager.apply_cloud_only_wallet_outcome(
-                    CloudBackupCloudOnlyWalletOutcome::SkippedDuplicate {
+                    CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
+                        record_id: wallet.record_id,
+                    },
+                );
+                manager.refresh_sync_health();
+            }
+            Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice) => {
+                manager.apply_cloud_only_wallet_outcome(
+                    CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                         record_id: wallet.record_id,
                     },
                 );

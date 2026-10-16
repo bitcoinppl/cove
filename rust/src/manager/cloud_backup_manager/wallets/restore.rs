@@ -3,7 +3,7 @@ use std::str::FromStr as _;
 use cove_cspp::backup_data::{EncryptedWalletBackup, WalletBackupVersion, WalletEntry};
 use cove_cspp::wallet_crypto;
 use cove_device::cloud_storage::{CloudStorageClient, CloudStorageError};
-use cove_device::keychain::WalletXprv;
+use cove_device::keychain::{Keychain, WalletSecret as KeychainWalletSecret, WalletXprv};
 use cove_util::ResultExt as _;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
@@ -14,11 +14,16 @@ use crate::backup::import::{
     CloudRestoreError, LabelRestoreBehavior, LabelRestoreWarning, restore_wallet_labels,
 };
 use crate::backup::model::{WalletBackup, WalletSecret};
+use crate::database::Database;
 use crate::manager::cloud_backup_manager::error::CloudBackupInternalError;
 use crate::manager::cloud_backup_manager::{CloudBackupError, LocalWalletSecret};
+use crate::wallet::metadata::WalletId;
+use crate::wallet::secret_upgrade::{
+    ExistingWalletSecretUpgrade, SecretUpgradeError, SecretUpgradeSource,
+};
 use crate::wallet_identity::{
-    ExistingWalletIdentitySet, WalletIdentityKey, fallback_identity_key_for_backup,
-    identity_key_for_backup,
+    BackupRecoveryMaterial, ExistingWalletIdentitySet, LocalWalletCoverage, WalletIdentityKey,
+    fallback_identity_key_for_backup, identity_key_for_backup,
 };
 
 pub(crate) enum WalletBackupLookup<T> {
@@ -175,18 +180,20 @@ pub(crate) enum WalletRestoreOutcome {
     SkippedDuplicate,
 }
 
+/// What restoring one cloud-only record did to the local wallets
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CloudOnlyRestoreOutcome {
+    /// The backup was restored as a new local wallet
+    Restored { labels_warning: Option<LabelRestoreWarning> },
+    /// A local wallet with the backup's identity now holds the backup's secret as well
+    SecretAdded { wallet_id: WalletId },
+    /// A local wallet already holds everything the backup can recover
+    AlreadyOnDevice,
+}
+
 impl WalletRestoreSession {
     pub(crate) fn new(existing_identities: ExistingWalletIdentitySet) -> Self {
         Self(existing_identities)
-    }
-
-    pub(crate) async fn restore_record(
-        &mut self,
-        reader: &WalletBackupReader,
-        record_id: &str,
-    ) -> Result<WalletRestoreOutcome, CloudBackupError> {
-        let wallet = reader.download(record_id).await?;
-        self.restore_downloaded(&wallet)
     }
 
     pub(crate) fn restore_downloaded(
@@ -209,18 +216,45 @@ impl WalletRestoreSession {
             return Ok(WalletRestoreOutcome::SkippedDuplicate);
         }
 
-        let outcome = wallet.restore()?;
+        let labels_warning = wallet.restore()?;
         self.0.insert(duplicate_key);
 
-        Ok(outcome)
+        Ok(WalletRestoreOutcome::Restored { labels_warning })
     }
 
-    /// Whether the wallet's identity already exists locally, without claiming it for a restore
-    pub(crate) fn is_duplicate(&self, wallet: &DownloadedWalletBackup) -> bool {
-        match wallet.duplicate_key() {
-            Ok(duplicate_key) => self.0.contains(&duplicate_key),
-            Err(_) => self.0.contains(&wallet.fallback_duplicate_key()),
+    /// Restores a cloud-only record, adding its secret to a matching local wallet that lacks it
+    ///
+    /// A local watch-only or cold wallet shares a secret backup's identity without holding its
+    /// secret, so skipping the backup as a duplicate would leave the only copy of that secret
+    /// in the cloud
+    pub(crate) fn restore_cloud_only(
+        &mut self,
+        wallet: &DownloadedWalletBackup,
+    ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
+        let (identity_key, identity_error) = wallet.identity_key();
+
+        match self.0.coverage(&identity_key, wallet.recovery_material()) {
+            LocalWalletCoverage::Covered => {
+                info!("Cloud-only wallet is already on this device");
+                return Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice);
+            }
+            LocalWalletCoverage::SecretMissing => {
+                if let Some(outcome) = wallet.add_secret_to_local_wallet()? {
+                    self.0.insert(identity_key);
+                    return Ok(outcome);
+                }
+            }
+            LocalWalletCoverage::Absent => {}
         }
+
+        if let Some(error) = identity_error {
+            return Err(error);
+        }
+
+        let labels_warning = wallet.restore()?;
+        self.0.insert(identity_key);
+
+        Ok(CloudOnlyRestoreOutcome::Restored { labels_warning })
     }
 
     fn should_skip_duplicate_wallet(&self, duplicate_key: &WalletIdentityKey) -> bool {
@@ -246,6 +280,103 @@ fn cloud_restore_error(context: &str, error: CloudRestoreError) -> CloudBackupEr
 }
 
 impl DownloadedWalletBackup {
+    /// How much of this backup the local wallets in `identities` already hold
+    pub(crate) fn local_coverage(
+        &self,
+        identities: &ExistingWalletIdentitySet,
+    ) -> LocalWalletCoverage {
+        let (identity_key, _) = self.identity_key();
+
+        identities.coverage(&identity_key, self.recovery_material())
+    }
+
+    /// The key a restore matches against local wallets, plus the error that forced the fallback
+    /// key when the backup's own public identity could not be read
+    fn identity_key(&self) -> (WalletIdentityKey, Option<CloudBackupError>) {
+        match self.duplicate_key() {
+            Ok(identity_key) => (identity_key, None),
+            Err(error) => (self.fallback_duplicate_key(), Some(error)),
+        }
+    }
+
+    fn recovery_material(&self) -> BackupRecoveryMaterial {
+        match convert_cloud_secret(&self.entry.secret) {
+            LocalWalletSecret::Mnemonic(_) | LocalWalletSecret::Xprv(_) => {
+                BackupRecoveryMaterial::Secret
+            }
+            _ => BackupRecoveryMaterial::PublicOnly,
+        }
+    }
+
+    /// The backup's signing secret, or `None` for a public-only backup
+    fn signing_secret(&self) -> Result<Option<KeychainWalletSecret>, CloudBackupError> {
+        let secret = match &convert_cloud_secret(&self.entry.secret) {
+            LocalWalletSecret::Mnemonic(words) => {
+                let mnemonic = bip39::Mnemonic::from_str(words).map_err(|source| {
+                    CloudBackupError::internal_context("invalid mnemonic", source)
+                })?;
+
+                KeychainWalletSecret::Mnemonic(mnemonic)
+            }
+            LocalWalletSecret::Xprv(value) => {
+                let xpriv = WalletXprv::parse(value.as_str()).map_err_prefix(
+                    "invalid extended private key",
+                    CloudBackupInternalError::from,
+                )?;
+
+                KeychainWalletSecret::Xpriv(xpriv)
+            }
+            _ => return Ok(None),
+        };
+
+        Ok(Some(secret))
+    }
+
+    /// Adds this backup's secret to the local wallet with its exact public identity
+    ///
+    /// Returns `None` when no local wallet has that identity, such as another account under
+    /// the same fingerprint, so the backup restores as a new wallet
+    ///
+    /// The upgrade writes only to the existing wallet and rolls itself back on failure, so it
+    /// needs no restore journal for the backup's own wallet ID
+    fn add_secret_to_local_wallet(
+        &self,
+    ) -> Result<Option<CloudOnlyRestoreOutcome>, CloudBackupError> {
+        let Some(secret) = self.signing_secret()? else {
+            return Ok(None);
+        };
+
+        let database = Database::global();
+        let keychain = Keychain::global();
+        let metadata = &self.metadata;
+        let upgrade = ExistingWalletSecretUpgrade::find(
+            &database,
+            keychain,
+            &secret,
+            metadata.network,
+            metadata.wallet_mode,
+        )
+        .map_err(|source| CloudBackupError::internal_context("find wallet for secret", source))?;
+
+        let Some(upgrade) = upgrade else {
+            return Ok(None);
+        };
+
+        let source = SecretUpgradeSource::CloudBackup { verified: metadata.verified };
+        match upgrade.apply(&database, keychain, source) {
+            Ok(upgraded) => {
+                Ok(Some(CloudOnlyRestoreOutcome::SecretAdded { wallet_id: upgraded.id }))
+            }
+            // the local wallet gained this secret after coverage was read
+            Err(SecretUpgradeError::AlreadyHoldsSecret(_)) => {
+                Ok(Some(CloudOnlyRestoreOutcome::AlreadyOnDevice))
+            }
+            Err(error) => {
+                Err(CloudBackupError::internal_context("add secret to local wallet", error))
+            }
+        }
+    }
+
     fn duplicate_key(&self) -> Result<WalletIdentityKey, CloudBackupError> {
         let backup_model = WalletBackup {
             metadata: self.entry.metadata.clone(),
@@ -264,7 +395,8 @@ impl DownloadedWalletBackup {
         fallback_identity_key_for_backup(&self.metadata)
     }
 
-    fn restore(&self) -> Result<WalletRestoreOutcome, CloudBackupError> {
+    /// Restores the backup as a new local wallet, returning any label import warning
+    fn restore(&self) -> Result<Option<LabelRestoreWarning>, CloudBackupError> {
         let backup_model = WalletBackup {
             metadata: self.entry.metadata.clone(),
             secret: convert_cloud_secret(&self.entry.secret),
@@ -273,26 +405,17 @@ impl DownloadedWalletBackup {
             labels_jsonl: decode_cloud_labels_jsonl(&self.entry)?,
         };
 
-        match &backup_model.secret {
-            LocalWalletSecret::Mnemonic(words) => {
-                let mnemonic = bip39::Mnemonic::from_str(words).map_err(|source| {
-                    CloudBackupError::internal_context("invalid mnemonic", source)
-                })?;
-
+        match self.signing_secret()? {
+            Some(KeychainWalletSecret::Mnemonic(mnemonic)) => {
                 crate::backup::import::restore_cloud_mnemonic_wallet(&self.metadata, mnemonic)
                     .map_err(|error| cloud_restore_error("restore mnemonic wallet", error))?;
             }
-            LocalWalletSecret::Xprv(value) => {
-                let xpriv = WalletXprv::parse(value.as_str()).map_err_prefix(
-                    "invalid extended private key",
-                    CloudBackupInternalError::from,
-                )?;
-
+            Some(KeychainWalletSecret::Xpriv(xpriv)) => {
                 crate::backup::import::restore_cloud_xpriv_wallet(&self.metadata, xpriv).map_err(
                     |error| cloud_restore_error("restore extended-private-key wallet", error),
                 )?;
             }
-            _ => {
+            None => {
                 crate::backup::import::restore_cloud_descriptor_wallet(
                     &self.metadata,
                     &backup_model,
@@ -311,7 +434,7 @@ impl DownloadedWalletBackup {
             warn!("Failed to restore labels for restored wallet: {}", warning.error);
         }
 
-        Ok(WalletRestoreOutcome::Restored { labels_warning: labels_outcome.warning })
+        Ok(labels_outcome.warning)
     }
 }
 

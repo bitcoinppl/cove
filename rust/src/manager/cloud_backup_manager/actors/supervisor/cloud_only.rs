@@ -192,37 +192,25 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         record_id: String,
-        result: Result<WalletRestoreOutcome, CloudBackupError>,
+        result: Result<CloudOnlyRestoreOutcome, CloudBackupError>,
     ) -> ActorResult<()> {
         let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
-        match result {
-            Ok(WalletRestoreOutcome::Restored { labels_warning }) => {
-                manager.apply_cloud_only_wallet_outcome(
-                    CloudBackupCloudOnlyWalletOutcome::Restored {
-                        record_id,
-                        warning: labels_warning.map(cloud_only_restore_warning),
-                    },
-                );
-                manager.refresh_sync_health();
-                let detail_claim = self.detail_workflow.start_operation_result();
-                self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.refresh_cloud_backup_detail().await;
-                    send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
-                });
+        let outcome = match result {
+            Ok(CloudOnlyRestoreOutcome::Restored { labels_warning }) => {
+                CloudBackupCloudOnlyWalletOutcome::Restored {
+                    record_id,
+                    warning: labels_warning.map(cloud_only_restore_warning),
+                }
             }
-            Ok(WalletRestoreOutcome::SkippedDuplicate) => {
-                manager.apply_cloud_only_wallet_outcome(
-                    CloudBackupCloudOnlyWalletOutcome::SkippedDuplicate { record_id },
-                );
-                manager.refresh_sync_health();
-                let detail_claim = self.detail_workflow.start_operation_result();
-                self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.refresh_cloud_backup_detail().await;
-                    send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
-                });
+            Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id }) => {
+                manager.handle_restored_secret_added(wallet_id);
+                CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice { record_id }
+            }
+            Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice) => {
+                CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice { record_id }
             }
             Err(error) => {
                 manager.apply_cloud_only_wallet_outcome(
@@ -233,8 +221,18 @@ impl CloudBackupSupervisor {
                 );
                 self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
+
+                return Produces::ok(());
             }
-        }
+        };
+
+        manager.apply_cloud_only_wallet_outcome(outcome);
+        manager.refresh_sync_health();
+        let detail_claim = self.detail_workflow.start_operation_result();
+        self.addr.send_fut_with(move |addr| async move {
+            let result = manager.refresh_cloud_backup_detail().await;
+            send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
+        });
 
         Produces::ok(())
     }

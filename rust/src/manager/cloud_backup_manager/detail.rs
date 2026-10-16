@@ -139,11 +139,24 @@ pub(crate) struct CloudBackupCloudOnlyOperationWarning {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CloudBackupCloudOnlyWalletOutcome {
-    Started { record_id: String },
-    Restored { record_id: String, warning: Option<CloudBackupCloudOnlyOperationWarning> },
-    SkippedDuplicate { record_id: String },
-    Deleted { record_id: String },
-    RestoreFailed { record_id: String, error: String },
+    Started {
+        record_id: String,
+    },
+    Restored {
+        record_id: String,
+        warning: Option<CloudBackupCloudOnlyOperationWarning>,
+    },
+    /// A local wallet holds everything the record can recover, so it stays as a deletable row
+    AlreadyOnDevice {
+        record_id: String,
+    },
+    Deleted {
+        record_id: String,
+    },
+    RestoreFailed {
+        record_id: String,
+        error: String,
+    },
     Failed(String),
 }
 
@@ -598,7 +611,7 @@ impl RustCloudBackupManager {
             CloudBackupCloudOnlyWalletOutcome::Restored { record_id, warning } => {
                 self.apply_finished_cloud_only_wallet_operation(record_id, warning);
             }
-            CloudBackupCloudOnlyWalletOutcome::SkippedDuplicate { record_id } => {
+            CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice { record_id } => {
                 self.apply_cloud_only_operation(CloudOnlyOperation::Idle);
                 self.apply_cloud_only_already_on_device(&record_id);
             }

@@ -14,12 +14,13 @@ use super::{
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::actors::restore::lookup_wallet_backup;
 use crate::manager::cloud_backup_manager::wallets::{
-    WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
+    CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReader, WalletRestoreSession,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupStore, CloudBackupWalletItem,
     CloudBackupWalletStatus, CloudOnlyFetch, RustCloudBackupManager, is_provider_wide_interruption,
 };
+use crate::wallet_identity::LocalWalletCoverage;
 
 pub(crate) struct CloudBackupPreparedCloudWalletDelete {
     pub(crate) cloud: CloudStorageClient,
@@ -36,14 +37,22 @@ impl CloudBackupPreparedWalletRestore {
     pub(crate) async fn restore_record(
         &mut self,
         record_id: &str,
-    ) -> Result<WalletRestoreOutcome, CloudBackupError> {
-        let outcome =
-            self.session.restore_record(&self.reader, record_id).await.map_err(|error| {
-                blocking_cloud_error(BlockingCloudStep::RestoreCloudWallet, error)
-            })?;
+    ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
+        let outcome = self
+            .restore_downloaded_record(record_id)
+            .await
+            .map_err(|error| blocking_cloud_error(BlockingCloudStep::RestoreCloudWallet, error))?;
 
         info!("Restored cloud wallet");
         Ok(outcome)
+    }
+
+    async fn restore_downloaded_record(
+        &mut self,
+        record_id: &str,
+    ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
+        let wallet = self.reader.download(record_id).await?;
+        self.session.restore_cloud_only(&wallet)
     }
 }
 
@@ -65,7 +74,7 @@ impl CloudBackupPreparedRestoreAll {
     pub(crate) async fn restore_record(
         &mut self,
         record_id: &str,
-    ) -> Result<WalletRestoreOutcome, CloudBackupError> {
+    ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
         if !self.ordered_queue.iter().any(|wallet| wallet.record_id == record_id) {
             return Err(CloudBackupError::Internal(
                 "restore all record is not in the prepared queue".into(),
@@ -150,13 +159,12 @@ impl RustCloudBackupManager {
             Zeroizing::new(master_key.critical_data_key()),
         );
 
-        // collected once per fetch, so a record already present under another record ID shows as
-        // already on this device instead of restorable
+        // collected once per fetch, so a record whose recovery material a local wallet already
+        // holds under another record ID shows as already on this device instead of restorable
         let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
             .map_err(|source| {
                 CloudBackupError::internal_context("collect wallet identities", source)
             })?;
-        let identity_session = WalletRestoreSession::new(existing_identities);
 
         let mut items = Vec::new();
         let mut unresolved_record_ids = Vec::new();
@@ -202,10 +210,13 @@ impl RustCloudBackupManager {
                 }
             };
 
-            let sync_status = if identity_session.is_duplicate(&wallet) {
-                CloudBackupWalletStatus::AlreadyOnDevice
-            } else {
-                CloudBackupWalletStatus::DeletedFromDevice
+            // a secret backup that a local public wallet only matches stays restorable, since
+            // restoring it adds the secret to that wallet and deleting it could lose the secret
+            let sync_status = match wallet.local_coverage(&existing_identities) {
+                LocalWalletCoverage::Covered => CloudBackupWalletStatus::AlreadyOnDevice,
+                LocalWalletCoverage::SecretMissing | LocalWalletCoverage::Absent => {
+                    CloudBackupWalletStatus::DeletedFromDevice
+                }
             };
 
             let metadata = wallet.metadata;
@@ -233,7 +244,7 @@ impl RustCloudBackupManager {
     pub(crate) async fn do_restore_cloud_wallet(
         &self,
         record_id: &str,
-    ) -> Result<WalletRestoreOutcome, CloudBackupError> {
+    ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
         let mut prepared = self.prepare_active_namespace_wallet_restore().await?;
         prepared.restore_record(record_id).await
     }

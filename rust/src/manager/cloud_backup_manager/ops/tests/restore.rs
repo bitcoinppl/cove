@@ -1342,7 +1342,7 @@ async fn restore_cloud_wallet_returns_label_warning_without_failing_restore() {
 
     let outcome = manager.do_restore_cloud_wallet(&record_id).await.unwrap();
 
-    let WalletRestoreOutcome::Restored { labels_warning } = outcome else {
+    let CloudOnlyRestoreOutcome::Restored { labels_warning } = outcome else {
         panic!("expected restored wallet");
     };
 
@@ -1499,10 +1499,10 @@ async fn restore_all_preparation_reuses_one_session_and_authentication_for_order
     assert_eq!(globals.cloud.list_wallet_files_attempt_count_for_namespace(&namespace), 1);
 
     let first_outcome = prepared.restore_record(&first_record_id).await.unwrap();
-    assert_eq!(first_outcome, WalletRestoreOutcome::Restored { labels_warning: None });
+    assert_eq!(first_outcome, CloudOnlyRestoreOutcome::Restored { labels_warning: None });
 
     let second_outcome = prepared.restore_record(&second_record_id).await.unwrap();
-    let WalletRestoreOutcome::Restored { labels_warning } = second_outcome else {
+    let CloudOnlyRestoreOutcome::Restored { labels_warning } = second_outcome else {
         panic!("expected second wallet to restore");
     };
 
@@ -1510,7 +1510,7 @@ async fn restore_all_preparation_reuses_one_session_and_authentication_for_order
     assert_eq!(warning.wallet_name, second_wallet.name);
 
     let duplicate_outcome = prepared.restore_record(&second_record_id).await.unwrap();
-    assert_eq!(duplicate_outcome, WalletRestoreOutcome::SkippedDuplicate);
+    assert_eq!(duplicate_outcome, CloudOnlyRestoreOutcome::AlreadyOnDevice);
     assert_eq!(globals.passkey.authenticate_count(), 1);
     assert_eq!(globals.passkey.discover_count(), 0);
     assert!(
