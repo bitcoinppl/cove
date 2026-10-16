@@ -26523,7 +26523,10 @@ public enum CloudOnlyState: Equatable, Hashable {
 
     case notFetched
     case loading
-    case loaded(wallets: [CloudBackupWalletItem]
+    case loaded(wallets: [CloudBackupWalletItem],
+        /**
+         * Some listed backups could not be read, so `wallets` may be missing cloud-only wallets
+         */incomplete: Bool
     )
     case failed(error: String
     )
@@ -26552,7 +26555,7 @@ public struct FfiConverterTypeCloudOnlyState: FfiConverterRustBuffer {
 
         case 2: return .loading
 
-        case 3: return .loaded(wallets: try FfiConverterSequenceTypeCloudBackupWalletItem.read(from: &buf)
+        case 3: return .loaded(wallets: try FfiConverterSequenceTypeCloudBackupWalletItem.read(from: &buf), incomplete: try FfiConverterBool.read(from: &buf)
         )
 
         case 4: return .failed(error: try FfiConverterString.read(from: &buf)
@@ -26574,9 +26577,10 @@ public struct FfiConverterTypeCloudOnlyState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
 
 
-        case let .loaded(wallets):
+        case let .loaded(wallets,incomplete):
             writeInt(&buf, Int32(3))
             FfiConverterSequenceTypeCloudBackupWalletItem.write(wallets, into: &buf)
+            FfiConverterBool.write(incomplete, into: &buf)
 
 
         case let .failed(error):

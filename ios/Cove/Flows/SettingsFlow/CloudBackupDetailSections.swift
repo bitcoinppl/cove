@@ -1,7 +1,8 @@
 import SwiftUI
 
 func cloudBackupVisibleCloudOnlyWallets(_ cloudOnly: CloudOnlyState) -> [CloudBackupWalletItem]? {
-    guard case let .loaded(wallets) = cloudOnly, !wallets.isEmpty else {
+    // an incomplete list shows even when empty, so its Check Again and Restore All retry stay reachable
+    guard case let .loaded(wallets, incomplete) = cloudOnly, !wallets.isEmpty || incomplete else {
         return nil
     }
 

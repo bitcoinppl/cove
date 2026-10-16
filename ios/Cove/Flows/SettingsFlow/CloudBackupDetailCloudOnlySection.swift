@@ -131,6 +131,10 @@ private struct CloudOnlySectionContent: View {
             }
         )
 
+        if case .loaded(wallets: _, incomplete: true) = manager.cloudOnly {
+            CloudOnlyIncompleteNotice(manager: manager)
+        }
+
         if case let .failed(error) = manager.cloudOnlyOperation {
             Text(error)
                 .font(.caption)
@@ -139,6 +143,21 @@ private struct CloudOnlySectionContent: View {
             Text(message)
                 .font(.caption)
                 .foregroundStyle(Color.statusWarning)
+        }
+    }
+}
+
+/// Some listed backups could not be read, so the rows above may be missing wallets
+private struct CloudOnlyIncompleteNotice: View {
+    let manager: CloudBackupManager
+
+    var body: some View {
+        Text("Some backups could not be read.")
+            .font(.caption)
+            .foregroundStyle(Color.statusWarning)
+
+        Button("Check Again") {
+            manager.dispatch(action: .refreshDetail)
         }
     }
 }

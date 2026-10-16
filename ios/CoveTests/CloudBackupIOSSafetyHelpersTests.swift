@@ -128,11 +128,11 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         ))
         XCTAssertFalse(cloudBackupHasVisibleWalletRows(
             detail: nil,
-            cloudOnly: .loaded(wallets: [wallet])
+            cloudOnly: .loaded(wallets: [wallet], incomplete: false)
         ))
         XCTAssertTrue(cloudBackupHasVisibleWalletRows(
             detail: detail,
-            cloudOnly: .loaded(wallets: [wallet])
+            cloudOnly: .loaded(wallets: [wallet], incomplete: false)
         ))
     }
 
@@ -140,9 +140,10 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.notFetched))
         XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.loading))
         XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.failed(error: "cloud inventory failed")))
-        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [])))
+        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [], incomplete: false)))
+        XCTAssertEqual(cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [], incomplete: true))?.count, 0)
         XCTAssertEqual(
-            cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [cloudBackupTestWallet]))?.count,
+            cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [cloudBackupTestWallet], incomplete: false))?.count,
             1
         )
 
@@ -174,7 +175,7 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         )
         XCTAssertNil(cloudBackupCloudOnlyFailureMessage(.notFetched))
         XCTAssertNil(cloudBackupCloudOnlyFailureMessage(.loading))
-        XCTAssertNil(cloudBackupCloudOnlyFailureMessage(.loaded(wallets: [])))
+        XCTAssertNil(cloudBackupCloudOnlyFailureMessage(.loaded(wallets: [], incomplete: false)))
         XCTAssertNil(cloudBackupOtherBackupsFailureMessage(.notChecked))
         XCTAssertNil(cloudBackupOtherBackupsFailureMessage(.checking))
         XCTAssertNil(cloudBackupOtherBackupsFailureMessage(.loaded(summary: CloudBackupOtherBackupsSummary(

@@ -98,8 +98,14 @@ pub(crate) enum RecoveryState {
 pub enum CloudOnlyState {
     NotFetched,
     Loading,
-    Loaded { wallets: Vec<CloudBackupWalletItem> },
-    Failed { error: String },
+    Loaded {
+        wallets: Vec<CloudBackupWalletItem>,
+        /// Some listed backups could not be read, so `wallets` may be missing cloud-only wallets
+        incomplete: bool,
+    },
+    Failed {
+        error: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -611,7 +617,7 @@ impl RustCloudBackupManager {
 
     pub(crate) fn clear_cloud_only_restore_failures(&self, record_ids: &[String]) {
         let mut cloud_only = self.state.read().cloud_only();
-        if let CloudOnlyState::Loaded { wallets } = &mut cloud_only {
+        if let CloudOnlyState::Loaded { wallets, .. } = &mut cloud_only {
             for wallet in wallets {
                 if record_ids.contains(&wallet.record_id) {
                     wallet.restore_failure = None;
@@ -623,7 +629,7 @@ impl RustCloudBackupManager {
 
     pub(crate) fn apply_cloud_only_restore_failure(&self, record_id: String, error: String) {
         let mut cloud_only = self.state.read().cloud_only();
-        if let CloudOnlyState::Loaded { wallets } = &mut cloud_only
+        if let CloudOnlyState::Loaded { wallets, .. } = &mut cloud_only
             && let Some(wallet) = wallets.iter_mut().find(|wallet| wallet.record_id == record_id)
         {
             wallet.restore_failure = Some(CloudBackupWalletRestoreFailure { message: error });
@@ -635,7 +641,7 @@ impl RustCloudBackupManager {
     /// record stays accounted for without being offered for restore again
     fn apply_cloud_only_already_on_device(&self, record_id: &str) {
         let mut cloud_only = self.state.read().cloud_only();
-        if let CloudOnlyState::Loaded { wallets } = &mut cloud_only
+        if let CloudOnlyState::Loaded { wallets, .. } = &mut cloud_only
             && let Some(wallet) = wallets.iter_mut().find(|wallet| wallet.record_id == record_id)
         {
             wallet.sync_status = CloudBackupWalletStatus::AlreadyOnDevice;
@@ -654,7 +660,7 @@ impl RustCloudBackupManager {
 
     /// Wallets Restore All can start with, or `None` while the cloud-only cache is not `Loaded`
     pub(crate) fn restore_all_eligible_wallets(&self) -> Option<Vec<CloudBackupWalletItem>> {
-        let CloudOnlyState::Loaded { wallets } = self.state.read().cloud_only() else {
+        let CloudOnlyState::Loaded { wallets, .. } = self.state.read().cloud_only() else {
             return None;
         };
 
@@ -668,7 +674,7 @@ impl RustCloudBackupManager {
     /// marker must stay
     pub(crate) fn restore_all_proven_eligible_wallets(&self) -> Option<Vec<CloudBackupWalletItem>> {
         let state = self.state.read();
-        let CloudOnlyState::Loaded { wallets } = state.cloud_only() else {
+        let CloudOnlyState::Loaded { wallets, .. } = state.cloud_only() else {
             return None;
         };
 
@@ -750,7 +756,7 @@ impl RustCloudBackupManager {
         }
 
         let mut cloud_only = self.state.read().cloud_only();
-        if let CloudOnlyState::Loaded { wallets } = &mut cloud_only {
+        if let CloudOnlyState::Loaded { wallets, .. } = &mut cloud_only {
             wallets.retain(|wallet| wallet.record_id != record_id);
         }
         self.apply_cloud_only_state(cloud_only);
@@ -839,7 +845,7 @@ mod tests {
 
         assert_eq!(
             manager.state.read().cloud_only(),
-            CloudOnlyState::Loaded { wallets: vec![wallet_b] }
+            CloudOnlyState::Loaded { wallets: vec![wallet_b], incomplete: false }
         );
     }
 
@@ -862,7 +868,10 @@ mod tests {
         });
         manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[])));
 
-        assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::Loaded { wallets: vec![] });
+        assert_eq!(
+            manager.state.read().cloud_only(),
+            CloudOnlyState::Loaded { wallets: vec![], incomplete: false }
+        );
     }
 
     #[test]
@@ -938,7 +947,7 @@ mod tests {
             vec![wallet.clone()],
         ));
 
-        let CloudOnlyState::Loaded { wallets } = manager.state.read().cloud_only() else {
+        let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
             panic!("expected loaded cloud-only rows");
         };
         assert_eq!(
@@ -952,7 +961,7 @@ mod tests {
             record_id: wallet.record_id,
         });
 
-        let CloudOnlyState::Loaded { wallets } = manager.state.read().cloud_only() else {
+        let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
             panic!("expected loaded cloud-only rows");
         };
         assert_eq!(wallets[0].restore_failure, None);

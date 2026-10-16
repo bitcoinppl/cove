@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -52,6 +53,7 @@ import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupWalletStatus
 import org.bitcoinppl.cove_core.CloudOnlyOperation
+import org.bitcoinppl.cove_core.CloudOnlyState
 
 internal enum class CloudBackupRestoreAllActionKind {
     START,
@@ -185,16 +187,26 @@ internal fun CloudOnlySection(
                 },
             )
 
-            WalletRowsCard(
-                wallets = wallets,
-                onWalletClick = { selectedWallet = it },
-                showChevron = false,
-                operatingRecordId = operatingRecordId,
-                rowsEnabled =
-                    operatingRecordId == null &&
-                        !manager.isRestoreAllRunning &&
-                        manager.isDetailInventoryReady,
-            )
+            if (wallets.isNotEmpty()) {
+                WalletRowsCard(
+                    wallets = wallets,
+                    onWalletClick = { selectedWallet = it },
+                    showChevron = false,
+                    operatingRecordId = operatingRecordId,
+                    rowsEnabled =
+                        operatingRecordId == null &&
+                            !manager.isRestoreAllRunning &&
+                            manager.isDetailInventoryReady,
+                )
+            }
+
+            if ((manager.cloudOnly as? CloudOnlyState.Loaded)?.incomplete == true) {
+                CloudOnlyIncompleteNotice(
+                    onCheckAgain = {
+                        manager.dispatch(CloudBackupManagerAction.RefreshDetail)
+                    },
+                )
+            }
         }
     }
 
@@ -362,6 +374,24 @@ private fun CloudBackupRestoreAllProgress(
                     Text(if (progress.cancellationRequested) "Canceling…" else "Cancel")
                 }
             }
+        }
+    }
+}
+
+// some listed backups could not be read, so the rows above may be missing wallets
+@Composable
+private fun CloudOnlyIncompleteNotice(onCheckAgain: () -> Unit) {
+    Column(
+        modifier = Modifier.padding(horizontal = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            "Some backups could not be read.",
+            style = MaterialTheme.typography.bodySmall,
+            color = cloudBackupVisualColors().warning,
+        )
+        Button(onClick = onCheckAgain) {
+            Text("Check Again")
         }
     }
 }
