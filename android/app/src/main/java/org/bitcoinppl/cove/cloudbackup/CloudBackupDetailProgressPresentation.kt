@@ -32,5 +32,8 @@ internal fun cloudBackupHasVisibleWalletRows(
     detail?.let {
         it.upToDate.isNotEmpty() ||
             it.needsSync.isNotEmpty() ||
-            (cloudOnly as? CloudOnlyState.Loaded)?.wallets?.isNotEmpty() == true
+            // an incomplete list shows Check Again even with no rows, so verification must stay inline
+            (cloudOnly as? CloudOnlyState.Loaded)?.let { loaded ->
+                loaded.incomplete || loaded.wallets.isNotEmpty()
+            } == true
     } == true

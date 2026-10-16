@@ -34,8 +34,9 @@ func cloudBackupHasVisibleWalletRows(
         return true
     }
 
-    guard case let .loaded(wallets, _) = cloudOnly else { return false }
-    return !wallets.isEmpty
+    // an incomplete list shows Check Again even with no rows, so verification must stay inline
+    guard case let .loaded(wallets, incomplete) = cloudOnly else { return false }
+    return incomplete || !wallets.isEmpty
 }
 
 struct CloudBackupDetailScreen: View {
