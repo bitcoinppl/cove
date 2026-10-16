@@ -14,7 +14,7 @@ use super::{
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::actors::restore::lookup_wallet_backup;
 use crate::manager::cloud_backup_manager::wallets::{
-    CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReader, WalletRestoreSession,
+    CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReader,
 };
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CloudBackupError, CloudBackupStore, CloudBackupWalletItem,
@@ -30,12 +30,11 @@ pub(crate) struct CloudBackupPreparedCloudWalletDelete {
 
 pub(crate) struct CloudBackupPreparedWalletRestore {
     reader: WalletBackupReader,
-    session: WalletRestoreSession,
 }
 
 impl CloudBackupPreparedWalletRestore {
     pub(crate) async fn restore_record(
-        &mut self,
+        &self,
         record_id: &str,
     ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
         let outcome = self
@@ -48,11 +47,19 @@ impl CloudBackupPreparedWalletRestore {
     }
 
     async fn restore_downloaded_record(
-        &mut self,
+        &self,
         record_id: &str,
     ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
         let wallet = self.reader.download(record_id).await?;
-        self.session.restore_cloud_only(&wallet)
+
+        // read after the download, so a local wallet deleted while it waited is not counted and
+        // a wallet this run restored earlier is
+        let local_wallets =
+            crate::wallet_identity::collect_existing_wallet_identities().map_err(|source| {
+                CloudBackupError::internal_context("collect wallet identities", source)
+            })?;
+
+        wallet.restore_cloud_only(&local_wallets)
     }
 }
 
@@ -72,7 +79,7 @@ impl CloudBackupPreparedRestoreAll {
     }
 
     pub(crate) async fn restore_record(
-        &mut self,
+        &self,
         record_id: &str,
     ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
         if !self.ordered_queue.iter().any(|wallet| wallet.record_id == record_id) {
@@ -81,7 +88,7 @@ impl CloudBackupPreparedRestoreAll {
             ));
         }
 
-        let Some(wallet_restore) = &mut self.wallet_restore else {
+        let Some(wallet_restore) = &self.wallet_restore else {
             return Err(CloudBackupError::Internal(
                 "restore all queue is missing its wallet restore session".into(),
             ));
@@ -245,7 +252,7 @@ impl RustCloudBackupManager {
         &self,
         record_id: &str,
     ) -> Result<CloudOnlyRestoreOutcome, CloudBackupError> {
-        let mut prepared = self.prepare_active_namespace_wallet_restore().await?;
+        let prepared = self.prepare_active_namespace_wallet_restore().await?;
         prepared.restore_record(record_id).await
     }
 
@@ -301,15 +308,7 @@ impl RustCloudBackupManager {
             Zeroizing::new(master_key.critical_data_key()),
         );
 
-        let existing_identities = crate::wallet_identity::collect_existing_wallet_identities()
-            .map_err(|source| {
-                CloudBackupError::internal_context("collect wallet identities", source)
-            })?;
-
-        Ok(CloudBackupPreparedWalletRestore {
-            reader,
-            session: WalletRestoreSession::new(existing_identities),
-        })
+        Ok(CloudBackupPreparedWalletRestore { reader })
     }
 
     pub(crate) async fn prepare_delete_cloud_wallet(

@@ -325,7 +325,7 @@ async fn seed_local_wallet_with_cloud_duplicate(
 
     let local_wallet = xpub_only_wallet_metadata();
     let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
-    let mut local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
     assert!(local_wallet_exists(&local_wallet));
 
@@ -1126,7 +1126,7 @@ async fn supervisor_ignores_stale_restore_cloud_wallet_completion() {
     assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::RestoreCloudWallet), async |supervisor, claim| {
             let outcome = Err(CloudBackupError::Internal("completion".into()));
             supervisor
-                .complete_restore_cloud_wallet(claim, "wallet-record".into(), outcome)
+                .complete_restore_cloud_wallet(claim, "wallet-record".into(), 0, outcome)
                 .await
                 .unwrap();
     })
@@ -3652,11 +3652,13 @@ async fn ordinary_restore_all_record_failure_keeps_batch_claim_for_next_record()
         .unwrap();
     supervisor.active_operation.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
 
+    let listing_generation = manager.state.read().cloud_only_listing_generation();
     let should_continue = supervisor
         .complete_restore_all_record(
             claim,
             1,
             wallet,
+            listing_generation,
             Err(CloudBackupError::Internal("invalid wallet".into())),
         )
         .await
@@ -4047,7 +4049,7 @@ async fn seed_backup_matching_a_local_hot_wallet_is_already_on_device() {
     let secret = test_seed_secret();
 
     let (local_wallet, local_record_id) = upload_test_seed_backup(&namespace, &secret);
-    let mut local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    let local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
     local_restore.restore_record(&local_record_id).await.unwrap();
     assert!(local_wallet_exists(&local_wallet));
 
@@ -4084,7 +4086,7 @@ async fn restore_all_adds_a_seed_backup_to_the_matching_watch_only_wallet() {
     ])));
 
     let generation = manager.state.read().cloud_only_listing_generation();
-    let mut prepared = manager
+    let prepared = manager
         .prepare_restore_all_cloud_wallets(vec![test_cloud_only_wallet(seed_record_id)], generation)
         .await
         .unwrap();
@@ -4184,4 +4186,63 @@ async fn restoring_one_of_three_copies_leaves_the_others_already_on_device() {
     .await;
     assert_eq!(manager.restore_all_eligible_wallets(), Some(Vec::new()));
     assert_eq!(manager.projected_restore_all_state(), CloudBackupRestoreAllState::NotShown);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_deleted() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+
+    // test xpub-only wallets share one xpub, so these are two copies of one wallet
+    let first_wallet = xpub_only_wallet_metadata();
+    let second_wallet = xpub_only_wallet_metadata();
+    let (namespace, items) = prepare_restore_all_queue_fixture(
+        &manager,
+        vec![
+            (first_wallet.clone(), wallet_entry_with_labels(&first_wallet, None)),
+            (second_wallet.clone(), wallet_entry_with_labels(&second_wallet, None)),
+        ],
+    );
+    let first_record_id = items[0].record_id.as_str();
+    let second_record_id = items[1].record_id.as_str();
+
+    // preparation reads the second copy once, so the download that is held is its restore
+    let gate = test_globals().cloud.gate_wallet_backup_download_after_successes(
+        namespace,
+        second_record_id.into(),
+        1,
+    );
+
+    call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(2), gate.wait_until_blocked())
+        .await
+        .expect("the second copy's restore download should block");
+    assert!(local_wallet_exists(&first_wallet));
+
+    // the restored first copy is deleted while the second copy is still downloading
+    Database::global()
+        .wallets
+        .remove_prepared_wallet_metadata(
+            first_wallet.network,
+            first_wallet.wallet_mode,
+            &first_wallet.id,
+        )
+        .unwrap();
+    manager.handle_local_wallets_changed();
+    gate.release();
+    wait_for_test_condition(Duration::from_secs(5), "Restore All should settle", || {
+        manager.projected_exclusive_operation().is_none()
+    })
+    .await;
+
+    // nothing on the device held the second copy anymore, so it was restored rather than skipped
+    assert!(local_wallet_exists(&second_wallet));
+    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
+
+    // the deleted wallet's record is cloud-only again, and the second wallet now covers it
+    wait_for_cloud_only_statuses(&manager, &[(
+        first_record_id,
+        CloudBackupWalletStatus::AlreadyOnDevice,
+    )])
+    .await;
 }

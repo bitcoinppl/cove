@@ -140,7 +140,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        let mut prepared = match result {
+        let prepared = match result {
             Ok(prepared) => prepared,
             Err(error) => {
                 self.finish_restore_all_retry_required(&manager, claim, error);
@@ -162,7 +162,7 @@ impl CloudBackupSupervisor {
         manager.apply_restore_all_started(claim, ordered_queue.len() as u32);
         let addr = self.addr.clone();
         addr.send_fut_with(move |addr| async move {
-            run_restore_all_queue(addr, manager, claim, cancellation, &mut prepared, ordered_queue)
+            run_restore_all_queue(addr, manager, claim, cancellation, &prepared, ordered_queue)
                 .await;
         });
 
@@ -193,6 +193,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         completed: u32,
         wallet: CloudBackupWalletItem,
+        listing_generation: u64,
         result: Result<CloudOnlyRestoreOutcome, CloudBackupError>,
     ) -> ActorResult<bool> {
         if self.active_operation.restore_all(claim).is_none() {
@@ -220,6 +221,7 @@ impl CloudBackupSupervisor {
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                         record_id: wallet.record_id,
+                        listing_generation,
                     },
                 );
                 manager.refresh_sync_health();
@@ -228,6 +230,7 @@ impl CloudBackupSupervisor {
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                         record_id: wallet.record_id,
+                        listing_generation,
                     },
                 );
                 manager.refresh_sync_health();
@@ -412,7 +415,7 @@ async fn run_restore_all_queue(
     manager: Arc<RustCloudBackupManager>,
     claim: CloudBackupExclusiveOperationClaim,
     cancellation: Arc<AtomicBool>,
-    prepared: &mut CloudBackupPreparedRestoreAll,
+    prepared: &CloudBackupPreparedRestoreAll,
     ordered_queue: Vec<CloudBackupWalletItem>,
 ) {
     let mut completed = 0_u32;
@@ -426,6 +429,9 @@ async fn run_restore_all_queue(
         else {
             return;
         };
+
+        // read before the restore reads the local wallets, so a later change can discard its result
+        let listing_generation = manager.state.read().cloud_only_listing_generation();
         let result = prepared.restore_record(&wallet.record_id).await;
         completed = completed.saturating_add(1);
         let result = match result {
@@ -437,8 +443,14 @@ async fn run_restore_all_queue(
         };
         let restored = result.is_ok();
 
-        let Ok(true) =
-            call!(addr.complete_restore_all_record(claim, completed, wallet, result)).await
+        let Ok(true) = call!(addr.complete_restore_all_record(
+            claim,
+            completed,
+            wallet,
+            listing_generation,
+            result
+        ))
+        .await
         else {
             return;
         };

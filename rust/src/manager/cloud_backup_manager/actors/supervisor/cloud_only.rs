@@ -63,9 +63,12 @@ impl CloudBackupSupervisor {
         manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Started {
             record_id: record_id.clone(),
         });
+
+        // read before the restore reads the local wallets, so a later change can discard its result
+        let listing_generation = manager.state.read().cloud_only_listing_generation();
         addr.send_fut_with(move |addr| async move {
             let result = manager.do_restore_cloud_wallet(&record_id).await;
-            send!(addr.complete_restore_cloud_wallet(claim, record_id, result));
+            send!(addr.complete_restore_cloud_wallet(claim, record_id, listing_generation, result));
         });
     }
 
@@ -192,6 +195,7 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         record_id: String,
+        listing_generation: u64,
         result: Result<CloudOnlyRestoreOutcome, CloudBackupError>,
     ) -> ActorResult<()> {
         let Some(manager) = self.current(claim) else {
@@ -208,11 +212,21 @@ impl CloudBackupSupervisor {
             ),
             Ok(CloudOnlyRestoreOutcome::SecretAdded { wallet_id }) => {
                 manager.handle_restored_secret_added(wallet_id);
-                (CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice { record_id }, true)
+                (
+                    CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
+                        record_id,
+                        listing_generation,
+                    },
+                    true,
+                )
             }
-            Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice) => {
-                (CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice { record_id }, false)
-            }
+            Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice) => (
+                CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
+                    record_id,
+                    listing_generation,
+                },
+                false,
+            ),
             Err(error) => {
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::RestoreFailed {

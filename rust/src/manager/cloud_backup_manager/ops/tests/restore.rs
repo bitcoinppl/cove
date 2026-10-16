@@ -1405,7 +1405,7 @@ async fn restore_all_matches_individual_restore_for_the_same_record() {
     crate::wallet::delete_wallet_specific_data(&wallet.id)
         .expect("individual restore artifacts are removed before the batch restore");
 
-    let mut prepared = manager
+    let prepared = manager
         .prepare_restore_all_cloud_wallets(
             vec![frozen_restore_all_wallet(&wallet, CloudBackupWalletStatus::DeletedFromDevice)],
             0,
@@ -1477,7 +1477,7 @@ async fn restore_all_preparation_reuses_one_session_and_authentication_for_order
         ],
     );
 
-    let mut prepared = manager
+    let prepared = manager
         .prepare_restore_all_cloud_wallets(
             vec![
                 frozen_restore_all_wallet(
@@ -1690,7 +1690,7 @@ async fn restore_all_preparation_avoids_authentication_for_empty_intersection() 
     globals.cloud.set_wallet_files(namespace.clone(), Vec::new());
 
     let frozen_wallet = xpub_only_wallet_metadata();
-    let mut prepared = manager
+    let prepared = manager
         .prepare_restore_all_cloud_wallets(
             vec![frozen_restore_all_wallet(
                 &frozen_wallet,

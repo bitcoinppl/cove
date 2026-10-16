@@ -167,6 +167,12 @@ pub(crate) enum CloudBackupStateReducerEvent {
     CloudOnlyFetchLoaded(CloudOnlyFetch),
     /// A listed record was restored or deleted, so it is no longer cloud-only
     CloudOnlyRowRemoved(String),
+    /// A restore found a local wallet holding everything the record can recover, applied only if
+    /// no local wallet or listing change happened since the restore read the local wallets
+    CloudOnlyRowAlreadyOnDevice {
+        record_id: String,
+        listing_generation: u64,
+    },
     /// Cloud-only rows no longer belong to any known listing, such as after disable or reset
     CloudOnlyInventoryInvalidated,
     /// The local wallet set changed, so the listing and any loaded rows may now count a record as
