@@ -5,9 +5,13 @@ use cove_util::ResultExt as _;
 use crate::{
     database::Database,
     keychain::Keychain,
-    manager::cloud_backup_manager::{
-        CloudBackupError, CloudBackupRecoveryCleanupPermit, CloudBackupResetPermit,
-        CloudBackupResetRecovery, begin_recovery_cleanup as begin_cloud_backup_recovery_cleanup,
+    manager::{
+        cloud_backup_manager::{
+            CloudBackupError, CloudBackupRecoveryCleanupPermit, CloudBackupResetPermit,
+            CloudBackupResetRecovery,
+            begin_recovery_cleanup as begin_cloud_backup_recovery_cleanup,
+        },
+        key_teleport_manager::ReceiveSessionReset,
     },
     network::Network,
     wallet::metadata::{WalletId, WalletMetadata, WalletMode},
@@ -95,6 +99,14 @@ impl PreparedFullWipe {
         self.recovery_cleanup.delete_all_wallet_items()
     }
 
+    /// Commit the returned reset at the database reset, since a failed wipe must leave
+    /// managers from before the wipe able to create receive sessions
+    pub(crate) fn delete_key_teleport_receive_session(
+        &self,
+    ) -> Result<ReceiveSessionReset, String> {
+        self.recovery_cleanup.delete_key_teleport_receive_session()
+    }
+
     pub(crate) fn purge_orphan_wallet_artifacts(&self) -> std::io::Result<()> {
         self.recovery_cleanup.purge_orphan_wallet_artifacts()
     }
@@ -154,6 +166,17 @@ impl RecoveryCleanup {
         Keychain::global().delete_all_wallet_items().map_err_str(std::convert::identity)
     }
 
+    /// Remove the persisted KeyTeleport receive session and its private key
+    ///
+    /// The session is not a wallet keychain item, so the wallet sweep leaves it
+    /// behind and the next receive start would resume it after a wipe. Commit the
+    /// returned reset once the wipe can no longer fail
+    pub(crate) fn delete_key_teleport_receive_session(
+        &self,
+    ) -> Result<ReceiveSessionReset, String> {
+        ReceiveSessionReset::begin().map_err_str(std::convert::identity)
+    }
+
     pub(crate) fn purge_orphan_wallet_artifacts(&self) -> std::io::Result<()> {
         crate::app::purge_orphan_wallet_artifacts(self)
     }
@@ -179,6 +202,10 @@ pub enum WalletDeletionStage {
     WalletData,
     /// Parent-directory durability synchronization
     DirectorySync,
+    /// Unsigned transaction rows that belong to the wallet
+    UnsignedTransactions,
+    /// Selected-wallet references in global config
+    WalletSelection,
     /// Exact durable metadata rows
     Metadata,
 }
@@ -289,8 +316,19 @@ fn delete_registered_wallet(
         failure(wallet_id, WalletDeletionStage::DirectorySync, source.to_string())
     })?;
 
+    let database = Database::global();
+    database.unsigned_transactions.delete_by_wallet_id(wallet_id).map_err(|source| {
+        failure(wallet_id, WalletDeletionStage::UnsignedTransactions, source.to_string())
+    })?;
+
+    // main and decoy selections are only rewritten on a mode switch, so a stale id
+    // would re-select the deleted wallet the next time the mode changes
+    database.global_config.forget_wallet(wallet_id).map_err(|source| {
+        failure(wallet_id, WalletDeletionStage::WalletSelection, source.to_string())
+    })?;
+
     for location in &target.locations {
-        let removed = Database::global()
+        let removed = database
             .wallets
             .remove_prepared_wallet_metadata(location.network, location.wallet_mode, wallet_id)
             .map_err(|source| {

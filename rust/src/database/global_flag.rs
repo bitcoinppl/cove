@@ -181,6 +181,18 @@ impl GlobalFlagTable {
         Ok(())
     }
 
+    pub(crate) fn set_onboarding_complete_in_transaction(
+        &self,
+        write_txn: &redb::WriteTransaction,
+    ) -> Result<(), Error> {
+        let mut table = write_txn.open_table(TABLE).map_err_str(Error::TableAccess)?;
+
+        let key: &'static str = GlobalFlagKey::CompletedOnboarding.into();
+        table.insert(key, true).map_err_str(GlobalFlagTableError::Save)?;
+
+        Ok(())
+    }
+
     pub(crate) fn is_onboarding_complete(&self) -> bool {
         self.get_bool_config(GlobalFlagKey::CompletedOnboarding)
     }

@@ -364,6 +364,9 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
             state.lifecycle = lifecycle
             state.settingsRowStatus = settingsRowStatus
 
+            // a completion from an enable that has since been turned off, such as by a full wipe, is stale
+            if case .disabled = lifecycle { enableCompletion = nil }
+
         case let .enableCompleted(context):
             enableCompletion = TaggedItem(context)
 
