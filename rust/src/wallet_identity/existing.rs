@@ -56,16 +56,16 @@ fn existing_wallet_identity_key(
     }
 
     if let Some(fingerprint) = metadata.master_fingerprint.as_deref().copied() {
-        // a hot wallet whose secret is missing or unreadable cannot cover a seed backup, so it
-        // matches by fingerprint like a degraded public wallet
-        if metadata.wallet_type == WalletType::Hot
-            && hot_wallet_secret_is_readable(&metadata, keychain)
-        {
-            return Ok(WalletIdentityKey::HotFingerprint {
-                fingerprint,
-                network: metadata.network,
-                mode: metadata.wallet_mode,
-            });
+        if metadata.wallet_type == WalletType::Hot {
+            if hot_wallet_secret_is_readable(&metadata, keychain) {
+                return Ok(WalletIdentityKey::HotFingerprint {
+                    fingerprint,
+                    network: metadata.network,
+                    mode: metadata.wallet_mode,
+                });
+            }
+
+            return Ok(unsigned_hot_wallet_identity_key(metadata, keychain, fingerprint));
         }
 
         return Ok(WalletIdentityKey::Fingerprint {
@@ -80,6 +80,39 @@ fn existing_wallet_identity_key(
         network: metadata.network,
         mode: metadata.wallet_mode,
     })
+}
+
+/// Identity of a hot wallet whose secret is missing or unreadable
+///
+/// It cannot cover a seed backup, and a fingerprint match would also cover every other public
+/// wallet under that fingerprint, such as another address type of the same seed, so it matches
+/// only its own public descriptors, or only its wallet ID when those cannot be read either
+fn unsigned_hot_wallet_identity_key(
+    metadata: WalletMetadata,
+    keychain: &Keychain,
+    fingerprint: Fingerprint,
+) -> WalletIdentityKey {
+    match PublicWalletIdentity::from_existing_wallet(&metadata, keychain) {
+        Ok(Some(identity)) => {
+            return WalletIdentityKey::PublicIdentity {
+                identity,
+                fingerprint: Some(fingerprint),
+                wallet_id: None,
+                network: metadata.network,
+                mode: metadata.wallet_mode,
+            };
+        }
+        Ok(None) => {}
+        Err(error) => {
+            warn!("hot wallet {} public identity could not be read: {error}", metadata.id);
+        }
+    }
+
+    WalletIdentityKey::WalletId {
+        id: metadata.id,
+        network: metadata.network,
+        mode: metadata.wallet_mode,
+    }
 }
 
 fn hot_wallet_secret_is_readable(metadata: &WalletMetadata, keychain: &Keychain) -> bool {

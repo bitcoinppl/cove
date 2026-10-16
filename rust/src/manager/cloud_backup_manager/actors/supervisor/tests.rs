@@ -4329,6 +4329,49 @@ async fn seed_backup_stays_restorable_when_the_local_secret_cannot_be_read() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn unreadable_hot_wallet_does_not_cover_other_public_backups_with_its_fingerprint() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    let namespace = manager.current_namespace_id().unwrap();
+    let secret = test_seed_secret();
+
+    // a hot wallet whose stored seed cannot be decrypted still has its own public descriptors
+    let mut local_wallet = save_local_watch_only_wallet(&secret);
+    local_wallet.wallet_type = WalletType::Hot;
+    Database::global().wallets.update_wallet_metadata(local_wallet.clone()).unwrap();
+    let keychain = Keychain::global();
+    keychain.save(format!("{}::wallet_mnemonic", local_wallet.id), "garbage-secret".into()).unwrap();
+    keychain
+        .save(
+            format!("{}::wallet_mnemonic_encryption_key_and_nonce", local_wallet.id),
+            "garbage-cryptor".into(),
+        )
+        .unwrap();
+
+    // another public wallet under the same fingerprint, backed up only in the cloud
+    let mut public_wallet = WalletMetadata::preview_new();
+    public_wallet.id = WalletId::new();
+    public_wallet.wallet_type = WalletType::WatchOnly;
+    public_wallet.master_fingerprint = local_wallet.master_fingerprint.clone();
+    let public_record_id = upload_test_wallet_backup(&namespace, &public_wallet);
+    let public_record_id = public_record_id.as_str();
+    list_test_wallet_files(&namespace, &[public_record_id]);
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
+        public_record_id,
+    ])));
+
+    call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
+
+    // the local wallet cannot sign and does not hold that public wallet, so its backup is no copy
+    wait_for_cloud_only_statuses(&manager, &[(
+        public_record_id,
+        CloudBackupWalletStatus::DeletedFromDevice,
+    )])
+    .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn seed_backup_watched_under_two_address_types_restores_as_its_own_wallet() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
