@@ -67,11 +67,18 @@ impl RustCloudBackupManager {
 
     pub(crate) fn handle_wallet_backup_change_and_reverify(&self, wallet_id: WalletId) {
         self.mark_wallet_blob_dirty(wallet_id);
-        self.mark_verification_required_after_wallet_change();
+        self.handle_wallet_set_change();
     }
 
     pub(crate) fn handle_wallet_set_change(&self) {
         self.mark_verification_required_after_wallet_change();
+        self.handle_local_wallets_changed();
+    }
+
+    /// Re-reads cloud-only rows against the current local wallets, since adding or removing one
+    /// can turn a listed record into a duplicate of a local wallet or back into a restorable one
+    pub(crate) fn handle_local_wallets_changed(&self) {
+        send!(self.supervisor.local_wallets_did_change());
     }
 
     pub(crate) fn schedule_wallet_upload(&self, wallet_id: WalletId, immediate: bool) {

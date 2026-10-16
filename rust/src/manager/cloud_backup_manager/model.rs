@@ -1677,6 +1677,16 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::CloudOnlyInventoryInvalidated => {
                 self.state.cloud_only_inventory.invalidate();
             }
+            CloudBackupStateReducerEvent::CloudOnlyLocalWalletsChanged => {
+                self.state.cloud_only_inventory.invalidate();
+
+                // a fetch still in flight is now stale, so it is discarded and replaced when it
+                // finishes
+                if matches!(self.state.cloud_only(), CloudOnlyState::Loaded { .. }) {
+                    self.state.resolve_cloud_only_state(CloudOnlyState::NotFetched);
+                    effects.cloud_only_refetch_needed = true;
+                }
+            }
             CloudBackupStateReducerEvent::CloudOnlyOperationResolved(cloud_only_operation) => {
                 self.state.resolve_cloud_only_operation(cloud_only_operation);
             }

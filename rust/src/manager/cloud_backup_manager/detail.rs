@@ -533,6 +533,10 @@ impl RustCloudBackupManager {
         self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(cloud_only));
     }
 
+    pub(crate) fn apply_local_wallets_changed(&self) {
+        self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyLocalWalletsChanged);
+    }
+
     /// Applies a fetch outcome, reporting whether a `Loaded` result was dropped as stale
     pub(crate) fn apply_cloud_only_fetch_outcome(
         &self,
