@@ -277,9 +277,13 @@ private fun WalletType.cloudBackupDisplayName(): String =
         WalletType.WATCH_ONLY -> "Watch Only"
     }
 
-internal fun cloudBackupWalletRowActionLabel(item: CloudBackupWalletItem): String {
-    return "Show restore and delete actions for ${item.name}"
-}
+internal fun cloudBackupWalletRowActionLabel(item: CloudBackupWalletItem): String =
+    when (item.syncStatus) {
+        // the wallet is already on this device, so its sheet offers only delete
+        CloudBackupWalletStatus.ALREADY_ON_DEVICE ->
+            "Show delete action for ${item.name}, already on this device"
+        else -> "Show restore and delete actions for ${item.name}"
+    }
 
 @Composable
 private fun WalletItemRow(

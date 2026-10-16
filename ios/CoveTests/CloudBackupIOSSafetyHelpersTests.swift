@@ -134,6 +134,14 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             detail: detail,
             cloudOnly: .loaded(wallets: [wallet], incomplete: false)
         ))
+        XCTAssertTrue(cloudBackupHasVisibleWalletRows(
+            detail: detail,
+            cloudOnly: .loaded(wallets: [], incomplete: true)
+        ))
+        XCTAssertFalse(cloudBackupHasVisibleWalletRows(
+            detail: detail,
+            cloudOnly: .loaded(wallets: [], incomplete: false)
+        ))
     }
 
     func testCloudBackupSupplementalSectionsRequireNonemptyLoadedInventory() {
