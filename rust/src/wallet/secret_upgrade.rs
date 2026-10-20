@@ -178,13 +178,21 @@ impl ExistingWalletSecretUpgrade {
             rollback.selection = UpgradeSelection::Selected { previous };
         }
 
+        // only a hot wallet's flag records verified recovery words, a public wallet's flag does
+        // not, since hardware imports set it without any words
+        metadata.verified = match source {
+            SecretUpgradeSource::Import => true,
+            SecretUpgradeSource::CloudBackup { verified } => {
+                let words_verified_locally =
+                    metadata.wallet_type == WalletType::Hot && metadata.verified;
+
+                words_verified_locally || verified
+            }
+        };
+
         // private key material means this wallet can now sign locally
         metadata.wallet_type = WalletType::Hot;
         metadata.hardware_metadata = None;
-        metadata.verified = match source {
-            SecretUpgradeSource::Import => true,
-            SecretUpgradeSource::CloudBackup { verified } => metadata.verified || verified,
-        };
 
         // commit metadata last so a database failure leaves the wallet non-hot and
         // requires rolling back only the selection and newly created secret
