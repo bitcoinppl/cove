@@ -45,7 +45,14 @@ usage() { # usage MESSAGE: exit 2 like the android-* commands, before any side e
 # and hold it long after this script exits. The redirect goes on the binary's path: on a builtin
 # such as `command`, bash 3.2 applies it in the shell and leaves a copy of fd 9 that adb inherits
 UIA2_ADB="$(type -P adb)"
-adb() { "${UIA2_ADB:-adb}" "$@" 9>&-; }
+adb() {
+  [ -n "$UIA2_ADB" ] || { echo "adb not found" >&2; return 127; }
+  "$UIA2_ADB" "$@" 9>&-
+}
+
+require_adb() {
+  [ -n "$UIA2_ADB" ] || die missing_adb "adb not found" "fix=add the Android SDK platform-tools to PATH"
+}
 
 # pick the device: ANDROID_SERIAL when set (adb honors it too), else the only attached device
 resolve_serial() {
