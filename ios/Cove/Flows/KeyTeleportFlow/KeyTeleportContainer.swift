@@ -194,7 +194,8 @@ private struct KeyTeleportLoadedView: View {
     }
 
     private func showDirectionConflict(requiredDirection: KeyTeleportFlowDirection) {
-        let expectedPacket = requiredDirection == .send ? "receiver request" : "sender response"
+        // the rejected packet needs the opposite flow, so the session expects the other packet
+        let expectedPacket = requiredDirection == .send ? "sender response" : "receiver request"
         app.alertState = .init(
             .general(
                 title: "Wrong KeyTeleport Packet",
