@@ -623,16 +623,17 @@ private struct SelectedWalletScrollContent<Content: View>: View {
 
     var body: some View {
         ScrollView {
+            // the offset is padding on the content, not a negative .contentMargins: on iOS 18 a
+            // negative scroll-content margin loops lazy layout when going back from Send at the
+            // largest text sizes (#927)
             content
                 .background(
                     SelectedWalletScrollBackground(
                         screenHeight: UIScreen.main.bounds.height
                     )
                 )
+                .padding(.top, -(safeAreaTop + navBarAndScrollInsets))
         }
-        .contentMargins(
-            .top, -(safeAreaTop + navBarAndScrollInsets), for: .scrollContent
-        )
         .modifier(ScrollViewBackgroundModifier(iOS26OrLater: iOS26OrLater))
         .refreshable {
             await refresh()

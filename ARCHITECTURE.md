@@ -219,4 +219,6 @@ SwiftUI has a bug on iOS 26 where `ToolbarPlacementEnvironment.updateValue()` en
 
 ### Scroll-driven toolbar styling — keep view identity stable
 
-Toolbar modifiers driven by scroll state, such as `adaptiveToolbarStyle(showNavBar:)`, must change modifier values, not choose between `if`/`else` view branches. A branch swap gives the screen a new identity on every flip, rebuilding it and resetting its lazy stacks. At large accessibility sizes that rebuild moves the header, which flips the scroll state again, so the back transition loops at 100% CPU inside `LazyLayoutViewCache` (#927). Pass the state into the modifiers instead, for example `.toolbarColorScheme(showNavBar ? nil : .dark, for: .navigationBar)`.
+Toolbar modifiers driven by scroll state, such as `adaptiveToolbarStyle(showNavBar:)`, must change modifier values, not choose between `if`/`else` view branches. A branch swap gives the screen a new identity on every flip, rebuilding it and resetting its lazy stacks while the user scrolls. Pass the state into the modifiers instead, for example `.toolbarColorScheme(showNavBar ? nil : .dark, for: .navigationBar)`.
+
+Offset scroll content under the navigation bar with padding on the content inside the `ScrollView`, not a negative `.contentMargins(..., for: .scrollContent)`. On iOS 18 the negative margin makes lazy layout loop at 100% CPU inside `LazyLayoutViewCache` when going back from Send at the largest accessibility sizes, until the watchdog kills the app (#927). `SendFlowBackNavigationTests` reproduces it on an iOS 18 simulator.
