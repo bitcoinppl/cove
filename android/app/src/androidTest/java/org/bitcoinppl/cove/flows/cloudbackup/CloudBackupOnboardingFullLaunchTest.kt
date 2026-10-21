@@ -8,6 +8,7 @@ import org.bitcoinppl.cove.test.FullLaunchTestRule
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchStartupRobot
 import org.bitcoinppl.cove.test.ManualFullLaunchTest
+import org.bitcoinppl.cove.test.QuarantinedInCi
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.launchFullApp
 import org.junit.Before
@@ -60,6 +61,7 @@ class CloudBackupOnboardingFullLaunchTest {
     }
 
     @Test
+    @QuarantinedInCi("the system create-passkey sheet never appears on the emulator")
     fun newUserCloudBackupEnableOpensCreatePasskeySheet() {
         val targetPackage = InstrumentationRegistry.getInstrumentation().targetContext.packageName
         assumeFalse(
