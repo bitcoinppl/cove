@@ -141,7 +141,14 @@ impl NodeSelector {
     ) -> Result<Node, Error> {
         let node_type = name.to_ascii_lowercase();
 
-        let url = parse_node_url(&url).map_err_str(Error::ParseNodeUrlError)?;
+        // the url rules depend on the api: Electrum uses ssl/tcp with default ports, while an
+        // Esplora url is an http(s) address that must keep its scheme and port as entered
+        let url = if node_type.contains("esplora") {
+            parse_esplora_url(&url)
+        } else {
+            parse_node_url(&url)
+        }
+        .map_err_str(Error::ParseNodeUrlError)?;
 
         if !url.domain().unwrap_or_default().contains('.') {
             return Err(Error::ParseNodeUrlError("invalid url, no domain".to_string()));
@@ -238,6 +245,18 @@ fn node_list(network: Network) -> Vec<Node> {
     }
 }
 
+/// Parses an Esplora url, defaulting to https when no scheme is given
+fn parse_esplora_url(url: &str) -> eyre::Result<Url> {
+    let url =
+        if url.contains("://") { Url::parse(url)? } else { Url::parse(&format!("https://{url}"))? };
+
+    match url.scheme() {
+        "http" | "https" => Ok(url),
+        scheme => Err(eyre!("unsupported scheme {scheme} for an Esplora node, use http or https")),
+    }
+}
+
+/// Parses an Electrum url into an ssl or tcp url with a port, using the port as a scheme hint
 fn parse_node_url(url: &str) -> eyre::Result<Url> {
     let url = url.replace("http://", "tcp://");
     let url = url.replace("https://", "ssl://");
