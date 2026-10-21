@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -33,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -74,7 +76,9 @@ import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.NewWalletRoute
 import org.bitcoinppl.cove_core.Route
+import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
+import org.bitcoinppl.cove_core.WalletErrorAlert
 import org.bitcoinppl.cove_core.WalletLedgerState
 import org.bitcoinppl.cove_core.WalletLoadState
 import org.bitcoinppl.cove_core.WalletManagerAction
@@ -206,6 +210,22 @@ fun SelectedWalletScreen(
 
     // force white status bar icons for midnight blue background
     ForceLightStatusBarIcons()
+
+    when (manager.errorAlert?.item) {
+        is WalletErrorAlert.NodeConnectionFailed ->
+            NodeConnectionFailedAlert(
+                onChangeNode = {
+                    manager.errorAlert = null
+                    app.pushRoutes(RouteFactory().nestedSettings(SettingsRoute.Node))
+                },
+                onDismiss = { manager.errorAlert = null },
+            )
+
+        // android never sets NoBalance here, the send flow shows its own no-balance alert
+        WalletErrorAlert.NoBalance,
+        null,
+        -> Unit
+    }
 
     Scaffold(
         containerColor = listBg,
@@ -565,4 +585,22 @@ private fun VerifyReminder(
             }
         }
     }
+}
+
+@Composable
+private fun NodeConnectionFailedAlert(
+    onChangeNode: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Node Connection Failed") },
+        text = { Text("Would you like to select a different node?") },
+        confirmButton = {
+            TextButton(onClick = onChangeNode) { Text("Yes, Change Node") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
