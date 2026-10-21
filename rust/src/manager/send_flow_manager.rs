@@ -779,6 +779,9 @@ mod tests {
 
     fn manager_for_validation() -> Arc<super::RustSendFlowManager> {
         crate::test_support::ensure_tokio_runtime();
+
+        // the wallet actor reads the global database on startup, so it must exist first
+        crate::database::test_support::init_test_database();
         manager_with_wallet(RustWalletManager::preview_new_wallet())
     }
 
@@ -786,12 +789,11 @@ mod tests {
     fn manager_for_spending(amounts_sats: &[u64]) -> Arc<super::RustSendFlowManager> {
         crate::test_support::ensure_tokio_runtime();
         crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
         manager_with_wallet(funded_preview_wallet_manager(amounts_sats))
     }
 
     fn manager_with_wallet(wallet_manager: RustWalletManager) -> Arc<super::RustSendFlowManager> {
-        crate::database::test_support::init_test_database();
-
         let balance = Arc::new(Balance::default());
         let state = super::State::new(WalletMetadata::preview_new(), balance);
         let wallet_manager = Arc::new(wallet_manager);
