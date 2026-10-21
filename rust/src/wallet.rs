@@ -389,8 +389,33 @@ impl Wallet {
 }
 
 #[cfg(test)]
-mod test_support {
+pub(crate) mod test_support {
     use super::*;
+
+    /// Persists a mainnet wallet and selects it, then switches to Testnet4, which has no wallets
+    ///
+    /// Leaves the stale selection in place, like a cold launch after a network change
+    pub(crate) fn select_mainnet_wallet_then_switch_to_empty_network() -> WalletId {
+        let mnemonic = Mnemonic::from_str("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
+        let wallet = Wallet::try_new_persisted_from_mnemonic_segwit(
+            WalletMetadata::preview_new(),
+            mnemonic,
+            None,
+        )
+        .expect("mainnet wallet persists");
+
+        let global_config = &Database::global().global_config;
+        global_config.select_wallet(wallet.id.clone()).expect("wallet selects");
+        global_config.set_selected_network(Network::Testnet4).expect("network switches");
+
+        wallet.id
+    }
+
+    pub(crate) fn restore_mainnet_after_network_switch(id: &WalletId) {
+        let _ = Database::global().global_config.set_selected_network(Network::Bitcoin);
+        let _ = Database::global().global_config.clear_selected_wallet();
+        let _ = delete_wallet_specific_data(id);
+    }
 
     impl Wallet {
         pub(crate) fn try_new_persisted_from_mnemonic_segwit(

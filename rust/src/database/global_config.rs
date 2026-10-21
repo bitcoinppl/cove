@@ -639,6 +639,29 @@ mod tests {
         assert_eq!(table.custom_block_explorer(Network::Bitcoin), None);
     }
 
+    // regression for #914: an empty save is a validation error; only Reset to Default clears
+    #[test]
+    fn custom_block_explorer_setter_rejects_empty_input_and_keeps_the_saved_template() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        let saved = table
+            .set_custom_block_explorer(
+                Network::Bitcoin,
+                "http://192.168.1.126:8088/tx/{txid}".to_string(),
+            )
+            .unwrap();
+        let selected = table.selected_block_explorer_option(Network::Bitcoin);
+
+        for input in ["", "   "] {
+            let result = table.set_custom_block_explorer(Network::Bitcoin, input.to_string());
+
+            assert!(result.is_err(), "empty input {input:?} was saved as {result:?}");
+            assert_eq!(table.custom_block_explorer(Network::Bitcoin), saved);
+            assert_eq!(table.selected_block_explorer_option(Network::Bitcoin), selected);
+        }
+    }
+
     #[test]
     fn block_explorer_option_setter_selects_presets_and_clears_default() {
         crate::app::reconcile::test_support::init_noop_updater();

@@ -687,6 +687,33 @@ mod tests {
         assert_eq!(presentation.confirmations(), Some(1));
     }
 
+    // regression for #915: 2026-01-21 01:57:04 UTC is the evening of January 20 in Chicago
+    #[test]
+    fn transaction_list_date_matches_detail_date_in_the_device_time_zone() {
+        crate::test_support::init_test_device();
+        let confirmed_at = 1_768_960_624;
+
+        let mut details = TransactionDetails::preview_confirmed_received();
+        details.pending_or_confirmed = PendingOrConfirmed::Confirmed(ConfirmedDetails {
+            block_number: 933_151,
+            confirmation_time: confirmed_at,
+        });
+        let list_row = crate::transaction::ConfirmedTransaction {
+            txid: crate::transaction::TxId::preview_new(),
+            block_height: 933_151,
+            confirmed_at: jiff::Timestamp::from_second(confirmed_at as i64).unwrap(),
+            sent_and_received: SentAndReceived::preview_new(),
+            fiat: None,
+            labels: Default::default(),
+        };
+
+        let detail_date_time = details.confirmation_date_time().expect("confirmed details");
+        let (detail_date, _time) = detail_date_time.split_once(" at ").expect("date and time");
+
+        assert_eq!(list_row.confirmed_at_fmt(), detail_date);
+        assert_eq!(detail_date, "January 20, 2026");
+    }
+
     #[test]
     fn display_amount_uses_metadata_without_exporting_amount() {
         let mut details = TransactionDetails::preview_new_confirmed();

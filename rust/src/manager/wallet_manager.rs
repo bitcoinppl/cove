@@ -1220,9 +1220,14 @@ impl RustWalletManager {
     #[uniffi::constructor]
     pub fn preview_new_wallet_with_metadata(metadata: WalletMetadata) -> Self {
         let metadata = preview_ledger_ready_metadata(metadata);
-        let channel = ReconcileChannel::new(100);
-
         let wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
+        Self::from_preview_wallet(metadata, wallet)
+    }
+}
+
+impl RustWalletManager {
+    fn from_preview_wallet(metadata: WalletMetadata, wallet: Wallet) -> Self {
+        let channel = ReconcileChannel::new(100);
         let wallet_data_db = WalletDataDb::new_in_memory(wallet.metadata.id.clone())
             .expect("failed to open in-memory wallet data database for preview wallet");
         let label_manager = LabelManager::new_with_db(wallet_data_db.clone()).into();
@@ -1325,6 +1330,34 @@ fn wallet_account_number(id: &WalletId) -> Option<u32> {
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use bdk_wallet::{
+        chain::BlockId,
+        test_utils::{insert_checkpoint, receive_output_in_latest_block},
+    };
+    use bitcoin::{Amount, BlockHash, hashes::Hash as _};
+
+    use super::{RustWalletManager, preview_ledger_ready_metadata};
+    use crate::wallet::{Wallet, metadata::WalletMetadata};
+
+    /// Builds an in-memory preview wallet manager with one confirmed output per amount
+    pub(crate) fn funded_preview_wallet_manager(amounts_sats: &[u64]) -> RustWalletManager {
+        let metadata = preview_ledger_ready_metadata(WalletMetadata::preview_new());
+        let mut wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
+        insert_checkpoint(
+            &mut wallet.bdk,
+            BlockId { height: 1, hash: BlockHash::from_byte_array([2; 32]) },
+        );
+
+        for amount in amounts_sats {
+            receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(*amount));
+        }
+
+        RustWalletManager::from_preview_wallet(metadata, wallet)
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
@@ -1332,13 +1365,14 @@ mod tests {
     use bitcoin::Amount;
 
     use super::{
-        Balance, Error, RustWalletManager, WalletLedgerState, WalletLoadState, WalletManagerError,
-        WalletScanPhase, WalletScanProgress, WalletScanStatus, WalletSnapshot,
+        Balance, Error, Message, RustWalletManager, WalletLedgerState, WalletLoadState,
+        WalletManagerError, WalletScanPhase, WalletScanProgress, WalletScanStatus, WalletSnapshot,
         initial_state_from_snapshot,
         initial_state_from_snapshot_with_pending_unsigned_transactions, ledger_state,
         preview_ledger_ready_metadata,
     };
 
+    use crate::manager::deferred_sender::SingleOrMany;
     use crate::transaction::{SentAndReceived, Transaction, TxId, UnconfirmedTransaction};
     use crate::wallet::metadata::WalletMetadata;
 
@@ -1515,6 +1549,89 @@ mod tests {
         }));
 
         assert!(matches!(error, WalletManagerError::InsufficientFunds(_)));
+    }
+
+    // regression for #916: a stale id from another network is a missing wallet, which both
+    // apps already recover from, not an opaque load failure
+    #[test]
+    fn loading_a_wallet_from_another_network_reports_that_it_does_not_exist() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::database::test_support::delete_database();
+
+        let stale_id =
+            crate::wallet::test_support::select_mainnet_wallet_then_switch_to_empty_network();
+        let result = RustWalletManager::try_new(stale_id.clone());
+
+        crate::wallet::test_support::restore_mainnet_after_network_switch(&stale_id);
+
+        assert_eq!(result.err(), Some(Error::WalletDoesNotExist));
+    }
+
+    fn confirmed_label(transaction: &Transaction) -> Option<String> {
+        match transaction {
+            Transaction::Confirmed(confirmed) => confirmed.label_opt(),
+            Transaction::Unconfirmed(_) => None,
+        }
+    }
+
+    fn labels_for(message: &Message, tx_id: &TxId) -> Vec<Option<String>> {
+        let transactions = match message {
+            Message::AvailableTransactions(txns)
+            | Message::ScanComplete(txns)
+            | Message::UpdatedTransactions(txns) => txns.iter().collect(),
+            Message::TransactionUpdated(txn) => vec![txn],
+            _ => Vec::new(),
+        };
+
+        transactions.into_iter().filter(|txn| &txn.id() == tx_id).map(confirmed_label).collect()
+    }
+
+    // regression for #921: the list must pick up a single label edit without a manual refresh
+    #[tokio::test(flavor = "current_thread")]
+    async fn single_label_edit_reconciles_the_transaction_list() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
+
+        let manager = super::test_support::funded_preview_wallet_manager(&[50_000]);
+        let receiver = manager.reconciler.receiver();
+        let tx_id = {
+            let txns = act_zero::call!(manager.actor.transactions()).await.expect("transactions");
+            txns.first().expect("the funded wallet has a transaction").id()
+        };
+        let details = manager
+            .transaction_details(Arc::new(tx_id.clone()))
+            .await
+            .expect("transaction details")
+            .details();
+
+        manager
+            .label_manager()
+            .insert_or_update_labels_for_txn(details, "Journey receive 2".to_string(), None)
+            .expect("label saves");
+
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        let mut seen = Vec::new();
+        while let Ok(Ok(message)) = tokio::time::timeout_at(deadline, receiver.recv_async()).await {
+            let messages = match message {
+                SingleOrMany::Single(message) => vec![message],
+                SingleOrMany::Many(messages) => messages,
+            };
+
+            for message in messages {
+                seen.extend(labels_for(&message, &tx_id));
+            }
+
+            if seen.contains(&Some("Journey receive 2".to_string())) {
+                return;
+            }
+        }
+
+        panic!("the transaction list never received the edited label, saw {seen:?}");
     }
 }
 

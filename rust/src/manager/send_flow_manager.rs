@@ -763,24 +763,38 @@ mod tests {
 
     use cove_types::{
         fees::{
-            FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee,
-            FeeSpeed,
+            FeeRate, FeeRateOption, FeeRateOptionWithTotalFee, FeeRateOptions,
+            FeeRateOptionsWithTotalFee, FeeSpeed,
         },
         utxo::{UtxoList, ffi_preview::preview_new_utxo_list},
     };
 
     use crate::{
-        manager::{deferred_sender::SingleOrMany, wallet_manager::RustWalletManager},
+        manager::{
+            deferred_sender::SingleOrMany,
+            wallet_manager::{RustWalletManager, test_support::funded_preview_wallet_manager},
+        },
         wallet::{Address, balance::Balance, metadata::WalletMetadata},
     };
 
     fn manager_for_validation() -> Arc<super::RustSendFlowManager> {
-        crate::database::test_support::init_test_database();
         crate::test_support::ensure_tokio_runtime();
+        manager_with_wallet(RustWalletManager::preview_new_wallet())
+    }
+
+    /// Send flow over a wallet holding one confirmed output per amount, so PSBTs really build
+    fn manager_for_spending(amounts_sats: &[u64]) -> Arc<super::RustSendFlowManager> {
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        manager_with_wallet(funded_preview_wallet_manager(amounts_sats))
+    }
+
+    fn manager_with_wallet(wallet_manager: RustWalletManager) -> Arc<super::RustSendFlowManager> {
+        crate::database::test_support::init_test_database();
 
         let balance = Arc::new(Balance::default());
         let state = super::State::new(WalletMetadata::preview_new(), balance);
-        let wallet_manager = Arc::new(RustWalletManager::preview_new_wallet());
+        let wallet_manager = Arc::new(wallet_manager);
 
         Arc::new(super::RustSendFlowManager {
             app: super::App::global().clone(),
@@ -792,6 +806,10 @@ mod tests {
                 super::Duration::from_millis(200),
             ),
         })
+    }
+
+    fn custom_fee_speed() -> FeeSpeed {
+        FeeSpeed::Custom { duration_mins: 10 }
     }
 
     fn fee_rate_option_with_total_fee(
@@ -1609,5 +1627,67 @@ mod tests {
         set_selected_fee_without_total(&manager);
 
         assert!(manager.amount_exceeds_balance());
+    }
+
+    // regression for #911: a typed custom rate below the relay floor must never reach a PSBT
+    #[tokio::test(flavor = "current_thread")]
+    async fn custom_fee_option_rejects_rates_below_minimum_relay_floor() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let manager = manager_for_spending(&[100_000]);
+        set_valid_amount_and_address(&manager, 10_000);
+
+        let floor = manager
+            .get_custom_fee_option(Arc::new(FeeRate::from_sat_per_vb(1.0)), custom_fee_speed())
+            .await
+            .expect("a rate at the floor builds a transaction");
+
+        let floor_fee = floor.total_fee().map(|fee| fee.as_sats());
+        assert!(floor_fee.is_some_and(|fee| fee > 0), "a funded wallet pays a fee at the floor");
+
+        for sat_per_vb in [0.0, -1.0, f32::NAN, 0.5] {
+            let result = manager
+                .get_custom_fee_option(
+                    Arc::new(FeeRate::from_sat_per_vb(sat_per_vb)),
+                    custom_fee_speed(),
+                )
+                .await;
+
+            match result {
+                Ok(option) => panic!(
+                    "custom rate {sat_per_vb} sat/vB was accepted with a {:?} sat fee",
+                    option.total_fee().map(|fee| fee.as_sats())
+                ),
+                Err(error) => assert!(
+                    error.to_string().contains("fee rate"),
+                    "custom rate {sat_per_vb} sat/vB failed for an unrelated reason: {error}"
+                ),
+            }
+        }
+    }
+
+    // regression for #912: the alert must explain that the fee causes the shortfall, and by how much
+    #[test]
+    fn validate_amount_names_the_shortfall_when_amount_plus_fee_exceeds_balance() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = manager_for_validation();
+        {
+            let mut state = manager.state.lock();
+            state.amount_sats = Some(1_436_722);
+            state.unlocked_spendable_sats = Some(1_436_900);
+            state.address = Some(Arc::new(Address::preview_new()));
+        }
+        set_selected_fee_total(&manager, 646);
+
+        assert!(!manager.validate_amount(true));
+
+        let super::Message::SetAlert(super::SendFlowAlertState::Error(error)) =
+            next_reconcile_message(&manager)
+        else {
+            panic!("expected a send flow error alert");
+        };
+
+        let message = error.to_string();
+        // 1,436,722 + 646 - 1,436,900
+        assert!(message.contains("468"), "alert does not name the shortfall: {message}");
     }
 }

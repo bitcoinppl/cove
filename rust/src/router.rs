@@ -479,6 +479,25 @@ impl From<SettingsRoute> for Route {
 mod tests {
     use super::*;
 
+    // regression for #916: a cold launch must not route to a wallet from another network
+    #[test]
+    fn startup_route_ignores_a_selected_wallet_from_another_network() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::database::test_support::delete_database();
+
+        let stale_id =
+            crate::wallet::test_support::select_mainnet_wallet_then_switch_to_empty_network();
+        let router = Router::new();
+
+        crate::wallet::test_support::restore_mainnet_after_network_switch(&stale_id);
+
+        assert_ne!(router.default, Route::SelectedWallet(stale_id));
+        assert_eq!(router.default, Route::NewWallet(NewWalletRoute::default()));
+    }
+
     #[test]
     fn transaction_details_with_same_wallet_and_txid_are_same_navigation_destination() {
         let wallet_id = WalletId::from("wallet-id".to_string());
