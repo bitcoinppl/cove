@@ -31,11 +31,12 @@ private struct SafeAreaInsetsCapture: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background {
-                // ignoring the keyboard keeps its height out of the bottom inset, so showing
-                // the keyboard doesn't update every reader
+                // read inside a container that ignores the keyboard, which keeps its height out of
+                // the bottom inset so showing it doesn't update every reader; reading on the
+                // ignoring view itself still includes the keyboard
                 Color.clear
-                    .ignoresSafeArea(.keyboard)
                     .onGeometryChange(for: EdgeInsets.self, of: \.safeAreaInsets) { insets = $0 }
+                    .ignoresSafeArea(.keyboard)
             }
             .environment(\.safeAreaInsets, insets)
     }
