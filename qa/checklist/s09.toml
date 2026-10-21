@@ -1,0 +1,301 @@
+[[row]]
+id = "s09-ypub-utf-8-file-import-uses-wrapped"
+section = "9"
+title = "ypub UTF-8 file import uses wrapped SegWit"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["agent", "rust:rust/src/wallet/builder.rs::bare_ypub_import_selects_wrapped_segwit_descriptor"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s09-zpub-native-segwit-and-first-receive-address"
+section = "9"
+title = "zpub native SegWit and first receive address"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["agent", "rust:rust/src/wallet/builder.rs::bare_zpub_import_selects_native_segwit_descriptor", "rust:rust/src/multi_format.rs::test_utf8_data_zpub_returns_hardware_export"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s09-full-bare-ypub-paste-uses-wrapped-segwit"
+section = "9"
+title = "Full bare ypub paste uses Wrapped SegWit"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["rust:rust/src/wallet/builder.rs::bare_ypub_import_selects_wrapped_segwit_descriptor"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s09-duplicate-account-import-creates-a-second-wallet"
+section = "9"
+title = "Duplicate account import creates a second wallet"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/wallet_identity/existing.rs", "rust/src/wallet_identity/public.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["agent"]
+pending = ["rust:rust/src/wallet/builder.rs::importing_the_same_origin_less_ypub_twice_reports_the_existing_wallet"]
+pending_pr = 924
+# 1.4.0: ios BLOCKED, android FAIL
+
+[[row]]
+id = "s09-first-upub-file-attempt-interrupted-by-os"
+section = "9"
+title = "First upub file attempt interrupted by OS permission revocation"
+platforms = ["android"]
+target = "device"
+paths = []
+coverage = ["agent"]
+# 1.4.0: ios N/A, android BLOCKED
+# os revoked a one-time permission and killed the app, not app code
+
+[[row]]
+id = "s09-upub-wrapped-segwit-and-first-receive-on"
+section = "9"
+title = "upub wrapped SegWit and first receive on Testnet"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s09-vpub-native-segwit-and-first-receive-on"
+section = "9"
+title = "vpub native SegWit and first receive on Testnet"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s09-multi-account-json-prefers-bip84"
+section = "9"
+title = "Multi-account JSON prefers BIP84"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["rust:rust/src/wallet/builder.rs::preferred_json_descriptors_uses_native_segwit_when_present"]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s09-multi-account-json-falls-back-to-bip49"
+section = "9"
+title = "Multi-account JSON falls back to BIP49"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["rust:rust/src/wallet/builder.rs::preferred_json_descriptors_falls_back_to_wrapped_segwit"]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s09-multi-account-json-falls-back-to-bip44"
+section = "9"
+title = "Multi-account JSON falls back to BIP44"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["rust:rust/src/wallet/builder.rs::preferred_json_descriptors_falls_back_to_legacy"]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s09-wrong-network-ypub-rejected-on-testnet"
+section = "9"
+title = "Wrong-network ypub rejected on Testnet"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s09-corrupt-vpub-checksum-rejected"
+section = "9"
+title = "Corrupt vpub checksum rejected"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s09-private-variant-rejected-in-public-key-import"
+section = "9"
+title = "Private variant rejected in public-key import"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s09-unsupported-bip86-taproot-descriptor-rejected"
+section = "9"
+title = "Unsupported BIP86 Taproot descriptor rejected"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/multi_format.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["rust:rust/src/wallet/builder.rs::descriptor_address_type_rejects_taproot"]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s09-ypub-exact-first-receive-address"
+section = "9"
+title = "ypub exact first receive address"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s09-public-key-plain-text-and-utf-8"
+section = "9"
+title = "Public-key plain text and UTF-8 file routes"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["agent", "rust:rust/src/multi_format.rs::test_plain_zpub_returns_hardware_export", "rust:rust/src/multi_format.rs::test_utf8_data_zpub_returns_hardware_export"]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s09-nfc-public-key-import"
+section = "9"
+title = "NFC public-key import"
+platforms = ["ios", "android"]
+target = "manual"
+paths = ["rust/src/multi_format.rs", "ios/Cove/Flows/NewWalletFlow/NfcHelpView.swift", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NfcHelpSheet.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt"]
+coverage = ["human", "rust:rust/src/multi_format.rs::test_nfc_data_zpub_returns_hardware_export"]
+# 1.4.0: ios HUMAN, android HUMAN
+# physical nfc tag read
+
+[[row]]
+id = "s09-plain-qr-and-single-part-bbqr-public"
+section = "9"
+title = "Plain QR and single-part BBQr public-key import"
+platforms = ["ios", "android"]
+target = "manual"
+paths = ["rust/src/qr_scanner.rs", "rust/src/multi_format.rs", "ios/Cove/Flows/NewWalletFlow/ColdWallet/QrCodeImportScreen.swift", "ios/Cove/ScanManager.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/ScanManager.kt"]
+coverage = ["human", "rust:rust/src/qr_scanner.rs::test_qr_scanner_plain_zpub", "rust:rust/src/qr_scanner.rs::test_qr_scanner_single_part_bbqr_zpub"]
+# 1.4.0: ios HUMAN, android HUMAN
+# camera scans need a person
+
+[[row]]
+id = "s09-alternate-address-history-without-duplicate-unrelated-scans"
+section = "9"
+title = "Alternate-address history without duplicate/unrelated scans"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/discovery_scanner.rs", "rust/src/wallet/builder.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["agent", "rust:rust/src/discovery_scanner.rs::json_discovery_builds_wrapped_and_legacy_alternates_for_native_segwit", "rust:rust/src/discovery_scanner.rs::json_discovery_skips_current_wrapped_segwit_alternate"]
+# 1.4.0: ios BLOCKED, android BLOCKED
+
+[[row]]
+id = "s09-upgraded-watch-only-name-material-origin-type"
+section = "9"
+title = "Upgraded watch-only name/material/origin/type/history"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/wallet_identity/existing.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
+coverage = ["agent", "rust:rust/src/wallet/builder.rs::cold_upgrade_metadata_carries_json_discovery_state"]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# read as the watch-only to cold upgrade via import; results treated it as an app upgrade
+
+[[row]]
+id = "s09-ios-signet-upub-import-and-first-receive"
+section = "9"
+title = "iOS Signet upub import and first receive"
+platforms = ["ios"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift"]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s09-ios-signet-vpub-native-import"
+section = "9"
+title = "iOS Signet vpub native import"
+platforms = ["ios"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift"]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s09-ios-public-vpub-first-0-0-check"
+section = "9"
+title = "iOS public vpub first /0/0 check"
+platforms = ["ios"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift"]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android N/A
+
+[[row]]
+id = "s09-invalid-public-key-alert-shows-internal-error"
+section = "9"
+title = "Invalid public-key alert shows internal error types"
+platforms = ["ios"]
+target = "ui"
+paths = ["rust/src/xpub.rs", "rust/src/wallet.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift"]
+coverage = ["agent"]
+pending = ["ios-unit:ios/CoveTests/HardwareImportErrorMessageTests.swift::testInvalidKeyAlertShowsTheReasonInsteadOfTheEnumDump"]
+pending_pr = 924
+# 1.4.0: ios FAIL, android N/A
+# ios maps the rust error to alert text
+
+[[row]]
+id = "s09-ios-wrong-network-ypub-rejected-on-signet"
+section = "9"
+title = "iOS wrong-network ypub rejected on Signet"
+platforms = ["ios"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift"]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s09-ios-multi-account-json-resolves-existing-bip84"
+section = "9"
+title = "iOS multi-account JSON resolves existing BIP84"
+platforms = ["ios"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/wallet_identity/existing.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift"]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s09-ios-json-duplicate-import-rejected"
+section = "9"
+title = "iOS JSON duplicate import rejected"
+platforms = ["ios"]
+target = "rust"
+paths = ["rust/src/wallet/builder.rs", "rust/src/wallet_identity/existing.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift"]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s09-beta-import-signing-keys-into-existing-watch"
+section = "9"
+title = "Beta import signing keys into existing watch-only wallet"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/import_wallet_manager.rs", "rust/src/wallet_identity/existing.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReviewViews.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewViews.kt"]
+coverage = ["human:ios", "agent:android", "rust:rust/src/manager/import_wallet_manager.rs::existing_wallet_upgrade_preserves_public_material_and_origin"]
+# 1.4.0: ios HUMAN, android BLOCKED
+
+[[row]]
+id = "s09-clear-saved-screenshot-of-invalid-public-key"
+section = "9"
+title = "Clear saved screenshot of invalid public-key error"
+platforms = ["ios"]
+target = "ui"
+paths = ["rust/src/xpub.rs", "rust/src/wallet.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift"]
+coverage = ["agent"]
+pending = ["ios-unit:ios/CoveTests/HardwareImportErrorMessageTests.swift::testInvalidKeyAlertShowsTheReasonInsteadOfTheEnumDump"]
+pending_pr = 924
+# 1.4.0: ios PASS, android N/A
+# same defect as the invalid public-key alert row, evidence capture

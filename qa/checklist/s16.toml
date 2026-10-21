@@ -1,0 +1,367 @@
+[[row]]
+id = "s16-send-entry-warnings-confirmation-and-advanced-details"
+section = "16"
+title = "Send entry warnings confirmation and advanced details at max font"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/**",
+    "ios/Cove/Flows/SendFlow/ConfirmScreen/**",
+    "ios/Cove/Flows/SendFlow/Common/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/Common/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s16-coin-control-search-list-and-continue-at"
+section = "16"
+title = "Coin control search list and Continue at max font"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/CoinControlFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s16-largest-text-makes-change-filter-unreadable"
+section = "16"
+title = "Largest text makes Change filter unreadable"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/CoinControlFlow/UtxoListScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/UtxoListScreen.kt",
+]
+coverage = [
+    "agent",
+]
+pending = [
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/LargeFontScaleLayoutTest.kt::utxoSortChipsStayReadableAtLargestFontScale",
+]
+pending_pr = 924
+# 1.4.0: ios BLOCKED, android FAIL
+
+[[row]]
+id = "s16-recovery-words-two-column-layout-at-largest"
+section = "16"
+title = "Recovery words two-column layout at largest font"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SelectedWalletFlow/SecretWordsScreen.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SecretWordsComponents.swift",
+    "ios/Cove/Flows/NewWalletFlow/HotWallet/HotWalletCreateScreen.swift",
+    "ios/Cove/Views/ColumnMajorGrid.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/secretwords/SecretWordsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/RecoveryWords.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/ColumnMajorGrid.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/hot_wallet/HotWalletCreateScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s16-add-create-and-verification-at-largest-font"
+section = "16"
+title = "Add create and verification at largest font in Dark mode"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift",
+    "ios/Cove/Flows/NewWalletFlow/HotWallet/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/hot_wallet/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s16-talkback-primary-controls-and-announcements"
+section = "16"
+title = "TalkBack primary controls and announcements"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "ios/Cove/Views/SidebarView.swift",
+    "ios/Cove/Views/NumberPadPinView.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/ReceiveView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/NumberPadPinView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# screen reader speech and traversal order need a person
+
+[[row]]
+id = "s16-remove-animations-keeps-navigation-usable"
+section = "16"
+title = "Remove animations keeps navigation usable"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/ui/theme/Motion.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/navigation/CoveNavDisplay.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+# needs the os animation and motion settings changed
+
+[[row]]
+id = "s16-receive-copy-address-missing-at-largest-font"
+section = "16"
+title = "Receive Copy Address missing at largest font"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SelectedWalletFlow/ReceiveView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
+]
+coverage = [
+    "agent",
+]
+pending = [
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/LargeFontScaleLayoutTest.kt::receiveSheetActionsCanBeReachedAtLargestFontScale",
+]
+pending_pr = 924
+# 1.4.0: ios BLOCKED, android FAIL
+
+[[row]]
+id = "s16-cloud-backup-setup-text-and-actions-at"
+section = "16"
+title = "Cloud Backup setup text and actions at max font"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingView.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingSections.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingContent.kt",
+]
+coverage = [
+    "human:ios",
+    "agent:android",
+]
+# 1.4.0: ios HUMAN, android PASS
+# the setup screen needs no passkey, but the ios result was left to a person
+
+[[row]]
+id = "s16-cloud-inventory-restore-and-recovery-layout"
+section = "16"
+title = "Cloud inventory restore and recovery layout"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "rust/src/manager/cloud_backup_manager/detail.rs",
+    "ios/Cove/Flows/SettingsFlow/CloudBackupDetailScreen.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackupDetailSections.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailSections.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupScreen.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# needs a real cloud account and passkey
+
+[[row]]
+id = "s16-tapsigner-setup-signing-and-retry-layout"
+section = "16"
+title = "TAPSIGNER setup signing and retry layout"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "ios/Cove/Flows/TapSignerFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/TapSignerFlow/**",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# needs a TAPSIGNER card over nfc
+
+[[row]]
+id = "s16-keyteleport-request-and-code-layout-at-largest"
+section = "16"
+title = "KeyTeleport request and code layout at largest font"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift",
+    "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSharedViews.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportComponents.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s16-receive-layout-failure-physical-screenshot"
+section = "16"
+title = "Receive layout failure physical screenshot"
+platforms = ["android"]
+target = "manual"
+paths = [
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios N/A, android HUMAN
+# the protected receive sheet returns no screencap over adb
+
+[[row]]
+id = "s16-keyteleport-sender-code-and-password-layout-at"
+section = "16"
+title = "KeyTeleport sender code and password layout at largest font"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSendViews.swift",
+    "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportComponents.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportSendViews.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportRevealPair.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s16-receiver-payload-and-private-key-review-layout"
+section = "16"
+title = "Receiver payload and private-key review layout"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReviewViews.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewViews.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# reaching the review screens needs a camera qr hand-off between two phones
+
+[[row]]
+id = "s16-restore-normal-font-and-compare-receive-controls"
+section = "16"
+title = "Restore normal font and compare Receive controls"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "ios/Cove/Flows/SelectedWalletFlow/ReceiveView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
+]
+coverage = [
+    "human:ios",
+    "agent:android",
+]
+# 1.4.0: ios HUMAN, android PASS
+# needs the os font size changed; the ios slider could not be set through the mirror
+
+[[row]]
+id = "s16-clean-install-onboarding-and-late-restore-layout"
+section = "16"
+title = "Clean-install onboarding and late restore layout"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/Onboarding/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/OnboardingFlow/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+
+[[row]]
+id = "s16-compact-iphone-layout-and-reduced-transparency"
+section = "16"
+title = "Compact iPhone layout and reduced transparency"
+platforms = ["ios"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsScreen.swift",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android N/A
+
+[[row]]
+id = "s16-ios-maximum-text-clips-send-balance-header"
+section = "16"
+title = "iOS maximum text clips Send balance header"
+platforms = ["ios"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SendFlow/Common/SendFlowHeaderView.swift",
+]
+coverage = [
+    "agent",
+]
+pending = [
+    "ios-unit:ios/CoveTests/SendFlowHeaderLayoutTests.swift::testHeaderGrowsWithAccessibilityTextSize",
+]
+pending_pr = 924
+# 1.4.0: ios FAIL, android N/A
+
+[[row]]
+id = "s16-ios-maximum-text-send-back-navigation"
+section = "16"
+title = "iOS maximum-text Send Back navigation"
+platforms = ["ios"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SendFlow/SendFlowContainer.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift",
+    "ios/Cove/Flows/SendFlow/Common/SendFlowHeaderView.swift",
+]
+coverage = [
+    "agent",
+]
+pending = [
+    "ios-unit:ios/CoveTests/AdaptiveToolbarStyleTests.swift::testNavBarToggleKeepsTheStyledScreenIdentity",
+    "ios-unit:ios/CoveTests/SendFlowBackNavigationTests.swift::testBackFromSendAtLargestAccessibilitySizeFinishes",
+]
+pending_pr = 924
+# 1.4.0: ios FAIL, android N/A
+
+[[row]]
+id = "s16-restore-original-ios-text-size-tick"
+section = "16"
+title = "Restore original iOS text-size tick"
+platforms = ["ios"]
+target = "manual"
+paths = []
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android N/A
+# restores a phone setting the mirror could not set; no app code involved

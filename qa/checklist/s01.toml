@@ -1,0 +1,331 @@
+[[row]]
+id = "s01-about-identity"
+section = "1"
+title = "About identity"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/build.rs",
+    "rust/build.rs",
+    "ios/Cove/Flows/SettingsFlow/AboutScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s01-android-1-3-0-1-4-0"
+section = "1"
+title = "Android 1.3.0 → 1.4.0 upgrade"
+platforms = ["android"]
+target = "device"
+paths = [
+    "rust/src/bootstrap/migration.rs",
+    "rust/src/database/migration.rs",
+    "rust/src/database/migration/**",
+    "android/app/build.gradle.kts",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# needs an adb install -r over a real 1.3.0 install
+
+[[row]]
+id = "s01-ios-1-3-0-1-4-0"
+section = "1"
+title = "iOS 1.3.0 → 1.4.0 upgrade"
+platforms = ["ios"]
+target = "device"
+paths = [
+    "rust/src/bootstrap/migration.rs",
+    "rust/src/database/migration.rs",
+    "rust/src/database/migration/**",
+    "ios/Cove.xcodeproj/project.pbxproj",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android N/A
+# needs a real 1.3.0 build installed before updating
+
+[[row]]
+id = "s01-ios-build-greater-than-113"
+section = "1"
+title = "iOS build greater than 113"
+platforms = ["ios"]
+target = "device"
+paths = [
+    "ios/Cove.xcodeproj/project.pbxproj",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android N/A
+# a script can compare the archive build number with 113
+
+[[row]]
+id = "s01-cloud-check-before-approved-android-wipe"
+section = "1"
+title = "Cloud check before approved Android wipe"
+platforms = ["android"]
+target = "manual"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios N/A, android HUMAN
+
+[[row]]
+id = "s01-main-recovery-copy-before-wipe"
+section = "1"
+title = "Main recovery copy before wipe"
+platforms = ["android"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# fixture capture before the wipe
+
+[[row]]
+id = "s01-install-actual-android-1-3-0"
+section = "1"
+title = "Install actual Android 1.3.0"
+platforms = ["android"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# environment setup
+
+[[row]]
+id = "s01-prepare-representative-1-3-0-fixtures"
+section = "1"
+title = "Prepare representative 1.3.0 fixtures"
+platforms = ["android"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# environment setup
+
+[[row]]
+id = "s01-old-bip329-without-spendable"
+section = "1"
+title = "Old BIP329 without spendable"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/database/wallet_data/label.rs",
+    "rust/src/label_manager.rs",
+    "rust/src/manager/coin_control_manager.rs",
+    "ios/Cove/Flows/CoinControlFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+
+[[row]]
+id = "s01-in-place-update-retains-selected-wallet-and"
+section = "1"
+title = "In-place update retains selected wallet and label"
+platforms = ["android"]
+target = "device"
+paths = [
+    "rust/src/bootstrap/migration.rs",
+    "rust/src/database/migration.rs",
+    "rust/src/database/migration/**",
+    "rust/src/database/global_config.rs",
+    "android/app/src/main/java/org/bitcoinppl/cove/WalletSelectionRecovery.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+
+[[row]]
+id = "s01-upgraded-settings-and-credential-flags"
+section = "1"
+title = "Upgraded settings and credential flags"
+platforms = ["android"]
+target = "device"
+paths = [
+    "rust/src/bootstrap/migration.rs",
+    "rust/src/database/migration.rs",
+    "rust/src/database/migration/**",
+    "rust/src/database/global_config.rs",
+    "rust/src/auth.rs",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+
+[[row]]
+id = "s01-existing-1-3-0-cloud-backup-restore"
+section = "1"
+title = "Existing 1.3.0 cloud backup restore"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "rust/src/manager/cloud_backup_manager/ops/restore.rs",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s01-existing-encrypted-manual-backup"
+section = "1"
+title = "Existing encrypted manual backup"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/backup/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android N/A
+
+[[row]]
+id = "s01-two-cold-launches-after-upgrade"
+section = "1"
+title = "Two cold launches after upgrade"
+platforms = ["android"]
+target = "device"
+paths = [
+    "rust/src/bootstrap/migration.rs",
+    "rust/src/database/migration.rs",
+    "rust/src/database/migration/**",
+    "rust/src/bootstrap.rs",
+    "android/app/src/main/java/org/bitcoinppl/cove/MainActivityStartupBootstrap.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+
+[[row]]
+id = "s01-decoy-credential-persists-after-update"
+section = "1"
+title = "Decoy credential persists after update"
+platforms = ["android"]
+target = "device"
+paths = [
+    "rust/src/manager/auth_manager.rs",
+    "rust/src/auth.rs",
+    "rust/src/database/global_config.rs",
+    "android/app/src/main/java/org/bitcoinppl/cove/AuthManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/Security.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+
+[[row]]
+id = "s01-migrated-hot-recovery-words-readable-after-auth"
+section = "1"
+title = "Migrated hot recovery words readable after auth"
+platforms = ["android"]
+target = "device"
+paths = [
+    "rust/crates/cove-device/src/keychain.rs",
+    "rust/src/wallet_secret.rs",
+    "android/app/src/main/java/org/bitcoinppl/cove/secretwords/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/Security.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+
+[[row]]
+id = "s01-main-recovered-first-receive-address"
+section = "1"
+title = "Main recovered first receive address"
+platforms = ["android"]
+target = "rust"
+paths = [
+    "rust/src/wallet/addressing.rs",
+    "rust/src/mnemonic.rs",
+    "rust/src/wallet_secret.rs",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/hot_wallet/HotWalletImportScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# a known mnemonic vector decides the derived first address
+
+[[row]]
+id = "s01-watch-only-hww-public-material-and-origin"
+section = "1"
+title = "Watch-only/hww public material and origin"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/bootstrap/migration.rs",
+    "rust/src/database/migration.rs",
+    "rust/src/database/migration/**",
+    "rust/src/wallet/metadata.rs",
+    "rust/src/database/wallet.rs",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# compares xpub and origin before and after a real upgrade
+
+[[row]]
+id = "s01-main-restored-balance"
+section = "1"
+title = "Main restored balance"
+platforms = ["android"]
+target = "device"
+paths = [
+    "rust/src/wallet/balance.rs",
+    "rust/src/manager/wallet_manager/balance_presentation.rs",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/WalletBalanceHeaderView.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# needs a live chain scan of the restored wallet
+
+[[row]]
+id = "s01-final-store-signed-artifact-smoke-and-release"
+section = "1"
+title = "Final store-signed artifact smoke and release sign-off"
+platforms = ["ios", "android"]
+target = "manual"
+paths = []
+coverage = [
+    "human",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# release sign-off on the store-signed artifacts

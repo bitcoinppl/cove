@@ -1,0 +1,175 @@
+[[row]]
+id = "s18-secondary-receipt-label-and-lock-unlock"
+section = "18"
+title = "Secondary receipt label and lock unlock"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/label_manager.rs",
+    "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/coin_control_manager.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "ios/Cove/Flows/CoinControlFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s18-sub-5000-sat-payment-secondary-to-main"
+section = "18"
+title = "Sub-5000-sat payment: Secondary to Main"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/manager/send_flow_manager.rs",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/**",
+    "ios/Cove/Flows/SendFlow/ConfirmScreen/**",
+    "ios/Cove/Flows/SendFlow/Common/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/Common/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# needs funded signet wallets and a broadcast
+
+[[row]]
+id = "s18-payment-confirmed-and-both-wallet-balances"
+section = "18"
+title = "Payment confirmed and both wallet balances"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/manager/wallet_manager/actor/transaction_confirmation.rs",
+    "rust/src/transaction_watcher.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# needs a signet confirmation
+
+[[row]]
+id = "s18-complete-clean-install-hot-wallet-journey"
+section = "18"
+title = "Complete clean-install hot-wallet journey"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "ios/Cove/Flows/Onboarding/**",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/OnboardingFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# end to end journey on clean installs
+
+[[row]]
+id = "s18-journey-cloud-backup"
+section = "18"
+title = "Journey cloud backup"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "rust/src/manager/cloud_backup_manager.rs",
+    "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingContent.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# needs a real cloud account and passkey
+
+[[row]]
+id = "s18-journey-encrypted-manual-backup"
+section = "18"
+title = "Journey encrypted manual backup"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/backup/export.rs",
+    "rust/src/backup/import.rs",
+    "rust/src/backup/verify.rs",
+    "ios/Cove/Flows/SettingsFlow/BackupExportView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BackupExportScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android N/A
+# generated with no platforms; the checklist step applies to both, so both are listed
+
+[[row]]
+id = "s18-relaunch-and-unlock-after-payment"
+section = "18"
+title = "Relaunch and unlock after payment"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/manager/auth_manager.rs",
+    "ios/Cove/Views/LockView.swift",
+    "ios/Cove/Views/NumberPadPinView.swift",
+    "ios/Cove/AuthManager.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/LockView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/NumberPadPinView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/AuthManager.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# needs a process relaunch
+
+[[row]]
+id = "s18-ios-main-receipt-output-lock-keeps-label"
+section = "18"
+title = "iOS Main receipt output lock keeps label"
+platforms = ["ios"]
+target = "rust"
+paths = [
+    "rust/src/label_manager.rs",
+    "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/coin_control_manager.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "ios/Cove/Flows/CoinControlFlow/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s18-ios-transaction-unlock-restores-receipt-and-label"
+section = "18"
+title = "iOS transaction unlock restores receipt and label"
+platforms = ["ios"]
+target = "rust"
+paths = [
+    "rust/src/label_manager.rs",
+    "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/coin_control_manager.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "ios/Cove/Flows/CoinControlFlow/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android N/A

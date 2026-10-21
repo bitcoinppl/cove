@@ -1,0 +1,157 @@
+[[row]]
+id = "s13-unsigned-psbt-share-to-downloads"
+section = "13"
+title = "Unsigned PSBT share to Downloads"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareScreen.swift",
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareSections.swift",
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareSheets.swift",
+  "ios/Cove/PSBTFile.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/*.kt",
+  "ios/Cove/ShareSheet.swift",
+  "ios/Cove/ExportTypes.swift",
+  "rust/src/transaction/unsigned_transaction.rs",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# depends on the os share sheet and an available file target
+
+[[row]]
+id = "s13-unsigned-psbt-text-copy-export"
+section = "13"
+title = "Unsigned PSBT text-copy export"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+  "ios/Cove/Views/QrExportView.swift",
+  "ios/Cove/Views/QrExportContentViews.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/views/QrExportView.kt",
+  "rust/crates/cove-types/src/psbt.rs",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s13-signer-lab-review-and-signed-file-import"
+section = "13"
+title = "Signer Lab review and signed file import loop"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareScreen.swift",
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareSections.swift",
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareSheets.swift",
+  "ios/Cove/PSBTFile.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/*.kt",
+  "rust/src/transaction/unsigned_transaction.rs",
+  "rust/src/manager/wallet_manager/unsigned_transactions.rs",
+  "rust/src/database/unsigned_transactions.rs",
+  "rust/crates/cove-types/src/psbt.rs",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# needs an external signer tool and a signed file pushed to the device
+
+[[row]]
+id = "s13-strict-signer-animated-ur-and-signed-ur"
+section = "13"
+title = "Strict signer animated UR and signed UR import"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareScreen.swift",
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareSections.swift",
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareSheets.swift",
+  "ios/Cove/PSBTFile.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/*.kt",
+  "ios/Cove/Views/QrExportView.swift",
+  "ios/Cove/Views/QrExportContentViews.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/views/QrExportView.kt",
+  "rust/crates/cove-ur/src/crypto_psbt.rs",
+]
+coverage = [
+  "human",
+  "rust:rust/crates/cove-ur/src/crypto_psbt.rs::test_crypto_psbt_cbor_is_untagged_bytes",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# encoding is asserted in rust; a strict signer scanning animated qr needs a person
+
+[[row]]
+id = "s13-bbqr-unsigned-and-signed-scan-path"
+section = "13"
+title = "BBQr unsigned and signed scan path"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareScreen.swift",
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareSections.swift",
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareSheets.swift",
+  "ios/Cove/PSBTFile.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/*.kt",
+  "ios/Cove/Views/QrExportView.swift",
+  "ios/Cove/Views/QrExportContentViews.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/views/QrExportView.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+# needs camera exchange between two devices
+
+[[row]]
+id = "s13-nfc-and-tapsigner-setup-retry-and-signing"
+section = "13"
+title = "NFC and TAPSIGNER setup retry and signing"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+  "ios/Cove/Flows/TapSignerFlow/*.swift",
+  "ios/Cove/TapSignerNFC.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/TapSignerFlow/*.kt",
+  "rust/src/tap_card/tap_signer_reader.rs",
+  "rust/crates/cove-device/src/keychain/tap_signer.rs",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+# needs a physical tapsigner and nfc
+
+[[row]]
+id = "s13-watch-only-badge-and-secret-action-isolation"
+section = "13"
+title = "Watch-only badge and secret-action isolation"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+  "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+  "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+  "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsDangerSection.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsDangerSection.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s13-beta-unsigned-draft-resume-delete-and-unrelated"
+section = "13"
+title = "Beta unsigned draft resume delete and unrelated signature"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/transaction/unsigned_transaction.rs",
+  "rust/src/manager/wallet_manager/unsigned_transactions.rs",
+  "rust/src/database/unsigned_transactions.rs",
+  "rust/crates/cove-types/src/psbt.rs",
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareScreen.swift",
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareSections.swift",
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareSheets.swift",
+  "ios/Cove/PSBTFile.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/*.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/database/unsigned_transactions.rs::delete_tx_removes_the_record_and_its_wallet_index_entry",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# draft deletion is asserted; reservation release and unrelated signature rejection are not

@@ -1,0 +1,342 @@
+[[row]]
+id = "s03-one-utxo-locked-selection-and-totals-exclude"
+section = "3"
+title = "One UTXO locked, selection and totals exclude it"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/coin_control_manager.rs",
+    "rust/src/manager/coin_control_manager/**",
+    "rust/src/database/wallet_data/label.rs",
+    "rust/src/manager/wallet_manager/transaction_locks.rs",
+    "ios/Cove/Flows/CoinControlFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
+]
+coverage = [
+    "agent",
+    "rust:rust/src/manager/coin_control_manager.rs::select_all_skips_locked_utxos",
+    "rust:rust/src/manager/coin_control_manager.rs::selected_total_excludes_locked_utxos",
+    "rust:rust/src/manager/coin_control_manager.rs::direct_selection_prunes_locked_utxos",
+]
+# 1.4.0: ios PASS, android PASS
+# rust decides selection and totals; the visible lock row stays agent
+
+[[row]]
+id = "s03-received-transaction-locked-status"
+section = "3"
+title = "Received transaction locked status"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/transaction_locks.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
+]
+coverage = [
+    "agent",
+    "rust:rust/src/manager/wallet_manager/actor.rs::lock_state_for_outpoints_returns_locked_when_all_outputs_are_locked",
+]
+# 1.4.0: ios PASS, android PASS
+# rust decides the locked state; list and detail labels stay agent
+
+[[row]]
+id = "s03-normal-send-max-excludes-locked-value"
+section = "3"
+title = "Normal Send Max excludes locked value"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/send_flow_manager/**",
+    "ios/Cove/Flows/SendFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/**",
+]
+coverage = [
+    "rust:rust/src/manager/wallet_manager/actor.rs::actor_build_tx_excludes_db_locked_outpoints_from_psbt_inputs",
+    "rust:rust/src/manager/wallet_manager/actor.rs::actor_drain_tx_excludes_db_locked_outpoints_from_psbt_inputs",
+    "rust:rust/src/manager/wallet_manager/actor.rs::unlocked_trusted_spendable_balance_subtracts_locked_bdk_spendable_outputs",
+]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s03-lock-persists-after-restart"
+section = "3"
+title = "Lock persists after restart"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/database/wallet_data/label.rs",
+    "rust/src/manager/coin_control_manager.rs",
+    "ios/Cove/Flows/CoinControlFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+# lock state is a redb record, so a reopen test would decide it
+
+[[row]]
+id = "s03-bip329-locked-output-without-text-label"
+section = "3"
+title = "BIP329 locked output without text label"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/database/wallet_data/label.rs",
+    "rust/src/label_manager.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/MoreInfoPopover.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/WalletMoreOptionsSheet.kt",
+]
+coverage = [
+    "rust:rust/src/database/wallet_data/label.rs::export_includes_lock_only_output_record",
+]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s03-bip329-spendable-true-unlocks"
+section = "3"
+title = "BIP329 spendable:true unlocks"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/database/wallet_data/label.rs",
+    "rust/src/label_manager.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/MoreInfoPopover.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/WalletMoreOptionsSheet.kt",
+]
+coverage = [
+    "rust:rust/src/database/wallet_data/label.rs::imported_explicit_output_spendable_overrides_current_spendability",
+    "rust:rust/src/database/wallet_data/label.rs::import_unlabeled_spendable_true_marks_locked_output_unlocked_for_export",
+]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s03-bip329-spendable-false-locks"
+section = "3"
+title = "BIP329 spendable:false locks"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/database/wallet_data/label.rs",
+    "rust/src/label_manager.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/MoreInfoPopover.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/WalletMoreOptionsSheet.kt",
+]
+coverage = [
+    "rust:rust/src/database/wallet_data/label.rs::imported_explicit_locked_output_locks_current_output",
+]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s03-bip329-omitted-spendable-preserves-lock"
+section = "3"
+title = "BIP329 omitted spendable preserves lock"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/database/wallet_data/label.rs",
+    "rust/src/label_manager.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/MoreInfoPopover.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/WalletMoreOptionsSheet.kt",
+]
+coverage = [
+    "rust:rust/src/database/wallet_data/label.rs::imported_output_with_omitted_spendable_preserves_current_spendability",
+]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s03-lock-toggles-keep-output-label"
+section = "3"
+title = "Lock toggles keep output label"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/database/wallet_data/label.rs",
+    "rust/src/label_manager.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/MoreInfoPopover.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/WalletMoreOptionsSheet.kt",
+    "rust/src/manager/coin_control_manager.rs",
+]
+coverage = [
+    "agent",
+    "rust:rust/src/database/wallet_data/label.rs::unlocking_labeled_output_preserves_label",
+    "rust:rust/src/database/wallet_data/label.rs::import_unlabeled_spendability_update_preserves_existing_output_label",
+]
+# 1.4.0: ios PASS, android PASS
+# unlock direction is asserted in rust; the lock direction is not
+
+[[row]]
+id = "s03-manual-backup-export-and-verification"
+section = "3"
+title = "Manual backup export and verification"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/backup/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android N/A
+
+[[row]]
+id = "s03-manual-backup-labels-and-locks-round-trip"
+section = "3"
+title = "Manual backup labels and locks round trip"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/backup/**",
+    "rust/src/database/wallet_data/label.rs",
+    "rust/src/label_manager.rs",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android N/A
+
+[[row]]
+id = "s03-cloud-backup-labels-and-locks-round-trip"
+section = "3"
+title = "Cloud backup labels and locks round trip"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/wallets/**",
+    "rust/src/database/wallet_data/label.rs",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "human",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_dirty",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# rust test covers the restore half with a fake cloud; the real-account round trip stays human
+
+[[row]]
+id = "s03-unavailable-locked-coin-state-fails-closed"
+section = "3"
+title = "Unavailable locked-coin state fails closed"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/send_flow_manager/**",
+    "rust/src/manager/send_flow_manager.rs",
+    "rust/src/manager/coin_control_manager.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "ios/Cove/Flows/SendFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/**",
+]
+coverage = [
+    "rust:rust/src/manager/send_flow_manager.rs::validate_amount_blocks_send_when_lock_state_load_failed",
+    "rust:rust/src/manager/coin_control_manager.rs::load_utxo_labels_fails_closed_when_wallet_database_cannot_open",
+    "rust:rust/src/manager/wallet_manager/actor.rs::unlocked_trusted_spendable_balance_propagates_lock_state_read_errors",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+
+[[row]]
+id = "s03-main-self-payment-for-mixed-lock-fixture"
+section = "3"
+title = "Main self-payment for mixed-lock fixture"
+platforms = ["android"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# fixture creation, a live signet payment
+
+[[row]]
+id = "s03-mixed-transaction-toggles-all-unspent-outputs"
+section = "3"
+title = "Mixed transaction toggles all unspent outputs"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/transaction_locks.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
+]
+coverage = [
+    "agent",
+    "rust:rust/src/manager/wallet_manager/transaction_locks.rs::transaction_lock_toggle_uses_current_outpoints_for_bulk_label_update",
+    "rust:rust/src/manager/wallet_manager/actor.rs::lock_state_for_outpoints_returns_mixed_when_some_outputs_are_locked",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s03-coin-control-lock-after-back-and-fee"
+section = "3"
+title = "Coin-control lock after back and fee change"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/coin_control_manager.rs",
+    "rust/src/manager/coin_control_manager/**",
+    "rust/src/database/wallet_data/label.rs",
+    "rust/src/manager/wallet_manager/transaction_locks.rs",
+    "ios/Cove/Flows/CoinControlFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
+    "ios/Cove/Flows/SendFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/**",
+]
+coverage = [
+    "agent",
+    "rust:rust/src/manager/wallet_manager/actor.rs::actor_manual_tx_rejects_db_locked_outpoints",
+    "rust:rust/src/manager/coin_control_manager.rs::direct_selection_prunes_locked_utxos",
+]
+# 1.4.0: ios PASS, android PASS
+# rust rejects locked inputs regardless of navigation; the back and fee-change route stays agent
+
+[[row]]
+id = "s03-coin-control-lock-after-amount-edit"
+section = "3"
+title = "Coin-control lock after amount edit"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/coin_control_manager.rs",
+    "rust/src/manager/coin_control_manager/**",
+    "rust/src/database/wallet_data/label.rs",
+    "rust/src/manager/wallet_manager/transaction_locks.rs",
+    "ios/Cove/Flows/CoinControlFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
+    "ios/Cove/Flows/SendFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/**",
+]
+coverage = [
+    "agent",
+    "rust:rust/src/manager/wallet_manager/actor.rs::actor_manual_tx_rejects_db_locked_outpoints",
+    "rust:rust/src/manager/coin_control_manager.rs::direct_selection_prunes_locked_utxos",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# amount edit control was not reachable in the UI; rust rejects locked inputs regardless
+
+[[row]]
+id = "s03-mixed-toggle-leaves-spent-output-metadata-intact"
+section = "3"
+title = "Mixed toggle leaves spent-output metadata intact"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/transaction_locks.rs",
+    "rust/src/database/wallet_data/label.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
+]
+coverage = [
+    "agent",
+    "rust:rust/src/manager/wallet_manager/transaction_locks.rs::transaction_lock_toggle_uses_current_outpoints_for_bulk_label_update",
+    "rust:rust/src/database/wallet_data/label.rs::bulk_spendability_update_only_changes_requested_outpoints",
+]
+# 1.4.0: ios BLOCKED, android PASS

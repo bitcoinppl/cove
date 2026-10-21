@@ -1,0 +1,460 @@
+[[row]]
+id = "s11-empty-network-cold-launch-and-saved-selection"
+section = "11"
+title = "Empty-network cold launch and saved selection recovery"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/app.rs",
+  "rust/src/router.rs",
+  "rust/src/manager/wallet_manager.rs",
+  "ios/Cove/ManagerCache.swift",
+  "ios/Cove/WalletManager.swift",
+  "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/WalletSelectionRecovery.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+]
+coverage = ["agent"]
+pending = [
+  "rust:rust/src/router.rs::startup_route_ignores_a_selected_wallet_from_another_network",
+  "rust:rust/src/manager/wallet_manager.rs::loading_a_wallet_from_another_network_reports_that_it_does_not_exist",
+  "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainerRecoveryTest.kt::staleSelectedWalletRouteFallsBackInsteadOfLoadingForever",
+]
+pending_pr = 924
+# 1.4.0: ios BLOCKED, android FAIL
+# stale wallet id from another network is decided by startup routing and manager load
+
+[[row]]
+id = "s11-sidebar-and-settings-reorder-four-wallets"
+section = "11"
+title = "Sidebar and Settings reorder four wallets"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+  "rust/src/database/wallet.rs",
+  "ios/Cove/SidebarContainer.swift",
+  "ios/Cove/Views/SidebarView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarContainer.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarView.kt",
+  "ios/Cove/Flows/SettingsFlow/SettingsScreen/SettingsListAllWallets.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SettingsListAllWalletsScreen.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/database/wallet.rs::reorder_persists_and_round_trips",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# drag and drop is the risky part; persistence is asserted in rust
+
+[[row]]
+id = "s11-release-drag-without-moving"
+section = "11"
+title = "Release drag without moving"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+  "rust/src/database/wallet.rs",
+  "ios/Cove/SidebarContainer.swift",
+  "ios/Cove/Views/SidebarView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarContainer.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarView.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/database/wallet.rs::reorder_is_noop_for_identical_order",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# identical order being a no-op is asserted in rust; the gesture is not
+
+[[row]]
+id = "s11-reordered-signet-wallets-persist-after-cold-launch"
+section = "11"
+title = "Reordered Signet wallets persist after cold launch"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+  "rust/src/database/wallet.rs",
+  "ios/Cove/SidebarContainer.swift",
+  "ios/Cove/Views/SidebarView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarContainer.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarView.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/database/wallet.rs::reorder_persists_and_round_trips",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# needs a force-stop and relaunch; table persistence is asserted in rust
+
+[[row]]
+id = "s11-new-wallet-appends-to-saved-order"
+section = "11"
+title = "New wallet appends to saved order"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/database/wallet.rs",
+]
+coverage = ["rust:rust/src/database/wallet.rs::new_wallet_appends_after_reorder"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s11-empty-selected-wallet-stays-on-wallet-home"
+section = "11"
+title = "Empty selected wallet stays on wallet Home"
+platforms = ["android"]
+target = "ui"
+paths = [
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/WalletSelectionRecovery.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios N/A, android PASS
+
+[[row]]
+id = "s11-search-protects-complete-order-and-hidden-rows"
+section = "11"
+title = "Search protects complete order and hidden rows"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+  "rust/src/database/wallet.rs",
+  "ios/Cove/SidebarContainer.swift",
+  "ios/Cove/Views/SidebarView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarContainer.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarView.kt",
+  "ios/Cove/Flows/SettingsFlow/SettingsScreen/SettingsListAllWallets.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SettingsListAllWalletsScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s11-all-wallets-reorder-matches-sidebar"
+section = "11"
+title = "All Wallets reorder matches sidebar"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+  "rust/src/database/wallet.rs",
+  "ios/Cove/SidebarContainer.swift",
+  "ios/Cove/Views/SidebarView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarContainer.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarView.kt",
+  "ios/Cove/Flows/SettingsFlow/SettingsScreen/SettingsListAllWallets.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SettingsListAllWalletsScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s11-rapid-main-to-secondary-to-hww-switch"
+section = "11"
+title = "Rapid Main to Secondary to hww switch"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+  "ios/Cove/ManagerCache.swift",
+  "ios/Cove/WalletManager.swift",
+  "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/WalletSelectionRecovery.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+]
+coverage = [
+  "agent",
+  "android-unit:android/app/src/test/java/org/bitcoinppl/cove/WalletSelectionRecoveryTest.kt::staleWaiterIsExcludedWhenTheLoadGateReleases",
+  "ios-unit:ios/CoveTests/WalletTransitionTests.swift::testStaleWalletLoadClosesWithoutPublishing",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# stale load being dropped is asserted for the manager cache; final screen content is not
+
+[[row]]
+id = "s11-back-from-details-and-send-then-switch"
+section = "11"
+title = "Back from details and Send then switch"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+  "ios/Cove/ManagerCache.swift",
+  "ios/Cove/WalletManager.swift",
+  "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/WalletSelectionRecovery.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/SendFlowRouteLifecycle.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s11-offline-switch-and-foreground-selection"
+section = "11"
+title = "Offline switch and foreground selection"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+  "ios/Cove/ManagerCache.swift",
+  "ios/Cove/WalletManager.swift",
+  "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/WalletSelectionRecovery.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+  "rust/src/app.rs",
+  "rust/src/router.rs",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+# needs offline toggle and background/foreground
+
+[[row]]
+id = "s11-delete-current-unused-signet-hot-wallet"
+section = "11"
+title = "Delete current unused Signet hot wallet"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/app.rs",
+  "rust/src/wallet/deletion.rs",
+  "rust/src/manager/wallet_manager/wallet_admin.rs",
+  "rust/src/database/global_config.rs",
+  "rust/src/database/wallet.rs",
+  "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsDangerSection.swift",
+  "ios/Cove/ManagerCache.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsDangerSection.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/database/global_config.rs::forget_wallet_clears_every_matching_selection",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# selection cleanup is asserted; reselecting a valid wallet and cache eviction are not
+
+[[row]]
+id = "s11-restore-deleted-current-wallet-from-words"
+section = "11"
+title = "Restore deleted current wallet from words"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/wallet/builder.rs",
+  "rust/src/manager/import_wallet_manager.rs",
+  "ios/Cove/Flows/NewWalletFlow/HotWallet/HotWalletImportScreen.swift",
+  "ios/Cove/Flows/NewWalletFlow/ColdWallet/QrCodeImportScreen.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/hot_wallet/HotWalletImportScreen.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/QrCodeImportScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s11-delete-non-current-public-watch-wallet"
+section = "11"
+title = "Delete non-current public watch wallet"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/app.rs",
+  "rust/src/wallet/deletion.rs",
+  "rust/src/manager/wallet_manager/wallet_admin.rs",
+  "rust/src/database/global_config.rs",
+  "rust/src/database/wallet.rs",
+  "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsDangerSection.swift",
+  "ios/Cove/ManagerCache.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsDangerSection.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/database/global_config.rs::forget_wallet_clears_every_matching_selection",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# selection cleanup is asserted; reselecting a valid wallet and cache eviction are not
+
+[[row]]
+id = "s11-restore-deleted-non-current-watch-wallet"
+section = "11"
+title = "Restore deleted non-current watch wallet"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/wallet/builder.rs",
+  "rust/src/manager/import_wallet_manager.rs",
+  "ios/Cove/Flows/NewWalletFlow/HotWallet/HotWalletImportScreen.swift",
+  "ios/Cove/Flows/NewWalletFlow/ColdWallet/QrCodeImportScreen.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/hot_wallet/HotWalletImportScreen.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/QrCodeImportScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s11-delete-last-wallet-in-signet-decoy-scope"
+section = "11"
+title = "Delete last wallet in Signet decoy scope"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/app.rs",
+  "rust/src/wallet/deletion.rs",
+  "rust/src/manager/wallet_manager/wallet_admin.rs",
+  "rust/src/database/global_config.rs",
+  "rust/src/database/wallet.rs",
+  "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsDangerSection.swift",
+  "ios/Cove/ManagerCache.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsDangerSection.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+# last-wallet fallback to onboarding or new wallet is in app.rs select_latest_or_new_wallet
+
+[[row]]
+id = "s11-restore-last-decoy-wallet-from-public-export"
+section = "11"
+title = "Restore last decoy wallet from public export"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/wallet/builder.rs",
+  "rust/src/manager/import_wallet_manager.rs",
+  "ios/Cove/Flows/NewWalletFlow/HotWallet/HotWalletImportScreen.swift",
+  "ios/Cove/Flows/NewWalletFlow/ColdWallet/QrCodeImportScreen.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/hot_wallet/HotWalletImportScreen.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/QrCodeImportScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s11-main-and-decoy-lists-remain-separate"
+section = "11"
+title = "Main and decoy lists remain separate"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/database/wallet.rs",
+  "rust/src/database/global_config.rs",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/database/wallet.rs::wallet_key_strings_cover_every_network_and_mode",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# separate storage keys per network and mode are asserted; the visible lists are not
+
+[[row]]
+id = "s11-network-order-isolation-follow-up"
+section = "11"
+title = "Network order isolation follow-up"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/database/wallet.rs",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/database/wallet.rs::wallet_key_strings_cover_every_network_and_mode",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# separate storage keys per network and mode are asserted; reorder isolation is not
+
+[[row]]
+id = "s11-switch-during-scan-and-coin-control-route"
+section = "11"
+title = "Switch during scan and coin-control route scope"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+  "ios/Cove/ManagerCache.swift",
+  "ios/Cove/WalletManager.swift",
+  "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/WalletSelectionRecovery.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+  "rust/src/app.rs",
+  "rust/src/router.rs",
+  "ios/Cove/CoinControlManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/CoinControlManager.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android BLOCKED
+
+[[row]]
+id = "s11-ios-sidebar-reorder-four-wallets"
+section = "11"
+title = "iOS sidebar reorder four wallets"
+platforms = ["ios"]
+target = "ui"
+paths = [
+  "rust/src/database/wallet.rs",
+  "ios/Cove/SidebarContainer.swift",
+  "ios/Cove/Views/SidebarView.swift",
+  "ios/Cove/Flows/SettingsFlow/SettingsScreen/SettingsListAllWallets.swift",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/database/wallet.rs::reorder_persists_and_round_trips",
+]
+# 1.4.0: ios BLOCKED, android N/A
+
+[[row]]
+id = "s11-ios-three-visible-wallets-end-on-main"
+section = "11"
+title = "iOS three visible wallets end on Main"
+platforms = ["ios"]
+target = "ui"
+paths = [
+  "ios/Cove/ManagerCache.swift",
+  "ios/Cove/WalletManager.swift",
+  "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+  "ios/Cove/SidebarContainer.swift",
+  "ios/Cove/Views/SidebarView.swift",
+]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s11-beta-wallet-rename-preserves-identity-and-balance"
+section = "11"
+title = "Beta wallet rename preserves identity and balance"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+  "rust/src/manager/wallet_manager/actor.rs",
+  "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsChangeNameView.swift",
+  "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsView.swift",
+  "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsSections.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/WalletSettingsChangeNameScreen.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsScreen.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSections.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s11-beta-wallet-color-changes-and-restores"
+section = "11"
+title = "Beta wallet color changes and restores"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+  "rust/src/manager/wallet_manager/actor.rs",
+  "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsChangeNameView.swift",
+  "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsView.swift",
+  "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsSections.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/WalletSettingsChangeNameScreen.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsScreen.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSections.kt",
+  "ios/Cove/SidebarContainer.swift",
+  "ios/Cove/Views/SidebarView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarContainer.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/sidebar/SidebarView.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android PASS

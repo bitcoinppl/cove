@@ -1,0 +1,140 @@
+[[row]]
+id = "s08-mnemonic-review-reveal-import-finish-without-importing"
+section = "8"
+title = "Mnemonic review reveal/import/finish without importing"
+platforms = ["ios", "android"]
+target = "ui"
+paths = ["rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReviewViews.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewViews.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s08-xprv-review-reveal-hide-copy-import"
+section = "8"
+title = "xprv review reveal/hide/copy/import"
+platforms = ["ios", "android"]
+target = "ui"
+paths = ["rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReviewViews.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewViews.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s08-ios-android-12-word-mnemonic"
+section = "8"
+title = "iOS → Android 12-word mnemonic"
+platforms = ["ios", "android"]
+target = "manual"
+paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s08-android-ios-18-word-mnemonic"
+section = "8"
+title = "Android → iOS 18-word mnemonic"
+platforms = ["ios", "android"]
+target = "manual"
+paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s08-ios-android-master-private-key"
+section = "8"
+title = "iOS → Android master private key"
+platforms = ["ios", "android"]
+target = "manual"
+paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s08-android-ios-master-private-key"
+section = "8"
+title = "Android → iOS master private key"
+platforms = ["ios", "android"]
+target = "manual"
+paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s08-same-platform-24-word-transfer"
+section = "8"
+title = "Same-platform 24-word transfer"
+platforms = ["ios", "android"]
+target = "manual"
+paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s08-coldcard-mnemonic"
+section = "8"
+title = "COLDCARD mnemonic"
+platforms = ["ios", "android"]
+target = "manual"
+paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s08-coldcard-private-key-raw-master-secret"
+section = "8"
+title = "COLDCARD private key/raw master secret"
+platforms = ["ios", "android"]
+target = "manual"
+paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s08-coldcard-plain-note-displays-without-wallet-import"
+section = "8"
+title = "COLDCARD plain note displays without wallet import"
+platforms = ["ios", "android"]
+target = "manual"
+paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s08-imported-default-name-and-duplicate-handling"
+section = "8"
+title = "Imported default name and duplicate handling"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReviewViews.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewViews.kt"]
+coverage = ["human", "rust:rust/src/manager/import_wallet_manager.rs::key_teleport_import_uses_fingerprint_as_default_name", "rust:rust/src/manager/key_teleport_manager/tests.rs::duplicate_receive_import_finishes_and_erases_the_receive_session"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s08-receive-network-and-main-decoy-scope-isolation"
+section = "8"
+title = "Receive network and main/decoy scope isolation"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "rust/src/manager/import_wallet_manager.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s08-bbqr-scans-and-opened-shared-response-links"
+section = "8"
+title = "BBQr scans and opened/shared response links"
+platforms = ["ios", "android"]
+target = "manual"
+paths = ["rust/src/key_teleport.rs", "rust/src/qr_scanner.rs", "ios/Cove/ScanManager+KeyTeleport.swift", "ios/Cove/ScanManager.swift", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt", "android/app/src/main/java/org/bitcoinppl/cove/ExternalKeyTeleportIntentHandler.kt", "android/app/src/main/java/org/bitcoinppl/cove/ScanManager.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+# camera scans and share sheet routing need a person
+
+[[row]]
+id = "s08-private-key-export-reveal-copy-and-keyteleport"
+section = "8"
+title = "Private Key export Reveal/Copy and KeyTeleport entry consistency"
+platforms = ["ios", "android"]
+target = "ui"
+paths = ["rust/src/manager/key_teleport_manager.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSharedViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportContainer.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportToolbarMenu.kt"]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
