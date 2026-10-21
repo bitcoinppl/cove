@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from android.driver import parse_hierarchy  # noqa: E402
 from common import Device, ForbiddenTap, RowFailed, ensure_tap_allowed  # noqa: E402
-from ios.driver import parse_source  # noqa: E402
+from ios.driver import Ios, parse_source  # noqa: E402
 from screens import row_registry  # noqa: E402
 
 DUMP = """UI hierchary dumped to: /dev/tty<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
@@ -42,11 +42,48 @@ class WdaSourceTest(unittest.TestCase):
     def test_parses_visible_labelled_elements_with_bounds_and_identifiers(self):
         nodes = parse_source(WDA_SOURCE, "org.bitcoinppl.cove")
 
-        self.assertEqual([node.label for node in nodes], ["Cove", "Menu", "Receive", "42 sats"])
-        self.assertEqual(nodes[1].res_id, "app.sidebar.open")
-        self.assertEqual(nodes[2].bounds, (220, 300, 380, 350))
-        self.assertEqual(nodes[2].center, (300, 325))
+        self.assertEqual([node.label for node in nodes], ["Menu", "Receive", "42 sats"])
+        self.assertEqual(nodes[0].res_id, "app.sidebar.open")
+        self.assertEqual(nodes[1].bounds, (220, 300, 380, 350))
+        self.assertEqual(nodes[1].center, (300, 325))
         self.assertEqual({node.package for node in nodes}, {"org.bitcoinppl.cove"})
+
+
+class FakeWda(Ios):
+    """An Ios driver whose WDA answers that `front` is the app in front and records taps"""
+
+    def __init__(self, front: str):
+        super().__init__("org.bitcoinppl.cove")
+        self.front = front
+        self.posted = []
+
+    def request(self, method, path, body=None, timeout=60):
+        if path == "/wda/activeAppInfo":
+            return {"value": {"bundleId": self.front}}
+
+        return {"value": WDA_SOURCE}
+
+    def session_post(self, path, body=None):
+        self.posted.append(path)
+        return {}
+
+
+class IosFrontAppTest(unittest.TestCase):
+    def test_refuses_to_read_or_tap_when_another_app_is_in_front(self):
+        driver = FakeWda("com.apple.Preferences")
+        receive = parse_source(WDA_SOURCE, "org.bitcoinppl.cove")[1]
+
+        with self.assertRaises(RowFailed):
+            driver.nodes()
+        with self.assertRaises(RowFailed):
+            driver.tap(receive)
+        self.assertEqual(driver.posted, [])
+
+    def test_taps_when_the_app_is_in_front(self):
+        driver = FakeWda("org.bitcoinppl.cove")
+        driver.tap(driver.find(r"^Receive$"))
+
+        self.assertEqual(driver.posted, ["/wda/tap"])
 
 
 class FakeScreen(Device):
