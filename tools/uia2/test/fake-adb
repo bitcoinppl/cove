@@ -37,12 +37,22 @@ case "$1 ${2:-} ${3:-}" in
       if [ "${left:-0}" -gt 0 ]; then echo $((left - 1)) >"$FAKE_ADB/force_stop_fail"; else echo "error: device offline" >&2; exit 1; fi
     fi ;;
   "shell dumpsys package") echo "    versionName=10.6.6" ;;
-  "shell pm path") echo "package:/data/app/base.apk" ;;
+  # installed/PACKAGE holds the checksum of the APK installed for it
+  "shell pm path")
+    [ -e "$FAKE_ADB/installed/$4" ] || exit 1
+    echo "package:/data/app/$4/base.apk" ;;
+  "shell sha256sum "*)
+    pkg="$(basename "$(dirname "$3")")"
+    echo "$(cat "$FAKE_ADB/installed/$pkg")  $3" ;;
+  "install -r -g")
+    case "$4" in *androidTest*) pkg=io.appium.uiautomator2.server.test ;; *) pkg=io.appium.uiautomator2.server ;; esac
+    mkdir -p "$FAKE_ADB/installed"
+    shasum -a 256 "$4" | cut -d' ' -f1 >"$FAKE_ADB/installed/$pkg" ;;
   "shell am instrument") while :; do sleep 1; done ;;
   "shell am start") echo "Status: ok" ;;
   "shell cmd package")
     [ -e "$FAKE_ADB/resolve_fail" ] && { echo "adb: more than one device/emulator" >&2; exit 1; }
     echo "org.bitcoinppl.cove/.MainActivity" ;;
-  "install "*|"shell input keyevent") ;;
+  "shell input keyevent") ;;
   *) echo "fake adb: unhandled: $*" >&2; exit 1 ;;
 esac

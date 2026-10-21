@@ -30,8 +30,10 @@ export ANDROID_SERIAL=<serial from adb devices>   # needed only when several dev
 2. **Run `uia2-doctor`.** It checks adb, the device, the screen lock, the cached APKs, the
    installed server, other running instrumentation and the port. The `next` field says what to fix.
 3. **Run `uia2-start`.** It downloads and verifies the pinned server APKs (v10.6.6) into
-   `~/.cache/cove-uia2`, installs them if needed, starts the server, and forwards it to
-   `localhost:8200`. Samsung may ask to confirm the first install on the phone.
+   `~/.cache/cove-uia2`, installs each one whose installed copy doesn't match its checksum,
+   starts the server, and forwards it to `localhost:8200`. A server that already runs for this
+   device is reused only when it is ready and on the pinned version. Samsung may ask to confirm
+   the first install on the phone.
 4. **Use the `android-*` commands.** Start with `android-launch org.bitcoinppl.cove`, then `android-vis`.
 5. **Run `uia2-stop` when done.** Plain `uiautomator dump` and instrumented tests need the
    device's automation connection back (see below).
@@ -50,16 +52,17 @@ export ANDROID_SERIAL=<serial from adb devices>   # needed only when several dev
 | `android-tap X Y` | tap at pixel coordinates |
 | `android-tap-label [--nth N] [--wait S] LABEL` | tap the element whose test tag, text or content-desc equals LABEL, waiting up to S seconds (default 5) for it to appear; the first lookup always completes |
 | `android-pin DIGITS` | tap a PIN on Cove's keypad by its test tags (`numberPadPin.digit.N`); fails when that keypad isn't showing |
-| `android-type [--enter] TEXT` | set the focused field to TEXT, report whether the field took it, then press Enter if asked |
+| `android-type [--enter] [--] TEXT` | set the focused field to TEXT, report whether the field took it, then press Enter if asked |
 | `android-swipe [--hold S] up\|down\|left\|right` | finger swipe across the middle of the screen; `up` moves the finger up, so a list shows items further down |
 | `android-drag [--hold S] X1 Y1 X2 Y2` | press at X1,Y1 for S seconds (default 1), then drag to X2,Y2 |
 | `android-hold X Y [SECONDS]` | long-press at pixel coordinates (default 1 s) |
 | `android-back` | press Back |
 | `android-key NAME\|KEYCODE` | press a key: `enter`, `del`, `tab`, `paste`, `home`, `app_switch`, ... or a numeric keycode |
-| `android-clipboard set TEXT \| get` | write the clipboard; `get` works only below Android 10 (see below) |
+| `android-clipboard set [--] TEXT \| get` | write the clipboard; `get` works only below Android 10 (see below) |
 | `android-shot [-s MAX_PIXELS] [--element LABEL] PATH.png` | screenshot to a file; `-s` downscales it with `sips`, `--element` crops to one element |
 
-Action commands accept `--dry-run`, which prints the requests without sending them.
+Action commands accept `--dry-run`, which prints the requests without sending them. Options
+are read only before `--`, so `android-type -- --enter` types the text `--enter`.
 
 ## Reading `android-vis`
 

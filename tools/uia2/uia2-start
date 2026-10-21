@@ -32,8 +32,15 @@ lock_device
 
 forwards="$(adb forward --list 2>&1)" || die adb_failed "adb forward --list failed: $forwards"
 # answer only for this device's own forward: a stale port file can outlive an unplug while
-# another device's server now answers on the same port
-if server_ports "$forwards" | grep -qx "$UIA2_PORT" && curl -sf -m 2 "$UIA2_BASE_URL/status" >/dev/null; then
+# another device's server now answers on the same port. Reuse only a ready server of the pinned
+# version; an older one left behind by a version bump is reinstalled and restarted below
+ready_server() {
+  curl -sf -m 2 "$UIA2_BASE_URL/status" | python3 -I -c 'import json, sys
+v = json.load(sys.stdin).get("value") or {}
+sys.exit(0 if v.get("ready") is True and (v.get("build") or {}).get("version") == sys.argv[1] else 1)' "$UIA2_SERVER_VERSION" 2>/dev/null
+}
+
+if server_ports "$forwards" | grep -qx "$UIA2_PORT" && ready_server; then
   json ok:raw=true action=uia2-start already_running:raw=true "base_url=$UIA2_BASE_URL" "serial=$ANDROID_SERIAL"
   exit 0
 fi
@@ -68,13 +75,24 @@ fi
 
 "$(dirname "$0")/uia2-fetch" >"$STATE/fetch.json" || { cat "$STATE/fetch.json"; exit 1; }
 
-installed="$(adb shell dumpsys package "$UIA2_SERVER_PKG" | sed -n 's/.*versionName=//p' | head -1 | tr -d '\r')"
-if [ "$installed" != "$UIA2_SERVER_VERSION" ] || ! adb shell pm path "$UIA2_SERVER_PKG.test" | grep -q package:; then
-  adb install -r -g "$UIA2_SERVER_APK" >"$STATE/install.log" 2>&1 &&
-    adb install -r -g "$UIA2_TEST_APK" >>"$STATE/install.log" 2>&1 ||
-    die install_failed "installing the server APKs failed; Samsung may show a confirmation on the phone" \
+# the test package has no version, so compare each installed APK with its pinned checksum; that
+# also catches an upgrade that installed the server but failed on the test APK
+installed_sha() { # installed_sha PACKAGE
+  local apk
+  apk="$(adb shell pm path "$1" 2>/dev/null | sed -n 's/^package://p' | head -1 | tr -d '\r')"
+  [ -n "$apk" ] && adb shell sha256sum "$apk" 2>/dev/null | cut -d' ' -f1
+}
+
+install_if_changed() { # install_if_changed PACKAGE SHA256 APK
+  [ "$(installed_sha "$1")" = "$2" ] && return 0
+  adb install -r -g "$3" >>"$STATE/install.log" 2>&1 ||
+    die install_failed "installing $1 failed; Samsung may show a confirmation on the phone" \
       "log=$STATE/install.log" "log_tail=$(tail -n 5 "$STATE/install.log")"
-fi
+}
+
+: >"$STATE/install.log"
+install_if_changed "$UIA2_SERVER_PKG" "$UIA2_SERVER_SHA256" "$UIA2_SERVER_APK"
+install_if_changed "$UIA2_SERVER_PKG.test" "$UIA2_TEST_SHA256" "$UIA2_TEST_APK"
 
 # stop leftovers from a previous run so the port and the UiAutomation connection are free
 stop_out="$("$(dirname "$0")/uia2-stop" 2>&1)" || die stop_failed "could not stop the previous server" "stop=$stop_out"

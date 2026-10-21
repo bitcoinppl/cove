@@ -125,9 +125,28 @@ def window_size():
     return float(v["width"]), float(v["height"])
 
 
+def options_end(args):
+    """Options end at the first `--`; every argument after it is literal, even one that looks like a flag"""
+    return args.index("--") if "--" in args else len(args)
+
+
+def pop_flag(args, name):
+    """Remove the option `name` and return (args, whether it was given)"""
+    if name not in args[:options_end(args)]:
+        return args, False
+    i = args.index(name)
+    return args[:i] + args[i + 1:], True
+
+
+def operands(args):
+    """The arguments left once the options are popped, without the `--` that ended them"""
+    i = options_end(args)
+    return args[:i] + args[i + 1:]
+
+
 def pop_opt(args, name, default, cast=float, usage=""):
     """Remove `name VALUE` from args and return (args, value)"""
-    if name not in args:
+    if name not in args[:options_end(args)]:
         return args, default
     i = args.index(name)
     try:
@@ -161,6 +180,7 @@ def swipe_points(direction, w, h):
 def cmd_swipe(args, dry):
     usage = "usage: android-swipe [--dry-run] [--hold SECONDS] up|down|left|right"
     args, hold = pop_opt(args, "--hold", SWIPE_HOLD, usage=usage)
+    args = operands(args)
     if len(args) != 1 or args[0] not in ("up", "down", "left", "right"):
         raise Fail("usage", usage)
     d = args[0]
@@ -177,6 +197,7 @@ def cmd_swipe(args, dry):
 def cmd_drag(args, dry):
     usage = "usage: android-drag [--dry-run] [--hold SECONDS] FROM_X FROM_Y TO_X TO_Y  (pixels; default hold 1 s)"
     args, hold = pop_opt(args, "--hold", 1.0, usage=usage)
+    args = operands(args)
     try:
         fx, fy, tx, ty = (int(float(a)) for a in args)
     except ValueError:
@@ -198,7 +219,7 @@ def parse_point(args, usage):
 
 
 def cmd_tap(args, dry):
-    x, y = parse_point(args, "usage: android-tap [--dry-run] X Y (pixels, as printed by android-vis)")
+    x, y = parse_point(operands(args), "usage: android-tap [--dry-run] X Y (pixels, as printed by android-vis)")
     body = {"offset": {"x": x, "y": y}}
     if dry:
         return {"would_send": [{"method": "POST", "path": "/session/<id>/appium/gestures/click", "body": body}]}
@@ -208,6 +229,7 @@ def cmd_tap(args, dry):
 
 def cmd_hold(args, dry):
     usage = "usage: android-hold [--dry-run] X Y [SECONDS]  (pixels; default 1 second)"
+    args = operands(args)
     secs = 1.0
     if len(args) == 3:
         try:
@@ -260,9 +282,10 @@ def find_label(label, nth=1, wait=0.0):
 
 
 def cmd_tap_label(args, dry):
-    usage = "usage: android-tap-label [--dry-run] [--nth N] [--wait SECONDS] LABEL (exact test tag, text or content-desc)"
+    usage = "usage: android-tap-label [--dry-run] [--nth N] [--wait SECONDS] [--] LABEL (exact test tag, text or content-desc)"
     args, nth = pop_opt(args, "--nth", 1, int, usage)
     args, wait = pop_opt(args, "--wait", float(os.environ.get("UIA2_WAIT", "5")), usage=usage)
+    args = operands(args)
     if len(args) != 1 or not args[0] or nth < 1:
         raise Fail("usage", usage)
     label = args[0]
@@ -278,10 +301,10 @@ def cmd_tap_label(args, dry):
 def cmd_type(args, dry):
     # the server sets the focused field's whole text through accessibility, so characters can't
     # reorder the way fast `adb shell input text` keystrokes do; it replaces rather than appends
-    enter = "--enter" in args
-    args = [a for a in args if a != "--enter"]
+    args, enter = pop_flag(args, "--enter")
+    args = operands(args)
     if len(args) != 1:
-        raise Fail("usage", "usage: android-type [--dry-run] [--enter] TEXT (replaces the focused field's text; quote it)")
+        raise Fail("usage", "usage: android-type [--dry-run] [--enter] [--] TEXT (replaces the focused field's text; quote it, and put -- before text that starts with -)")
     text = args[0]
     body = {"text": text, "replace": True}
     enter_req = ("/appium/device/press_keycode", {"keycode": KEYCODES["enter"]})
@@ -307,7 +330,7 @@ def cmd_type(args, dry):
 
 
 def cmd_back(args, dry):
-    if args:
+    if operands(args):
         raise Fail("usage", "usage: android-back [--dry-run]")
     if dry:
         return {"would_send": [{"method": "POST", "path": "/session/<id>/back", "body": {}}]}
@@ -317,6 +340,7 @@ def cmd_back(args, dry):
 
 def cmd_key(args, dry):
     usage = "usage: android-key [--dry-run] NAME|KEYCODE  (names: %s)" % ", ".join(sorted(KEYCODES))
+    args = operands(args)
     if len(args) != 1:
         raise Fail("usage", usage)
     name = args[0].lower().removeprefix("keycode_")
@@ -335,9 +359,8 @@ def source_xml():
 
 
 def cmd_source(args, dry):
-    raw = "--raw" in args
-    args = [a for a in args if a != "--raw"]
-    if args:
+    args, raw = pop_flag(args, "--raw")
+    if operands(args):
         raise Fail("usage", "usage: android-source [--dry-run] [--raw]")
     if dry:
         return {"would_send": [{"method": "GET", "path": "/session/<id>/source"}]}
@@ -490,14 +513,15 @@ def vis_lines(xml, show_all=False):
 
 
 def cmd_vis(args, dry):
-    show_all = "-a" in args
-    if [a for a in args if a != "-a"]:
+    args, show_all = pop_flag(args, "-a")
+    if operands(args):
         raise Fail("usage", "usage: android-vis [-a]  (flags: C clickable, E editable, S scrollable, F focused, X checked, D disabled, U under a later layer)")
     print_text("\n".join(vis_lines(source_xml(), show_all)))
 
 
 def cmd_pin(args, dry):
     # one tree read, then coordinate taps: six find-and-click round trips take about 2 s
+    args = operands(args)
     if len(args) != 1 or not args[0].isdigit():
         raise Fail("usage", "usage: android-pin [--dry-run] DIGITS")
     digits = args[0]
@@ -522,9 +546,10 @@ def cmd_pin(args, dry):
 
 
 def cmd_shot(args, dry):
-    usage = "usage: android-shot [--dry-run] [-s MAX_PIXELS] [--element LABEL] PATH.png"
+    usage = "usage: android-shot [--dry-run] [-s MAX_PIXELS] [--element LABEL] [--] PATH.png"
     args, max_px = pop_opt(args, "-s", 0, int, usage)
     args, label = pop_opt(args, "--element", "", str, usage)
+    args = operands(args)
     if len(args) != 1:
         raise Fail("usage", usage)
     path = os.path.abspath(os.path.expanduser(args[0]))
@@ -547,7 +572,8 @@ def cmd_shot(args, dry):
 
 
 def cmd_clipboard(args, dry):
-    usage = "usage: android-clipboard [--dry-run] get | set TEXT"
+    usage = "usage: android-clipboard [--dry-run] get | set [--] TEXT"
+    args = operands(args)
     if not args or args[0] not in ("get", "set") or len(args) != (2 if args[0] == "set" else 1):
         raise Fail("usage", usage)
     if args[0] == "set":
@@ -568,8 +594,8 @@ def cmd_clipboard(args, dry):
 def cmd_launch(args, dry):
     # launching needs adb, not the server: the server has no app start endpoint
     # an unknown flag must not fall through to a force-stop that wipes the app's in-memory state
-    activate = "--activate" in args
-    pkgs = [a for a in args if a != "--activate"]
+    args, activate = pop_flag(args, "--activate")
+    pkgs = operands(args)
     if len(pkgs) != 1 or pkgs[0].startswith("-"):
         raise Fail("usage", "usage: android-launch [--dry-run] [--activate] PACKAGE")
     pkg = pkgs[0]
@@ -603,8 +629,7 @@ COMMANDS = {"launch": cmd_launch, "swipe": cmd_swipe, "drag": cmd_drag, "tap": c
 
 def main(argv):
     name, rest = argv[0], argv[1:]
-    dry = "--dry-run" in rest
-    rest = [a for a in rest if a != "--dry-run"]
+    rest, dry = pop_flag(rest, "--dry-run")
     try:
         result = COMMANDS[name](rest, dry)
     except Fail as e:

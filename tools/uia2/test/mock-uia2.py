@@ -78,7 +78,13 @@ class H(BaseHTTPRequestHandler):
             f.write(json.dumps({"method": method, "path": self.path, "body": body}) + "\n")
         p = self.path
         if p == "/status":
-            return self.reply(200, {"ready": True})
+            # a test can report another server version by writing REQUEST_LOG.version
+            try:
+                with open(LOG + ".version") as f:
+                    version = f.read().strip()
+            except FileNotFoundError:
+                version = "10.6.6"
+            return self.reply(200, {"ready": True, "build": {"version": version}})
         if p == "/session":
             return self.reply(200, {"sessionId": SID, "capabilities": {}})
         if not p.startswith("/session/" + SID):
