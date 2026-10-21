@@ -15,7 +15,7 @@ impl RustSendFlowManager {
     ) -> Result<Psbt> {
         trace!("build_psbt");
 
-        // every send path builds here, so this keeps a zero-fee transaction from ever existing
+        // finalize and max send check the same floor for paths that skip this builder
         if fee_rate.is_below_minimum() {
             return Err(SendFlowError::FeeRateBelowMinimum);
         }

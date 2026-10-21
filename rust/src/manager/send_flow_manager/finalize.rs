@@ -40,6 +40,12 @@ impl RustSendFlowManager {
             return self.send_alert(SendFlowError::UnableToGetFeeRate);
         };
 
+        // a selection with a known total confirms without building a PSBT here, so the floor
+        // that build_psbt enforces must also hold before confirming
+        if selected_fee_rate.fee_rate.is_below_minimum() {
+            return self.send_alert(SendFlowError::FeeRateBelowMinimum);
+        }
+
         let Some(total_fee) = selected_fee_rate.total_fee else {
             let me = self.clone();
             let snapshot = FinalizeSnapshot {
