@@ -447,6 +447,7 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
                     manager: CoinControlManager(RustCoinControlManager.previewNew())
                 )
                 .environment(WalletManager(preview: .only))
+                .environment(AppManager.shared)
             }
             .frame(width: size.width, height: size.height),
             size: size
