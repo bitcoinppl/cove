@@ -1,9 +1,13 @@
 use std::collections::HashMap;
+use std::str::FromStr as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
 use parking_lot::Mutex;
+
+use crate::wallet::fingerprint::Fingerprint;
+use crate::wallet::metadata::{WalletMetadata, WalletType};
 
 static FAIL_KEYCHAIN_DELETES: AtomicBool = AtomicBool::new(false);
 
@@ -53,13 +57,16 @@ impl MockKeychain {
 
 impl KeychainAccess for MockKeychain {
     fn save(&self, key: String, value: String) -> Result<(), KeychainError> {
-        let mut save_count = self.save_count.lock();
-        *save_count += 1;
-        if Some(*save_count) == *self.fail_save_at.lock() {
-            return Err(KeychainError::Save);
+        {
+            let mut save_count = self.save_count.lock();
+            *save_count += 1;
+            if Some(*save_count) == *self.fail_save_at.lock() {
+                return Err(KeychainError::Save);
+            }
         }
 
         self.entries.lock().insert(key, value);
+
         Ok(())
     }
 
@@ -90,9 +97,21 @@ impl KeychainAccess for MockKeychain {
             "::tap_signer_backup",
             "::wallet_tap_signer_encryption_key_and_nonce_key_name",
         ];
+
         self.entries.lock().retain(|key, _| !suffixes.iter().any(|suffix| key.ends_with(suffix)));
         Ok(())
     }
+}
+
+pub(crate) fn hot_wallet_metadata(name: &str) -> WalletMetadata {
+    let mut metadata = WalletMetadata::preview_new();
+    metadata.name = name.to_string();
+    metadata.wallet_type = WalletType::Hot;
+    metadata.master_fingerprint = Some(Arc::new(Fingerprint::from(
+        bdk_wallet::bitcoin::bip32::Fingerprint::from_str("817e7be0").unwrap(),
+    )));
+
+    metadata
 }
 
 /// The single [`MockKeychain`] instance behind the process-global keychain

@@ -1,4 +1,8 @@
-use std::{fmt, time::Duration};
+use std::{
+    fmt,
+    sync::atomic::{AtomicU32, AtomicU64, Ordering},
+    time::Duration,
+};
 
 use cove_device::keychain::Keychain;
 use keyteleport::ReceiverSession;
@@ -18,8 +22,25 @@ use cove_util::result_ext::ResultExt as _;
 const RECEIVE_SESSION_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 static RECEIVE_SESSION_STORAGE_LOCK: Mutex<()> = Mutex::new(());
 
-#[derive(Debug, Default)]
-pub(crate) struct ReceiveSessionStore;
+// bumped under the storage lock when a full wipe commits, so a manager created before the wipe
+// cannot persist a new session from a receive action that was still queued when the wipe ran
+static RECEIVE_SESSION_WIPE_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+// resets that deleted the session but have not committed or failed yet; frontends queue actions
+// on their own threads, so an action can reach Rust mid-wipe and must not save a new key then
+static RECEIVE_SESSION_RESETS_IN_PROGRESS: AtomicU32 = AtomicU32::new(0);
+
+/// Receive session storage bound to the full-wipe epoch its manager was created in
+#[derive(Debug)]
+pub(crate) struct ReceiveSessionStore(u64);
+
+/// A receive session reset that blocks session creation until it commits or is dropped
+///
+/// Committing marks every existing manager stale. Dropping without a commit means the wipe
+/// failed, so existing managers can create sessions again
+#[must_use = "dropping the reset without commit reopens receive sessions for existing managers"]
+#[derive(Debug)]
+pub(crate) struct ReceiveSessionReset(());
 
 #[derive(Debug)]
 pub(crate) enum LoadedReceiveSession {
@@ -61,15 +82,39 @@ struct PersistedReceiveSession {
 }
 
 impl ReceiveSessionStore {
+    pub(crate) fn current() -> Self {
+        Self(RECEIVE_SESSION_WIPE_EPOCH.load(Ordering::Acquire))
+    }
+
+    /// Takes the storage lock for a store whose manager predates no committed wipe
+    ///
+    /// A manager from before the wipe can still have actions queued; letting them load or delete
+    /// would touch the session a newer manager created, so every storage access checks the epoch
+    fn lock_current(&self) -> Result<MutexGuard<'static, ()>, KeyTeleportAlert> {
+        let storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        if self.0 != RECEIVE_SESSION_WIPE_EPOCH.load(Ordering::Acquire) {
+            return Err(receive_session_unavailable());
+        }
+
+        Ok(storage_guard)
+    }
+
     pub(crate) fn create(&self) -> Result<ActiveReceiveSession, KeyTeleportAlert> {
+        // check the reset state, generate, and save under one lock so a full wipe cannot land
+        // between them and leave a private key in the keychain
+        let _storage_guard = self.lock_current()?;
+        if RECEIVE_SESSION_RESETS_IN_PROGRESS.load(Ordering::Acquire) > 0 {
+            return Err(receive_session_unavailable());
+        }
+
         let session = ActiveReceiveSession::new();
-        self.save(&session)?;
+        Self::save_unlocked(&session)?;
 
         Ok(session)
     }
 
     pub(crate) fn load(&self) -> Result<Option<LoadedReceiveSession>, KeyTeleportAlert> {
-        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        let _storage_guard = self.lock_current()?;
         let Some(persisted) = load_receive_session_unlocked()? else {
             return Ok(None);
         };
@@ -82,7 +127,7 @@ impl ReceiveSessionStore {
         ActiveReceiveSession::restore(&persisted).map(LoadedReceiveSession::Active).map(Some)
     }
 
-    pub(crate) fn save(&self, session: &ActiveReceiveSession) -> Result<(), KeyTeleportAlert> {
+    fn save_unlocked(session: &ActiveReceiveSession) -> Result<(), KeyTeleportAlert> {
         let mut private_key = session.receiver.private_key_bytes();
         let persisted = PersistedReceiveSession {
             session_id: Some(session.id.0.clone()),
@@ -93,9 +138,6 @@ impl ReceiveSessionStore {
         };
 
         private_key.zeroize();
-
-        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
-
         persisted.save_unlocked()
     }
 
@@ -103,7 +145,7 @@ impl ReceiveSessionStore {
         &self,
         session: &ActiveReceiveSession,
     ) -> Result<AuthoritativeReceiveSession, KeyTeleportAlert> {
-        let storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        let storage_guard = self.lock_current()?;
         ensure_authoritative_receive_session_unlocked(session)?;
 
         Ok(AuthoritativeReceiveSession {
@@ -113,7 +155,7 @@ impl ReceiveSessionStore {
     }
 
     pub(crate) fn delete(&self) -> Result<(), KeyTeleportAlert> {
-        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        let _storage_guard = self.lock_current()?;
 
         delete_receive_session_unlocked()
     }
@@ -122,9 +164,40 @@ impl ReceiveSessionStore {
         &self,
         session_id: &ReceiveSessionId,
     ) -> Result<(), KeyTeleportAlert> {
-        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        let _storage_guard = self.lock_current()?;
 
         delete_receive_session_if_matches_unlocked(session_id)
+    }
+}
+
+impl ReceiveSessionReset {
+    /// Deletes the persisted receive session and its private key under the session store lock
+    ///
+    /// Deleting outside the lock would let a concurrent load that upgrades a legacy session write
+    /// the old private key back after the delete. No manager can create a session until the
+    /// returned reset commits or is dropped, and committing keeps managers created before the wipe
+    /// from ever creating one, so a receive action still queued during the wipe cannot save a new
+    /// key
+    pub(crate) fn begin() -> Result<Self, KeyTeleportAlert> {
+        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        delete_receive_session_unlocked()?;
+
+        // the reset's Drop takes the storage lock, so it must only be built once nothing can fail
+        RECEIVE_SESSION_RESETS_IN_PROGRESS.fetch_add(1, Ordering::AcqRel);
+        Ok(Self(()))
+    }
+
+    /// Marks every manager created before the reset stale, then reopens session creation
+    pub(crate) fn commit(self) {
+        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        RECEIVE_SESSION_WIPE_EPOCH.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+impl Drop for ReceiveSessionReset {
+    fn drop(&mut self) {
+        let _storage_guard = RECEIVE_SESSION_STORAGE_LOCK.lock();
+        RECEIVE_SESSION_RESETS_IN_PROGRESS.fetch_sub(1, Ordering::AcqRel);
     }
 }
 
@@ -344,6 +417,12 @@ fn ensure_authoritative_receive_session_unlocked(
     }
 
     Ok(())
+}
+
+// the wipe PIN can be entered under duress and a queued action can surface this alert, so it reads
+// like any other keychain failure instead of revealing that a wipe ran
+fn receive_session_unavailable() -> KeyTeleportAlert {
+    KeyTeleportAlert::Keychain("unable to save KeyTeleport receive session".into())
 }
 
 fn delete_receive_session_unlocked() -> Result<(), KeyTeleportAlert> {

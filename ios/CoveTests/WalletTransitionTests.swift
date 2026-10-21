@@ -209,10 +209,30 @@ final class WalletTransitionTests: XCTestCase {
 
     @MainActor
     func testStaleWalletLoadClosesWithoutPublishing() async throws {
+        var isCurrent = true
+
+        try await assertInFlightLoadIsCancelled(isCurrent: { isCurrent }) { _ in
+            isCurrent = false
+        }
+    }
+
+    @MainActor
+    func testClearingWalletManagerInvalidatesInFlightLoad() async throws {
+        try await assertInFlightLoadIsCancelled { cache in
+            cache.clearWalletManager()
+        }
+    }
+
+    /// Starts a suspended wallet load, runs `invalidate` while it is in flight, then expects the
+    /// load to be cancelled without publishing the manager
+    @MainActor
+    private func assertInFlightLoadIsCancelled(
+        isCurrent: @escaping @MainActor () -> Bool = { true },
+        invalidate: (ManagerCache) -> Void
+    ) async throws {
         let expectedManager = WalletManager(preview: .only)
         var loadStarted = false
         var resumeLoad: CheckedContinuation<Void, Never>?
-        var isCurrent = true
         let cache = ManagerCache(
             backgroundScanTaskHandler: BackgroundScanTaskHandler(),
             loadWalletManager: { _, _ in
@@ -230,7 +250,7 @@ final class WalletTransitionTests: XCTestCase {
             try await cache.ensureWalletManagerLoaded(
                 id: expectedManager.id,
                 delegate: delegate,
-                isCurrent: { isCurrent }
+                isCurrent: isCurrent
             )
         }
         try await waitUntilWalletLoadStarts({ loadStarted }) {
@@ -239,12 +259,12 @@ final class WalletTransitionTests: XCTestCase {
             resumeLoad = nil
         }
 
-        isCurrent = false
+        invalidate(cache)
         resumeLoad?.resume()
 
         do {
             _ = try await load.value
-            XCTFail("stale wallet load must be cancelled")
+            XCTFail("invalidated wallet load must be cancelled")
         } catch is CancellationError {}
 
         XCTAssertNil(cache.cachedWalletManager(id: expectedManager.id))
@@ -303,6 +323,28 @@ final class WalletTransitionTests: XCTestCase {
         XCTAssertTrue(expectedManager.canApplyReconcileMessages)
 
         cache.clearWalletManager()
+    }
+
+    @MainActor
+    func testClearingWalletManagerAlsoClearsCoinControlManager() async throws {
+        let walletManager = WalletManager(preview: .only)
+        let coinControlManager = CoinControlManager(
+            RustCoinControlManager.previewNew(outputCount: 1, changeCount: 0)
+        )
+        let cache = ManagerCache(
+            backgroundScanTaskHandler: BackgroundScanTaskHandler(),
+            loadWalletManager: { _, _ in walletManager }
+        )
+
+        _ = try await cache.ensureWalletManagerLoaded(id: walletManager.id, delegate: TestWalletManagerDelegate())
+        cache.setCoinControlManager(coinControlManager)
+
+        cache.clearWalletManager()
+
+        XCTAssertNil(cache.cachedWalletManager(id: walletManager.id))
+        XCTAssertFalse(walletManager.canApplyReconcileMessages)
+        XCTAssertNil(cache.coinControlManager)
+        XCTAssertFalse(coinControlManager.canApplyReconcileMessages)
     }
 
     func testRepeatedInvalidationAdvancesWhenCacheIsEmpty() {

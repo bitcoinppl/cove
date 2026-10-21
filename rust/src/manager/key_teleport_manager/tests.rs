@@ -240,6 +240,49 @@ fn legacy_receive_session_json_is_migrated_without_changing_the_request() {
 }
 
 #[test]
+fn receive_start_queued_across_a_full_wipe_cannot_save_a_session() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let has_session = || Keychain::global().get_key_teleport_receive_session().unwrap().is_some();
+    let pre_wipe_manager = RustKeyTeleportManager::new();
+
+    // frontends queue actions on their own threads, so one can reach Rust mid-wipe
+    let reset = super::ReceiveSessionReset::begin().unwrap();
+    assert!(pre_wipe_manager.start_receive().is_err());
+    assert!(RustKeyTeleportManager::new().start_receive().is_err());
+    assert!(!has_session());
+
+    reset.commit();
+    assert!(pre_wipe_manager.start_receive().is_err());
+    assert!(!has_session());
+
+    RustKeyTeleportManager::new().start_receive().unwrap();
+    let current = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
+
+    // a restart still queued on the old manager must not load, replace, or delete the new session
+    assert!(pre_wipe_manager.start_receive().is_err());
+    assert!(pre_wipe_manager.restart_receive().is_err());
+    assert!(pre_wipe_manager.end_receive().is_err());
+    let stored = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
+    assert_eq!(*stored, *current);
+}
+
+#[test]
+fn failed_full_wipe_reopens_receive_for_existing_managers() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let manager = RustKeyTeleportManager::new();
+
+    let reset = super::ReceiveSessionReset::begin().unwrap();
+    assert!(manager.restart_receive().is_err());
+
+    // a failed wipe drops the reset, and frontends keep their cached manager
+    drop(reset);
+    manager.restart_receive().unwrap();
+    assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_some());
+}
+
+#[test]
 fn another_manager_restart_invalidates_the_displayed_receive_request() {
     let _guard = crate::test_support::global_state_test_lock().blocking_lock();
     init_globals();

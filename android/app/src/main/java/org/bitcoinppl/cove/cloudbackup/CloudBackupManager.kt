@@ -539,8 +539,13 @@ class CloudBackupManager private constructor(
     private fun apply(message: CloudBackupReconcileMessage) {
         val wasDisablingCloudBackup = isDisablingCloudBackup
         when (message) {
-            is CloudBackupReconcileMessage.Lifecycle ->
+            is CloudBackupReconcileMessage.Lifecycle -> {
+                // a completion from an enable that has since been turned off, such as by a full wipe, is stale
+                if (message.v1 is CloudBackupLifecycle.Disabled) enableCompletion = null
+
                 state = state.copy(lifecycle = message.v1, settingsRowStatus = message.v2)
+            }
+
             is CloudBackupReconcileMessage.EnableCompleted ->
                 enableCompletion = TaggedItem(message.v1)
             is CloudBackupReconcileMessage.DriveAccountSwitchCommitRequired -> {

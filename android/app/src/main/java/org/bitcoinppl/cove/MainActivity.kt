@@ -491,7 +491,10 @@ class MainActivity : FragmentActivity() {
                 return@setContent
             }
 
-            if (bdkMigrationWarning != null) {
+            val app = remember { AppManager.getInstance() }
+            val auth = remember { AuthManager.getInstance() }
+
+            if (bdkMigrationWarning != null && auth.wipePresentationState != WipePresentationState.Running) {
                 AlertDialog(
                     onDismissRequest = { bdkMigrationWarning = null },
                     title = { Text("Encryption Migration Issue") },
@@ -506,8 +509,6 @@ class MainActivity : FragmentActivity() {
                 )
             }
 
-            val app = remember { AppManager.getInstance() }
-            val auth = remember { AuthManager.getInstance() }
             val snackbarHostState = remember { SnackbarHostState() }
             var startupMode by remember {
                 mutableStateOf(resolveStartupMode(app.needsOnboarding))

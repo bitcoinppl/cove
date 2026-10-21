@@ -44,64 +44,68 @@ internal fun MainActivityAppShell(
         }
 
     CoveTheme(darkTheme = darkTheme) {
-        CloudBackupPresentationHost(
-            app = app,
-            auth = auth,
-            isCoverPresented = isPrivacyCoverVisible,
-            presentationPolicy =
-                if (startupMode == StartupMode.ONBOARDING) {
-                    CloudBackupPresentationPolicy.ONBOARDING
-                } else {
-                    CloudBackupPresentationPolicy.REQUIRES_UNLOCKED_AUTH
-                },
-        ) {
-            Scaffold(
-                containerColor = Color.Transparent,
-                contentWindowInsets = WindowInsets(0),
-                snackbarHost = {
-                    SnackbarHost(
-                        hostState = snackbarHostState,
-                        modifier = Modifier.padding(WindowInsets.navigationBars.asPaddingValues()),
-                    )
-                },
-            ) { _ ->
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .semantics { testTagsAsResourceId = true },
-                ) {
-                    LockView {
-                        when (startupMode) {
-                            StartupMode.ONBOARDING -> {
-                                if (onboardingManager != null) {
-                                    OnboardingContainer(
-                                        manager = onboardingManager,
-                                        onComplete = onOnboardingComplete,
-                                    )
-                                }
-                            }
-                            StartupMode.READY ->
-                                SidebarContainer(app = app) {
-                                    key(app.selectedNetwork, app.routeId) {
-                                        CoveNavDisplay(app = app)
+        if (auth.wipePresentationState == WipePresentationState.Running) {
+            SplashLoadingView(showSpinner = true)
+        } else {
+            CloudBackupPresentationHost(
+                app = app,
+                auth = auth,
+                isCoverPresented = isPrivacyCoverVisible,
+                presentationPolicy =
+                    if (startupMode == StartupMode.ONBOARDING) {
+                        CloudBackupPresentationPolicy.ONBOARDING
+                    } else {
+                        CloudBackupPresentationPolicy.REQUIRES_UNLOCKED_AUTH
+                    },
+            ) {
+                Scaffold(
+                    containerColor = Color.Transparent,
+                    contentWindowInsets = WindowInsets(0),
+                    snackbarHost = {
+                        SnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier = Modifier.padding(WindowInsets.navigationBars.asPaddingValues()),
+                        )
+                    },
+                ) { _ ->
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .semantics { testTagsAsResourceId = true },
+                    ) {
+                        LockView {
+                            when (startupMode) {
+                                StartupMode.ONBOARDING -> {
+                                    if (onboardingManager != null) {
+                                        OnboardingContainer(
+                                            manager = onboardingManager,
+                                            onComplete = onOnboardingComplete,
+                                        )
                                     }
                                 }
+                                StartupMode.READY ->
+                                    SidebarContainer(app = app) {
+                                        key(app.selectedNetwork, app.routeId) {
+                                            CoveNavDisplay(app = app)
+                                        }
+                                    }
+                            }
                         }
-                    }
 
-                    app.sheetState?.let { taggedState ->
-                        SheetContent(
-                            state = taggedState,
+                        app.sheetState?.let { taggedState ->
+                            SheetContent(
+                                state = taggedState,
+                                app = app,
+                                onDismiss = { app.sheetState = null },
+                            )
+                        }
+
+                        GlobalAlertHandler(
                             app = app,
-                            onDismiss = { app.sheetState = null },
+                            snackbarHostState = snackbarHostState,
                         )
                     }
-
-                    GlobalAlertHandler(
-                        app = app,
-                        snackbarHostState = snackbarHostState,
-                    )
                 }
             }
         }

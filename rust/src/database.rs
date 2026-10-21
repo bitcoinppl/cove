@@ -28,7 +28,7 @@ use cloud_backup::{
 use diagnostics_reports::DiagnosticsReportsTable;
 use global_cache::GlobalCacheTable;
 use global_config::{GlobalConfigKey, GlobalConfigTable};
-use global_flag::GlobalFlagTable;
+use global_flag::{GlobalFlagKey, GlobalFlagTable};
 use historical_price::HistoricalPriceTable;
 use uniffi::custom_newtype;
 use unsigned_transactions::UnsignedTransactionsTable;
@@ -88,8 +88,16 @@ impl Database {
     pub fn diagnostics_reports(&self) -> DiagnosticsReportsTable {
         self.diagnostics_reports.clone()
     }
+}
 
-    pub fn dangerous_reset_all_data(&self) -> Result<(), error::DatabaseError> {
+impl Database {
+    /// Replace the database file with a fresh one that keeps only completed onboarding
+    ///
+    /// Only the lifecycle coordinator's full wipe may call this. Returns whether onboarding
+    /// stays complete in the fresh database, so callers report the committed value
+    pub(crate) fn dangerous_reset_all_data(&self) -> Result<bool, error::DatabaseError> {
+        let completed_onboarding = self.global_flag.get(GlobalFlagKey::CompletedOnboarding)?;
+
         match std::fs::remove_file(database_location()) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -104,14 +112,12 @@ impl Database {
             error!("unable to clear diagnostics logs during data reset: {error}");
         }
 
-        let db = Self::init()?;
+        let db = Self::init_with_completed_onboarding(completed_onboarding)?;
         DATABASE.get().expect("database not initialized").swap(Arc::new(db));
 
-        Ok(())
+        Ok(completed_onboarding)
     }
-}
 
-impl Database {
     pub fn global() -> Arc<Self> {
         Self::try_global().expect("failed to initialize main database")
     }
@@ -146,6 +152,12 @@ impl Database {
     }
 
     fn init() -> Result<Self, error::DatabaseError> {
+        Self::init_with_completed_onboarding(false)
+    }
+
+    fn init_with_completed_onboarding(
+        completed_onboarding: bool,
+    ) -> Result<Self, error::DatabaseError> {
         crate::bootstrap::ensure_storage_bootstrapped()
             .map_err_str(error::DatabaseError::BootstrapFailed)?;
 
@@ -164,6 +176,10 @@ impl Database {
         let unsigned_transactions = UnsignedTransactionsTable::new(main_db_arc.clone(), &write_txn);
         let historical_prices = HistoricalPriceTable::new(main_db_arc.clone(), &write_txn);
         let diagnostics_reports = DiagnosticsReportsTable::new(main_db_arc, &write_txn);
+
+        if completed_onboarding {
+            global_flag.set_onboarding_complete_in_transaction(&write_txn)?;
+        }
 
         write_txn.commit()?;
 
@@ -226,31 +242,54 @@ fn database_location() -> PathBuf {
 
 #[cfg(test)]
 pub(crate) mod test_support {
-    use rand::{distr::Alphanumeric, prelude::*};
+    use std::path::{Path, PathBuf};
+    use std::sync::OnceLock;
+    use std::time::Duration;
 
     use super::*;
 
-    pub(crate) fn init_test_database() {
-        crate::bootstrap::tests::set_test_bootstrapped();
-        crate::app::reconcile::test_support::init_noop_updater();
-        let _ = DATABASE_LOCATION_OVERRIDE.set(test_database_location());
+    const TEST_DATA_DIR_PREFIX: &str = "cove-test-";
+    const STALE_TEST_DATA_DIR_AGE: Duration = Duration::from_secs(60 * 60);
+
+    static TEST_ROOT: OnceLock<PathBuf> = OnceLock::new();
+
+    // held for the process lifetime so another run's sweep can tell the root is still in use
+    static TEST_ROOT_LOCK: OnceLock<std::fs::File> = OnceLock::new();
+
+    /// Install the process test root before any test can touch the real data directory
+    ///
+    /// `ROOT_DATA_DIR` resolves lazily and cannot be redirected afterwards, so a test
+    /// that reached it before `init_test_database` pinned the whole process to
+    /// `~/.data`, and `delete_database` then removed the developer's real wallet data
+    #[ctor::ctor(unsafe)]
+    fn install_process_test_root() {
+        process_test_data_dir();
     }
 
-    fn test_database_location() -> PathBuf {
-        let mut rng = rand::rng();
-        let random_string: String = (0..7).map(|_| rng.sample(Alphanumeric) as char).collect();
-        let cove_db = format!("cove_{random_string}.db");
+    /// Remove the process test root on normal exit; the stale sweep covers killed processes
+    #[dtor::dtor(unsafe)]
+    fn remove_process_test_root() {
+        if let Some(root) = TEST_ROOT.get() {
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
 
-        let test_dir = ROOT_DATA_DIR.join("test");
-        std::fs::create_dir_all(&test_dir).expect("failed to create test dir");
-
-        test_dir.join(cove_db)
+    pub(crate) fn init_test_database() {
+        let root = process_test_data_dir();
+        crate::bootstrap::tests::set_test_bootstrapped();
+        crate::app::reconcile::test_support::init_noop_updater();
+        let _ = DATABASE_LOCATION_OVERRIDE.set(root.join("cove.encrypted.db"));
     }
 
     pub(crate) fn delete_database() {
         init_test_database();
+        let root = process_test_data_dir();
         let db_path = database_location();
-        let wallet_data_dir = ROOT_DATA_DIR.join("wallet_data");
+        let wallet_data_dir = cove_common::consts::wallet_data_dir_path();
+        assert!(
+            db_path.starts_with(root) && wallet_data_dir.starts_with(root),
+            "test cleanup must stay inside the process test root {root:?}"
+        );
 
         let _ = std::fs::remove_file(&db_path);
         let _ = std::fs::remove_dir_all(&wallet_data_dir);
@@ -258,7 +297,104 @@ pub(crate) mod test_support {
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent).expect("failed to recreate test dir");
         }
+
         std::fs::create_dir_all(wallet_data_dir).expect("failed to recreate wallet data test dir");
+    }
+
+    fn process_test_data_dir() -> &'static PathBuf {
+        TEST_ROOT.get_or_init(|| {
+            let parent = std::env::temp_dir();
+            sweep_stale_test_data_dirs(&parent);
+
+            let tempdir = tempfile::Builder::new()
+                .prefix(TEST_DATA_DIR_PREFIX)
+                .tempdir()
+                .expect("failed to create test data directory");
+
+            // keep the directory for the process lifetime; Drop would delete it too early
+            let path = tempdir.keep();
+
+            // locking the directory itself keeps the lock out of the root's contents and needs no
+            // cleanup; flock works on read-only directory handles
+            let lock = std::fs::File::open(&path).expect("failed to open test root");
+            lock.lock().expect("failed to lock test root");
+            let _ = TEST_ROOT_LOCK.set(lock);
+
+            cove_common::consts::set_root_data_dir(path.clone())
+                .expect("test root must be installed before any data directory access");
+            assert_eq!(
+                *cove_common::consts::ROOT_DATA_DIR,
+                path,
+                "data directory resolved before the test root was installed"
+            );
+            path
+        })
+    }
+
+    fn sweep_stale_test_data_dirs(parent: &Path) {
+        let Ok(entries) = std::fs::read_dir(parent) else {
+            return;
+        };
+
+        let now = std::time::SystemTime::now();
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+
+            if !name.starts_with(TEST_DATA_DIR_PREFIX) {
+                continue;
+            }
+
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+
+            if !metadata.is_dir() {
+                continue;
+            }
+
+            let Ok(modified) = metadata.modified() else {
+                continue;
+            };
+
+            let Ok(age) = now.duration_since(modified) else {
+                continue;
+            };
+
+            // nextest runs binaries in parallel, so only remove dirs older than one hour
+            if age <= STALE_TEST_DATA_DIR_AGE {
+                continue;
+            }
+
+            // a run that still holds its lock is alive however long it has been running
+            let root = entry.path();
+            if let Ok(lock) = std::fs::File::open(&root)
+                && lock.try_lock().is_err()
+            {
+                continue;
+            }
+
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn test_database_lives_under_temp_dir_not_home_data() {
+        init_test_database();
+        let path = database_location();
+        let temp = std::env::temp_dir();
+
+        assert!(path.starts_with(&temp), "test database {path:?} must be under {temp:?}");
+
+        let root = &*cove_common::consts::ROOT_DATA_DIR;
+        let wallet_data = cove_common::consts::wallet_data_dir_path();
+        assert!(root.starts_with(&temp), "root data dir {root:?} must be under {temp:?}");
+        assert!(
+            wallet_data.starts_with(root),
+            "wallet data {wallet_data:?} must be under {root:?}"
+        );
     }
 }
 

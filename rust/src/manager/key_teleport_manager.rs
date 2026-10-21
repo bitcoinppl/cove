@@ -23,6 +23,7 @@ use crate::{
 use controller::ManagerController;
 use model::ManagerModel;
 use receive::ReceiveWorkflow;
+pub(crate) use receive_session::ReceiveSessionReset;
 use receive_session::ReceiveSessionStore;
 pub(crate) use send::is_send_eligible_wallet_id;
 
@@ -420,7 +421,7 @@ impl RustKeyTeleportManager {
         Arc::new(Self {
             action_lock: Mutex::new(()),
             model: Arc::new(Mutex::new(ManagerModel::default())),
-            receive_sessions: ReceiveSessionStore,
+            receive_sessions: ReceiveSessionStore::current(),
             reconciler: ReconcileChannel::new(20),
         })
     }
