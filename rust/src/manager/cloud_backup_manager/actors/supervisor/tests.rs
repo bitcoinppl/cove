@@ -5,6 +5,7 @@ use super::enable::{
 };
 use super::verification::DeepVerificationContinuation;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
+use cove_tokio::FutureTimeoutExt as _;
 use cove_cspp::CsppStore as _;
 use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
@@ -3514,7 +3515,8 @@ async fn restore_all_cancellation_finishes_the_active_wallet_and_skips_the_next(
     );
 
     call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(2), gate.wait_until_blocked())
+    gate.wait_until_blocked()
+        .with_timeout(Duration::from_secs(2))
         .await
         .expect("first wallet restore should reach atomic download");
     call!(manager.supervisor.cancel_restore_all_operation()).await.unwrap();

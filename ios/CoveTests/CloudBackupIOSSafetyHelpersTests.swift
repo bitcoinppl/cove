@@ -1505,6 +1505,304 @@ extension CloudBackupIOSSafetyHelpersTests {
 }
 
 @MainActor
+extension CloudBackupIOSSafetyHelpersTests {
+    func testMetadataDeletionImmediatelyFiltersReadersAndStaleUpdates() async throws {
+        let settleSleep = MetadataSettleSleepSpy(blockedCalls: [])
+        let fixture = makeICloudMetadataFixture(
+            settleSleep: { duration in try await settleSleep.sleep(for: duration) }
+        )
+        defer { fixture.removeContainer() }
+
+        let deleted = metadataRecord(name: "wallet.json", parentPath: "/cloud/namespace")
+        let unrelated = metadataRecord(name: "other.json", parentPath: "/cloud/namespace")
+        let initial = Task {
+            try await fixture.index.settledRecords(timeout: 1, settleInterval: 0.5)
+        }
+
+        await fixture.source.waitUntilStarted()
+        fixture.source.send(.finishedGathering([deleted, unrelated]))
+        let initialRecords = try await initial.value
+        XCTAssertEqual(initialRecords, [deleted, unrelated])
+
+        var observerCount = 0
+        let observerID = fixture.index.addObserver { observerCount += 1 }
+        fixture.index.markDeleted(resolvedPaths: [deleted.resolvedPath])
+
+        let currentRecords = try await fixture.index.currentOrInitialRecords(timeout: 1)
+        let deletedItem = try await fixture.index.itemIfPresent(
+            named: deleted.name,
+            parentPath: "/cloud/namespace",
+            timeout: 1
+        )
+        XCTAssertEqual(currentRecords, [unrelated])
+        XCTAssertNil(deletedItem)
+        XCTAssertEqual(
+            fixture.index.visibleItems(matching: [
+                ICloudMetadataCandidate(name: unrelated.name, parentPath: "/cloud/namespace"),
+            ]),
+            [unrelated]
+        )
+        let settledRecords = try await fixture.index.settledRecords(
+            timeout: 1,
+            settleInterval: 0.5
+        )
+        XCTAssertEqual(settledRecords, [unrelated])
+        XCTAssertEqual(settleSleep.durations, [0.5])
+        XCTAssertEqual(observerCount, 0)
+
+        fixture.source.send(.updated([deleted, unrelated]))
+        fixture.source.send(.updated([deleted, unrelated]))
+
+        let staleUpdateRecords = try await fixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(staleUpdateRecords, [unrelated])
+        XCTAssertEqual(
+            fixture.index.visibleItems(matching: [
+                ICloudMetadataCandidate(name: deleted.name, parentPath: "/cloud/namespace"),
+            ]),
+            []
+        )
+        XCTAssertEqual(observerCount, 2)
+        XCTAssertEqual(fixture.source.startCount, 1)
+
+        let refreshedRecords = try await fixture.index.settledRecords(
+            timeout: 1,
+            settleInterval: 0.5
+        )
+        XCTAssertEqual(refreshedRecords, [unrelated])
+        XCTAssertEqual(settleSleep.durations, [0.5, 0.5])
+        fixture.index.removeObserver(observerID)
+    }
+
+    func testMetadataDeletionSurvivesSnapshotsThatOmitThePath() async throws {
+        let record = metadataRecord(name: "wallet.json", parentPath: "/cloud/namespace")
+
+        // an empty cold-start gather is not proof of deletion
+        let initialFixture = makeICloudMetadataFixture()
+        initialFixture.index.markDeleted(resolvedPaths: [record.resolvedPath])
+        let initial = Task { try await initialFixture.index.currentOrInitialRecords(timeout: 1) }
+        await initialFixture.source.waitUntilStarted()
+        initialFixture.source.send(.finishedGathering([]))
+        let absentInitialRecords = try await initial.value
+        XCTAssertEqual(absentInitialRecords, [])
+        initialFixture.source.send(.updated([record]))
+        let staleInitialRecords = try await initialFixture.index.currentOrInitialRecords(
+            timeout: 1
+        )
+        XCTAssertEqual(staleInitialRecords, [])
+
+        let liveFixture = makeICloudMetadataFixture()
+        try await seedFinishedGathering(liveFixture, [record])
+        liveFixture.index.markDeleted(resolvedPaths: [record.resolvedPath])
+        liveFixture.source.send(.updated([]))
+        liveFixture.source.send(.updated([record]))
+        let staleLiveRecords = try await liveFixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(staleLiveRecords, [])
+
+        // a later upload of the same file releases the tombstone without another event
+        liveFixture.index.clearDeletion(resolvedPath: record.resolvedPath)
+        let reuploadedRecords = try await liveFixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(reuploadedRecords, [record])
+    }
+
+    func testMetadataDeletionCoversDescendantsWithoutMatchingTextPrefix() async throws {
+        let fixture = makeICloudMetadataFixture()
+        let directoryPath = "/cloud/namespace"
+        let child = metadataRecord(name: "wallet.json", parentPath: directoryPath)
+        let nested = metadataRecord(name: "key.json", parentPath: directoryPath + "/nested")
+        let sibling = metadataRecord(name: "other.json", parentPath: directoryPath + "-other")
+        try await seedFinishedGathering(fixture, [child, nested, sibling])
+
+        fixture.index.markDeleted(resolvedPaths: [directoryPath, directoryPath])
+        let records = try await fixture.index.currentOrInitialRecords(timeout: 1)
+
+        XCTAssertEqual(records, [sibling])
+        XCTAssertEqual(
+            ICloudMetadataProjection.subdirectoryNames(in: records, parentPath: "/cloud"),
+            ["namespace-other"]
+        )
+        XCTAssertEqual(
+            ICloudMetadataProjection.fileNames(
+                in: records,
+                parentPath: directoryPath,
+                prefix: "wallet"
+            ),
+            []
+        )
+    }
+
+    func testSuccessfulBackupDeleteHidesCurrentAndLegacyMetadataImmediately() async throws {
+        for location in backupLocations() {
+            let fixture = makeICloudMetadataFixture(settleSleep: { _ in })
+            defer { fixture.removeContainer() }
+
+            let url = try fixture.helper.backupFileReadURL(
+                namespace: testNamespace,
+                location: location
+            )
+            try writeTestBackup(at: url)
+            let record = metadataRecord(
+                name: url.lastPathComponent,
+                parentPath: url.deletingLastPathComponent().path
+            )
+            try await seedFinishedGathering(fixture, [record])
+
+            try await fixture.helper.deleteExistingBackupFile(
+                namespace: testNamespace,
+                recordId: "wallet-record",
+                locations: [location]
+            )
+
+            let fileNames = try await fixture.helper.metadataFileNames(
+                namespacePath: url.deletingLastPathComponent().path,
+                prefix: csppWalletFilePrefix()
+            )
+            XCTAssertEqual(fileNames, [])
+            fixture.source.send(.updated([record]))
+            let staleRecords = try await fixture.index.currentOrInitialRecords(timeout: 1)
+            XCTAssertEqual(staleRecords, [])
+
+            do {
+                _ = try await fixture.helper.existingBackupFileReadTarget(
+                    namespace: testNamespace,
+                    recordId: "wallet-record",
+                    locations: [location],
+                    lookupMode: .currentSnapshot
+                )
+                XCTFail("expected deleted metadata item to be absent")
+            } catch CloudStorageError.NotFound {}
+        }
+    }
+
+    func testBackupDeleteRecordsCoordinatorResolvedURL() async throws {
+        let location = try XCTUnwrap(backupLocations().first)
+        let redirectedURL = URL(fileURLWithPath: "/provider/\(testNamespace)/wallet-record.json")
+        let deleteStub = CoordinatedDeleteStub(redirectTo: redirectedURL)
+        let fixture = makeICloudMetadataFixture(
+            coordinatedDeleter: { url, id in
+                try deleteStub.delete(url: url, missingItemID: id)
+            }
+        )
+        defer { fixture.removeContainer() }
+
+        let requestedURL = try fixture.helper.backupFileReadURL(
+            namespace: testNamespace,
+            location: location
+        )
+        try writeTestBackup(at: requestedURL)
+        let providerRecord = ICloudMetadataRecord(
+            name: requestedURL.lastPathComponent,
+            url: redirectedURL,
+            resolvedPath: redirectedURL.resolvingSymlinksInPath().path
+        )
+        try await seedFinishedGathering(fixture, [providerRecord])
+
+        try await fixture.helper.deleteExistingBackupFile(
+            namespace: testNamespace,
+            recordId: "wallet-record",
+            locations: [location]
+        )
+
+        XCTAssertEqual(deleteStub.deletedURLs, [requestedURL])
+        var visibleRecords = try await fixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(visibleRecords, [])
+        fixture.source.send(.updated([providerRecord]))
+        visibleRecords = try await fixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(visibleRecords, [])
+    }
+
+    func testBackupDeleteRecordsPartialSuccessBeforeFailure() async throws {
+        let deleteStub = CoordinatedDeleteStub(failOnCall: 2)
+        let fixture = makeICloudMetadataFixture(
+            coordinatedDeleter: { url, id in
+                try deleteStub.delete(url: url, missingItemID: id)
+            }
+        )
+        defer { fixture.removeContainer() }
+        let locations = backupLocations()
+        let urls = try locations.map {
+            try fixture.helper.backupFileReadURL(namespace: testNamespace, location: $0)
+        }
+        for url in urls {
+            try writeTestBackup(at: url)
+        }
+        let records = urls.map {
+            metadataRecord(name: $0.lastPathComponent, parentPath: $0.deletingLastPathComponent().path)
+        }
+        try await seedFinishedGathering(fixture, records)
+
+        do {
+            try await fixture.helper.deleteExistingBackupFile(
+                namespace: testNamespace,
+                recordId: "wallet-record",
+                locations: locations
+            )
+            XCTFail("expected injected delete failure")
+        } catch CloudStorageError.UploadFailed {}
+
+        let remainingRecords = try await fixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(remainingRecords, [records[1]])
+    }
+
+    func testNamespaceDeleteHidesLocalDescendants() async throws {
+        let localFixture = makeICloudMetadataFixture()
+        defer { localFixture.removeContainer() }
+        let localURL = try localFixture.helper.namespaceDirectoryReadURL(namespace: testNamespace)
+        let localChild = localURL.appendingPathComponent("wallet.json")
+        try writeTestBackup(at: localChild)
+        let localRecords = [
+            metadataRecord(
+                name: localURL.lastPathComponent,
+                parentPath: localURL.deletingLastPathComponent().path
+            ),
+            metadataRecord(name: localChild.lastPathComponent, parentPath: localURL.path),
+        ]
+        try await seedFinishedGathering(localFixture, localRecords)
+
+        try await localFixture.helper.deleteNamespaceDirectory(namespace: testNamespace)
+        var visibleRecords = try await localFixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(visibleRecords, [])
+        localFixture.source.send(.updated(localRecords))
+        visibleRecords = try await localFixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(visibleRecords, [])
+    }
+
+    func testNamespaceDeleteHidesMetadataFallbackDescendants() async throws {
+        let fallbackStub = CoordinatedDeleteStub(removeFiles: false)
+        let fallbackFixture = makeICloudMetadataFixture(
+            coordinatedDeleter: { url, id in
+                try fallbackStub.delete(url: url, missingItemID: id)
+            }
+        )
+        defer { fallbackFixture.removeContainer() }
+        let requestedURL = try fallbackFixture.helper.namespaceDirectoryReadURL(
+            namespace: testNamespace
+        )
+        let providerURL = URL(fileURLWithPath: "/provider/\(testNamespace)")
+        let namespaceRecord = ICloudMetadataRecord(
+            name: testNamespace,
+            url: providerURL,
+            resolvedPath: requestedURL.resolvingSymlinksInPath().path
+        )
+        let childRecord = metadataRecord(name: "wallet.json", parentPath: requestedURL.path)
+        let fallbackInitial = Task {
+            try await fallbackFixture.index.currentOrInitialRecords(timeout: 1)
+        }
+        await fallbackFixture.source.waitUntilStarted()
+        fallbackFixture.source.send(.finishedGathering([namespaceRecord, childRecord]))
+        _ = try await fallbackInitial.value
+
+        try await fallbackFixture.helper.deleteNamespaceDirectory(namespace: testNamespace)
+
+        XCTAssertEqual(fallbackStub.deletedURLs, [providerURL])
+        var visibleRecords = try await fallbackFixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(visibleRecords, [])
+        fallbackFixture.source.send(.updated([namespaceRecord, childRecord]))
+        visibleRecords = try await fallbackFixture.index.currentOrInitialRecords(timeout: 1)
+        XCTAssertEqual(visibleRecords, [])
+    }
+}
+
+@MainActor
 private struct ICloudMetadataFixture {
     let containerURL: URL
     let source: MetadataQuerySourceSpy
