@@ -73,9 +73,8 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove_core.utxoDate
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 // extension properties on Utxo to match Swift implementation
 val org.bitcoinppl.cove_core.types.Utxo.id: ULong
@@ -89,11 +88,9 @@ val org.bitcoinppl.cove_core.types.Utxo.displayName: String
             "Receive Address"
         }
 
+// rust formats the date in the device time zone, the same way iOS shows it
 val org.bitcoinppl.cove_core.types.Utxo.displayDate: String
-    get() {
-        val date = java.util.Date(datetime.toLong() * 1000)
-        return SimpleDateFormat("MMM d, yyyy", Locale.US).format(date)
-    }
+    get() = utxoDate(this)
 
 enum class UtxoSort { DATE, NAME, AMOUNT, CHANGE }
 
