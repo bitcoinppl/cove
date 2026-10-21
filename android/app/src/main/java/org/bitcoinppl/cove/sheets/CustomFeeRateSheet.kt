@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
@@ -218,6 +219,8 @@ fun CustomFeeRateSheet(
                             return@withContext
                         }
 
+                        // the rate may have changed or become invalid while Rust checked it
+                        ensureActive()
                         handleTooHighCustomFee(
                             feeRate = feeRate,
                             presenter = presenter,
@@ -240,7 +243,13 @@ fun CustomFeeRateSheet(
 
     // trigger calculation when fee rate changes
     LaunchedEffect(feeRateFloat, inputError) {
-        if (inputError == null) getTotalSatsDeduped(feeRateFloat)
+        if (inputError == null) {
+            getTotalSatsDeduped(feeRateFloat)
+        } else {
+            // a pending request for the previous rate must not update totals or dismiss the sheet
+            feeCalculationJob?.cancel()
+            feeCalculationJob = null
+        }
     }
 
     // on dismiss, apply the custom fee option unless the typed rate is invalid
