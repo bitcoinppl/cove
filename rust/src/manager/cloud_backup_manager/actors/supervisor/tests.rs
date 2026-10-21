@@ -6,6 +6,7 @@ use super::enable::{
 use super::verification::DeepVerificationContinuation;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
 use cove_cspp::CsppStore as _;
+use cove_tokio::FutureTimeoutExt as _;
 use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
     PersistedDriveAccountSwitchPhase,
@@ -4242,7 +4243,8 @@ async fn restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_d
     );
 
     call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(2), gate.wait_until_blocked())
+    gate.wait_until_blocked()
+        .with_timeout(Duration::from_secs(2))
         .await
         .expect("the second copy's restore download should block");
     assert!(local_wallet_exists(&first_wallet));
