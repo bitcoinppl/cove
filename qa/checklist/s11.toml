@@ -208,7 +208,10 @@ paths = [
   "rust/src/app/**",
   "rust/src/router.rs",
 ]
-coverage = ["agent"]
+coverage = [
+    "agent",
+    "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::scan_against_an_offline_node_reports_the_failure_and_recovers_on_a_new_node",
+]
 # 1.4.0: ios BLOCKED, android PASS
 # needs offline toggle and background/foreground
 
