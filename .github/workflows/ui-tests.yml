@@ -10,9 +10,8 @@ on:
   push:
     branches:
       - master
+  # any base branch, so stacked PRs can opt in too; the job condition checks the label
   pull_request:
-    branches:
-      - master
     types: [opened, synchronize, reopened, labeled]
 
 permissions:
