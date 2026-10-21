@@ -10,25 +10,34 @@ import SwiftUI
 
 extension EnvironmentValues {
     @Entry var navigate: (Route) -> Void = { _ in }
+
+    /// Safe area insets of the scene's root view, injected by `capturesSafeAreaInsets()`
+    @Entry var safeAreaInsets = EdgeInsets()
 }
 
-struct SafeAreaInsetsKey: EnvironmentKey {
-    static var defaultValue: EdgeInsets {
-        #if os(iOS) || os(tvOS)
-            let window = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.keyWindow
-            guard let insets = window?.safeAreaInsets else { return EdgeInsets() }
-            return EdgeInsets(
-                top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right
-            )
-        #else
-            return EdgeInsets()
-        #endif
+extension View {
+    /// Captures this view's safe area insets from SwiftUI geometry and injects them as
+    /// `\.safeAreaInsets` for the views below it
+    func capturesSafeAreaInsets() -> some View {
+        modifier(SafeAreaInsetsCapture())
     }
 }
 
-public extension EnvironmentValues {
-    var safeAreaInsets: EdgeInsets {
-        self[SafeAreaInsetsKey.self]
+/// Reads the insets from layout instead of asking UIKit while SwiftUI updates its graph; the #941
+/// watchdog stack shows that UIKit read re-entering the graph through the status bar
+private struct SafeAreaInsetsCapture: ViewModifier {
+    @State private var insets = EdgeInsets()
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                // ignoring the keyboard keeps its height out of the bottom inset, so showing
+                // the keyboard doesn't update every reader
+                Color.clear
+                    .ignoresSafeArea(.keyboard)
+                    .onGeometryChange(for: EdgeInsets.self, of: \.safeAreaInsets) { insets = $0 }
+            }
+            .environment(\.safeAreaInsets, insets)
     }
 }
 
@@ -124,6 +133,7 @@ struct CoveApplicationRoot: View {
 
     var body: some View {
         startupContent
+            .capturesSafeAreaInsets()
             .task(id: bootstrapRequestID) {
                 await runBootstrap()
             }
