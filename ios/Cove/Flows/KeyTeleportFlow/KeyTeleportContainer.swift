@@ -176,7 +176,7 @@ private struct KeyTeleportLoadedView: View {
 
             manager.ingest(packet)
         default:
-            app.alertState = .init(.invalidFormat(message: "This is not a KeyTeleport packet."))
+            app.alertState = .init(.invalidFormat(message: route.flowDirection.rejectedInputMessage))
         }
     }
 
