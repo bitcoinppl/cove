@@ -396,22 +396,14 @@ impl GlobalConfigTable {
         Ok(template.render(PREVIEW_TXID))
     }
 
-    pub fn set_custom_block_explorer(
-        &self,
-        network: Network,
-        input: String,
-    ) -> Result<Option<String>> {
-        if input.trim().is_empty() {
-            self.clear_custom_block_explorer(network)?;
-            return Ok(None);
-        }
-
+    pub fn set_custom_block_explorer(&self, network: Network, input: String) -> Result<String> {
+        // empty input is a validation error, Reset to Default is the only way to clear
         let template = CustomBlockExplorerTemplate::parse(network, &input)
             .map_err(GlobalConfigTableError::from)?;
         let canonical = template.as_str().to_string();
         self.set(GlobalConfigKey::CustomBlockExplorer(network), canonical.clone())?;
 
-        Ok(Some(canonical))
+        Ok(canonical)
     }
 
     pub fn set_block_explorer_option(
@@ -621,21 +613,20 @@ mod tests {
     }
 
     #[test]
-    fn custom_block_explorer_setter_validates_normalizes_and_clears_empty() {
+    fn custom_block_explorer_setter_validates_normalizes_and_reset_clears() {
         crate::app::reconcile::test_support::init_noop_updater();
         let (_tmp, table) = test_table();
 
         let saved = table
             .set_custom_block_explorer(Network::Bitcoin, " https://example.com ".to_string())
             .unwrap();
-        assert_eq!(saved.as_deref(), Some("https://example.com/tx/{txid}"));
+        assert_eq!(saved, "https://example.com/tx/{txid}");
         assert_eq!(
             table.custom_block_explorer(Network::Bitcoin).as_deref(),
             Some("https://example.com/tx/{txid}")
         );
 
-        let cleared = table.set_custom_block_explorer(Network::Bitcoin, "   ".to_string()).unwrap();
-        assert_eq!(cleared, None);
+        table.clear_custom_block_explorer(Network::Bitcoin).unwrap();
         assert_eq!(table.custom_block_explorer(Network::Bitcoin), None);
     }
 
@@ -657,7 +648,7 @@ mod tests {
             let result = table.set_custom_block_explorer(Network::Bitcoin, input.to_string());
 
             assert!(result.is_err(), "empty input {input:?} was saved as {result:?}");
-            assert_eq!(table.custom_block_explorer(Network::Bitcoin), saved);
+            assert_eq!(table.custom_block_explorer(Network::Bitcoin).as_ref(), Some(&saved));
             assert_eq!(table.selected_block_explorer_option(Network::Bitcoin), selected);
         }
     }
@@ -709,7 +700,7 @@ mod tests {
             .set_custom_block_explorer(Network::Bitcoin, "blockstream.info/tx".to_string())
             .unwrap();
 
-        assert_eq!(saved.as_deref(), Some("https://blockstream.info/tx/{txid}"));
+        assert_eq!(saved, "https://blockstream.info/tx/{txid}");
         assert_eq!(
             table.custom_block_explorer(Network::Bitcoin).as_deref(),
             Some("https://blockstream.info/tx/{txid}")

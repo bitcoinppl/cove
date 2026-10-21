@@ -127,7 +127,7 @@ struct BlockExplorerSettingsView: View {
                 network: networkToSave,
                 input: inputToSave
             )
-            input = normalized ?? ""
+            input = normalized
             preview = config.effectiveBlockExplorerPreview(network: networkToSave)
             selectedOption = config.selectedBlockExplorerOption(network: networkToSave)
 

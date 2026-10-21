@@ -123,7 +123,7 @@ fun BlockExplorerSettingsScreen(
             isSaving = true
             try {
                 val normalized = config.setCustomBlockExplorer(networkToSave, inputToSave)
-                input = normalized ?: ""
+                input = normalized
                 preview = config.effectiveBlockExplorerPreview(networkToSave)
                 selectedOption = config.selectedBlockExplorerOption(networkToSave)
                 keyboardController?.hide()
