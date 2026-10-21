@@ -140,10 +140,12 @@ private struct KeyTeleportLoadedView: View {
         let text = pastedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
+        // every KeyTeleport packet parses as a MultiFormat, so text that does not is the wrong
+        // input, and naming the expected packet helps more than a generic parse failure
         do {
             try ingest(StringOrData(text).toMultiFormat())
         } catch {
-            manager.ingest(text)
+            showRejectedInput()
         }
     }
 
@@ -176,8 +178,12 @@ private struct KeyTeleportLoadedView: View {
 
             manager.ingest(packet)
         default:
-            app.alertState = .init(.invalidFormat(message: route.flowDirection.rejectedInputMessage))
+            showRejectedInput()
         }
+    }
+
+    private func showRejectedInput() {
+        app.alertState = .init(.invalidFormat(message: route.flowDirection.rejectedInputMessage))
     }
 
     private func canIngestPacket(requiring requiredDirection: KeyTeleportFlowDirection) -> Bool {
