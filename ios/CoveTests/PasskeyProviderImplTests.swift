@@ -4,6 +4,31 @@ import CoveCore
 import XCTest
 
 final class PasskeyProviderImplTests: XCTestCase {
+    func testNonAuthorizationFailureReturnsOnlySanitizedMetadata() {
+        let delegate = PasskeyDelegate(context: .discoverAssertion)
+        let request = ASAuthorizationPlatformPublicKeyCredentialProvider(
+            relyingPartyIdentifier: "example.com"
+        ).createCredentialAssertionRequest(challenge: Data(count: 32))
+
+        delegate.authorizationController(
+            controller: ASAuthorizationController(authorizationRequests: [request]),
+            didCompleteWithError: NSError(
+                domain: "com.example.passkey",
+                code: 42,
+                userInfo: [NSLocalizedDescriptionKey: "private localized description"]
+            )
+        )
+
+        XCTAssertThrowsError(try delegate.waitForResult {}) { error in
+            let description = String(describing: error)
+
+            XCTAssertTrue(description.contains("com.example.passkey"))
+            XCTAssertTrue(description.contains("42"))
+            XCTAssertFalse(description.contains("private"))
+            XCTAssertFalse(description.contains("localized"))
+        }
+    }
+
     func testInteractiveRequestTimeoutCancelsOnMainQueueAndReturnsPresentedFailure() {
         let delegate = PasskeyDelegate(context: .registration, timeout: 0.01)
         let cancellation = expectation(description: "controller cancelled")
