@@ -498,6 +498,21 @@ impl Row {
         manual.or_else(|| layers.min())
     }
 
+    /// The submodule directory of the Rust module file `path` when no row path covers it
+    fn uncovered_submodule_dir(&self, path: &Pattern, tracked: &[String]) -> Option<String> {
+        let module = path.as_str().strip_suffix(".rs")?;
+        if Pattern::escape(path.as_str()) != path.as_str() {
+            return None;
+        }
+
+        let dir = format!("{module}/");
+        let mut submodules = tracked.iter().filter(|file| file.starts_with(&dir)).peekable();
+        submodules.peek()?;
+
+        let covered = submodules.any(|file| self.touches(std::slice::from_ref(file)));
+        (!covered).then_some(dir)
+    }
+
     fn touches(&self, changed: &[String]) -> bool {
         changed
             .iter()
@@ -725,6 +740,14 @@ impl Manifest {
             for path in &row.paths {
                 if !tracked.iter().any(|file| path.matches_with(file, GLOB_OPTIONS)) {
                     report.errors.push(format!("{at} path `{path}` matches no tracked file"));
+                }
+
+                // `foo.rs` is only the root of module `foo`, so a change confined to its
+                // submodules would otherwise skip the row
+                if let Some(dir) = row.uncovered_submodule_dir(path, tracked) {
+                    report.errors.push(format!(
+                        "{at} path `{path}` leaves out its submodules; add `{dir}**` or the files in it the row depends on"
+                    ));
                 }
             }
 

@@ -7,7 +7,7 @@
 - `just qa-plan <git-range>` lists the rows whose `paths` the range touches and that no automated test decides, grouped into agent and human rows. The output is the whole brief for an agent pass on that change. The range goes straight to `git diff --name-only --no-renames`, so `master...HEAD` and `v1.4.0..HEAD` both work, and a moved file counts under both its old and new path. Rows with `pending` tests also list the still-manual platforms those tests would take over
 - `just qa-plan-all` lists every row that still needs an agent or a human, for a full release pass
 - `just qa-coverage` counts rows per platform by the cheapest layer that covers them, then by their target layer
-- `just qa-check` fails when a row names a file that doesn't exist or a test that the file doesn't declare as a test outside comments, uses a path glob that matches no tracked file, or leaves one of its platforms without coverage. CI runs it on every pull request
+- `just qa-check` fails when a row names a file that doesn't exist or a test that the file doesn't declare as a test outside comments, uses a path glob that matches no tracked file, lists a Rust module file such as `foo.rs` without any of the files under `foo/`, or leaves one of its platforms without coverage. CI runs it on every pull request
 
 ## Row format
 

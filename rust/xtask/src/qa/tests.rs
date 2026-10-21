@@ -236,3 +236,45 @@ coverage = [
         assert!(errors.contains(&format!("names `{name}`")), "{errors}");
     }
 }
+
+#[test]
+fn check_requires_rust_submodules_next_to_their_module_file() {
+    let root = tempfile::tempdir().unwrap();
+    let manifest = manifest(
+        r#"
+[[row]]
+id = "root-only"
+section = "18"
+title = "root only"
+platforms = ["ios"]
+target = "manual"
+paths = ["rust/src/send.rs"]
+coverage = ["human"]
+
+[[row]]
+id = "with-dir"
+section = "18"
+title = "with dir"
+platforms = ["ios"]
+target = "manual"
+paths = ["rust/src/send.rs", "rust/src/send/**"]
+coverage = ["human"]
+
+[[row]]
+id = "one-submodule"
+section = "18"
+title = "one submodule"
+platforms = ["ios"]
+target = "manual"
+paths = ["rust/src/send.rs", "rust/src/send/finalize.rs"]
+coverage = ["human"]
+"#,
+    );
+
+    let tracked = ["rust/src/send.rs", "rust/src/send/finalize.rs"].map(String::from);
+    let report = manifest.check(root.path(), &tracked);
+    let errors = report.errors.join("\n");
+
+    assert_eq!(report.errors.len(), 1, "{errors}");
+    assert!(errors.contains("`root-only` path `rust/src/send.rs` leaves out"), "{errors}");
+}
