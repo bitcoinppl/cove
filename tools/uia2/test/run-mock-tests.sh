@@ -101,6 +101,9 @@ check "type enter presses Enter" sent /appium/device/press_keycode '{"keycode": 
 [ "$(requests | grep -E '^/keys$|press_keycode' | tr '\n' ' ')" = "/keys /appium/device/press_keycode " ] &&
   echo "ok   type enter presses Enter after setting the text" || { echo "FAIL type enter order: $(requests | tr '\n' ' ')"; fail=1; }
 expect "type no args" 2 'd["error"]=="usage"' -- "$here/android-type"
+# after --, text that looks like a flag is typed as is
+expect "type flag-looking text after --" 0 'd["enter"] is False' -- "$here/android-type" -- --enter
+check "type sends the literal text after --" sent /keys '{"text": "--enter", "replace": true}'
 expect "back" 0 'd["ok"]' -- "$here/android-back"
 check "back request" sent /back '{}'
 expect "key name" 0 'd["keycode"]==66' -- "$here/android-key" KEYCODE_ENTER
@@ -126,6 +129,8 @@ expect "clipboard set" 0 'd["chars"]==4' -- "$here/android-clipboard" set "a #b"
 check "clipboard set body is base64" sent /appium/device/set_clipboard '{"content": "YSAjYg==", "contentType": "plaintext"}'
 expect "clipboard get blocked" 1 'd["error"]=="clipboard_read_blocked"' -- "$here/android-clipboard" get
 expect "clipboard bad op" 2 'd["error"]=="usage"' -- "$here/android-clipboard" clear
+expect "clipboard set flag-looking text after --" 0 'd["dry_run"] is False and d["chars"]==9' -- "$here/android-clipboard" set -- --dry-run
+check "clipboard sends the literal text after --" sent /appium/device/set_clipboard "{\"content\": \"$(printf '%s' --dry-run | base64)\", \"contentType\": \"plaintext\"}"
 UIA2_PORT=1 expect "unreachable" 1 'd["error"]=="uia2_unreachable"' -- "$here/android-source"
 UIA2_WAIT=x expect "bad env gives JSON" 1 'd["error"]=="internal"' -- "$here/android-tap-label" About
 
@@ -237,6 +242,12 @@ pid="$(cut -d' ' -f1 "$tmp/state/TEST-SERIAL/instrument.pid")"
 check "start forwards the port" grep -q "^TEST-SERIAL tcp:$port tcp:6790$" "$FAKE_ADB/forwards"
 check "start runs am instrument" kill -0 "$pid"
 expect "start again" 0 'd["already_running"]' -- "$here/uia2-start"
+# an older server left behind by a version bump is restarted, not reused
+echo 10.5.0 >"$tmp/requests.log.version"
+expect "start with an outdated server running" 0 'd["ok"] and "already_running" not in d' -- "$here/uia2-start"
+check "start replaces the outdated server" bash -c "! kill -0 $pid 2>/dev/null"
+rm "$tmp/requests.log.version"
+pid="$(cut -d' ' -f1 "$tmp/state/TEST-SERIAL/instrument.pid")"
 touch "$FAKE_ADB/force_stop_fail"
 expect "stop with a failing device" 1 'd["error"]=="cleanup_incomplete" and "force-stop" in d["failed"] and "adb:" in d["stopped"]' -- "$here/uia2-stop"
 check "failed stop keeps its state for a retry" test -s "$tmp/state/TEST-SERIAL/port"
@@ -245,6 +256,13 @@ expect "stop after a failed stop" 0 'd["stopped"]=="io.appium.uiautomator2.serve
 sleep 0.2
 check "stop kills am instrument" bash -c "! kill -0 $pid 2>/dev/null"
 check "stop removes the forward" bash -c "! grep -q TEST-SERIAL '$FAKE_ADB/forwards'"
+
+# an upgrade that installed the server but not the test APK is finished by the next start
+echo stale >"$FAKE_ADB/installed/io.appium.uiautomator2.server.test"
+: >"$FAKE_ADB/calls.log"
+expect "start after a half-finished upgrade" 0 'd["ok"]' -- "$here/uia2-start"
+check "start reinstalls only the stale test APK" bash -c "[ \"\$(grep -c '^install ' '$FAKE_ADB/calls.log')\" = 1 ] && grep -q '^install .*androidTest' '$FAKE_ADB/calls.log'"
+"$here/uia2-stop" >/dev/null
 
 # a pid file whose process was replaced must not get that process killed, even when the new
 # process looks like this device's adb
