@@ -30,6 +30,11 @@ jobs:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
     runs-on: ubuntu-24.04
     timeout-minutes: 75
+    # one flavour per job: with both in one job the hosted runner shut down about 35 minutes in, twice
+    strategy:
+      fail-fast: false
+      matrix:
+        flavour: [Dev, UiTest]
     steps:
       - uses: actions/checkout@v6
 
@@ -67,7 +72,7 @@ jobs:
       - name: Build Rust FFI for the x86_64 emulator
         run: just xtask build-android debug --x86-64
 
-      - name: Run instrumented tests for both flavours
+      - name: Run instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -85,13 +90,13 @@ jobs:
             adb shell settings put global hide_error_dialogs 1
             adb shell cmd uimode night yes
             adb shell cmd uimode night no
-            just android-instrumented-ci
+            just android-instrumented-ci ${{ matrix.flavour }}
 
       - name: Upload Android test reports
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: android-instrumented-reports
+          name: android-instrumented-reports-${{ matrix.flavour }}
           path: |
             android/app/build/reports/androidTests/connected
             android/app/build/outputs/androidTest-results/connected
