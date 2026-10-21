@@ -52,6 +52,9 @@ private object CustomFeeRateConstants {
 
     // delay before showing alert after dismissing sheet
     const val ALERT_DELAY_MS = 850L
+
+    // typed rates round to hundredths of a sat/vB
+    const val FEE_RATE_SCALE = 100f
 }
 
 /** Parses typed custom fee rate text, rounded to hundredths, or null when it isn't a finite number */
@@ -60,7 +63,7 @@ internal fun parseCustomFeeRate(text: String): Float? =
         .trim()
         .toFloatOrNull()
         ?.takeIf { it.isFinite() }
-        ?.let { round(it * 100f) / 100f }
+        ?.let { round(it * CustomFeeRateConstants.FEE_RATE_SCALE) / CustomFeeRateConstants.FEE_RATE_SCALE }
 
 // rust owns the minimum, so the check goes through FeeRate instead of a local constant
 private fun customFeeRateInputError(feeRate: Float?): String? =
