@@ -72,6 +72,12 @@ struct SendFlowCustomFeeRateView: View {
             "≈ \(manager.convertAndDisplayFiat(amount: Amount.fromSat(sats: UInt64(totalSats ?? 0)), prices: prices))"
     }
 
+    /// Whether the typed rate is under the minimum rust enforces when building the transaction
+    var isBelowMinimum: Bool {
+        guard let feeRate = Float(feeRate) else { return false }
+        return FeeRate.fromSatPerVb(satPerVb: feeRate).isBelowMinimum()
+    }
+
     var feeSpeed: FeeSpeed {
         let feeRate = Float(feeRate) ?? 20.0
         return feeOptions.calculateCustomFeeSpeed(feeRate: Float(feeRate))
@@ -125,7 +131,7 @@ struct SendFlowCustomFeeRateView: View {
     }
 
     func addCustomFeeOption() {
-        guard let feeRate = Float(feeRate) else { return }
+        guard let feeRate = Float(feeRate), !isBelowMinimum else { return }
 
         // if there is an non custom fee option for the same fee rate select it and remove the custom fee option
         if let newSelectedOption = feeOptions.getFeeRateWith(feeRate: feeRate),
@@ -150,7 +156,7 @@ struct SendFlowCustomFeeRateView: View {
 
     func feeRateChanged(_: String?, newFeeRate: String?) {
         guard let newFeeRate else { return }
-        guard let feeRate = Float(newFeeRate) else { return }
+        guard let feeRate = Float(newFeeRate), !isBelowMinimum else { return }
         getTotalSatsDeduped(for: feeRate)
     }
 
@@ -168,12 +174,13 @@ struct SendFlowCustomFeeRateView: View {
                 maximumFeeRate: feeOptions.fast().satPerVb() * 3,
                 erroredFeeRate: erroredFeeRate,
                 totalSats: totalSats,
-                feeInFiat: feeInFiat
+                feeInFiat: feeInFiat,
+                isBelowMinimum: isBelowMinimum
             )
 
             Divider()
 
-            SendFlowCustomFeeDoneButton(action: addCustomFeeOption)
+            SendFlowCustomFeeDoneButton(action: addCustomFeeOption, isDisabled: isBelowMinimum)
         }
         .padding(.horizontal)
         .padding(.vertical)
@@ -200,6 +207,7 @@ private struct SendFlowCustomFeeEditor: View {
     let erroredFeeRate: Float?
     let totalSats: Int?
     let feeInFiat: String
+    let isBelowMinimum: Bool
 
     var body: some View {
         VStack(spacing: 8) {
@@ -226,6 +234,16 @@ private struct SendFlowCustomFeeEditor: View {
                     font: .footnote,
                     fontWeight: .semibold
                 )
+            }
+
+            if isBelowMinimum {
+                HStack {
+                    Text("The fee rate must be at least 1 sat/vB")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+
+                    Spacer()
+                }
             }
 
             SendFlowCustomFeeSlider(
@@ -284,6 +302,7 @@ private struct SendFlowCustomFeeTotal: View {
 
 private struct SendFlowCustomFeeDoneButton: View {
     let action: () -> Void
+    let isDisabled: Bool
 
     var body: some View {
         Button(action: action) {
@@ -296,6 +315,8 @@ private struct SendFlowCustomFeeDoneButton: View {
         .background(Color.midnightBtn)
         .foregroundColor(.white)
         .cornerRadius(10)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.5 : 1)
         .padding(.horizontal, detailsExpandedPadding)
         .padding(.top, 14)
     }

@@ -48,6 +48,15 @@ pub(crate) fn spendable_balance_check(
     SpendableBalanceCheck::WithinBalance
 }
 
+/// How many sats the amount plus fee is over the spendable balance, zero when it fits
+pub(crate) fn spend_shortfall_sats(
+    amount: u64,
+    total_fee_sats: Option<u64>,
+    spendable_balance: u64,
+) -> u64 {
+    total_spend_sats(amount, total_fee_sats.unwrap_or(0)).saturating_sub(spendable_balance)
+}
+
 pub(crate) fn total_spend_sats(amount: u64, total_fee_sats: u64) -> u64 {
     amount.saturating_add(total_fee_sats)
 }

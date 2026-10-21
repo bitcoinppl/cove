@@ -14,6 +14,12 @@ impl RustSendFlowManager {
         fee_rate: FeeRate,
     ) -> Result<Psbt> {
         trace!("build_psbt");
+
+        // every send path builds here, so this keeps a zero-fee transaction from ever existing
+        if fee_rate.is_below_minimum() {
+            return Err(SendFlowError::FeeRateBelowMinimum);
+        }
+
         let mode = self.state.lock().mode.clone();
 
         match mode {

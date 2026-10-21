@@ -342,7 +342,10 @@ impl RustSendFlowManager {
                     return false;
                 }
 
-                let msg = Message::SetAlert(SendFlowError::InsufficientFunds.into());
+                let shortfall_sats =
+                    validation::spend_shortfall_sats(amount, total_fee_sats, spendable_balance);
+                let msg =
+                    Message::SetAlert(SendFlowError::SpendExceedsBalance { shortfall_sats }.into());
                 if display_alert {
                     sender.queue(msg);
                 } else {
@@ -1518,10 +1521,12 @@ mod tests {
             panic!("expected a single insufficient funds alert");
         };
 
-        assert!(matches!(
+        assert_eq!(
             alert,
-            super::SendFlowAlertState::Error(super::SendFlowError::InsufficientFunds)
-        ));
+            super::SendFlowAlertState::Error(super::SendFlowError::SpendExceedsBalance {
+                shortfall_sats: 155
+            })
+        );
     }
 
     #[test]
@@ -1567,10 +1572,12 @@ mod tests {
             panic!("expected a single insufficient funds alert");
         };
 
-        assert!(matches!(
+        assert_eq!(
             alert,
-            super::SendFlowAlertState::Error(super::SendFlowError::InsufficientFunds)
-        ));
+            super::SendFlowAlertState::Error(super::SendFlowError::SpendExceedsBalance {
+                shortfall_sats: 56
+            })
+        );
     }
 
     #[test]

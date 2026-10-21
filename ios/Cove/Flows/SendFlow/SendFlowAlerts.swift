@@ -134,6 +134,8 @@ private struct SendFlowErrorAlertActions: View {
 
         case .InvalidNumber,
              .InsufficientFunds,
+             .SpendExceedsBalance,
+             .FeeRateBelowMinimum,
              .SendBelowDustLimit,
              .ZeroAmount,
              .WalletManager,
@@ -192,8 +194,10 @@ private extension SendFlowError {
             "Invalid Address"
         case .InvalidNumber, .ZeroAmount:
             "Invalid Amount"
-        case .InsufficientFunds, .NoBalance:
+        case .InsufficientFunds, .NoBalance, .SpendExceedsBalance:
             "Insufficient Funds"
+        case .FeeRateBelowMinimum:
+            "Fee Rate Too Low"
         case .SendBelowDustLimit:
             "Amount Below Dust Limit"
         case .UnableToGetFeeRate:
@@ -229,6 +233,10 @@ private extension SendFlowError {
             "The address \(address.addressSpacedOut()) is on the wrong network, is it for (\(validFor). You are on \(currentNetwork)"
         case .InsufficientFunds:
             "You do not have enough bitcoin in your wallet to cover the amount plus fees"
+        case let .SpendExceedsBalance(shortfallSats: shortfall):
+            "The amount plus the network fee is \(shortfall) sats more than your spendable balance. Lower the amount or the fee."
+        case .FeeRateBelowMinimum:
+            "The network fee rate must be at least 1 sat/vB"
         case .SendBelowDustLimit:
             "This amount is below Bitcoin's dust limit for this address type. The network would reject it. Please send a bit more."
         case .UnableToGetFeeRate:

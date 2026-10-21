@@ -296,15 +296,9 @@ private fun SendFlowRouteToScreen(
                             presenter.focusField = SetAmountFocusField.ADDRESS
                         }
                         !amountValid -> {
-                            // only show snackbar if amount has content (not just empty/zero)
-                            if (hasAmount) {
-                                validationScope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        message = "Amount not valid. Please try again.",
-                                        duration = SnackbarDuration.Short,
-                                    )
-                                }
-                            }
+                            // only alert if amount has content (not just empty/zero), and let rust
+                            // explain the failure, such as how far amount plus fee overshoots the balance
+                            if (hasAmount) sendFlowManager.validateAmount(displayAlert = true)
                             presenter.focusField = SetAmountFocusField.AMOUNT
                         }
                         else -> {
