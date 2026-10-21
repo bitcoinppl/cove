@@ -1289,8 +1289,6 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_bitcoinunit_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_types_fn_method_utxo_date(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_utxo_hash_to_uint(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_types_fn_method_utxo_is_equal(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -9524,16 +9522,6 @@ data class Utxo (
     var `spendable`: kotlin.Boolean
 
 ): Disposable{
-     fun `date`(): kotlin.String {
-            return FfiConverterString.lift(
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_types_fn_method_utxo_date(FfiConverterTypeUtxo.lower(this),
-        _status)
-}
-    )
-    }
-
-
      fun `hashToUint`(): kotlin.ULong {
             return FfiConverterULong.lift(
     uniffiRustCall() { _status ->
