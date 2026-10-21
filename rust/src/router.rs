@@ -555,9 +555,7 @@ mod tests {
         let route = startup_route(&database);
         let selected = database.global_config.selected_wallet();
 
-        crate::keychain::Keychain::global().delete_wallet_items(&wallet.id);
-        let _ = crate::wallet::delete_wallet_specific_data(&wallet.id);
-        let _ = database.wallets.delete(&wallet.id);
+        crate::wallet::test_support::remove_wallet(&wallet.id);
         let _ = database.global_config.clear_selected_wallet();
 
         assert_eq!(route, Route::SelectedWallet(wallet.id.clone()));
