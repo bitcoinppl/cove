@@ -597,10 +597,20 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
 
     boot_simulator(&sh, &options.device)?;
 
+    // run every test before failing so one broken test doesn't hide the state of the rest
+    let mut failures = Vec::new();
     for test in ios_ui_tests_to_run(&sh, &options.test)? {
         reset_simulator_state(&sh, &options.device)?;
         boot_simulator(&sh, &options.device)?;
-        run_ios_ui_test(&sh, &options.device, &test, verbose)?;
+
+        if let Err(error) = run_ios_ui_test(&sh, &options.device, &test, verbose) {
+            print_error(&format!("{error:?}"));
+            failures.push(test);
+        }
+    }
+
+    if !failures.is_empty() {
+        color_eyre::eyre::bail!("{} iOS UI test(s) failed: {}", failures.len(), failures.join(", "));
     }
 
     Ok(())
