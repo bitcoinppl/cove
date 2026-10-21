@@ -91,7 +91,8 @@ jobs:
   ios-ui:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
     runs-on: macos-26
-    timeout-minutes: 75
+    # each test erases and reboots the simulator, about 6 minutes a test on the hosted runner
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v6
 
