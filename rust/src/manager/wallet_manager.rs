@@ -1230,7 +1230,7 @@ impl RustWalletManager {
         let channel = ReconcileChannel::new(100);
         let wallet_data_db = WalletDataDb::new_in_memory(wallet.metadata.id.clone())
             .expect("failed to open in-memory wallet data database for preview wallet");
-        let label_manager = LabelManager::new_with_db(wallet_data_db.clone()).into();
+        let label_manager = LabelManager::new_with_db(wallet_data_db.clone());
         let wallet_snapshot = Arc::new(RwLock::new(WalletSnapshot::from_wallet(&wallet)));
         let unsigned_transactions = WalletBootstrapUnsignedTransactions::in_memory(Vec::new());
         let scan_status = Arc::new(RwLock::new(WalletScanStatus::Idle));
@@ -1244,6 +1244,7 @@ impl RustWalletManager {
             shared_metadata.clone(),
         );
         let actor = task::spawn_actor(wallet_actor);
+        let label_manager = label_manager.with_wallet_actor(actor.downgrade()).into();
 
         Self {
             id: metadata.id,

@@ -275,6 +275,20 @@ impl WalletActor {
         Produces::ok(())
     }
 
+    /// Re-sends one transaction's list row and details after its labels change
+    pub async fn transaction_labels_changed(&mut self, tx_id: Txid) -> ActorResult<()> {
+        let Some(transaction) = self.transaction_for_tx_id(tx_id)? else {
+            warn!("labeled transaction missing from wallet tx_id={tx_id}");
+            return Produces::ok(());
+        };
+
+        let presentation = self.transaction_details_presentation_for_tx_id(tx_id.into())?;
+        self.send(WalletManagerReconcileMessage::TransactionUpdated(transaction));
+        self.send(WalletManagerReconcileMessage::TransactionDetailsUpdated(presentation.into()));
+
+        Produces::ok(())
+    }
+
     async fn send_targeted_transaction_updates(&mut self, tx_id: Txid) -> ActorResult<()> {
         let Some(transaction) = self.transaction_for_tx_id(tx_id)? else {
             warn!("targeted transaction update missing tx_id={tx_id}");
