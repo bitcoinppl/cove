@@ -5,7 +5,8 @@ mod public;
 
 pub(crate) use backup::{fallback_identity_key_for_backup, identity_key_for_backup};
 pub(crate) use existing::{
-    collect_existing_wallet_identities, existing_public_wallet_by_identity_strict,
+    collect_existing_wallet_identities, existing_origin_less_wallet_by_identity,
+    existing_public_wallet_by_identity_strict,
 };
 pub(crate) use identity_set::{
     BackupRecoveryMaterial, ExistingWalletIdentitySet, LocalWalletCoverage, WalletIdentityKey,
