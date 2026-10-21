@@ -6,8 +6,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,7 +72,6 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AddressText
-import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -590,6 +592,9 @@ private fun ChangeBadge(tintColor: Color = CoveColor.WarningOrange) {
     }
 }
 
+// keeps scrolled chips apart once SpaceBetween has no free width left to share
+private val SORT_CHIP_MIN_GAP = 8.dp
+
 @Composable
 private fun SortRow(
     manager: org.bitcoinppl.cove.CoinControlManager,
@@ -604,38 +609,48 @@ private fun SortRow(
     val amountPresentation = manager.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.AMOUNT)
     val changePresentation = manager.buttonPresentation(org.bitcoinppl.cove_core.CoinControlListSortKey.CHANGE)
 
-    Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        SortChip(
-            label = stringResource(R.string.sort_date),
-            selected = datePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
-            onClick = { onSortChange(UtxoSort.DATE) },
-            showArrow = datePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
-            arrowUp = (datePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING,
-        )
-        SortChip(
-            label = stringResource(R.string.sort_name),
-            selected = namePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
-            onClick = { onSortChange(UtxoSort.NAME) },
-            showArrow = namePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
-            arrowUp = (namePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING,
-        )
-        SortChip(
-            label = stringResource(R.string.sort_amount),
-            selected = amountPresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
-            onClick = { onSortChange(UtxoSort.AMOUNT) },
-            showArrow = amountPresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
-            arrowUp = (amountPresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING,
-        )
-        SortChip(
-            label = stringResource(R.string.sort_change),
-            selected = changePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
-            onClick = { onSortChange(UtxoSort.CHANGE) },
-            showArrow = changePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
-            arrowUp = (changePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING,
-        )
+    // chips spread across the row when they fit and scroll at large font scales, so labels
+    // never shrink to fit the width
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier =
+                Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .widthIn(min = maxWidth),
+        ) {
+            SortChip(
+                label = stringResource(R.string.sort_date),
+                selected = datePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
+                onClick = { onSortChange(UtxoSort.DATE) },
+                showArrow = datePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
+                arrowUp = (datePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING,
+            )
+            Spacer(Modifier.width(SORT_CHIP_MIN_GAP))
+            SortChip(
+                label = stringResource(R.string.sort_name),
+                selected = namePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
+                onClick = { onSortChange(UtxoSort.NAME) },
+                showArrow = namePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
+                arrowUp = (namePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING,
+            )
+            Spacer(Modifier.width(SORT_CHIP_MIN_GAP))
+            SortChip(
+                label = stringResource(R.string.sort_amount),
+                selected = amountPresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
+                onClick = { onSortChange(UtxoSort.AMOUNT) },
+                showArrow = amountPresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
+                arrowUp = (amountPresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING,
+            )
+            Spacer(Modifier.width(SORT_CHIP_MIN_GAP))
+            SortChip(
+                label = stringResource(R.string.sort_change),
+                selected = changePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
+                onClick = { onSortChange(UtxoSort.CHANGE) },
+                showArrow = changePresentation is org.bitcoinppl.cove_core.ButtonPresentation.Selected,
+                arrowUp = (changePresentation as? org.bitcoinppl.cove_core.ButtonPresentation.Selected)?.v1 == org.bitcoinppl.cove_core.ListSortDirection.ASCENDING,
+            )
+        }
     }
 }
 
@@ -662,10 +677,11 @@ private fun SortChip(
                 ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AutoSizeText(
+        Text(
             text = label,
-            maxFontSize = 13.sp,
-            minimumScaleFactor = 0.01f,
+            fontSize = 13.sp,
+            maxLines = 1,
+            softWrap = false,
             color = txt,
             fontWeight = FontWeight.Medium,
         )
