@@ -4847,7 +4847,7 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func setBlockExplorerOption(network: Network, option: BlockExplorerOption) throws  -> String?
 
-    func setCustomBlockExplorer(network: Network, input: String) throws  -> String?
+    func setCustomBlockExplorer(network: Network, input: String) throws  -> String
 
     func setHashedPinCode(hashedPinCode: String) throws
 
@@ -5110,8 +5110,8 @@ open func setBlockExplorerOption(network: Network, option: BlockExplorerOption)t
 })
 }
 
-open func setCustomBlockExplorer(network: Network, input: String)throws  -> String?  {
-    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+open func setCustomBlockExplorer(network: Network, input: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_globalconfigtable_set_custom_block_explorer(
             self.uniffiCloneHandle(),
@@ -36012,8 +36012,17 @@ enum SendFlowError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
     case UnableToGetMaxSend(String
     )
     case InsufficientFunds
+    /**
+     * The amount plus the selected network fee is more than the wallet can spend
+     */
+    case SpendExceedsBalance(shortfallSats: UInt64
+    )
     case SendBelowDustLimit
     case UnableToGetFeeRate
+    /**
+     * A custom rate under the relay floor, including zero, negative, and NaN input
+     */
+    case FeeRateBelowMinimum
     case UnableToBuildTxn(String
     )
     case UnableToSaveUnsignedTransaction(String
@@ -36078,18 +36087,22 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 8: return .InsufficientFunds
-        case 9: return .SendBelowDustLimit
-        case 10: return .UnableToGetFeeRate
-        case 11: return .UnableToBuildTxn(
+        case 9: return .SpendExceedsBalance(
+            shortfallSats: try FfiConverterUInt64.read(from: &buf)
+            )
+        case 10: return .SendBelowDustLimit
+        case 11: return .UnableToGetFeeRate
+        case 12: return .FeeRateBelowMinimum
+        case 13: return .UnableToBuildTxn(
             try FfiConverterString.read(from: &buf)
             )
-        case 12: return .UnableToSaveUnsignedTransaction(
+        case 14: return .UnableToSaveUnsignedTransaction(
             try FfiConverterString.read(from: &buf)
             )
-        case 13: return .WalletManager(
+        case 15: return .WalletManager(
             try FfiConverterTypeWalletManagerError.read(from: &buf)
             )
-        case 14: return .UnableToGetFeeDetails(
+        case 16: return .UnableToGetFeeDetails(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -36141,31 +36154,40 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(8))
 
 
-        case .SendBelowDustLimit:
+        case let .SpendExceedsBalance(shortfallSats):
             writeInt(&buf, Int32(9))
+            FfiConverterUInt64.write(shortfallSats, into: &buf)
 
 
-        case .UnableToGetFeeRate:
+        case .SendBelowDustLimit:
             writeInt(&buf, Int32(10))
 
 
-        case let .UnableToBuildTxn(v1):
+        case .UnableToGetFeeRate:
             writeInt(&buf, Int32(11))
+
+
+        case .FeeRateBelowMinimum:
+            writeInt(&buf, Int32(12))
+
+
+        case let .UnableToBuildTxn(v1):
+            writeInt(&buf, Int32(13))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .UnableToSaveUnsignedTransaction(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(14))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .WalletManager(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(15))
             FfiConverterTypeWalletManagerError.write(v1, into: &buf)
 
 
         case let .UnableToGetFeeDetails(v1):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(16))
             FfiConverterString.write(v1, into: &buf)
 
         }
@@ -47592,7 +47614,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_set_block_explorer_option() != 32847) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer() != 26335) {
+    if (uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer() != 25909) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 7049) {
