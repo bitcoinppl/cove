@@ -1674,6 +1674,29 @@ mod tests {
         }
     }
 
+    #[test]
+    fn finalize_rejects_a_selected_rate_below_the_minimum_even_with_a_known_total() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 10_000);
+        set_selected_fee_total(&manager, 200);
+
+        let below_minimum = FeeRateOptionWithTotalFee::new(
+            FeeRateOption::new(custom_fee_speed(), 0.5),
+            super::Amount::from_sat(100),
+        );
+        manager.selected_fee_rate_changed(Arc::new(below_minimum));
+        drain_reconcile_messages(&manager);
+
+        manager.finalize_and_go_to_next_screen();
+
+        assert_eq!(
+            next_reconcile_message(&manager),
+            super::Message::SetAlert(super::SendFlowAlertState::Error(
+                super::SendFlowError::FeeRateBelowMinimum
+            ))
+        );
+    }
+
     // regression for #912: the alert must explain that the fee causes the shortfall, and by how much
     #[test]
     fn validate_amount_names_the_shortfall_when_amount_plus_fee_exceeds_balance() {
