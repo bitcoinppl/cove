@@ -6497,6 +6497,7 @@ dependencies = [
  "cove-ur",
  "foundation-ur",
  "gif",
+ "glob",
  "hex",
  "image",
  "jsonwebtoken",
@@ -6505,6 +6506,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "toml 1.1.2+spec-1.1.0",
  "xshell",
  "zip",
 ]

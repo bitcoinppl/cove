@@ -238,6 +238,26 @@ ios-ui-foreground device="iPhone 17" test="CoveUITests/OnboardingFullLaunchUITes
 
 alias iuf := ios-ui-foreground
 
+# [quick] List release checklist rows a git range touches that still need an agent or a human
+[group('qa')]
+qa-plan range="master...HEAD":
+    just xtask qa plan "{{ range }}"
+
+# [quick] List every release checklist row that still needs an agent or a human
+[group('qa')]
+qa-plan-all:
+    just xtask qa plan --all
+
+# [quick] Count release checklist rows per platform by the layer that covers them
+[group('qa')]
+qa-coverage:
+    just xtask qa coverage
+
+# [quick] Check that the release checklist manifest names tests and files that exist
+[group('qa')]
+qa-check:
+    just xtask qa check
+
 # [bounded] Run all tests
 [group('test')]
 [working-directory('rust')]

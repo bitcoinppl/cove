@@ -8,6 +8,7 @@ mod github;
 mod ios;
 mod mobile;
 mod mobile_artifact;
+mod qa;
 mod rebase;
 mod util;
 mod version;
@@ -276,6 +277,10 @@ enum Commands {
         new_base: String,
     },
 
+    /// Release checklist manifest: per-change plan, coverage, and consistency check
+    #[command(subcommand)]
+    Qa(qa::QaCommand),
+
     /// Utility commands for development and testing
     #[command(subcommand)]
     Util(UtilCommands),
@@ -428,6 +433,8 @@ fn main() -> Result<()> {
         Commands::MobileArtifact { command } => mobile_artifact::run(command, cli.verbose),
 
         Commands::Rebase { new_base } => rebase::rebase(&new_base),
+
+        Commands::Qa(command) => qa::run(command),
 
         Commands::Util(util_cmd) => match util_cmd {
             UtilCommands::SignPsbt { mnemonic, psbt, network, format, output } => {
