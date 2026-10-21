@@ -158,4 +158,20 @@ mod tests {
         assert_ne!(node.connection_identity(), different_api.connection_identity());
         assert_ne!(node.connection_identity(), different_network.connection_identity());
     }
+
+    // regression for #928: a node that accepts the connection but never answers kept the
+    // settings check loading forever; paused time lets the wait run without real delay
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn check_url_gives_up_on_a_node_that_never_responds() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/api", listener.local_addr().unwrap());
+        let node = Node::new_esplora("Silent".to_string(), url, Network::Signet);
+
+        let result = tokio::time::timeout(std::time::Duration::from_secs(600), node.check_url())
+            .await
+            .expect("check_url never returned for a node that never responds");
+
+        assert!(result.is_err(), "a node that never responds must fail the check");
+        drop(listener);
+    }
 }
