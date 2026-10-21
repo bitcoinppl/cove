@@ -209,7 +209,8 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/navigation/CoveNavDisplay.kt",
 ]
 coverage = [
-    "agent",
+    "device-script:qa/device/android/rows.py::s15-repeated-navigation-and-background-route-scope",
+    "device-script:qa/device/ios/rows.py::s15-repeated-navigation-and-background-route-scope",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 # needs repeated os backgrounding across several flows

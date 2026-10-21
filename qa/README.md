@@ -36,7 +36,7 @@ pending_pr = 924
   - `android-unit:<file>::<fun>` and `android-instrumented:<file>::<fun>` apply to Android
   - `ios-unit:<file>::<func>` and `ios-ui:<file>::<func>` apply to iOS
   - The named function must carry its runner's marker: a Rust attribute containing `test` such as `#[test]` or `#[tokio::test]`, Kotlin `@Test`, or a Swift `test` name prefix or `@Test`
-  - `device-script:<script>::<row id>` applies to the platform directory the script lives in, `ios/` or `android/`; the script must contain the row id as a quoted string outside `#` comment lines
+  - `device-script:<script>::<row id>` applies to the platform directory the script lives in, `ios/` or `android/`; the script must contain the row id as a quoted string outside `#` comment lines. The scripts, how to run them and their result format are in [device/README.md](device/README.md)
   - `agent` and `human` apply to both platforms, or to one with `agent:ios` or `human:android`
 - `pending` and `pending_pr`: tests on an open pull request that will decide the row once it merges. `qa-check` doesn't fail on them, and warns once one exists so it can move into `coverage`
 

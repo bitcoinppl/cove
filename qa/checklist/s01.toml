@@ -225,7 +225,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/MainActivityStartupBootstrap.kt",
 ]
 coverage = [
-    "agent",
+    "device-script:qa/device/android/rows.py::s01-two-cold-launches-after-upgrade",
 ]
 # 1.4.0: ios N/A, android PASS
 
