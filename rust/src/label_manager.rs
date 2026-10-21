@@ -6,12 +6,14 @@ use crate::{
     database::Database,
     database::{InsertOrUpdate, Record, record::Timestamps, wallet_data::WalletDataDb},
     manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
+    manager::wallet_manager::actor::WalletActor,
     multi_format::Bip329Labels,
     transaction::{TransactionDetails, TransactionDirection},
     wallet::{Address, metadata::WalletId},
     wallet_lifecycle::WalletManagerLifecycleToken,
 };
 
+use act_zero::{WeakAddr, send};
 use ahash::AHashMap as HashMap;
 use bip329::{
     AddressRecord, InputRecord, Label, Labels, OutputRecord, ParsedLabels, TransactionRecord,
@@ -23,6 +25,8 @@ use cove_types::{TxId, confirm::QrDensity};
 pub struct LabelManager {
     db: WalletDataDb,
     lifecycle: Option<WalletManagerLifecycleToken>,
+    /// The wallet actor that owns the transaction list, told when a transaction's labels change
+    wallet_actor: Option<WeakAddr<WalletActor>>,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -183,6 +187,7 @@ impl LabelManager {
                 .map_err_str(LabelManagerError::SaveOutputLabels)?;
 
             self.mark_cloud_backup_dirty();
+            self.notify_transaction_labels_changed(tx_id);
 
             return Ok(());
         }
@@ -190,14 +195,16 @@ impl LabelManager {
         // UPDATE
         self.update_labels_for_txn(&tx_id, input_records_iter, output_records_iter)?;
         self.mark_cloud_backup_dirty();
+        self.notify_transaction_labels_changed(tx_id);
 
         Ok(())
     }
 
     pub fn delete_labels_for_txn(&self, tx_id: Arc<TxId>) -> Result<(), LabelManagerError> {
         self.ensure_active()?;
-        if self.delete_labels_for_txn_without_cloud_backup_dirty(tx_id)? {
+        if self.delete_labels_for_txn_without_cloud_backup_dirty(tx_id.clone())? {
             self.mark_cloud_backup_dirty();
+            self.notify_transaction_labels_changed(*tx_id);
         }
 
         Ok(())
@@ -271,19 +278,31 @@ impl LabelManager {
 
 impl LabelManager {
     pub(crate) fn new_with_db(db: WalletDataDb) -> Self {
-        Self { db, lifecycle: None }
+        Self { db, lifecycle: None, wallet_actor: None }
     }
 
     pub fn try_new(
         id: WalletId,
     ) -> std::result::Result<Self, crate::database::wallet_data::WalletDataError> {
         let db = WalletDataDb::new_or_existing(id)?;
-        Ok(Self { db, lifecycle: None })
+        Ok(Self { db, lifecycle: None, wallet_actor: None })
     }
 
     pub(crate) fn with_lifecycle(mut self, lifecycle: WalletManagerLifecycleToken) -> Self {
         self.lifecycle = Some(lifecycle);
         self
+    }
+
+    /// Routes label edits to the wallet actor so its transaction list stays current
+    pub(crate) fn with_wallet_actor(mut self, wallet_actor: WeakAddr<WalletActor>) -> Self {
+        self.wallet_actor = Some(wallet_actor);
+        self
+    }
+
+    fn notify_transaction_labels_changed(&self, tx_id: TxId) {
+        if let Some(wallet_actor) = &self.wallet_actor {
+            send!(wallet_actor.transaction_labels_changed(tx_id.0));
+        }
     }
 
     fn ensure_active(&self) -> Result<()> {
@@ -664,7 +683,7 @@ mod tests {
     fn test_manager() -> (LabelManager, tempfile::TempDir) {
         let (db, tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
 
-        (LabelManager { db, lifecycle: None }, tmp)
+        (LabelManager::new_with_db(db), tmp)
     }
 
     fn received_details_with_output(vout: u32) -> TransactionDetails {
