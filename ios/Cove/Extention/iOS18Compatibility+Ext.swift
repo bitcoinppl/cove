@@ -44,8 +44,7 @@ extension View {
         if #available(iOS 26.0, *) {
             if reduceTransparency {
                 // showNavBar flips while scrolling, so it only changes modifier values; branching
-                // on it would rebuild the screen and its lazy list on every flip, which loops
-                // during the back transition at large text sizes
+                // on it would rebuild the screen and its lazy list on every flip
                 self
                     .toolbarColorScheme(showNavBar ? nil : .dark, for: .navigationBar)
                     .toolbarBackground(showNavBar ? Color.coveBg : Color.midnightBlue, for: .navigationBar)
