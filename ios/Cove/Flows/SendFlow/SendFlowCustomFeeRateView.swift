@@ -99,6 +99,9 @@ struct SendFlowCustomFeeRateView: View {
                     feeRate: feeRate, feeSpeed: feeSpeed
                 )
 
+                // the rate may have changed or become invalid while Rust computed this total
+                if Task.isCancelled { return }
+
                 if let totalFee = feeRateOption.totalFee() {
                     self.totalSats = Int(totalFee.asSats())
                 }
@@ -108,6 +111,8 @@ struct SendFlowCustomFeeRateView: View {
                     presenter.lastWorkingFeeRate = feeRate.satPerVb()
                 }
             } catch {
+                if Task.isCancelled { return }
+
                 guard isTooHighCustomFeeError(error) else {
                     Log.error("Unable to get accurate total sats \(error)")
                     return
@@ -155,8 +160,13 @@ struct SendFlowCustomFeeRateView: View {
     }
 
     func feeRateChanged(_: String?, newFeeRate: String?) {
-        guard let newFeeRate else { return }
-        guard let feeRate = Float(newFeeRate), !isBelowMinimum else { return }
+        guard let newFeeRate, let feeRate = Float(newFeeRate), !isBelowMinimum else {
+            // a pending request for the previous rate must not update totals or dismiss the sheet
+            totalSatsTask?.cancel()
+            totalSatsTask = nil
+            return
+        }
+
         getTotalSatsDeduped(for: feeRate)
     }
 
