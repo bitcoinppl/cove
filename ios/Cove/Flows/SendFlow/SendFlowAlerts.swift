@@ -135,6 +135,7 @@ private struct SendFlowErrorAlertActions: View {
         case .InvalidNumber,
              .InsufficientFunds,
              .SpendExceedsBalance,
+             .AmountExceedsBalance,
              .FeeRateBelowMinimum,
              .SendBelowDustLimit,
              .ZeroAmount,
@@ -194,7 +195,7 @@ private extension SendFlowError {
             "Invalid Address"
         case .InvalidNumber, .ZeroAmount:
             "Invalid Amount"
-        case .InsufficientFunds, .NoBalance, .SpendExceedsBalance:
+        case .InsufficientFunds, .NoBalance, .SpendExceedsBalance, .AmountExceedsBalance:
             "Insufficient Funds"
         case .FeeRateBelowMinimum:
             "Fee Rate Too Low"
@@ -235,6 +236,8 @@ private extension SendFlowError {
             "You do not have enough bitcoin in your wallet to cover the amount plus fees"
         case let .SpendExceedsBalance(shortfallSats: shortfall):
             "The amount plus the network fee is \(shortfall) sats more than your spendable balance. Lower the amount or the fee."
+        case let .AmountExceedsBalance(excessSats: excess):
+            "The amount is \(excess) sats more than your spendable balance, before the network fee. Lower the amount."
         case .FeeRateBelowMinimum:
             "The network fee rate must be at least 1 sat/vB"
         case .SendBelowDustLimit:
