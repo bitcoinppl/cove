@@ -46,6 +46,7 @@ Offline unit tests, which need no device: `python3 -I -m unittest discover -s qa
 - A phone prepared with WebDriverAgent as described in `$WDA_TOOLS/README.md` (default `~/code/tools/wda`): `wda-doctor`, then `wda-start`, with the phone unlocked for the whole run
 - WDA reachable at `WDA_BASE_URL` (default `http://127.0.0.1:8100`); `wdalib.py` from `$WDA_TOOLS` is imported for sessions and HTTP
 - The app installed, on a wallet home, on a test network
+- Nothing else driving the phone during the run. WDA serves every client on the same session, and another client switching apps mid-row makes the row fail. The driver reads and taps only while the app is in front, so a label in another app is never tapped
 
 The iOS rows have been checked only against canned WDA output (`test_device_scripts.py`), not a phone. Watch the first run. The iOS rows read the network from the checkmark in Settings, Network, and open the sidebar through the `app.sidebar.open` identifier; if either lookup fails, preflight blocks the rows and says why.
 

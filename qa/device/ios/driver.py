@@ -11,13 +11,16 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from common import Device, Node, RowBlocked, ensure_tap_allowed
+from common import Device, Node, RowBlocked, RowFailed, ensure_tap_allowed
 
 # WDA reports `/wda/apps/state` 4 for an app running in the foreground
 FOREGROUND = 4
 
 # element types that only lay out other elements or paint the system chrome
 LAYOUT_TYPES = {"XCUIElementTypeOther", "XCUIElementTypeWindow", "XCUIElementTypeStatusBar"}
+
+# the application element spans the whole screen, so matching it would tap the middle of whatever app is in front
+APPLICATION_TYPE = "XCUIElementTypeApplication"
 
 
 def parse_source(xml: str, bundle_id: str = "") -> list[Node]:
@@ -44,6 +47,9 @@ def parse_source(xml: str, bundle_id: str = "") -> list[Node]:
 
         label, name, value = element.get("label") or "", element.get("name") or "", element.get("value") or ""
         kind = element.get("type", element.tag)
+        if kind == APPLICATION_TYPE:
+            continue
+
 
         # an unlabelled container is only structure, not something a row can read or tap
         if kind in LAYOUT_TYPES and not (label or name or value):
@@ -144,15 +150,30 @@ class Ios(Device):
 
     # screen
 
+    def ensure_app_in_front(self) -> None:
+        """Fail unless this app is the one in front
+
+        WDA reads and taps whatever app is in front, and another app can come forward mid-row
+        (a system prompt, or another client driving the same phone), so a label found there must
+        never be tapped
+        """
+        bundle_id = self.request("GET", "/wda/activeAppInfo").get("value", {}).get("bundleId")
+        if bundle_id != self.package:
+            raise RowFailed(f"{bundle_id or 'another app'} is in front instead of {self.package}")
+
     def nodes(self) -> list[Node]:
+        self.ensure_app_in_front()
         return parse_source(self.request("GET", "/source?format=xml")["value"], self.package)
 
     def app_nodes(self) -> list[Node]:
-        # WDA's source is already the foreground app's tree
+        # nodes() only reads the tree while this app is in front
         return self.nodes()
 
     def tap(self, node: Node) -> None:
         ensure_tap_allowed(node.label)
+
+        # the tree was read earlier, so check again right before touching the screen
+        self.ensure_app_in_front()
         x, y = node.center
         self.session_post("/wda/tap", {"x": x, "y": y})
 
