@@ -14,6 +14,7 @@ use cove_device::cloud_storage::{
     CloudStorageInventorySnapshot, CloudSyncHealth,
 };
 use cove_device::keychain::Keychain;
+use cove_tokio::FutureTimeoutExt as _;
 
 use crate::test_support::MockKeychain;
 use cove_device::passkey::{
@@ -1324,7 +1325,7 @@ pub(crate) async fn wait_for_test_condition(
     message: &str,
     mut condition: impl FnMut() -> bool,
 ) {
-    tokio::time::timeout(timeout, async {
+    async {
         loop {
             if condition() {
                 break;
@@ -1332,7 +1333,8 @@ pub(crate) async fn wait_for_test_condition(
 
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-    })
+    }
+    .with_timeout(timeout)
     .await
     .expect(message);
 }
