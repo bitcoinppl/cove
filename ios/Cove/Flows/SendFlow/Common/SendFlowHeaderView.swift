@@ -42,7 +42,16 @@ private struct SendFlowHeaderLayout: View {
     @State private var showingMenu = false
 
     var body: some View {
-        ZStack {
+        // the balance row sets the height so large text grows the header instead of clipping,
+        // and the pattern sits behind it so its fixed height never drives the layout
+        SendFlowHeaderBalanceContent(
+            manager: manager,
+            balanceString: balanceString,
+            showingMenu: $showingMenu
+        )
+        .padding()
+        .frame(maxWidth: .infinity, minHeight: height)
+        .background {
             Image(.headerPattern)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
@@ -50,15 +59,7 @@ private struct SendFlowHeaderLayout: View {
                 .frame(maxWidth: .infinity)
                 .ignoresSafeArea(edges: .top)
                 .clipped()
-
-            SendFlowHeaderBalanceContent(
-                manager: manager,
-                balanceString: balanceString,
-                showingMenu: $showingMenu
-            )
-            .padding()
         }
-        .frame(height: height)
         .background(Color.midnightBlue)
     }
 }
