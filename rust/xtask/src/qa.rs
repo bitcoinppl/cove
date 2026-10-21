@@ -194,7 +194,9 @@ pub struct TestRef {
 }
 
 impl TestRef {
-    /// Whether `source` declares this test, using the declaration syntax of its language
+    /// Whether `source` declares this as a test, using the syntax of its language
+    ///
+    /// Comments and string literals are ignored, so a commented-out test no longer counts
     fn is_declared_in(&self, layer: Layer, source: &str) -> bool {
         let name = &self.name;
         let declarations = match layer {
@@ -205,12 +207,151 @@ impl TestRef {
             Layer::IosUnit | Layer::IosUi => vec![format!("func {name}(")],
 
             // device scripts name each row they decide as a literal row id
-            Layer::DeviceScript => vec![format!("\"{name}\"")],
+            Layer::DeviceScript => {
+                let literal = format!("\"{name}\"");
+                return source
+                    .lines()
+                    .filter(|line| !line.trim_start().starts_with('#'))
+                    .any(|line| line.contains(&literal));
+            }
             Layer::Agent | Layer::Human => return true,
         };
 
-        declarations.iter().any(|declaration| source.contains(declaration.as_str()))
+        let code = blank_comments_and_strings(source);
+        declarations.iter().any(|declaration| {
+            code.match_indices(declaration.as_str()).any(|(start, _)| {
+                let starts_word = !code[..start].ends_with(is_identifier_char);
+                starts_word && is_test_item(layer, name, item_prefix(&code[..start]))
+            })
+        })
     }
+}
+
+/// The attributes and modifiers in front of the declaration that ends `code`
+fn item_prefix(code: &str) -> &str {
+    let start = code.rfind(['{', '}', ';']).map_or(0, |index| index + 1);
+    &code[start..]
+}
+
+/// Whether the attributes in `prefix` mark the function `name` as a test
+fn is_test_item(layer: Layer, name: &str, prefix: &str) -> bool {
+    let has_annotation = |annotation: &str| {
+        prefix
+            .match_indices(annotation)
+            .any(|(start, _)| !prefix[start + annotation.len()..].starts_with(is_identifier_char))
+    };
+
+    match layer {
+        // `#[test]`, `#[tokio::test]`, `#[rstest]` and similar runner attributes
+        Layer::Rust => prefix
+            .split("#[")
+            .skip(1)
+            .any(|attribute| attribute.split(']').next().is_some_and(|body| body.contains("test"))),
+        Layer::AndroidUnit | Layer::AndroidInstrumented => has_annotation("@Test"),
+
+        // XCTest runs `test`-prefixed methods, swift-testing runs `@Test` functions
+        Layer::IosUnit | Layer::IosUi => name.starts_with("test") || has_annotation("@Test"),
+        Layer::DeviceScript | Layer::Agent | Layer::Human => true,
+    }
+}
+
+fn is_identifier_char(char: char) -> bool {
+    char.is_alphanumeric() || char == '_'
+}
+
+/// `source` with comments and string literal contents replaced by spaces
+///
+/// Covers the Rust, Kotlin and Swift syntax test files use: line and nested block
+/// comments, escaped, raw (`r#"`, `#"`) and triple-quoted strings, and char literals.
+/// Newlines are kept so each declaration stays on its own line
+fn blank_comments_and_strings(source: &str) -> String {
+    let chars = source.chars().collect::<Vec<_>>();
+    let mut out = String::with_capacity(source.len());
+    let mut index = 0;
+
+    while index < chars.len() {
+        let rest = &chars[index..];
+        let skipped = match rest {
+            ['/', '/', ..] => rest.iter().position(|&char| char == '\n').unwrap_or(rest.len()),
+            ['/', '*', ..] => block_comment_len(rest),
+            ['"', ..] => string_len(&chars, index),
+            ['\'', '\\', _, ..] => {
+                rest[3..].iter().position(|&char| char == '\'').map_or(1, |end| end + 4)
+            }
+            ['\'', _, '\'', ..] => 3,
+            _ => 0,
+        };
+
+        if skipped == 0 {
+            out.push(chars[index]);
+            index += 1;
+            continue;
+        }
+
+        let end = (index + skipped).min(chars.len());
+        out.extend(chars[index..end].iter().map(|&char| if char == '\n' { '\n' } else { ' ' }));
+        index = end;
+    }
+
+    out
+}
+
+/// Length of the block comment that starts `rest`, counting nested comments
+fn block_comment_len(rest: &[char]) -> usize {
+    let mut depth = 0;
+    let mut index = 0;
+
+    while index < rest.len() {
+        match &rest[index..] {
+            ['/', '*', ..] => {
+                depth += 1;
+                index += 2;
+            }
+            ['*', '/', ..] => {
+                depth -= 1;
+                index += 2;
+                if depth == 0 {
+                    return index;
+                }
+            }
+            _ => index += 1,
+        }
+    }
+
+    rest.len()
+}
+
+/// Length of the string literal whose opening quote is `chars[quote]`
+///
+/// Leading `#`s and a Rust `r` prefix were already copied through as code, so the
+/// literal only needs the closing quote followed by the same number of `#`s
+fn string_len(chars: &[char], quote: usize) -> usize {
+    let hashes = chars[..quote].iter().rev().take_while(|&&char| char == '#').count();
+    let is_rust_raw = quote > hashes && chars[quote - hashes - 1] == 'r';
+    let escapes = hashes == 0 && !is_rust_raw;
+
+    let rest = &chars[quote..];
+    let delimiter = if rest.starts_with(&['"', '"', '"']) { 3 } else { 1 };
+    let mut index = delimiter;
+
+    while index < rest.len() {
+        if escapes && rest[index] == '\\' {
+            index += 2;
+            continue;
+        }
+
+        let closes = rest[index..].starts_with(&rest[..delimiter])
+            && rest[index + delimiter..].iter().take(hashes).filter(|&&char| char == '#').count()
+                == hashes;
+
+        if closes {
+            return index + delimiter + hashes;
+        }
+
+        index += 1;
+    }
+
+    rest.len()
 }
 
 /// One `coverage` or `pending` entry, such as `rust:rust/src/foo.rs::bar` or `human:ios`
@@ -440,8 +581,21 @@ impl Manifest {
                 continue;
             }
 
-            if !row.pending.is_empty() {
-                pending.push(row);
+            // only the still-manual platforms an open PR's tests would take over
+            let pending_platforms = row
+                .platforms
+                .iter()
+                .copied()
+                .filter(|platform| {
+                    agent_platforms.contains(platform) || human_platforms.contains(platform)
+                })
+                .filter(|platform| {
+                    row.pending.iter().any(|pending| pending.platforms.contains(platform))
+                })
+                .collect::<Vec<_>>();
+
+            if !pending_platforms.is_empty() {
+                pending.push((row, pending_platforms));
             }
 
             if !agent_platforms.is_empty() {
@@ -473,9 +627,10 @@ impl Manifest {
 
         if !pending.is_empty() {
             out.push_str("\n## Covered once open PRs land\n\n");
-            for row in pending {
+            for (row, platforms) in pending {
                 let pr = row.pending_pr.map(|pr| format!("#{pr}")).unwrap_or_default();
-                out.push_str(&format!("- `{}` {} {pr}\n", row.id, row.title));
+                let platforms = join_platforms(&platforms);
+                out.push_str(&format!("- `{}` {} ({platforms}) {pr}\n", row.id, row.title));
             }
         }
 
@@ -625,9 +780,13 @@ fn push_group(out: &mut String, heading: &str, rows: &[(&Row, Vec<Platform>)]) {
     }
 
     for (row, platforms) in rows {
-        let platforms = platforms.iter().map(Platform::to_string).collect::<Vec<_>>().join(", ");
+        let platforms = join_platforms(platforms);
         out.push_str(&format!("- §{} `{}` {} ({platforms})\n", row.section, row.id, row.title));
     }
+}
+
+fn join_platforms(platforms: &[Platform]) -> String {
+    platforms.iter().map(Platform::to_string).collect::<Vec<_>>().join(", ")
 }
 
 fn repo_root() -> Result<PathBuf> {
@@ -636,7 +795,9 @@ fn repo_root() -> Result<PathBuf> {
 }
 
 fn changed_files(root: &Path, range: &str) -> Result<Vec<String>> {
-    let output = git(Some(root), &["diff", "--name-only", range])?;
+    // a detected rename lists only its destination, so a file moved out of a row's paths
+    // would drop that row; without rename detection both the old and new path are listed
+    let output = git(Some(root), &["diff", "--name-only", "--no-renames", range])?;
     Ok(output.lines().map(str::to_string).collect())
 }
 
