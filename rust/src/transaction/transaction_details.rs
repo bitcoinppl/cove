@@ -18,10 +18,7 @@ use crate::{
 };
 use cove_tokio::task;
 
-use crate::{
-    device::Device,
-    wallet::{Address, address, amount_display, metadata::WalletMetadata},
-};
+use crate::wallet::{Address, address, amount_display, metadata::WalletMetadata};
 use cove_util::{format::NumberFormatter as _, result_ext::ResultExt as _};
 use tap::TapFallible;
 
@@ -465,23 +462,8 @@ impl TransactionDetails {
             PendingOrConfirmed::Confirmed(confirmed) => Some(confirmed.confirmation_time),
         }? as i64;
 
-        // get timezone
-        let timezone_string = Device::global().timezone();
-
-        // create a Timestamp from Unix seconds
-        let ts = Timestamp::from_second(confirm_time).ok()?;
-
-        // Convert to local time zone
-        let local = match ts.in_tz(&timezone_string) {
-            Ok(local) => local,
-            Err(error) => {
-                tracing::warn!("unable to convert timestamp: {error}");
-                ts.in_tz("UTC").ok()?
-            }
-        };
-
-        // Format the timestamp
-        jiff::fmt::strtime::format("%B %e, %Y at %-I:%M %p", &local).ok()
+        let confirmed_at = Timestamp::from_second(confirm_time).ok()?;
+        Some(super::local_time::local_date_time(confirmed_at))
     }
 
     #[uniffi::method]

@@ -158,7 +158,7 @@ impl ConfirmedTransaction {
 
     #[uniffi::method]
     pub fn confirmed_at_fmt(&self) -> String {
-        self.confirmed_at.strftime("%B %d, %Y").to_string()
+        super::local_time::local_date(self.confirmed_at)
     }
 
     #[uniffi::method]
