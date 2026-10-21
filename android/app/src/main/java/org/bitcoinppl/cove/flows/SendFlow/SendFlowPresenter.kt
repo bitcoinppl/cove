@@ -104,6 +104,7 @@ class SendFlowPresenter(
             is SendFlowException.InsufficientFunds,
             is SendFlowException.NoBalance,
             is SendFlowException.SpendExceedsBalance,
+            is SendFlowException.AmountExceedsBalance,
             -> "Insufficient Funds"
 
             is SendFlowException.FeeRateBelowMinimum -> "Fee Rate Too Low"
@@ -157,6 +158,9 @@ class SendFlowPresenter(
 
             is SendFlowException.SpendExceedsBalance ->
                 "The amount plus the network fee is ${error.shortfallSats} sats more than your spendable balance. Lower the amount or the fee."
+
+            is SendFlowException.AmountExceedsBalance ->
+                "The amount is ${error.excessSats} sats more than your spendable balance, before the network fee. Lower the amount."
 
             is SendFlowException.FeeRateBelowMinimum ->
                 "The network fee rate must be at least 1 sat/vB"
@@ -224,6 +228,7 @@ class SendFlowPresenter(
             is SendFlowException.InvalidNumber,
             is SendFlowException.InsufficientFunds,
             is SendFlowException.SpendExceedsBalance,
+            is SendFlowException.AmountExceedsBalance,
             is SendFlowException.FeeRateBelowMinimum,
             is SendFlowException.SendBelowDustLimit,
             is SendFlowException.ZeroAmount,

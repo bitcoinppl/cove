@@ -33,6 +33,10 @@ pub enum SendFlowError {
     #[error("amount plus network fee exceeds the spendable balance by {shortfall_sats} sats")]
     SpendExceedsBalance { shortfall_sats: u64 },
 
+    /// The amount alone is more than the wallet can spend, before the network fee is known
+    #[error("amount exceeds the spendable balance by {excess_sats} sats before the network fee")]
+    AmountExceedsBalance { excess_sats: u64 },
+
     #[error("send amount is below the dust limit")]
     SendBelowDustLimit,
 
