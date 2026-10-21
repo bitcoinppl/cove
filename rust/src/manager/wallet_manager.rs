@@ -1604,7 +1604,7 @@ mod tests {
             txns.first().expect("the funded wallet has a transaction").id()
         };
         let details = manager
-            .transaction_details(Arc::new(tx_id.clone()))
+            .transaction_details(Arc::new(tx_id))
             .await
             .expect("transaction details")
             .details();

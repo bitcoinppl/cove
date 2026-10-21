@@ -947,7 +947,7 @@ mod tests {
             let _ = delete_wallet_specific_data(second_id);
         }
 
-        assert_eq!(second.err(), Some(WalletError::WalletAlreadyExists(first.id.clone())));
+        assert_eq!(second.err(), Some(WalletError::WalletAlreadyExists(first.id)));
         assert_eq!(wallet_count, 1, "a duplicate wallet was saved");
     }
 }
