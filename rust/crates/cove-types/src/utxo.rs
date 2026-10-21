@@ -171,15 +171,6 @@ impl Utxo {
         self.name().to_string()
     }
 
-    #[allow(clippy::cast_possible_wrap)]
-    fn date(&self) -> String {
-        let Ok(timestamp) = jiff::Timestamp::from_second(self.datetime as i64) else {
-            return String::new();
-        };
-
-        timestamp.strftime("%b %d, %Y").to_string()
-    }
-
     fn hash_to_uint(&self) -> u64 {
         let mut hasher = std::hash::DefaultHasher::new();
         self.hash(&mut hasher);
