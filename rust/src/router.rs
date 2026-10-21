@@ -547,19 +547,22 @@ mod tests {
 
         let database = Database::global();
         database.wallets.save_new_wallet_metadata(wallet.metadata.clone()).unwrap();
-        database
-            .global_config
-            .select_wallet(WalletId::from("wallet-from-another-network".to_string()))
-            .unwrap();
+        let stale_id = WalletId::from("wallet-from-another-network".to_string());
+        database.global_config.select_wallet(stale_id.clone()).unwrap();
 
         let route = startup_route(&database);
-        let selected = database.global_config.selected_wallet();
+        let selected = database.global_config.selected_wallet().expect("fallback is selected");
+        let SelectedWalletTarget { network, mode } = database.global_config.wallet_target();
+        let fallback_exists = matches!(database.wallets.get(&selected, network, mode), Ok(Some(_)));
 
         crate::wallet::test_support::remove_wallet(&wallet.id);
         let _ = database.global_config.clear_selected_wallet();
 
-        assert_eq!(route, Route::SelectedWallet(wallet.id.clone()));
-        assert_eq!(selected, Some(wallet.id));
+        // tests that skip the global state lock can save a newer wallet mid-run, so the
+        // fallback is any wallet on the active target rather than always this one
+        assert_ne!(selected, stale_id);
+        assert!(fallback_exists, "fallback {selected} is not on the active target");
+        assert_eq!(route, Route::SelectedWallet(selected));
     }
 
     #[test]
