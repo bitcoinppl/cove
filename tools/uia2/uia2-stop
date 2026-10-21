@@ -1,0 +1,37 @@
+#!/bin/bash
+# stop the server started by uia2-start and remove its port forward
+# usage: [ANDROID_SERIAL=<serial>] uia2-stop [--dry-run]
+set -u
+. "$(dirname "$0")/uia2-env.sh"
+
+dry=false
+[ "${1:-}" = "--dry-run" ] && dry=true
+resolve_serial
+STATE="$(state_dir)"
+port="$(cat "$STATE/port" 2>/dev/null || echo "$UIA2_PORT")"
+
+if $dry; then
+  json ok:raw=true action=uia2-stop dry_run:raw=true "serial=$ANDROID_SERIAL" "port=$port"
+  exit 0
+fi
+
+stopped=()
+pidfile="$STATE/instrument.pid"
+if [ -f "$pidfile" ]; then
+  pid="$(cat "$pidfile")"
+  # only signal a pid that is still our adb process, in case the pid was reused
+  if kill -0 "$pid" 2>/dev/null && ps -p "$pid" -o args= | grep -q "$UIA2_SERVER_PKG"; then
+    kill "$pid" 2>/dev/null
+    stopped+=("adb:$pid")
+  fi
+  rm -f "$pidfile"
+fi
+
+# the on-device instrumentation can outlive the adb shell that started it
+adb shell am force-stop "$UIA2_SERVER_PKG" >/dev/null 2>&1 && stopped+=("$UIA2_SERVER_PKG")
+if adb forward --list | grep -q "^$ANDROID_SERIAL tcp:$port "; then
+  adb forward --remove "tcp:$port" >/dev/null 2>&1 && stopped+=("forward:$port")
+fi
+rm -f "$STATE/port"
+
+json ok:raw=true action=uia2-stop "serial=$ANDROID_SERIAL" "stopped=${stopped[*]:-none}"

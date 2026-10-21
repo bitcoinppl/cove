@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""Check everything the UiAutomator2 server needs and print one JSON object with the next fix
+
+Read-only: queries adb and the cache, never installs, starts or taps anything.
+"""
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import urllib.request
+
+HOME = os.path.dirname(os.path.abspath(__file__))
+
+
+def env_config():
+    # uia2-env.sh is the single source of the pinned version, checksums and paths
+    script = 'set -u; . "%s/uia2-env.sh"; for v in UIA2_SERVER_VERSION UIA2_SERVER_SHA256 UIA2_TEST_SHA256 UIA2_SERVER_PKG UIA2_PORT UIA2_BASE_URL UIA2_SERVER_APK UIA2_TEST_APK UIA2_CACHE; do printf "%%s=%%s\\n" "$v" "${!v}"; done' % HOME
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True).stdout
+    return dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+
+
+CFG = env_config()
+SERIAL = os.environ.get("ANDROID_SERIAL", "")
+checks = []
+
+
+def run(*cmd, timeout=30):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, p.stdout, p.stderr
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 127, "", str(e)
+
+
+def adb_shell(*args):
+    return run("adb", "-s", SERIAL, "shell", *args)[1]
+
+
+def check(name, ok, detail, fix=""):
+    checks.append({"name": name, "ok": bool(ok), "detail": detail, **({} if ok else {"fix": fix})})
+
+
+def sha256(path):
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return ""
+
+
+def main():
+    global SERIAL
+
+    check("adb", shutil.which("adb"), shutil.which("adb") or "not on PATH", "add the Android SDK platform-tools to PATH")
+    if not shutil.which("adb"):
+        return report()
+
+    # device selection mirrors resolve_serial in uia2-env.sh
+    _, out, _ = run("adb", "devices")
+    rows = [l.split("\t") for l in out.splitlines()[1:] if "\t" in l]
+    ready = [s for s, state in rows if state == "device"]
+    if SERIAL:
+        state = dict(rows).get(SERIAL, "missing")
+        check("device", state == "device", "%s is %s" % (SERIAL, state),
+              "unplug and replug, then tap Allow on the USB debugging prompt" if state == "unauthorized" else "plug in %s or fix ANDROID_SERIAL" % SERIAL)
+    elif len(ready) == 1:
+        SERIAL = ready[0]
+        check("device", True, "only device: %s" % SERIAL)
+    else:
+        check("device", False, "%d authorized devices: %s" % (len(ready), " ".join(ready) or "none"),
+              "set ANDROID_SERIAL" if ready else "plug in the phone and allow USB debugging")
+    if not checks[-1]["ok"]:
+        return report()
+
+    api = adb_shell("getprop", "ro.build.version.sdk").strip()
+    model = adb_shell("getprop", "ro.product.model").strip()
+    check("android", api.isdigit() and int(api) >= 26, "%s, API %s" % (model, api), "the server needs Android 8 (API 26) or newer")
+
+    power = adb_shell("dumpsys", "power")
+    awake = "mWakefulness=Awake" in power
+    keyguard = "isKeyguardShowing=true" in adb_shell("dumpsys", "window")
+    check("screen_unlocked", awake and not keyguard, "awake=%s keyguard=%s" % (awake, keyguard), "wake and unlock the device")
+
+    apks_ok = sha256(CFG["UIA2_SERVER_APK"]) == CFG["UIA2_SERVER_SHA256"] and sha256(CFG["UIA2_TEST_APK"]) == CFG["UIA2_TEST_SHA256"]
+    check("apks_cached", apks_ok, "v%s in %s" % (CFG["UIA2_SERVER_VERSION"], os.path.dirname(CFG["UIA2_SERVER_APK"])), "run uia2-fetch (uia2-start does it too)")
+
+    pkg = CFG["UIA2_SERVER_PKG"]
+    m = re.search(r"versionName=(\S+)", adb_shell("dumpsys", "package", pkg))
+    installed = m.group(1) if m else "none"
+    has_test = "package:" in adb_shell("pm", "path", pkg + ".test")
+    check("server_installed", installed == CFG["UIA2_SERVER_VERSION"] and has_test,
+          "server %s, test APK %s" % (installed, "present" if has_test else "missing"), "uia2-start installs them")
+
+    # Android allows one UiAutomation connection; a running connectedAndroidTest owns it
+    others = [l for l in adb_shell("ps", "-A", "-o", "ARGS").splitlines() if "am instrument" in l.lower() and pkg not in l]
+    check("no_other_instrumentation", not others, "; ".join(others) or "none running",
+          "wait for the other instrumentation to finish; uia2-start refuses while it runs")
+
+    port = CFG["UIA2_PORT"]
+    owners = [l.split()[0] for l in run("adb", "forward", "--list")[1].splitlines() if len(l.split()) >= 2 and l.split()[1] == "tcp:" + port]
+    check("port_free", not owners or owners == [SERIAL], "tcp:%s forwards to %s" % (port, owners[0] if owners else "nothing"),
+          "use another UIA2_PORT for this device")
+
+    try:
+        with urllib.request.urlopen(CFG["UIA2_BASE_URL"] + "/status", timeout=3) as r:
+            st = json.loads(r.read())
+        check("server_running", owners == [SERIAL], "ready=%s, version %s" % (st["value"].get("ready"), st["value"].get("build", {}).get("version")),
+              "the server on this port belongs to another device")
+    except Exception:
+        check("server_running", False, "no answer from %s/status" % CFG["UIA2_BASE_URL"], "run uia2-start")
+
+    return report()
+
+
+def report():
+    # server_installed and server_running are informational: uia2-start fixes both
+    soft = ("server_installed", "server_running", "apks_cached")
+    blockers = [c for c in checks if not c["ok"] and c["name"] not in soft]
+    running = any(c["name"] == "server_running" and c["ok"] for c in checks)
+    result = {"ok": not blockers, "serial": SERIAL, "checks": checks,
+              "next": blockers[0]["fix"] if blockers else ("server is up; use the android-* commands" if running else "run uia2-start")}
+    print(json.dumps(result, indent=2))
+    return 0 if result["ok"] else 1
+
+
+sys.exit(main())

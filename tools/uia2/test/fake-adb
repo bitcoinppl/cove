@@ -1,0 +1,27 @@
+#!/bin/bash
+# Fake adb for testing uia2-start, uia2-stop and android-launch without a device
+# State lives in $FAKE_ADB: forwards (adb forward --list), ps (device processes), calls.log,
+# and flag files resolve_fail and forward_fail
+echo "$*" >>"$FAKE_ADB/calls.log"
+serial="${ANDROID_SERIAL:-}"
+if [ "${1:-}" = "-s" ]; then serial="$2"; shift 2; fi
+touch "$FAKE_ADB/forwards"
+
+case "$1 ${2:-} ${3:-}" in
+  "devices  ") printf 'List of devices attached\n%s\tdevice\n' "${serial:-TEST-SERIAL}" ;;
+  "forward --list "*) cat "$FAKE_ADB/forwards" ;;
+  "forward --remove "*) grep -v " $3 " "$FAKE_ADB/forwards" >"$FAKE_ADB/forwards.new"; mv "$FAKE_ADB/forwards.new" "$FAKE_ADB/forwards" ;;
+  "forward tcp:"*)
+    [ -e "$FAKE_ADB/forward_fail" ] && { echo "error: cannot bind listener" >&2; exit 1; }
+    echo "$serial $2 $3" >>"$FAKE_ADB/forwards" ;;
+  "shell ps "*) cat "$FAKE_ADB/ps" 2>/dev/null ;;
+  "shell dumpsys package") echo "    versionName=10.6.6" ;;
+  "shell pm path") echo "package:/data/app/base.apk" ;;
+  "shell am instrument") while :; do sleep 1; done ;;
+  "shell am start") echo "Status: ok" ;;
+  "shell cmd package")
+    [ -e "$FAKE_ADB/resolve_fail" ] && { echo "adb: more than one device/emulator" >&2; exit 1; }
+    echo "org.bitcoinppl.cove/.MainActivity" ;;
+  "install "*|"shell am force-stop"|"shell input keyevent") ;;
+  *) echo "fake adb: unhandled: $*" >&2; exit 1 ;;
+esac
