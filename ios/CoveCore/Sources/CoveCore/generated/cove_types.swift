@@ -4768,15 +4768,6 @@ public struct Utxo: Equatable, Hashable {
     }
 
 
-public func date() -> String  {
-    return try!  FfiConverterString.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_types_fn_method_utxo_date(
-            FfiConverterTypeUtxo_lower(self),uniffiCallStatus
-    )
-})
-}
-
 public func hashToUint() -> UInt64  {
     return try!  FfiConverterUInt64.lift(try! rustCall() {
         uniffiCallStatus in
