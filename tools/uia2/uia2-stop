@@ -12,6 +12,7 @@ for a in "$@"; do
   esac
 done
 
+require_adb
 resolve_serial
 STATE="$(state_dir)"
 

@@ -24,7 +24,7 @@ fi
 timeout="${UIA2_START_TIMEOUT:-60}"
 [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || die invalid_timeout "UIA2_START_TIMEOUT must be a positive whole number of seconds, not '$timeout'"
 
-[ -n "$UIA2_ADB" ] || die missing_adb "adb not found" "fix=add the Android SDK platform-tools to PATH"
+require_adb
 resolve_serial
 STATE="$(state_dir)"
 mkdir -p "$STATE"

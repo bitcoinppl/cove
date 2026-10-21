@@ -294,6 +294,11 @@ check "stop leaves a forward that isn't the server's" grep -q "^TEST-SERIAL tcp:
 : >"$FAKE_ADB/forwards"
 
 # a bad timeout fails before anything starts on the device
+# without adb on PATH both commands say so instead of failing somewhere inside
+for cmd in uia2-start uia2-stop; do
+  PATH=/usr/bin:/bin expect "$cmd without adb" 1 'd["error"]=="missing_adb"' -- "$here/$cmd"
+done
+
 : >"$FAKE_ADB/calls.log"
 UIA2_START_TIMEOUT=abc expect "start with a bad timeout" 1 'd["error"]=="invalid_timeout"' -- "$here/uia2-start"
 check "bad timeout starts nothing" bash -c "! grep -q 'am instrument' '$FAKE_ADB/calls.log'"
