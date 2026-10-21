@@ -211,11 +211,11 @@ android-ui-manual:
 alias aum := android-ui-manual
 
 # Skips staged process-death tests, which need `android-ui-manual`, and tests marked @QuarantinedInCi
-# [long, external] Run Android instrumented tests for both flavours the way the UI tests workflow does
+# [long, external] Run Android instrumented tests the way the UI tests workflow does; flavours: Dev, UiTest or both
 [group('test')]
 [working-directory('android')]
-android-instrumented-ci:
-    ./gradlew connectedDevDebugAndroidTest connectedUiTestDebugAndroidTest --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi"
+android-instrumented-ci flavours="Dev UiTest":
+    ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi"
 
 # [bounded] Update Android Compose preview screenshot references
 [group('test')]
