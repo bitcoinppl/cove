@@ -164,6 +164,7 @@ class WalletManager :
 
     // errors
     var sendFlowErrorAlert by mutableStateOf<TaggedItem<SendFlowErrorAlert>?>(null)
+    var errorAlert by mutableStateOf<TaggedItem<WalletErrorAlert>?>(null)
     var labelRefreshFailed by mutableStateOf<TaggedItem<Unit>?>(null)
         private set
 
@@ -911,6 +912,7 @@ class WalletManager :
 
             is WalletManagerReconcileMessage.NodeConnectionFailed -> {
                 logError(message.v1)
+                errorAlert = TaggedItem(WalletErrorAlert.NodeConnectionFailed(message.v1))
             }
 
             is WalletManagerReconcileMessage.WalletException -> {
