@@ -217,7 +217,20 @@ touch "$FAKE_ADB/forward_fail"
 expect "start forward failure" 1 'd["error"]=="forward_failed"' -- "$here/uia2-start"
 pid="$(cat "$tmp/state/TEST-SERIAL/instrument.pid" 2>/dev/null)"
 check "failed start stops the server" bash -c "[ -z '$pid' ] && grep -q 'am force-stop io.appium.uiautomator2.server' '$FAKE_ADB/calls.log'"
-rm "$FAKE_ADB/forward_fail"
+
+# a start that can't stop the server it launched says so, in its one JSON object; the
+# preliminary stop before the launch still succeeds
+echo 1 >"$FAKE_ADB/force_stop_fail"
+expect "failed start with a failing cleanup" 1 'd["error"]=="cleanup_incomplete" and d["cause"]=="forward_failed" and "force-stop" in d["stop"]' -- "$here/uia2-start"
+rm "$FAKE_ADB/forward_fail" "$FAKE_ADB/force_stop_fail"
+"$here/uia2-stop" >/dev/null
+
+# an adb server started while the lock is held must not keep holding it
+touch "$FAKE_ADB/daemon"
+"$here/uia2-stop" >/dev/null
+UIA2_LOCK_WAIT=0.5 expect "stop after adb started its server" 0 'd["ok"]' -- "$here/uia2-stop"
+kill "$(cat "$FAKE_ADB/daemon.pid")"
+rm "$FAKE_ADB/daemon" "$FAKE_ADB/daemon.pid"
 
 expect "start" 0 'd["ok"] and d["serial"]=="TEST-SERIAL"' -- "$here/uia2-start"
 pid="$(cut -d' ' -f1 "$tmp/state/TEST-SERIAL/instrument.pid")"

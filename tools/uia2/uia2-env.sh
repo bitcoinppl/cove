@@ -41,6 +41,12 @@ usage() { # usage MESSAGE: exit 2 like the android-* commands, before any side e
   exit 2
 }
 
+# the first adb call can start the host adb daemon, which would inherit the device lock on fd 9
+# and hold it long after this script exits. The redirect goes on the binary's path: on a builtin
+# such as `command`, bash 3.2 applies it in the shell and leaves a copy of fd 9 that adb inherits
+UIA2_ADB="$(type -P adb)"
+adb() { "${UIA2_ADB:-adb}" "$@" 9>&-; }
+
 # pick the device: ANDROID_SERIAL when set (adb honors it too), else the only attached device
 resolve_serial() {
   if [ -n "${ANDROID_SERIAL:-}" ]; then

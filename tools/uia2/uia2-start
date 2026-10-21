@@ -24,7 +24,7 @@ fi
 timeout="${UIA2_START_TIMEOUT:-60}"
 [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || die invalid_timeout "UIA2_START_TIMEOUT must be a positive whole number of seconds, not '$timeout'"
 
-command -v adb >/dev/null || die missing_adb "adb not found" "fix=add the Android SDK platform-tools to PATH"
+[ -n "$UIA2_ADB" ] || die missing_adb "adb not found" "fix=add the Android SDK platform-tools to PATH"
 resolve_serial
 STATE="$(state_dir)"
 mkdir -p "$STATE"
@@ -80,19 +80,28 @@ fi
 stop_out="$("$(dirname "$0")/uia2-stop" 2>&1)" || die stop_failed "could not stop the previous server" "stop=$stop_out"
 
 # from here on, any exit before the server answers stops it again, so a failed, interrupted or
-# aborted start never leaves it holding the device's UiAutomation connection
-started=false
+# aborted start never leaves it holding the device's UiAutomation connection. die only records
+# the error, so on_exit can report it in one object together with how the cleanup went
+started=false failure=()
+die() {
+  failure=("$@")
+  exit 1
+}
+
 on_exit() {
-  local rc=$?
+  local rc=$? stop_out
   $started && return
-  "$(dirname "$0")/uia2-stop" >/dev/null 2>&1
-  if [ "$rc" -eq 0 ]; then
-    json ok:raw=false error=start_aborted "message=uia2-start stopped before the server answered; the server was stopped"
-    exit 1
+  [ ${#failure[@]} -gt 0 ] || failure=(start_aborted "uia2-start stopped before the server answered (exit $rc)")
+  if stop_out="$("$(dirname "$0")/uia2-stop" 2>&1)"; then
+    json ok:raw=false "error=${failure[0]}" "message=${failure[1]}; the server was stopped" "${failure[@]:2}"
+  else
+    json ok:raw=false error=cleanup_incomplete "message=${failure[1]}; stopping the server failed too, so it may still hold the device's automation connection" \
+      "cause=${failure[0]}" "${failure[@]:2}" "stop=$stop_out" "fix=reconnect the device and rerun uia2-stop"
   fi
+  exit 1
 }
 trap on_exit EXIT
-trap 'die interrupted "uia2-start was interrupted; the server was stopped"' INT TERM
+trap 'die interrupted "uia2-start was interrupted"' INT TERM
 
 adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1
 # 9>&-: the long-lived server must not inherit, and so keep holding, the device lock
