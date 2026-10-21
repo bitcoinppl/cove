@@ -98,7 +98,8 @@ View           (204,1465) 312x219 C  tag='numberPadPin.digit.1'
   `uia2-start` and `uia2-stop` hold a lock per device, so two agents can't start or stop the
   same device at once. A second one waits up to `UIA2_LOCK_WAIT` seconds, then fails with
   `locked`. If `uia2-start` fails or is interrupted after launching the server, it stops the
-  server again before exiting
+  server again before exiting, and reports `cleanup_incomplete` with the original error as
+  `cause` when the device can't be reached to stop it
 - **Coordinates are pixels**, not points as on iOS. Use the centers `android-vis` prints
 - **`android-type` replaces the field's text.** It sets the whole text through
   accessibility, so characters can't arrive out of order the way fast `adb shell input
