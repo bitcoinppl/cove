@@ -411,10 +411,17 @@ pub(crate) mod test_support {
         wallet.id
     }
 
+    /// Undoes [`select_mainnet_wallet_then_switch_to_empty_network`], including the wallet row,
+    /// so later tests sharing the process-global database never see the orphaned wallet
     pub(crate) fn restore_mainnet_after_network_switch(id: &WalletId) {
-        let _ = Database::global().global_config.set_selected_network(Network::Bitcoin);
-        let _ = Database::global().global_config.clear_selected_wallet();
+        let database = Database::global();
+        let _ = database.global_config.set_selected_network(Network::Bitcoin);
+        let _ = database.global_config.clear_selected_wallet();
+
+        // delete by id resolves against the active target, so it runs after mainnet is restored
+        crate::keychain::Keychain::global().delete_wallet_items(id);
         let _ = delete_wallet_specific_data(id);
+        let _ = database.wallets.delete(id);
     }
 
     impl Wallet {
