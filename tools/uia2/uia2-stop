@@ -5,7 +5,13 @@ set -u
 . "$(dirname "$0")/uia2-env.sh"
 
 dry=false
-[ "${1:-}" = "--dry-run" ] && dry=true
+for a in "$@"; do
+  case "$a" in
+    --dry-run) dry=true ;;
+    *) usage "usage: uia2-stop [--dry-run]" ;;
+  esac
+done
+
 resolve_serial
 STATE="$(state_dir)"
 port="$(cat "$STATE/port" 2>/dev/null || echo "$UIA2_PORT")"
@@ -15,23 +21,41 @@ if $dry; then
   exit 0
 fi
 
-stopped=()
+mkdir -p "$STATE"
+lock_device
+stopped=() failed=()
+
 pidfile="$STATE/instrument.pid"
 if [ -f "$pidfile" ]; then
-  pid="$(cat "$pidfile")"
-  # only signal a pid that is still our adb process, in case the pid was reused
-  if kill -0 "$pid" 2>/dev/null && ps -p "$pid" -o args= | grep -q "$UIA2_SERVER_PKG"; then
-    kill "$pid" 2>/dev/null
-    stopped+=("adb:$pid")
+  read -r pid started <"$pidfile"
+  # signal only the adb process uia2-start launched for this device: same start time and
+  # command line, so a reused pid or another device's server is left alone
+  if [ -n "${started:-}" ] && [ "$(proc_start "$pid")" = "$started" ] &&
+    ps -p "$pid" -o args= | grep -qF -- "-s $ANDROID_SERIAL shell am instrument"; then
+    if kill "$pid" 2>/dev/null; then stopped+=("adb:$pid"); else failed+=("kill $pid"); fi
   fi
-  rm -f "$pidfile"
 fi
 
 # the on-device instrumentation can outlive the adb shell that started it
-adb shell am force-stop "$UIA2_SERVER_PKG" >/dev/null 2>&1 && stopped+=("$UIA2_SERVER_PKG")
-if adb forward --list | grep -q "^$ANDROID_SERIAL tcp:$port "; then
-  adb forward --remove "tcp:$port" >/dev/null 2>&1 && stopped+=("forward:$port")
+if out="$(adb shell am force-stop "$UIA2_SERVER_PKG" 2>&1)"; then
+  stopped+=("$UIA2_SERVER_PKG")
+else
+  failed+=("force-stop: $out")
 fi
-rm -f "$STATE/port"
+
+if forwards="$(adb forward --list 2>&1)"; then
+  if [ "$(forward_owner "$forwards" "$port")" = "$ANDROID_SERIAL" ]; then
+    if out="$(adb forward --remove "tcp:$port" 2>&1)"; then stopped+=("forward:$port"); else failed+=("forward --remove: $out"); fi
+  fi
+else
+  failed+=("forward --list: $forwards")
+fi
+
+# keep the state a retry needs until everything is really stopped
+if [ ${#failed[@]} -gt 0 ]; then
+  die cleanup_incomplete "could not fully stop the server on $ANDROID_SERIAL; it may still hold the device's automation connection" \
+    "failed=$(printf '%s; ' "${failed[@]}")" "stopped=${stopped[*]:-none}" "fix=reconnect the device and rerun uia2-stop"
+fi
+rm -f "$pidfile" "$STATE/port"
 
 json ok:raw=true action=uia2-stop "serial=$ANDROID_SERIAL" "stopped=${stopped[*]:-none}"

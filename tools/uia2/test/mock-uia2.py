@@ -56,6 +56,10 @@ def source():
         return SOURCE
 
 
+# the focused field's text, so android-type's readback reflects what was sent
+FIELD = {"text": ""}
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -92,8 +96,16 @@ class H(BaseHTTPRequestHandler):
             return self.reply(200, [{"ELEMENT": "el-1"}] if hit else [])
         if rest == "/element/active":
             return self.reply(200, {"ELEMENT": "el-focused"})
+        if rest == "/keys":
+            text = body["text"]
+            if text.startswith("FAIL"):
+                # the real server quotes the submitted text in this error
+                return self.reply(500, {"error": "invalid element state", "message": "Cannot set the element to '%s'." % text})
+            # a field with a length limit keeps only part of what was typed
+            FIELD["text"] = text[:4] if text.startswith("trunc") else text
+            return self.reply(200, None)
         if rest == "/element/el-focused/text":
-            return self.reply(200, "hello")
+            return self.reply(200, FIELD["text"])
         if rest == "/element/el-1/screenshot":
             return self.reply(500, {"error": "unable to capture screen", "message": "Failed to capture a screenshot. Does the current view have 'secure' flag set?"})
         if rest == "/source":

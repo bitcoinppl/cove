@@ -5,6 +5,7 @@ which print text for reading or piping. Action commands accept --dry-run, which 
 requests they would send without touching the network or the device.
 """
 import base64
+import fcntl
 import json
 import os
 import re
@@ -42,7 +43,7 @@ def emit(ok, **fields):
     print(json.dumps(out))
 
 
-def http(method, path, body=None, timeout=60):
+def http(method, path, body=None, timeout=60.0):
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(BASE + path, data=data, method=method, headers={"Content-Type": "application/json"})
     try:
@@ -67,39 +68,56 @@ def new_session():
     sid = r.get("sessionId") or (r.get("value") or {}).get("sessionId")
     if not sid:
         raise Fail("no_session", "the server did not return a session id", response=r)
-    os.makedirs(STATE, exist_ok=True)
-    with open(SESSION_FILE, "w") as f:
-        f.write(sid)
     # the default 10 s idle wait stalls every command while a spinner or sync animation runs;
     # a short bound keeps reads fresh without waiting on animations that never settle
     idle_ms = int(float(os.environ.get("UIA2_WAIT_FOR_IDLE", "1")) * 1000)
     http("POST", "/session/%s/appium/settings" % sid, {"settings": {"waitForIdleTimeout": idle_ms}})
+
+    # publish the id only once the session is fully set up, and never as a half-written file
+    tmp = "%s.%d.tmp" % (SESSION_FILE, os.getpid())
+    with open(tmp, "w") as f:
+        f.write(sid)
+    os.replace(tmp, SESSION_FILE)
     return sid
+
+
+_SID = ""
 
 
 def session():
     """Return a live session id, reusing the cached one when the server still knows it"""
-    try:
-        with open(SESSION_FILE) as f:
-            sid = f.read().strip()
-    except OSError:
-        sid = ""
-    if sid:
+    global _SID
+    if _SID:
+        return _SID
+
+    # a new session replaces the server's current one, so two commands that both find the
+    # cache missing or stale would cut each other off; check and create under one lock
+    os.makedirs(STATE, exist_ok=True)
+    with open(SESSION_FILE + ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
         try:
-            http("GET", "/session/%s" % sid, timeout=10)
-            return sid
-        except Fail as e:
-            if e.code == "uia2_unreachable":
-                raise
-    return new_session()
+            with open(SESSION_FILE) as f:
+                sid = f.read().strip()
+        except OSError:
+            sid = ""
+        if sid:
+            try:
+                http("GET", "/session/%s" % sid, timeout=10)
+                _SID = sid
+                return sid
+            except Fail as e:
+                if e.code == "uia2_unreachable":
+                    raise
+        _SID = new_session()
+    return _SID
 
 
 def get(path):
     return http("GET", "/session/%s%s" % (session(), path)).get("value")
 
 
-def post(path, body):
-    return http("POST", "/session/%s%s" % (session(), path), body).get("value")
+def post(path, body, timeout=60.0):
+    return http("POST", "/session/%s%s" % (session(), path), body, timeout).get("value")
 
 
 def window_size():
@@ -217,19 +235,28 @@ def element_id(el):
 
 
 def find_label(label, nth=1, wait=0.0):
-    """Return (element id, matched_by), polling up to `wait` seconds for the element to appear"""
-    deadline = time.time() + wait
+    """Return (element id, matched_by), polling up to `wait` seconds for the element to appear
+
+    The first round of lookups always completes; after that, no request outlives the deadline.
+    """
+    deadline = time.monotonic() + wait
+    first = True
     while True:
-        counts = []
+        counts = {"tag": 0, "text": 0, "desc": 0}
         for by, sel in selectors(label):
-            found = post("/elements", {"strategy": "-android uiautomator", "selector": sel}) or []
-            counts.append(len(found))
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 and not first:
+                break
+            found = post("/elements", {"strategy": "-android uiautomator", "selector": sel},
+                         timeout=60.0 if first else max(remaining, 0.5)) or []
+            counts[by] = len(found)
             if len(found) >= nth:
                 return element_id(found[nth - 1]), by
-        if time.time() >= deadline:
+        if time.monotonic() >= deadline:
             raise Fail("label_not_found", "no element #%d with test tag, text or content-desc %r%s; check android-vis" %
-                       (nth, label, " after %gs" % wait if wait else ""), matches=dict(zip(("tag", "text", "desc"), counts)))
-        time.sleep(0.3)
+                       (nth, label, " after %gs" % wait if wait else ""), matches=counts)
+        first = False
+        time.sleep(min(0.3, max(deadline - time.monotonic(), 0)))
 
 
 def cmd_tap_label(args, dry):
@@ -261,7 +288,11 @@ def cmd_type(args, dry):
     if dry:
         return {"would_send": [{"method": "POST", "path": "/session/<id>" + p, "body": b}
                                for p, b in [("/keys", body)] + ([enter_req] if enter else [])]}
-    post("/keys", body)
+    try:
+        post("/keys", body)
+    except Fail as e:
+        # the server's error quotes the text it was given, which may be a secret
+        raise Fail(e.code, "the server could not set the focused field's text; focus a text field first (android-vis shows F)")
     # report only whether the field took the text, so secrets typed into it stay out of the output;
     # read back before Enter, which may submit the form and move focus
     try:
@@ -365,16 +396,38 @@ def covering_layers(nodes, ancestors, window):
     return covered
 
 
+def is_plain(node):
+    """True for a node with nothing to act on or check: no tag, not tappable, editable or toggleable"""
+    a = node.attrib
+    return not (tag_of(a) or a.get("class", "").endswith("EditText") or
+                any(a.get(k) == "true" for k in ("clickable", "long-clickable", "scrollable", "checkable", "checked")))
+
+
+def row_label(node, parent, cx, cy):
+    """Name a switch or checkbox by the visible text level with it inside the same row container"""
+    container = parent.get(node)
+    for _ in range(3):
+        if container is None:
+            break
+        row = [(abs((bounds(m)[0] + bounds(m)[2]) // 2 - cx), m.get("text")) for m in container.iter()
+               if m is not node and m.get("text") and m.get("displayed") != "false" and bounds(m)[1] <= cy <= bounds(m)[3]]
+        if row:
+            return ["row=%r" % min(row)[1]]
+        container = parent.get(container)
+    return []
+
+
 def vis_lines(xml, show_all=False):
     """One line per visible element worth acting on: labelled, tagged, clickable, editable or scrollable"""
     root = ET.fromstring(xml.encode())
-    nodes, ancestors = [], []
+    nodes, ancestors, parent = [], [], {}
 
     def walk(node, chain):
         if "bounds" in node.attrib:
             nodes.append(node)
             ancestors.append(set(chain))
         for child in node:
+            parent[child] = node
             walk(child, chain + ([node] if "bounds" in node.attrib else []))
 
     walk(root, [])
@@ -407,23 +460,26 @@ def vis_lines(xml, show_all=False):
             "desc=%r" % desc if desc and desc != text else "",
             "tag=%r" % tag if tag else "") if p]
         if not parts and "C" in flags:
-            # Compose puts a row's words on child nodes; name the row by them and skip the plain
-            # child lines, which would only repeat them; tagged or tappable children still print
-            inner, kids = [], [c for c in n.iter() if c is not n]
+            # Compose puts a row's words on child nodes; name the row by them
+            kids = [c for c in n.iter() if c is not n and c.get("displayed") != "false"]
+            inner = []
             for c in kids:
                 for t in (c.get("text"), c.get("content-desc")):
                     if t and t not in inner:
                         inner.append(t)
-                if not tag_of(c.attrib) and c.get("clickable") != "true":
-                    summarized.add(c)
             joined = " | ".join(inner)
-            parts = ["contains=%r" % (joined if len(joined) <= 160 else joined[:150] + "...")] if inner else []
+            shown = joined if len(joined) <= 160 else joined[:150]
+            parts = ["contains=%r" % (shown + ("..." if shown != joined else ""))] if inner else []
+
+            # skip child lines that would only repeat the summary; anything an agent could act
+            # on, or text cut from a long summary, still gets its own line
+            for c in kids:
+                texts = [t for t in (c.get("text"), c.get("content-desc")) if t]
+                if is_plain(c) and all(t in shown for t in texts):
+                    summarized.add(c)
+
             if not inner:
-                # a switch or checkbox is labelled by a sibling text on the same row
-                cy = (y1 + y2) // 2
-                row = [(abs((bounds(m)[0] + bounds(m)[2]) // 2 - (x1 + x2) // 2), m.get("text")) for m in nodes
-                       if m.get("text") and bounds(m)[1] <= cy <= bounds(m)[3]]
-                parts = ["row=%r" % min(row)[1]] if row else []
+                parts = row_label(n, parent, (x1 + x2) // 2, (y1 + y2) // 2)
         lines.append("%-14s (%d,%d) %dx%d %-3s %s" % (cls[:14], (x1 + x2) // 2, (y1 + y2) // 2, x2 - x1, y2 - y1, flags, " ".join(parts) or "[unlabeled]"))
 
     if covered:
@@ -448,15 +504,13 @@ def cmd_pin(args, dry):
     if dry:
         return {"would_send": [{"method": "GET", "path": "/session/<id>/source"}] +
                 [{"method": "POST", "path": "/session/<id>/appium/gestures/click", "body": "center of numberPadPin.digit.%s" % d} for d in digits]}
-    keys, by = {}, "tag"
-    nodes = list(ET.fromstring(source_xml().encode()).iter())
-    for n in nodes:
+    # only Cove's tagged keypad counts: a lone "1" elsewhere on screen is not a key
+    keys = {}
+    for n in ET.fromstring(source_xml().encode()).iter():
         m = re.fullmatch(r"numberPadPin\.digit\.(\d)", n.get("resource-id", ""))
-        if m:
+        x1, y1, x2, y2 = bounds(n)
+        if m and n.get("displayed") != "false" and x2 > x1 and y2 > y1:
             keys[m.group(1)] = n
-    if not keys:
-        by = "text"
-        keys = {n.get("text"): n for n in nodes if len(n.get("text", "")) == 1 and n.get("text").isdigit()}
     missing = sorted(set(d for d in digits if d not in keys))
     if missing:
         raise Fail("keypad_not_visible", "no keypad digits %s on screen; check android-vis" % ",".join(missing), found=sorted(keys))
@@ -464,7 +518,7 @@ def cmd_pin(args, dry):
         x1, y1, x2, y2 = bounds(keys[d])
         post("/appium/gestures/click", {"offset": {"x": (x1 + x2) // 2, "y": (y1 + y2) // 2}})
         time.sleep(0.1)
-    return {"typed_digits": len(digits), "matched_by": by}
+    return {"typed_digits": len(digits)}
 
 
 def cmd_shot(args, dry):

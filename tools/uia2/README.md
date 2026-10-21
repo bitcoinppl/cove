@@ -43,13 +43,13 @@ export ANDROID_SERIAL=<serial from adb devices>   # needed only when several dev
 | `uia2-doctor` | check prerequisites, print the next fix |
 | `uia2-fetch` | download the pinned server APKs with `gh` and verify their checksums; `uia2-start` calls it |
 | `uia2-start [--force]` | install if needed, run the server, forward `localhost:$UIA2_PORT`; refuses while other instrumentation, or another agent's server for the same device, is running |
-| `uia2-stop` | stop the server and remove the forward |
+| `uia2-stop` | stop the server and remove the forward; when the device can't be reached it reports `cleanup_incomplete` and keeps its state, so rerun it after reconnecting |
 | `android-launch [--activate] PACKAGE` | force-stop and start the app (`--activate` brings a running app forward instead) |
 | `android-vis [-a]` | one line per visible element worth acting on, with its tap center in pixels; `-a` includes hidden ones |
 | `android-source [--raw]` | full UI tree as XML; `--raw` prints only the tree |
 | `android-tap X Y` | tap at pixel coordinates |
-| `android-tap-label [--nth N] [--wait S] LABEL` | tap the element whose test tag, text or content-desc equals LABEL, waiting up to S seconds (default 5) for it to appear |
-| `android-pin DIGITS` | tap a PIN on Cove's keypad by its test tags (`numberPadPin.digit.N`) |
+| `android-tap-label [--nth N] [--wait S] LABEL` | tap the element whose test tag, text or content-desc equals LABEL, waiting up to S seconds (default 5) for it to appear; the first lookup always completes |
+| `android-pin DIGITS` | tap a PIN on Cove's keypad by its test tags (`numberPadPin.digit.N`); fails when that keypad isn't showing |
 | `android-type [--enter] TEXT` | set the focused field to TEXT, report whether the field took it, then press Enter if asked |
 | `android-swipe [--hold S] up\|down\|left\|right` | finger swipe across the middle of the screen; `up` moves the finger up, so a list shows items further down |
 | `android-drag [--hold S] X1 Y1 X2 Y2` | press at X1,Y1 for S seconds (default 1), then drag to X2,Y2 |
@@ -93,13 +93,16 @@ View           (204,1465) 312x219 C  tag='numberPadPin.digit.1'
   `/sdcard/ui.xml` in place, so a script that reads it silently shows an old screen. Run
   `uia2-stop` before using dump-based helpers or `connectedAndroidTest`
 - **`uia2-start` refuses while other instrumentation runs.** Starting the server would take
-  the connection from a running instrumented test and break it. Pass `--force` only when
-  that run can be interrupted
+  the connection from a running instrumented test and break it. It also refuses when it can't
+  list the device's processes. Pass `--force` only when that run can be interrupted.
+  `uia2-start` and `uia2-stop` hold a lock per device, so two agents can't start or stop the
+  same device at once
 - **Coordinates are pixels**, not points as on iOS. Use the centers `android-vis` prints
 - **`android-type` replaces the field's text.** It sets the whole text through
   accessibility, so characters can't arrive out of order the way fast `adb shell input
   text` keystrokes do, and `# & ? % "` need no escaping. It reports `readback_matches`
-  instead of echoing the field, so typed secrets stay out of the output
+  instead of echoing the field, and its errors leave the text out, so typed secrets stay out
+  of the output
 - **The clipboard can be written but not read on Android 10+.** Only the foreground app or
   keyboard may read it. To check what was copied, paste it into a field with
   `android-key paste` and read the field with `android-vis`

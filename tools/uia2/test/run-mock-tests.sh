@@ -43,6 +43,27 @@ sent() {
 
 vis() { "$here/android-vis"; }
 
+# clicks: print the x,y of each gestures/click request in order
+clicks() {
+  python3 -I -c 'import json,sys
+for l in open(sys.argv[1]):
+    r = json.loads(l)
+    if r["path"].endswith("/appium/gestures/click"):
+        print("%d,%d" % (r["body"]["offset"]["x"], r["body"]["offset"]["y"]))' "$tmp/requests.log"
+}
+
+# requests: print the paths of the requests sent since the log was last cleared
+requests() {
+  python3 -I -c 'import json,sys
+for l in open(sys.argv[1]):
+    print(json.loads(l)["path"].removeprefix("/session/mock-session"))' "$tmp/requests.log"
+}
+
+# screen FILE_CONTENT: serve this XML as the screen until the next call to screen with no argument
+screen() {
+  if [ $# -eq 0 ]; then rm -f "$tmp/requests.log.source"; else printf '%s' "$1" >"$tmp/requests.log.source"; fi
+}
+
 # server commands
 expect "swipe up" 0 'd["direction"]=="up" and d["from"]==[540,1800] and d["to"]==[540,600]' -- "$here/android-swipe" up
 expect "swipe bad dir" 2 'd["error"]=="usage"' -- "$here/android-swipe" sideways
@@ -69,11 +90,16 @@ expect "tap-label missing" 1 'd["error"]=="label_not_found" and d["matches"]=={"
 expect "tap-label nth too high" 1 'd["error"]=="label_not_found"' -- "$here/android-tap-label" --wait 0 --nth 2 About
 expect "type readback" 0 'd["typed_chars"]==5 and d["readback_matches"] is True' -- "$here/android-type" hello
 check "type replaces the field" sent /keys '{"text": "hello", "replace": true}'
-expect "type mismatch" 0 'd["readback_matches"] is False' -- "$here/android-type" other
+expect "type mismatch" 0 'd["readback_matches"] is False' -- "$here/android-type" trunc-secret
+out="$("$here/android-type" FAILsecret 2>&1)"
+expect "type failure" 1 'd["error"]=="uia2_invalid_element_state"' -- "$here/android-type" FAILsecret
+[[ "$out" != *FAILsecret* ]] && echo "ok   type failure keeps the text out of the output" || { echo "FAIL type failure echoes the text: $out"; fail=1; }
 : >"$tmp/requests.log"
 expect "type enter" 0 'd["enter"] and d["readback_matches"] is True' -- "$here/android-type" --enter hello
 check "type enter sends the text without a newline" sent /keys '{"text": "hello", "replace": true}'
 check "type enter presses Enter" sent /appium/device/press_keycode '{"keycode": 66}'
+[ "$(requests | grep -E '^/keys$|press_keycode' | tr '\n' ' ')" = "/keys /appium/device/press_keycode " ] &&
+  echo "ok   type enter presses Enter after setting the text" || { echo "FAIL type enter order: $(requests | tr '\n' ' ')"; fail=1; }
 expect "type no args" 2 'd["error"]=="usage"' -- "$here/android-type"
 expect "back" 0 'd["ok"]' -- "$here/android-back"
 check "back request" sent /back '{}'
@@ -83,11 +109,13 @@ check "key request" sent /appium/device/press_keycode '{"keycode": 279}'
 expect "key bad" 2 'd["error"]=="usage"' -- "$here/android-key" nope
 expect "source" 0 '"numberPadPin" in d["source"]' -- "$here/android-source"
 : >"$tmp/requests.log"
-expect "pin" 0 'd["typed_digits"]==3 and d["matched_by"]=="tag"' -- "$here/android-pin" 121
-check "pin taps digit 1 at its center" sent /appium/gestures/click '{"offset": {"x": 204, "y": 1465}}'
-check "pin taps digit 2 at its center" sent /appium/gestures/click '{"offset": {"x": 540, "y": 1465}}'
-[ "$(grep -c gestures/click "$tmp/requests.log")" = 3 ] && echo "ok   pin taps once per digit" || { echo "FAIL pin tap count"; fail=1; }
+expect "pin" 0 'd["typed_digits"]==4' -- "$here/android-pin" 2112
+[ "$(clicks | tr '\n' ' ')" = "540,1465 204,1465 204,1465 540,1465 " ] &&
+  echo "ok   pin taps each digit's center in order" || { echo "FAIL pin taps: $(clicks | tr '\n' ' ')"; fail=1; }
 expect "pin missing digit" 1 'd["error"]=="keypad_not_visible"' -- "$here/android-pin" 13
+screen '<hierarchy width="1080" height="2400"><android.widget.TextView class="android.widget.TextView" resource-id="" text="1" content-desc="" displayed="true" bounds="[60,100][120,160]"/></hierarchy>'
+expect "pin ignores digits outside the keypad" 1 'd["error"]=="keypad_not_visible"' -- "$here/android-pin" 1111
+screen
 expect "shot" 0 'd["bytes"]>0 and d["protected"] is False' -- "$here/android-shot" "$tmp/out/shot.png"
 check "shot file is a PNG" grep -q PNG "$tmp/out/shot.png"
 expect "shot scaled" 0 'd["max_pixels"]==1' -- "$here/android-shot" -s 1 "$tmp/out/small.png"
@@ -122,7 +150,29 @@ cat >"$tmp/requests.log.source" <<'XML'
 XML
 if vis | grep -qE '^# U|U  '; then echo "FAIL vis flags a screen with no visible layer"; fail=1; else echo "ok   vis has no U flags without a visible layer"; fi
 check "vis prints a view id in full" bash -c "'$here/android-vis' | grep -qF \"tag='com.android.permissioncontroller:id/permission_allow_button'\""
-rm "$tmp/requests.log.source"
+screen
+
+# summaries must not hide controls, cut text or borrow labels from hidden or unrelated nodes
+long="$(printf 'word%.0s ' $(seq 60))"
+screen "<hierarchy width=\"1080\" height=\"2400\">
+  <android.view.View class=\"android.view.View\" resource-id=\"\" text=\"\" content-desc=\"\" clickable=\"true\" displayed=\"true\" bounds=\"[0,100][1080,300]\">
+    <android.widget.TextView class=\"android.widget.TextView\" resource-id=\"\" text=\"Hidden note\" content-desc=\"\" displayed=\"false\" bounds=\"[0,200][900,300]\"/>
+    <android.widget.TextView class=\"android.widget.TextView\" resource-id=\"\" text=\"$long\" content-desc=\"\" displayed=\"true\" bounds=\"[0,100][900,150]\"/>
+    <android.widget.TextView class=\"android.widget.TextView\" resource-id=\"\" text=\"Tail words\" content-desc=\"\" displayed=\"true\" bounds=\"[0,150][900,200]\"/>
+    <android.widget.EditText class=\"android.widget.EditText\" resource-id=\"\" text=\"Amount\" content-desc=\"\" displayed=\"true\" bounds=\"[0,200][900,300]\"/>
+  </android.view.View>
+  <android.view.View class=\"android.view.View\" resource-id=\"\" text=\"\" content-desc=\"\" displayed=\"true\" bounds=\"[0,400][1080,500]\">
+    <android.widget.TextView class=\"android.widget.TextView\" resource-id=\"\" text=\"Enable PIN\" content-desc=\"\" displayed=\"true\" bounds=\"[60,420][400,480]\"/>
+    <android.view.View class=\"android.view.View\" resource-id=\"\" text=\"\" content-desc=\"\" clickable=\"true\" displayed=\"true\" bounds=\"[880,400][1020,500]\"/>
+    <android.widget.TextView class=\"android.widget.TextView\" resource-id=\"\" text=\"Delete wallet\" content-desc=\"\" displayed=\"false\" bounds=\"[700,420][860,480]\"/>
+  </android.view.View>
+  <android.widget.TextView class=\"android.widget.TextView\" resource-id=\"\" text=\"Other row\" content-desc=\"\" displayed=\"true\" bounds=\"[860,420][879,480]\"/>
+</hierarchy>"
+check "vis keeps an editable child of a row" bash -c "'$here/android-vis' | grep -qE \"^EditText .* E .*text='Amount'\""
+check "vis keeps text cut from a long summary" bash -c "'$here/android-vis' | grep -qF \"text='Tail words'\""
+if vis | grep -q "Hidden note"; then echo "FAIL vis summary includes a hidden child"; fail=1; else echo "ok   vis summary skips hidden children"; fi
+check "vis names a switch from its own row" bash -c "'$here/android-vis' | grep -qF \"row='Enable PIN'\""
+screen
 
 # android-launch through the fake adb
 expect "launch" 0 'd["action"]=="launch" and d["activity"]=="org.bitcoinppl.cove/.MainActivity"' -- "$here/android-launch" org.bitcoinppl.cove
@@ -135,8 +185,19 @@ touch "$FAKE_ADB/resolve_fail"
 expect "launch adb failure" 1 'd["error"]=="adb_failed" and "more than one device" in d["message"]' -- "$here/android-launch" org.bitcoinppl.cove
 rm "$FAKE_ADB/resolve_fail"
 
+# uia2-doctor through the fake adb
+expect "doctor" 0 'd["ok"] and {c["name"]: c["ok"] for c in d["checks"]}["screen_unlocked"]' -- "$here/uia2-doctor"
+touch "$FAKE_ADB/query_fail"
+expect "doctor with failing device queries" 1 'not d["ok"] and not any(c["ok"] for c in d["checks"] if c["name"] in ("screen_unlocked", "no_other_instrumentation"))' -- "$here/uia2-doctor"
+expect "start with failing device queries" 1 'd["error"]=="device_query_failed"' -- "$here/uia2-start"
+rm "$FAKE_ADB/query_fail"
+
 # uia2-start and uia2-stop through the fake adb; the mock answers /status like a started server
 expect "start dry-run" 0 'd["dry_run"] and "am instrument" in d["instrument_command"]' -- "$here/uia2-start" --dry-run
+expect "start bad flag" 2 'd["error"]=="usage"' -- "$here/uia2-start" --forse
+: >"$FAKE_ADB/calls.log"
+expect "stop bad flag" 2 'd["error"]=="usage"' -- "$here/uia2-stop" --dr-run
+check "stop bad flag does nothing" bash -c "! grep -q force-stop '$FAKE_ADB/calls.log'"
 echo "OTHER-SERIAL tcp:$port tcp:6790" >"$FAKE_ADB/forwards"
 expect "start port taken" 1 'd["error"]=="port_taken"' -- "$here/uia2-start"
 echo "TEST-SERIAL tcp:9999 tcp:6790" >"$FAKE_ADB/forwards"
@@ -159,12 +220,42 @@ check "failed start stops the server" bash -c "[ -z '$pid' ] && grep -q 'am forc
 rm "$FAKE_ADB/forward_fail"
 
 expect "start" 0 'd["ok"] and d["serial"]=="TEST-SERIAL"' -- "$here/uia2-start"
-pid="$(cat "$tmp/state/TEST-SERIAL/instrument.pid")"
+pid="$(cut -d' ' -f1 "$tmp/state/TEST-SERIAL/instrument.pid")"
 check "start forwards the port" grep -q "^TEST-SERIAL tcp:$port tcp:6790$" "$FAKE_ADB/forwards"
 check "start runs am instrument" kill -0 "$pid"
 expect "start again" 0 'd["already_running"]' -- "$here/uia2-start"
-expect "stop" 0 '"adb:" in d["stopped"] and "forward:" in d["stopped"]' -- "$here/uia2-stop"
+touch "$FAKE_ADB/force_stop_fail"
+expect "stop with a failing device" 1 'd["error"]=="cleanup_incomplete" and "force-stop" in d["failed"] and "adb:" in d["stopped"]' -- "$here/uia2-stop"
+check "failed stop keeps its state for a retry" test -s "$tmp/state/TEST-SERIAL/port"
+rm "$FAKE_ADB/force_stop_fail"
+expect "stop after a failed stop" 0 'd["stopped"]=="io.appium.uiautomator2.server"' -- "$here/uia2-stop"
 sleep 0.2
 check "stop kills am instrument" bash -c "! kill -0 $pid 2>/dev/null"
 check "stop removes the forward" bash -c "! grep -q TEST-SERIAL '$FAKE_ADB/forwards'"
+
+# a pid file whose process was replaced must not get that process killed, even when the new
+# process looks like this device's adb
+bash -c 'exec -a "adb -s TEST-SERIAL shell am instrument" sleep 30' &
+other=$!
+sleep 0.2
+echo "$other Mon Jan  1 00:00:00 2024" >"$tmp/state/TEST-SERIAL/instrument.pid"
+expect "stop with a reused pid" 0 '"adb:" not in d["stopped"]' -- "$here/uia2-stop"
+check "stop leaves a reused pid alone" kill -0 "$other"
+kill "$other"; wait "$other" 2>/dev/null
+
+# a lock left by a dead process does not block the next start
+mkdir -p "$tmp/state/TEST-SERIAL.lock"; echo 999999 >"$tmp/state/TEST-SERIAL.lock/pid"
+expect "start with a stale lock" 0 'd["ok"]' -- "$here/uia2-start"
+"$here/uia2-stop" >/dev/null
+
+# an interrupted start stops the server it launched; this port has no server, so start keeps waiting
+dead=$((port + 1))
+UIA2_PORT=$dead UIA2_START_TIMEOUT=20 "$here/uia2-start" >"$tmp/interrupt.json" 2>&1 &
+starter=$!
+for _ in $(seq 50); do [ -s "$tmp/state/TEST-SERIAL/instrument.pid" ] && break; sleep 0.1; done
+pid="$(cut -d' ' -f1 "$tmp/state/TEST-SERIAL/instrument.pid")"
+sleep 0.5; kill -TERM "$starter"; wait "$starter" 2>/dev/null; sleep 0.3
+expect "interrupted start" 0 'd["error"]=="interrupted"' -- cat "$tmp/interrupt.json"
+check "interrupted start kills am instrument" bash -c "! kill -0 $pid 2>/dev/null"
+check "interrupted start removes its forward" bash -c "! grep -q 'tcp:$dead' '$FAKE_ADB/forwards'"
 exit $fail
