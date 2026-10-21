@@ -6,8 +6,11 @@ platforms = ["ios", "android"]
 target = "manual"
 paths = [
     "rust/src/manager/cloud_backup_manager.rs",
-    "ios/Cove/Flows/SettingsFlow/CloudBackupDetailScreen.swift",
-    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupScreen.kt",
+    "rust/src/manager/cloud_backup_manager/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/CloudBackupPresentationCoordinator.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
 ]
 coverage = [
     "human",

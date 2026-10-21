@@ -135,6 +135,6 @@ section = "8"
 title = "Private Key export Reveal/Copy and KeyTeleport entry consistency"
 platforms = ["ios", "android"]
 target = "ui"
-paths = ["rust/src/manager/key_teleport_manager.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSharedViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportContainer.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportToolbarMenu.kt"]
+paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/send.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSharedViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportContainer.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportToolbarMenu.kt"]
 coverage = ["human"]
 # 1.4.0: ios HUMAN, android HUMAN

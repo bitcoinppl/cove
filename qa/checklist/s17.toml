@@ -135,6 +135,7 @@ paths = [
 ]
 coverage = [
     "rust:rust/crates/cove-types/src/address.rs::test_parse_bitcoin_uri_pjos_without_pj",
+    "agent:ios",
 ]
 # 1.4.0: ios PASS, android N/A
-# the rust parser decides this for both platforms
+# the rust test covers only the URI parser, so an agent still checks the address validation and EnterAddressView draft

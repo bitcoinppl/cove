@@ -7,6 +7,7 @@ target = "manual"
 paths = [
     "rust/src/key_teleport.rs",
     "rust/src/manager/key_teleport_manager.rs",
+    "rust/src/manager/key_teleport_manager/**",
     "ios/Cove/Flows/KeyTeleportFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
 ]
@@ -25,6 +26,7 @@ target = "manual"
 paths = [
     "rust/src/key_teleport.rs",
     "rust/src/manager/key_teleport_manager.rs",
+    "rust/src/manager/key_teleport_manager/**",
     "ios/Cove/Flows/KeyTeleportFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
 ]
