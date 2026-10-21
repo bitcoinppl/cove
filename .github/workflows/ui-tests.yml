@@ -120,3 +120,13 @@ jobs:
         env:
           TEST_RUNNER_COVE_SKIP_QUARANTINED: "1"
         run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17"
+
+      # CoveCloudBackupUITests stays out until its inventory scenarios pass on master; see #947
+
+      - name: Upload iOS test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ui-xcresults
+          path: ~/Library/Developer/Xcode/DerivedData/*/Logs/Test/*.xcresult
+          retention-days: 7
