@@ -1,0 +1,99 @@
+#!/bin/bash
+# install the UiAutomator2 server if needed, run it on the device, and forward it to localhost
+# usage: [ANDROID_SERIAL=<serial>] uia2-start [--dry-run] [--force]
+set -u
+. "$(dirname "$0")/uia2-env.sh"
+
+dry=false force=false
+for a in "$@"; do
+  case "$a" in
+    --dry-run) dry=true ;;
+    --force) force=true ;;
+    *) die usage "usage: uia2-start [--dry-run] [--force]" ;;
+  esac
+done
+
+INSTR_CMD=(shell am instrument -w -e disableAnalytics true "$UIA2_RUNNER")
+if $dry; then
+  json ok:raw=true action=uia2-start dry_run:raw=true "serial=${ANDROID_SERIAL:-<only device>}" \
+    "instrument_command=adb ${INSTR_CMD[*]}" "forward=tcp:$UIA2_PORT -> tcp:$UIA2_DEVICE_PORT" "base_url=$UIA2_BASE_URL"
+  exit 0
+fi
+
+command -v adb >/dev/null || die missing_adb "adb not found" "fix=add the Android SDK platform-tools to PATH"
+resolve_serial
+STATE="$(state_dir)"
+mkdir -p "$STATE"
+
+forwards="$(adb forward --list)"
+# answer only for this device's own forward: a stale port file can outlive an unplug while
+# another device's server now answers on the same port
+if curl -sf -m 2 "$UIA2_BASE_URL/status" >/dev/null && grep -q "^$ANDROID_SERIAL tcp:$UIA2_PORT " <<<"$forwards"; then
+  json ok:raw=true action=uia2-start already_running:raw=true "base_url=$UIA2_BASE_URL" "serial=$ANDROID_SERIAL"
+  exit 0
+fi
+
+# another device's forward on this port would be silently rebound by adb forward
+owner="$(awk -v p="tcp:$UIA2_PORT" '$2 == p { print $1 }' <<<"$forwards" | head -1)"
+if [ -n "$owner" ] && [ "$owner" != "$ANDROID_SERIAL" ]; then
+  die port_taken "localhost:$UIA2_PORT already forwards to $owner" "fix=UIA2_PORT=$((UIA2_PORT + 1)) uia2-start, and export the same UIA2_PORT for the android-* commands"
+fi
+
+# a server for this device on another port belongs to another agent; restarting it here
+# would cut that agent off
+mine="$(awk -v s="$ANDROID_SERIAL" -v d="tcp:$UIA2_DEVICE_PORT" '$1 == s && $3 == d && $2 != "tcp:'"$UIA2_PORT"'" { print $2 }' <<<"$forwards" | head -1)"
+if [ -n "$mine" ] && ! $force; then
+  die device_busy "a server for $ANDROID_SERIAL already runs on localhost ${mine#tcp:}" \
+    "fix=UIA2_PORT=${mine#tcp:} for the android-* commands, or pass --force to restart it on $UIA2_PORT"
+fi
+
+# Android allows one UiAutomation connection; starting the server takes it from a running
+# connectedAndroidTest and breaks that run mid-test. The device may list the process as
+# `am instrument` or as `com.android.commands.am.Am instrument`
+others="$(adb shell ps -A -o ARGS 2>/dev/null | grep -i 'am instrument' | grep -v "$UIA2_SERVER_PKG" | grep -v grep)"
+if [ -n "$others" ] && ! $force; then
+  die device_busy "another instrumentation is running on $ANDROID_SERIAL; starting the server would break it" \
+    "running=$others" "fix=wait for it to finish, or pass --force if it is safe to interrupt"
+fi
+
+"$(dirname "$0")/uia2-fetch" >"$STATE/fetch.json" || { cat "$STATE/fetch.json"; exit 1; }
+
+installed="$(adb shell dumpsys package "$UIA2_SERVER_PKG" | sed -n 's/.*versionName=//p' | head -1 | tr -d '\r')"
+if [ "$installed" != "$UIA2_SERVER_VERSION" ] || ! adb shell pm path "$UIA2_SERVER_PKG.test" | grep -q package:; then
+  adb install -r -g "$UIA2_SERVER_APK" >"$STATE/install.log" 2>&1 &&
+    adb install -r -g "$UIA2_TEST_APK" >>"$STATE/install.log" 2>&1 ||
+    die install_failed "installing the server APKs failed; Samsung may show a confirmation on the phone" \
+      "log=$STATE/install.log" "log_tail=$(tail -n 5 "$STATE/install.log")"
+fi
+
+# stop leftovers from a previous run so the port and the UiAutomation connection are free
+"$(dirname "$0")/uia2-stop" >/dev/null 2>&1
+
+# a failed start must not leave the server holding the device's UiAutomation connection
+fail() {
+  "$(dirname "$0")/uia2-stop" >/dev/null 2>&1
+  die "$@"
+}
+
+adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1
+nohup adb "${INSTR_CMD[@]}" >"$STATE/server.log" 2>&1 &
+echo $! >"$STATE/instrument.pid"
+# the server outlives this script; disown keeps bash from printing a job notice when it stops
+disown
+echo "$UIA2_PORT" >"$STATE/port"
+adb forward "tcp:$UIA2_PORT" "tcp:$UIA2_DEVICE_PORT" >/dev/null 2>&1 || fail forward_failed "adb forward tcp:$UIA2_PORT failed; another program may listen on it"
+
+timeout="${UIA2_START_TIMEOUT:-60}"
+for ((i = 0; i < timeout; i++)); do
+  if curl -sf -m 2 "$UIA2_BASE_URL/status" >/dev/null; then
+    json ok:raw=true action=uia2-start "base_url=$UIA2_BASE_URL" "serial=$ANDROID_SERIAL" "log=$STATE/server.log"
+    exit 0
+  fi
+  if ! kill -0 "$(cat "$STATE/instrument.pid")" 2>/dev/null; then
+    log_tail="$(tail -n 15 "$STATE/server.log")"
+    fail instrument_exited "am instrument exited before the server answered" "log=$STATE/server.log" "log_tail=$log_tail"
+  fi
+  sleep 1
+done
+log_tail="$(tail -n 15 "$STATE/server.log")"
+fail status_timeout "the server did not answer /status within ${timeout}s" "log=$STATE/server.log" "log_tail=$log_tail"
