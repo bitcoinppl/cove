@@ -803,13 +803,25 @@ mod tests {
             test_utils::{ReceiveTo, get_test_wpkh_and_change_desc, receive_output},
         };
 
+        use crate::fiat::client::{PRICES, PriceResponse};
         use crate::transaction::Transaction;
 
+        // PRICES is process-global, so put the previous cache back even if an assertion panics
+        struct RestorePrices(Arc<Option<PriceResponse>>);
+
+        impl Drop for RestorePrices {
+            fn drop(&mut self) {
+                PRICES.store(self.0.clone());
+            }
+        }
+
         crate::database::test_support::init_test_database();
-        // cached prices keep the list build from fetching them over the network
-        crate::fiat::client::PRICES.swap(Arc::new(Some(crate::fiat::client::PriceResponse {
+
+        // cached prices keep the list build from fetching them over the network; a current
+        // fetched_at keeps price age checks from underflowing in later tests
+        let _restore_prices = RestorePrices(PRICES.swap(Arc::new(Some(PriceResponse {
             time: 0,
-            fetched_at: u64::MAX,
+            fetched_at: jiff::Timestamp::now().as_second() as u64,
             usd: 100_000,
             eur: 100_000,
             gbp: 100_000,
@@ -817,7 +829,8 @@ mod tests {
             chf: 100_000,
             aud: 100_000,
             jpy: 100_000,
-        })));
+        }))));
+
         // an in-memory wallet db keeps the edit away from cloud backup scheduling
         let db = crate::database::wallet_data::WalletDataDb::new_in_memory(
             WalletId::preview_new_random(),
