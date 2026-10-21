@@ -2,6 +2,9 @@ package org.bitcoinppl.cove.flows.SelectedWalletFlow
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -189,10 +192,12 @@ private fun ReceiveAddressSheetContent(
 ) {
     val isDarkTheme = !MaterialTheme.colorScheme.isLight
 
+    // large font scales push the actions below the sheet, so the content scrolls
     Column(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -355,7 +360,7 @@ private fun ReceiveAddressSheetContent(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .height(50.dp),
+                    .heightIn(min = 50.dp),
             colors =
                 ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.coveColors.midnightBtn,
