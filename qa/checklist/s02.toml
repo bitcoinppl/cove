@@ -294,6 +294,7 @@ platforms = ["ios", "android"]
 target = "device"
 paths = [
     "rust/crates/cove-device/src/keychain.rs",
+    "rust/crates/cove-device/src/keychain/**",
     "rust/src/wallet_secret.rs",
     "ios/Cove/Security.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/Security.kt",

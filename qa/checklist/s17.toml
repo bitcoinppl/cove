@@ -26,6 +26,7 @@ paths = [
     "rust/crates/cove-types/src/address.rs",
     "rust/src/manager/wallet_manager/payjoin.rs",
     "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/wallet_manager/actor/**",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAddressView.kt",
 ]
@@ -44,6 +45,7 @@ target = "rust"
 paths = [
     "rust/src/key_teleport.rs",
     "rust/src/manager/key_teleport_manager.rs",
+    "rust/src/manager/key_teleport_manager/**",
     "ios/Cove/Flows/KeyTeleportFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
 ]
@@ -61,6 +63,7 @@ target = "rust"
 paths = [
     "rust/src/key_teleport.rs",
     "rust/src/manager/key_teleport_manager.rs",
+    "rust/src/manager/key_teleport_manager/**",
     "ios/Cove/Flows/KeyTeleportFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
 ]
@@ -79,6 +82,7 @@ target = "ui"
 paths = [
     "rust/src/key_teleport.rs",
     "rust/src/manager/key_teleport_manager.rs",
+    "rust/src/manager/key_teleport_manager/**",
     "ios/Cove/Flows/KeyTeleportFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
 ]

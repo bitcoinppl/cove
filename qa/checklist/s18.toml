@@ -7,7 +7,9 @@ target = "rust"
 paths = [
     "rust/src/label_manager.rs",
     "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/wallet_manager/**",
     "rust/src/manager/coin_control_manager.rs",
+    "rust/src/manager/coin_control_manager/**",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
     "ios/Cove/Flows/CoinControlFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
@@ -26,6 +28,7 @@ platforms = ["ios", "android"]
 target = "device"
 paths = [
     "rust/src/manager/send_flow_manager.rs",
+    "rust/src/manager/send_flow_manager/**",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/**",
     "ios/Cove/Flows/SendFlow/ConfirmScreen/**",
     "ios/Cove/Flows/SendFlow/Common/**",
@@ -89,6 +92,7 @@ platforms = ["ios", "android"]
 target = "manual"
 paths = [
     "rust/src/manager/cloud_backup_manager.rs",
+    "rust/src/manager/cloud_backup_manager/**",
     "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingContent.kt",
 ]
@@ -107,6 +111,7 @@ target = "rust"
 paths = [
     "rust/src/backup/export.rs",
     "rust/src/backup/import.rs",
+    "rust/src/backup/import/**",
     "rust/src/backup/verify.rs",
     "ios/Cove/Flows/SettingsFlow/BackupExportView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BackupExportScreen.kt",
@@ -147,7 +152,9 @@ target = "rust"
 paths = [
     "rust/src/label_manager.rs",
     "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/wallet_manager/**",
     "rust/src/manager/coin_control_manager.rs",
+    "rust/src/manager/coin_control_manager/**",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
     "ios/Cove/Flows/CoinControlFlow/**",
 ]
@@ -165,7 +172,9 @@ target = "rust"
 paths = [
     "rust/src/label_manager.rs",
     "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/wallet_manager/**",
     "rust/src/manager/coin_control_manager.rs",
+    "rust/src/manager/coin_control_manager/**",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
     "ios/Cove/Flows/CoinControlFlow/**",
 ]

@@ -501,7 +501,9 @@ target = "rust"
 paths = [
   "rust/src/backup/export.rs",
   "rust/src/backup/import.rs",
+  "rust/src/backup/import/**",
   "rust/src/backup/model.rs",
+  "rust/src/backup/model/**",
 ]
 coverage = [
   "rust:rust/src/backup/export.rs::backup_export_gathers_only_normalized_custom_block_explorers",

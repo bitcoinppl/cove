@@ -8,6 +8,7 @@ paths = [
     "rust/src/manager/wallet_manager/receive_address.rs",
     "rust/src/manager/wallet_manager/actor/receive_address.rs",
     "rust/src/database/wallet_data.rs",
+    "rust/src/database/wallet_data/**",
     "ios/Cove/Flows/SelectedWalletFlow/ReceiveView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
 ]
@@ -66,6 +67,7 @@ platforms = ["ios", "android"]
 target = "ui"
 paths = [
     "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/wallet_manager/actor/**",
     "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletAlerts.swift",
     "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
     "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
@@ -114,6 +116,7 @@ paths = [
     "rust/src/manager/wallet_manager/receive_address.rs",
     "rust/src/manager/wallet_manager/actor/receive_address.rs",
     "rust/src/database/wallet_data.rs",
+    "rust/src/database/wallet_data/**",
     "ios/Cove/Flows/SelectedWalletFlow/ReceiveView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
 ]
@@ -210,6 +213,7 @@ target = "rust"
 paths = [
     "rust/src/label_manager.rs",
     "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/wallet_manager/**",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
@@ -269,6 +273,7 @@ target = "rust"
 paths = [
     "rust/src/label_manager.rs",
     "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/wallet_manager/**",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
@@ -310,6 +315,7 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
     "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/wallet_manager/actor/**",
     "rust/src/manager/wallet_manager/ledger_state.rs",
     "ios/Cove/Flows/SendFlow/SendFlowContainer.swift",
     "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
@@ -424,6 +430,7 @@ target = "rust"
 paths = [
     "rust/src/label_manager.rs",
     "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/wallet_manager/**",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsLabelView.swift",
 ]
 coverage = [
@@ -439,6 +446,7 @@ platforms = ["ios", "android"]
 target = "ui"
 paths = [
     "rust/src/fiat.rs",
+    "rust/src/fiat/**",
     "ios/Cove/Flows/SettingsFlow/MainSettingsSections.swift",
     "ios/Cove/Flows/SelectedWalletFlow/WalletBalanceHeaderView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/FiatCurrencySettingsScreen.kt",
@@ -517,6 +525,7 @@ platforms = ["ios", "android"]
 target = "ui"
 paths = [
     "rust/src/node.rs",
+    "rust/src/node/**",
     "rust/src/node_connect.rs",
     "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeSelectionView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",

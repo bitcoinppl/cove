@@ -30,6 +30,7 @@ target = "rust"
 paths = [
     "rust/src/manager/wallet_manager/transaction_locks.rs",
     "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/wallet_manager/actor/**",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
@@ -50,6 +51,7 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
     "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/wallet_manager/actor/**",
     "rust/src/manager/send_flow_manager/**",
     "ios/Cove/Flows/SendFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/**",
@@ -70,6 +72,7 @@ target = "rust"
 paths = [
     "rust/src/database/wallet_data/label.rs",
     "rust/src/manager/coin_control_manager.rs",
+    "rust/src/manager/coin_control_manager/**",
     "ios/Cove/Flows/CoinControlFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
 ]
@@ -160,6 +163,7 @@ paths = [
     "ios/Cove/Flows/SelectedWalletFlow/MoreInfoPopover.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/WalletMoreOptionsSheet.kt",
     "rust/src/manager/coin_control_manager.rs",
+    "rust/src/manager/coin_control_manager/**",
 ]
 coverage = [
     "agent",
@@ -231,7 +235,9 @@ paths = [
     "rust/src/manager/send_flow_manager/**",
     "rust/src/manager/send_flow_manager.rs",
     "rust/src/manager/coin_control_manager.rs",
+    "rust/src/manager/coin_control_manager/**",
     "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/wallet_manager/actor/**",
     "ios/Cove/Flows/SendFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/**",
 ]
@@ -264,6 +270,7 @@ target = "rust"
 paths = [
     "rust/src/manager/wallet_manager/transaction_locks.rs",
     "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/wallet_manager/actor/**",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
 ]

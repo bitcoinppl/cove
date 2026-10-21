@@ -7,6 +7,7 @@ target = "device"
 paths = [
     "rust/src/wallet/builder.rs",
     "rust/src/database/wallet_data.rs",
+    "rust/src/database/wallet_data/**",
     "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
     "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",

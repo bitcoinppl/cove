@@ -111,6 +111,7 @@ paths = [
   "rust/src/manager/cloud_backup_manager/actors/supervisor/enable/*.rs",
   "rust/src/manager/cloud_backup_manager/pending_enable/coordinator.rs",
   "rust/src/backup/recovery.rs",
+  "rust/src/backup/recovery/**",
   "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingView.swift",
   "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingSections.swift",
   "ios/Cove/Flows/SettingsFlow/CloudBackupPendingUploadSection.swift",

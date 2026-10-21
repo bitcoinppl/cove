@@ -5,6 +5,9 @@ title = "Send entry warnings confirmation and advanced details at max font"
 platforms = ["ios", "android"]
 target = "ui"
 paths = [
+    "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/**",
     "ios/Cove/Flows/SendFlow/ConfirmScreen/**",
     "ios/Cove/Flows/SendFlow/Common/**",

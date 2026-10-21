@@ -6,8 +6,10 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
   "rust/src/app.rs",
+  "rust/src/app/**",
   "rust/src/router.rs",
   "rust/src/manager/wallet_manager.rs",
+  "rust/src/manager/wallet_manager/**",
   "ios/Cove/ManagerCache.swift",
   "ios/Cove/WalletManager.swift",
   "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
@@ -205,6 +207,7 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
   "rust/src/app.rs",
+  "rust/src/app/**",
   "rust/src/router.rs",
 ]
 coverage = ["agent"]
@@ -219,6 +222,7 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
   "rust/src/app.rs",
+  "rust/src/app/**",
   "rust/src/wallet/deletion.rs",
   "rust/src/manager/wallet_manager/wallet_admin.rs",
   "rust/src/database/global_config.rs",
@@ -260,6 +264,7 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
   "rust/src/app.rs",
+  "rust/src/app/**",
   "rust/src/wallet/deletion.rs",
   "rust/src/manager/wallet_manager/wallet_admin.rs",
   "rust/src/database/global_config.rs",
@@ -301,6 +306,7 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
   "rust/src/app.rs",
+  "rust/src/app/**",
   "rust/src/wallet/deletion.rs",
   "rust/src/manager/wallet_manager/wallet_admin.rs",
   "rust/src/database/global_config.rs",
@@ -378,6 +384,7 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
   "rust/src/app.rs",
+  "rust/src/app/**",
   "rust/src/router.rs",
   "ios/Cove/CoinControlManager.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/CoinControlManager.kt",
@@ -427,6 +434,7 @@ platforms = ["ios", "android"]
 target = "ui"
 paths = [
   "rust/src/manager/wallet_manager/actor.rs",
+  "rust/src/manager/wallet_manager/actor/**",
   "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsChangeNameView.swift",
   "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsView.swift",
   "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsSections.swift",
@@ -445,6 +453,7 @@ platforms = ["ios", "android"]
 target = "ui"
 paths = [
   "rust/src/manager/wallet_manager/actor.rs",
+  "rust/src/manager/wallet_manager/actor/**",
   "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsChangeNameView.swift",
   "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsView.swift",
   "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsSections.swift",

@@ -7,6 +7,7 @@ target = "device"
 paths = [
     "rust/src/router.rs",
     "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/wallet_manager/**",
     "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
     "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
     "ios/Cove/RouteView.swift",

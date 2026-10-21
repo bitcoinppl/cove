@@ -132,6 +132,7 @@ paths = [
     "rust/src/database/wallet_data/label.rs",
     "rust/src/label_manager.rs",
     "rust/src/manager/coin_control_manager.rs",
+    "rust/src/manager/coin_control_manager/**",
     "ios/Cove/Flows/CoinControlFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
 ]
@@ -254,6 +255,7 @@ platforms = ["android"]
 target = "device"
 paths = [
     "rust/crates/cove-device/src/keychain.rs",
+    "rust/crates/cove-device/src/keychain/**",
     "rust/src/wallet_secret.rs",
     "android/app/src/main/java/org/bitcoinppl/cove/secretwords/**",
     "android/app/src/main/java/org/bitcoinppl/cove/Security.kt",
@@ -272,6 +274,7 @@ target = "rust"
 paths = [
     "rust/src/wallet/addressing.rs",
     "rust/src/mnemonic.rs",
+    "rust/src/mnemonic/**",
     "rust/src/wallet_secret.rs",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/hot_wallet/HotWalletImportScreen.kt",
 ]
