@@ -5,6 +5,8 @@ use crate::node_connect::{
     BITCOIN_ELECTRUM, NodeSelection, SIGNET_ESPLORA, TESTNET_ESPLORA, TESTNET4_ESPLORA,
 };
 
+use std::time::Duration;
+
 use client::NodeClient;
 use cove_types::network::Network;
 
@@ -43,10 +45,16 @@ pub(crate) struct NodeConnectionIdentity {
     url: String,
 }
 
+/// How long a node check waits before reporting the node as unreachable
+const CHECK_URL_TIMEOUT: Duration = Duration::from_secs(20);
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to check node url: {0}")]
     CheckUrlError(#[from] client::Error),
+
+    #[error("node did not respond within {} seconds", .0.as_secs())]
+    CheckUrlTimedOut(Duration),
 }
 
 impl Node {
@@ -110,11 +118,18 @@ impl Node {
         Self { name, network, api_type: ApiType::Esplora, url }
     }
 
+    /// Connects to the node and reads its height, failing when the node doesn't answer in time
     pub async fn check_url(&self) -> Result<(), Error> {
-        let client = NodeClient::new(self).await?;
-        client.check_url().await?;
+        // neither client sets a timeout, so a host that never answers would hold the settings
+        // check until the OS gives up on the connection
+        tokio::time::timeout(CHECK_URL_TIMEOUT, async {
+            let client = NodeClient::new(self).await?;
+            client.check_url().await?;
 
-        Ok(())
+            Ok(())
+        })
+        .await
+        .map_err(|_| Error::CheckUrlTimedOut(CHECK_URL_TIMEOUT))?
     }
 }
 
