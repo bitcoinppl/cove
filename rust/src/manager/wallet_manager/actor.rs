@@ -1729,6 +1729,8 @@ mod tests {
         task::JoinHandle,
     };
 
+    mod fake_node_scan;
+
     use crate::{database::wallet::WalletMetadataPatch, wallet::metadata::WalletMetadata};
 
     use super::{
