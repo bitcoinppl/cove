@@ -47028,6 +47028,17 @@ public func transactionsPreviewNew(confirmed: UInt8, unconfirmed: UInt8) -> [Tra
     )
 })
 }
+/**
+ * The calendar date a UTXO was confirmed where the user is, such as "Jan 20, 2026"
+ */
+public func utxoDate(utxo: Utxo) -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_func_utxo_date(
+        FfiConverterTypeUtxo_lower(utxo),uniffiCallStatus
+    )
+})
+}
 public func walletAmountInFiatCached(amount: Amount) -> Double?  {
     return try!  FfiConverterOptionDouble.lift(try! rustCall() {
         uniffiCallStatus in
@@ -47319,6 +47330,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_transactions_preview_new() != 39646) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_func_utxo_date() != 45752) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_func_wallet_amount_in_fiat_cached() != 26689) {

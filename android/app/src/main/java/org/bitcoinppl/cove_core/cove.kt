@@ -1171,6 +1171,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_func_transactions_preview_new(
     ): Short
+    external fun uniffi_cove_checksum_func_utxo_date(
+    ): Short
     external fun uniffi_cove_checksum_func_wallet_amount_in_fiat_cached(
     ): Short
     external fun uniffi_cove_checksum_func_wallet_display_amount(
@@ -3725,6 +3727,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_transactions_preview_new(`confirmed`: Byte,`unconfirmed`: Byte,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_func_utxo_date(`utxo`: RustBufferUtxo.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_wallet_amount_in_fiat_cached(`amount`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_func_wallet_display_amount(`metadata`: RustBuffer.ByValue,`amount`: Long,`showUnit`: Byte,uniffi_out_err: UniffiRustCallStatus,
@@ -4018,6 +4022,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_transactions_preview_new() != 39646.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_func_utxo_date() != 45752.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_wallet_amount_in_fiat_cached() != 26689.toShort()) {
@@ -69674,6 +69681,20 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
 
         FfiConverterUByte.lower(`confirmed`),
         FfiConverterUByte.lower(`unconfirmed`),_status)
+}
+    )
+    }
+
+
+        /**
+         * The calendar date a UTXO was confirmed where the user is, such as "Jan 20, 2026"
+         */ fun `utxoDate`(`utxo`: Utxo): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_func_utxo_date(
+
+
+        FfiConverterTypeUtxo.lower(`utxo`),_status)
 }
     )
     }

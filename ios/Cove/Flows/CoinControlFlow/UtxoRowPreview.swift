@@ -40,7 +40,7 @@ struct UtxoRowPreview: View {
             HStack {
                 Text(displayAmount(utxo.amount, true))
                 Spacer()
-                Text(utxo.date())
+                Text(utxoDate(utxo: utxo))
             }
             .foregroundColor(.secondary)
             .font(.footnote)
