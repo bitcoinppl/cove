@@ -11,7 +11,7 @@ use color_eyre::{
 use colored::Colorize;
 use reqwest::StatusCode;
 use serde::Deserialize;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{
     fs,
@@ -595,15 +595,16 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
         cmd!(sh, "open -a Simulator").run().wrap_err("Failed to open Simulator")?;
     }
 
-    boot_simulator(&sh, &options.device)?;
+    let udid = SimctlDevices::load(&sh)?.resolve(&options.device)?;
+    boot_simulator(&sh, &udid)?;
 
     // run every test before failing so one broken test doesn't hide the state of the rest
     let mut failures = Vec::new();
     for test in ios_ui_tests_to_run(&sh, &options.test)? {
-        reset_simulator_state(&sh, &options.device)?;
-        boot_simulator(&sh, &options.device)?;
+        reset_simulator_state(&sh, &udid)?;
+        boot_simulator(&sh, &udid)?;
 
-        if let Err(error) = run_ios_ui_test(&sh, &options.device, &test, verbose) {
+        if let Err(error) = run_ios_ui_test(&sh, &udid, &test, verbose) {
             print_error(&format!("{error:?}"));
             failures.push(test);
         }
@@ -1066,24 +1067,61 @@ fn simulator_is_booted(sh: &Shell, device: &str) -> Result<bool> {
     Ok(simulator_state(sh, device)?.is_some_and(|state| state == "Booted"))
 }
 
-fn simulator_state(sh: &Shell, device: &str) -> Result<Option<String>> {
-    let output =
-        cmd!(sh, "xcrun simctl list devices").read().wrap_err("Failed to list simulators")?;
-
-    Ok(output
-        .lines()
-        .find(|line| simulator_line_matches_device(line, device))
-        .and_then(simulator_state_from_line))
+fn simulator_state(sh: &Shell, udid: &str) -> Result<Option<String>> {
+    Ok(SimctlDevices::load(sh)?.state(udid).map(str::to_string))
 }
 
-fn simulator_state_from_line(line: &str) -> Option<String> {
-    line.rsplit_once(" (").map(|(_, state)| state.trim().trim_end_matches(')').to_string())
+/// Output of `xcrun simctl list devices -j`, keyed by runtime identifier
+#[derive(Debug, Deserialize)]
+struct SimctlDevices {
+    devices: BTreeMap<String, Vec<SimctlDevice>>,
 }
 
-fn simulator_line_matches_device(line: &str, device: &str) -> bool {
-    let line = line.trim_start();
+#[derive(Debug, Deserialize)]
+struct SimctlDevice {
+    udid: String,
+    name: String,
+    state: String,
+    #[serde(rename = "isAvailable", default)]
+    is_available: bool,
+}
 
-    line.starts_with(&format!("{device} ("))
+impl SimctlDevices {
+    fn load(sh: &Shell) -> Result<Self> {
+        let json = cmd!(sh, "xcrun simctl list devices -j")
+            .read()
+            .wrap_err("Failed to list simulators")?;
+
+        serde_json::from_str(&json).wrap_err("Failed to parse simctl device list")
+    }
+
+    /// Resolves a simulator name or UDID to a single UDID
+    ///
+    /// A runner image can carry the same device name under several runtimes, and name-based
+    /// simctl and xcodebuild calls then pick different simulators, so everything after this
+    /// addresses the simulator by UDID
+    fn resolve(&self, device: &str) -> Result<String> {
+        self.devices
+            .iter()
+            .flat_map(|(runtime, devices)| devices.iter().map(move |sim| (runtime, sim)))
+            .filter(|(_, sim)| sim.is_available && (sim.udid == device || sim.name == device))
+            // a booted match wins so a warm simulator is reused, then the newest runtime
+            .max_by_key(|(runtime, sim)| (sim.state == "Booted", ios_runtime_version(runtime)))
+            .map(|(_, sim)| sim.udid.clone())
+            .ok_or_else(|| eyre!("No available simulator named '{device}'"))
+    }
+
+    fn state(&self, udid: &str) -> Option<&str> {
+        self.devices.values().flatten().find(|sim| sim.udid == udid).map(|sim| sim.state.as_str())
+    }
+}
+
+/// Version numbers from a runtime identifier such as `com.apple.CoreSimulator.SimRuntime.iOS-26-2`
+fn ios_runtime_version(runtime: &str) -> Vec<u32> {
+    runtime
+        .rsplit_once("iOS-")
+        .map(|(_, version)| version.split('-').filter_map(|part| part.parse().ok()).collect())
+        .unwrap_or_default()
 }
 
 fn reset_simulator_state(sh: &Shell, device: &str) -> Result<()> {
@@ -1161,10 +1199,10 @@ fn simctl_shutdown_already_shutdown(stdout: &str, stderr: &str) -> bool {
         || stderr.contains("Unable to shutdown device in current state: Shutdown")
 }
 
-fn run_ios_ui_test(sh: &Shell, device: &str, test: &str, verbose: bool) -> Result<()> {
+fn run_ios_ui_test(sh: &Shell, udid: &str, test: &str, verbose: bool) -> Result<()> {
     print_info(&format!("Running iOS UI test {test}"));
 
-    let destination = format!("platform=iOS Simulator,name={device}");
+    let destination = format!("platform=iOS Simulator,id={udid}");
     let only_testing = format!("-only-testing:{test}");
 
     let test_cmd = cmd!(
@@ -1184,8 +1222,8 @@ fn run_ios_ui_test(sh: &Shell, device: &str, test: &str, verbose: bool) -> Resul
             print_info(&format!(
                 "Retrying iOS UI test {test} after Xcode test runner bootstrap failure"
             ));
-            reset_simulator_state(sh, device)?;
-            boot_simulator(sh, device)?;
+            reset_simulator_state(sh, udid)?;
+            boot_simulator(sh, udid)?;
         }
 
         let test_cmd = cmd!(
@@ -1783,10 +1821,10 @@ mod tests {
         device_selector_from_target_value, devicectl_device_connection_can_refresh,
         devicectl_device_is_available_ios, ensure_aasa_webcredentials_app, looks_like_ios_udid,
         normalize_pem_text, resolve_device_name_or_alias, sanitize_build_slot,
-        simulator_line_matches_device, simulator_state_from_line, validate_aasa_response,
-        DeviceSelector, DevicectlConnectionProperties, DevicectlDevice, DevicectlDeviceProperties,
-        DevicectlHardwareProperties, DevicectlPairingState, DevicectlTunnelState,
-        IOS_DEVICE_DERIVED_DATA_SUFFIX, IOS_SIMULATOR_DERIVED_DATA_SUFFIX,
+        validate_aasa_response, DeviceSelector, DevicectlConnectionProperties, DevicectlDevice,
+        DevicectlDeviceProperties, DevicectlHardwareProperties, DevicectlPairingState,
+        DevicectlTunnelState, SimctlDevices, IOS_DEVICE_DERIVED_DATA_SUFFIX,
+        IOS_SIMULATOR_DERIVED_DATA_SUFFIX,
     };
     use reqwest::StatusCode;
     use std::path::Path;
@@ -1870,38 +1908,45 @@ ABC123
 ";
 
     #[test]
-    fn simulator_line_matches_exact_booted_device_name() {
-        assert!(simulator_line_matches_device(
-            "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Booted)",
-            "iPhone 17",
-        ));
+    fn simulator_resolves_a_name_shared_across_runtimes_to_one_udid() {
+        let devices: SimctlDevices = serde_json::from_str(
+            r#"{"devices": {
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-0": [
+                    {"udid": "OLD", "name": "iPhone 17", "state": "Shutdown", "isAvailable": true}
+                ],
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-10": [
+                    {"udid": "NEW", "name": "iPhone 17", "state": "Shutdown", "isAvailable": true},
+                    {"udid": "PRO", "name": "iPhone 17 Pro", "state": "Booted", "isAvailable": true}
+                ],
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-2": [
+                    {"udid": "GONE", "name": "iPhone 17", "state": "Shutdown", "isAvailable": false}
+                ]
+            }}"#,
+        )
+        .unwrap();
+
+        assert_eq!(devices.resolve("iPhone 17").unwrap(), "NEW");
+        assert_eq!(devices.resolve("OLD").unwrap(), "OLD");
+        assert_eq!(devices.state("PRO"), Some("Booted"));
+        assert!(devices.resolve("iPhone 1").is_err());
+        assert!(devices.resolve("GONE").is_err());
     }
 
     #[test]
-    fn simulator_line_does_not_match_device_name_prefix() {
-        assert!(!simulator_line_matches_device(
-            "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Booted)",
-            "iPhone 1",
-        ));
-    }
+    fn simulator_prefers_the_booted_match() {
+        let devices: SimctlDevices = serde_json::from_str(
+            r#"{"devices": {
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-0": [
+                    {"udid": "OLD", "name": "iPhone 17", "state": "Booted", "isAvailable": true}
+                ],
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-2": [
+                    {"udid": "NEW", "name": "iPhone 17", "state": "Shutdown", "isAvailable": true}
+                ]
+            }}"#,
+        )
+        .unwrap();
 
-    #[test]
-    fn simulator_line_matches_exact_shutdown_device_name() {
-        assert!(simulator_line_matches_device(
-            "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Shutdown)",
-            "iPhone 17",
-        ));
-    }
-
-    #[test]
-    fn simulator_state_from_line_trims_shutdown_state() {
-        assert_eq!(
-            simulator_state_from_line(
-                "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Shutdown) "
-            )
-            .as_deref(),
-            Some("Shutdown"),
-        );
+        assert_eq!(devices.resolve("iPhone 17").unwrap(), "OLD");
     }
 
     #[test]
