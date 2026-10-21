@@ -125,6 +125,8 @@ private struct SendNavigationTestRoot: View {
                     SendFlowSetAmountScreen(id: manager.id)
                 }
         }
+        // the app root injects the safe area the wallet screen lays out with
+        .capturesSafeAreaInsets()
     }
 }
 
