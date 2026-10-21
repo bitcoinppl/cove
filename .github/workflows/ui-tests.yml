@@ -79,18 +79,13 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
-          # the default 2 cores starve the software-rendered launcher until it ANRs
+          # headroom for the software-rendered launcher, which stops responding on a busy emulator;
+          # the DismissAnrDialogs test listener clears its dialog when it does anyway
           cores: 4
           ram-size: 4096M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          # an ANR dialog left on screen eats Back, outside taps and clipboard focus for every later test;
-          # hide_error_dialogs is only read on a configuration change, so toggle night mode to apply it
-          script: |
-            adb shell settings put global hide_error_dialogs 1
-            adb shell cmd uimode night yes
-            adb shell cmd uimode night no
-            just android-instrumented-ci ${{ matrix.flavour }}
+          script: just android-instrumented-ci ${{ matrix.flavour }}
 
       - name: Upload Android test reports
         if: failure()
