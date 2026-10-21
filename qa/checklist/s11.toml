@@ -452,7 +452,10 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsScreen.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSections.kt",
 ]
-coverage = ["agent"]
+coverage = [
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/WalletSettingsChangeNameScreenTest.kt::renamingUpdatesTheNameWithoutChangingWalletIdentityOrBalance",
+    "agent:ios",
+]
 # 1.4.0: ios PASS, android PASS
 
 [[row]]

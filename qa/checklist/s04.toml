@@ -193,6 +193,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
 ]
 coverage = [
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/SendDiagnosticsCopyReportIdTest.kt::copyIdPutsTheExactReportIdOnTheClipboard",
     "agent",
 ]
 # 1.4.0: ios BLOCKED, android PASS
