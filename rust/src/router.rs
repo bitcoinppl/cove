@@ -18,6 +18,7 @@ use crate::{
 use cove_macros::impl_default_for;
 use cove_types::{ConfirmDetails, WalletId, utxo::Utxo};
 use derive_more::From;
+use tracing::warn;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum Route {
@@ -194,17 +195,34 @@ fn startup_route(database: &Database) -> Route {
     };
 
     let SelectedWalletTarget { network, mode } = database.global_config.wallet_target();
-    if database.wallets.get(&selected_wallet, network, mode).ok().flatten().is_some() {
-        return Route::SelectedWallet(selected_wallet);
+    match database.wallets.get(&selected_wallet, network, mode) {
+        Ok(Some(_)) => return Route::SelectedWallet(selected_wallet),
+        Ok(None) => {}
+
+        // a read error is not proof the wallet is gone, so keep the route and let the
+        // platform loader surface it, such as through the database corruption recovery flow
+        Err(error) => {
+            warn!("unable to read selected wallet {selected_wallet}: {error}");
+            return Route::SelectedWallet(selected_wallet);
+        }
     }
 
-    // a stale selection falls back to the newest wallet on the active network, if any
-    database
-        .wallets()
-        .all_sorted_active()
-        .ok()
-        .and_then(|wallets| wallets.into_iter().next())
-        .map_or(new_wallet, |wallet| Route::SelectedWallet(wallet.id))
+    let wallets = match database.wallets().all_sorted_active() {
+        Ok(wallets) => wallets,
+        Err(error) => {
+            warn!("unable to list wallets for a stale selection: {error}");
+            return Route::SelectedWallet(selected_wallet);
+        }
+    };
+
+    // a stale selection falls back to the newest wallet on the active target, which becomes
+    // the selection so the rest of the app agrees on which wallet is open
+    let Some(fallback) = wallets.into_iter().next() else { return new_wallet };
+    if let Err(error) = database.global_config.select_wallet(fallback.id.clone()) {
+        warn!("unable to select fallback wallet {}: {error}", fallback.id);
+    }
+
+    Route::SelectedWallet(fallback.id)
 }
 
 impl_default_for!(Router);
@@ -509,6 +527,41 @@ mod tests {
 
         assert_ne!(router.default, Route::SelectedWallet(stale_id));
         assert_eq!(router.default, Route::NewWallet(NewWalletRoute::default()));
+    }
+
+    #[test]
+    fn startup_route_selects_the_fallback_for_a_stale_selection() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::database::test_support::delete_database();
+
+        let mnemonic: bip39::Mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about".parse().unwrap();
+        let wallet = crate::wallet::Wallet::try_new_persisted_from_mnemonic_segwit(
+            crate::wallet::metadata::WalletMetadata::preview_new(),
+            mnemonic,
+            None,
+        )
+        .expect("wallet persists");
+
+        let database = Database::global();
+        database.wallets.save_new_wallet_metadata(wallet.metadata.clone()).unwrap();
+        database
+            .global_config
+            .select_wallet(WalletId::from("wallet-from-another-network".to_string()))
+            .unwrap();
+
+        let route = startup_route(&database);
+        let selected = database.global_config.selected_wallet();
+
+        crate::keychain::Keychain::global().delete_wallet_items(&wallet.id);
+        let _ = crate::wallet::delete_wallet_specific_data(&wallet.id);
+        let _ = database.wallets.delete(&wallet.id);
+        let _ = database.global_config.clear_selected_wallet();
+
+        assert_eq!(route, Route::SelectedWallet(wallet.id.clone()));
+        assert_eq!(selected, Some(wallet.id));
     }
 
     #[test]
