@@ -6,6 +6,16 @@ extension WeakReconciler: KeyTeleportManagerReconciler where Reconciler == KeyTe
 enum KeyTeleportFlowDirection: Equatable {
     case receive
     case send
+
+    /// The sender scans the receiver's request and the receiver scans the sender's response
+    var rejectedInputMessage: String {
+        switch self {
+        case .send:
+            "This isn't a KeyTeleport request. Scan or paste the request shown on the receiving device."
+        case .receive:
+            "This isn't a KeyTeleport response. Scan or paste the response shown on the sending device."
+        }
+    }
 }
 
 enum KeyTeleportPacketRoutingDecision: Equatable {

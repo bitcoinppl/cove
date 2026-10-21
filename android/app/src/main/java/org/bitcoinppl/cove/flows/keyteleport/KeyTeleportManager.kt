@@ -28,6 +28,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal enum class KeyTeleportFlowDirection {
     RECEIVE,
     SEND,
+    ;
+
+    // the sender scans the receiver's request and the receiver scans the sender's response
+    val rejectedInputMessage: String
+        get() =
+            when (this) {
+                SEND -> "This isn't a KeyTeleport request. Scan or paste the request shown on the receiving device."
+                RECEIVE -> "This isn't a KeyTeleport response. Scan or paste the response shown on the sending device."
+            }
 }
 
 internal enum class KeyTeleportSendStartResult {
