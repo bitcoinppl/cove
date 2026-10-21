@@ -15,6 +15,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import java.io.ByteArrayOutputStream
+import java.util.regex.Pattern
 
 class FullLaunchStartupRobot(
     private val device: UiDevice,
@@ -85,7 +86,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun chooseNewUser(): FullLaunchOnboardingRobot {
-        device.advanceUntilVisible(text("Creating your wallet")) {
+        device.advanceUntilVisible(walletCreationStartedOrFinished()) {
             clickCenterIfVisible(tag("onboarding.bitcoinChoice.new"))
         }
         device.waitUntilVisible(textContains("Back up your wallet"), timeoutMillis = 10_000)
@@ -127,7 +128,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun chooseExchange(): FullLaunchOnboardingRobot {
-        device.advanceUntilVisible(text("Creating your wallet")) {
+        device.advanceUntilVisible(walletCreationStartedOrFinished()) {
             clickCenterIfVisible(tag("onboarding.storage.exchange"))
         }
         device.waitUntilVisible(text("Back up your wallet before funding it"), timeoutMillis = 10_000)
@@ -152,7 +153,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun chooseSoftwareCreate(): FullLaunchOnboardingRobot {
-        device.advanceUntilVisible(text("Creating your wallet")) {
+        device.advanceUntilVisible(walletCreationStartedOrFinished()) {
             clickCenterIfVisible(tag("onboarding.software.create"))
         }
         device.waitUntilVisible(textContains("Back up your wallet"), timeoutMillis = 10_000)
@@ -933,6 +934,13 @@ private fun text(value: String): DescribedSelector =
 
 private fun textContains(value: String): DescribedSelector =
     DescribedSelector(By.textContains(value), "text containing \"$value\"")
+
+// wallet creation can finish before the next poll, so the progress screen alone would be a race
+private fun walletCreationStartedOrFinished(): DescribedSelector =
+    DescribedSelector(
+        By.text(Pattern.compile("Creating your wallet|.*Back up your wallet.*")),
+        "text \"Creating your wallet\" or the backup screen",
+    )
 
 private fun desc(value: String): DescribedSelector =
     DescribedSelector(By.desc(value), "content description \"$value\"")
