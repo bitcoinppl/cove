@@ -215,7 +215,7 @@ alias aum := android-ui-manual
 [group('test')]
 [working-directory('android')]
 android-instrumented-ci flavours="Dev UiTest":
-    ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi"
+    ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi" "-Pandroid.testInstrumentationRunnerArguments.listener=org.bitcoinppl.cove.test.DismissAnrDialogs"
 
 # [bounded] Update Android Compose preview screenshot references
 [group('test')]
