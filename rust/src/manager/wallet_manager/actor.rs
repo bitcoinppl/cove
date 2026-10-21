@@ -4213,6 +4213,71 @@ mod tests {
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 
+    fn latest_receive_address(
+        receiver: &flume::Receiver<SingleOrMany>,
+    ) -> crate::manager::wallet_manager::receive_address::ReceiveAddressState {
+        let mut latest = None;
+        for batch in receiver.try_iter() {
+            let messages = match batch {
+                SingleOrMany::Single(message) => vec![message],
+                SingleOrMany::Many(messages) => messages,
+            };
+
+            for message in messages {
+                if let WalletManagerReconcileMessage::ReceiveAddressUpdated(state) = message {
+                    latest = Some(state);
+                }
+            }
+        }
+
+        latest.expect("receive address update is emitted")
+    }
+
+    #[tokio::test]
+    async fn reopening_receive_shows_the_same_unused_address_until_a_new_one_is_requested() {
+        use crate::manager::wallet_manager::receive_address::ReceiveAddressStatus;
+
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        // with no reachable node the reopen can only fall back to the cached address
+        set_unreachable_bitcoin_esplora_node();
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        let (addr, receiver) = spawn_test_wallet_actor(wallet);
+        drain_reconcile_messages(&receiver);
+
+        // first receive addresses of the BIP84 test mnemonic, from the BIP84 spec
+        const BIP84_FIRST_RECEIVE: &str = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
+        const BIP84_SECOND_RECEIVE: &str = "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g";
+
+        call!(addr.open_receive_address_intent()).await.expect("receive opens");
+        let first = latest_receive_address(&receiver);
+        assert_eq!(first.status, ReceiveAddressStatus::Fresh);
+        assert_eq!(first.address.info.address.to_string(), BIP84_FIRST_RECEIVE);
+
+        call!(addr.close_receive_address(first.request_id)).await.expect("receive closes");
+        call!(addr.open_receive_address_intent()).await.expect("receive reopens");
+        let reopened = latest_receive_address(&receiver);
+        assert_eq!(reopened.status, ReceiveAddressStatus::CachedUnused);
+        assert_eq!(reopened.address.info.address.to_string(), BIP84_FIRST_RECEIVE);
+        assert_ne!(reopened.request_id, first.request_id);
+
+        call!(addr.create_new_receive_address_intent()).await.expect("new address is created");
+        let created = latest_receive_address(&receiver);
+        assert_eq!(created.address.info.address.to_string(), BIP84_SECOND_RECEIVE);
+
+        // the new address is now the cached one
+        call!(addr.close_receive_address(created.request_id)).await.expect("receive closes");
+        call!(addr.open_receive_address_intent()).await.expect("receive reopens");
+        let reopened_again = latest_receive_address(&receiver);
+        assert_eq!(reopened_again.address.info.address.to_string(), BIP84_SECOND_RECEIVE);
+
+        restore_default_bitcoin_node();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+    }
+
     #[test]
     fn prepare_failure_before_first_full_scan_returns_to_initial_state() {
         assert_eq!(
