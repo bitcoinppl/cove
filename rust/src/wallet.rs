@@ -67,7 +67,7 @@ pub enum WalletError {
     #[error("metadata not found")]
     MetadataNotFound,
 
-    #[error("failed to parse xpub: {0}")]
+    #[error("not a valid extended public key or wallet export: {0}")]
     ParseXpubError(#[from] XpubError),
 
     #[error("trying to import a wallet that already exists")]

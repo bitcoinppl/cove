@@ -18,7 +18,7 @@ impl XpubExt for Xpub {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum XpubError {
-    #[error("Invalid descriptor {0}")]
+    #[error(transparent)]
     InvalidDescriptor(#[from] DescriptorError),
 
     #[error("Invalid JSON {0}")]
@@ -37,7 +37,7 @@ pub enum XpubError {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
 pub enum DescriptorError {
-    #[error("Invalid descriptor: {0:?}")]
+    #[error("invalid descriptor: {0}")]
     InvalidDescriptor(String),
 
     #[error("Single descriptor line did not contain both external and internal keys")]

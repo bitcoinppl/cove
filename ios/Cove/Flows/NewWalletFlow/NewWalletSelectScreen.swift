@@ -10,7 +10,13 @@ import UniformTypeIdentifiers
 
 /// Alert text for a hardware wallet import that failed
 func hardwareImportErrorMessage(_ error: Error) -> String {
-    error.localizedDescription
+    switch error {
+    // generated UniFFI errors describe themselves with a reflection dump, Display is the real message
+    case let error as WalletError:
+        error.description
+    default:
+        error.localizedDescription
+    }
 }
 
 struct NewWalletSelectScreen: View {
