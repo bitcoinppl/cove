@@ -589,7 +589,7 @@ private struct UtxoRow: View {
                     .font(.footnote)
                     .fontWeight(.regular)
 
-                Text(utxo.date())
+                Text(utxoDate(utxo: utxo))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
