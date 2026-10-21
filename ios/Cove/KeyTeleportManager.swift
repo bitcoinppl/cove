@@ -127,10 +127,6 @@ enum KeyTeleportSendStartDecision: Equatable {
         }
     }
 
-    func ingest(_ input: String) {
-        dispatch(.ingest(.multiFormat(StringOrData(input))))
-    }
-
     func ingest(_ packet: KeyTeleportReceiverPacket) {
         dispatch(.ingest(.receiver(packet)))
     }
