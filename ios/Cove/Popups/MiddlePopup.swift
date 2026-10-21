@@ -26,10 +26,8 @@ struct MiddlePopup: CenterPopup {
             .gesture(
                 DragGesture()
                     .onEnded { gesture in
-                        if abs(gesture.translation.width) > 40 || abs(gesture.translation.height) > 40 {
-                            if swipeToDismiss {
-                                Task { await dismissLastPopup() }
-                            }
+                        if abs(gesture.translation.width) > 40 || abs(gesture.translation.height) > 40, swipeToDismiss {
+                            Task { await dismissLastPopup() }
                         }
                     }
             )
