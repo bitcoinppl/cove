@@ -119,7 +119,7 @@ title = "Selected coins cannot silently add inputs for high fee"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "rust/src/manager/send_flow_manager/coin_control.rs", "rust/src/manager/coin_control_manager.rs", "rust/src/manager/coin_control_manager/*.rs", "rust/src/manager/wallet_manager/actor/transactions.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "ios/Cove/Flows/CoinControlFlow/*.swift", "ios/Cove/Flows/SendFlow/SendFlowCoinControlSetAmountScreen.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/CoinControlSetAmountScreen.kt"]
-coverage = ["agent"]
+coverage = ["agent", "rust:rust/src/manager/wallet_manager/actor.rs::actor_manual_tx_never_adds_unselected_inputs_to_cover_a_high_fee"]
 # 1.4.0: ios BLOCKED, android PASS
 # coin control psbt uses manually selected inputs only
 
