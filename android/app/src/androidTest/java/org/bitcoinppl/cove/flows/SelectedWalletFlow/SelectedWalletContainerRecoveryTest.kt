@@ -6,6 +6,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.Route
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -26,19 +27,43 @@ class SelectedWalletContainerRecoveryTest {
     @Test
     fun staleSelectedWalletRouteFallsBackInsteadOfLoadingForever() {
         val app = AppManager.getInstance()
+        val originalRoute = app.router.default
         val staleRoute = Route.SelectedWallet(STALE_WALLET_ID)
+
+        // resetRoute reconciles asynchronously, so the stale route must be in place before the
+        // container mounts, or leaving it would prove nothing
         compose.runOnUiThread { app.resetRoute(staleRoute) }
+        compose.waitUntil(timeoutMillis = RECOVERY_TIMEOUT_MS) { app.router.default == staleRoute }
 
-        compose.setContent {
-            CoveTheme(dynamicColor = false) {
-                SelectedWalletContainer(app = app, id = STALE_WALLET_ID)
+        try {
+            compose.setContent {
+                CoveTheme(dynamicColor = false) {
+                    SelectedWalletContainer(app = app, id = STALE_WALLET_ID)
+                }
             }
-        }
 
-        compose.waitUntil(timeoutMillis = RECOVERY_TIMEOUT_MS) {
-            app.router.default != staleRoute
+            compose.waitUntil(timeoutMillis = RECOVERY_TIMEOUT_MS) {
+                app.router.default != staleRoute
+            }
+
+            assertTrue(
+                "fell back to ${app.router.default}, not a wallet the app has or new wallet",
+                isRecoveryRoute(app, app.router.default),
+            )
+        } finally {
+            compose.runOnUiThread { app.resetRoute(originalRoute) }
         }
     }
+
+    private fun isRecoveryRoute(
+        app: AppManager,
+        route: Route,
+    ): Boolean =
+        when (route) {
+            is Route.NewWallet -> true
+            is Route.SelectedWallet -> app.walletMetadata(route.v1) != null
+            else -> false
+        }
 
     private companion object {
         const val STALE_WALLET_ID = "wallet-from-another-network"
