@@ -26318,6 +26318,11 @@ public enum CloudBackupWalletStatus: Equatable, Hashable {
     case confirmed
     case failed
     case deletedFromDevice
+    /**
+     * Cloud-only record whose wallet already exists on this device under another record ID,
+     * so it can be deleted but not restored
+     */
+    case alreadyOnDevice
     case unsupportedVersion
     case remoteStateUnknown
 
@@ -26353,9 +26358,11 @@ public struct FfiConverterTypeCloudBackupWalletStatus: FfiConverterRustBuffer {
 
         case 6: return .deletedFromDevice
 
-        case 7: return .unsupportedVersion
+        case 7: return .alreadyOnDevice
 
-        case 8: return .remoteStateUnknown
+        case 8: return .unsupportedVersion
+
+        case 9: return .remoteStateUnknown
 
         default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -26389,12 +26396,16 @@ public struct FfiConverterTypeCloudBackupWalletStatus: FfiConverterRustBuffer {
             writeInt(&buf, Int32(6))
 
 
-        case .unsupportedVersion:
+        case .alreadyOnDevice:
             writeInt(&buf, Int32(7))
 
 
-        case .remoteStateUnknown:
+        case .unsupportedVersion:
             writeInt(&buf, Int32(8))
+
+
+        case .remoteStateUnknown:
+            writeInt(&buf, Int32(9))
 
         }
     }
@@ -26512,7 +26523,10 @@ public enum CloudOnlyState: Equatable, Hashable {
 
     case notFetched
     case loading
-    case loaded(wallets: [CloudBackupWalletItem]
+    case loaded(wallets: [CloudBackupWalletItem],
+        /**
+         * Some listed backups could not be read, so `wallets` may be missing cloud-only wallets
+         */incomplete: Bool
     )
     case failed(error: String
     )
@@ -26541,7 +26555,7 @@ public struct FfiConverterTypeCloudOnlyState: FfiConverterRustBuffer {
 
         case 2: return .loading
 
-        case 3: return .loaded(wallets: try FfiConverterSequenceTypeCloudBackupWalletItem.read(from: &buf)
+        case 3: return .loaded(wallets: try FfiConverterSequenceTypeCloudBackupWalletItem.read(from: &buf), incomplete: try FfiConverterBool.read(from: &buf)
         )
 
         case 4: return .failed(error: try FfiConverterString.read(from: &buf)
@@ -26563,9 +26577,10 @@ public struct FfiConverterTypeCloudOnlyState: FfiConverterRustBuffer {
             writeInt(&buf, Int32(2))
 
 
-        case let .loaded(wallets):
+        case let .loaded(wallets,incomplete):
             writeInt(&buf, Int32(3))
             FfiConverterSequenceTypeCloudBackupWalletItem.write(wallets, into: &buf)
+            FfiConverterBool.write(incomplete, into: &buf)
 
 
         case let .failed(error):

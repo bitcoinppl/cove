@@ -1,8 +1,7 @@
+@_exported import CoveCore
 import MijickPopups
 import SwiftUI
 import UIKit
-
-@_exported import CoveCore
 
 enum CloudBackupRootPresentation: Equatable {
     case existingBackupFound(CloudBackupEnableContext, CloudBackupPasskeyHint?)

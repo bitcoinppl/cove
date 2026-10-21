@@ -17,10 +17,13 @@ import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
 
+// an incomplete list shows even when empty, so its Check Again and Restore All retry stay reachable
 internal fun cloudBackupVisibleCloudOnlyWallets(
     cloudOnly: CloudOnlyState,
 ): List<CloudBackupWalletItem>? =
-    (cloudOnly as? CloudOnlyState.Loaded)?.wallets?.takeIf { it.isNotEmpty() }
+    (cloudOnly as? CloudOnlyState.Loaded)
+        ?.takeIf { it.wallets.isNotEmpty() || it.incomplete }
+        ?.wallets
 
 internal fun cloudBackupCloudOnlyFailureMessage(
     cloudOnly: CloudOnlyState,

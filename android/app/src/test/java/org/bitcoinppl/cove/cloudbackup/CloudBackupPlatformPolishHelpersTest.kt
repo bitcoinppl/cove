@@ -113,6 +113,12 @@ class CloudBackupPlatformPolishHelpersTest {
                 ),
             ),
         )
+        assertEquals(
+            "Show delete action for Vacation Fund, already on this device",
+            cloudBackupWalletRowActionLabel(
+                item.copy(syncStatus = CloudBackupWalletStatus.ALREADY_ON_DEVICE),
+            ),
+        )
         assertEquals("Restore to this device", cloudBackupWalletRestoreActionTitle(false))
         assertEquals("Retry restore", cloudBackupWalletRestoreActionTitle(true))
     }
