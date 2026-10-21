@@ -610,7 +610,11 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
     }
 
     if !failures.is_empty() {
-        color_eyre::eyre::bail!("{} iOS UI test(s) failed: {}", failures.len(), failures.join(", "));
+        color_eyre::eyre::bail!(
+            "{} iOS UI test(s) failed: {}",
+            failures.len(),
+            failures.join(", ")
+        );
     }
 
     Ok(())
