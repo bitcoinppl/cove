@@ -801,6 +801,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_types_checksum_method_qrdensity_ur_fragment_len(
     ): Short
+    external fun uniffi_cove_types_checksum_method_feerate_is_below_minimum(
+    ): Short
     external fun uniffi_cove_types_checksum_method_feerate_sat_per_vb(
     ): Short
     external fun uniffi_cove_types_checksum_method_feerate_sats_per_vbyte_string(
@@ -1111,6 +1113,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_types_fn_constructor_feerate_from_sat_per_vb(`satPerVb`: Float,uniffi_out_err: UniffiRustCallStatus,
     ): Long
+    external fun uniffi_cove_types_fn_method_feerate_is_below_minimum(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_types_fn_method_feerate_sat_per_vb(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Float
     external fun uniffi_cove_types_fn_method_feerate_sats_per_vbyte_string(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -1634,6 +1638,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_qrdensity_ur_fragment_len() != 56660.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_types_checksum_method_feerate_is_below_minimum() != 57681.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_feerate_sat_per_vb() != 25940.toShort()) {
@@ -4897,6 +4904,13 @@ public object FfiConverterTypeConfirmDetails: FfiConverter<ConfirmDetails, Long>
 
 public interface FeeRateInterface {
 
+    /**
+     * Whether this rate is under [`MIN_FEE_RATE_SAT_PER_VB`]
+     *
+     * Zero, negative, and NaN inputs all convert to a zero rate, so they land here too
+     */
+    fun `isBelowMinimum`(): kotlin.Boolean
+
     fun `satPerVb`(): kotlin.Float
 
     fun `satsPerVbyteString`(): kotlin.String
@@ -5004,6 +5018,24 @@ open class FeeRate: Disposable, AutoCloseable, FeeRateInterface
             UniffiLib.uniffi_cove_types_fn_clone_feerate(handle, status)
         }
     }
+
+
+    /**
+     * Whether this rate is under [`MIN_FEE_RATE_SAT_PER_VB`]
+     *
+     * Zero, negative, and NaN inputs all convert to a zero rate, so they land here too
+     */override fun `isBelowMinimum`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_feerate_is_below_minimum(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
 
     override fun `satPerVb`(): kotlin.Float {
             return FfiConverterFloat.lift(
