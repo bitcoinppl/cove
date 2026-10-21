@@ -951,3 +951,176 @@ fn stale_label_manager_rejects_storage_access() {
         Err(crate::label_manager::LabelManagerError::ManagerClosed)
     ));
 }
+
+mod deletion_and_restore {
+    use std::str::FromStr as _;
+
+    use bip39::Mnemonic;
+    use cove_device::keychain::{Keychain, WalletSecret};
+    use cove_types::network::Network;
+
+    use super::ShutdownDeadlineTier;
+    use crate::{
+        app::delete_wallet_with_tier,
+        database::Database,
+        manager::import_wallet_manager::import_mnemonic_with_target,
+        wallet::{
+            Wallet, WalletAddressType,
+            metadata::{WalletId, WalletMetadata, WalletMode, WalletType},
+        },
+        wallet_secret::WalletSecretExt as _,
+    };
+
+    const MNEMONIC_A: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const MNEMONIC_B: &str =
+        "legal winner thank year wave sausage worth useful legal winner thank yellow";
+    const MNEMONIC_C: &str =
+        "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
+
+    fn mnemonic(words: &str) -> Mnemonic {
+        Mnemonic::from_str(words).unwrap()
+    }
+
+    fn init_signet() {
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
+
+        let database = Database::global();
+        database.global_config.set_selected_network(Network::Signet).unwrap();
+        database.global_config.set_main_mode().unwrap();
+        database.global_config.clear_selected_wallet().unwrap();
+
+        for mode in [WalletMode::Main, WalletMode::Decoy] {
+            database.wallets.save_all_wallets(Network::Signet, mode, Vec::new()).unwrap();
+        }
+    }
+
+    fn wallet_ids(mode: WalletMode) -> Vec<WalletId> {
+        Database::global()
+            .wallets
+            .get_all(Network::Signet, mode)
+            .unwrap()
+            .into_iter()
+            .map(|wallet| wallet.id)
+            .collect()
+    }
+
+    /// Public descriptor export of a key whose private material never enters the app
+    fn public_export(words: &str) -> String {
+        let secret = WalletSecret::Mnemonic(mnemonic(words));
+        let descriptors = secret.into_descriptors(Network::Signet, WalletAddressType::NativeSegwit);
+
+        // the app imports the multipath form that hardware wallets export
+        let external = descriptors.external.extended_descriptor.to_string();
+        let multipath = external.split('#').next().unwrap().replace("/0/*", "/<0;1>/*");
+
+        bdk_wallet::miniscript::Descriptor::<bdk_wallet::miniscript::DescriptorPublicKey>::from_str(
+            &multipath,
+        )
+        .unwrap()
+        .to_string()
+    }
+
+    fn import_watch_wallet(words: &str) -> WalletMetadata {
+        Wallet::try_new_persisted_from_xpub(public_export(words)).unwrap().metadata
+    }
+
+    async fn delete(id: &WalletId) {
+        delete_wallet_with_tier(id.clone(), ShutdownDeadlineTier::Initial, None)
+            .await
+            .expect("wallet deletion succeeds");
+    }
+
+    #[tokio::test]
+    async fn deleting_the_current_hot_wallet_clears_it_and_the_words_restore_it() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        init_signet();
+        let database = Database::global();
+        let keychain = Keychain::global();
+
+        let current =
+            import_mnemonic_with_target(mnemonic(MNEMONIC_A), Network::Signet, WalletMode::Main)
+                .unwrap();
+        let other =
+            import_mnemonic_with_target(mnemonic(MNEMONIC_B), Network::Signet, WalletMode::Main)
+                .unwrap();
+        database.global_config.select_wallet(current.id.clone()).unwrap();
+
+        delete(&current.id).await;
+
+        assert_eq!(wallet_ids(WalletMode::Main), vec![other.id.clone()]);
+        assert_eq!(keychain.get_wallet_secret(&current.id).unwrap(), None);
+        assert_eq!(database.global_config.selected_wallet(), None);
+        assert!(keychain.get_wallet_secret(&other.id).unwrap().is_some());
+
+        // the duplicate-fingerprint check must not see the deleted wallet
+        let restored =
+            import_mnemonic_with_target(mnemonic(MNEMONIC_A), Network::Signet, WalletMode::Main)
+                .unwrap();
+
+        assert_ne!(restored.id, current.id);
+        assert_eq!(restored.master_fingerprint, current.master_fingerprint);
+        assert_eq!(wallet_ids(WalletMode::Main), vec![other.id.clone(), restored.id.clone()]);
+        assert_eq!(database.global_config.selected_wallet(), Some(restored.id.clone()));
+        assert_eq!(
+            keychain.get_wallet_secret(&restored.id).unwrap(),
+            Some(WalletSecret::Mnemonic(mnemonic(MNEMONIC_A)))
+        );
+    }
+
+    #[tokio::test]
+    async fn deleting_a_non_current_watch_wallet_keeps_the_selection_and_the_export_restores_it() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        init_signet();
+        let database = Database::global();
+        let keychain = Keychain::global();
+
+        let watch = import_watch_wallet(MNEMONIC_C);
+        assert_ne!(watch.wallet_type, WalletType::Hot);
+        let current =
+            import_mnemonic_with_target(mnemonic(MNEMONIC_A), Network::Signet, WalletMode::Main)
+                .unwrap();
+        assert_eq!(database.global_config.selected_wallet(), Some(current.id.clone()));
+
+        delete(&watch.id).await;
+
+        assert_eq!(wallet_ids(WalletMode::Main), vec![current.id.clone()]);
+        assert_eq!(database.global_config.selected_wallet(), Some(current.id.clone()));
+        assert_eq!(keychain.get_wallet_xpub(&watch.id).unwrap(), None);
+        assert!(keychain.get_wallet_secret(&current.id).unwrap().is_some());
+
+        let restored = import_watch_wallet(MNEMONIC_C);
+
+        assert_eq!(restored.master_fingerprint, watch.master_fingerprint);
+        assert_eq!(wallet_ids(WalletMode::Main), vec![current.id, restored.id]);
+    }
+
+    #[tokio::test]
+    async fn deleting_the_last_decoy_wallet_leaves_main_alone_and_the_export_restores_it() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        init_signet();
+        let database = Database::global();
+
+        let main =
+            import_mnemonic_with_target(mnemonic(MNEMONIC_A), Network::Signet, WalletMode::Main)
+                .unwrap();
+        database.global_config.set_decoy_mode().unwrap();
+        let decoy = import_watch_wallet(MNEMONIC_C);
+        assert_eq!(wallet_ids(WalletMode::Decoy), vec![decoy.id.clone()]);
+
+        delete(&decoy.id).await;
+
+        assert_eq!(wallet_ids(WalletMode::Decoy), Vec::<WalletId>::new());
+        assert_eq!(wallet_ids(WalletMode::Main), vec![main.id.clone()]);
+        assert_eq!(database.global_config.selected_wallet(), None);
+
+        let restored = import_watch_wallet(MNEMONIC_C);
+        assert_eq!(wallet_ids(WalletMode::Decoy), vec![restored.id]);
+
+        // leaving decoy mode returns to the untouched main selection
+        database.global_config.set_main_mode().unwrap();
+        assert_eq!(database.global_config.selected_wallet(), Some(main.id.clone()));
+        assert_eq!(wallet_ids(WalletMode::Main), vec![main.id]);
+    }
+}

@@ -231,8 +231,9 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
 ]
 coverage = [
-  "agent",
-  "rust:rust/src/database/global_config.rs::forget_wallet_clears_every_matching_selection",
+    "agent",
+    "rust:rust/src/database/global_config.rs::forget_wallet_clears_every_matching_selection",
+    "rust:rust/src/wallet_lifecycle/tests.rs::deleting_the_current_hot_wallet_clears_it_and_the_words_restore_it",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 # selection cleanup is asserted; reselecting a valid wallet and cache eviction are not
@@ -251,7 +252,9 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/hot_wallet/HotWalletImportScreen.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/QrCodeImportScreen.kt",
 ]
-coverage = ["agent"]
+coverage = [
+    "rust:rust/src/wallet_lifecycle/tests.rs::deleting_the_current_hot_wallet_clears_it_and_the_words_restore_it",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -273,8 +276,9 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
 ]
 coverage = [
-  "agent",
-  "rust:rust/src/database/global_config.rs::forget_wallet_clears_every_matching_selection",
+    "agent",
+    "rust:rust/src/database/global_config.rs::forget_wallet_clears_every_matching_selection",
+    "rust:rust/src/wallet_lifecycle/tests.rs::deleting_a_non_current_watch_wallet_keeps_the_selection_and_the_export_restores_it",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 # selection cleanup is asserted; reselecting a valid wallet and cache eviction are not
@@ -293,7 +297,9 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/hot_wallet/HotWalletImportScreen.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/QrCodeImportScreen.kt",
 ]
-coverage = ["agent"]
+coverage = [
+    "rust:rust/src/wallet_lifecycle/tests.rs::deleting_a_non_current_watch_wallet_keeps_the_selection_and_the_export_restores_it",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -314,7 +320,10 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsDangerSection.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
 ]
-coverage = ["agent"]
+coverage = [
+    "agent",
+    "rust:rust/src/wallet_lifecycle/tests.rs::deleting_the_last_decoy_wallet_leaves_main_alone_and_the_export_restores_it",
+]
 # 1.4.0: ios BLOCKED, android PASS
 # last-wallet fallback to onboarding or new wallet is in app.rs select_latest_or_new_wallet
 
@@ -332,7 +341,9 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/hot_wallet/HotWalletImportScreen.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/QrCodeImportScreen.kt",
 ]
-coverage = ["agent"]
+coverage = [
+    "rust:rust/src/wallet_lifecycle/tests.rs::deleting_the_last_decoy_wallet_leaves_main_alone_and_the_export_restores_it",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -346,8 +357,9 @@ paths = [
   "rust/src/database/global_config.rs",
 ]
 coverage = [
-  "agent",
-  "rust:rust/src/database/wallet.rs::wallet_key_strings_cover_every_network_and_mode",
+    "agent",
+    "rust:rust/src/database/wallet.rs::wallet_key_strings_cover_every_network_and_mode",
+    "rust:rust/src/database/wallet.rs::reorder_and_append_in_one_scope_leave_every_other_scope_untouched",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 # separate storage keys per network and mode are asserted; the visible lists are not
@@ -362,8 +374,8 @@ paths = [
   "rust/src/database/wallet.rs",
 ]
 coverage = [
-  "agent",
-  "rust:rust/src/database/wallet.rs::wallet_key_strings_cover_every_network_and_mode",
+    "rust:rust/src/database/wallet.rs::wallet_key_strings_cover_every_network_and_mode",
+    "rust:rust/src/database/wallet.rs::reorder_and_append_in_one_scope_leave_every_other_scope_untouched",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
 # separate storage keys per network and mode are asserted; reorder isolation is not
