@@ -21,6 +21,7 @@
 		C0B000162F00000000000001 /* CustomFeeRateErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */; };
 		C0B000902F00000000000001 /* HardwareImportErrorMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000912F00000000000001 /* HardwareImportErrorMessageTests.swift */; };
 		C0B000922F00000000000001 /* SendFlowHeaderLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000932F00000000000001 /* SendFlowHeaderLayoutTests.swift */; };
+		C0B000982F00000000000001 /* SendFlowBackNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000992F00000000000001 /* SendFlowBackNavigationTests.swift */; };
 		C0B000962F00000000000001 /* AdaptiveToolbarStyleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000972F00000000000001 /* AdaptiveToolbarStyleTests.swift */; };
 		C0B0001B2F10000000000001 /* NavigationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001A2F10000000000001 /* NavigationCoordinatorTests.swift */; };
 		C0B0001C2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */; };
@@ -93,6 +94,7 @@
 		C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomFeeRateErrorTests.swift; sourceTree = "<group>"; };
 		C0B000912F00000000000001 /* HardwareImportErrorMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareImportErrorMessageTests.swift; sourceTree = "<group>"; };
 		C0B000932F00000000000001 /* SendFlowHeaderLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowHeaderLayoutTests.swift; sourceTree = "<group>"; };
+		C0B000992F00000000000001 /* SendFlowBackNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SendFlowBackNavigationTests.swift; sourceTree = "<group>"; };
 		C0B000972F00000000000001 /* AdaptiveToolbarStyleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveToolbarStyleTests.swift; sourceTree = "<group>"; };
 		C0B0001A2F10000000000001 /* NavigationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationCoordinatorTests.swift; sourceTree = "<group>"; };
 		C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotWalletCreateScreenLayoutTests.swift; sourceTree = "<group>"; };
@@ -203,6 +205,7 @@
 				C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */,
 				C0B000912F00000000000001 /* HardwareImportErrorMessageTests.swift */,
 				C0B000932F00000000000001 /* SendFlowHeaderLayoutTests.swift */,
+				C0B000992F00000000000001 /* SendFlowBackNavigationTests.swift */,
 				C0B000972F00000000000001 /* AdaptiveToolbarStyleTests.swift */,
 				C0B0001D2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift */,
 				C0B0001A2F10000000000001 /* NavigationCoordinatorTests.swift */,
@@ -476,6 +479,7 @@
 				C0B000162F00000000000001 /* CustomFeeRateErrorTests.swift in Sources */,
 				C0B000902F00000000000001 /* HardwareImportErrorMessageTests.swift in Sources */,
 				C0B000922F00000000000001 /* SendFlowHeaderLayoutTests.swift in Sources */,
+				C0B000982F00000000000001 /* SendFlowBackNavigationTests.swift in Sources */,
 				C0B000962F00000000000001 /* AdaptiveToolbarStyleTests.swift in Sources */,
 				C0B0001C2F10000000000001 /* HotWalletCreateScreenLayoutTests.swift in Sources */,
 				C0B0001B2F10000000000001 /* NavigationCoordinatorTests.swift in Sources */,
