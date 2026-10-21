@@ -1,7 +1,7 @@
 #!/bin/bash
 # Fake adb for testing uia2-start, uia2-stop and android-launch without a device
 # State lives in $FAKE_ADB: forwards (adb forward --list), ps (device processes), calls.log,
-# and flag files resolve_fail and forward_fail
+# and flag files resolve_fail, forward_fail, query_fail and force_stop_fail
 echo "$*" >>"$FAKE_ADB/calls.log"
 serial="${ANDROID_SERIAL:-}"
 if [ "${1:-}" = "-s" ]; then serial="$2"; shift 2; fi
@@ -11,10 +11,22 @@ case "$1 ${2:-} ${3:-}" in
   "devices  ") printf 'List of devices attached\n%s\tdevice\n' "${serial:-TEST-SERIAL}" ;;
   "forward --list "*) cat "$FAKE_ADB/forwards" ;;
   "forward --remove "*) grep -v " $3 " "$FAKE_ADB/forwards" >"$FAKE_ADB/forwards.new"; mv "$FAKE_ADB/forwards.new" "$FAKE_ADB/forwards" ;;
-  "forward tcp:"*)
+  "forward --no-rebind "*)
     [ -e "$FAKE_ADB/forward_fail" ] && { echo "error: cannot bind listener" >&2; exit 1; }
-    echo "$serial $2 $3" >>"$FAKE_ADB/forwards" ;;
-  "shell ps "*) cat "$FAKE_ADB/ps" 2>/dev/null ;;
+    grep -q " $3 " "$FAKE_ADB/forwards" && { echo "error: cannot rebind existing socket" >&2; exit 1; }
+    echo "$serial $3 $4" >>"$FAKE_ADB/forwards" ;;
+  "shell ps "*)
+    [ -e "$FAKE_ADB/query_fail" ] && { echo "error: device offline" >&2; exit 1; }
+    cat "$FAKE_ADB/ps" 2>/dev/null || true ;;
+  "shell getprop ro.build.version.sdk") echo 33 ;;
+  "shell getprop ro.product.model") echo FakePhone ;;
+  "shell dumpsys power") echo "  mWakefulness=Awake" ;;
+  "shell dumpsys window")
+    [ -e "$FAKE_ADB/query_fail" ] && { echo "error: device offline" >&2; exit 1; }
+    echo "    isKeyguardShowing=false" ;;
+  "shell am force-stop")
+    [ -e "$FAKE_ADB/force_stop_fail" ] && { echo "error: device offline" >&2; exit 1; }
+    : ;;
   "shell dumpsys package") echo "    versionName=10.6.6" ;;
   "shell pm path") echo "package:/data/app/base.apk" ;;
   "shell am instrument") while :; do sleep 1; done ;;
@@ -22,6 +34,6 @@ case "$1 ${2:-} ${3:-}" in
   "shell cmd package")
     [ -e "$FAKE_ADB/resolve_fail" ] && { echo "adb: more than one device/emulator" >&2; exit 1; }
     echo "org.bitcoinppl.cove/.MainActivity" ;;
-  "install "*|"shell am force-stop"|"shell input keyevent") ;;
+  "install "*|"shell input keyevent") ;;
   *) echo "fake adb: unhandled: $*" >&2; exit 1 ;;
 esac

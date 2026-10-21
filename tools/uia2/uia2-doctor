@@ -36,7 +36,9 @@ def run(*cmd, timeout=30):
 
 
 def adb_shell(*args):
-    return run("adb", "-s", SERIAL, "shell", *args)[1]
+    """Return the command's output, or None when adb or the command failed"""
+    rc, out, _ = run("adb", "-s", SERIAL, "shell", *args)
+    return out if rc == 0 else None
 
 
 def check(name, ok, detail, fix=""):
@@ -75,32 +77,45 @@ def main():
     if not checks[-1]["ok"]:
         return report()
 
-    api = adb_shell("getprop", "ro.build.version.sdk").strip()
-    model = adb_shell("getprop", "ro.product.model").strip()
-    check("android", api.isdigit() and int(api) >= 26, "%s, API %s" % (model, api), "the server needs Android 8 (API 26) or newer")
+    api = (adb_shell("getprop", "ro.build.version.sdk") or "").strip()
+    model = (adb_shell("getprop", "ro.product.model") or "").strip()
+    check("android", api.isdigit() and int(api) >= 26, "%s, API %s" % (model or "unknown", api or "unknown"),
+          "the server needs Android 8 (API 26) or newer" if api else "adb could not read the device; check adb devices")
 
-    power = adb_shell("dumpsys", "power")
-    awake = "mWakefulness=Awake" in power
-    keyguard = "isKeyguardShowing=true" in adb_shell("dumpsys", "window")
-    check("screen_unlocked", awake and not keyguard, "awake=%s keyguard=%s" % (awake, keyguard), "wake and unlock the device")
+    # a query that failed says nothing about the device, so it fails the check instead of passing
+    power, window = adb_shell("dumpsys", "power"), adb_shell("dumpsys", "window")
+    if power is None or window is None:
+        check("screen_unlocked", False, "could not query the screen state", "check the device in adb devices")
+    else:
+        awake = "mWakefulness=Awake" in power
+        keyguard = "isKeyguardShowing=true" in window
+        check("screen_unlocked", awake and not keyguard, "awake=%s keyguard=%s" % (awake, keyguard), "wake and unlock the device")
 
     apks_ok = sha256(CFG["UIA2_SERVER_APK"]) == CFG["UIA2_SERVER_SHA256"] and sha256(CFG["UIA2_TEST_APK"]) == CFG["UIA2_TEST_SHA256"]
     check("apks_cached", apks_ok, "v%s in %s" % (CFG["UIA2_SERVER_VERSION"], os.path.dirname(CFG["UIA2_SERVER_APK"])), "run uia2-fetch (uia2-start does it too)")
 
     pkg = CFG["UIA2_SERVER_PKG"]
-    m = re.search(r"versionName=(\S+)", adb_shell("dumpsys", "package", pkg))
+    m = re.search(r"versionName=(\S+)", adb_shell("dumpsys", "package", pkg) or "")
     installed = m.group(1) if m else "none"
-    has_test = "package:" in adb_shell("pm", "path", pkg + ".test")
+    has_test = "package:" in (adb_shell("pm", "path", pkg + ".test") or "")
     check("server_installed", installed == CFG["UIA2_SERVER_VERSION"] and has_test,
           "server %s, test APK %s" % (installed, "present" if has_test else "missing"), "uia2-start installs them")
 
     # Android allows one UiAutomation connection; a running connectedAndroidTest owns it
-    others = [l for l in adb_shell("ps", "-A", "-o", "ARGS").splitlines() if "am instrument" in l.lower() and pkg not in l]
-    check("no_other_instrumentation", not others, "; ".join(others) or "none running",
-          "wait for the other instrumentation to finish; uia2-start refuses while it runs")
+    procs = adb_shell("ps", "-A", "-o", "ARGS")
+    if procs is None:
+        check("no_other_instrumentation", False, "could not list device processes", "check the device in adb devices")
+    else:
+        others = [l for l in procs.splitlines() if "am instrument" in l.lower() and pkg not in l]
+        check("no_other_instrumentation", not others, "; ".join(others) or "none running",
+              "wait for the other instrumentation to finish; uia2-start refuses while it runs")
 
     port = CFG["UIA2_PORT"]
-    owners = [l.split()[0] for l in run("adb", "forward", "--list")[1].splitlines() if len(l.split()) >= 2 and l.split()[1] == "tcp:" + port]
+    rc, fwd, err = run("adb", "forward", "--list")
+    if rc != 0:
+        check("port_free", False, "could not list adb forwards: %s" % err.strip()[:200], "check adb")
+        return report()
+    owners = [l.split()[0] for l in fwd.splitlines() if len(l.split()) >= 2 and l.split()[1] == "tcp:" + port]
     check("port_free", not owners or owners == [SERIAL], "tcp:%s forwards to %s" % (port, owners[0] if owners else "nothing"),
           "use another UIA2_PORT for this device")
 

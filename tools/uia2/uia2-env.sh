@@ -36,6 +36,11 @@ die() { # die ERROR_CODE MESSAGE [extra key=value...]
   exit 1
 }
 
+usage() { # usage MESSAGE: exit 2 like the android-* commands, before any side effect
+  json ok:raw=false error=usage "message=$1"
+  exit 2
+}
+
 # pick the device: ANDROID_SERIAL when set (adb honors it too), else the only attached device
 resolve_serial() {
   if [ -n "${ANDROID_SERIAL:-}" ]; then
@@ -53,4 +58,46 @@ resolve_serial() {
 
 state_dir() {
   echo "${UIA2_STATE:-$UIA2_CACHE/state}/$ANDROID_SERIAL"
+}
+
+# print the serial whose adb forward owns localhost PORT; fields compare literally, since a
+# serial such as [::1]:5555 is not a safe regex
+forward_owner() { # forward_owner FORWARD_LIST PORT
+  awk -v p="tcp:$2" '$2 == p { print $1; exit }' <<<"$1"
+}
+
+# print the local ports forwarded to this device's server, one per line
+server_ports() { # server_ports FORWARD_LIST
+  awk -v s="$ANDROID_SERIAL" -v d="tcp:$UIA2_DEVICE_PORT" '$1 == s && $3 == d { sub(/^tcp:/, "", $2); print $2 }' <<<"$1"
+}
+
+# start time of a process, so a pid reused by another process is not mistaken for ours
+proc_start() {
+  ps -p "$1" -o lstart= 2>/dev/null | sed 's/^ *//; s/ *$//'
+}
+
+# hold a per-device lock so concurrent starts and stops can't interleave their checks,
+# state files and forwards; a uia2-stop run by uia2-start inherits its parent's lock
+lock_device() {
+  [ -n "${UIA2_LOCKED:-}" ] && return 0
+  local lock owner i
+  lock="$(state_dir).lock"
+  mkdir -p "$(dirname "$lock")"
+  for ((i = 0; i < 300; i++)); do
+    if mkdir "$lock" 2>/dev/null; then
+      echo $$ >"$lock/pid"
+      export UIA2_LOCKED="$lock"
+      trap 'rm -rf "$UIA2_LOCKED"' EXIT
+      return 0
+    fi
+
+    # a lock left by a process that died is stale
+    owner="$(cat "$lock/pid" 2>/dev/null)"
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+      rm -rf "$lock"
+      continue
+    fi
+    sleep 0.1
+  done
+  die locked "another uia2-start or uia2-stop for $ANDROID_SERIAL has held $lock for 30 s" "fix=wait for it, or remove the lock if its process is gone"
 }
