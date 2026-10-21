@@ -930,24 +930,29 @@ mod tests {
         crate::test_support::shared_mock_keychain().reset();
         crate::database::test_support::delete_database();
 
+        // the global database handle outlives delete_database, so count relative to the start
+        let wallet_count = || {
+            let SelectedWalletTarget { network, mode } =
+                Database::global().global_config.wallet_target();
+
+            Database::global().wallets.get_all(network, mode).expect("wallets load").len()
+        };
+
+        let starting_count = wallet_count();
         let first = Wallet::try_new_persisted_from_xpub(BIP49_YPUB.to_string())
             .expect("first import succeeds");
+
         assert_eq!(first.metadata.master_fingerprint, None);
 
         let second = Wallet::try_new_persisted_from_xpub(BIP49_YPUB.to_string());
-        let second_id = second.as_ref().ok().map(|wallet| wallet.id.clone());
-        let wallet_count = Database::global()
-            .wallets
-            .get_all(first.network, first.metadata.wallet_mode)
-            .expect("wallets load")
-            .len();
+        let added_count = wallet_count() - starting_count;
 
-        let _ = delete_wallet_specific_data(&first.id);
-        if let Some(second_id) = &second_id {
-            let _ = delete_wallet_specific_data(second_id);
+        crate::wallet::test_support::remove_wallet(&first.id);
+        if let Ok(second) = &second {
+            crate::wallet::test_support::remove_wallet(&second.id);
         }
 
         assert_eq!(second.err(), Some(WalletError::WalletAlreadyExists(first.id)));
-        assert_eq!(wallet_count, 1, "a duplicate wallet was saved");
+        assert_eq!(added_count, 1, "a duplicate wallet was saved");
     }
 }

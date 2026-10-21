@@ -392,10 +392,15 @@ impl Wallet {
 pub(crate) mod test_support {
     use super::*;
 
-    /// Persists a mainnet wallet and selects it, then switches to Testnet4, which has no wallets
+    /// Persists a mainnet wallet with its metadata row and selects it, then switches to
+    /// Testnet4, which has no wallets
     ///
     /// Leaves the stale selection in place, like a cold launch after a network change
     pub(crate) fn select_mainnet_wallet_then_switch_to_empty_network() -> WalletId {
+        let database = Database::global();
+        let global_config = &database.global_config;
+        global_config.set_selected_network(Network::Bitcoin).expect("mainnet selects");
+
         let mnemonic = Mnemonic::from_str("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about").unwrap();
         let wallet = Wallet::try_new_persisted_from_mnemonic_segwit(
             WalletMetadata::preview_new(),
@@ -404,9 +409,17 @@ pub(crate) mod test_support {
         )
         .expect("mainnet wallet persists");
 
-        let global_config = &Database::global().global_config;
+        database.wallets.save_new_wallet_metadata(wallet.metadata.clone()).expect("row saves");
         global_config.select_wallet(wallet.id.clone()).expect("wallet selects");
+
+        // the wallet is real on mainnet, so only the network switch can make it stale
+        let mode = global_config.wallet_mode();
+        let on_mainnet = database.wallets.get(&wallet.id, Network::Bitcoin, mode);
+        assert!(matches!(on_mainnet, Ok(Some(_))), "wallet row exists on mainnet");
+
         global_config.set_selected_network(Network::Testnet4).expect("network switches");
+        let on_testnet = database.wallets.get_all(Network::Testnet4, mode).expect("wallets load");
+        assert!(on_testnet.is_empty(), "testnet4 starts without wallets");
 
         wallet.id
     }
@@ -419,9 +432,15 @@ pub(crate) mod test_support {
         let _ = database.global_config.clear_selected_wallet();
 
         // delete by id resolves against the active target, so it runs after mainnet is restored
+        remove_wallet(id);
+    }
+
+    /// Removes a test wallet's keychain items, wallet files, and metadata row on the active
+    /// target, which tests sharing the process-global database would otherwise see
+    pub(crate) fn remove_wallet(id: &WalletId) {
         crate::keychain::Keychain::global().delete_wallet_items(id);
         let _ = delete_wallet_specific_data(id);
-        let _ = database.wallets.delete(id);
+        let _ = Database::global().wallets.delete(id);
     }
 
     impl Wallet {

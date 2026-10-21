@@ -1603,16 +1603,27 @@ mod tests {
             let txns = act_zero::call!(manager.actor.transactions()).await.expect("transactions");
             txns.first().expect("the funded wallet has a transaction").id()
         };
-        let details = manager
-            .transaction_details(Arc::new(tx_id))
-            .await
-            .expect("transaction details")
-            .details();
+        let details = || async {
+            manager
+                .transaction_details(Arc::new(tx_id))
+                .await
+                .expect("transaction details")
+                .details()
+        };
+
+        // #921 is an edit of an existing label, so save one first and ignore what it sends
+        manager
+            .label_manager()
+            .insert_or_update_labels_for_txn(details().await, "Journey receive".to_string(), None)
+            .expect("first label saves");
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        receiver.drain().for_each(drop);
 
         manager
             .label_manager()
-            .insert_or_update_labels_for_txn(details, "Journey receive 2".to_string(), None)
-            .expect("label saves");
+            .insert_or_update_labels_for_txn(details().await, "Journey receive 2".to_string(), None)
+            .expect("label edit saves");
 
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
         let mut seen = Vec::new();

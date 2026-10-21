@@ -3,7 +3,9 @@ package org.bitcoinppl.cove.flows.SelectedWalletFlow
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
@@ -81,11 +83,12 @@ class LargeFontScaleLayoutTest {
             }
         }
 
+        // an action that already fits counts as reachable, otherwise it must scroll into view
         listOf("Copy Address", "Create New Address").forEach { action ->
-            compose
-                .onNodeWithText(action)
-                .performScrollTo()
-                .assertIsDisplayed()
+            val node = compose.onNodeWithText(action)
+            if (!node.isDisplayed()) node.performScrollTo()
+
+            node.assertIsDisplayed().assertIsEnabled()
         }
     }
 

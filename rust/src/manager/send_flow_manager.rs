@@ -1678,6 +1678,7 @@ mod tests {
             state.unlocked_spendable_sats = Some(1_436_900);
             state.address = Some(Arc::new(Address::preview_new()));
         }
+
         set_selected_fee_total(&manager, 646);
 
         assert!(!manager.validate_amount(true));
