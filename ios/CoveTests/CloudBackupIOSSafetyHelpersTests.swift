@@ -1199,8 +1199,8 @@ extension CloudBackupIOSSafetyHelpersTests {
     }
 }
 
+@MainActor
 extension CloudBackupIOSSafetyHelpersTests {
-    @MainActor
     func testMetadataDeletionImmediatelyFiltersReadersAndStaleUpdates() async throws {
         let settleSleep = MetadataSettleSleepSpy(blockedCalls: [])
         let fixture = makeICloudMetadataFixture(
@@ -1268,7 +1268,6 @@ extension CloudBackupIOSSafetyHelpersTests {
         fixture.index.removeObserver(observerID)
     }
 
-    @MainActor
     func testMetadataDeletionSurvivesSnapshotsThatOmitThePath() async throws {
         let record = metadataRecord(name: "wallet.json", parentPath: "/cloud/namespace")
 
@@ -1300,7 +1299,6 @@ extension CloudBackupIOSSafetyHelpersTests {
         XCTAssertEqual(reuploadedRecords, [record])
     }
 
-    @MainActor
     func testMetadataDeletionCoversDescendantsWithoutMatchingTextPrefix() async throws {
         let fixture = makeICloudMetadataFixture()
         let directoryPath = "/cloud/namespace"
@@ -1327,7 +1325,6 @@ extension CloudBackupIOSSafetyHelpersTests {
         )
     }
 
-    @MainActor
     func testSuccessfulBackupDeleteHidesCurrentAndLegacyMetadataImmediately() async throws {
         for location in backupLocations() {
             let fixture = makeICloudMetadataFixture(settleSleep: { _ in })
@@ -1371,7 +1368,6 @@ extension CloudBackupIOSSafetyHelpersTests {
         }
     }
 
-    @MainActor
     func testBackupDeleteRecordsCoordinatorResolvedURL() async throws {
         let location = try XCTUnwrap(backupLocations().first)
         let redirectedURL = URL(fileURLWithPath: "/provider/\(testNamespace)/wallet-record.json")
@@ -1409,7 +1405,6 @@ extension CloudBackupIOSSafetyHelpersTests {
         XCTAssertEqual(visibleRecords, [])
     }
 
-    @MainActor
     func testBackupDeleteRecordsPartialSuccessBeforeFailure() async throws {
         let deleteStub = CoordinatedDeleteStub(failOnCall: 2)
         let fixture = makeICloudMetadataFixture(
@@ -1443,7 +1438,6 @@ extension CloudBackupIOSSafetyHelpersTests {
         XCTAssertEqual(remainingRecords, [records[1]])
     }
 
-    @MainActor
     func testNamespaceDeleteHidesLocalDescendants() async throws {
         let localFixture = makeICloudMetadataFixture()
         defer { localFixture.removeContainer() }
@@ -1467,7 +1461,6 @@ extension CloudBackupIOSSafetyHelpersTests {
         XCTAssertEqual(visibleRecords, [])
     }
 
-    @MainActor
     func testNamespaceDeleteHidesMetadataFallbackDescendants() async throws {
         let fallbackStub = CoordinatedDeleteStub(removeFiles: false)
         let fallbackFixture = makeICloudMetadataFixture(
