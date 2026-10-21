@@ -56220,6 +56220,17 @@ sealed class SendFlowException: kotlin.Exception() {
             get() = "shortfallSats=${ `shortfallSats` }"
     }
 
+    /**
+     * The amount alone is more than the wallet can spend, before the network fee is known
+     */
+    class AmountExceedsBalance(
+
+        val `excessSats`: kotlin.ULong
+        ) : SendFlowException() {
+        override val message
+            get() = "excessSats=${ `excessSats` }"
+    }
+
     class SendBelowDustLimit(
         ) : SendFlowException() {
         override val message
@@ -56320,19 +56331,22 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
             9 -> SendFlowException.SpendExceedsBalance(
                 FfiConverterULong.read(buf),
                 )
-            10 -> SendFlowException.SendBelowDustLimit()
-            11 -> SendFlowException.UnableToGetFeeRate()
-            12 -> SendFlowException.FeeRateBelowMinimum()
-            13 -> SendFlowException.UnableToBuildTxn(
+            10 -> SendFlowException.AmountExceedsBalance(
+                FfiConverterULong.read(buf),
+                )
+            11 -> SendFlowException.SendBelowDustLimit()
+            12 -> SendFlowException.UnableToGetFeeRate()
+            13 -> SendFlowException.FeeRateBelowMinimum()
+            14 -> SendFlowException.UnableToBuildTxn(
                 FfiConverterString.read(buf),
                 )
-            14 -> SendFlowException.UnableToSaveUnsignedTransaction(
+            15 -> SendFlowException.UnableToSaveUnsignedTransaction(
                 FfiConverterString.read(buf),
                 )
-            15 -> SendFlowException.WalletManager(
+            16 -> SendFlowException.WalletManager(
                 FfiConverterTypeWalletManagerError.read(buf),
                 )
-            16 -> SendFlowException.UnableToGetFeeDetails(
+            17 -> SendFlowException.UnableToGetFeeDetails(
                 FfiConverterString.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
@@ -56382,6 +56396,11 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
                 + FfiConverterULong.allocationSize(value.`shortfallSats`)
+            )
+            is SendFlowException.AmountExceedsBalance -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterULong.allocationSize(value.`excessSats`)
             )
             is SendFlowException.SendBelowDustLimit -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -56462,35 +56481,40 @@ public object FfiConverterTypeSendFlowError : FfiConverterRustBuffer<SendFlowExc
                 FfiConverterULong.write(value.`shortfallSats`, buf)
                 Unit
             }
-            is SendFlowException.SendBelowDustLimit -> {
+            is SendFlowException.AmountExceedsBalance -> {
                 buf.putInt(10)
+                FfiConverterULong.write(value.`excessSats`, buf)
                 Unit
             }
-            is SendFlowException.UnableToGetFeeRate -> {
+            is SendFlowException.SendBelowDustLimit -> {
                 buf.putInt(11)
                 Unit
             }
-            is SendFlowException.FeeRateBelowMinimum -> {
+            is SendFlowException.UnableToGetFeeRate -> {
                 buf.putInt(12)
                 Unit
             }
-            is SendFlowException.UnableToBuildTxn -> {
+            is SendFlowException.FeeRateBelowMinimum -> {
                 buf.putInt(13)
-                FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is SendFlowException.UnableToSaveUnsignedTransaction -> {
+            is SendFlowException.UnableToBuildTxn -> {
                 buf.putInt(14)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is SendFlowException.WalletManager -> {
+            is SendFlowException.UnableToSaveUnsignedTransaction -> {
                 buf.putInt(15)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is SendFlowException.WalletManager -> {
+                buf.putInt(16)
                 FfiConverterTypeWalletManagerError.write(value.v1, buf)
                 Unit
             }
             is SendFlowException.UnableToGetFeeDetails -> {
-                buf.putInt(16)
+                buf.putInt(17)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
