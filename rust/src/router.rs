@@ -7,7 +7,7 @@ pub const WALLET_SELECTION_LOAD_AND_RESET_DELAY_MS: u32 = 250;
 
 use crate::{
     app::FfiApp,
-    database::Database,
+    database::{Database, global_config::SelectedWalletTarget},
     mnemonic::NumberOfBip39Words,
     psbt::Psbt,
     tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
@@ -183,21 +183,34 @@ pub enum TapSignerPinAction {
     Change,
 }
 
+/// The first screen after launch
+///
+/// The selected wallet id is global, so after a network or mode change it can point at a
+/// wallet the active target does not have. Routing there would load a missing wallet
+fn startup_route(database: &Database) -> Route {
+    let new_wallet = Route::NewWallet(NewWalletRoute::default());
+    let Some(selected_wallet) = database.global_config.selected_wallet() else {
+        return new_wallet;
+    };
+
+    let SelectedWalletTarget { network, mode } = database.global_config.wallet_target();
+    if database.wallets.get(&selected_wallet, network, mode).ok().flatten().is_some() {
+        return Route::SelectedWallet(selected_wallet);
+    }
+
+    // a stale selection falls back to the newest wallet on the active network, if any
+    database
+        .wallets()
+        .all_sorted_active()
+        .ok()
+        .and_then(|wallets| wallets.into_iter().next())
+        .map_or(new_wallet, |wallet| Route::SelectedWallet(wallet.id))
+}
+
 impl_default_for!(Router);
 impl Router {
     pub fn new() -> Self {
-        let database = Database::global();
-
-        // when there is a selected wallet, show the selected wallet screen
-        let default_route =
-            if let Some(selected_wallet) = database.global_config().selected_wallet() {
-                Route::SelectedWallet(selected_wallet)
-            } else {
-                // when there are no wallets or no selected wallet, show the new wallet screen
-                Route::NewWallet(NewWalletRoute::default())
-            };
-
-        Self { app: FfiApp::global(), default: default_route, routes: vec![] }
+        Self { app: FfiApp::global(), default: startup_route(&Database::global()), routes: vec![] }
     }
 
     pub fn reset_routes_to(&mut self, route: Route) {

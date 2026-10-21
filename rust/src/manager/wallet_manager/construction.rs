@@ -70,9 +70,21 @@ impl RustWalletManager {
 
         let mut deferred = channel.deferred_sender();
 
+        // a stale id from another network or mode must report as missing before any store opens
+        let exists_on_target = Database::global()
+            .wallets
+            .get(&id, network, mode)
+            .map_err_str(Error::GetSelectedWalletError)?
+            .is_some();
+
+        if !exists_on_target {
+            return Err(Error::WalletDoesNotExist);
+        }
+
         let mut wallet = Wallet::try_load_persisted(id.clone())?;
         wallet.metadata = downgrade_and_notify_if_needed(wallet.metadata, &mut deferred)?;
 
+        // read after loading, which can heal metadata, and after any watch-only downgrade
         let metadata = Database::global()
             .wallets
             .get(&id, network, mode)
