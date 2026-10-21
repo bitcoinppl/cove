@@ -52,18 +52,40 @@ impl IntegrityDowngrade {
     fn apply_to(&self, current: &PersistedCloudBackupState) -> Option<PersistedCloudBackupState> {
         match self {
             Self::Unverified => match current.status() {
-                PersistedCloudBackupStatus::Enabled => {
+                PersistedCloudBackupStatus::Enabled | PersistedCloudBackupStatus::Unverified => {
                     let mut state = current.clone();
                     state.mark_verification_required(state.last_verification_requested_at());
                     Some(state)
                 }
-                PersistedCloudBackupStatus::Unverified => Some(current.clone()),
                 PersistedCloudBackupStatus::PasskeyMissing
                 | PersistedCloudBackupStatus::Disabling
                 | PersistedCloudBackupStatus::Disabled
                 | PersistedCloudBackupStatus::Corrupted => None,
             },
         }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::{
+        DeepVerificationResult, IntegrityDowngrade, PersistedCloudBackupState,
+        apply_persisted_verification_result,
+    };
+
+    pub(crate) fn apply_startup_integrity_downgrade(
+        current: &PersistedCloudBackupState,
+    ) -> Option<PersistedCloudBackupState> {
+        IntegrityDowngrade::Unverified.apply_to(current)
+    }
+
+    pub(crate) fn apply_verification_result(
+        current: &PersistedCloudBackupState,
+        result: &DeepVerificationResult,
+    ) -> PersistedCloudBackupState {
+        let mut updated = current.clone();
+        apply_persisted_verification_result(&mut updated, result, 30);
+        updated
     }
 }
 
@@ -180,46 +202,11 @@ impl RustCloudBackupManager {
 
     pub(crate) fn persist_verification_result(&self, result: &DeepVerificationResult) {
         let verified_at = cove_util::time::unix_timestamp_secs_or_zero();
-        let persisted =
-            self.mutate_persisted_cloud_backup_state("persist verification state", |state| {
-                if matches!(
-                    state.status(),
-                    PersistedCloudBackupStatus::Disabled
-                        | PersistedCloudBackupStatus::Corrupted
-                        | PersistedCloudBackupStatus::Disabling
-                ) {
-                    return false;
-                }
-
-                let previous = state.clone();
-                match result {
-                    DeepVerificationResult::Verified(_) => state.mark_verified_at(verified_at),
-                    DeepVerificationResult::NeedsAttention(report) => {
-                        state.mark_verification_needs_attention(
-                            verified_at,
-                            report.wallets_verified,
-                            PersistedWalletVerificationIssues {
-                                missing: report.wallet_issues.missing,
-                                download_failed: report.wallet_issues.download_failed,
-                                invalid: report.wallet_issues.invalid,
-                                decryption_failed: report.wallet_issues.decryption_failed,
-                                unsupported: report.wallet_issues.unsupported,
-                                unreadable: report.wallet_issues.unreadable,
-                            },
-                        );
-                    }
-                    DeepVerificationResult::PasskeyMissing(_) => state.mark_passkey_missing(),
-                    DeepVerificationResult::UserCancelled(_)
-                    | DeepVerificationResult::Failed(_) => {
-                        state.mark_verification_required(state.last_verification_requested_at());
-                    }
-                    DeepVerificationResult::AwaitingUploadConfirmation(_)
-                    | DeepVerificationResult::PasskeyConfirmed(_)
-                    | DeepVerificationResult::NotEnabled => return false,
-                }
-
-                *state != previous
+        let persisted = self
+            .mutate_persisted_cloud_backup_state("persist verification state", |state| {
+                apply_persisted_verification_result(state, result, verified_at)
             });
+
         if let Err(error) = persisted {
             error!("Failed to persist verification state: {error}");
         }
@@ -230,13 +217,9 @@ impl RustCloudBackupManager {
         let persisted = self.mutate_persisted_cloud_backup_state(
             "mark cloud backup unverified after wallet change",
             |state| {
-                let Some(mut new_state) = IntegrityDowngrade::Unverified.apply_to(state) else {
-                    return false;
-                };
-
-                new_state.mark_verification_required(Some(requested_at));
-                *state = new_state;
-                true
+                let previous = state.clone();
+                state.mark_verification_required_after_wallet_change(Some(requested_at));
+                *state != previous
             },
         );
         if let Err(error) = persisted {
@@ -476,12 +459,61 @@ impl RustCloudBackupManager {
     }
 }
 
+fn apply_persisted_verification_result(
+    state: &mut PersistedCloudBackupState,
+    result: &DeepVerificationResult,
+    verified_at: u64,
+) -> bool {
+    if matches!(
+        state.status(),
+        PersistedCloudBackupStatus::Disabled
+            | PersistedCloudBackupStatus::Corrupted
+            | PersistedCloudBackupStatus::Disabling
+    ) {
+        return false;
+    }
+
+    let previous = state.clone();
+    match result {
+        DeepVerificationResult::Verified(_) => state.mark_verified_at(verified_at),
+        DeepVerificationResult::NeedsAttention(report) => {
+            state.mark_verification_needs_attention(
+                verified_at,
+                report.wallets_verified,
+                PersistedWalletVerificationIssues {
+                    missing: report.wallet_issues.missing,
+                    download_failed: report.wallet_issues.download_failed,
+                    invalid: report.wallet_issues.invalid,
+                    decryption_failed: report.wallet_issues.decryption_failed,
+                    unsupported: report.wallet_issues.unsupported,
+                    unreadable: report.wallet_issues.unreadable,
+                },
+            );
+        }
+
+        DeepVerificationResult::PasskeyMissing(_) => state.mark_passkey_missing(),
+
+        // cancellation does not provide new evidence about backup integrity
+        DeepVerificationResult::UserCancelled(_) => return false,
+
+        DeepVerificationResult::Failed(_) => {
+            state.mark_verification_required(state.last_verification_requested_at());
+        }
+
+        DeepVerificationResult::AwaitingUploadConfirmation(_)
+        | DeepVerificationResult::PasskeyConfirmed(_)
+        | DeepVerificationResult::NotEnabled => return false,
+    }
+
+    *state != previous
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::database::cloud_backup::{
         PersistedBackupSyncState, PersistedBackupVerificationState, PersistedConfiguredCloudBackup,
-        PersistedPasskeyState,
+        PersistedPasskeyState, PersistedVerificationRequirement,
     };
 
     fn configured_state(
@@ -519,6 +551,7 @@ mod tests {
             configured_state(
                 PersistedPasskeyState::Available,
                 PersistedBackupVerificationState::Required {
+                    reason: PersistedVerificationRequirement::IntegrityIssue,
                     last_verified_at: Some(21),
                     requested_at: None,
                     dismissed_at: None,

@@ -93,5 +93,6 @@ pub(crate) use payload::{
     decode_cloud_labels_jsonl, prepare_wallet_backup, wallet_metadata_change_requires_upload,
 };
 pub(crate) use restore::{
-    WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome, WalletRestoreSession,
+    CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
+    WalletRestoreSession,
 };

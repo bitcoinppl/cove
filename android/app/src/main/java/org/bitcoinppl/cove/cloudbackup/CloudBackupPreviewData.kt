@@ -119,6 +119,7 @@ private fun cloudBackupPreviewState(): CloudBackupState {
                             updatedAt = 1_779_931_020UL,
                         ),
                     ),
+                    incomplete = false,
                 ),
             cloudOnlyOperation = CloudOnlyOperation.Idle,
             otherBackupsOperation = OtherBackupsOperation.Idle,

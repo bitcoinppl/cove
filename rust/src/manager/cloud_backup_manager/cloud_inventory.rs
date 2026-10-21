@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use super::wallets::RemoteWalletBackupSummary;
 use super::{
-    CloudBackupDetail, CloudBackupError, CloudBackupStore, CloudBackupWalletItem,
-    CloudBackupWalletStatus,
+    CloudBackupDetail, CloudBackupError, CloudBackupListedDetail, CloudBackupStore,
+    CloudBackupWalletItem, CloudBackupWalletStatus,
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
@@ -90,7 +90,7 @@ impl CloudWalletInventory {
             .collect()
     }
 
-    pub(crate) fn build_detail(&self) -> CloudBackupDetail {
+    pub(crate) fn build_detail(&self) -> CloudBackupListedDetail {
         let local_record_ids: HashSet<_> =
             self.local_wallets.iter().map(|wallet| wallet.record_id.clone()).collect();
 
@@ -107,13 +107,23 @@ impl CloudWalletInventory {
             }
         }
 
-        let cloud_only_count = self
+        let cloud_only_record_ids: HashSet<_> = self
             .cloud_wallet_record_ids
             .iter()
             .filter(|record_id| !local_record_ids.contains(*record_id))
-            .count() as u32;
+            .cloned()
+            .collect();
+        let cloud_only_count = cloud_only_record_ids.len() as u32;
 
-        CloudBackupDetail { last_sync: self.last_sync, up_to_date, needs_sync, cloud_only_count }
+        CloudBackupListedDetail {
+            detail: CloudBackupDetail {
+                last_sync: self.last_sync,
+                up_to_date,
+                needs_sync,
+                cloud_only_count,
+            },
+            cloud_only_record_ids,
+        }
     }
 
     pub(crate) fn has_unknown_remote_wallets(&self) -> bool {
@@ -222,7 +232,9 @@ impl CloudWalletInventory {
 fn wallet_item_bucket(item: &CloudBackupWalletItem) -> Option<WalletItemBucket> {
     match item.sync_status {
         CloudBackupWalletStatus::Confirmed => Some(WalletItemBucket::UpToDate),
-        CloudBackupWalletStatus::DeletedFromDevice => None,
+        CloudBackupWalletStatus::DeletedFromDevice | CloudBackupWalletStatus::AlreadyOnDevice => {
+            None
+        }
         CloudBackupWalletStatus::Dirty
         | CloudBackupWalletStatus::Uploading
         | CloudBackupWalletStatus::UploadedPendingConfirmation
@@ -604,7 +616,7 @@ mod tests {
 
         assert!(upload_candidates.is_empty());
 
-        let detail = inventory.build_detail();
+        let detail = inventory.build_detail().detail;
 
         assert_eq!(detail.needs_sync.len(), 2);
         assert!(detail.needs_sync.iter().any(|item| {
@@ -644,7 +656,7 @@ mod tests {
         );
         assert!(inventory.upload_candidate_wallets().is_empty());
 
-        let detail = inventory.build_detail();
+        let detail = inventory.build_detail().detail;
 
         assert_eq!(detail.needs_sync.len(), 1);
         assert_eq!(detail.needs_sync[0].record_id, wallet.record_id);

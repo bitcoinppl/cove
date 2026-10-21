@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 use super::cloud_inventory::RemoteWalletTruth;
 use super::wallets::{WalletBackupLookup, WalletBackupReader};
 use super::{
-    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupDetail, CloudBackupError,
+    BlockingCloudStep, CLOUD_BACKUP_IO_CONCURRENCY, CloudBackupError, CloudBackupListedDetail,
     CloudBackupStore, RustCloudBackupManager, blocking_cloud_error,
 };
 use crate::database::Database;
@@ -18,7 +18,7 @@ impl RustCloudBackupManager {
         &self,
         wallet_record_ids: &[String],
         remote_wallet_truth: RemoteWalletTruth,
-    ) -> Result<CloudBackupDetail, CloudBackupError> {
+    ) -> Result<CloudBackupListedDetail, CloudBackupError> {
         Ok(super::cloud_inventory::CloudWalletInventory::load_with_remote_truth(
             wallet_record_ids,
             remote_wallet_truth,

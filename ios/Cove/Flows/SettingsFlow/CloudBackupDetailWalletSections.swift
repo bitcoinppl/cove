@@ -165,6 +165,7 @@ private struct StatusBadge: View {
         case .confirmed: .statusSuccess
         case .failed: .statusError
         case .deletedFromDevice, .unsupportedVersion: .statusWarning
+        case .alreadyOnDevice: .statusInfo
         case .remoteStateUnknown: .secondary
         }
     }
@@ -189,6 +190,7 @@ private extension CloudBackupWalletStatus {
         case .confirmed: "Confirmed"
         case .failed: "Failed"
         case .deletedFromDevice: "Not on device"
+        case .alreadyOnDevice: "Already on this device"
         case .unsupportedVersion: "Unsupported, requires a newer version of Cove"
         case .remoteStateUnknown: "Unknown"
         }

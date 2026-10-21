@@ -44286,6 +44286,11 @@ enum class CloudBackupWalletStatus {
     CONFIRMED,
     FAILED,
     DELETED_FROM_DEVICE,
+    /**
+     * Cloud-only record whose wallet already exists on this device under another record ID,
+     * so it can be deleted but not restored
+     */
+    ALREADY_ON_DEVICE,
     UNSUPPORTED_VERSION,
     REMOTE_STATE_UNKNOWN;
 
@@ -44451,7 +44456,11 @@ sealed class CloudOnlyState {
 
 
     data class Loaded(
-        val `wallets`: List<org.bitcoinppl.cove_core.CloudBackupWalletItem>) : CloudOnlyState()
+        val `wallets`: List<org.bitcoinppl.cove_core.CloudBackupWalletItem>,
+        /**
+         * Some listed backups could not be read, so `wallets` may be missing cloud-only wallets
+         */
+        val `incomplete`: kotlin.Boolean) : CloudOnlyState()
 
     {
 
@@ -44488,6 +44497,7 @@ public object FfiConverterTypeCloudOnlyState : FfiConverterRustBuffer<CloudOnlyS
             2 -> CloudOnlyState.Loading
             3 -> CloudOnlyState.Loaded(
                 FfiConverterSequenceTypeCloudBackupWalletItem.read(buf),
+                FfiConverterBoolean.read(buf),
                 )
             4 -> CloudOnlyState.Failed(
                 FfiConverterString.read(buf),
@@ -44514,6 +44524,7 @@ public object FfiConverterTypeCloudOnlyState : FfiConverterRustBuffer<CloudOnlyS
             (
                 4UL
                 + FfiConverterSequenceTypeCloudBackupWalletItem.allocationSize(value.`wallets`)
+                + FfiConverterBoolean.allocationSize(value.`incomplete`)
             )
         }
         is CloudOnlyState.Failed -> {
@@ -44538,6 +44549,7 @@ public object FfiConverterTypeCloudOnlyState : FfiConverterRustBuffer<CloudOnlyS
             is CloudOnlyState.Loaded -> {
                 buf.putInt(3)
                 FfiConverterSequenceTypeCloudBackupWalletItem.write(value.`wallets`, buf)
+                FfiConverterBoolean.write(value.`incomplete`, buf)
                 Unit
             }
             is CloudOnlyState.Failed -> {

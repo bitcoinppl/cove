@@ -18,7 +18,6 @@ impl CloudBackupSupervisor {
     pub(crate) fn reconcile_restore_all_after_cloud_only_fetch(
         &self,
         manager: &RustCloudBackupManager,
-        eligible_count: usize,
     ) {
         if self.active_operation.is_restore_all()
             || !restore_all_marker_matches_active_namespace(manager)
@@ -26,7 +25,10 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        if eligible_count != 0 {
+        // only a loaded, complete and current cache proves nothing is left, anything else keeps
+        // the marker so a later fetch can decide
+        if manager.restore_all_proven_eligible_wallets().is_none_or(|eligible| !eligible.is_empty())
+        {
             manager.apply_restore_all_retry_required();
             return;
         }
@@ -45,7 +47,8 @@ impl CloudBackupSupervisor {
     pub(crate) fn begin_restore_all_operation(&mut self, retry: bool) {
         let Some(manager) = self.manager() else { return };
         let addr = self.addr();
-        let frozen_wallets = manager.restore_all_eligible_wallets();
+        let Some(frozen_wallets) = manager.restore_all_eligible_wallets() else { return };
+        let listing_generation = manager.state.read().cloud_only_listing_generation();
         let frozen_count = frozen_wallets.len() as u32;
         let projected_state = manager.projected_restore_all_state();
         let can_start = match (retry, projected_state) {
@@ -84,7 +87,8 @@ impl CloudBackupSupervisor {
         manager.apply_restore_all_started(claim, frozen_count);
 
         addr.send_fut_with(move |addr| async move {
-            let result = manager.prepare_restore_all_cloud_wallets(frozen_wallets).await;
+            let result =
+                manager.prepare_restore_all_cloud_wallets(frozen_wallets, listing_generation).await;
             send!(addr.complete_restore_all_preparation(claim, result));
         });
     }
@@ -136,7 +140,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        let mut prepared = match result {
+        let prepared = match result {
             Ok(prepared) => prepared,
             Err(error) => {
                 self.finish_restore_all_retry_required(&manager, claim, error);
@@ -144,19 +148,21 @@ impl CloudBackupSupervisor {
             }
         };
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(
-            prepared.authoritative_wallets().to_vec(),
+            prepared.authoritative_fetch().clone(),
         ));
 
+        // listed wallets whose downloads failed leave the queue empty without restoring anything,
+        // so an empty queue goes through the same proof as a finished one
         let ordered_queue = prepared.ordered_queue().to_vec();
         if ordered_queue.is_empty() {
-            self.finish_restore_all_clean(&manager, claim);
+            self.finish_restore_all_from_cache(manager, claim);
             return Produces::ok(());
         }
 
         manager.apply_restore_all_started(claim, ordered_queue.len() as u32);
         let addr = self.addr.clone();
         addr.send_fut_with(move |addr| async move {
-            run_restore_all_queue(addr, manager, claim, cancellation, &mut prepared, ordered_queue)
+            run_restore_all_queue(addr, manager, claim, cancellation, &prepared, ordered_queue)
                 .await;
         });
 
@@ -187,7 +193,8 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         completed: u32,
         wallet: CloudBackupWalletItem,
-        result: Result<WalletRestoreOutcome, CloudBackupError>,
+        listing_generation: u64,
+        result: Result<CloudOnlyRestoreOutcome, CloudBackupError>,
     ) -> ActorResult<bool> {
         if self.active_operation.restore_all(claim).is_none() {
             return Produces::ok(false);
@@ -198,7 +205,8 @@ impl CloudBackupSupervisor {
         };
 
         match result {
-            Ok(WalletRestoreOutcome::Restored { labels_warning }) => {
+            Ok(CloudOnlyRestoreOutcome::Restored { labels_warning }) => {
+                self.note_restore_all_committed_local_wallet(claim);
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::Restored {
                         record_id: wallet.record_id,
@@ -207,10 +215,21 @@ impl CloudBackupSupervisor {
                 );
                 manager.refresh_sync_health();
             }
-            Ok(WalletRestoreOutcome::SkippedDuplicate) => {
+            Ok(CloudOnlyRestoreOutcome::SecretAdded { .. }) => {
+                self.note_restore_all_committed_local_wallet(claim);
                 manager.apply_cloud_only_wallet_outcome(
-                    CloudBackupCloudOnlyWalletOutcome::SkippedDuplicate {
+                    CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
                         record_id: wallet.record_id,
+                        listing_generation,
+                    },
+                );
+                manager.refresh_sync_health();
+            }
+            Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice) => {
+                manager.apply_cloud_only_wallet_outcome(
+                    CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
+                        record_id: wallet.record_id,
+                        listing_generation,
                     },
                 );
                 manager.refresh_sync_health();
@@ -244,7 +263,7 @@ impl CloudBackupSupervisor {
         if self.detail_workflow.is_latest_result(detail_claim)
             && let Some(result) = result
         {
-            apply_cloud_only_operation_refresh_detail_result(&manager, &result);
+            apply_refresh_detail_result(&manager, &result);
             if let CloudBackupDetailResult::AccessError(error) = result
                 && restore_all_must_stop(&error)
             {
@@ -303,12 +322,26 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        if manager.restore_all_eligible_wallets().is_empty() {
-            self.finish_restore_all_clean(&manager, claim);
-        } else {
-            self.finish_restore_all_retry_remaining(&manager, claim);
-        }
+        self.finish_restore_all_from_cache(manager, claim);
         Produces::ok(())
+    }
+
+    /// Finishes a run clean only when the cloud-only cache proves nothing is left to restore
+    fn finish_restore_all_from_cache(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) {
+        // an unloaded, incomplete or outdated cache is unknown rather than empty, so the marker stays
+        match manager.restore_all_proven_eligible_wallets() {
+            Some(eligible) if eligible.is_empty() => self.finish_restore_all_clean(&manager, claim),
+            Some(_) => self.finish_restore_all_retry_remaining(&manager, claim),
+            None => {
+                self.finish_restore_all_retry_remaining(&manager, claim);
+                // a reset already asked for a fetch, this covers a cache left in `Failed`
+                self.begin_cloud_only_fetch_if_needed(manager);
+            }
+        }
     }
 
     fn finish_restore_all_clean(
@@ -345,14 +378,34 @@ impl CloudBackupSupervisor {
         self.finish_restore_all_claim(manager, claim, true);
     }
 
+    /// Defers reclassifying cloud-only rows to the end of the run, so the active batch is not
+    /// reset after every restored wallet
+    fn note_restore_all_committed_local_wallet(
+        &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) {
+        if let Some(run) = self.active_operation.restore_all_mut(claim) {
+            run.committed_local_wallet = true;
+        }
+    }
+
     fn finish_restore_all_claim(
         &mut self,
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
         retry_remaining: bool,
     ) {
+        let committed_local_wallet =
+            self.active_operation.restore_all(claim).is_some_and(|run| run.committed_local_wallet);
+
         self.active_operation.clear();
         manager.finish_restore_all_run(claim, retry_remaining);
+
+        // a restored wallet can turn other listed records into copies of it, which matching record
+        // IDs cannot show, so the rows are read again
+        if committed_local_wallet {
+            manager.apply_local_wallets_changed();
+        }
     }
 }
 
@@ -361,7 +414,7 @@ async fn run_restore_all_queue(
     manager: Arc<RustCloudBackupManager>,
     claim: CloudBackupExclusiveOperationClaim,
     cancellation: Arc<AtomicBool>,
-    prepared: &mut CloudBackupPreparedRestoreAll,
+    prepared: &CloudBackupPreparedRestoreAll,
     ordered_queue: Vec<CloudBackupWalletItem>,
 ) {
     let mut completed = 0_u32;
@@ -375,7 +428,11 @@ async fn run_restore_all_queue(
         else {
             return;
         };
+
+        // read before the restore reads the local wallets, so a later change can discard its result
+        let listing_generation = manager.state.read().cloud_only_listing_generation();
         let result = prepared.restore_record(&wallet.record_id).await;
+        manager.handle_cloud_only_restore_committed(&result);
         completed = completed.saturating_add(1);
         let result = match result {
             Err(error) if restore_all_must_stop(&error) => {
@@ -386,8 +443,14 @@ async fn run_restore_all_queue(
         };
         let restored = result.is_ok();
 
-        let Ok(true) =
-            call!(addr.complete_restore_all_record(claim, completed, wallet, result)).await
+        let Ok(true) = call!(addr.complete_restore_all_record(
+            claim,
+            completed,
+            wallet,
+            listing_generation,
+            result
+        ))
+        .await
         else {
             return;
         };

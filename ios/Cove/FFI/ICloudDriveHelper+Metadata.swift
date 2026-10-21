@@ -163,6 +163,8 @@ enum ICloudMetadataIndexError: Error, Equatable {
     case timedOut
 }
 
+typealias ICloudMetadataSettleSleep = @MainActor @Sendable (TimeInterval) async throws -> Void
+
 @MainActor
 final class ICloudMetadataIndex {
     static let shared = ICloudMetadataIndex(source: FoundationICloudMetadataQuerySource())
@@ -185,15 +187,39 @@ final class ICloudMetadataIndex {
     }
 
     private let source: ICloudMetadataQuerySource
+    private let settleSleep: ICloudMetadataSettleSleep
+    // bounds how long a deletion hides records the query has not yet confirmed gone
+    private static let deletionTombstoneMaxAge: TimeInterval = 60
     private var phase = Phase.idle
-    private var records: [ICloudMetadataRecord] = []
+    // latest query snapshot; reads go through `records` so tombstones expire without a new event
+    private var queryRecords: [ICloudMetadataRecord] = []
+    private var deletionTombstones: [String: Date] = [:]
     private var generation: UInt64 = 0
+    // quiet interval observed for the current generation; `apply` resets it when records change
+    private var settledInterval: TimeInterval?
     private var snapshotWaiters: [UUID: SnapshotWaiter] = [:]
     private var itemWaiters: [UUID: ItemWaiter] = [:]
     private var observers: [UUID: @MainActor @Sendable () -> Void] = [:]
 
-    init(source: ICloudMetadataQuerySource) {
+    init(
+        source: ICloudMetadataQuerySource,
+        settleSleep: @escaping ICloudMetadataSettleSleep = { duration in
+            try await Task.sleep(for: .seconds(duration))
+        }
+    ) {
         self.source = source
+        self.settleSleep = settleSleep
+    }
+
+    func markDeleted(resolvedPaths: [String]) {
+        let recordedAt = Date()
+        for path in resolvedPaths {
+            deletionTombstones[path] = recordedAt
+        }
+    }
+
+    func clearDeletion(resolvedPath: String) {
+        deletionTombstones.removeValue(forKey: resolvedPath)
     }
 
     func currentOrInitialRecords(timeout: TimeInterval) async throws -> [ICloudMetadataRecord] {
@@ -215,15 +241,27 @@ final class ICloudMetadataIndex {
         let deadline = Date().addingTimeInterval(timeout)
         _ = try await currentOrInitialRecords(timeout: timeout)
 
+        try Task.checkCancellation()
+        guard deadline.timeIntervalSinceNow > 0 else {
+            throw ICloudMetadataIndexError.timedOut
+        }
+
+        if let settledInterval, settledInterval >= settleInterval {
+            return records
+        }
+
         while true {
             try Task.checkCancellation()
             let observedGeneration = generation
             let remaining = deadline.timeIntervalSinceNow
             guard remaining > 0 else { throw ICloudMetadataIndexError.timedOut }
 
-            try await Task.sleep(for: .seconds(min(settleInterval, remaining)))
+            let quietInterval = min(settleInterval, remaining)
+            try await settleSleep(quietInterval)
+            try Task.checkCancellation()
             guard generation == observedGeneration else { continue }
 
+            settledInterval = max(settledInterval ?? 0, quietInterval)
             return records
         }
     }
@@ -333,19 +371,52 @@ final class ICloudMetadataIndex {
     private func apply(_ event: ICloudMetadataQueryEvent) {
         switch event {
         case let .finishedGathering(records):
-            self.records = records
             phase = .live
+            queryRecords = records
+            pruneTombstones()
             resumeSnapshotWaiters()
         case let .updated(records):
-            self.records = records
+            queryRecords = records
+            pruneTombstones()
         }
 
         generation &+= 1
+        settledInterval = nil
         resumeMatchingItemWaiters()
 
         for observer in observers.values {
             observer()
         }
+    }
+
+    private var records: [ICloudMetadataRecord] {
+        let hiddenPaths = activeTombstonePaths(at: Date())
+        guard !hiddenPaths.isEmpty else { return queryRecords }
+
+        return queryRecords.filter { record in
+            !hiddenPaths.contains { path in Self.covers(path: path, record: record) }
+        }
+    }
+
+    private func activeTombstonePaths(at currentTime: Date) -> [String] {
+        deletionTombstones.compactMap { path, recordedAt in
+            currentTime.timeIntervalSince(recordedAt) < Self.deletionTombstoneMaxAge ? path : nil
+        }
+    }
+
+    /// Drops expired tombstones
+    ///
+    /// A snapshot that omits the path is not proof of deletion, since a cold-start gather can be
+    /// empty while the files still exist, so only age or a later upload releases a tombstone
+    private func pruneTombstones() {
+        guard !deletionTombstones.isEmpty else { return }
+
+        let activePaths = activeTombstonePaths(at: Date())
+        deletionTombstones = deletionTombstones.filter { path, _ in activePaths.contains(path) }
+    }
+
+    private static func covers(path: String, record: ICloudMetadataRecord) -> Bool {
+        record.resolvedPath == path || record.resolvedPath.hasPrefix(path + "/")
     }
 
     private func waitForInitialSnapshot(timeout: TimeInterval) async throws -> [ICloudMetadataRecord] {
@@ -476,6 +547,19 @@ final class SyncHealthObserver: @unchecked Sendable {
 }
 
 extension ICloudDriveHelper {
+    /// Records successful deletes in the index; the main-actor hop is not a cancellation point,
+    /// so a cancelled delete task still records its partial successes
+    func recordMetadataDeletions(of urls: [URL]) async {
+        let resolvedPaths = urls.map { Self.resolvedPath($0.path) }
+        guard !resolvedPaths.isEmpty else { return }
+
+        await metadataIndexProvider().markDeleted(resolvedPaths: resolvedPaths)
+    }
+
+    func clearMetadataDeletion(of url: URL) async {
+        await metadataIndexProvider().clearDeletion(resolvedPath: Self.resolvedPath(url.path))
+    }
+
     func makeSyncHealthObserver(
         onChange: @escaping @Sendable () -> Void
     ) -> SyncHealthObserver {

@@ -1,14 +1,26 @@
 use cove_device::cloud_storage::CloudStorageClient;
 
 use super::*;
-use crate::manager::cloud_backup_manager::CloudOnlyState;
+use crate::manager::cloud_backup_manager::{
+    CloudOnlyFetch, CloudOnlyFetchApplication, CloudOnlyState,
+};
 
 impl CloudBackupSupervisor {
-    pub(crate) fn begin_background_cloud_only_fetch_if_needed(
+    /// Starts a fetch when the cache is unloaded and the detail inventory can say what to fetch
+    pub async fn ensure_cloud_only_fetch(&mut self) -> ActorResult<()> {
+        if let Some(manager) = self.manager() {
+            self.begin_cloud_only_fetch_if_needed(manager);
+        }
+
+        Produces::ok(())
+    }
+
+    pub(crate) fn begin_cloud_only_fetch_if_needed(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
     ) {
         if self.active_cloud_only_fetch_request.is_some()
+            || !manager.detail_inventory_is_ready()
             || !matches!(
                 manager.state.read().cloud_only(),
                 CloudOnlyState::NotFetched | CloudOnlyState::Failed { .. }
@@ -28,10 +40,13 @@ impl CloudBackupSupervisor {
     ) {
         let request_id = self.next_request_id();
         self.active_cloud_only_fetch_request = Some(request_id);
+        // read before the fetch is spawned so a listing applied while it runs makes it stale
+        let listing_generation = manager.state.read().cloud_only_listing_generation();
         manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Started);
 
         self.addr.send_fut_with(move |addr| async move {
-            let result = manager.do_fetch_cloud_only_wallets_with_client(cloud).await;
+            let result =
+                manager.do_fetch_cloud_only_wallets_with_client(cloud, listing_generation).await;
             send!(addr.complete_cloud_only_fetch_request(request_id, result));
         });
     }
@@ -48,9 +63,12 @@ impl CloudBackupSupervisor {
         manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Started {
             record_id: record_id.clone(),
         });
+
+        // read before the restore reads the local wallets, so a later change can discard its result
+        let listing_generation = manager.state.read().cloud_only_listing_generation();
         addr.send_fut_with(move |addr| async move {
             let result = manager.do_restore_cloud_wallet(&record_id).await;
-            send!(addr.complete_restore_cloud_wallet(claim, record_id, result));
+            send!(addr.complete_restore_cloud_wallet(claim, record_id, listing_generation, result));
         });
     }
 
@@ -75,7 +93,7 @@ impl CloudBackupSupervisor {
     pub async fn complete_cloud_only_fetch_request(
         &mut self,
         request_id: u64,
-        result: Result<Vec<CloudBackupWalletItem>, CloudBackupError>,
+        result: Result<CloudOnlyFetch, CloudBackupError>,
     ) -> ActorResult<()> {
         if self.active_cloud_only_fetch_request != Some(request_id) {
             return Produces::ok(());
@@ -86,17 +104,14 @@ impl CloudBackupSupervisor {
         };
 
         match result {
-            Ok(items) => {
-                let eligible_count = items
-                    .iter()
-                    .filter(|wallet| {
-                        wallet.sync_status == CloudBackupWalletStatus::DeletedFromDevice
-                    })
-                    .count();
-                manager.apply_cloud_only_fetch_outcome(CloudBackupCloudOnlyFetchOutcome::Loaded(
-                    items,
-                ));
-                self.reconcile_restore_all_after_cloud_only_fetch(&manager, eligible_count);
+            Ok(fetch) => {
+                // a discarded fetch already asked for its replacement, and its rows prove nothing
+                let application = manager.apply_cloud_only_fetch_outcome(
+                    CloudBackupCloudOnlyFetchOutcome::Loaded(fetch),
+                );
+                if application == CloudOnlyFetchApplication::Applied {
+                    self.reconcile_restore_all_after_cloud_only_fetch(&manager);
+                }
             }
             Err(error) => {
                 error!("Failed to fetch cloud-only wallets: {error}");
@@ -180,38 +195,35 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
         record_id: String,
-        result: Result<WalletRestoreOutcome, CloudBackupError>,
+        listing_generation: u64,
+        result: Result<CloudOnlyRestoreOutcome, CloudBackupError>,
     ) -> ActorResult<()> {
         let Some(manager) = self.current(claim) else {
             return Produces::ok(());
         };
 
-        match result {
-            Ok(WalletRestoreOutcome::Restored { labels_warning }) => {
-                manager.apply_cloud_only_wallet_outcome(
-                    CloudBackupCloudOnlyWalletOutcome::Restored {
-                        record_id,
-                        warning: labels_warning.map(cloud_only_restore_warning),
-                    },
-                );
-                manager.refresh_sync_health();
-                let detail_claim = self.detail_workflow.start_operation_result();
-                self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.refresh_cloud_backup_detail().await;
-                    send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
-                });
-            }
-            Ok(WalletRestoreOutcome::SkippedDuplicate) => {
-                manager.apply_cloud_only_wallet_outcome(
-                    CloudBackupCloudOnlyWalletOutcome::SkippedDuplicate { record_id },
-                );
-                manager.refresh_sync_health();
-                let detail_claim = self.detail_workflow.start_operation_result();
-                self.addr.send_fut_with(move |addr| async move {
-                    let result = manager.refresh_cloud_backup_detail().await;
-                    send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
-                });
-            }
+        let (outcome, committed_local_wallet) = match result {
+            Ok(CloudOnlyRestoreOutcome::Restored { labels_warning }) => (
+                CloudBackupCloudOnlyWalletOutcome::Restored {
+                    record_id,
+                    warning: labels_warning.map(cloud_only_restore_warning),
+                },
+                true,
+            ),
+            Ok(CloudOnlyRestoreOutcome::SecretAdded { .. }) => (
+                CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
+                    record_id,
+                    listing_generation,
+                },
+                true,
+            ),
+            Ok(CloudOnlyRestoreOutcome::AlreadyOnDevice) => (
+                CloudBackupCloudOnlyWalletOutcome::AlreadyOnDevice {
+                    record_id,
+                    listing_generation,
+                },
+                false,
+            ),
             Err(error) => {
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::RestoreFailed {
@@ -221,8 +233,25 @@ impl CloudBackupSupervisor {
                 );
                 self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
+
+                return Produces::ok(());
             }
+        };
+
+        manager.apply_cloud_only_wallet_outcome(outcome);
+
+        // a restored wallet can turn other listed records into copies of it, which matching record
+        // IDs cannot show, so the rows are read again
+        if committed_local_wallet {
+            manager.apply_local_wallets_changed();
         }
+
+        manager.refresh_sync_health();
+        let detail_claim = self.detail_workflow.start_operation_result();
+        self.addr.send_fut_with(move |addr| async move {
+            let result = manager.refresh_cloud_backup_detail().await;
+            send!(addr.complete_operation_refresh_detail(claim, detail_claim, result));
+        });
 
         Produces::ok(())
     }

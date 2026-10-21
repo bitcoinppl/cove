@@ -6,6 +6,7 @@ pub(crate) mod deletion;
 pub mod ffi;
 pub mod fingerprint;
 pub mod metadata;
+pub(crate) mod secret_upgrade;
 
 use crate::database::{global_config::SelectedWalletTarget, wallet_data::WalletDataDb};
 use std::{str::FromStr as _, sync::Arc};
