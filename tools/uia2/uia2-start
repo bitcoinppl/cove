@@ -20,6 +20,10 @@ if $dry; then
   exit 0
 fi
 
+# a bad timeout must fail here, before anything starts on the device
+timeout="${UIA2_START_TIMEOUT:-60}"
+[[ "$timeout" =~ ^[1-9][0-9]*$ ]] || die invalid_timeout "UIA2_START_TIMEOUT must be a positive whole number of seconds, not '$timeout'"
+
 command -v adb >/dev/null || die missing_adb "adb not found" "fix=add the Android SDK platform-tools to PATH"
 resolve_serial
 STATE="$(state_dir)"
@@ -34,10 +38,11 @@ if server_ports "$forwards" | grep -qx "$UIA2_PORT" && curl -sf -m 2 "$UIA2_BASE
   exit 0
 fi
 
-# another device's forward on this port would be silently rebound by adb forward
-owner="$(forward_owner "$forwards" "$UIA2_PORT")"
-if [ -n "$owner" ] && [ "$owner" != "$ANDROID_SERIAL" ]; then
-  die port_taken "localhost:$UIA2_PORT already forwards to $owner" "fix=UIA2_PORT=$((UIA2_PORT + 1)) uia2-start, and export the same UIA2_PORT for the android-* commands"
+# any other forward on this port, from another device or to another port on this one, is not
+# ours to replace
+read -r owner dest <<<"$(forward_entry "$forwards" "$UIA2_PORT")"
+if [ -n "${owner:-}" ] && { [ "$owner" != "$ANDROID_SERIAL" ] || [ "$dest" != "tcp:$UIA2_DEVICE_PORT" ]; }; then
+  die port_taken "localhost:$UIA2_PORT already forwards to $owner $dest" "fix=UIA2_PORT=$((UIA2_PORT + 1)) uia2-start, and export the same UIA2_PORT for the android-* commands"
 fi
 
 # a server for this device on another port belongs to another agent; restarting it here
@@ -74,17 +79,24 @@ fi
 # stop leftovers from a previous run so the port and the UiAutomation connection are free
 stop_out="$("$(dirname "$0")/uia2-stop" 2>&1)" || die stop_failed "could not stop the previous server" "stop=$stop_out"
 
-# a failed or interrupted start must not leave the server holding the device's UiAutomation
-# connection
-fail() {
-  trap - INT TERM
+# from here on, any exit before the server answers stops it again, so a failed, interrupted or
+# aborted start never leaves it holding the device's UiAutomation connection
+started=false
+on_exit() {
+  local rc=$?
+  $started && return
   "$(dirname "$0")/uia2-stop" >/dev/null 2>&1
-  die "$@"
+  if [ "$rc" -eq 0 ]; then
+    json ok:raw=false error=start_aborted "message=uia2-start stopped before the server answered; the server was stopped"
+    exit 1
+  fi
 }
-trap 'fail interrupted "uia2-start was interrupted; the server was stopped"' INT TERM
+trap on_exit EXIT
+trap 'die interrupted "uia2-start was interrupted; the server was stopped"' INT TERM
 
 adb shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1
-nohup adb -s "$ANDROID_SERIAL" "${INSTR_CMD[@]}" >"$STATE/server.log" 2>&1 &
+# 9>&-: the long-lived server must not inherit, and so keep holding, the device lock
+nohup adb -s "$ANDROID_SERIAL" "${INSTR_CMD[@]}" >"$STATE/server.log" 2>&1 9>&- &
 pid=$!
 # the server outlives this script; disown keeps bash from printing a job notice when it stops
 disown
@@ -92,20 +104,20 @@ echo "$pid $(proc_start "$pid")" >"$STATE/instrument.pid"
 echo "$UIA2_PORT" >"$STATE/port"
 # --no-rebind: a forward another start created since the checks above is never replaced
 adb forward --no-rebind "tcp:$UIA2_PORT" "tcp:$UIA2_DEVICE_PORT" >/dev/null 2>&1 ||
-  fail forward_failed "adb forward tcp:$UIA2_PORT failed; another program or device may hold the port"
+  die forward_failed "adb forward tcp:$UIA2_PORT failed; another program or device may hold the port"
 
-timeout="${UIA2_START_TIMEOUT:-60}"
 for ((i = 0; i < timeout; i++)); do
   if curl -sf -m 2 "$UIA2_BASE_URL/status" >/dev/null; then
+    started=true
     trap - INT TERM
     json ok:raw=true action=uia2-start "base_url=$UIA2_BASE_URL" "serial=$ANDROID_SERIAL" "log=$STATE/server.log"
     exit 0
   fi
   if ! kill -0 "$pid" 2>/dev/null; then
     log_tail="$(tail -n 15 "$STATE/server.log")"
-    fail instrument_exited "am instrument exited before the server answered" "log=$STATE/server.log" "log_tail=$log_tail"
+    die instrument_exited "am instrument exited before the server answered" "log=$STATE/server.log" "log_tail=$log_tail"
   fi
   sleep 1
 done
 log_tail="$(tail -n 15 "$STATE/server.log")"
-fail status_timeout "the server did not answer /status within ${timeout}s" "log=$STATE/server.log" "log_tail=$log_tail"
+die status_timeout "the server did not answer /status within ${timeout}s" "log=$STATE/server.log" "log_tail=$log_tail"

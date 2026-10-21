@@ -43,7 +43,7 @@ export ANDROID_SERIAL=<serial from adb devices>   # needed only when several dev
 | `uia2-doctor` | check prerequisites, print the next fix |
 | `uia2-fetch` | download the pinned server APKs with `gh` and verify their checksums; `uia2-start` calls it |
 | `uia2-start [--force]` | install if needed, run the server, forward `localhost:$UIA2_PORT`; refuses while other instrumentation, or another agent's server for the same device, is running |
-| `uia2-stop` | stop the server and remove the forward; when the device can't be reached it reports `cleanup_incomplete` and keeps its state, so rerun it after reconnecting |
+| `uia2-stop` | stop the server and remove its forward, leaving other forwards on the port alone; when the device can't be reached it reports `cleanup_incomplete` and keeps its state, so rerun it after reconnecting |
 | `android-launch [--activate] PACKAGE` | force-stop and start the app (`--activate` brings a running app forward instead) |
 | `android-vis [-a]` | one line per visible element worth acting on, with its tap center in pixels; `-a` includes hidden ones |
 | `android-source [--raw]` | full UI tree as XML; `--raw` prints only the tree |
@@ -96,7 +96,9 @@ View           (204,1465) 312x219 C  tag='numberPadPin.digit.1'
   the connection from a running instrumented test and break it. It also refuses when it can't
   list the device's processes. Pass `--force` only when that run can be interrupted.
   `uia2-start` and `uia2-stop` hold a lock per device, so two agents can't start or stop the
-  same device at once
+  same device at once. A second one waits up to `UIA2_LOCK_WAIT` seconds, then fails with
+  `locked`. If `uia2-start` fails or is interrupted after launching the server, it stops the
+  server again before exiting
 - **Coordinates are pixels**, not points as on iOS. Use the centers `android-vis` prints
 - **`android-type` replaces the field's text.** It sets the whole text through
   accessibility, so characters can't arrive out of order the way fast `adb shell input
@@ -141,9 +143,10 @@ ANDROID_SERIAL=emulator-5554 UIA2_PORT=8201 android-vis
 | `UIA2_WAIT` | `5` | seconds `android-tap-label` waits for its element |
 | `UIA2_WAIT_FOR_IDLE` | `1` | seconds the server waits for the UI to settle before each command; read when a session is created, so restart the server after changing it |
 | `UIA2_CACHE` | `~/.cache/cove-uia2` | APK cache and state, shared across worktrees |
-| `UIA2_START_TIMEOUT` | `60` | seconds `uia2-start` waits for the server |
+| `UIA2_START_TIMEOUT` | `60` | seconds `uia2-start` waits for the server; a value that isn't a positive whole number fails with `invalid_timeout` before anything starts |
+| `UIA2_LOCK_WAIT` | `30` | seconds `uia2-start` and `uia2-stop` wait for another one on the same device to finish |
 
-State lives in `$UIA2_CACHE/state/`: the adb pid, port and server log per device under `<serial>/`, and one cached session ID per server URL.
+State lives in `$UIA2_CACHE/state/`: the adb pid, port and server log per device under `<serial>/`, the device lock in `<serial>.flock`, and one cached session ID per server URL.
 
 ## Tests
 
