@@ -14,15 +14,16 @@ done
 
 resolve_serial
 STATE="$(state_dir)"
-port="$(cat "$STATE/port" 2>/dev/null || echo "$UIA2_PORT")"
 
 if $dry; then
-  json ok:raw=true action=uia2-stop dry_run:raw=true "serial=$ANDROID_SERIAL" "port=$port"
+  json ok:raw=true action=uia2-stop dry_run:raw=true "serial=$ANDROID_SERIAL" "port=$(cat "$STATE/port" 2>/dev/null || echo "$UIA2_PORT")"
   exit 0
 fi
 
 mkdir -p "$STATE"
 lock_device
+# read under the lock: a start that held it may have just moved the server to another port
+port="$(cat "$STATE/port" 2>/dev/null || echo "$UIA2_PORT")"
 stopped=() failed=()
 
 pidfile="$STATE/instrument.pid"
@@ -44,7 +45,8 @@ else
 fi
 
 if forwards="$(adb forward --list 2>&1)"; then
-  if [ "$(forward_owner "$forwards" "$port")" = "$ANDROID_SERIAL" ]; then
+  # remove only this device's forward to the server, never another forward on the same port
+  if [ "$(forward_entry "$forwards" "$port")" = "$ANDROID_SERIAL tcp:$UIA2_DEVICE_PORT" ]; then
     if out="$(adb forward --remove "tcp:$port" 2>&1)"; then stopped+=("forward:$port"); else failed+=("forward --remove: $out"); fi
   fi
 else

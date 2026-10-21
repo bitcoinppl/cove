@@ -60,10 +60,10 @@ state_dir() {
   echo "${UIA2_STATE:-$UIA2_CACHE/state}/$ANDROID_SERIAL"
 }
 
-# print the serial whose adb forward owns localhost PORT; fields compare literally, since a
-# serial such as [::1]:5555 is not a safe regex
-forward_owner() { # forward_owner FORWARD_LIST PORT
-  awk -v p="tcp:$2" '$2 == p { print $1; exit }' <<<"$1"
+# print "SERIAL DESTINATION" for the adb forward on localhost PORT; fields compare literally,
+# since a serial such as [::1]:5555 is not a safe regex
+forward_entry() { # forward_entry FORWARD_LIST PORT
+  awk -v p="tcp:$2" '$2 == p { print $1, $3; exit }' <<<"$1"
 }
 
 # print the local ports forwarded to this device's server, one per line
@@ -77,27 +77,25 @@ proc_start() {
 }
 
 # hold a per-device lock so concurrent starts and stops can't interleave their checks,
-# state files and forwards; a uia2-stop run by uia2-start inherits its parent's lock
+# state files and forwards; a uia2-stop run by uia2-start inherits its parent's lock.
+# macOS has no flock(1), so a helper locks fd 9: the lock belongs to that open file, outlives
+# the helper, and the OS releases it when this script exits, even when it is killed
 lock_device() {
   [ -n "${UIA2_LOCKED:-}" ] && return 0
-  local lock owner i
-  lock="$(state_dir).lock"
+  local lock
+  lock="$(state_dir).flock"
   mkdir -p "$(dirname "$lock")"
-  for ((i = 0; i < 300; i++)); do
-    if mkdir "$lock" 2>/dev/null; then
-      echo $$ >"$lock/pid"
-      export UIA2_LOCKED="$lock"
-      trap 'rm -rf "$UIA2_LOCKED"' EXIT
-      return 0
-    fi
-
-    # a lock left by a process that died is stale
-    owner="$(cat "$lock/pid" 2>/dev/null)"
-    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
-      rm -rf "$lock"
-      continue
-    fi
-    sleep 0.1
-  done
-  die locked "another uia2-start or uia2-stop for $ANDROID_SERIAL has held $lock for 30 s" "fix=wait for it, or remove the lock if its process is gone"
+  exec 9>>"$lock"
+  python3 -I -c 'import fcntl, sys, time
+deadline = time.monotonic() + float(sys.argv[1])
+while True:
+    try:
+        fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        sys.exit(0)
+    except BlockingIOError:
+        if time.monotonic() >= deadline:
+            sys.exit(1)
+        time.sleep(0.1)' "${UIA2_LOCK_WAIT:-30}" ||
+    die locked "another uia2-start or uia2-stop for $ANDROID_SERIAL held $lock for ${UIA2_LOCK_WAIT:-30} s" "fix=wait for it to finish"
+  export UIA2_LOCKED=1
 }

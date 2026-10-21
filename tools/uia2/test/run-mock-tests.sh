@@ -243,10 +243,47 @@ expect "stop with a reused pid" 0 '"adb:" not in d["stopped"]' -- "$here/uia2-st
 check "stop leaves a reused pid alone" kill -0 "$other"
 kill "$other"; wait "$other" 2>/dev/null
 
-# a lock left by a dead process does not block the next start
-mkdir -p "$tmp/state/TEST-SERIAL.lock"; echo 999999 >"$tmp/state/TEST-SERIAL.lock/pid"
-expect "start with a stale lock" 0 'd["ok"]' -- "$here/uia2-start"
+# hold_lock SECONDS [PORT]: hold the device lock in the background, then optionally move the
+# recorded server port before releasing it, the way a concurrent uia2-start would
+hold_lock() {
+  python3 -I -c 'import fcntl, sys, time
+f = open(sys.argv[1], "a")
+fcntl.flock(f, fcntl.LOCK_EX)
+open(sys.argv[1] + ".held", "w").close()
+time.sleep(float(sys.argv[2]))
+if len(sys.argv) > 4:
+    open(sys.argv[3], "w").write(sys.argv[4] + "\n")' "$tmp/state/TEST-SERIAL.flock" "$1" "$tmp/state/TEST-SERIAL/port" "${2:-}" &
+  holder=$!
+  for _ in $(seq 50); do [ -e "$tmp/state/TEST-SERIAL.flock.held" ] && break; sleep 0.1; done
+  rm -f "$tmp/state/TEST-SERIAL.flock.held"
+}
+
+hold_lock 3
+UIA2_LOCK_WAIT=0.5 expect "start while another start holds the lock" 1 'd["error"]=="locked"' -- "$here/uia2-start"
+wait "$holder"
+expect "start once the lock is released" 0 'd["ok"]' -- "$here/uia2-start"
 "$here/uia2-stop" >/dev/null
+
+# stop reads the port under the lock, so it stops the server a concurrent start just moved
+alt=$((port + 2))
+echo "$port" >"$tmp/state/TEST-SERIAL/port"
+echo "TEST-SERIAL tcp:$alt tcp:6790" >"$FAKE_ADB/forwards"
+hold_lock 1 "$alt"
+expect "stop after a start moved the port" 0 '"forward:'"$alt"'" in d["stopped"]' -- "$here/uia2-stop"
+wait "$holder"
+check "stop removes the moved forward" bash -c "! grep -q 'tcp:$alt' '$FAKE_ADB/forwards'"
+
+# a forward from this device's port to somewhere other than the server is not ours to replace
+echo "TEST-SERIAL tcp:$port tcp:9000" >"$FAKE_ADB/forwards"
+expect "start on a port this device forwards elsewhere" 1 'd["error"]=="port_taken" and "tcp:9000" in d["message"]' -- "$here/uia2-start"
+"$here/uia2-stop" >/dev/null
+check "stop leaves a forward that isn't the server's" grep -q "^TEST-SERIAL tcp:$port tcp:9000$" "$FAKE_ADB/forwards"
+: >"$FAKE_ADB/forwards"
+
+# a bad timeout fails before anything starts on the device
+: >"$FAKE_ADB/calls.log"
+UIA2_START_TIMEOUT=abc expect "start with a bad timeout" 1 'd["error"]=="invalid_timeout"' -- "$here/uia2-start"
+check "bad timeout starts nothing" bash -c "! grep -q 'am instrument' '$FAKE_ADB/calls.log'"
 
 # an interrupted start stops the server it launched; this port has no server, so start keeps waiting
 dead=$((port + 1))
