@@ -5,8 +5,8 @@ import XCTest
 
 @MainActor
 final class SendFlowHeaderLayoutTests: XCTestCase {
-    // regression for #926: a fixed header height clipped the balance and unit at the
-    // largest accessibility text size instead of letting the header grow
+    /// Regression for #926: a fixed header height clipped the balance and unit at the
+    /// largest accessibility text size instead of letting the header grow
     func testHeaderGrowsWithAccessibilityTextSize() {
         let manager = WalletManager(preview: .only)
 

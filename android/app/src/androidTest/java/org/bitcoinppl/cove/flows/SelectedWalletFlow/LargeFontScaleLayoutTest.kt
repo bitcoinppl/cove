@@ -1,11 +1,13 @@
 package org.bitcoinppl.cove.flows.SelectedWalletFlow
 
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.remember
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
@@ -71,24 +73,47 @@ class LargeFontScaleLayoutTest {
     // regression for #919: the sheet had no scroll container, so its actions fell off screen
     @Test
     fun receiveSheetActionsCanBeReachedAtLargestFontScale() {
+        val presentation = WalletManager.previewNew().receiveAddressPresentation
+
+        // the sheet runs in its own window, which ignores a test font scale, so render its content
+        // in a box the size of the expanded sheet on the Galaxy S20 where #919 was found
         compose.setContent {
             CoveTheme(dynamicColor = false) {
                 WithFontScale(LARGEST_SYSTEM_FONT_SCALE) {
-                    ReceiveAddressSheet(
-                        manager = remember { WalletManager.previewNew() },
-                        snackbarHostState = remember { SnackbarHostState() },
-                        onDismiss = {},
-                    )
+                    Box(Modifier.size(GALAXY_S20_SHEET_WIDTH, GALAXY_S20_SHEET_HEIGHT).testTag(SHEET_TAG)) {
+                        ReceiveAddressSheetContent(
+                            walletName = "Signet Wallet",
+                            addressText = "tb1q ar0s rrr7 xfkv y5l6 43ly dnw9 re59 gtzz wf5m dq",
+                            addressRaw = "tb1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+                            derivationPath = "m/84'/1'/0'/0/0",
+                            isLoading = false,
+                            presentation = presentation,
+                            onCopyAddress = {},
+                            onCreateNewAddress = {},
+                        )
+                    }
                 }
             }
         }
 
-        // an action that already fits counts as reachable, otherwise it must scroll into view
+        val sheetBottom = compose.onNodeWithTag(SHEET_TAG).getUnclippedBoundsInRoot().bottom
+
+        // an action that already fits counts as reachable, otherwise it must scroll into the
+        // sheet; a column out of room squeezes its last action to zero height instead
         listOf("Copy Address", "Create New Address").forEach { action ->
             val node = compose.onNodeWithText(action)
-            if (!node.isDisplayed()) node.performScrollTo()
+            val isReachable = {
+                val bounds = node.getUnclippedBoundsInRoot()
+                bounds.bottom <= sheetBottom && bounds.height >= MIN_ACTION_HEIGHT
+            }
 
-            node.assertIsDisplayed().assertIsEnabled()
+            if (!isReachable()) node.performScrollTo()
+
+            assertTrue(
+                "\"$action\" is ${node.getUnclippedBoundsInRoot()}, outside or squeezed in a sheet ending at $sheetBottom",
+                isReachable(),
+            )
+            node.assertIsEnabled()
         }
     }
 
@@ -104,5 +129,13 @@ class LargeFontScaleLayoutTest {
 
         // the 13sp chip label is about this tall at the default font scale
         val MIN_READABLE_TEXT_HEIGHT = 14.dp
+
+        // a 1080x2400 Galaxy S20 at its default 480dpi is 360x800dp, less the status bar and handle
+        val GALAXY_S20_SHEET_WIDTH = 360.dp
+        val GALAXY_S20_SHEET_HEIGHT = 760.dp
+        const val SHEET_TAG = "receive-sheet"
+
+        // well under a 2x line of button text, so only a squeezed action falls below it
+        val MIN_ACTION_HEIGHT = 24.dp
     }
 }
