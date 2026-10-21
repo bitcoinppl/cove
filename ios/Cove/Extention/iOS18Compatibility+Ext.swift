@@ -43,16 +43,13 @@ extension View {
     func adaptiveToolbarStyle(showNavBar: Bool, reduceTransparency: Bool = false) -> some View {
         if #available(iOS 26.0, *) {
             if reduceTransparency {
-                if showNavBar {
-                    self
-                        .toolbarBackground(Color.coveBg, for: .navigationBar)
-                        .toolbarBackground(.visible, for: .navigationBar)
-                } else {
-                    self
-                        .toolbarColorScheme(.dark, for: .navigationBar)
-                        .toolbarBackground(Color.midnightBlue, for: .navigationBar)
-                        .toolbarBackground(.visible, for: .navigationBar)
-                }
+                // showNavBar flips while scrolling, so it only changes modifier values; branching
+                // on it would rebuild the screen and its lazy list on every flip, which loops
+                // during the back transition at large text sizes
+                self
+                    .toolbarColorScheme(showNavBar ? nil : .dark, for: .navigationBar)
+                    .toolbarBackground(showNavBar ? Color.coveBg : Color.midnightBlue, for: .navigationBar)
+                    .toolbarBackground(.visible, for: .navigationBar)
             } else {
                 // iOS 26+: let system handle liquid glass automatically
                 // don't override with clear background
