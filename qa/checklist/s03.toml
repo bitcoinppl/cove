@@ -77,10 +77,10 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/database/wallet_data/label.rs::locks_and_labels_survive_reopening_the_wallet_database",
 ]
 # 1.4.0: ios PASS, android PASS
-# lock state is a redb record, so a reopen test would decide it
+# lock state is a redb record, decided by a reopen test
 
 [[row]]
 id = "s03-bip329-locked-output-without-text-label"
@@ -166,12 +166,12 @@ paths = [
     "rust/src/manager/coin_control_manager/**",
 ]
 coverage = [
-    "agent",
     "rust:rust/src/database/wallet_data/label.rs::unlocking_labeled_output_preserves_label",
     "rust:rust/src/database/wallet_data/label.rs::import_unlabeled_spendability_update_preserves_existing_output_label",
+    "rust:rust/src/database/wallet_data/label.rs::locking_labeled_output_preserves_label",
 ]
 # 1.4.0: ios PASS, android PASS
-# unlock direction is asserted in rust; the lock direction is not
+# both lock directions are asserted in rust
 
 [[row]]
 id = "s03-manual-backup-export-and-verification"
@@ -200,6 +200,7 @@ paths = [
 ]
 coverage = [
     "agent",
+    "rust:rust/src/backup/import.rs::backup_import_restores_labels_and_output_locks_into_a_fresh_wallet",
 ]
 # 1.4.0: ios N/A, android N/A
 
