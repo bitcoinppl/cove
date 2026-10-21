@@ -102,7 +102,12 @@ impl ReceiveWorkflow<'_> {
         self.create_session(generation).inspect_err(|_| {
             self.state_machine()
                 .set_phase_if_current(generation, Phase::Receive(ReceivePhase::Error));
-        })
+        })?;
+
+        // the new request replaces the session any expiry or reset notice was about
+        self.0.reconciler.send(Message::ClearAlert);
+
+        Ok(())
     }
 
     pub(crate) fn end(&self) -> Result<(), KeyTeleportAlert> {
