@@ -11,6 +11,12 @@ use tracing::debug;
 //
 pub type BdkFeeRate = bitcoin::FeeRate;
 
+/// Lowest fee rate Cove builds a transaction with, in sat/vB
+///
+/// Default Bitcoin Core relay policy sat at this floor for most of its history, so a
+/// transaction below it may never leave the wallet's node
+pub const MIN_FEE_RATE_SAT_PER_VB: f32 = 1.0;
+
 #[derive(
     Debug,
     Clone,
@@ -63,6 +69,14 @@ impl FeeRate {
     #[must_use]
     pub fn sats_per_vbyte_string(&self) -> String {
         format!("{:.2} sats/vbyte", self.sat_per_vb())
+    }
+
+    /// Whether this rate is under [`MIN_FEE_RATE_SAT_PER_VB`]
+    ///
+    /// Zero, negative, and NaN inputs all convert to a zero rate, so they land here too
+    #[must_use]
+    pub fn is_below_minimum(&self) -> bool {
+        self.sat_per_vb() < MIN_FEE_RATE_SAT_PER_VB
     }
 }
 

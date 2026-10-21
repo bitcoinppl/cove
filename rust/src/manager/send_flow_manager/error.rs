@@ -29,11 +29,19 @@ pub enum SendFlowError {
     #[error("insufficient funds")]
     InsufficientFunds,
 
+    /// The amount plus the selected network fee is more than the wallet can spend
+    #[error("amount plus network fee exceeds the spendable balance by {shortfall_sats} sats")]
+    SpendExceedsBalance { shortfall_sats: u64 },
+
     #[error("send amount is below the dust limit")]
     SendBelowDustLimit,
 
     #[error("unable to get fee rate")]
     UnableToGetFeeRate,
+
+    /// A custom rate under the relay floor, including zero, negative, and NaN input
+    #[error("fee rate is below the minimum of 1 sat/vB")]
+    FeeRateBelowMinimum,
 
     #[error("unable to build txn: {0}")]
     UnableToBuildTxn(String),

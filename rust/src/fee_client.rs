@@ -19,7 +19,7 @@ use crate::{
     app::reconcile::{AppStateReconcileMessage as AppMessage, Updater},
     database::Database,
 };
-use cove_types::fees::{FeeRate, FeeRateOption, FeeRateOptions, FeeSpeed};
+use cove_types::fees::{FeeRate, FeeRateOption, FeeRateOptions, FeeSpeed, MIN_FEE_RATE_SAT_PER_VB};
 
 const FEE_URL: &str = "https://mempool.space/api/v1/fees/recommended";
 
@@ -344,13 +344,10 @@ impl CachedFeeResponse {
 }
 
 fn derive_fee_rate_options(fees: FeeResponse) -> FeeRateOptions {
-    /// Policy minimum fee rate in sat/vB
-    const POLICY_MIN_FEE_RATE: f32 = 1.0;
-
     /// Minimum gap between fee tiers to ensure they're visually distinct
     const TIER_GAP: f32 = 0.1;
 
-    let min_relay_rate = fees.minimum_fee.clamp(POLICY_MIN_FEE_RATE, MAX_AUTOMATIC_FEE_RATE);
+    let min_relay_rate = fees.minimum_fee.clamp(MIN_FEE_RATE_SAT_PER_VB, MAX_AUTOMATIC_FEE_RATE);
 
     let slow_rate = f32::midpoint(fees.economy_fee, fees.hour_fee)
         .min(fees.hour_fee)

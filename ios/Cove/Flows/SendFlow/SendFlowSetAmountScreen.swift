@@ -94,16 +94,9 @@ struct SendFlowSetAmountScreen: View {
             return false
         }
         if !validateAmount() {
+            // let rust explain the failure, such as how far amount plus fee overshoots the balance
             let hasAmount = sendFlowManager.amount != nil && sendFlowManager.amount?.asSats() != 0
-            if hasAmount {
-                await FloaterPopup(
-                    text: "Amount not valid. Please try again.",
-                    backgroundColor: .orange,
-                    textColor: .white,
-                    iconColor: .white,
-                    icon: "exclamationmark.triangle"
-                ).dismissAfter(1).present()
-            }
+            if hasAmount { _ = validateAmount(displayAlert: true) }
             presenter.focusField = .amount
             return false
         }
