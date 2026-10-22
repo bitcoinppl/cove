@@ -920,4 +920,39 @@ mod tests {
         let _ = delete_wallet_specific_data(&metadata.id);
         assert_eq!("73c5da0a", fingerprint.as_str());
     }
+
+    // regression for #913: a bare ypub has no key origin, so fingerprint dedup alone cannot see it
+    #[test]
+    fn importing_the_same_origin_less_ypub_twice_reports_the_existing_wallet() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+        crate::database::test_support::delete_database();
+
+        // the global database handle outlives delete_database, so count relative to the start
+        let wallet_count = || {
+            let SelectedWalletTarget { network, mode } =
+                Database::global().global_config.wallet_target();
+
+            Database::global().wallets.get_all(network, mode).expect("wallets load").len()
+        };
+
+        let starting_count = wallet_count();
+        let first = Wallet::try_new_persisted_from_xpub(BIP49_YPUB.to_string())
+            .expect("first import succeeds");
+
+        assert_eq!(first.metadata.master_fingerprint, None);
+
+        let second = Wallet::try_new_persisted_from_xpub(BIP49_YPUB.to_string());
+        let added_count = wallet_count() - starting_count;
+
+        crate::wallet::test_support::remove_wallet(&first.id);
+        if let Ok(second) = &second {
+            crate::wallet::test_support::remove_wallet(&second.id);
+        }
+
+        assert_eq!(second.err(), Some(WalletError::WalletAlreadyExists(first.id)));
+        assert_eq!(added_count, 1, "a duplicate wallet was saved");
+    }
 }

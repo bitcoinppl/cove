@@ -11,7 +11,8 @@ use keyteleport::{
 };
 
 use crate::{
-    database::Database, wallet::metadata::WalletType, wallet_secret::WalletSecretExt as _,
+    database::Database, manager::deferred_sender::SingleOrMany, wallet::metadata::WalletType,
+    wallet_secret::WalletSecretExt as _,
 };
 
 use super::*;
@@ -558,6 +559,57 @@ fn expired_receive_session_is_deleted_and_not_resumed() {
 
     assert_ne!(replacement, expired);
     assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveReady(_)));
+}
+
+/// Applies pending alert messages the way both apps do, starting from what is on screen
+fn apply_alert_messages(
+    manager: &RustKeyTeleportManager,
+    displayed: &mut Option<KeyTeleportAlert>,
+) {
+    while let Ok(message) = manager.reconciler.receiver().try_recv() {
+        let messages = match message {
+            SingleOrMany::Single(message) => vec![message],
+            SingleOrMany::Many(messages) => messages,
+        };
+
+        for message in messages {
+            match message {
+                Message::SetAlert(alert) => *displayed = Some(alert),
+                Message::ClearAlert => *displayed = None,
+                Message::UpdateState(_) => {}
+            }
+        }
+    }
+}
+
+// regression for #922: a new request must clear the expiry notice it replaces
+#[test]
+fn restarting_receive_after_expiry_clears_the_expired_session_alert() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let session = ReceiverSession::from_private_key_bytes([4; 32]).unwrap();
+    let persisted = serde_json::json!({
+        "session_id": hex::encode([2_u8; 16]),
+        "private_key_hex": hex::encode(session.private_key_bytes()),
+        "created_at_secs": now_secs() - (24 * 60 * 60) - 1,
+        "network": Database::global().global_config.selected_network(),
+        "wallet_mode": Database::global().global_config.wallet_mode(),
+    });
+
+    Keychain::global().save_key_teleport_receive_session(&persisted.to_string()).unwrap();
+    let manager = RustKeyTeleportManager::new();
+
+    let mut displayed = None;
+
+    manager.clone().dispatch(Action::StartReceive);
+    apply_alert_messages(&manager, &mut displayed);
+    assert_eq!(displayed, Some(KeyTeleportAlert::ReceiveSessionExpired));
+
+    manager.clone().dispatch(Action::RestartReceive);
+    apply_alert_messages(&manager, &mut displayed);
+
+    assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveReady(_)));
+    assert_eq!(displayed, None, "the expiry alert outlived the new request");
 }
 
 #[test]

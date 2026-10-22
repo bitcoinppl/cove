@@ -286,3 +286,47 @@ impl NodeSelection {
         self.clone().into()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::node::ApiType;
+
+    fn selector(network: Network) -> NodeSelector {
+        NodeSelector { network, node_list: Vec::new() }
+    }
+
+    // regression for #928: the Electrum-only url rules turned an Esplora url into ssl://host:50002
+    #[test]
+    fn parse_custom_node_keeps_an_esplora_url_as_entered() {
+        let node = selector(Network::Signet)
+            .parse_custom_node(
+                "https://mutinynet.com/api".to_string(),
+                "Custom Esplora".to_string(),
+                String::new(),
+            )
+            .unwrap();
+
+        assert_eq!(node.api_type, ApiType::Esplora);
+        assert_eq!(node.url, "https://mutinynet.com/api");
+        assert_eq!(node.name, "mutinynet.com");
+    }
+
+    #[test]
+    fn parse_custom_node_maps_electrum_urls_to_electrum_schemes_and_ports() {
+        let selector = selector(Network::Bitcoin);
+        let parse = |url: &str| {
+            selector
+                .parse_custom_node(url.to_string(), "Custom Electrum".to_string(), String::new())
+                .unwrap()
+        };
+
+        let node = parse("https://electrum.example.com");
+        assert_eq!(node.api_type, ApiType::Electrum);
+        assert_eq!(node.url, "ssl://electrum.example.com:50002");
+
+        assert_eq!(parse("http://electrum.example.com").url, "tcp://electrum.example.com:50001");
+        assert_eq!(parse("electrum.example.com:50002").url, "ssl://electrum.example.com:50002/");
+        assert_eq!(parse("electrum.example.com").url, "tcp://electrum.example.com:50001/");
+    }
+}

@@ -11,6 +11,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.ui.theme.CoveTheme
+import org.bitcoinppl.cove_core.WalletManagerReconcileMessage
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -51,5 +52,38 @@ class SelectedWalletScreenTest {
         }
 
         compose.onAllNodes(hasText("Backup your wallet")).assertCountEquals(0)
+    }
+
+    // regression for #917: iOS alerts on a failed node connection, Android only logged it
+    @Test
+    fun nodeConnectionFailureShowsAnAlertWithAWayToChangeNode() {
+        val manager = WalletManager.previewNew()
+
+        compose.setContent {
+            CoveTheme {
+                SelectedWalletScreen(
+                    onBack = {},
+                    onSend = {},
+                    onReceive = {},
+                    onQrCode = {},
+                    onMore = {},
+                    isDarkList = false,
+                    manager = manager,
+                    app = AppManager.getInstance(),
+                    isCloudBackupEnabled = false,
+                )
+            }
+        }
+
+        compose.runOnUiThread {
+            manager.reconcile(
+                WalletManagerReconcileMessage.NodeConnectionFailed(
+                    "failed to connect to node: https://mutinynet.com/api/blocks/tip/height",
+                ),
+            )
+        }
+
+        compose.onNodeWithText("Node Connection Failed").assertIsDisplayed()
+        compose.onNodeWithText("Change Node", substring = true).assertIsDisplayed()
     }
 }

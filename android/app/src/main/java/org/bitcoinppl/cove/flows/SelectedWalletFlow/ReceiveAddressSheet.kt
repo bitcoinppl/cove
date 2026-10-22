@@ -176,8 +176,9 @@ fun ReceiveAddressSheet(
     }
 }
 
+// internal so layout tests can render it in a fixed-size viewport, outside the sheet's window
 @Composable
-private fun ReceiveAddressSheetContent(
+internal fun ReceiveAddressSheetContent(
     walletName: String,
     addressText: String?,
     addressRaw: String?,

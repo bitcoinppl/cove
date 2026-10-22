@@ -177,6 +177,30 @@ pub(crate) fn init_test_keychain() {
     });
 }
 
+/// Time zone of the process-global test device
+///
+/// A zone west of UTC makes evening confirmations fall on the next UTC day, so date code
+/// that skips the local conversion shows up as an off-by-one-day mismatch
+pub(crate) const TEST_DEVICE_TIME_ZONE: &str = "America/Chicago";
+
+#[derive(Debug)]
+struct TestDevice;
+
+impl cove_device::device::DeviceAccess for TestDevice {
+    fn timezone(&self) -> String {
+        TEST_DEVICE_TIME_ZONE.to_string()
+    }
+}
+
+/// Installs a process-global device that reports [`TEST_DEVICE_TIME_ZONE`]
+pub(crate) fn init_test_device() {
+    static INIT: OnceLock<()> = OnceLock::new();
+
+    INIT.get_or_init(|| {
+        let _ = cove_device::device::Device::new(Box::new(TestDevice));
+    });
+}
+
 /// Makes every keychain delete fail while set, for error-path tests
 pub(crate) fn set_fail_keychain_deletes(fail: bool) {
     FAIL_KEYCHAIN_DELETES.store(fail, Ordering::Relaxed);
