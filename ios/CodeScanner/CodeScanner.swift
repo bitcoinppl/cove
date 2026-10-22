@@ -141,9 +141,9 @@
         }
     }
 
+    @available(*, deprecated, renamed: "requiresPhotoOutput")
     @available(macCatalyst 14.0, *)
     public extension CodeScannerView {
-        @available(*, deprecated, renamed: "requiresPhotoOutput")
         var requirePhotoOutput: Bool {
             requiresPhotoOutput
         }

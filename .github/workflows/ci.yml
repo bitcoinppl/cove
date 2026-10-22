@@ -12,6 +12,12 @@ on:
 permissions:
   contents: read
 
+# a new push to a PR cancels its older run so stacked PRs don't pile up on the
+# limited macOS runners; master pushes key on run_id so every commit is tested
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 env:
   CARGO_HTTP_MULTIPLEXING: "false"
   CARGO_NET_RETRY: "10"

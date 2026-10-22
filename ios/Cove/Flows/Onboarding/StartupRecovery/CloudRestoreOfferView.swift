@@ -1,6 +1,5 @@
-import SwiftUI
-
 @_exported import CoveCore
+import SwiftUI
 
 /// Shown after the cloud backup check finds at least one backup
 struct CloudRestoreOfferView: View {

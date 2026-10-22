@@ -1,6 +1,5 @@
-import SwiftUI
-
 @_exported import CoveCore
+import SwiftUI
 
 struct DeviceRestoreView: View {
     let restoreState: OnboardingRestoreState

@@ -75,14 +75,12 @@ struct QrCodeScanView: View {
 
     private func handleScan(result: Result<ScanResult, ScanError>) {
         // permission handling
-        if case let .failure(error) = result {
-            if case ScanError.permissionDenied = error {
-                dismiss()
-                app.sheetState = .none
+        if case let .failure(error) = result, case ScanError.permissionDenied = error {
+            dismiss()
+            app.sheetState = .none
 
-                DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1000)) {
-                    app.alertState = TaggedItem(AppAlertState.noCameraPermission)
-                }
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(1000)) {
+                app.alertState = TaggedItem(AppAlertState.noCameraPermission)
             }
         }
 
