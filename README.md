@@ -28,6 +28,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites and build instructions.
 - [docs/ios_android_parity.md](docs/ios_android_parity.md) - iOS/Android UI patterns
 - [docs/icloud_drive.md](docs/icloud_drive.md) - iCloud Drive behavior and file coordination notes
 - [docs/passkeys.md](docs/passkeys.md) - Passkey behavior and Cloud Backup confirmation notes
+- [docs/testing.md](docs/testing.md) - Test layers, release passes, and agent-driven device testing
 
 ## Features
 
