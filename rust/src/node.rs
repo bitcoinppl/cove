@@ -8,6 +8,7 @@ use crate::node_connect::{
 use std::time::Duration;
 
 use client::NodeClient;
+use cove_tokio::FutureTimeoutExt as _;
 use cove_types::network::Network;
 
 #[derive(
@@ -122,12 +123,13 @@ impl Node {
     pub async fn check_url(&self) -> Result<(), Error> {
         // neither client sets a timeout, so a host that never answers would hold the settings
         // check until the OS gives up on the connection
-        tokio::time::timeout(CHECK_URL_TIMEOUT, async {
+        async {
             let client = NodeClient::new(self).await?;
             client.check_url().await?;
 
             Ok(())
-        })
+        }
+        .with_timeout(CHECK_URL_TIMEOUT)
         .await
         .map_err(|_| Error::CheckUrlTimedOut(CHECK_URL_TIMEOUT))?
     }

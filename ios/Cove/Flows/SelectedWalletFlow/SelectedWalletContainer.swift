@@ -90,6 +90,7 @@ private struct SelectedWalletLoadingScreen: View {
 
     var body: some View {
         ScrollView {
+            // padding, not a negative .contentMargins, which loops lazy layout on iOS 18 (#927)
             SelectedWalletLoadingContent(
                 metadata: metadata,
                 reduceTransparency: reduceTransparency
@@ -97,10 +98,8 @@ private struct SelectedWalletLoadingScreen: View {
             .background(
                 SelectedWalletLoadingScrollBackground(screenHeight: screenHeight)
             )
+            .padding(.top, -(safeAreaInsets.top + navBarAndScrollInsets))
         }
-        .contentMargins(
-            .top, -(safeAreaInsets.top + navBarAndScrollInsets), for: .scrollContent
-        )
         .modifier(ScrollViewBackgroundModifier(iOS26OrLater: iOS26OrLater))
         .scrollIndicators(.hidden)
         .modifier(HiddenTopScrollEdgeModifier())
