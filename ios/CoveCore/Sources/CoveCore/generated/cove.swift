@@ -4847,7 +4847,7 @@ public protocol GlobalConfigTableProtocol: AnyObject, Sendable {
 
     func setBlockExplorerOption(network: Network, option: BlockExplorerOption) throws  -> String?
 
-    func setCustomBlockExplorer(network: Network, input: String) throws  -> String?
+    func setCustomBlockExplorer(network: Network, input: String) throws  -> String
 
     func setHashedPinCode(hashedPinCode: String) throws
 
@@ -5110,8 +5110,8 @@ open func setBlockExplorerOption(network: Network, option: BlockExplorerOption)t
 })
 }
 
-open func setCustomBlockExplorer(network: Network, input: String)throws  -> String?  {
-    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
+open func setCustomBlockExplorer(network: Network, input: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDatabaseError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_globalconfigtable_set_custom_block_explorer(
             self.uniffiCloneHandle(),
@@ -47627,7 +47627,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_globalconfigtable_set_block_explorer_option() != 32847) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer() != 26335) {
+    if (uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer() != 25909) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 7049) {

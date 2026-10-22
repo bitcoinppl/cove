@@ -4326,7 +4326,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_globalconfigtable_set_block_explorer_option() != 32847.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer() != 26335.toShort()) {
+    if (lib.uniffi_cove_checksum_method_globalconfigtable_set_custom_block_explorer() != 25909.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_globalconfigtable_set_hashed_pin_code() != 7049.toShort()) {
@@ -13939,7 +13939,7 @@ public interface GlobalConfigTableInterface {
 
     fun `setBlockExplorerOption`(`network`: Network, `option`: BlockExplorerOption): kotlin.String?
 
-    fun `setCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String?
+    fun `setCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String
 
     fun `setHashedPinCode`(`hashedPinCode`: kotlin.String)
 
@@ -14347,8 +14347,8 @@ open class GlobalConfigTable: Disposable, AutoCloseable, GlobalConfigTableInterf
 
 
 
-    @Throws(DatabaseException::class)override fun `setCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String? {
-            return FfiConverterOptionalString.lift(
+    @Throws(DatabaseException::class)override fun `setCustomBlockExplorer`(`network`: Network, `input`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
     callWithHandle {
     uniffiRustCallWithError(DatabaseException) { _status ->
     UniffiLib.uniffi_cove_fn_method_globalconfigtable_set_custom_block_explorer(
