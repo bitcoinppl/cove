@@ -4,8 +4,10 @@ import CoveCore
 import XCTest
 
 final class PasskeyProviderImplTests: XCTestCase {
-    // a timed-out request cancels through the main queue, which the host app can keep busy for
-    // seconds on a slow CI simulator; the wait still returns as soon as cancellation runs
+    /// Upper bound for a timed-out request's cancellation, which runs on the main queue
+    ///
+    /// The host app can keep the main queue busy for seconds on a slow CI simulator; the wait still
+    /// returns as soon as cancellation runs
     private static let mainQueueCancellationTimeout: TimeInterval = 10
 
     func testNonAuthorizationFailureReturnsOnlySanitizedMetadata() {
