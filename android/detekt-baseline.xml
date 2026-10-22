@@ -349,7 +349,7 @@
     <ID>FunctionNaming:QrExportView.kt:@Composable private fun DensityButtons</ID>
     <ID>FunctionNaming:QrExportView.kt:@Composable private fun MinusButton</ID>
     <ID>FunctionNaming:QrExportView.kt:@Composable private fun PlusButton</ID>
-    <ID>FunctionNaming:ReceiveAddressSheet.kt:@Composable private fun ReceiveAddressSheetContent</ID>
+    <ID>FunctionNaming:ReceiveAddressSheet.kt:@Composable internal fun ReceiveAddressSheetContent</ID>
     <ID>FunctionNaming:ReceiveAddressSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ReceiveAddressSheet</ID>
     <ID>FunctionNaming:ReceiveAddressSheet.kt:@Preview(showBackground = true, heightDp = 800) @Composable private fun ReceiveAddressSheetPreview</ID>
     <ID>FunctionNaming:ReceivedTransactionDetails.kt:@Composable internal fun ReceivedTransactionDetails</ID>
@@ -609,7 +609,7 @@
     <ID>LongMethod:QrCodeImportScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun HelpSheet</ID>
     <ID>LongMethod:QrCodeScanView.kt:@Composable @androidx.camera.core.ExperimentalGetImage private fun QrScannerContent</ID>
     <ID>LongMethod:QrExportView.kt:@Composable fun QrExportView</ID>
-    <ID>LongMethod:ReceiveAddressSheet.kt:@Composable private fun ReceiveAddressSheetContent</ID>
+    <ID>LongMethod:ReceiveAddressSheet.kt:@Composable internal fun ReceiveAddressSheetContent</ID>
     <ID>LongMethod:ReceiveAddressSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ReceiveAddressSheet</ID>
     <ID>LongMethod:ReceivedTransactionDetails.kt:@Composable internal fun ReceivedTransactionDetails</ID>
     <ID>LongMethod:SecretWordsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SecretWordsScreen</ID>
@@ -717,7 +717,7 @@
     <ID>LongParameterList:OnboardingTheme.kt:@Composable internal fun OnboardingStatusCard</ID>
     <ID>LongParameterList:QrCodeScanView.kt:private fun handleQrCode</ID>
     <ID>LongParameterList:QrExportView.kt:@Composable fun QrExportView</ID>
-    <ID>LongParameterList:ReceiveAddressSheet.kt:@Composable private fun ReceiveAddressSheetContent</ID>
+    <ID>LongParameterList:ReceiveAddressSheet.kt:@Composable internal fun ReceiveAddressSheetContent</ID>
     <ID>LongParameterList:RoundRectImage.kt:@Composable fun RoundRectImage</ID>
     <ID>LongParameterList:SelectedWalletScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun SelectedWalletScreen</ID>
     <ID>LongParameterList:SendFlowConfirmScreen.kt:@Composable private fun KeyValueRow</ID>
