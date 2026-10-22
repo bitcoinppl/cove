@@ -5,6 +5,7 @@ use crate::manager::cloud_backup_manager::{
     GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
 };
 use crate::test_support::raw_wallet_keychain_entries;
+use cove_tokio::FutureTimeoutExt as _;
 
 #[tokio::test(flavor = "current_thread")]
 async fn restore_downloaded_wallet_does_not_reupload_wallet_or_mutate_backup_counts() {
@@ -499,7 +500,9 @@ async fn restore_cancellation_retains_exclusive_claim_until_native_call_returns(
     call!(manager.supervisor.start_restore_from_cloud_backup_with_events(retry_sender))
         .await
         .unwrap();
-    let retry_event = tokio::time::timeout(Duration::from_secs(2), retry_receiver.recv_async())
+    let retry_event = retry_receiver
+        .recv_async()
+        .with_timeout(Duration::from_secs(2))
         .await
         .expect("restore retry response")
         .expect("restore retry event");

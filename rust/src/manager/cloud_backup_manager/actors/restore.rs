@@ -915,6 +915,7 @@ mod tests {
         reset_cloud_backup_test_state, sample_xpub, test_globals, test_lock,
         xpub_only_wallet_metadata,
     };
+    use cove_tokio::FutureTimeoutExt as _;
 
     #[tokio::test(flavor = "current_thread")]
     async fn restore_downloads_refill_slots_before_the_first_file_finishes_and_keep_order() {
@@ -996,11 +997,10 @@ mod tests {
             }
         };
 
-        let (downloaded, ()) = tokio::time::timeout(Duration::from_secs(5), async {
-            tokio::join!(download, release_downloads)
-        })
-        .await
-        .expect("later downloads must start while the first file is blocked");
+        let (downloaded, ()) = async { tokio::join!(download, release_downloads) }
+            .with_timeout(Duration::from_secs(5))
+            .await
+            .expect("later downloads must start while the first file is blocked");
         let downloaded = downloaded.unwrap();
 
         assert_eq!(

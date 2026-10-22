@@ -1364,6 +1364,7 @@ mod tests {
 
     use bdk_wallet::{coin_selection::InsufficientFunds, error::CreateTxError};
     use bitcoin::Amount;
+    use cove_tokio::FutureTimeoutExt as _;
 
     use super::{
         Balance, Error, Message, RustWalletManager, WalletLedgerState, WalletLoadState,
@@ -1628,7 +1629,7 @@ mod tests {
 
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
         let mut seen = Vec::new();
-        while let Ok(Ok(message)) = tokio::time::timeout_at(deadline, receiver.recv_async()).await {
+        while let Ok(Ok(message)) = receiver.recv_async().with_deadline(deadline).await {
             let messages = match message {
                 SingleOrMany::Single(message) => vec![message],
                 SingleOrMany::Many(messages) => messages,

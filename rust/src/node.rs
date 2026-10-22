@@ -184,7 +184,9 @@ mod tests {
         let url = format!("http://{}/api", listener.local_addr().unwrap());
         let node = Node::new_esplora("Silent".to_string(), url, Network::Signet);
 
-        let result = tokio::time::timeout(std::time::Duration::from_secs(600), node.check_url())
+        let result = node
+            .check_url()
+            .with_timeout(std::time::Duration::from_secs(600))
             .await
             .expect("check_url never returned for a node that never responds");
 
