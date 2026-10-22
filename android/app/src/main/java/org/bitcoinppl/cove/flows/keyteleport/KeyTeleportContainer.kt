@@ -51,8 +51,9 @@ fun KeyTeleportContainer(
     // an empty clipboard stays silent, only a clip this flow cannot use reports back
     val onPaste: () -> Unit = {
         val text = readClipboardText(context)?.trim()?.takeIf(String::isNotEmpty)
-        if (text != null && !manager.ingestKeyTeleportText(text, route.flowDirection())) {
-            localError = "Scan the KeyTeleport response expected by this flow."
+        val direction = route.flowDirection()
+        if (text != null && !manager.ingestKeyTeleportText(text, direction)) {
+            localError = direction.rejectedInputMessage
         }
     }
 
@@ -141,12 +142,9 @@ private fun KeyTeleportOverlays(
         QrCodeScanView(
             onScanned = { multiFormat ->
                 actions.onScannerDismiss()
-                if (!manager.ingestKeyTeleportMultiFormat(
-                        multiFormat,
-                        overlay.route.flowDirection(),
-                    )
-                ) {
-                    actions.onScanError("Scan the KeyTeleport response expected by this flow.")
+                val direction = overlay.route.flowDirection()
+                if (!manager.ingestKeyTeleportMultiFormat(multiFormat, direction)) {
+                    actions.onScanError(direction.rejectedInputMessage)
                 }
             },
             onDismiss = actions.onScannerDismiss,
