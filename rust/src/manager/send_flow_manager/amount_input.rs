@@ -361,6 +361,10 @@ impl RustSendFlowManager {
         }
 
         let fee_rate = fee_rate.unwrap_or_else(|| FeeRate::from_sat_per_vb(50.0));
+        if fee_rate.is_below_minimum() {
+            return Err(SendFlowError::FeeRateBelowMinimum);
+        }
+
         let psbt: Psbt =
             call!(wallet_actor.build_ephemeral_drain_tx(address, fee_rate)).await.unwrap()?.into();
 

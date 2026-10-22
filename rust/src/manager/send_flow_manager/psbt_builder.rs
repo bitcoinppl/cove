@@ -14,6 +14,12 @@ impl RustSendFlowManager {
         fee_rate: FeeRate,
     ) -> Result<Psbt> {
         trace!("build_psbt");
+
+        // finalize and max send check the same floor for paths that skip this builder
+        if fee_rate.is_below_minimum() {
+            return Err(SendFlowError::FeeRateBelowMinimum);
+        }
+
         let mode = self.state.lock().mode.clone();
 
         match mode {

@@ -36012,8 +36012,22 @@ enum SendFlowError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
     case UnableToGetMaxSend(String
     )
     case InsufficientFunds
+    /**
+     * The amount plus the selected network fee is more than the wallet can spend
+     */
+    case SpendExceedsBalance(shortfallSats: UInt64
+    )
+    /**
+     * The amount alone is more than the wallet can spend, before the network fee is known
+     */
+    case AmountExceedsBalance(excessSats: UInt64
+    )
     case SendBelowDustLimit
     case UnableToGetFeeRate
+    /**
+     * A custom rate under the relay floor, including zero, negative, and NaN input
+     */
+    case FeeRateBelowMinimum
     case UnableToBuildTxn(String
     )
     case UnableToSaveUnsignedTransaction(String
@@ -36078,18 +36092,25 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             try FfiConverterString.read(from: &buf)
             )
         case 8: return .InsufficientFunds
-        case 9: return .SendBelowDustLimit
-        case 10: return .UnableToGetFeeRate
-        case 11: return .UnableToBuildTxn(
+        case 9: return .SpendExceedsBalance(
+            shortfallSats: try FfiConverterUInt64.read(from: &buf)
+            )
+        case 10: return .AmountExceedsBalance(
+            excessSats: try FfiConverterUInt64.read(from: &buf)
+            )
+        case 11: return .SendBelowDustLimit
+        case 12: return .UnableToGetFeeRate
+        case 13: return .FeeRateBelowMinimum
+        case 14: return .UnableToBuildTxn(
             try FfiConverterString.read(from: &buf)
             )
-        case 12: return .UnableToSaveUnsignedTransaction(
+        case 15: return .UnableToSaveUnsignedTransaction(
             try FfiConverterString.read(from: &buf)
             )
-        case 13: return .WalletManager(
+        case 16: return .WalletManager(
             try FfiConverterTypeWalletManagerError.read(from: &buf)
             )
-        case 14: return .UnableToGetFeeDetails(
+        case 17: return .UnableToGetFeeDetails(
             try FfiConverterString.read(from: &buf)
             )
 
@@ -36141,31 +36162,45 @@ public struct FfiConverterTypeSendFlowError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(8))
 
 
-        case .SendBelowDustLimit:
+        case let .SpendExceedsBalance(shortfallSats):
             writeInt(&buf, Int32(9))
+            FfiConverterUInt64.write(shortfallSats, into: &buf)
+
+
+        case let .AmountExceedsBalance(excessSats):
+            writeInt(&buf, Int32(10))
+            FfiConverterUInt64.write(excessSats, into: &buf)
+
+
+        case .SendBelowDustLimit:
+            writeInt(&buf, Int32(11))
 
 
         case .UnableToGetFeeRate:
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(12))
+
+
+        case .FeeRateBelowMinimum:
+            writeInt(&buf, Int32(13))
 
 
         case let .UnableToBuildTxn(v1):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(14))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .UnableToSaveUnsignedTransaction(v1):
-            writeInt(&buf, Int32(12))
+            writeInt(&buf, Int32(15))
             FfiConverterString.write(v1, into: &buf)
 
 
         case let .WalletManager(v1):
-            writeInt(&buf, Int32(13))
+            writeInt(&buf, Int32(16))
             FfiConverterTypeWalletManagerError.write(v1, into: &buf)
 
 
         case let .UnableToGetFeeDetails(v1):
-            writeInt(&buf, Int32(14))
+            writeInt(&buf, Int32(17))
             FfiConverterString.write(v1, into: &buf)
 
         }

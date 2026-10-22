@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
@@ -52,7 +53,26 @@ private object CustomFeeRateConstants {
 
     // delay before showing alert after dismissing sheet
     const val ALERT_DELAY_MS = 850L
+
+    // typed rates round to hundredths of a sat/vB
+    const val FEE_RATE_SCALE = 100f
 }
+
+/** Parses typed custom fee rate text, rounded to hundredths, or null when it isn't a finite number */
+internal fun parseCustomFeeRate(text: String): Float? =
+    text
+        .trim()
+        .toFloatOrNull()
+        ?.takeIf { it.isFinite() }
+        ?.let { round(it * CustomFeeRateConstants.FEE_RATE_SCALE) / CustomFeeRateConstants.FEE_RATE_SCALE }
+
+// rust owns the minimum, so the check goes through FeeRate instead of a local constant
+private fun customFeeRateInputError(feeRate: Float?): String? =
+    when {
+        feeRate == null -> "Enter the fee rate as a number"
+        FeeRate.fromSatPerVb(feeRate).isBelowMinimum() -> "The fee rate must be at least 1 sat/vB"
+        else -> null
+    }
 
 internal fun isTooHighCustomFeeError(error: SendFlowException): Boolean =
     when (error) {
@@ -128,13 +148,9 @@ fun CustomFeeRateSheet(
 
     val scope = rememberCoroutineScope()
 
-    // get fee rate as float
-    val feeRateFloat =
-        remember(feeRateText) {
-            feeRateText.toFloatOrNull()?.let {
-                round(it * 100f) / 100f
-            } ?: selectedOption.satPerVb()
-        }
+    val parsedFeeRate = remember(feeRateText) { parseCustomFeeRate(feeRateText) }
+    val inputError = remember(parsedFeeRate) { customFeeRateInputError(parsedFeeRate) }
+    val feeRateFloat = parsedFeeRate ?: selectedOption.satPerVb()
 
     // calculate fee speed based on current fee rate
     val feeSpeed =
@@ -203,6 +219,8 @@ fun CustomFeeRateSheet(
                             return@withContext
                         }
 
+                        // the rate may have changed or become invalid while Rust checked it
+                        ensureActive()
                         handleTooHighCustomFee(
                             feeRate = feeRate,
                             presenter = presenter,
@@ -224,14 +242,21 @@ fun CustomFeeRateSheet(
     }
 
     // trigger calculation when fee rate changes
-    LaunchedEffect(feeRateFloat) {
-        getTotalSatsDeduped(feeRateFloat)
+    LaunchedEffect(feeRateFloat, inputError) {
+        if (inputError == null) {
+            getTotalSatsDeduped(feeRateFloat)
+        } else {
+            // a pending request for the previous rate must not update totals or dismiss the sheet
+            feeCalculationJob?.cancel()
+            feeCalculationJob = null
+        }
     }
 
-    // on dismiss, apply the custom fee option
+    // on dismiss, apply the custom fee option unless the typed rate is invalid
     DisposableEffect(Unit) {
         onDispose {
-            val customFeeRate = feeRateText.toFloatOrNull() ?: return@onDispose
+            val customFeeRate = parseCustomFeeRate(feeRateText) ?: return@onDispose
+            if (customFeeRateInputError(customFeeRate) != null) return@onDispose
 
             // if there's a matching non-custom option, use that instead
             updatedFeeOptions.getFeeRateWith(customFeeRate)?.let { matchingOption ->
@@ -323,6 +348,15 @@ fun CustomFeeRateSheet(
                     )
                 }
 
+                inputError?.let { message ->
+                    Text(
+                        text = message,
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // slider
@@ -373,6 +407,7 @@ fun CustomFeeRateSheet(
             // done button
             Button(
                 onClick = onDismiss,
+                enabled = inputError == null,
                 modifier =
                     Modifier
                         .fillMaxWidth()

@@ -103,7 +103,11 @@ class SendFlowPresenter(
 
             is SendFlowException.InsufficientFunds,
             is SendFlowException.NoBalance,
+            is SendFlowException.SpendExceedsBalance,
+            is SendFlowException.AmountExceedsBalance,
             -> "Insufficient Funds"
+
+            is SendFlowException.FeeRateBelowMinimum -> "Fee Rate Too Low"
 
             is SendFlowException.SendBelowDustLimit -> "Amount Below Dust Limit"
             is SendFlowException.UnableToGetFeeRate -> "Unable to get fee rate"
@@ -151,6 +155,15 @@ class SendFlowPresenter(
 
             is SendFlowException.InsufficientFunds ->
                 "You do not have enough bitcoin in your wallet to cover the amount plus fees"
+
+            is SendFlowException.SpendExceedsBalance ->
+                "The amount plus the network fee is ${error.shortfallSats} sats more than your spendable balance. Lower the amount or the fee."
+
+            is SendFlowException.AmountExceedsBalance ->
+                "The amount is ${error.excessSats} sats more than your spendable balance, before the network fee. Lower the amount."
+
+            is SendFlowException.FeeRateBelowMinimum ->
+                "The network fee rate must be at least 1 sat/vB"
 
             is SendFlowException.SendBelowDustLimit ->
                 "This amount is below Bitcoin's dust limit for this address type. The network would reject it. Please send a bit more."
@@ -214,6 +227,9 @@ class SendFlowPresenter(
 
             is SendFlowException.InvalidNumber,
             is SendFlowException.InsufficientFunds,
+            is SendFlowException.SpendExceedsBalance,
+            is SendFlowException.AmountExceedsBalance,
+            is SendFlowException.FeeRateBelowMinimum,
             is SendFlowException.SendBelowDustLimit,
             is SendFlowException.ZeroAmount,
             is SendFlowException.WalletManager,

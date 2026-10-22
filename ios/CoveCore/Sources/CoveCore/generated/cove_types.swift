@@ -2086,6 +2086,13 @@ public func FfiConverterTypeConfirmDetails_lower(_ value: ConfirmDetails) -> UIn
 
 public protocol FeeRateProtocol: AnyObject, Sendable {
 
+    /**
+     * Whether this rate is under [`MIN_FEE_RATE_SAT_PER_VB`]
+     *
+     * Zero, negative, and NaN inputs all convert to a zero rate, so they land here too
+     */
+    func isBelowMinimum()  -> Bool
+
     func satPerVb()  -> Float
 
     func satsPerVbyteString()  -> String
@@ -2152,6 +2159,20 @@ public static func fromSatPerVb(satPerVb: Float) -> FeeRate  {
 }
 
 
+
+    /**
+     * Whether this rate is under [`MIN_FEE_RATE_SAT_PER_VB`]
+     *
+     * Zero, negative, and NaN inputs all convert to a zero rate, so they land here too
+     */
+open func isBelowMinimum() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_types_fn_method_feerate_is_below_minimum(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
 
 open func satPerVb() -> Float  {
     return try!  FfiConverterFloat.lift(try! rustCall() {
@@ -6622,6 +6643,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_qrdensity_ur_fragment_len() != 56660) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_feerate_is_below_minimum() != 57681) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_feerate_sat_per_vb() != 25940) {

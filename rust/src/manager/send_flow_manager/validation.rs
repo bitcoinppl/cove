@@ -1,4 +1,4 @@
-use super::{EnterMode, SendFlowAlertState};
+use super::{EnterMode, SendFlowAlertState, SendFlowError};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) enum SpendableBalanceCheck {
@@ -46,6 +46,24 @@ pub(crate) fn spendable_balance_check(
     }
 
     SpendableBalanceCheck::WithinBalance
+}
+
+/// The error for a spend over the spendable balance; until the fee total is known only the
+/// amount's excess is exact, so it is reported without claiming to include the fee
+pub(crate) fn spend_over_balance_error(
+    amount: u64,
+    total_fee_sats: Option<u64>,
+    spendable_balance: u64,
+) -> SendFlowError {
+    match total_fee_sats {
+        Some(total_fee_sats) => SendFlowError::SpendExceedsBalance {
+            shortfall_sats: total_spend_sats(amount, total_fee_sats)
+                .saturating_sub(spendable_balance),
+        },
+        None => SendFlowError::AmountExceedsBalance {
+            excess_sats: amount.saturating_sub(spendable_balance),
+        },
+    }
 }
 
 pub(crate) fn total_spend_sats(amount: u64, total_fee_sats: u64) -> u64 {

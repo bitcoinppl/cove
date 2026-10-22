@@ -342,7 +342,9 @@ impl RustSendFlowManager {
                     return false;
                 }
 
-                let msg = Message::SetAlert(SendFlowError::InsufficientFunds.into());
+                let error =
+                    validation::spend_over_balance_error(amount, total_fee_sats, spendable_balance);
+                let msg = Message::SetAlert(error.into());
                 if display_alert {
                     sender.queue(msg);
                 } else {
@@ -1518,10 +1520,38 @@ mod tests {
             panic!("expected a single insufficient funds alert");
         };
 
-        assert!(matches!(
+        assert_eq!(
             alert,
-            super::SendFlowAlertState::Error(super::SendFlowError::InsufficientFunds)
-        ));
+            super::SendFlowAlertState::Error(super::SendFlowError::SpendExceedsBalance {
+                shortfall_sats: 155
+            })
+        );
+    }
+
+    #[test]
+    fn validate_amount_reports_only_the_amount_excess_while_the_fee_is_unknown() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let manager = manager_for_validation();
+        {
+            let mut state = manager.state.lock();
+            state.amount_sats = Some(10_100);
+            state.unlocked_spendable_sats = Some(10_000);
+        }
+        set_selected_fee_without_total(&manager);
+
+        assert!(!manager.validate_amount(true));
+
+        let super::Message::SetAlert(alert) = next_reconcile_message(&manager) else {
+            panic!("expected a single insufficient funds alert");
+        };
+
+        // a 100-sat shortfall "including the fee" would undercount once the fee is known
+        assert_eq!(
+            alert,
+            super::SendFlowAlertState::Error(super::SendFlowError::AmountExceedsBalance {
+                excess_sats: 100
+            })
+        );
     }
 
     #[test]
@@ -1567,10 +1597,12 @@ mod tests {
             panic!("expected a single insufficient funds alert");
         };
 
-        assert!(matches!(
+        assert_eq!(
             alert,
-            super::SendFlowAlertState::Error(super::SendFlowError::InsufficientFunds)
-        ));
+            super::SendFlowAlertState::Error(super::SendFlowError::SpendExceedsBalance {
+                shortfall_sats: 56
+            })
+        );
     }
 
     #[test]
@@ -1665,6 +1697,29 @@ mod tests {
                 ),
             }
         }
+    }
+
+    #[test]
+    fn finalize_rejects_a_selected_rate_below_the_minimum_even_with_a_known_total() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 10_000);
+        set_selected_fee_total(&manager, 200);
+
+        let below_minimum = FeeRateOptionWithTotalFee::new(
+            FeeRateOption::new(custom_fee_speed(), 0.5),
+            super::Amount::from_sat(100),
+        );
+        manager.selected_fee_rate_changed(Arc::new(below_minimum));
+        drain_reconcile_messages(&manager);
+
+        manager.finalize_and_go_to_next_screen();
+
+        assert_eq!(
+            next_reconcile_message(&manager),
+            super::Message::SetAlert(super::SendFlowAlertState::Error(
+                super::SendFlowError::FeeRateBelowMinimum
+            ))
+        );
     }
 
     // regression for #912: the alert must explain that the fee causes the shortfall, and by how much
