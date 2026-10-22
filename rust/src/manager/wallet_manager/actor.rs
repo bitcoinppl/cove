@@ -2938,6 +2938,56 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn actor_manual_tx_never_adds_unselected_inputs_to_cover_a_high_fee() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::database::test_support::init_test_database();
+
+        let mut wallet = Wallet::preview_new_wallet();
+        mark_wallet_ledger_ready(&mut wallet);
+        insert_checkpoint(
+            &mut wallet.bdk,
+            BlockId { height: 1, hash: BlockHash::from_byte_array([2; 32]) },
+        );
+        let selected = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(4_845));
+        let unselected = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(80_000));
+
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor = new_test_wallet_actor(wallet, sender);
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+        actor.db = db;
+
+        // the unselected 80_000 sat output could easily pay this fee, so the build must
+        // fail instead of silently spending it
+        let result = actor
+            .build_manual_tx(
+                vec![selected],
+                Amount::from_sat(4_000),
+                Address::preview_new(),
+                high_sat_vbyte_fee_rate(),
+            )
+            .await;
+        let error =
+            actor_value(result).await.expect_err("selected coin cannot cover a 100 sat/vbyte fee");
+
+        assert!(matches!(error, super::Error::InsufficientFunds(_)));
+
+        // at an affordable rate the same selection builds and spends exactly the selected coin
+        let result = actor
+            .build_manual_tx(
+                vec![selected],
+                Amount::from_sat(4_000),
+                Address::preview_new(),
+                one_sat_vbyte_fee_rate(),
+            )
+            .await;
+        let psbt = actor_value(result).await.expect("selected coin covers a 1 sat/vbyte fee");
+        let spent = spent_outpoints(&psbt);
+
+        assert_eq!(spent, HashSet::from([selected]));
+        assert!(!spent.contains(&unselected));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn broadcast_transaction_posts_to_node_exactly_once() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
 
