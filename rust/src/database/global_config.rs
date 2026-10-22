@@ -852,7 +852,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(saved.as_deref(), Some("http://192.168.1.10:3000/tx/{txid}"));
+        assert_eq!(saved, "http://192.168.1.10:3000/tx/{txid}");
         assert_eq!(
             table.selected_block_explorer_option(Network::Bitcoin),
             BlockExplorerOption::Custom
