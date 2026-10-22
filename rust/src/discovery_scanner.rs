@@ -815,6 +815,7 @@ mod tests {
 
     use bdk_wallet::bitcoin::bip32::Xpriv;
     use cove_device::keychain::WalletXprv;
+    use cove_tokio::FutureTimeoutExt as _;
 
     use super::*;
 
@@ -1084,7 +1085,8 @@ mod tests {
         });
         drop(worker_addr);
 
-        tokio::time::timeout(std::time::Duration::from_secs(1), call!(scanner.shutdown()))
+        call!(scanner.shutdown())
+            .with_timeout(std::time::Duration::from_secs(1))
             .await
             .expect("scanner shutdown waits for the worker task")
             .expect("scanner shutdown responds");
@@ -1092,7 +1094,8 @@ mod tests {
         assert!(task_finished.load(Ordering::SeqCst));
         assert_eq!(Arc::strong_count(&db_ref), 1);
 
-        tokio::time::timeout(std::time::Duration::from_secs(1), worker_termination)
+        worker_termination
+            .with_timeout(std::time::Duration::from_secs(1))
             .await
             .expect("worker actor terminates");
         assert_eq!(Arc::strong_count(&db_ref), 1);
