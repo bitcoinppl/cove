@@ -768,8 +768,8 @@ struct CorruptedWalletDeletionRetry: Equatable {
     }
 }
 
+@MainActor
 extension AppManager {
-    @MainActor
     private func applyConfigurationMessage(_ message: AppStateReconcileMessage) {
         switch message {
         case .databaseUpdated:
@@ -801,7 +801,6 @@ extension AppManager {
         }
     }
 
-    @MainActor
     private func refreshWalletFiatValues() {
         guard let walletManager else { return }
 
@@ -811,7 +810,6 @@ extension AppManager {
         }
     }
 
-    @MainActor
     private func applyWalletPresentationMessage(_ message: AppStateReconcileMessage) {
         switch message {
         case .walletModeChanged:
@@ -891,11 +889,11 @@ extension AppManager {
 }
 
 /// Wipe handling, kept out of the class body because that body is at the SwiftLint length limit
+@MainActor
 extension AppManager {
     /// Apply the committed post-wipe state from Rust before authentication is released
     ///
     /// Rust decides what a wiped app looks like; this only clears iOS-owned presentation state
-    @MainActor
     func applyWipeCompletion(_ completion: FullWipeCompletion) async {
         isSidebarVisible = false
         isLoading = false
