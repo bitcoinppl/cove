@@ -321,11 +321,7 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
 ]
-coverage = ["agent"]
-pending = [
-  "rust:rust/src/database/global_config.rs::custom_block_explorer_setter_rejects_empty_input_and_keeps_the_saved_template",
-]
-pending_pr = 924
+coverage = ["rust:rust/src/database/global_config.rs::custom_block_explorer_setter_rejects_empty_input_and_keeps_the_saved_template"]
 # 1.4.0: ios BLOCKED, android FAIL
 # failing on android in 1.4.0; fix and test are in pr 924
 

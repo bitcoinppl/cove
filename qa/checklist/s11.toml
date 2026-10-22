@@ -17,13 +17,11 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
 ]
-coverage = ["agent"]
-pending = [
+coverage = [
   "rust:rust/src/router.rs::startup_route_ignores_a_selected_wallet_from_another_network",
   "rust:rust/src/manager/wallet_manager.rs::loading_a_wallet_from_another_network_reports_that_it_does_not_exist",
   "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainerRecoveryTest.kt::staleSelectedWalletRouteFallsBackInsteadOfLoadingForever",
 ]
-pending_pr = 924
 # 1.4.0: ios BLOCKED, android FAIL
 # stale wallet id from another network is decided by startup routing and manager load
 

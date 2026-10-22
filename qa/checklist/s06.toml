@@ -36,9 +36,7 @@ title = "Amount plus fee over funds gives clear explanation"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
-coverage = ["agent"]
-pending = ["rust:rust/src/manager/send_flow_manager.rs::validate_amount_names_the_shortfall_when_amount_plus_fee_exceeds_balance"]
-pending_pr = 924
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::validate_amount_names_the_shortfall_when_amount_plus_fee_exceeds_balance"]
 # 1.4.0: ios BLOCKED, android FAIL
 # existing rust test asserts the InsufficientFunds variant; the failure was the message text
 
@@ -49,9 +47,7 @@ title = "Invalid custom fee rates accepted"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "ios/Cove/Flows/SendFlow/SendFlowCustomFeeRateView.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/SendFlowSelectFeeRateView.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/sheets/CustomFeeRateSheet.kt", "android/app/src/main/java/org/bitcoinppl/cove/sheets/FeeRateSelectorSheet.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/NetworkFeeBottomSheet.kt"]
-coverage = ["agent"]
-pending = ["rust:rust/src/manager/send_flow_manager.rs::custom_fee_option_rejects_rates_below_minimum_relay_floor"]
-pending_pr = 924
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::custom_fee_option_rejects_rates_below_minimum_relay_floor"]
 # 1.4.0: ios BLOCKED, android FAIL
 # rate validation is decided in rust, the sheets only show the error
 
@@ -188,9 +184,7 @@ title = "iOS zero-rate custom fee draft"
 platforms = ["ios"]
 target = "rust"
 paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowCustomFeeRateView.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/SendFlowSelectFeeRateView.swift"]
-coverage = ["agent"]
-pending = ["rust:rust/src/manager/send_flow_manager.rs::custom_fee_option_rejects_rates_below_minimum_relay_floor"]
-pending_pr = 924
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::custom_fee_option_rejects_rates_below_minimum_relay_floor"]
 # 1.4.0: ios BLOCKED, android N/A
 
 [[row]]
@@ -200,9 +194,7 @@ title = "iOS negative custom fee draft"
 platforms = ["ios"]
 target = "rust"
 paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowCustomFeeRateView.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/SendFlowSelectFeeRateView.swift"]
-coverage = ["agent"]
-pending = ["rust:rust/src/manager/send_flow_manager.rs::custom_fee_option_rejects_rates_below_minimum_relay_floor"]
-pending_pr = 924
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::custom_fee_option_rejects_rates_below_minimum_relay_floor"]
 # 1.4.0: ios BLOCKED, android N/A
 
 [[row]]

@@ -87,12 +87,9 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
 ]
 coverage = [
-    "agent",
-]
-pending = [
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPasteRejectionTest.kt::senderRejectsANonKeyTeleportPasteByAskingForTheReceiverRequest",
+    "agent:ios",
 ]
-pending_pr = 924
 # 1.4.0: ios BLOCKED, android FAIL
 
 [[row]]

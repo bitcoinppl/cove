@@ -33,12 +33,8 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
 ]
 coverage = [
-    "agent",
-]
-pending = [
     "rust:rust/src/transaction/transaction_details.rs::transaction_list_date_matches_detail_date_in_the_device_time_zone",
 ]
-pending_pr = 924
 # 1.4.0: ios FAIL, android FAIL
 # both screens format the date rust hands them
 
@@ -76,12 +72,9 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsScanState.kt",
 ]
 coverage = [
-    "agent",
-]
-pending = [
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreenTest.kt::nodeConnectionFailureShowsAnAlertWithAWayToChangeNode",
+    "agent:ios",
 ]
-pending_pr = 924
 # 1.4.0: ios BLOCKED, android FAIL
 # rust already reports the node failure; the missing piece is the alert, which a compose test can drive without toggling wifi
 
@@ -281,12 +274,8 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
 ]
 coverage = [
-    "agent",
-]
-pending = [
     "rust:rust/src/manager/wallet_manager.rs::single_label_edit_reconciles_the_transaction_list",
 ]
-pending_pr = 924
 # 1.4.0: ios PASS, android FAIL
 
 [[row]]
@@ -508,13 +497,9 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
 ]
 coverage = [
-    "agent",
-]
-pending = [
     "rust:rust/src/node_connect.rs::parse_custom_node_keeps_an_esplora_url_as_entered",
     "rust:rust/src/node.rs::check_url_gives_up_on_a_node_that_never_responds",
 ]
-pending_pr = 924
 # 1.4.0: ios FAIL, android FAIL
 
 [[row]]

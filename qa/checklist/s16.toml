@@ -46,12 +46,9 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/UtxoListScreen.kt",
 ]
 coverage = [
-    "agent",
-]
-pending = [
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/LargeFontScaleLayoutTest.kt::utxoSortChipsStayReadableAtLargestFontScale",
+    "agent:ios",
 ]
-pending_pr = 924
 # 1.4.0: ios BLOCKED, android FAIL
 
 [[row]]
@@ -143,12 +140,9 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
 ]
 coverage = [
-    "agent",
-]
-pending = [
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/LargeFontScaleLayoutTest.kt::receiveSheetActionsCanBeReachedAtLargestFontScale",
+    "agent:ios",
 ]
-pending_pr = 924
 # 1.4.0: ios BLOCKED, android FAIL
 
 [[row]]
@@ -327,12 +321,8 @@ paths = [
     "ios/Cove/Flows/SendFlow/Common/SendFlowHeaderView.swift",
 ]
 coverage = [
-    "agent",
-]
-pending = [
     "ios-unit:ios/CoveTests/SendFlowHeaderLayoutTests.swift::testHeaderGrowsWithAccessibilityTextSize",
 ]
-pending_pr = 924
 # 1.4.0: ios FAIL, android N/A
 
 [[row]]
@@ -347,13 +337,9 @@ paths = [
     "ios/Cove/Flows/SendFlow/Common/SendFlowHeaderView.swift",
 ]
 coverage = [
-    "agent",
-]
-pending = [
     "ios-unit:ios/CoveTests/AdaptiveToolbarStyleTests.swift::testNavBarToggleKeepsTheStyledScreenIdentity",
     "ios-unit:ios/CoveTests/SendFlowBackNavigationTests.swift::testBackFromSendAtLargestAccessibilitySizeFinishes",
 ]
-pending_pr = 924
 # 1.4.0: ios FAIL, android N/A
 
 [[row]]

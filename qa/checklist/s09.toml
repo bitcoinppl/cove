@@ -35,9 +35,7 @@ title = "Duplicate account import creates a second wallet"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/wallet/builder.rs", "rust/src/wallet_identity/existing.rs", "rust/src/wallet_identity/public.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
-coverage = ["agent"]
-pending = ["rust:rust/src/wallet/builder.rs::importing_the_same_origin_less_ypub_twice_reports_the_existing_wallet"]
-pending_pr = 924
+coverage = ["rust:rust/src/wallet/builder.rs::importing_the_same_origin_less_ypub_twice_reports_the_existing_wallet"]
 # 1.4.0: ios BLOCKED, android FAIL
 
 [[row]]
@@ -241,9 +239,7 @@ title = "Invalid public-key alert shows internal error types"
 platforms = ["ios"]
 target = "ui"
 paths = ["rust/src/xpub.rs", "rust/src/wallet.rs", "rust/src/wallet/**", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift"]
-coverage = ["agent"]
-pending = ["ios-unit:ios/CoveTests/HardwareImportErrorMessageTests.swift::testInvalidKeyAlertShowsTheReasonInsteadOfTheEnumDump"]
-pending_pr = 924
+coverage = ["ios-unit:ios/CoveTests/HardwareImportErrorMessageTests.swift::testInvalidKeyAlertShowsTheReasonInsteadOfTheEnumDump"]
 # 1.4.0: ios FAIL, android N/A
 # ios maps the rust error to alert text
 
@@ -294,8 +290,6 @@ title = "Clear saved screenshot of invalid public-key error"
 platforms = ["ios"]
 target = "ui"
 paths = ["rust/src/xpub.rs", "rust/src/wallet.rs", "rust/src/wallet/**", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift"]
-coverage = ["agent"]
-pending = ["ios-unit:ios/CoveTests/HardwareImportErrorMessageTests.swift::testInvalidKeyAlertShowsTheReasonInsteadOfTheEnumDump"]
-pending_pr = 924
+coverage = ["ios-unit:ios/CoveTests/HardwareImportErrorMessageTests.swift::testInvalidKeyAlertShowsTheReasonInsteadOfTheEnumDump"]
 # 1.4.0: ios PASS, android N/A
 # same defect as the invalid public-key alert row, evidence capture

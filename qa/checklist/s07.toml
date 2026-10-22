@@ -108,9 +108,10 @@ title = "Malformed pasted text errors without leaving sender"
 platforms = ["ios", "android"]
 target = "ui"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/send.rs", "rust/src/manager/key_teleport_manager/controller.rs", "rust/src/key_teleport.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSendViews.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportSendViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["agent"]
-pending = ["android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPasteRejectionTest.kt::senderRejectsANonKeyTeleportPasteByAskingForTheReceiverRequest"]
-pending_pr = 924
+coverage = [
+  "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPasteRejectionTest.kt::senderRejectsANonKeyTeleportPasteByAskingForTheReceiverRequest",
+  "agent:ios",
+]
 # 1.4.0: ios BLOCKED, android PASS
 # the paste rejection is android sheet and handler behaviour
 
@@ -171,9 +172,7 @@ title = "New receiver request keeps stale expiry error"
 platforms = ["ios"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift"]
-coverage = ["agent"]
-pending = ["rust:rust/src/manager/key_teleport_manager/tests.rs::restarting_receive_after_expiry_clears_the_expired_session_alert"]
-pending_pr = 924
+coverage = ["rust:rust/src/manager/key_teleport_manager/tests.rs::restarting_receive_after_expiry_clears_the_expired_session_alert"]
 # 1.4.0: ios FAIL, android N/A
 
 [[row]]
@@ -183,8 +182,6 @@ title = "Clear saved screenshot of stale expiry banner"
 platforms = ["ios"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift"]
-coverage = ["agent"]
-pending = ["rust:rust/src/manager/key_teleport_manager/tests.rs::restarting_receive_after_expiry_clears_the_expired_session_alert"]
-pending_pr = 924
+coverage = ["rust:rust/src/manager/key_teleport_manager/tests.rs::restarting_receive_after_expiry_clears_the_expired_session_alert"]
 # 1.4.0: ios BLOCKED, android N/A
 # same defect as the stale expiry error row, evidence capture
