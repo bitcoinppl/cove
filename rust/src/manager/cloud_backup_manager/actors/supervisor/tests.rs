@@ -5,6 +5,7 @@ use super::enable::{
 };
 use super::verification::DeepVerificationContinuation;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
+use cove_tokio::FutureTimeoutExt as _;
 use cove_cspp::CsppStore as _;
 use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
@@ -3514,7 +3515,8 @@ async fn restore_all_cancellation_finishes_the_active_wallet_and_skips_the_next(
     );
 
     call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(2), gate.wait_until_blocked())
+    gate.wait_until_blocked()
+        .with_timeout(Duration::from_secs(2))
         .await
         .expect("first wallet restore should reach atomic download");
     call!(manager.supervisor.cancel_restore_all_operation()).await.unwrap();
@@ -4017,8 +4019,13 @@ async fn seed_backup_matching_only_a_watch_only_wallet_restores_into_that_wallet
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
     let namespace = manager.current_namespace_id().unwrap();
     let secret = test_seed_secret();
-    let local_wallet = save_local_watch_only_wallet(&secret);
+
+    // a hardware import marks a public wallet verified without any recovery words
+    let mut local_wallet = save_local_watch_only_wallet(&secret);
+    local_wallet.verified = true;
+    Database::global().wallets.update_wallet_metadata(local_wallet.clone()).unwrap();
     let (seed_wallet, seed_record_id) = upload_test_seed_backup(&namespace, &secret);
+    assert!(!seed_wallet.verified);
     let seed_record_id = seed_record_id.as_str();
     list_test_wallet_files(&namespace, &[seed_record_id]);
     manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed_detail(&[
@@ -4049,6 +4056,9 @@ async fn seed_backup_matching_only_a_watch_only_wallet_restores_into_that_wallet
     assert_eq!(local_wallets[0].id, local_wallet.id);
     assert_eq!(local_wallets[0].wallet_type, WalletType::Hot);
     assert_eq!(Keychain::global().get_wallet_secret(&local_wallet.id).unwrap(), Some(secret));
+
+    // the seed's words were never verified, so the wallet keeps warning before delete or wipe
+    assert!(!local_wallets[0].verified);
     assert!(!local_wallet_exists(&seed_wallet));
 
     // the local wallet now holds the seed, so the cloud record is an extra copy

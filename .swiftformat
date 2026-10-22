@@ -1,3 +1,4 @@
+--minversion 0.64.0
 --exclude ios/CoveCore/Sources/CoveCore/generated
 --exclude rust/bindings
 --exclude ios/CoveCore/Sources/cove_core_ffi.xcframework
@@ -9,4 +10,5 @@
 --disable wrapIfStatementBodies
 --disable wrapLoopBodies
 --disable wrapPropertyBodies
+--disable repeatedGuard
 --swiftversion 6.0
