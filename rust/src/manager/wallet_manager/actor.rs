@@ -2029,7 +2029,7 @@ mod tests {
     }
 
     async fn wait_for_wallet_scan_started(receiver: &flume::Receiver<SingleOrMany>) {
-        tokio::time::timeout(Duration::from_secs(5), async {
+        async {
             loop {
                 let batch = receiver.recv_async().await.expect("reconcile message is emitted");
 
@@ -2037,7 +2037,8 @@ mod tests {
                     return;
                 }
             }
-        })
+        }
+        .with_timeout(Duration::from_secs(5))
         .await
         .expect("address-type switch restarts wallet scan");
     }
@@ -2222,7 +2223,7 @@ mod tests {
     }
 
     async fn wait_for_height_request_count(server: &TestEsploraNode, count: usize) {
-        tokio::time::timeout(Duration::from_secs(2), async {
+        async {
             loop {
                 if server.height_requests.load(Ordering::SeqCst) >= count {
                     return;
@@ -2230,13 +2231,14 @@ mod tests {
 
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
-        })
+        }
+        .with_timeout(Duration::from_secs(2))
         .await
         .expect("height request count is reached");
     }
 
     async fn wait_for_persisted_height(metadata: &WalletMetadata, block_height: u64) {
-        tokio::time::timeout(Duration::from_secs(2), async {
+        async {
             loop {
                 let persisted = persisted_wallet_metadata(metadata)
                     .internal
@@ -2254,7 +2256,8 @@ mod tests {
 
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
-        })
+        }
+        .with_timeout(Duration::from_secs(2))
         .await
         .expect("height refresh persists");
     }
@@ -2359,7 +2362,7 @@ mod tests {
     }
 
     async fn wait_for_broadcast_request_count(broadcast_requests: &Arc<AtomicUsize>, count: usize) {
-        tokio::time::timeout(Duration::from_secs(2), async {
+        async {
             loop {
                 if broadcast_requests.load(Ordering::SeqCst) >= count {
                     return;
@@ -2367,7 +2370,8 @@ mod tests {
 
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
-        })
+        }
+        .with_timeout(Duration::from_secs(2))
         .await
         .expect("broadcast request count is reached");
     }
@@ -3060,12 +3064,10 @@ mod tests {
 
         let (authority, preparation) =
             crate::wallet_lifecycle::test_support::begin_wallet_deletion(db.id.clone());
-        tokio::time::timeout(
-            Duration::from_secs(1),
-            actor_value(actor.quiesce_for_terminal_shutdown(authority).await),
-        )
-        .await
-        .expect("destructive quiesce does not wait for a pending node request");
+        async { actor_value(actor.quiesce_for_terminal_shutdown(authority).await).await }
+            .with_timeout(Duration::from_secs(1))
+            .await
+            .expect("destructive quiesce does not wait for a pending node request");
         wait_for_broadcast_request_count(&pending_server.broadcast_requests, 1).await;
 
         pending_server.release.send(true).expect("pending broadcast request is listening");
@@ -3138,7 +3140,8 @@ mod tests {
         let height = call!(addr.get_height(true));
         tokio::time::sleep(Duration::from_millis(50)).await;
 
-        let balance = tokio::time::timeout(Duration::from_millis(100), call!(addr.balance()))
+        let balance = call!(addr.balance())
+            .with_timeout(Duration::from_millis(100))
             .await
             .expect("balance is not blocked by height refresh")
             .expect("balance actor message completes");
@@ -3279,13 +3282,11 @@ mod tests {
         let outpoint = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(20_000));
         let (addr, receiver) = spawn_test_wallet_actor(wallet);
 
-        tokio::time::timeout(
-            Duration::from_millis(200),
-            call!(addr.monitor_transaction_confirmation(outpoint.txid)),
-        )
-        .await
-        .expect("local confirmation monitoring does not wait for node height")
-        .expect("confirmation monitoring starts");
+        call!(addr.monitor_transaction_confirmation(outpoint.txid))
+            .with_timeout(Duration::from_millis(200))
+            .await
+            .expect("local confirmation monitoring does not wait for node height")
+            .expect("confirmation monitoring starts");
         let presentation = wait_for_transaction_details_update(&receiver).await;
 
         restore_default_bitcoin_node();
@@ -3455,12 +3456,11 @@ mod tests {
 
         let mut first_error = None;
         assert!(
-            tokio::time::timeout(
-                Duration::from_millis(10),
-                actor.quiesce_transaction_watchers(&mut first_error),
-            )
-            .await
-            .is_err(),
+            actor
+                .quiesce_transaction_watchers(&mut first_error)
+                .with_timeout(Duration::from_millis(10))
+                .await
+                .is_err(),
             "quiescence is cancelled while the watcher stop is queued"
         );
         assert_eq!(
@@ -3509,7 +3509,9 @@ mod tests {
         send!(watcher.block_for_test(started_sender, release.clone()));
         started_receiver.await.expect("watcher blocker starts");
         assert!(
-            tokio::time::timeout(Duration::from_millis(10), actor.resume_transaction_watchers(),)
+            actor
+                .resume_transaction_watchers()
+                .with_timeout(Duration::from_millis(10))
                 .await
                 .is_err(),
             "resume is cancelled while confirming the old watcher is stopped"

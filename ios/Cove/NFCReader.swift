@@ -264,13 +264,11 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         session.alertMessage = "Reading data please hold still..."
 
         tag.readNDEF { message, error in
-            if let error {
-                if message == nil {
-                    Log.error("read error: \(error.localizedDescription)")
-                    self.isScanning = false
-                    session.invalidate(errorMessage: "Unable to read NFC tag please try again.")
-                    return
-                }
+            if let error, message == nil {
+                Log.error("read error: \(error.localizedDescription)")
+                self.isScanning = false
+                session.invalidate(errorMessage: "Unable to read NFC tag please try again.")
+                return
             }
 
             guard let message else {
