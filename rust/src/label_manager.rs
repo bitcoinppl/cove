@@ -796,6 +796,96 @@ mod tests {
     }
 
     #[test]
+    fn edited_label_reaches_both_the_transaction_list_and_the_detail_label() {
+        use bdk_wallet::{
+            Wallet as BdkWallet,
+            bitcoin::{Amount, Network as BdkNetwork},
+            test_utils::{ReceiveTo, get_test_wpkh_and_change_desc, receive_output},
+        };
+
+        use crate::fiat::client::{PRICES, PriceResponse};
+        use crate::transaction::Transaction;
+
+        // PRICES is process-global, so put the previous cache back even if an assertion panics
+        struct RestorePrices(Arc<Option<PriceResponse>>);
+
+        impl Drop for RestorePrices {
+            fn drop(&mut self) {
+                PRICES.store(self.0.clone());
+            }
+        }
+
+        crate::database::test_support::init_test_database();
+
+        // cached prices keep the list build from fetching them over the network; a current
+        // fetched_at keeps price age checks from underflowing in later tests
+        let _restore_prices = RestorePrices(PRICES.swap(Arc::new(Some(PriceResponse {
+            time: 0,
+            fetched_at: jiff::Timestamp::now().as_second() as u64,
+            usd: 100_000,
+            eur: 100_000,
+            gbp: 100_000,
+            cad: 100_000,
+            chf: 100_000,
+            aud: 100_000,
+            jpy: 100_000,
+        }))));
+
+        // an in-memory wallet db keeps the edit away from cloud backup scheduling
+        let db = crate::database::wallet_data::WalletDataDb::new_in_memory(
+            WalletId::preview_new_random(),
+        )
+        .expect("in-memory wallet data opens");
+        let manager = LabelManager::new_with_db(db);
+        let (external, internal) = get_test_wpkh_and_change_desc();
+        let mut wallet = BdkWallet::create(external, internal)
+            .network(BdkNetwork::Signet)
+            .create_wallet_no_persist()
+            .expect("signet wallet is created");
+        let outpoint = receive_output(&mut wallet, Amount::from_sat(50_000), ReceiveTo::Mempool(1));
+        let tx = wallet.get_tx(outpoint.txid).expect("received transaction exists");
+        let details = Arc::new(
+            TransactionDetails::try_new(&wallet, tx, Default::default())
+                .expect("transaction details build"),
+        );
+
+        let list_label = |manager: &LabelManager| {
+            let transactions = Transaction::all_from_wallet(&wallet, Some(&manager.db.labels));
+            assert_eq!(transactions.len(), 1);
+
+            match &transactions[0] {
+                Transaction::Confirmed(tx) => tx.label(),
+                Transaction::Unconfirmed(tx) => tx.label(),
+            }
+        };
+        let detail_label = |manager: &LabelManager| {
+            manager.transaction_label(Arc::new(details.tx_id)).expect("label read succeeds")
+        };
+
+        let unlabeled = list_label(&manager);
+        assert_eq!(detail_label(&manager), None);
+
+        manager
+            .insert_or_update_labels_for_txn(details.clone(), "  Rent  ".to_string(), None)
+            .expect("label is saved");
+        assert_eq!(list_label(&manager), "Rent");
+        assert_eq!(detail_label(&manager).as_deref(), Some("Rent"));
+
+        manager
+            .insert_or_update_labels_for_txn(details.clone(), "Groceries".to_string(), None)
+            .expect("label is edited");
+        assert_eq!(list_label(&manager), "Groceries");
+        assert_eq!(detail_label(&manager).as_deref(), Some("Groceries"));
+
+        // clearing the field removes the label and the list falls back to the default text
+        manager
+            .insert_or_update_labels_for_txn(details.clone(), "   ".to_string(), None)
+            .expect("label is cleared");
+        assert_eq!(list_label(&manager), unlabeled);
+        assert_eq!(detail_label(&manager), None);
+    }
+
+    #[test]
     fn deleting_transaction_label_preserves_locked_auto_output_as_lock_only_record() {
         let (manager, _tmp) = test_manager();
         let details = received_details_with_output(0);

@@ -1055,3 +1055,131 @@ fn send_eligibility_requires_hot_wallet_with_keychain_secret() {
 
     Keychain::global().delete_wallet_items(&hot_wallet.id);
 }
+
+#[test]
+fn receiver_code_outside_the_digit_alphabet_is_rejected_then_correct_code_succeeds() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let fixture = SendWalletFixture::new();
+    let manager = RustKeyTeleportManager::new();
+    let receiver = ReceiverSession::from_private_key_bytes([31; 32]).unwrap();
+    let request = receiver.request().unwrap();
+
+    manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
+    manager
+        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::from(request.packet)))
+        .unwrap();
+
+    // letters, wrong lengths, and non-ascii digits must never reach the protocol
+    for bad_code in
+        ["ABCDEFGH", "1234567", "123456789", "1234-567", "1234567a", "１２３４５６７８", ""]
+    {
+        assert_eq!(
+            manager.enter_receiver_code(bad_code),
+            Err(KeyTeleportAlert::WrongReceiverCode),
+            "{bad_code:?} should be rejected"
+        );
+        assert!(matches!(manager.state(), KeyTeleportManagerState::SendEnterCode(_)));
+    }
+
+    // the displayed grouping (a space in the middle) is accepted
+    let digits = request.numeric_code.as_str();
+    manager.enter_receiver_code(&format!("{} {}", &digits[..4], &digits[4..])).unwrap();
+
+    let KeyTeleportManagerState::SendReady(ready) = manager.state() else {
+        panic!("expected send ready after the correct code")
+    };
+    assert_eq!(ready.selected_wallet, fixture.wallet);
+}
+
+#[test]
+fn sender_password_outside_the_alphabet_is_rejected_then_correct_password_succeeds() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let manager = RustKeyTeleportManager::new();
+    manager.start_receive().unwrap();
+    let (packet, password) = sender_transfer(&receive_request(&manager));
+
+    manager.ingest(KeyTeleportInput::Sender(packet)).unwrap();
+
+    // '9' and '$' are outside the base32 alphabet, and the length checks apply after
+    // normalization. Each input is derived from the real password, so it only fails for the
+    // reason under test, and the message names the case instead of echoing the password
+    let rejected = [
+        ("non-base32 digit", format!("{}9", &password[..7])),
+        ("symbol", format!("{}$", &password[..7])),
+        ("too short", password[..3].to_string()),
+        ("too long", format!("{password}{}", &password[..4])),
+        ("empty", String::new()),
+    ];
+
+    for (case, bad_password) in rejected {
+        assert_eq!(
+            manager.enter_sender_password(&bad_password),
+            Err(KeyTeleportAlert::WrongTeleportPassword),
+            "{case} should be rejected"
+        );
+        assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveEnterPassword));
+        assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_some());
+    }
+
+    manager.enter_sender_password(&password.to_lowercase()).unwrap();
+
+    let KeyTeleportManagerState::ReceiveMnemonicReview(review) = manager.state() else {
+        panic!("expected mnemonic review after the correct password")
+    };
+    assert_eq!(review.word_count, 12);
+}
+
+#[test]
+fn send_start_reports_distinct_alerts_for_no_eligible_ineligible_and_unreadable_wallets() {
+    use cove_cspp::CsppStore as _;
+
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+
+    // the fixture restores the original wallet list on drop
+    let fixture = SendWalletFixture::new();
+    let database = Database::global();
+    let (network, mode) = (fixture.wallet.network, fixture.wallet.wallet_mode);
+
+    let mut cold = WalletMetadata::preview_new();
+    cold.network = network;
+    cold.wallet_mode = mode;
+    cold.wallet_type = WalletType::Cold;
+
+    let mut unreadable = WalletMetadata::preview_new();
+    unreadable.network = network;
+    unreadable.wallet_mode = mode;
+
+    database
+        .wallets
+        .save_all_wallets(network, mode, vec![cold.clone(), unreadable.clone()])
+        .unwrap();
+    Keychain::global()
+        .save(format!("{}::wallet_mnemonic", unreadable.id), "garbage-secret".to_string())
+        .unwrap();
+    Keychain::global()
+        .save(
+            format!("{}::wallet_mnemonic_encryption_key_and_nonce", unreadable.id),
+            "garbage-cryptor".to_string(),
+        )
+        .unwrap();
+
+    let manager = RustKeyTeleportManager::new();
+    let request = ReceiverSession::from_private_key_bytes([41; 32]).unwrap().request().unwrap();
+    let packet = Arc::new(KeyTeleportReceiverPacket::from(request.packet));
+
+    assert_eq!(
+        manager.start_send_with_receiver_packet(packet),
+        Err(KeyTeleportAlert::NoEligibleWallets)
+    );
+    assert_eq!(manager.start_send_from_wallet(cold.id), Err(KeyTeleportAlert::IneligibleWallet));
+    assert!(matches!(
+        manager.start_send_from_wallet(unreadable.id.clone()),
+        Err(KeyTeleportAlert::Keychain(_))
+    ));
+    assert_eq!(manager.state(), KeyTeleportManagerState::Idle);
+
+    assert!(Keychain::global().delete_wallet_items(&unreadable.id));
+}

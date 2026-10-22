@@ -1169,4 +1169,51 @@ mod tests {
 
         assert!(matches!(result, Err(Error::Wallets(WalletTableError::WalletNotFound))));
     }
+
+    #[test]
+    fn reorder_and_append_in_one_scope_leave_every_other_scope_untouched() {
+        use strum::IntoEnumIterator as _;
+
+        let (_tmp, table) = wallet_table();
+        let scoped_wallet = |network: Network, mode: WalletMode, name: &str| {
+            let mut wallet = wallet(&format!("{network}-{mode:?}-{name}"));
+            wallet.network = network;
+            wallet.wallet_mode = mode;
+            wallet
+        };
+
+        let scopes = Network::iter()
+            .flat_map(|network| WalletMode::iter().map(move |mode| (network, mode)))
+            .collect::<Vec<_>>();
+
+        for &(network, mode) in &scopes {
+            let wallets = ["a", "b", "c"]
+                .map(|name| scoped_wallet(network, mode, name))
+                .into_iter()
+                .collect::<Vec<_>>();
+            table.save_all_wallets(network, mode, wallets).unwrap();
+        }
+
+        let target = (Network::Signet, WalletMode::Decoy);
+        let requested = ["c", "a", "b"].map(|name| scoped_wallet(target.0, target.1, name).id);
+        table.reorder(target.0, target.1, requested.to_vec()).unwrap();
+        table
+            .save_new_wallet_metadata_with_backup_behavior(
+                scoped_wallet(target.0, target.1, "d"),
+                false,
+            )
+            .unwrap();
+
+        for &(network, mode) in &scopes {
+            let persisted = table.get_all(network, mode).unwrap();
+            let expected: &[&str] =
+                if (network, mode) == target { &["c", "a", "b", "d"] } else { &["a", "b", "c"] };
+            let expected = expected
+                .iter()
+                .map(|name| scoped_wallet(network, mode, name).id)
+                .collect::<Vec<_>>();
+
+            assert_eq!(wallet_ids(&persisted), expected, "{network} {mode:?}");
+        }
+    }
 }

@@ -862,6 +862,32 @@ mod tests {
         state.address = Some(Arc::new(Address::preview_new()));
     }
 
+    #[test]
+    fn unit_change_keeps_the_amount_and_fee_and_only_changes_their_display() {
+        let manager = manager_for_validation();
+        set_valid_amount_and_address(&manager, 150_000);
+        set_selected_fee_total(&manager, 1_234);
+        manager.state.lock().entering_btc_amount = "150,000".to_string();
+        manager.state.lock().metadata.selected_unit = super::BitcoinUnit::Sat;
+
+        assert_eq!(manager.send_amount_btc(), "150,000");
+        assert_eq!(manager.total_fee_string().as_deref(), Some("1,234 sats"));
+
+        manager.handle_selected_unit_changed(super::BitcoinUnit::Sat, super::BitcoinUnit::Btc);
+
+        assert_eq!(manager.amount_sats(), 150_000);
+        assert_eq!(manager.state.lock().entering_btc_amount, "0.0015");
+        assert_eq!(manager.send_amount_btc(), "0.0015");
+        assert_eq!(manager.total_fee_string().as_deref(), Some("0.00001234 BTC"));
+
+        manager.handle_selected_unit_changed(super::BitcoinUnit::Btc, super::BitcoinUnit::Sat);
+
+        assert_eq!(manager.amount_sats(), 150_000);
+        assert_eq!(manager.state.lock().entering_btc_amount, "150,000");
+        assert_eq!(manager.send_amount_btc(), "150,000");
+        assert_eq!(manager.total_fee_string().as_deref(), Some("1,234 sats"));
+    }
+
     fn set_coin_control_mode_with_total(manager: &super::RustSendFlowManager, total_sats: u64) {
         let mut utxos = preview_new_utxo_list(1, 0);
         utxos[0].amount = Arc::new(super::Amount::from_sat(total_sats));

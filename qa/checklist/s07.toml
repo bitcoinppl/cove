@@ -5,7 +5,10 @@ title = "Receiver-code invalid alphabet and wrong-code retry"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/send.rs", "rust/src/manager/key_teleport_manager/controller.rs", "rust/src/key_teleport.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSendViews.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportSendViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["agent", "rust:rust/src/manager/key_teleport_manager/tests.rs::wrong_receiver_code_keeps_pending_send_for_retry"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::wrong_receiver_code_keeps_pending_send_for_retry",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::receiver_code_outside_the_digit_alphabet_is_rejected_then_correct_code_succeeds",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -77,7 +80,10 @@ title = "Wrong sender password, invalid password alphabet, correct retry"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt"]
-coverage = ["human", "rust:rust/src/manager/key_teleport_manager/tests.rs::wrong_sender_password_keeps_receive_session_for_retry"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::wrong_sender_password_keeps_receive_session_for_retry",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::sender_password_outside_the_alphabet_is_rejected_then_correct_password_succeeds",
+]
 # 1.4.0: ios HUMAN, android HUMAN
 
 [[row]]
@@ -87,7 +93,10 @@ title = "Corrupt/replayed multipart frames and memory bounds"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/qr_scanner.rs", "rust/src/key_teleport.rs", "ios/Cove/ScanManager+KeyTeleport.swift", "ios/Cove/ScanManager.swift", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt", "android/app/src/main/java/org/bitcoinppl/cove/ScanManager.kt"]
-coverage = ["human"]
+coverage = [
+    "rust:rust/src/qr_scanner.rs::replayed_and_bad_bbqr_frames_do_not_grow_retained_parts",
+    "rust:rust/src/qr_scanner.rs::malformed_final_bbqr_frame_does_not_poison_progress",
+]
 # 1.4.0: ios HUMAN, android HUMAN
 # frame handling lives in the rust qr scanner, camera frames need a human
 
@@ -132,7 +141,11 @@ title = "No eligible/ineligible/unreadable/duplicate secret alerts"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/send.rs", "rust/src/manager/key_teleport_manager/controller.rs", "rust/src/key_teleport.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSendViews.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportSendViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt"]
-coverage = ["agent", "rust:rust/src/manager/key_teleport_manager/tests.rs::send_eligibility_requires_hot_wallet_with_keychain_secret", "rust:rust/src/manager/key_teleport_manager/tests.rs::duplicate_receive_import_finishes_and_erases_the_receive_session"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::send_eligibility_requires_hot_wallet_with_keychain_secret",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::duplicate_receive_import_finishes_and_erases_the_receive_session",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::send_start_reports_distinct_alerts_for_no_eligible_ineligible_and_unreadable_wallets",
+]
 # 1.4.0: ios BLOCKED, android BLOCKED
 
 [[row]]
