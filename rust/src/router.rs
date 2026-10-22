@@ -7,7 +7,7 @@ pub const WALLET_SELECTION_LOAD_AND_RESET_DELAY_MS: u32 = 250;
 
 use crate::{
     app::FfiApp,
-    database::Database,
+    database::{Database, global_config::SelectedWalletTarget},
     mnemonic::NumberOfBip39Words,
     psbt::Psbt,
     tap_card::tap_signer_reader::{DeriveInfo, SetupCmdResponse, TapSignerSetupComplete},
@@ -18,6 +18,7 @@ use crate::{
 use cove_macros::impl_default_for;
 use cove_types::{ConfirmDetails, WalletId, utxo::Utxo};
 use derive_more::From;
+use tracing::warn;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum Route {
@@ -183,21 +184,51 @@ pub enum TapSignerPinAction {
     Change,
 }
 
+/// The first screen after launch
+///
+/// The selected wallet id is global, so after a network or mode change it can point at a
+/// wallet the active target does not have. Routing there would load a missing wallet
+fn startup_route(database: &Database) -> Route {
+    let new_wallet = Route::NewWallet(NewWalletRoute::default());
+    let Some(selected_wallet) = database.global_config.selected_wallet() else {
+        return new_wallet;
+    };
+
+    let SelectedWalletTarget { network, mode } = database.global_config.wallet_target();
+    match database.wallets.get(&selected_wallet, network, mode) {
+        Ok(Some(_)) => return Route::SelectedWallet(selected_wallet),
+        Ok(None) => {}
+
+        // a read error is not proof the wallet is gone, so keep the route and let the
+        // platform loader surface it, such as through the database corruption recovery flow
+        Err(error) => {
+            warn!("unable to read selected wallet {selected_wallet}: {error}");
+            return Route::SelectedWallet(selected_wallet);
+        }
+    }
+
+    let wallets = match database.wallets().all_sorted_active() {
+        Ok(wallets) => wallets,
+        Err(error) => {
+            warn!("unable to list wallets for a stale selection: {error}");
+            return Route::SelectedWallet(selected_wallet);
+        }
+    };
+
+    // a stale selection falls back to the newest wallet on the active target, which becomes
+    // the selection so the rest of the app agrees on which wallet is open
+    let Some(fallback) = wallets.into_iter().next() else { return new_wallet };
+    if let Err(error) = database.global_config.select_wallet(fallback.id.clone()) {
+        warn!("unable to select fallback wallet {}: {error}", fallback.id);
+    }
+
+    Route::SelectedWallet(fallback.id)
+}
+
 impl_default_for!(Router);
 impl Router {
     pub fn new() -> Self {
-        let database = Database::global();
-
-        // when there is a selected wallet, show the selected wallet screen
-        let default_route =
-            if let Some(selected_wallet) = database.global_config().selected_wallet() {
-                Route::SelectedWallet(selected_wallet)
-            } else {
-                // when there are no wallets or no selected wallet, show the new wallet screen
-                Route::NewWallet(NewWalletRoute::default())
-            };
-
-        Self { app: FfiApp::global(), default: default_route, routes: vec![] }
+        Self { app: FfiApp::global(), default: startup_route(&Database::global()), routes: vec![] }
     }
 
     pub fn reset_routes_to(&mut self, route: Route) {
@@ -496,6 +527,42 @@ mod tests {
 
         assert_ne!(router.default, Route::SelectedWallet(stale_id));
         assert_eq!(router.default, Route::NewWallet(NewWalletRoute::default()));
+    }
+
+    #[test]
+    fn startup_route_selects_the_fallback_for_a_stale_selection() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::database::test_support::delete_database();
+
+        let mnemonic: bip39::Mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about".parse().unwrap();
+        let wallet = crate::wallet::Wallet::try_new_persisted_from_mnemonic_segwit(
+            crate::wallet::metadata::WalletMetadata::preview_new(),
+            mnemonic,
+            None,
+        )
+        .expect("wallet persists");
+
+        let database = Database::global();
+        database.wallets.save_new_wallet_metadata(wallet.metadata.clone()).unwrap();
+        let stale_id = WalletId::from("wallet-from-another-network".to_string());
+        database.global_config.select_wallet(stale_id.clone()).unwrap();
+
+        let route = startup_route(&database);
+        let selected = database.global_config.selected_wallet().expect("fallback is selected");
+        let SelectedWalletTarget { network, mode } = database.global_config.wallet_target();
+        let fallback_exists = matches!(database.wallets.get(&selected, network, mode), Ok(Some(_)));
+
+        crate::wallet::test_support::remove_wallet(&wallet.id);
+        let _ = database.global_config.clear_selected_wallet();
+
+        // tests that skip the global state lock can save a newer wallet mid-run, so the
+        // fallback is any wallet on the active target rather than always this one
+        assert_ne!(selected, stale_id);
+        assert!(fallback_exists, "fallback {selected} is not on the active target");
+        assert_eq!(route, Route::SelectedWallet(selected));
     }
 
     #[test]
