@@ -1,5 +1,5 @@
 use tracing::error;
-use url::Url;
+use url::{Host, Url};
 
 use crate::{database::Database, network::Network, node::Node};
 use cove_macros::impl_default_for;
@@ -141,16 +141,31 @@ impl NodeSelector {
     ) -> Result<Node, Error> {
         let node_type = name.to_ascii_lowercase();
 
-        let url = parse_node_url(&url).map_err_str(Error::ParseNodeUrlError)?;
+        // the url rules depend on the api: Electrum uses ssl/tcp with default ports, while an
+        // Esplora url is an http(s) address that must keep its scheme and port as entered
+        let url = if node_type.contains("esplora") {
+            parse_esplora_url(&url)
+        } else {
+            parse_node_url(&url)
+        }
+        .map_err_str(Error::ParseNodeUrlError)?;
 
-        if !url.domain().unwrap_or_default().contains('.') {
+        // http(s) urls parse an ip address as an ip host with no domain, so a local Esplora
+        // server is valid here, while a named host still needs a dot
+        let has_valid_host = match url.host() {
+            Some(Host::Domain(domain)) => domain.contains('.'),
+            Some(Host::Ipv4(_) | Host::Ipv6(_)) => true,
+            None => false,
+        };
+
+        if !has_valid_host {
             return Err(Error::ParseNodeUrlError("invalid url, no domain".to_string()));
         }
 
         let url_string = url.to_string();
 
         let name = if entered_name.is_empty() {
-            url.domain().unwrap_or(url_string.as_str()).to_string()
+            url.host_str().unwrap_or(url_string.as_str()).to_string()
         } else {
             entered_name
         };
@@ -238,6 +253,18 @@ fn node_list(network: Network) -> Vec<Node> {
     }
 }
 
+/// Parses an Esplora url, defaulting to https when no scheme is given
+fn parse_esplora_url(url: &str) -> eyre::Result<Url> {
+    let url =
+        if url.contains("://") { Url::parse(url)? } else { Url::parse(&format!("https://{url}"))? };
+
+    match url.scheme() {
+        "http" | "https" => Ok(url),
+        scheme => Err(eyre!("unsupported scheme {scheme} for an Esplora node, use http or https")),
+    }
+}
+
+/// Parses an Electrum url into an ssl or tcp url with a port, using the port as a scheme hint
 fn parse_node_url(url: &str) -> eyre::Result<Url> {
     let url = url.replace("http://", "tcp://");
     let url = url.replace("https://", "ssl://");
@@ -310,6 +337,20 @@ mod tests {
         assert_eq!(node.api_type, ApiType::Esplora);
         assert_eq!(node.url, "https://mutinynet.com/api");
         assert_eq!(node.name, "mutinynet.com");
+    }
+
+    #[test]
+    fn parse_custom_node_accepts_a_local_esplora_ip_address() {
+        let node = selector(Network::Signet)
+            .parse_custom_node(
+                "http://192.168.1.10:3002".to_string(),
+                "Custom Esplora".to_string(),
+                String::new(),
+            )
+            .unwrap();
+
+        assert_eq!(node.url, "http://192.168.1.10:3002/");
+        assert_eq!(node.name, "192.168.1.10");
     }
 
     #[test]
