@@ -655,8 +655,13 @@ mod tests {
 
     use crate::{
         database::{
-            Record, cbor::Cbor, record::Timestamps,
-            wallet_data::test_support::new_test_wallet_data_db,
+            Record,
+            cbor::Cbor,
+            record::Timestamps,
+            wallet_data::{
+                WalletDataDb,
+                test_support::{clear_wallet_registry_entry, new_test_wallet_data_db},
+            },
         },
         wallet::metadata::WalletId,
     };
@@ -1162,5 +1167,85 @@ mod tests {
 
         assert_eq!(requested.spendable, Some(false));
         assert_eq!(untouched.spendable, Some(true));
+    }
+
+    #[test]
+    fn locking_labeled_output_preserves_label() {
+        let outpoint = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse outpoint");
+        let existing = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"keep me"}"#;
+        let (wallet_db, _tmp) = new_test_wallet_data_db(WalletId::preview_new_random());
+        let db = &wallet_db.labels;
+
+        db.insert_labels_with_timestamps(
+            Labels::try_from_str(existing).expect("failed to parse existing labels"),
+            Timestamps::now(),
+        )
+        .expect("failed to insert existing labels");
+        db.set_output_spendability_for_outpoints([outpoint], false).expect("failed to lock output");
+
+        let record = db
+            .get_output_record(outpoint)
+            .expect("failed to get output record")
+            .expect("missing output record");
+        let exported = db.all_labels().expect("failed to load labels").export().unwrap();
+
+        assert_eq!(record.item.label, Some("keep me".to_string()));
+        assert_eq!(record.item.spendable, Some(false));
+        assert!(exported.contains(r#""label":"keep me""#));
+        assert!(exported.contains(r#""spendable":false"#));
+    }
+
+    #[test]
+    fn locks_and_labels_survive_reopening_the_wallet_database() {
+        let locked = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1",
+        )
+        .expect("failed to parse locked outpoint");
+        let unlocked = OutPoint::from_str(
+            "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:2",
+        )
+        .expect("failed to parse unlocked outpoint");
+        let existing = r#"{"type":"output","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1","label":"cold storage"}"#;
+        let id = WalletId::preview_new_random();
+        let (wallet_db, tmp) = new_test_wallet_data_db(id.clone());
+
+        wallet_db
+            .labels
+            .insert_labels_with_timestamps(
+                Labels::try_from_str(existing).expect("failed to parse existing labels"),
+                Timestamps::now(),
+            )
+            .expect("failed to insert existing labels");
+        wallet_db
+            .labels
+            .set_output_spendability_for_outpoints([locked], false)
+            .expect("failed to lock output");
+        wallet_db
+            .labels
+            .set_output_spendability_for_outpoints([unlocked], true)
+            .expect("failed to unlock output");
+
+        // dropping every handle and the registry entry forces a real reopen from disk
+        drop(wallet_db);
+        clear_wallet_registry_entry(&id);
+
+        let reopened = WalletDataDb::new_with_db_location(id.clone(), tmp.path())
+            .expect("failed to reopen wallet database");
+        let record = reopened
+            .labels
+            .get_output_record(locked)
+            .expect("failed to get output record")
+            .expect("missing output record");
+
+        assert_eq!(
+            reopened.labels.locked_output_outpoints().expect("failed to get locked outputs"),
+            std::collections::HashSet::from([locked])
+        );
+        assert_eq!(record.item.label, Some("cold storage".to_string()));
+
+        clear_wallet_registry_entry(&id);
     }
 }

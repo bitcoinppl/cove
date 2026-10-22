@@ -813,6 +813,179 @@ mod tests {
     }
 
     #[test]
+    fn preset_explorer_selection_renders_preview_and_transaction_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+
+        let txid = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let cases = [
+            (BlockExplorerOption::MempoolGuide, "https://mempool.guide/tx/"),
+            (BlockExplorerOption::BullBitcoin, "https://mempool.bullbitcoin.com/tx/"),
+            (BlockExplorerOption::Blockstream, "https://blockstream.info/tx/"),
+        ];
+
+        for (option, prefix) in cases {
+            let (_tmp, table) = test_table();
+
+            table.set_block_explorer_option(Network::Bitcoin, option).unwrap();
+
+            assert_eq!(
+                table.effective_block_explorer_preview(Network::Bitcoin),
+                format!("{prefix}{}", crate::custom_block_explorer::PREVIEW_TXID)
+            );
+            assert_eq!(
+                table.custom_block_explorer_transaction_url(Network::Bitcoin, txid.to_string()),
+                format!("{prefix}{txid}")
+            );
+            assert_eq!(table.selected_block_explorer_option(Network::Bitcoin), option);
+        }
+    }
+
+    #[test]
+    fn custom_lan_template_saves_and_renders_transaction_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        let saved = table
+            .set_custom_block_explorer(
+                Network::Bitcoin,
+                "http://192.168.1.10:3000/tx/{txid}".to_string(),
+            )
+            .unwrap();
+
+        assert_eq!(saved, "http://192.168.1.10:3000/tx/{txid}");
+        assert_eq!(
+            table.selected_block_explorer_option(Network::Bitcoin),
+            BlockExplorerOption::Custom
+        );
+        assert_eq!(
+            table.effective_block_explorer_preview(Network::Bitcoin),
+            "http://192.168.1.10:3000/tx/4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
+        );
+    }
+
+    #[test]
+    fn invalid_custom_block_explorer_input_keeps_saved_template() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        table
+            .set_custom_block_explorer(Network::Bitcoin, "https://example.com".to_string())
+            .unwrap();
+
+        let invalid_inputs = [
+            "ftp://example.com",
+            "https://bitcoin",
+            "https://example.com/#fragment",
+            "https://example.com/tx/{hash}",
+            "https://example.com/tx/{txid",
+            "https://example.com/tx/txid}",
+        ];
+
+        for input in invalid_inputs {
+            assert!(
+                table.set_custom_block_explorer(Network::Bitcoin, input.to_string()).is_err(),
+                "{input} should be rejected"
+            );
+            assert_eq!(
+                table.custom_block_explorer(Network::Bitcoin).as_deref(),
+                Some("https://example.com/tx/{txid}"),
+                "{input} replaced the saved explorer"
+            );
+        }
+    }
+
+    #[test]
+    fn custom_block_explorer_does_not_leak_into_other_networks() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        table
+            .set_custom_block_explorer(
+                Network::Bitcoin,
+                "https://example.com/tx/{txid}".to_string(),
+            )
+            .unwrap();
+
+        let defaults = [
+            (Network::Testnet, "https://mempool.space/testnet/tx/"),
+            (Network::Testnet4, "https://mempool.space/testnet4/tx/"),
+            (Network::Signet, "https://mutinynet.com/tx/"),
+        ];
+
+        for (network, prefix) in defaults {
+            assert_eq!(table.custom_block_explorer(network), None);
+            assert_eq!(
+                table.selected_block_explorer_option(network),
+                BlockExplorerOption::MempoolSpace
+            );
+            assert_eq!(
+                table.effective_block_explorer_preview(network),
+                format!("{prefix}{}", crate::custom_block_explorer::PREVIEW_TXID)
+            );
+        }
+
+        // and the other direction: a signet override leaves bitcoin alone
+        table
+            .set_block_explorer_option(Network::Bitcoin, BlockExplorerOption::MempoolSpace)
+            .unwrap();
+        table
+            .set_custom_block_explorer(Network::Signet, "https://signet.example.com".to_string())
+            .unwrap();
+
+        assert_eq!(
+            table.effective_block_explorer_preview(Network::Bitcoin),
+            "https://mempool.space/tx/4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
+        );
+    }
+
+    #[test]
+    fn explicit_reset_to_default_restores_network_default_url() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (_tmp, table) = test_table();
+
+        table
+            .set_custom_block_explorer(
+                Network::Bitcoin,
+                "https://example.com/tx/{txid}".to_string(),
+            )
+            .unwrap();
+        table
+            .set_block_explorer_option(Network::Bitcoin, BlockExplorerOption::MempoolSpace)
+            .unwrap();
+
+        assert_eq!(
+            table.get(super::GlobalConfigKey::CustomBlockExplorer(Network::Bitcoin)).unwrap(),
+            None
+        );
+        assert_eq!(
+            table.effective_block_explorer_preview(Network::Bitcoin),
+            "https://mempool.space/tx/4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
+        );
+    }
+
+    #[test]
+    fn custom_block_explorer_survives_reopening_the_database() {
+        crate::app::reconcile::test_support::init_noop_updater();
+        let (tmp, table) = test_table();
+
+        table
+            .set_custom_block_explorer(Network::Bitcoin, "http://192.168.1.10:3000".to_string())
+            .unwrap();
+        drop(table);
+
+        let reopened = table_at(&tmp.path().join("test.redb"));
+
+        assert_eq!(
+            reopened.custom_block_explorer(Network::Bitcoin).as_deref(),
+            Some("http://192.168.1.10:3000/tx/{txid}")
+        );
+        assert_eq!(
+            reopened.selected_block_explorer_option(Network::Bitcoin),
+            BlockExplorerOption::Custom
+        );
+    }
+
+    #[test]
     fn forget_wallet_clears_every_matching_selection() {
         crate::app::reconcile::test_support::init_noop_updater();
         let (_tmp, table) = test_table();
@@ -835,12 +1008,19 @@ mod tests {
 
     fn test_table() -> (tempfile::TempDir, super::GlobalConfigTable) {
         let tmp = tempfile::tempdir().unwrap();
-        let db = std::sync::Arc::new(redb::Database::create(tmp.path().join("test.redb")).unwrap());
+        let table = table_at(&tmp.path().join("test.redb"));
+
+        (tmp, table)
+    }
+
+    // creates the database file or opens it again when it already exists
+    fn table_at(path: &std::path::Path) -> super::GlobalConfigTable {
+        let db = std::sync::Arc::new(redb::Database::create(path).unwrap());
         let write_txn = db.begin_write().unwrap();
         let table = super::GlobalConfigTable::new(db, &write_txn);
         write_txn.commit().unwrap();
 
-        (tmp, table)
+        table
     }
 }
 

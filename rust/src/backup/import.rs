@@ -981,6 +981,7 @@ mod tests {
 
     use cove_types::BlockSizeLast;
 
+    use crate::database::wallet_data::WalletDataDb;
     use crate::test_support::hot_wallet_metadata as hot_metadata;
     use crate::wallet::metadata::StoreType;
 
@@ -1062,6 +1063,64 @@ mod tests {
             Some("https://existing.example/tx/{txid}")
         );
         assert_eq!(config.custom_block_explorer(Network::Signet), None);
+    }
+
+    #[test]
+    fn backup_import_restores_labels_and_output_locks_into_a_fresh_wallet() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::database::encrypted_backend::tests::set_test_encryption_key();
+
+        let labeled_lock = "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:1";
+        let lock_only = "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:2";
+        let unlocked = "f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd:3";
+        let source_jsonl = format!(
+            r#"{{"type":"tx","ref":"f91d0a8a78462bc59398f2c5d7a84fcff491c26ba54c4833478b202796c8aafd","label":"rent"}}
+{{"type":"output","ref":"{labeled_lock}","label":"cold storage","spendable":false}}
+{{"type":"output","ref":"{lock_only}","spendable":false}}
+{{"type":"output","ref":"{unlocked}","label":"spendable change","spendable":true}}"#
+        );
+
+        let source_id = WalletId::preview_new_random();
+        let destination_id = WalletId::preview_new_random();
+
+        // the backup carries what the source wallet exports, not the literal input above
+        let source_db = WalletDataDb::new_or_existing(source_id.clone()).unwrap();
+        source_db
+            .labels
+            .insert_imported_labels(
+                bip329::Labels::try_from_str_with_metadata(&source_jsonl).unwrap(),
+            )
+            .unwrap();
+        let backup_jsonl = source_db.labels.all_labels().unwrap().export().unwrap();
+
+        let outcome = restore_wallet_labels(
+            &destination_id,
+            "destination",
+            Some(&backup_jsonl),
+            LabelRestoreBehavior::PreserveCloudBackupClean,
+        );
+
+        assert!(outcome.warning.is_none());
+        assert!(outcome.imported);
+
+        let destination_db = WalletDataDb::new_or_existing(destination_id.clone()).unwrap();
+        let restored = destination_db.labels.all_labels().unwrap().export().unwrap();
+        let restored_locked = destination_db.labels.locked_output_outpoints().unwrap();
+
+        assert_eq!(
+            restored_locked,
+            std::collections::HashSet::from([
+                labeled_lock.parse().unwrap(),
+                lock_only.parse().unwrap()
+            ])
+        );
+        assert!(restored.contains(r#""label":"rent""#));
+        assert!(restored.contains(r#""label":"cold storage""#));
+        assert!(restored.contains(r#""label":"spendable change""#));
+
+        let _ = crate::database::wallet_data::delete_database(&source_id);
+        let _ = crate::database::wallet_data::delete_database(&destination_id);
     }
 
     fn test_config() -> (tempfile::TempDir, GlobalConfigTable) {
