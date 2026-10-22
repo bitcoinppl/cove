@@ -58,7 +58,16 @@ final class SafeAreaInsetsEnvironmentTests: XCTestCase {
         let layoutBottomBefore = reader.layoutBottomInset
 
         reader.isFocused = true
-        try await Task.sleep(for: .seconds(1.5))
+
+        // a slow CI simulator can take seconds to raise the keyboard, so poll for it instead of
+        // sleeping a fixed time
+        let deadline = ContinuousClock.now + .seconds(10)
+        while reader.layoutBottomInset <= layoutBottomBefore + 100, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+
+        // give a wrong inset update from the keyboard time to reach the captured insets
+        try await Task.sleep(for: .milliseconds(500))
 
         // the keyboard-aware layout inset proves the keyboard is up, so the check can't pass vacuously
         XCTAssertGreaterThan(reader.layoutBottomInset, layoutBottomBefore + 100, "the software keyboard must appear")
