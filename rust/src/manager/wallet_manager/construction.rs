@@ -132,7 +132,10 @@ impl RustWalletManager {
 
         let (actor_registration, lifecycle) =
             construction.register(id.clone(), actor.clone(), discovery_scanner.clone());
-        let label_manager = label_manager.with_lifecycle(lifecycle.clone()).into();
+        let label_manager = label_manager
+            .with_lifecycle(lifecycle.clone())
+            .with_wallet_actor(actor.downgrade())
+            .into();
 
         Ok(Self {
             id,
@@ -177,7 +180,10 @@ impl RustWalletManager {
             start_discovery_scanner(metadata, actor.clone(), channel.raw_sender());
         let (actor_registration, lifecycle) =
             construction.register(id.clone(), actor.clone(), discovery_scanner.clone());
-        let label_manager = label_manager.with_lifecycle(lifecycle.clone()).into();
+        let label_manager = label_manager
+            .with_lifecycle(lifecycle.clone())
+            .with_wallet_actor(actor.downgrade())
+            .into();
 
         Ok(Self {
             id,
@@ -226,7 +232,10 @@ impl RustWalletManager {
         let actor = task::spawn_actor(wallet_actor);
         let (actor_registration, lifecycle) =
             construction.register(id.clone(), actor.clone(), None);
-        let label_manager = label_manager.with_lifecycle(lifecycle.clone()).into();
+        let label_manager = label_manager
+            .with_lifecycle(lifecycle.clone())
+            .with_wallet_actor(actor.downgrade())
+            .into();
 
         Ok(Self {
             id,
