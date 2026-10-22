@@ -65,6 +65,19 @@ vis="$("$here/ios-vis")"
 expect "stop with nothing running" 0 'd["ok"] and d["stopped"]=="none"' -- env -u IOS_UDID WDA_CACHE="$tmp/cache" "$here/wda-stop"
 expect "stop one phone dry-run" 0 'd["dry_run"] and d["stopped"]=="none"' -- env WDA_CACHE="$tmp/cache" "$here/wda-stop" --dry-run
 expect "fetch dry-run" 0 'd["dir"].endswith("/WebDriverAgent-v16.15.3")' -- env WDA_CACHE="$tmp/cache" "$here/wda-fetch" --dry-run
+expect "type text after --" 0 'd["typed_chars"]==9 and not d["dry_run"]' -- "$here/ios-type" -- --dry-run
+expect "type dry-run before --" 0 'd["dry_run"] and d["would_send"][0]["body"]["value"]==list("-x")' -- "$here/ios-type" --dry-run -- -x
+expect "pasteboard set text after --" 0 'd["chars"]==5 and d["app"]=="org.bitcoinppl.cove"' -- "$here/ios-pasteboard" set -- --app
+expect "pasteboard --app without value" 2 'd["error"]=="usage"' -- "$here/ios-pasteboard" --app
+expect "launch activate after -- is a bundle id" 2 'd["error"]=="usage"' -- "$here/ios-launch" -- --activate x.y
+
+# a second wda-start for the same port waits on the first one's lock instead of racing its check
+(. "$here/wda-env.sh"; WDA_STATE="$tmp/lockstate" lock_port 9999; sleep 3) &
+locker=$!
+sleep 1
+expect "port lock held" 1 'd["error"]=="locked"' -- env WDA_STATE="$tmp/lockstate" WDA_LOCK_WAIT=0.5 bash -c '. "$1"; lock_port 9999; json ok:raw=true' _ "$here/wda-env.sh"
+wait $locker
+expect "port lock free" 0 'd["ok"]' -- env WDA_STATE="$tmp/lockstate" WDA_LOCK_WAIT=0.5 bash -c '. "$1"; lock_port 9999; json ok:raw=true' _ "$here/wda-env.sh"
 expect "vis bad args" 2 'd["error"]=="usage"' -- "$here/ios-vis" --all
 expect "vis dry-run" 0 'd["dry_run"] and "would_send" in d' -- "$here/ios-vis" --dry-run
 [ "$(head -c4 "$tmp/out/shot.png" | tail -c3)" = "PNG" ] && echo "ok   shot file is a PNG" || { echo "FAIL shot file"; fail=1; }

@@ -18,10 +18,12 @@ need_udid
 command -v iproxy >/dev/null || die missing_iproxy "iproxy not found" "fix=brew install libimobiledevice"
 STATE_DIR="$(device_state "$IOS_UDID")"
 mkdir -p "$STATE_DIR"
+lock_port "$WDA_PORT"
 
 if curl -sf -m 2 "$WDA_BASE_URL/status" >/dev/null; then
-  # the port can belong to another phone's runner, so only reuse one this phone started on it
-  if pid_alive "$STATE_DIR/xcodebuild.pid" xcodebuild && [ "$(cat "$STATE_DIR/port" 2>/dev/null)" = "$WDA_PORT" ]; then
+  # the port can belong to another phone's runner, so only reuse one whose runner and forward
+  # this phone started on it are both still alive
+  if pid_alive "$STATE_DIR/xcodebuild.pid" xcodebuild && proxy_serves "$STATE_DIR" "$IOS_UDID" "$WDA_PORT"; then
     json ok:raw=true action=wda-start already_running:raw=true "base_url=$WDA_BASE_URL" "udid=$IOS_UDID"
     exit 0
   fi
@@ -48,15 +50,20 @@ fi
 # stop this phone's leftovers from a previous run so its port and device session are free
 IOS_UDID="$IOS_UDID" "$(dirname "$0")/wda-stop" >/dev/null 2>&1
 
-nohup "${TEST_CMD[@]}" >"$STATE_DIR/wda.log" 2>&1 &
+nohup "${TEST_CMD[@]}" >"$STATE_DIR/wda.log" 2>&1 9>&- &
 echo $! >"$STATE_DIR/xcodebuild.pid"
-nohup "${PROXY_CMD[@]}" >"$STATE_DIR/iproxy.log" 2>&1 &
+nohup "${PROXY_CMD[@]}" >"$STATE_DIR/iproxy.log" 2>&1 9>&- &
 echo $! >"$STATE_DIR/iproxy.pid"
 echo "$WDA_PORT" >"$STATE_DIR/port"
 
 timeout="${WDA_START_TIMEOUT:-180}"
 for ((i = 0; i < timeout; i++)); do
-  if curl -sf -m 2 "$WDA_BASE_URL/status" >/dev/null; then
+  # a forward that couldn't bind exits, so an answer is only ours while our iproxy still runs
+  if ! proxy_serves "$STATE_DIR" "$IOS_UDID" "$WDA_PORT"; then
+    die proxy_exited "iproxy for $IOS_UDID exited; another process may hold port $WDA_PORT" \
+      "log=$STATE_DIR/iproxy.log" "fix=check lsof -i :$WDA_PORT, or set WDA_PORT to a free port"
+  fi
+  if curl -sf -m 2 "$WDA_BASE_URL/status" >/dev/null && proxy_serves "$STATE_DIR" "$IOS_UDID" "$WDA_PORT"; then
     json ok:raw=true action=wda-start "base_url=$WDA_BASE_URL" "udid=$IOS_UDID" "log=$STATE_DIR/wda.log"
     exit 0
   fi
