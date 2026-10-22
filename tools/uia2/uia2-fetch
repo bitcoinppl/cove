@@ -1,0 +1,28 @@
+#!/bin/bash
+# download the pinned UiAutomator2 server APKs into the cache and verify their checksums
+# usage: uia2-fetch [--dry-run]
+set -u
+. "$(dirname "$0")/uia2-env.sh"
+
+if [ "${1:-}" = "--dry-run" ]; then
+  json ok:raw=true action=uia2-fetch dry_run:raw=true "version=$UIA2_SERVER_VERSION" "dir=$UIA2_APK_DIR"
+  exit 0
+fi
+
+verify() { # verify FILE SHA256
+  [ -f "$1" ] && [ "$(shasum -a 256 "$1" | cut -d' ' -f1)" = "$2" ]
+}
+
+if verify "$UIA2_SERVER_APK" "$UIA2_SERVER_SHA256" && verify "$UIA2_TEST_APK" "$UIA2_TEST_SHA256"; then
+  json ok:raw=true action=uia2-fetch cached:raw=true "version=$UIA2_SERVER_VERSION" "dir=$UIA2_APK_DIR"
+  exit 0
+fi
+
+command -v gh >/dev/null || die missing_gh "gh not found" "fix=brew install gh"
+mkdir -p "$UIA2_APK_DIR"
+gh release download "v$UIA2_SERVER_VERSION" -R appium/appium-uiautomator2-server -D "$UIA2_APK_DIR" --clobber >/dev/null 2>&1 ||
+  die download_failed "gh release download v$UIA2_SERVER_VERSION failed" "fix=gh auth status"
+
+verify "$UIA2_SERVER_APK" "$UIA2_SERVER_SHA256" || die checksum_mismatch "server APK checksum differs from the pinned one" "path=$UIA2_SERVER_APK"
+verify "$UIA2_TEST_APK" "$UIA2_TEST_SHA256" || die checksum_mismatch "test APK checksum differs from the pinned one" "path=$UIA2_TEST_APK"
+json ok:raw=true action=uia2-fetch cached:raw=false "version=$UIA2_SERVER_VERSION" "dir=$UIA2_APK_DIR"

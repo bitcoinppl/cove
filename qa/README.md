@@ -9,6 +9,10 @@
 - `just qa-coverage` counts rows per platform by the cheapest layer that covers them, then by their target layer
 - `just qa-check` fails when a row names a file that doesn't exist or a test that the file doesn't declare as a test outside comments, uses a path glob that matches no tracked file, lists a Rust module file such as `foo.rs` without any of the files under `foo/`, or leaves one of its platforms without coverage. CI runs it on every pull request
 
+## Driving devices
+
+An agent pass on Android drives the device with [`tools/uia2`](../tools/uia2/README.md): read the screen with `android-vis`, act with `android-tap-label` and the other `android-*` commands, and take screenshots only for visual checks.
+
 ## Row format
 
 ```toml
