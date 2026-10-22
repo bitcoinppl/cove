@@ -1102,12 +1102,22 @@ fn sender_password_outside_the_alphabet_is_rejected_then_correct_password_succee
 
     manager.ingest(KeyTeleportInput::Sender(packet)).unwrap();
 
-    // '9' is not in the base32 alphabet, and the length checks apply after normalization
-    for bad_password in ["pa$$word", "ABCD9FGH", "ABC", "ABCDEFGHIJKL", ""] {
+    // '9' and '$' are outside the base32 alphabet, and the length checks apply after
+    // normalization. Each input is derived from the real password, so it only fails for the
+    // reason under test, and the message names the case instead of echoing the password
+    let rejected = [
+        ("non-base32 digit", format!("{}9", &password[..7])),
+        ("symbol", format!("{}$", &password[..7])),
+        ("too short", password[..3].to_string()),
+        ("too long", format!("{password}{}", &password[..4])),
+        ("empty", String::new()),
+    ];
+
+    for (case, bad_password) in rejected {
         assert_eq!(
-            manager.enter_sender_password(bad_password),
+            manager.enter_sender_password(&bad_password),
             Err(KeyTeleportAlert::WrongTeleportPassword),
-            "{bad_password:?} should be rejected"
+            "{case} should be rejected"
         );
         assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveEnterPassword));
         assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_some());
