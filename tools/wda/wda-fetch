@@ -1,0 +1,38 @@
+#!/bin/bash
+# clone the pinned WebDriverAgent release into the cache and verify its commit
+# usage: wda-fetch [--dry-run]
+set -u
+. "$(dirname "$0")/wda-env.sh"
+
+if [ "${1:-}" = "--dry-run" ]; then
+  json ok:raw=true action=wda-fetch dry_run:raw=true "version=$WDA_VERSION" "commit=$WDA_COMMIT" "dir=$WDA_REPO"
+  exit 0
+fi
+
+head_commit() {
+  git -C "$WDA_REPO" rev-parse HEAD 2>/dev/null
+}
+
+if [ -d "$WDA_REPO" ]; then
+  [ "$(head_commit)" = "$WDA_COMMIT" ] ||
+    die commit_mismatch "$WDA_REPO is not at the pinned commit" "expected=$WDA_COMMIT" "found=$(head_commit)" "fix=delete $WDA_REPO and rerun wda-fetch"
+  json ok:raw=true action=wda-fetch cached:raw=true "version=$WDA_VERSION" "dir=$WDA_REPO"
+  exit 0
+fi
+
+command -v git >/dev/null || die missing_git "git not found" "fix=xcode-select --install"
+mkdir -p "$(dirname "$WDA_REPO")"
+tmp="$WDA_REPO.partial"
+rm -rf "$tmp"
+git clone -q --depth 1 --branch "$WDA_VERSION" https://github.com/appium/WebDriverAgent.git "$tmp" 2>/dev/null ||
+  die clone_failed "git clone of WebDriverAgent $WDA_VERSION failed" "fix=check the network and rerun"
+
+# a moved tag would otherwise build different code under the same version name
+found="$(git -C "$tmp" rev-parse HEAD)"
+if [ "$found" != "$WDA_COMMIT" ]; then
+  rm -rf "$tmp"
+  die commit_mismatch "tag $WDA_VERSION points at a different commit than the pinned one" "expected=$WDA_COMMIT" "found=$found"
+fi
+
+mv "$tmp" "$WDA_REPO"
+json ok:raw=true action=wda-fetch cached:raw=false "version=$WDA_VERSION" "dir=$WDA_REPO"

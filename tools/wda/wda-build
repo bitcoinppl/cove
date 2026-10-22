@@ -1,0 +1,28 @@
+#!/bin/bash
+# build WebDriverAgentRunner for any iOS device (no device needed when signing allows it)
+# usage: wda-build [--dry-run]
+set -u
+. "$(dirname "$0")/wda-env.sh"
+
+cmd=(xcodebuild build-for-testing
+  -project "$WDA_REPO/WebDriverAgent.xcodeproj"
+  -scheme WebDriverAgentRunner
+  -destination "${WDA_BUILD_DESTINATION:-generic/platform=iOS}"
+  -derivedDataPath "$WDA_DERIVED"
+  -allowProvisioningUpdates
+  "DEVELOPMENT_TEAM=$WDA_TEAM"
+  "PRODUCT_BUNDLE_IDENTIFIER=$WDA_BUNDLE_ID")
+
+if [ "${1:-}" = "--dry-run" ]; then
+  json ok:raw=true action=wda-build "command=${cmd[*]}"
+  exit 0
+fi
+
+fetched="$("$(dirname "$0")/wda-fetch")" || { echo "$fetched"; exit 1; }
+mkdir -p "$WDA_STATE"
+"${cmd[@]}" >"$WDA_STATE/build.log" 2>&1
+rc=$?
+if [ $rc -ne 0 ]; then
+  die build_failed "xcodebuild exited $rc; see $WDA_STATE/build.log" "log=$WDA_STATE/build.log"
+fi
+json ok:raw=true action=wda-build "derived_data=$WDA_DERIVED" "log=$WDA_STATE/build.log"
