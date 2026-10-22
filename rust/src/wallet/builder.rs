@@ -20,7 +20,10 @@ use crate::{
     manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER,
     mnemonic::MnemonicExt as _,
     tap_card::tap_signer_reader::DeriveInfo,
-    wallet_identity::{PublicWalletIdentity, existing_public_wallet_by_identity_strict},
+    wallet_identity::{
+        PublicWalletIdentity, existing_origin_less_wallet_by_identity,
+        existing_public_wallet_by_identity_strict,
+    },
     wallet_secret::WalletSecretExt as _,
     xpub::{self, XpubError},
 };
@@ -243,6 +246,19 @@ impl WalletBuilder {
                     keychain,
                     &database,
                 );
+            }
+        } else {
+            let existing = existing_origin_less_wallet_by_identity(
+                &database,
+                keychain,
+                network,
+                mode,
+                &incoming_identity,
+            )
+            .map_err_str(WalletError::LoadError)?;
+
+            if let Some(existing_metadata) = existing {
+                return Err(WalletError::WalletAlreadyExists(existing_metadata.id));
             }
         }
 

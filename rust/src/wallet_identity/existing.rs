@@ -144,6 +144,37 @@ pub(crate) fn existing_public_wallet_by_identity_strict(
     matching_public_wallet_by_identity(wallets, keychain, fingerprint, incoming_identity, false)
 }
 
+/// Finds a wallet with no master fingerprint whose public descriptors match the incoming ones
+///
+/// A bare xpub has no key origin, so fingerprint matching can never see its duplicates
+pub(crate) fn existing_origin_less_wallet_by_identity(
+    database: &Database,
+    keychain: &Keychain,
+    network: Network,
+    mode: WalletMode,
+    incoming_identity: &PublicWalletIdentity,
+) -> Result<Option<WalletMetadata>, WalletIdentityError> {
+    for wallet_metadata in database.wallets.get_all(network, mode)? {
+        if wallet_metadata.master_fingerprint.is_some() {
+            continue;
+        }
+
+        let wallet_identity =
+            PublicWalletIdentity::from_existing_wallet(&wallet_metadata, keychain).map_err(
+                |source| WalletIdentityError::ExistingWalletPublicIdentity {
+                    wallet_id: wallet_metadata.id.clone(),
+                    source,
+                },
+            )?;
+
+        if wallet_identity.as_ref() == Some(incoming_identity) {
+            return Ok(Some(wallet_metadata));
+        }
+    }
+
+    Ok(None)
+}
+
 pub(crate) fn matching_public_wallet_by_identity(
     wallets: Vec<WalletMetadata>,
     keychain: &Keychain,
