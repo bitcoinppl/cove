@@ -4,6 +4,10 @@ import CoveCore
 import XCTest
 
 final class PasskeyProviderImplTests: XCTestCase {
+    // a timed-out request cancels through the main queue, which the host app can keep busy for
+    // seconds on a slow CI simulator; the wait still returns as soon as cancellation runs
+    private static let mainQueueCancellationTimeout: TimeInterval = 10
+
     func testNonAuthorizationFailureReturnsOnlySanitizedMetadata() {
         let delegate = PasskeyDelegate(context: .discoverAssertion)
         let request = ASAuthorizationPlatformPublicKeyCredentialProvider(
@@ -48,7 +52,7 @@ final class PasskeyProviderImplTests: XCTestCase {
             }
         }
 
-        wait(for: [cancellation], timeout: 1)
+        wait(for: [cancellation], timeout: Self.mainQueueCancellationTimeout)
     }
 
     func testLateCallbackCannotReplaceTimeoutResult() {
@@ -60,7 +64,7 @@ final class PasskeyProviderImplTests: XCTestCase {
                 cancellation.fulfill()
             }
         )
-        wait(for: [cancellation], timeout: 1)
+        wait(for: [cancellation], timeout: Self.mainQueueCancellationTimeout)
 
         let request = ASAuthorizationPlatformPublicKeyCredentialProvider(
             relyingPartyIdentifier: "example.com"

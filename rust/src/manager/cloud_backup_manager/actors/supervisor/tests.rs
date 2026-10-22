@@ -149,6 +149,21 @@ async fn wait_for_cloud_only_rows(
     loaded_rows().expect("cloud-only rows should be loaded")
 }
 
+/// Waits for the rows a finished Restore All reads again after it restored a wallet
+///
+/// The run's final supervisor message clears the operation before it resets the rows and asks
+/// for that fetch, so a test that saw the operation clear can still read the rows from before it
+async fn wait_for_rows_refetched_after_restore_all(
+    manager: &RustCloudBackupManager,
+    present: &[&str],
+    absent: &[&str],
+) -> Vec<CloudBackupWalletItem> {
+    // the supervisor handles messages in order, so once this returns the final message has reset
+    // the rows and any loaded rows come from the fetch it asked for
+    call!(manager.supervisor.ensure_cloud_only_fetch()).await.unwrap();
+    wait_for_cloud_only_rows(manager, present, absent).await
+}
+
 fn cloud_only_row_statuses(rows: &[CloudBackupWalletItem]) -> Vec<(&str, CloudBackupWalletStatus)> {
     rows.iter().map(|row| (row.record_id.as_str(), row.sync_status.clone())).collect()
 }
@@ -3419,7 +3434,7 @@ async fn restore_all_mixed_failure_continues_through_later_success_and_settles()
     );
     // the restored wallets make the run read the rows again, and the failure survives that
     let failed_record_id = items[1].record_id.as_str();
-    let rows = wait_for_cloud_only_rows(&manager, &[failed_record_id], &[]).await;
+    let rows = wait_for_rows_refetched_after_restore_all(&manager, &[failed_record_id], &[]).await;
     let retained_failure = rows
         .iter()
         .find(|wallet| wallet.record_id == failed_record_id)
@@ -3525,7 +3540,7 @@ async fn restore_all_cancellation_finishes_the_active_wallet_and_skips_the_next(
         CloudBackupRestoreAllState::Running { cancellation_requested: true, .. }
     ));
     gate.release();
-    wait_for_test_condition(Duration::from_secs(2), "cancelled Restore All should settle", || {
+    wait_for_test_condition(Duration::from_secs(5), "cancelled Restore All should settle", || {
         manager.projected_exclusive_operation().is_none()
     })
     .await;
@@ -3545,6 +3560,14 @@ async fn restore_all_cancellation_finishes_the_active_wallet_and_skips_the_next(
             .is_none()
     );
     assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
+
+    // the restored first wallet makes the run read the rows again, and the retry counts the rest
+    wait_for_rows_refetched_after_restore_all(
+        &manager,
+        &[items[1].record_id.as_str()],
+        &[items[0].record_id.as_str()],
+    )
+    .await;
     assert!(matches!(
         manager.projected_restore_all_state(),
         CloudBackupRestoreAllState::RetryAvailable { wallet_count: 1 }
@@ -4000,15 +4023,32 @@ async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
         test_cloud_only_wallet(a),
         test_cloud_only_wallet(b),
     ]));
-    list_test_wallet_files(&manager.current_namespace_id().unwrap(), &[b, c]);
+    let namespace = manager.current_namespace_id().unwrap();
+    list_test_wallet_files(&namespace, &[b, c]);
+
+    // the refetch is held on the newly listed record, so its rows cannot land before the checks
+    let gate =
+        test_globals().cloud.gate_wallet_backup_download_after_successes(namespace, c.into(), 0);
 
     // a background report carries no listing, so the loaded rows cannot be matched and reset
     manager.apply_verification_effect(CloudBackupVerificationEffect {
         detail: Some(test_cloud_backup_detail(2)),
         ..Default::default()
     });
-    assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::NotFetched);
 
+    // the reset is synchronous, but the supervisor may already have started the fetch it asked for
+    assert!(matches!(
+        manager.state.read().cloud_only(),
+        CloudOnlyState::NotFetched | CloudOnlyState::Loading
+    ));
+
+    gate.wait_until_blocked()
+        .with_timeout(Duration::from_secs(5))
+        .await
+        .expect("the reset should start a fetch that reads the new listing");
+    assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::Loading);
+
+    gate.release();
     wait_for_cloud_only_rows(&manager, &[b, c], &[a]).await;
 }
 
