@@ -54,3 +54,31 @@ pid_alive() { # pid_alive PIDFILE NAME
   pid="$(cat "$1" 2>/dev/null)" || return 1
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && ps -p "$pid" -o comm= | grep -q "$2"
 }
+
+# true when this phone's recorded iproxy is alive and forwarding PORT for it, so a port that
+# another phone's runner took over is never mistaken for this one
+proxy_serves() { # proxy_serves STATE_DIR UDID PORT
+  pid_alive "$1/iproxy.pid" iproxy || return 1
+  ps -p "$(cat "$1/iproxy.pid")" -o args= | grep -q -- "-u $2 $3:8100"
+}
+
+# hold a lock on PORT for the rest of this script, so two wda-start runs can't both pass the
+# port check before either forward binds. macOS has no flock(1), so a helper locks fd 9: the lock
+# belongs to that open file and the OS releases it when this script exits, even when killed.
+# Background children must close fd 9 (9>&-), or they would hold the lock after this script exits
+lock_port() { # lock_port PORT
+  local lock="$WDA_STATE/port-$1.lock"
+  mkdir -p "$WDA_STATE"
+  exec 9>>"$lock"
+  python3 -I -c 'import fcntl, sys, time
+deadline = time.monotonic() + float(sys.argv[1])
+while True:
+    try:
+        fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        sys.exit(0)
+    except BlockingIOError:
+        if time.monotonic() >= deadline:
+            sys.exit(1)
+        time.sleep(0.1)' "${WDA_LOCK_WAIT:-30}" ||
+    die locked "another wda-start held $lock for ${WDA_LOCK_WAIT:-30} s" "fix=wait for it to finish, or use another WDA_PORT"
+}

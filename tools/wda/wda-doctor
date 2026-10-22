@@ -10,6 +10,7 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.request
 
 WDA_HOME = os.path.dirname(os.path.abspath(__file__))
@@ -71,7 +72,15 @@ def main():
     if not UDID:
         check("udid", False, "IOS_UDID is not set", "export IOS_UDID=<udid>; xcrun devicectl list devices shows it")
     else:
-        rc, out, err = run("xcrun", "devicectl", "list", "devices", "--json-output", "-", "--quiet")
+        # Xcode before 27 writes --json-output only to a file, not to stdout
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "devices.json")
+            run("xcrun", "devicectl", "list", "devices", "--json-output", path, "--quiet")
+            try:
+                with open(path) as f:
+                    out = f.read()
+            except OSError:
+                out = ""
         dev = None
         try:
             for d in json.loads(out)["result"]["devices"]:

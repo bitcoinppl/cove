@@ -33,15 +33,15 @@ Needs Xcode signed in to the signing team (`WDA_TEAM`, default Cove's team) and 
 | `ios-vis [-a]` | one line per visible element with a label, id or value, with its tap center and size in points; `-a` includes hidden ones |
 | `ios-source [--json] [--raw]` | accessibility tree, XML by default; `--raw` prints only the tree |
 | `ios-tap X Y` | tap at point coordinates (points, not pixels) |
-| `ios-tap-label LABEL` | tap the element whose accessibility id, label or name matches exactly |
-| `ios-type TEXT` | type into the focused field |
+| `ios-tap-label [--] LABEL` | tap the element whose accessibility id, label or name matches exactly |
+| `ios-type [--] TEXT` | type into the focused field |
 | `ios-swipe [--hold S] up\|down\|left\|right` | finger swipe across the middle of the screen; `up` moves the finger up, so a list shows items further down. The finger rests S seconds first (default 0.3) |
 | `ios-drag [--hold S] X1 Y1 X2 Y2` | press at X1,Y1 for S seconds (default 1), then drag to X2,Y2 |
 | `ios-hold X Y [SECONDS]` | long-press at point coordinates (default 1 s), for example to open the Paste menu |
-| `ios-pasteboard [--app ID] get \| set TEXT` | read or write the pasteboard; see below |
+| `ios-pasteboard [--app ID] get \| set [--] TEXT` | read or write the pasteboard; see below |
 | `ios-shot PATH.png` | screenshot to a file |
 
-`wda-doctor` and `wda-start` need `IOS_UDID`. The `ios-*` commands only need WDA on localhost and echo `IOS_UDID` when it is set. Every command except the read-only `wda-doctor` accepts `--dry-run`, which prints what it would do without touching the phone.
+`wda-doctor` and `wda-start` need `IOS_UDID`. The `ios-*` commands only need WDA on localhost and echo `IOS_UDID` when it is set. Every command except the read-only `wda-doctor` accepts `--dry-run`, which prints what it would do without touching the phone. Options are read only before `--`, so `ios-type -- --dry-run` types the text `--dry-run`.
 
 To drive two phones at once, start the second with its own `IOS_UDID` and `WDA_PORT`, and pass the same `WDA_PORT` to the `ios-*` commands for it.
 
@@ -92,6 +92,8 @@ Offline check of the commands against a mock server: `tools/wda/test/run-mock-te
   - "Unable to find a device matching": the phone is locked or not on USB
 - **`status_timeout`.** The phone is probably locked or showing a passcode or trust prompt. Unlock it and rerun
 - **`wda_unreachable` from an `ios-*` command.** `wda-start` isn't running or `iproxy` died. Check `state/devices/<udid>/iproxy.log`, then `lsof -i :8100` for another process on the port
+- **`proxy_exited` from `wda-start`.** This phone's `iproxy` couldn't keep the port, usually because another process holds it. Check `state/devices/<udid>/iproxy.log` and `lsof -i :8100`
+- **`locked` from `wda-start`.** Another `wda-start` on the same port is still starting. Wait for it, or use another `WDA_PORT`
 - **`port_in_use` from `wda-start`.** Another phone's runner answers on the port. `WDA_PORT=8101 wda-start` moves this one; use the same variable for its `ios-*` commands
 - **Black screenshots, the same small image every time, or elements not found.** The screen is asleep even though WDA reports it unlocked. Unlock it, and set Auto-Lock to Never for the session
 - **Session errors after the phone sleeps.** Delete the `state/session-*` file; the next command creates a session

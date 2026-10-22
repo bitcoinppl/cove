@@ -107,8 +107,8 @@ def swipe_points(direction, w, h):
 
 
 def cmd_launch(args, dry):
-    activate = "--activate" in args
-    ids = [a for a in args if not a.startswith("--")]
+    args, activate = pop_flag(args, "--activate")
+    ids = operands(args)
     if len(ids) != 1:
         raise Fail("usage", "usage: ios-launch [--dry-run] [--activate] BUNDLE_ID")
     path = "/wda/apps/activate" if activate else "/wda/apps/launch"
@@ -118,10 +118,39 @@ def cmd_launch(args, dry):
     return {"bundle_id": ids[0], "action": "activate" if activate else "launch"}
 
 
+def options_end(args):
+    """Index of the `--` that ends the options, or the end; text after it is never an option"""
+    return args.index("--") if "--" in args else len(args)
+
+
+def pop_flag(args, name):
+    """Remove the option `name` and return (args, whether it was given)"""
+    if name not in args[:options_end(args)]:
+        return args, False
+    i = args.index(name)
+    return args[:i] + args[i + 1:], True
+
+
+def pop_value(args, name, usage):
+    """Remove `name VALUE` from the options and return (args, VALUE or None)"""
+    if name not in args[:options_end(args)]:
+        return args, None
+    i = args.index(name)
+    if i + 1 >= options_end(args):
+        raise Fail("usage", usage)
+    return args[:i] + args[i + 2:], args[i + 1]
+
+
+def operands(args):
+    """The arguments left once the options are popped, without the `--` that ended them"""
+    i = options_end(args)
+    return args[:i] + args[i + 1:]
+
+
 def pop_hold(args, default):
     # --hold is how long the finger rests before moving; SwiftUI starts drag-to-reorder after
     # a long enough rest, so scrolls over reorderable rows (Cove's sidebar) want a short one
-    if "--hold" not in args:
+    if "--hold" not in args[:options_end(args)]:
         return args, default
     i = args.index("--hold")
     try:
@@ -133,6 +162,7 @@ def pop_hold(args, default):
 
 def cmd_swipe(args, dry):
     args, hold = pop_hold(args, SWIPE_SECONDS)
+    args = operands(args)
     if len(args) != 1 or args[0] not in ("up", "down", "left", "right"):
         raise Fail("usage", "usage: ios-swipe [--dry-run] [--hold SECONDS] up|down|left|right")
     d = args[0]
@@ -148,6 +178,7 @@ def cmd_swipe(args, dry):
 
 def cmd_drag(args, dry):
     args, hold = pop_hold(args, 1.0)
+    args = operands(args)
     try:
         fx, fy, tx, ty = (float(a) for a in args)
     except ValueError:
@@ -160,6 +191,7 @@ def cmd_drag(args, dry):
 
 
 def cmd_tap(args, dry):
+    args = operands(args)
     try:
         if len(args) != 2:
             raise ValueError
@@ -187,8 +219,9 @@ def find_by_label(label):
 
 
 def cmd_tap_label(args, dry):
+    args = operands(args)
     if len(args) != 1 or not args[0]:
-        raise Fail("usage", "usage: ios-tap-label [--dry-run] LABEL (exact accessibility id, label or name)")
+        raise Fail("usage", "usage: ios-tap-label [--dry-run] [--] LABEL (exact accessibility id, label or name)")
     label = args[0]
     if dry:
         return {"would_send": [{"method": "POST", "path": "/session/<id>/element", "body": {"using": "accessibility id", "value": label}},
@@ -201,8 +234,9 @@ def cmd_tap_label(args, dry):
 
 
 def cmd_type(args, dry):
+    args = operands(args)
     if len(args) != 1:
-        raise Fail("usage", "usage: ios-type [--dry-run] TEXT (one argument; quote it)")
+        raise Fail("usage", "usage: ios-type [--dry-run] [--] TEXT (one argument; quote it, and put -- before text that starts with -)")
     text = args[0]
     if dry:
         return {"would_send": [{"method": "POST", "path": "/session/<id>/wda/keys", "body": {"value": list(text)}}]}
@@ -212,9 +246,8 @@ def cmd_type(args, dry):
 
 def cmd_source(args, dry):
     fmt = "xml"
-    raw = "--raw" in args
-    args = [a for a in args if a != "--raw"]
-    for a in args:
+    args, raw = pop_flag(args, "--raw")
+    for a in operands(args):
         if a in ("--json", "json"):
             fmt = "json"
         elif a in ("--xml", "xml"):
@@ -262,8 +295,8 @@ def vis_lines(xml, show_hidden):
 
 
 def cmd_vis(args, dry):
-    show_hidden = "-a" in args
-    if [a for a in args if a != "-a"]:
+    args, show_hidden = pop_flag(args, "-a")
+    if operands(args):
         raise Fail("usage", "usage: ios-vis [--dry-run] [-a]  (-a includes hidden elements)")
     if dry:
         return {"would_send": [{"method": "GET", "path": "/source?format=xml"}]}
@@ -293,15 +326,12 @@ RUNNER_ID = os.environ.get("WDA_RUNNER_ID") or os.environ.get("WDA_BUNDLE_ID", "
 def cmd_pasteboard(args, dry):
     # iOS only lets the foreground app touch the pasteboard, so the runner comes forward for
     # the read or write, then the app named by --app (default Cove) is reactivated
-    app = "org.bitcoinppl.cove"
-    if "--app" in args:
-        i = args.index("--app")
-        if i + 1 >= len(args):
-            raise Fail("usage", "usage: ios-pasteboard [--dry-run] [--app BUNDLE_ID] get | set TEXT")
-        app = args[i + 1]
-        args = args[:i] + args[i + 2:]
+    usage = "usage: ios-pasteboard [--dry-run] [--app BUNDLE_ID] get | set [--] TEXT"
+    args, app = pop_value(args, "--app", usage)
+    app = app or "org.bitcoinppl.cove"
+    args = operands(args)
     if not args or args[0] not in ("get", "set") or (args[0] == "set") != (len(args) == 2) or len(args) > 2:
-        raise Fail("usage", "usage: ios-pasteboard [--dry-run] [--app BUNDLE_ID] get | set TEXT")
+        raise Fail("usage", usage)
     op = args[0]
     body = {"contentType": "plaintext"}
     if op == "set":
@@ -320,6 +350,7 @@ def cmd_pasteboard(args, dry):
 
 
 def cmd_hold(args, dry):
+    args = operands(args)
     try:
         x, y = float(args[0]), float(args[1])
         secs = float(args[2]) if len(args) == 3 else 1.0
@@ -341,13 +372,16 @@ COMMANDS = {"launch": cmd_launch, "swipe": cmd_swipe, "tap": cmd_tap, "tap-label
 
 def main(argv):
     name, rest = argv[0], argv[1:]
-    dry = "--dry-run" in rest
-    rest = [a for a in rest if a != "--dry-run"]
+    rest, dry = pop_flag(rest, "--dry-run")
     try:
         result = COMMANDS[name](rest, dry)
     except Fail as e:
         emit(False, error=e.code, message=e.message, **e.extra)
         return 2 if e.code == "usage" else 1
+    except Exception as e:
+        # keep the one-JSON-object contract for callers that parse every result
+        emit(False, error="internal", message=repr(e)[:300])
+        return 1
     emit(True, command="ios-" + name, dry_run=dry, **result)
     return 0
 
