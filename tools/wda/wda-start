@@ -1,0 +1,61 @@
+#!/bin/bash
+# start WDA on the phone and forward it to localhost:8100
+# usage: IOS_UDID=<udid> wda-start [--dry-run]
+set -u
+. "$(dirname "$0")/wda-env.sh"
+
+IDEVICE_ID="$(command -v idevice_id || echo /opt/homebrew/opt/libimobiledevice/bin/idevice_id)"
+XCTESTRUN="$(ls "$WDA_DERIVED"/Build/Products/*.xctestrun 2>/dev/null | head -1)"
+TEST_CMD=(xcodebuild test-without-building -xctestrun "${XCTESTRUN:-<built by wda-build>}" -destination "id=${IOS_UDID:-<udid>}")
+PROXY_CMD=(iproxy -u "${IOS_UDID:-<udid>}" "$WDA_PORT:8100")
+
+if [ "${1:-}" = "--dry-run" ]; then
+  json ok:raw=true action=wda-start dry_run:raw=true "test_command=${TEST_CMD[*]}" "proxy_command=${PROXY_CMD[*]}" "base_url=$WDA_BASE_URL"
+  exit 0
+fi
+
+need_udid
+command -v iproxy >/dev/null || die missing_iproxy "iproxy not found" "fix=brew install libimobiledevice"
+mkdir -p "$WDA_STATE"
+
+if curl -sf -m 2 "$WDA_BASE_URL/status" >/dev/null; then
+  json ok:raw=true action=wda-start already_running:raw=true "base_url=$WDA_BASE_URL" "udid=$IOS_UDID"
+  exit 0
+fi
+
+if [ -x "$IDEVICE_ID" ] && ! "$IDEVICE_ID" -l | grep -qx "$IOS_UDID"; then
+  die device_not_on_usb "phone $IOS_UDID is not visible over USB" "fix=plug it in, unlock it, tap Trust, run wda-doctor"
+fi
+
+# rebuild when there are no products or the profile does not include this device; a destination
+# with the real UDID lets Xcode register the device and refresh the profile
+APP="$WDA_DERIVED/Build/Products/Debug-iphoneos/WebDriverAgentRunner-Runner.app"
+if [ -z "$XCTESTRUN" ] || ! security cms -D -i "$APP/embedded.mobileprovision" 2>/dev/null | grep -q "$IOS_UDID"; then
+  WDA_BUILD_DESTINATION="id=$IOS_UDID" "$(dirname "$0")/wda-build" >"$WDA_STATE/wda-build.json" || {
+    cat "$WDA_STATE/wda-build.json"; exit 1; }
+  XCTESTRUN="$(ls "$WDA_DERIVED"/Build/Products/*.xctestrun | head -1)"
+  TEST_CMD=(xcodebuild test-without-building -xctestrun "$XCTESTRUN" -destination "id=$IOS_UDID")
+fi
+
+# stop leftovers from a previous run so ports and the device session are free
+"$(dirname "$0")/wda-stop" >/dev/null 2>&1
+
+nohup "${TEST_CMD[@]}" >"$WDA_STATE/wda.log" 2>&1 &
+echo $! >"$WDA_STATE/xcodebuild.pid"
+nohup "${PROXY_CMD[@]}" >"$WDA_STATE/iproxy.log" 2>&1 &
+echo $! >"$WDA_STATE/iproxy.pid"
+echo "$IOS_UDID" >"$WDA_STATE/udid"
+
+timeout="${WDA_START_TIMEOUT:-180}"
+for ((i = 0; i < timeout; i++)); do
+  if curl -sf -m 2 "$WDA_BASE_URL/status" >/dev/null; then
+    json ok:raw=true action=wda-start "base_url=$WDA_BASE_URL" "udid=$IOS_UDID" "log=$WDA_STATE/wda.log"
+    exit 0
+  fi
+  if ! kill -0 "$(cat "$WDA_STATE/xcodebuild.pid")" 2>/dev/null; then
+    die xcodebuild_exited "test-without-building exited before WDA answered; if the log mentions an untrusted developer, trust the certificate under Settings > General > VPN & Device Management and rerun" \
+      "log=$WDA_STATE/wda.log" "log_tail=$(tail -n 15 "$WDA_STATE/wda.log")"
+  fi
+  sleep 1
+done
+die status_timeout "WDA did not answer /status within ${timeout}s; the phone must stay unlocked" "log=$WDA_STATE/wda.log" "log_tail=$(tail -n 15 "$WDA_STATE/wda.log")"
