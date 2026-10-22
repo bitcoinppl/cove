@@ -836,7 +836,7 @@ mod tests {
             WalletId::preview_new_random(),
         )
         .expect("in-memory wallet data opens");
-        let manager = LabelManager { db, lifecycle: None };
+        let manager = LabelManager::new_with_db(db);
         let (external, internal) = get_test_wpkh_and_change_desc();
         let mut wallet = BdkWallet::create(external, internal)
             .network(BdkNetwork::Signet)
