@@ -1,0 +1,207 @@
+[[row]]
+id = "s05-cloud-backup-off-after-approved-wipe"
+section = "5"
+title = "Cloud Backup off after approved wipe"
+platforms = ["android"]
+target = "device"
+paths = [
+    "rust/src/app/full_wipe.rs",
+    "rust/src/manager/cloud_backup_manager/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# checks the Off state after a real wipe
+
+[[row]]
+id = "s05-online-inventory-completes-before-restore-delete"
+section = "5"
+title = "Online inventory completes before restore/delete"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+
+[[row]]
+id = "s05-offline-inventory-keeps-existing-rows-and-disables"
+section = "5"
+title = "Offline inventory keeps existing rows and disables actions"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "human",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/sync_health.rs::authoritative_failure_retains_provisional_rows_in_failed_state",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# rust test covers retained rows in Failed state; disabled controls and the real offline run stay human
+
+[[row]]
+id = "s05-reconnect-inventory-without-duplicate-new-passkey"
+section = "5"
+title = "Reconnect inventory without duplicate/new passkey"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+
+[[row]]
+id = "s05-cloud-only-wallet-restore-data-matches"
+section = "5"
+title = "Cloud-only wallet restore data matches"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+
+[[row]]
+id = "s05-local-deletion-keeps-restorable-cloud-only-wallet"
+section = "5"
+title = "Local deletion keeps restorable cloud-only wallet"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+
+[[row]]
+id = "s05-cloud-restored-wallet-performs-full-rescan"
+section = "5"
+title = "Cloud-restored wallet performs full rescan"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+
+[[row]]
+id = "s05-passkey-cancel-leaves-active-state-intact"
+section = "5"
+title = "Passkey cancel leaves active state intact"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+
+[[row]]
+id = "s05-disable-while-cloud-writes-pending"
+section = "5"
+title = "Disable while cloud writes pending"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+
+[[row]]
+id = "s05-delete-from-cloud-confirmation-and-selected-backup"
+section = "5"
+title = "Delete From Cloud confirmation and selected backup"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/manager/cloud_backup_manager/**",
+    "rust/src/database/cloud_backup/**",
+    "ios/Cove/CloudBackupManager.swift",
+    "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsCloudBackupSection.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# state machine is rust and testable with scripted cloud providers; the real-account run stays human

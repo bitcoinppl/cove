@@ -1,0 +1,307 @@
+[[row]]
+id = "s02-recovery-words-in-accessibility-tree-before-fresh"
+section = "2"
+title = "Recovery words in accessibility tree before fresh PIN"
+platforms = ["android"]
+target = "ui"
+paths = [
+    "android/app/src/main/java/org/bitcoinppl/cove/secretwords/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/RecoveryWords.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/LockView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/Security.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android FAIL
+# the accessibility tree dump decides whether words sit under the auth overlay
+
+[[row]]
+id = "s02-decoy-diagnostics-and-report-history-absent"
+section = "2"
+title = "Decoy diagnostics and report history absent"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/database/global_config.rs",
+    "rust/src/manager/auth_manager.rs",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsScreen.swift",
+    "ios/Cove/Flows/SettingsFlow/SendDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/SubmittedDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/AboutScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/MainSettingsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SendDiagnostics*.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SubmittedDiagnosticsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s02-private-key-fixture-through-tprv-file"
+section = "2"
+title = "Private-key fixture through tprv file"
+platforms = ["ios"]
+target = "manual"
+paths = [
+    "rust/src/manager/key_teleport_manager/**",
+    "rust/src/key_teleport.rs",
+    "ios/Cove/Flows/KeyTeleportFlow/**",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android N/A
+# private-key fixture needs the camera-only receiver response between two phones
+
+[[row]]
+id = "s02-fresh-main-credential-for-xprv-cancel-fail"
+section = "2"
+title = "Fresh main credential for xprv; cancel/fail hides it"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "rust/src/manager/auth_manager.rs",
+    "rust/src/auth.rs",
+    "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsXprvReveal.swift",
+    "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsPresentation.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsXprvReveal.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSections.kt",
+]
+coverage = [
+    "human",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSecurityHelpersTest.kt::exportRequiresCredentialSuccessAfterTheRequest",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# android unit test only covers the fresh-credential generation check
+
+[[row]]
+id = "s02-no-pin-private-key-export-safe-failure"
+section = "2"
+title = "No-PIN private-key export safe failure"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "rust/src/manager/auth_manager.rs",
+    "rust/src/auth.rs",
+    "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsXprvReveal.swift",
+    "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsPresentation.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsXprvReveal.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSections.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# needs a private-key wallet from a two-phone KeyTeleport receive
+
+[[row]]
+id = "s02-android-keyteleport-screenshot-capture-blocked"
+section = "2"
+title = "Android KeyTeleport screenshot capture blocked"
+platforms = ["android"]
+target = "device"
+paths = [
+    "android/app/src/main/java/org/bitcoinppl/cove/MainActivity.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportComponents.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPlatform.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# FLAG_SECURE shows as an empty screencap over adb
+
+[[row]]
+id = "s02-decoy-pin-cannot-authorize-mnemonic-keyteleport-export"
+section = "2"
+title = "Decoy PIN cannot authorize mnemonic KeyTeleport export"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/manager/auth_manager.rs",
+    "rust/src/auth.rs",
+    "rust/src/manager/key_teleport_manager/**",
+    "rust/src/key_teleport.rs",
+    "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSendViews.swift",
+    "ios/Cove/AuthManager.swift",
+    "ios/Cove/Security.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportSendViews.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/AuthManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/Security.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/secretwords/SecretWordsSensitiveAction.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s02-fresh-main-pin-permits-mnemonic-keyteleport-sender"
+section = "2"
+title = "Fresh main PIN permits mnemonic KeyTeleport sender"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/manager/auth_manager.rs",
+    "rust/src/auth.rs",
+    "rust/src/manager/key_teleport_manager/**",
+    "rust/src/key_teleport.rs",
+    "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSendViews.swift",
+    "ios/Cove/AuthManager.swift",
+    "ios/Cove/Security.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportSendViews.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/AuthManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/Security.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/secretwords/SecretWordsSensitiveAction.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s02-android-keyteleport-screen-recording"
+section = "2"
+title = "Android KeyTeleport screen recording"
+platforms = ["android"]
+target = "device"
+paths = [
+    "android/app/src/main/java/org/bitcoinppl/cove/MainActivity.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportComponents.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPlatform.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# screenrecord shows a blank content area under FLAG_SECURE
+
+[[row]]
+id = "s02-android-keyteleport-recent-app-thumbnail"
+section = "2"
+title = "Android KeyTeleport recent-app thumbnail"
+platforms = ["android"]
+target = "device"
+paths = [
+    "android/app/src/main/java/org/bitcoinppl/cove/MainActivity.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/MainActivityPrivacyCover.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportComponents.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+
+[[row]]
+id = "s02-keyteleport-qr-password-visual-separation"
+section = "2"
+title = "KeyTeleport QR/password visual separation"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/KeyTeleportFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportRevealPair.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportSendViews.kt",
+]
+coverage = [
+    "human",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportRevealPairTest.kt::revealActionSwapsTheOnlyExposedValue",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# the compose test covers android one-at-a-time exposure; the visual judgement stays human
+
+[[row]]
+id = "s02-ios-conceal-reveal-clipboard-expiry-background-cover"
+section = "2"
+title = "iOS conceal/reveal, clipboard expiry, background cover"
+platforms = ["ios"]
+target = "device"
+paths = [
+    "ios/Cove/Flows/SelectedWalletFlow/SecretWordsScreen.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SecretWordsComponents.swift",
+    "ios/Cove/CoverView.swift",
+    "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReviewViews.swift",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android N/A
+# needs backgrounding the app and waiting out the 120 second clipboard expiry
+
+[[row]]
+id = "s02-android-sensitive-clipboard-and-replacement-cleanup"
+section = "2"
+title = "Android sensitive clipboard and replacement cleanup"
+platforms = ["android"]
+target = "ui"
+paths = [
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/SensitiveClipboardPolicy.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPlatform.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BackupExportScreen.kt",
+]
+coverage = [
+    "human",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/flows/keyteleport/SensitiveClipboardPolicyTest.kt::readableClipOwnedByAnotherAppIsLeftAlone",
+]
+# 1.4.0: ios N/A, android HUMAN
+# unit test covers only the replacement-text half; the sensitive flag and expiry stay human
+
+[[row]]
+id = "s02-nfc-active-scan-privacy-cover"
+section = "2"
+title = "NFC active-scan privacy cover"
+platforms = ["ios"]
+target = "manual"
+paths = [
+    "ios/Cove/NFCReader.swift",
+    "ios/Cove/TapSignerNFC.swift",
+    "ios/Cove/CoverView.swift",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android N/A
+# needs a real NFC card scan
+
+[[row]]
+id = "s02-background-every-secret-bearing-keyteleport-state"
+section = "2"
+title = "Background every secret-bearing KeyTeleport state"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "ios/Cove/Flows/KeyTeleportFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
+    "ios/Cove/CoverView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/MainActivityPrivacyCover.kt",
+]
+coverage = [
+    "agent:ios",
+    "human:android",
+]
+# 1.4.0: ios BLOCKED, android HUMAN
+# android secret-bearing states need the camera QR leg
+
+[[row]]
+id = "s02-repeated-secret-reads-writes-across-supported-secret"
+section = "2"
+title = "Repeated secret reads/writes across supported secret types"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/crates/cove-device/src/keychain.rs",
+    "rust/crates/cove-device/src/keychain/**",
+    "rust/src/wallet_secret.rs",
+    "ios/Cove/Security.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/Security.kt",
+]
+coverage = [
+    "agent:ios",
+    "human:android",
+]
+# 1.4.0: ios BLOCKED, android HUMAN
+# platform keystore stress; android secret types need the camera QR leg

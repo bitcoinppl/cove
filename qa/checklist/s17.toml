@@ -1,0 +1,142 @@
+[[row]]
+id = "s17-legacy-pjos-uses-ordinary-on-chain-path"
+section = "17"
+title = "Legacy pjos uses ordinary on-chain path"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/crates/cove-types/src/address.rs",
+    "rust/src/manager/wallet_manager/payjoin.rs",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAddressView.kt",
+]
+coverage = [
+    "rust:rust/crates/cove-types/src/address.rs::test_parse_bitcoin_uri_pjos_without_pj",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# pjos without pj is stripped so the uri parses to a plain address and amount
+
+[[row]]
+id = "s17-bip21-pj-v2-ordinary-signet-payment-once"
+section = "17"
+title = "BIP21 pj v2 ordinary Signet payment once"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/crates/cove-types/src/address.rs",
+    "rust/src/manager/wallet_manager/payjoin.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/wallet_manager/actor/**",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAddressView.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# rust gates payjoin off; the ui half is one broadcast with no payjoin screen
+
+[[row]]
+id = "s17-sender-rejects-psbt-text-without-secret-import"
+section = "17"
+title = "Sender rejects PSBT text without secret import"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/key_teleport.rs",
+    "rust/src/manager/key_teleport_manager.rs",
+    "rust/src/manager/key_teleport_manager/**",
+    "ios/Cove/Flows/KeyTeleportFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s17-coldcard-psbt-vault-and-backup-scan-wrappers"
+section = "17"
+title = "COLDCARD PSBT vault and backup scan wrappers"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/key_teleport.rs",
+    "rust/src/manager/key_teleport_manager.rs",
+    "rust/src/manager/key_teleport_manager/**",
+    "ios/Cove/Flows/KeyTeleportFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# needs coldcard fixtures and a person; rust rejects the payload kinds
+
+[[row]]
+id = "s17-psbt-rejection-names-the-wrong-expected-payload"
+section = "17"
+title = "PSBT rejection names the wrong expected payload"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/key_teleport.rs",
+    "rust/src/manager/key_teleport_manager.rs",
+    "rust/src/manager/key_teleport_manager/**",
+    "ios/Cove/Flows/KeyTeleportFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
+]
+coverage = [
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPasteRejectionTest.kt::senderRejectsANonKeyTeleportPasteByAskingForTheReceiverRequest",
+    "agent:ios",
+]
+# 1.4.0: ios BLOCKED, android FAIL
+
+[[row]]
+id = "s17-sender-psbt-error-physical-screenshot"
+section = "17"
+title = "Sender PSBT error physical screenshot"
+platforms = ["android"]
+target = "manual"
+paths = [
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios N/A, android HUMAN
+# the protected screen returns no screencap over adb
+
+[[row]]
+id = "s17-ios-pj-uri-parses-to-ordinary-draft"
+section = "17"
+title = "iOS pj URI parses to ordinary draft"
+platforms = ["ios"]
+target = "rust"
+paths = [
+    "rust/crates/cove-types/src/address.rs",
+    "rust/src/manager/wallet_manager/payjoin.rs",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s17-ios-pjos-uri-parses-to-ordinary-draft"
+section = "17"
+title = "iOS pjos URI parses to ordinary draft"
+platforms = ["ios"]
+target = "rust"
+paths = [
+    "rust/crates/cove-types/src/address.rs",
+    "rust/src/manager/wallet_manager/payjoin.rs",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
+]
+coverage = [
+    "rust:rust/crates/cove-types/src/address.rs::test_parse_bitcoin_uri_pjos_without_pj",
+    "agent:ios",
+]
+# 1.4.0: ios PASS, android N/A
+# the rust test covers only the URI parser, so an agent still checks the address validation and EnterAddressView draft

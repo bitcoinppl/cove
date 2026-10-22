@@ -1,0 +1,47 @@
+[[row]]
+id = "setup-hww-hardware-import"
+section = "Setup"
+title = "hww hardware import"
+platforms = ["ios"]
+target = "rust"
+paths = [
+    "rust/src/hardware_export.rs",
+    "rust/src/multi_format.rs",
+    "rust/src/wallet/builder.rs",
+    "ios/Cove/Flows/NewWalletFlow/ColdWallet/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android N/A
+# paste parsing and wallet construction are shared rust; the funded signet hww is environment
+
+[[row]]
+id = "setup-hww-first-receive-address"
+section = "Setup"
+title = "hww first receive address"
+platforms = ["ios"]
+target = "rust"
+paths = [
+    "rust/src/wallet/addressing.rs",
+    "rust/src/manager/wallet_manager/receive_address.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/ReceiveView.swift",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android N/A
+# address derivation is rust
+
+[[row]]
+id = "setup-android-secondary-after-upgrade"
+section = "Setup"
+title = "Android Secondary after upgrade"
+platforms = ["android"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# fixture preparation on the device

@@ -1,0 +1,22 @@
+[[row]]
+id = "s22-long-session-regression"
+section = "22"
+title = "Long-session regression"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/router.rs",
+    "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/wallet_manager/**",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "ios/Cove/RouteView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/RouteView.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios FAIL, android PASS
+# a 30 minute soak across many flows

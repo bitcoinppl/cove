@@ -1,0 +1,218 @@
+[[row]]
+id = "s06-amounts-below-dust-blocked"
+section = "6"
+title = "Amounts below dust blocked"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "rust/src/manager/wallet_manager/actor/transactions.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
+coverage = ["agent", "rust:rust/src/manager/send_flow_manager/error.rs::wallet_output_below_dust_maps_to_send_below_dust"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s06-small-payment-warning-cancel-and-send-anyway"
+section = "6"
+title = "Small payment warning Cancel and Send Anyway"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
+coverage = ["agent", "rust:rust/src/manager/send_flow_manager.rs::pending_warning_returns_small_amount_before_high_fee", "rust:rust/src/manager/send_flow_manager.rs::acknowledging_final_warning_through_finalize_proceeds_past_warning_gate"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s06-one-small-payment-funds-secondary"
+section = "6"
+title = "One small payment funds Secondary"
+platforms = ["android"]
+target = "device"
+paths = []
+coverage = ["agent"]
+# 1.4.0: ios N/A, android PASS
+# fixture setup that spends real signet coins from a funded wallet
+
+[[row]]
+id = "s06-amount-plus-fee-over-funds-gives-clear"
+section = "6"
+title = "Amount plus fee over funds gives clear explanation"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::validate_amount_names_the_shortfall_when_amount_plus_fee_exceeds_balance"]
+# 1.4.0: ios BLOCKED, android FAIL
+# existing rust test asserts the InsufficientFunds variant; the failure was the message text
+
+[[row]]
+id = "s06-invalid-custom-fee-rates-accepted"
+section = "6"
+title = "Invalid custom fee rates accepted"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "ios/Cove/Flows/SendFlow/SendFlowCustomFeeRateView.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/SendFlowSelectFeeRateView.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/sheets/CustomFeeRateSheet.kt", "android/app/src/main/java/org/bitcoinppl/cove/sheets/FeeRateSelectorSheet.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/NetworkFeeBottomSheet.kt"]
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::custom_fee_option_rejects_rates_below_minimum_relay_floor"]
+# 1.4.0: ios BLOCKED, android FAIL
+# rate validation is decided in rust, the sheets only show the error
+
+[[row]]
+id = "s06-valid-custom-fee-recovers-after-invalid-input"
+section = "6"
+title = "Valid custom fee recovers after invalid input"
+platforms = ["ios", "android"]
+target = "ui"
+paths = ["rust/src/manager/send_flow_manager/fee_selection.rs", "ios/Cove/Flows/SendFlow/SendFlowCustomFeeRateView.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/SendFlowSelectFeeRateView.swift", "android/app/src/main/java/org/bitcoinppl/cove/sheets/CustomFeeRateSheet.kt", "android/app/src/main/java/org/bitcoinppl/cove/sheets/FeeRateSelectorSheet.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/NetworkFeeBottomSheet.kt"]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android PASS
+# recovery is editor state in the custom fee sheet
+
+[[row]]
+id = "s06-amount-change-requires-new-fee-acknowledgement"
+section = "6"
+title = "Amount change requires new fee acknowledgement"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::warning_acknowledgements_reset_on_amount_change", "rust:rust/src/manager/send_flow_manager.rs::acknowledged_small_amount_rearms_when_amount_changes_through_dispatch"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s06-high-and-very-high-fee-warnings"
+section = "6"
+title = "High and Very High fee warnings"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::pending_warning_returns_high_fee_for_5_to_20_percent", "rust:rust/src/manager/send_flow_manager.rs::pending_warning_returns_very_high_fee_for_20_percent_or_more", "rust:rust/src/manager/send_flow_manager.rs::acknowledging_very_high_fee_does_not_reveal_high_fee_for_same_fee"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s06-fee-greater-than-payment-hard-blocked"
+section = "6"
+title = "Fee greater than payment hard blocked"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::fee_greater_than_amount_hard_blocks_before_warnings"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s06-fee-rate-change-requires-new-acknowledgement"
+section = "6"
+title = "Fee-rate change requires new acknowledgement"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "ios/Cove/Flows/SendFlow/SendFlowCustomFeeRateView.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/SendFlowSelectFeeRateView.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/sheets/CustomFeeRateSheet.kt", "android/app/src/main/java/org/bitcoinppl/cove/sheets/FeeRateSelectorSheet.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/NetworkFeeBottomSheet.kt"]
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::warning_acknowledgements_reset_on_fee_change"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s06-address-change-requires-new-acknowledgement"
+section = "6"
+title = "Address change requires new acknowledgement"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::warning_acknowledgements_reset_on_address_change"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s06-selected-coins-cannot-silently-add-inputs-for"
+section = "6"
+title = "Selected coins cannot silently add inputs for high fee"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "rust/src/manager/send_flow_manager/coin_control.rs", "rust/src/manager/coin_control_manager.rs", "rust/src/manager/coin_control_manager/*.rs", "rust/src/manager/wallet_manager/actor/transactions.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "ios/Cove/Flows/CoinControlFlow/*.swift", "ios/Cove/Flows/SendFlow/SendFlowCoinControlSetAmountScreen.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/CoinControlSetAmountScreen.kt"]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+# coin control psbt uses manually selected inputs only
+
+[[row]]
+id = "s06-max-while-fee-or-balance-is-loading"
+section = "6"
+title = "Max while fee or balance is loading"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/validation.rs", "rust/src/manager/send_flow_manager/state.rs", "rust/src/manager/send_flow_manager/amount_or_max.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android BLOCKED
+
+[[row]]
+id = "s06-second-secondary-utxo-for-coin-change-warning"
+section = "6"
+title = "Second Secondary UTXO for coin-change warning"
+platforms = ["android"]
+target = "device"
+paths = []
+coverage = ["agent"]
+# 1.4.0: ios N/A, android PASS
+# fixture setup that spends real signet coins from a funded wallet
+
+[[row]]
+id = "s06-coin-selection-requires-fresh-fee-acknowledgement"
+section = "6"
+title = "Coin selection requires fresh fee acknowledgement"
+platforms = ["ios", "android"]
+target = "ui"
+paths = ["rust/src/manager/send_flow_manager/coin_control.rs", "rust/src/manager/send_flow_manager/state.rs", "ios/Cove/Flows/CoinControlFlow/*.swift", "ios/Cove/Flows/SendFlow/SendFlowCoinControlSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/CoinControlSetAmountScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt"]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+# depends on the screens creating a fresh send flow manager after coin selection
+
+[[row]]
+id = "s06-unconfirmed-incoming-spend-exclusion-timing-window"
+section = "6"
+title = "Unconfirmed incoming spend exclusion timing window"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/manager/wallet_manager/actor.rs", "rust/src/manager/wallet_manager/actor/transactions.rs", "rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/**", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
+coverage = ["rust:rust/src/manager/wallet_manager/actor.rs::automatic_spend_policy_excludes_unconfirmed_external_outputs_but_keeps_internal_outputs"]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# the spend policy test removes the confirmation timing window
+
+[[row]]
+id = "s06-visible-ios-secondary-recipient-fixture"
+section = "6"
+title = "Visible iOS Secondary recipient fixture"
+platforms = ["ios"]
+target = "device"
+paths = []
+coverage = ["agent"]
+# 1.4.0: ios PASS, android N/A
+# fixture lookup of a receive address, no app logic under test
+
+[[row]]
+id = "s06-ios-zero-rate-custom-fee-draft"
+section = "6"
+title = "iOS zero-rate custom fee draft"
+platforms = ["ios"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowCustomFeeRateView.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/SendFlowSelectFeeRateView.swift"]
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::custom_fee_option_rejects_rates_below_minimum_relay_floor"]
+# 1.4.0: ios BLOCKED, android N/A
+
+[[row]]
+id = "s06-ios-negative-custom-fee-draft"
+section = "6"
+title = "iOS negative custom fee draft"
+platforms = ["ios"]
+target = "rust"
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowCustomFeeRateView.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/SendFlowSelectFeeRateView.swift"]
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::custom_fee_option_rejects_rates_below_minimum_relay_floor"]
+# 1.4.0: ios BLOCKED, android N/A
+
+[[row]]
+id = "s06-ios-non-numeric-custom-fee-input"
+section = "6"
+title = "iOS non-numeric custom fee input"
+platforms = ["ios"]
+target = "ui"
+paths = ["ios/Cove/Flows/SendFlow/SendFlowCustomFeeRateView.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/SendFlowSelectFeeRateView.swift"]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s06-ios-valid-rate-recovery"
+section = "6"
+title = "iOS valid rate recovery"
+platforms = ["ios"]
+target = "ui"
+paths = ["rust/src/manager/send_flow_manager/fee_selection.rs", "ios/Cove/Flows/SendFlow/SendFlowCustomFeeRateView.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/SendFlowSelectFeeRateView.swift"]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android N/A

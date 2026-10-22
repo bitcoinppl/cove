@@ -1,0 +1,235 @@
+[[row]]
+id = "s04-sensitive-test-values-in-description"
+section = "4"
+title = "Sensitive test values in description"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/diagnostics.rs",
+    "rust/src/diagnostics/**",
+    "rust/src/database/diagnostics_reports.rs",
+    "ios/Cove/Flows/SettingsFlow/SendDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/SubmittedDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/AboutScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SendDiagnostics*.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SubmittedDiagnosticsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
+]
+coverage = [
+    "rust:rust/src/diagnostics.rs::user_description_is_redacted_for_preview_and_upload",
+    "rust:rust/src/diagnostics/redact.rs::redacts_extended_keys_and_txids_with_stable_placeholders",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s04-controlled-sensitive-values-in-activity-logs"
+section = "4"
+title = "Controlled sensitive values in activity logs"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/diagnostics.rs",
+    "rust/src/diagnostics/**",
+    "rust/src/database/diagnostics_reports.rs",
+    "ios/Cove/SwiftLogStore.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/LogcatProcessCollector.kt",
+]
+coverage = [
+    "agent",
+    "rust:rust/src/diagnostics.rs::assembly_includes_sections_and_redacts_sensitive_values",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# redaction is rust; proving the app logged each controlled value is the agent part
+
+[[row]]
+id = "s04-encrypted-transport-request-inspection"
+section = "4"
+title = "Encrypted transport request inspection"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/diagnostics/upload.rs",
+]
+coverage = [
+    "human",
+    "rust:rust/src/diagnostics/upload.rs::report_is_gzipped_before_age_encryption",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# rust test covers gzip then age and no readable text; wire headers are only asserted inside test servers
+
+[[row]]
+id = "s04-preview-redacts-tested-secrets-and-known-paths"
+section = "4"
+title = "Preview redacts tested secrets and known paths"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/diagnostics.rs",
+    "rust/src/diagnostics/**",
+    "rust/src/database/diagnostics_reports.rs",
+    "ios/Cove/Flows/SettingsFlow/SendDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/SubmittedDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/AboutScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SendDiagnostics*.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SubmittedDiagnosticsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
+]
+coverage = [
+    "rust:rust/src/diagnostics/redact.rs::redacts_extended_keys_and_txids_with_stable_placeholders",
+    "rust:rust/src/diagnostics/redact.rs::redacts_wif_private_keys",
+    "rust:rust/src/diagnostics/redact.rs::redacts_bitcoin_addresses_across_networks_and_scripts",
+    "rust:rust/src/diagnostics/redact.rs::redacts_bip39_seed_phrases_with_stable_placeholders",
+    "rust:rust/src/diagnostics/redact.rs::redacts_known_paths_before_tokens",
+    "rust:rust/src/diagnostics/redact.rs::does_not_redact_amounts_or_near_misses",
+    "rust:rust/src/diagnostics.rs::assembly_includes_sections_and_redacts_sensitive_values",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s04-shared-plain-report-content"
+section = "4"
+title = "Shared plain-report content"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/diagnostics.rs",
+    "rust/src/diagnostics/**",
+    "rust/src/database/diagnostics_reports.rs",
+    "ios/Cove/Flows/SettingsFlow/SendDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/SubmittedDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/AboutScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SendDiagnostics*.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SubmittedDiagnosticsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
+]
+coverage = [
+    "agent",
+    "rust:rust/src/diagnostics.rs::assembly_includes_sections_and_redacts_sensitive_values",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# shared file is the rust preview text; reading the shared file on device stays agent
+
+[[row]]
+id = "s04-offline-diagnostic-submission-keeps-preview"
+section = "4"
+title = "Offline diagnostic submission keeps preview"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/diagnostics/upload.rs",
+    "rust/src/diagnostics.rs",
+    "ios/Cove/Flows/SettingsFlow/SendDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/SubmittedDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/AboutScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SendDiagnostics*.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SubmittedDiagnosticsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# needs a Wi-Fi and mobile data toggle
+
+[[row]]
+id = "s04-reconnect-and-successful-diagnostic-submission"
+section = "4"
+title = "Reconnect and successful diagnostic submission"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/diagnostics/upload.rs",
+    "rust/src/diagnostics.rs",
+    "ios/Cove/Flows/SettingsFlow/SendDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/SubmittedDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/AboutScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SendDiagnostics*.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SubmittedDiagnosticsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# needs an offline then online toggle
+
+[[row]]
+id = "s04-submitted-history-keeps-one-redacted-record"
+section = "4"
+title = "Submitted history keeps one redacted record"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/diagnostics.rs",
+    "rust/src/diagnostics/**",
+    "rust/src/database/diagnostics_reports.rs",
+    "ios/Cove/Flows/SettingsFlow/SendDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/SubmittedDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/AboutScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SendDiagnostics*.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SubmittedDiagnosticsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
+]
+coverage = [
+    "agent",
+    "rust:rust/src/diagnostics.rs::submit_persists_redacted_history_description",
+    "rust:rust/src/diagnostics.rs::submit_persists_successful_report_history",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# rust asserts the stored record; the history screen stays agent
+
+[[row]]
+id = "s04-copy-id-exact-value"
+section = "4"
+title = "Copy ID exact value"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SettingsFlow/SendDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/SubmittedDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/AboutScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SendDiagnostics*.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SubmittedDiagnosticsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s04-clear-stored-logs-and-clear-history"
+section = "4"
+title = "Clear Stored Logs and Clear History"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/database/diagnostics_reports.rs",
+    "ios/Cove/SwiftLogStore.swift",
+    "ios/Cove/Flows/SettingsFlow/SendDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/SubmittedDiagnosticsSheet.swift",
+    "ios/Cove/Flows/SettingsFlow/AboutScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SendDiagnostics*.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SubmittedDiagnosticsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
+]
+coverage = [
+    "agent",
+    "rust:rust/src/database/diagnostics_reports.rs::clear_removes_report_history",
+    "ios-unit:ios/CoveTests/SwiftLogStoreTests.swift::testClearRemovesExistingLogsAndWritesMarker",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# ios log clear and rust history clear are unit tested; preview rebuild and android log clear stay agent
+
+[[row]]
+id = "s04-restore-beta-switches-after-skipped-manual-tests"
+section = "4"
+title = "Restore Beta switches after skipped manual tests"
+platforms = ["android"]
+target = "ui"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# restores test environment state

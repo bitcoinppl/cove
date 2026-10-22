@@ -173,6 +173,25 @@ jobs:
       - name: Run iOS unit tests
         run: cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' -only-testing:CoveTests -parallel-testing-enabled NO test
 
+  qa-manifest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          cache-bin: false
+          prefix-key: v1-rust
+
+      # fails when a checklist row names a test or path that no longer exists
+      - name: Check QA checklist manifest
+        run: cd rust && cargo run --locked -p xtask -- qa check
+
   test:
     strategy:
       matrix:
