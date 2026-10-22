@@ -1,24 +1,37 @@
 #!/bin/bash
-# stop the WDA test run and the iproxy forward started by wda-start
-# usage: wda-stop [--dry-run]
+# stop the WDA test runs and iproxy forwards started by wda-start: the phone in IOS_UDID, or every
+# phone when it is unset
+# usage: [IOS_UDID=<udid>] wda-stop [--dry-run]
 set -u
 . "$(dirname "$0")/wda-env.sh"
 
+dry=false
+[ "${1:-}" = "--dry-run" ] && dry=true
+
+if [ -n "$IOS_UDID" ]; then
+  dirs=("$(device_state "$IOS_UDID")")
+else
+  dirs=("$WDA_STATE"/devices/*)
+fi
+
 stopped=()
-for name in xcodebuild iproxy; do
-  pidfile="$WDA_STATE/$name.pid"
-  [ -f "$pidfile" ] || continue
-  pid="$(cat "$pidfile")"
-  # only signal a pid that is still the process we started, in case the pid was reused
-  if kill -0 "$pid" 2>/dev/null && ps -p "$pid" -o comm= | grep -q "$name"; then
-    if [ "${1:-}" = "--dry-run" ]; then
-      stopped+=("$name:$pid(dry-run)")
-      continue
+for dir in "${dirs[@]}"; do
+  [ -d "$dir" ] || continue
+  for name in xcodebuild iproxy; do
+    pidfile="$dir/$name.pid"
+    [ -f "$pidfile" ] || continue
+    if pid_alive "$pidfile" "$name"; then
+      pid="$(cat "$pidfile")"
+      if $dry; then
+        stopped+=("$(basename "$dir"):$name:$pid(dry-run)")
+        continue
+      fi
+      kill "$pid" 2>/dev/null
+      stopped+=("$(basename "$dir"):$name:$pid")
     fi
-    kill "$pid" 2>/dev/null
-    stopped+=("$name:$pid")
-  fi
-  [ "${1:-}" = "--dry-run" ] || rm -f "$pidfile"
+    $dry || rm -f "$pidfile"
+  done
+  $dry || rm -f "$dir/port"
 done
 
-json ok:raw=true action=wda-stop "stopped=${stopped[*]:-none}" "dry_run:raw=$([ "${1:-}" = "--dry-run" ] && echo true || echo false)"
+json ok:raw=true action=wda-stop "stopped=${stopped[*]:-none}" "dry_run:raw=$dry"

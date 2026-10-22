@@ -9,6 +9,7 @@ without touching the network.
 import base64
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -17,7 +18,8 @@ import xml.etree.ElementTree as ET
 BASE = os.environ.get("WDA_BASE_URL") or "http://127.0.0.1:%s" % os.environ.get("WDA_PORT", "8100")
 STATE = os.environ.get("WDA_STATE") or os.path.join(os.environ.get("WDA_CACHE") or os.path.expanduser("~/.cache/cove-wda"), "state")
 UDID = os.environ.get("IOS_UDID", "")
-SESSION_FILE = os.path.join(STATE, "session-id")
+# one cached session per WDA address, so runners for two phones on two ports keep their own
+SESSION_FILE = os.path.join(STATE, "session-" + re.sub(r"\W", "_", BASE.split("://")[-1]))
 SWIPE_SECONDS = 0.3
 
 
@@ -232,8 +234,13 @@ def cmd_source(args, dry):
 
 def vis_lines(xml, show_hidden):
     """One line per element worth acting on: type, tap center and size in points, then its text"""
+    try:
+        root = ET.fromstring(xml)
+    except ET.ParseError as e:
+        raise Fail("bad_source", "WDA returned a tree that is not valid XML (%s); retry, or check ios-shot" % e)
+
     lines = []
-    for el in ET.fromstring(xml).iter():
+    for el in root.iter():
         a = el.attrib
         visible = a.get("visible") == "true"
         if not visible and not show_hidden:
@@ -261,7 +268,9 @@ def cmd_vis(args, dry):
     if dry:
         return {"would_send": [{"method": "GET", "path": "/source?format=xml"}]}
     # SwiftUI keeps hidden layers in the tree, so only visible elements are printed by default
-    print("\n".join(vis_lines(http("GET", "/source?format=xml")["value"], show_hidden)))
+    lines = vis_lines(http("GET", "/source?format=xml")["value"], show_hidden)
+    if lines:
+        print("\n".join(lines))
     sys.exit(0)
 
 

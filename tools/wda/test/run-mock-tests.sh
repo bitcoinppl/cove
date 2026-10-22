@@ -62,6 +62,9 @@ WDA_BASE_URL=http://127.0.0.1:1 expect "unreachable" 1 'd["error"]=="wda_unreach
 vis="$("$here/ios-vis")"
 [ "$vis" = "$(printf '%s\n%s' 'StaticText     (60,110) 80x20 label='"'About'" 'TextField      (160,220) 300x40 name='"'amount'"' value='"'0'"' [disabled]')" ] && echo "ok   vis prints visible elements" || { echo "FAIL vis: $vis"; fail=1; }
 "$here/ios-vis" -a | grep -q "^Button .* label='Back' name='BackButton' \[hidden\]$" && echo "ok   vis -a includes hidden" || { echo "FAIL vis -a"; fail=1; }
+expect "stop with nothing running" 0 'd["ok"] and d["stopped"]=="none"' -- env -u IOS_UDID WDA_CACHE="$tmp/cache" "$here/wda-stop"
+expect "stop one phone dry-run" 0 'd["dry_run"] and d["stopped"]=="none"' -- env WDA_CACHE="$tmp/cache" "$here/wda-stop" --dry-run
+expect "fetch dry-run" 0 'd["dir"].endswith("/WebDriverAgent-v16.15.3")' -- env WDA_CACHE="$tmp/cache" "$here/wda-fetch" --dry-run
 expect "vis bad args" 2 'd["error"]=="usage"' -- "$here/ios-vis" --all
 expect "vis dry-run" 0 'd["dry_run"] and "would_send" in d' -- "$here/ios-vis" --dry-run
 [ "$(head -c4 "$tmp/out/shot.png" | tail -c3)" = "PNG" ] && echo "ok   shot file is a PNG" || { echo "FAIL shot file"; fail=1; }

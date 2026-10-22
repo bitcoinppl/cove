@@ -13,12 +13,23 @@ import sys
 import urllib.request
 
 WDA_HOME = os.path.dirname(os.path.abspath(__file__))
-CACHE = os.environ.get("WDA_CACHE") or os.path.expanduser("~/.cache/cove-wda")
-DERIVED = os.environ.get("WDA_DERIVED", CACHE + "/DerivedData")
-TEAM = os.environ.get("WDA_TEAM", "Q8UP8C53Y8")
-BUNDLE = os.environ.get("WDA_BUNDLE_ID", "com.avencera.WebDriverAgentRunner")
-PORT = os.environ.get("WDA_PORT", "8100")
-BASE = os.environ.get("WDA_BASE_URL") or "http://127.0.0.1:" + PORT
+
+
+def shell_config(*names):
+    """Read settings from wda-env.sh, so the doctor checks the same defaults the scripts use"""
+    script = '. "$1"; shift; for n in "$@"; do printf "%s\\0" "${!n}"; done'
+    out = subprocess.run(["bash", "-c", script, "wda-env", os.path.join(WDA_HOME, "wda-env.sh"), *names],
+                         capture_output=True, text=True, check=True).stdout
+    return dict(zip(names, out.split("\0")))
+
+
+CONFIG = shell_config("WDA_DERIVED", "WDA_TEAM", "WDA_BUNDLE_ID", "WDA_BASE_URL")
+DERIVED = CONFIG["WDA_DERIVED"]
+TEAM = CONFIG["WDA_TEAM"]
+BUNDLE = CONFIG["WDA_BUNDLE_ID"]
+# wda-start builds the runner and registers the phone itself, so these only inform
+BUILT_BY_START = {"build_products", "build_bundle_id", "profile_has_device"}
+BASE = CONFIG["WDA_BASE_URL"]
 UDID = os.environ.get("IOS_UDID", "")
 checks = []
 
@@ -101,6 +112,13 @@ def main():
         rc, _, err = run("codesign", "-dv", app)
         signed_team = [l.split("=")[1] for l in err.splitlines() if l.startswith("TeamIdentifier=")]
         check("build_signed", signed_team == [TEAM], "TeamIdentifier=%s" % (signed_team or "none"), "rebuild with wda-build")
+        try:
+            with open(app + "/Info.plist", "rb") as f:
+                built_id = plistlib.load(f).get("CFBundleIdentifier", "")
+        except (OSError, plistlib.InvalidFileException):
+            built_id = ""
+        check("build_bundle_id", built_id == BUNDLE + ".xctrunner", "built %s, expected %s.xctrunner" % (built_id or "nothing", BUNDLE),
+              "run wda-start, which rebuilds for WDA_BUNDLE_ID")
         if UDID:
             rc, prof, _ = run("security", "cms", "-D", "-i", app + "/embedded.mobileprovision")
             try:
@@ -118,10 +136,19 @@ def main():
     except Exception:
         check("wda_running", False, "no answer from %s/status" % BASE, "run: %s/wda-start" % WDA_HOME)
 
-    # wda_running is informational; every other failing check blocks starting
-    blockers = [c for c in checks if not c["ok"] and c["name"] != "wda_running"]
-    result = {"ok": not blockers, "udid": UDID, "team": TEAM, "bundle_id": BUNDLE, "checks": checks,
-              "next": blockers[0]["fix"] if blockers else ("run wda-start" if not checks[-1]["ok"] else "WDA is up; use ios-* scripts")}
+    # wda_running and the checks wda-start fixes on its own inform; every other failing check blocks starting
+    blockers = [c for c in checks if not c["ok"] and c["name"] != "wda_running" and c["name"] not in BUILT_BY_START]
+    running = any(c["name"] == "wda_running" and c["ok"] for c in checks)
+    needs_build = any(c["name"] in BUILT_BY_START and not c["ok"] for c in checks)
+    if blockers:
+        next_step = blockers[0]["fix"]
+    elif running:
+        next_step = "WDA is up; use the ios-* commands"
+    elif needs_build:
+        next_step = "run wda-start; it builds the runner first"
+    else:
+        next_step = "run wda-start"
+    result = {"ok": not blockers, "udid": UDID, "team": TEAM, "bundle_id": BUNDLE, "checks": checks, "next": next_step}
     print(json.dumps(result, indent=2))
     return 0 if result["ok"] else 1
 
