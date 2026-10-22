@@ -58,8 +58,9 @@ echo "$WDA_PORT" >"$STATE_DIR/port"
 
 timeout="${WDA_START_TIMEOUT:-180}"
 for ((i = 0; i < timeout; i++)); do
-  # a forward that couldn't bind exits, so an answer is only ours while our iproxy still runs
-  if ! proxy_serves "$STATE_DIR" "$IOS_UDID" "$WDA_PORT"; then
+  # a forward that couldn't bind exits. Only a dead pid counts as exited here: until nohup execs
+  # iproxy, the process doesn't carry its name yet. Ownership is checked before reporting success
+  if ! kill -0 "$(cat "$STATE_DIR/iproxy.pid")" 2>/dev/null; then
     die proxy_exited "iproxy for $IOS_UDID exited; another process may hold port $WDA_PORT" \
       "log=$STATE_DIR/iproxy.log" "fix=check lsof -i :$WDA_PORT, or set WDA_PORT to a free port"
   fi
