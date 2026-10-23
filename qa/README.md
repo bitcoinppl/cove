@@ -1,6 +1,6 @@
 # Release QA checklist manifest
 
-`checklist/*.toml` holds one row per item of the manual release checklist, one file per checklist section. Each row records what currently decides it, so a release only sends an agent or a person to the rows nothing cheaper can cover.
+`checklist/*.toml` holds one row per item of the manual release checklist, one file per checklist section. Each row records what currently decides it, so a release only sends an agent or a person to the rows nothing cheaper can cover. How a release pass uses it, from planning to agent briefs and results, is in [docs/testing.md](../docs/testing.md).
 
 ## Commands
 
