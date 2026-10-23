@@ -11,7 +11,7 @@ use color_eyre::{
 use colored::Colorize;
 use reqwest::StatusCode;
 use serde::Deserialize;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{
     fs,
@@ -65,7 +65,9 @@ const IOS_DEVICE_PRODUCTS_DIR: &str = "Debug-iphoneos";
 const IOS_UI_SCHEME: &str = "CoveManualUITests";
 const IOS_UI_TEST_CLASS: &str = "CoveUITests/OnboardingFullLaunchUITests";
 const IOS_UI_TEST_FILE: &str = "CoveUITests/OnboardingFullLaunchUITests.swift";
-const IOS_UI_BOOTSTRAP_RETRY_ATTEMPTS: usize = 1;
+// each test starts on a freshly erased simulator, where Xcode's runner and the first app
+// launch both fail now and then, so retry those environment failures on a clean simulator
+const IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS: usize = 2;
 const IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS: usize = 2;
 const IOS_DEVICE_LOCKED_LAUNCH_RETRY_DURATION_SECS: u64 = 30;
 const IOS_DEVICE_LOCKED_LAUNCH_RETRY_DELAY_SECS: u64 = 5;
@@ -595,12 +597,27 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
         cmd!(sh, "open -a Simulator").run().wrap_err("Failed to open Simulator")?;
     }
 
-    boot_simulator(&sh, &options.device)?;
+    let udid = SimctlDevices::load(&sh)?.resolve(&options.device)?;
+    boot_simulator(&sh, &udid)?;
 
+    // run every test before failing so one broken test doesn't hide the state of the rest
+    let mut failures = Vec::new();
     for test in ios_ui_tests_to_run(&sh, &options.test)? {
-        reset_simulator_state(&sh, &options.device)?;
-        boot_simulator(&sh, &options.device)?;
-        run_ios_ui_test(&sh, &options.device, &test, verbose)?;
+        reset_simulator_state(&sh, &udid)?;
+        boot_simulator(&sh, &udid)?;
+
+        if let Err(error) = run_ios_ui_test(&sh, &udid, &test, verbose) {
+            print_error(&format!("{error:?}"));
+            failures.push(test);
+        }
+    }
+
+    if !failures.is_empty() {
+        color_eyre::eyre::bail!(
+            "{} iOS UI test(s) failed: {}",
+            failures.len(),
+            failures.join(", ")
+        );
     }
 
     Ok(())
@@ -1052,24 +1069,61 @@ fn simulator_is_booted(sh: &Shell, device: &str) -> Result<bool> {
     Ok(simulator_state(sh, device)?.is_some_and(|state| state == "Booted"))
 }
 
-fn simulator_state(sh: &Shell, device: &str) -> Result<Option<String>> {
-    let output =
-        cmd!(sh, "xcrun simctl list devices").read().wrap_err("Failed to list simulators")?;
-
-    Ok(output
-        .lines()
-        .find(|line| simulator_line_matches_device(line, device))
-        .and_then(simulator_state_from_line))
+fn simulator_state(sh: &Shell, udid: &str) -> Result<Option<String>> {
+    Ok(SimctlDevices::load(sh)?.state(udid).map(str::to_string))
 }
 
-fn simulator_state_from_line(line: &str) -> Option<String> {
-    line.rsplit_once(" (").map(|(_, state)| state.trim().trim_end_matches(')').to_string())
+/// Output of `xcrun simctl list devices -j`, keyed by runtime identifier
+#[derive(Debug, Deserialize)]
+struct SimctlDevices {
+    devices: BTreeMap<String, Vec<SimctlDevice>>,
 }
 
-fn simulator_line_matches_device(line: &str, device: &str) -> bool {
-    let line = line.trim_start();
+#[derive(Debug, Deserialize)]
+struct SimctlDevice {
+    udid: String,
+    name: String,
+    state: String,
+    #[serde(rename = "isAvailable", default)]
+    is_available: bool,
+}
 
-    line.starts_with(&format!("{device} ("))
+impl SimctlDevices {
+    fn load(sh: &Shell) -> Result<Self> {
+        let json = cmd!(sh, "xcrun simctl list devices -j")
+            .read()
+            .wrap_err("Failed to list simulators")?;
+
+        serde_json::from_str(&json).wrap_err("Failed to parse simctl device list")
+    }
+
+    /// Resolves a simulator name or UDID to a single UDID
+    ///
+    /// A runner image can carry the same device name under several runtimes, and name-based
+    /// simctl and xcodebuild calls then pick different simulators, so everything after this
+    /// addresses the simulator by UDID
+    fn resolve(&self, device: &str) -> Result<String> {
+        self.devices
+            .iter()
+            .flat_map(|(runtime, devices)| devices.iter().map(move |sim| (runtime, sim)))
+            .filter(|(_, sim)| sim.is_available && (sim.udid == device || sim.name == device))
+            // a booted match wins so a warm simulator is reused, then the newest runtime
+            .max_by_key(|(runtime, sim)| (sim.state == "Booted", ios_runtime_version(runtime)))
+            .map(|(_, sim)| sim.udid.clone())
+            .ok_or_else(|| eyre!("No available simulator named '{device}'"))
+    }
+
+    fn state(&self, udid: &str) -> Option<&str> {
+        self.devices.values().flatten().find(|sim| sim.udid == udid).map(|sim| sim.state.as_str())
+    }
+}
+
+/// Version numbers from a runtime identifier such as `com.apple.CoreSimulator.SimRuntime.iOS-26-2`
+fn ios_runtime_version(runtime: &str) -> Vec<u32> {
+    runtime
+        .rsplit_once("iOS-")
+        .map(|(_, version)| version.split('-').filter_map(|part| part.parse().ok()).collect())
+        .unwrap_or_default()
 }
 
 fn reset_simulator_state(sh: &Shell, device: &str) -> Result<()> {
@@ -1147,10 +1201,10 @@ fn simctl_shutdown_already_shutdown(stdout: &str, stderr: &str) -> bool {
         || stderr.contains("Unable to shutdown device in current state: Shutdown")
 }
 
-fn run_ios_ui_test(sh: &Shell, device: &str, test: &str, verbose: bool) -> Result<()> {
+fn run_ios_ui_test(sh: &Shell, udid: &str, test: &str, verbose: bool) -> Result<()> {
     print_info(&format!("Running iOS UI test {test}"));
 
-    let destination = format!("platform=iOS Simulator,name={device}");
+    let destination = format!("platform=iOS Simulator,id={udid}");
     let only_testing = format!("-only-testing:{test}");
 
     let test_cmd = cmd!(
@@ -1165,13 +1219,12 @@ fn run_ios_ui_test(sh: &Shell, device: &str, test: &str, verbose: bool) -> Resul
         return Ok(());
     }
 
-    for attempt in 0..=IOS_UI_BOOTSTRAP_RETRY_ATTEMPTS {
-        if attempt > 0 {
-            print_info(&format!(
-                "Retrying iOS UI test {test} after Xcode test runner bootstrap failure"
-            ));
-            reset_simulator_state(sh, device)?;
-            boot_simulator(sh, device)?;
+    let mut retry_reason = None;
+    for attempt in 0..=IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS {
+        if let Some(reason) = retry_reason {
+            print_info(&format!("Retrying iOS UI test {test} after {reason}"));
+            reset_simulator_state(sh, udid)?;
+            boot_simulator(sh, udid)?;
         }
 
         let test_cmd = cmd!(
@@ -1192,8 +1245,9 @@ fn run_ios_ui_test(sh: &Shell, device: &str, test: &str, verbose: bool) -> Resul
         }
 
         let failure = XcodebuildFailure::from_output(output)?;
+        retry_reason = failure.environment_failure();
 
-        if failure.is_test_runner_bootstrap_failure() && attempt < IOS_UI_BOOTSTRAP_RETRY_ATTEMPTS {
+        if retry_reason.is_some() && attempt < IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS {
             continue;
         }
 
@@ -1220,15 +1274,44 @@ impl XcodebuildFailure {
         })
     }
 
-    fn is_test_runner_bootstrap_failure(&self) -> bool {
-        xcodebuild_test_runner_bootstrap_failed(&self.stdout)
-            || xcodebuild_test_runner_bootstrap_failed(&self.stderr)
+    fn environment_failure(&self) -> Option<IosUiEnvironmentFailure> {
+        IosUiEnvironmentFailure::detect(&self.stdout)
+            .or_else(|| IosUiEnvironmentFailure::detect(&self.stderr))
     }
 }
 
-fn xcodebuild_test_runner_bootstrap_failed(output: &str) -> bool {
-    output.contains("Early unexpected exit, operation never finished bootstrapping")
-        && output.contains("while preparing to run tests")
+/// A UI test failure caused by the simulator rather than the app under test
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IosUiEnvironmentFailure {
+    TestRunnerBootstrap,
+    AppLaunch,
+}
+
+impl IosUiEnvironmentFailure {
+    fn detect(output: &str) -> Option<Self> {
+        if output.contains("Early unexpected exit, operation never finished bootstrapping")
+            && output.contains("while preparing to run tests")
+        {
+            return Some(Self::TestRunnerBootstrap);
+        }
+
+        // XCUIApplication.launch() timing out or losing the process, or the app's own
+        // bootstrap watchdog firing on both launches in OnboardingFullLaunchUITests.launchApp()
+        let app_launch_failed = output.contains("Timed out while launching application")
+            || output.contains("does not have a process ID")
+            || output.contains("App startup timed out on relaunch");
+
+        app_launch_failed.then_some(Self::AppLaunch)
+    }
+}
+
+impl std::fmt::Display for IosUiEnvironmentFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TestRunnerBootstrap => f.write_str("Xcode test runner bootstrap failure"),
+            Self::AppLaunch => f.write_str("simulator app launch failure"),
+        }
+    }
 }
 
 fn fail_ios_ui_test(test: &str, failure: XcodebuildFailure) -> Result<()> {
@@ -1722,6 +1805,37 @@ fn available_device_context(devices: &[ResolvedDevice]) -> String {
 
 #[cfg(test)]
 mod tests {
+    mod ui_environment_failure {
+        use crate::ios::IosUiEnvironmentFailure;
+
+        #[test]
+        fn retries_simulator_launch_failures_seen_in_ci() {
+            let launch_timeout = "OnboardingFullLaunchUITests.swift:280: error: -[CoveUITests.OnboardingFullLaunchUITests testCanReachExistingWalletStorageChoices] : Failed to launch <XCUIApplicationImpl: 0x109c16800 org.bitcoinppl.cove at Cove.app> via Xcode: Timed out while launching application via Xcode.";
+            let lost_process = "OnboardingFullLaunchUITests.swift:280: error: -[CoveUITests.OnboardingFullLaunchUITests testExchangeUserCanReachFundingAfterBackup] : Application 'org.bitcoinppl.cove' does not have a process ID";
+            let watchdog = "OnboardingFullLaunchUITests.swift:290: error: -[CoveUITests.OnboardingFullLaunchUITests testWelcomeScreenShowsFirstLaunchEntryPoint] : failed - App startup timed out on relaunch";
+            let runner = "Early unexpected exit, operation never finished bootstrapping - no restart will be attempted. (Underlying Error: Test crashed with signal kill while preparing to run tests.)";
+
+            for output in [launch_timeout, lost_process, watchdog] {
+                assert_eq!(
+                    IosUiEnvironmentFailure::detect(output),
+                    Some(IosUiEnvironmentFailure::AppLaunch)
+                );
+            }
+
+            assert_eq!(
+                IosUiEnvironmentFailure::detect(runner),
+                Some(IosUiEnvironmentFailure::TestRunnerBootstrap)
+            );
+        }
+
+        #[test]
+        fn does_not_retry_app_assertion_failures() {
+            let assertion = "OnboardingFullLaunchUITests.swift:394: error: -[CoveUITests.OnboardingFullLaunchUITests testNewUserCanViewRecoveryWordsAndReturn] : failed - Timed out waiting for button 'Get Started'";
+
+            assert_eq!(IosUiEnvironmentFailure::detect(assertion), None);
+        }
+    }
+
     #[cfg(target_os = "macos")]
     mod archive_identity {
         use crate::ios::testflight_archive_identity;
@@ -1769,10 +1883,10 @@ mod tests {
         device_selector_from_target_value, devicectl_device_connection_can_refresh,
         devicectl_device_is_available_ios, ensure_aasa_webcredentials_app, looks_like_ios_udid,
         normalize_pem_text, resolve_device_name_or_alias, sanitize_build_slot,
-        simulator_line_matches_device, simulator_state_from_line, validate_aasa_response,
-        DeviceSelector, DevicectlConnectionProperties, DevicectlDevice, DevicectlDeviceProperties,
-        DevicectlHardwareProperties, DevicectlPairingState, DevicectlTunnelState,
-        IOS_DEVICE_DERIVED_DATA_SUFFIX, IOS_SIMULATOR_DERIVED_DATA_SUFFIX,
+        validate_aasa_response, DeviceSelector, DevicectlConnectionProperties, DevicectlDevice,
+        DevicectlDeviceProperties, DevicectlHardwareProperties, DevicectlPairingState,
+        DevicectlTunnelState, SimctlDevices, IOS_DEVICE_DERIVED_DATA_SUFFIX,
+        IOS_SIMULATOR_DERIVED_DATA_SUFFIX,
     };
     use reqwest::StatusCode;
     use std::path::Path;
@@ -1856,38 +1970,45 @@ ABC123
 ";
 
     #[test]
-    fn simulator_line_matches_exact_booted_device_name() {
-        assert!(simulator_line_matches_device(
-            "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Booted)",
-            "iPhone 17",
-        ));
+    fn simulator_resolves_a_name_shared_across_runtimes_to_one_udid() {
+        let devices: SimctlDevices = serde_json::from_str(
+            r#"{"devices": {
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-0": [
+                    {"udid": "OLD", "name": "iPhone 17", "state": "Shutdown", "isAvailable": true}
+                ],
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-10": [
+                    {"udid": "NEW", "name": "iPhone 17", "state": "Shutdown", "isAvailable": true},
+                    {"udid": "PRO", "name": "iPhone 17 Pro", "state": "Booted", "isAvailable": true}
+                ],
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-2": [
+                    {"udid": "GONE", "name": "iPhone 17", "state": "Shutdown", "isAvailable": false}
+                ]
+            }}"#,
+        )
+        .unwrap();
+
+        assert_eq!(devices.resolve("iPhone 17").unwrap(), "NEW");
+        assert_eq!(devices.resolve("OLD").unwrap(), "OLD");
+        assert_eq!(devices.state("PRO"), Some("Booted"));
+        assert!(devices.resolve("iPhone 1").is_err());
+        assert!(devices.resolve("GONE").is_err());
     }
 
     #[test]
-    fn simulator_line_does_not_match_device_name_prefix() {
-        assert!(!simulator_line_matches_device(
-            "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Booted)",
-            "iPhone 1",
-        ));
-    }
+    fn simulator_prefers_the_booted_match() {
+        let devices: SimctlDevices = serde_json::from_str(
+            r#"{"devices": {
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-0": [
+                    {"udid": "OLD", "name": "iPhone 17", "state": "Booted", "isAvailable": true}
+                ],
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-2": [
+                    {"udid": "NEW", "name": "iPhone 17", "state": "Shutdown", "isAvailable": true}
+                ]
+            }}"#,
+        )
+        .unwrap();
 
-    #[test]
-    fn simulator_line_matches_exact_shutdown_device_name() {
-        assert!(simulator_line_matches_device(
-            "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Shutdown)",
-            "iPhone 17",
-        ));
-    }
-
-    #[test]
-    fn simulator_state_from_line_trims_shutdown_state() {
-        assert_eq!(
-            simulator_state_from_line(
-                "    iPhone 17 (F4E2B0AD-2E89-4E34-8B69-879F4C580475) (Shutdown) "
-            )
-            .as_deref(),
-            Some("Shutdown"),
-        );
+        assert_eq!(devices.resolve("iPhone 17").unwrap(), "OLD");
     }
 
     #[test]

@@ -46,12 +46,16 @@ enum Commands {
         profile: String,
 
         /// Build only the native library ABI used by the connected Android device
-        #[arg(long, conflicts_with = "arm64")]
+        #[arg(long, conflicts_with_all = ["arm64", "x86_64"])]
         connected_device: bool,
 
         /// Build only the native library ABI used by ARM64 Android devices
-        #[arg(long)]
+        #[arg(long, conflicts_with = "x86_64")]
         arm64: bool,
+
+        /// Build only the native library ABI used by x86_64 Android emulators, such as CI runners
+        #[arg(long = "x86-64")]
+        x86_64: bool,
     },
 
     /// Build and run Android app on device/emulator
@@ -349,12 +353,14 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::BumpVersion { bump_type, targets } => version::bump_version(bump_type, targets),
 
-        Commands::BuildAndroid { profile, connected_device, arm64 } => {
+        Commands::BuildAndroid { profile, connected_device, arm64, x86_64 } => {
             let build_profile = android::BuildProfile::from_str(&profile);
             let build_targets = if connected_device {
                 android::AndroidBuildTargets::ConnectedDevice
             } else if arm64 {
                 android::AndroidBuildTargets::Arm64
+            } else if x86_64 {
+                android::AndroidBuildTargets::X86_64
             } else {
                 android::AndroidBuildTargets::All
             };

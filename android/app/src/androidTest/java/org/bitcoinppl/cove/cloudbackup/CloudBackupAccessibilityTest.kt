@@ -64,7 +64,7 @@ class CloudBackupAccessibilityTest {
         val node = compose.onNodeWithText("Vacation Fund").fetchSemanticsNode()
 
         assertEquals(
-            "Restore Vacation Fund to this device",
+            "Show restore and delete actions for Vacation Fund",
             node.config[SemanticsActions.OnClick].label,
         )
         assertEquals("Restore in progress", node.config[SemanticsProperties.StateDescription])
@@ -129,7 +129,7 @@ class CloudBackupAccessibilityTest {
         val node = compose.onNodeWithText("Vacation Fund").fetchSemanticsNode()
 
         assertEquals(
-            "Retry restoring Vacation Fund to this device",
+            "Show restore and delete actions for Vacation Fund",
             node.config[SemanticsActions.OnClick].label,
         )
         assertEquals(

@@ -354,7 +354,8 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/WalletMoreOptionsSheet.kt",
 ]
 coverage = [
-    "agent",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/WalletMoreOptionsSheetTest.kt::initialScanWithoutTransactionsHidesCoinControlAndTransactionExport",
+    "ios-unit:ios/CoveTests/MoreInfoPopoverTests.swift::testInitialScanWithoutTransactionsHidesCoinControlAndTransactionExport",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 
