@@ -65,7 +65,9 @@ const IOS_DEVICE_PRODUCTS_DIR: &str = "Debug-iphoneos";
 const IOS_UI_SCHEME: &str = "CoveManualUITests";
 const IOS_UI_TEST_CLASS: &str = "CoveUITests/OnboardingFullLaunchUITests";
 const IOS_UI_TEST_FILE: &str = "CoveUITests/OnboardingFullLaunchUITests.swift";
-const IOS_UI_BOOTSTRAP_RETRY_ATTEMPTS: usize = 1;
+// each test starts on a freshly erased simulator, where Xcode's runner and the first app
+// launch both fail now and then, so retry those environment failures on a clean simulator
+const IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS: usize = 2;
 const IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS: usize = 2;
 const IOS_DEVICE_LOCKED_LAUNCH_RETRY_DURATION_SECS: u64 = 30;
 const IOS_DEVICE_LOCKED_LAUNCH_RETRY_DELAY_SECS: u64 = 5;
@@ -1217,11 +1219,10 @@ fn run_ios_ui_test(sh: &Shell, udid: &str, test: &str, verbose: bool) -> Result<
         return Ok(());
     }
 
-    for attempt in 0..=IOS_UI_BOOTSTRAP_RETRY_ATTEMPTS {
-        if attempt > 0 {
-            print_info(&format!(
-                "Retrying iOS UI test {test} after Xcode test runner bootstrap failure"
-            ));
+    let mut retry_reason = None;
+    for attempt in 0..=IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS {
+        if let Some(reason) = retry_reason {
+            print_info(&format!("Retrying iOS UI test {test} after {reason}"));
             reset_simulator_state(sh, udid)?;
             boot_simulator(sh, udid)?;
         }
@@ -1244,8 +1245,9 @@ fn run_ios_ui_test(sh: &Shell, udid: &str, test: &str, verbose: bool) -> Result<
         }
 
         let failure = XcodebuildFailure::from_output(output)?;
+        retry_reason = failure.environment_failure();
 
-        if failure.is_test_runner_bootstrap_failure() && attempt < IOS_UI_BOOTSTRAP_RETRY_ATTEMPTS {
+        if retry_reason.is_some() && attempt < IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS {
             continue;
         }
 
@@ -1272,15 +1274,44 @@ impl XcodebuildFailure {
         })
     }
 
-    fn is_test_runner_bootstrap_failure(&self) -> bool {
-        xcodebuild_test_runner_bootstrap_failed(&self.stdout)
-            || xcodebuild_test_runner_bootstrap_failed(&self.stderr)
+    fn environment_failure(&self) -> Option<IosUiEnvironmentFailure> {
+        IosUiEnvironmentFailure::detect(&self.stdout)
+            .or_else(|| IosUiEnvironmentFailure::detect(&self.stderr))
     }
 }
 
-fn xcodebuild_test_runner_bootstrap_failed(output: &str) -> bool {
-    output.contains("Early unexpected exit, operation never finished bootstrapping")
-        && output.contains("while preparing to run tests")
+/// A UI test failure caused by the simulator rather than the app under test
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IosUiEnvironmentFailure {
+    TestRunnerBootstrap,
+    AppLaunch,
+}
+
+impl IosUiEnvironmentFailure {
+    fn detect(output: &str) -> Option<Self> {
+        if output.contains("Early unexpected exit, operation never finished bootstrapping")
+            && output.contains("while preparing to run tests")
+        {
+            return Some(Self::TestRunnerBootstrap);
+        }
+
+        // XCUIApplication.launch() timing out or losing the process, or the app's own
+        // bootstrap watchdog firing on both launches in OnboardingFullLaunchUITests.launchApp()
+        let app_launch_failed = output.contains("Timed out while launching application")
+            || output.contains("does not have a process ID")
+            || output.contains("App startup timed out on relaunch");
+
+        app_launch_failed.then_some(Self::AppLaunch)
+    }
+}
+
+impl std::fmt::Display for IosUiEnvironmentFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TestRunnerBootstrap => f.write_str("Xcode test runner bootstrap failure"),
+            Self::AppLaunch => f.write_str("simulator app launch failure"),
+        }
+    }
 }
 
 fn fail_ios_ui_test(test: &str, failure: XcodebuildFailure) -> Result<()> {
@@ -1774,6 +1805,37 @@ fn available_device_context(devices: &[ResolvedDevice]) -> String {
 
 #[cfg(test)]
 mod tests {
+    mod ui_environment_failure {
+        use crate::ios::IosUiEnvironmentFailure;
+
+        #[test]
+        fn retries_simulator_launch_failures_seen_in_ci() {
+            let launch_timeout = "OnboardingFullLaunchUITests.swift:280: error: -[CoveUITests.OnboardingFullLaunchUITests testCanReachExistingWalletStorageChoices] : Failed to launch <XCUIApplicationImpl: 0x109c16800 org.bitcoinppl.cove at Cove.app> via Xcode: Timed out while launching application via Xcode.";
+            let lost_process = "OnboardingFullLaunchUITests.swift:280: error: -[CoveUITests.OnboardingFullLaunchUITests testExchangeUserCanReachFundingAfterBackup] : Application 'org.bitcoinppl.cove' does not have a process ID";
+            let watchdog = "OnboardingFullLaunchUITests.swift:290: error: -[CoveUITests.OnboardingFullLaunchUITests testWelcomeScreenShowsFirstLaunchEntryPoint] : failed - App startup timed out on relaunch";
+            let runner = "Early unexpected exit, operation never finished bootstrapping - no restart will be attempted. (Underlying Error: Test crashed with signal kill while preparing to run tests.)";
+
+            for output in [launch_timeout, lost_process, watchdog] {
+                assert_eq!(
+                    IosUiEnvironmentFailure::detect(output),
+                    Some(IosUiEnvironmentFailure::AppLaunch)
+                );
+            }
+
+            assert_eq!(
+                IosUiEnvironmentFailure::detect(runner),
+                Some(IosUiEnvironmentFailure::TestRunnerBootstrap)
+            );
+        }
+
+        #[test]
+        fn does_not_retry_app_assertion_failures() {
+            let assertion = "OnboardingFullLaunchUITests.swift:394: error: -[CoveUITests.OnboardingFullLaunchUITests testNewUserCanViewRecoveryWordsAndReturn] : failed - Timed out waiting for button 'Get Started'";
+
+            assert_eq!(IosUiEnvironmentFailure::detect(assertion), None);
+        }
+    }
+
     #[cfg(target_os = "macos")]
     mod archive_identity {
         use crate::ios::testflight_archive_identity;
