@@ -124,7 +124,8 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/navigation/CoveNavDisplay.kt",
 ]
 coverage = [
-    "agent",
+    "device-script:qa/device/android/rows.py::s16-remove-animations-keeps-navigation-usable",
+    "agent:ios",
 ]
 # 1.4.0: ios PASS, android PASS
 # needs the os animation and motion settings changed
@@ -140,6 +141,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
 ]
 coverage = [
+    "device-script:qa/device/android/rows.py::s16-receive-copy-address-missing-at-largest-font",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/LargeFontScaleLayoutTest.kt::receiveSheetActionsCanBeReachedAtLargestFontScale",
     "agent:ios",
 ]
@@ -275,7 +277,7 @@ paths = [
 ]
 coverage = [
     "human:ios",
-    "agent:android",
+    "device-script:qa/device/android/rows.py::s16-restore-normal-font-and-compare-receive-controls",
 ]
 # 1.4.0: ios HUMAN, android PASS
 # needs the os font size changed; the ios slider could not be set through the mirror
