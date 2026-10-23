@@ -196,6 +196,10 @@ jobs:
       - name: Test device-script helpers
         run: python3 -I -m unittest discover -s qa/device -p "test_*.py"
 
+      # the iOS device scripts import wdalib from tools/wda, so its commands are checked against a mock WDA
+      - name: Test WebDriverAgent tools
+        run: tools/wda/test/run-mock-tests.sh
+
   test:
     strategy:
       matrix:

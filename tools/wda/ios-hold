@@ -1,0 +1,3 @@
+#!/bin/bash
+# thin wrapper; see wdalib.py for behavior and README.md for usage
+exec python3 -I "$(dirname "$0")/wdalib.py" hold "$@"

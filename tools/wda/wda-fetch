@@ -1,0 +1,40 @@
+#!/bin/bash
+# clone the pinned WebDriverAgent release into the cache and verify its commit
+# usage: wda-fetch [--dry-run]
+set -u
+. "$(dirname "$0")/wda-env.sh"
+
+if [ "${1:-}" = "--dry-run" ]; then
+  json ok:raw=true action=wda-fetch dry_run:raw=true "version=$WDA_VERSION" "commit=$WDA_COMMIT" "dir=$WDA_REPO"
+  exit 0
+fi
+
+# print the cached-checkout result and exit, or fail when it isn't at the pinned commit
+use_existing() {
+  local found
+  found="$(git -C "$WDA_REPO" rev-parse HEAD 2>/dev/null)"
+  [ "$found" = "$WDA_COMMIT" ] ||
+    die commit_mismatch "$WDA_REPO is not at the pinned commit" "expected=$WDA_COMMIT" "found=$found" "fix=delete $WDA_REPO and rerun wda-fetch"
+  json ok:raw=true action=wda-fetch cached:raw=true "version=$WDA_VERSION" "dir=$WDA_REPO"
+  exit 0
+}
+
+[ -d "$WDA_REPO" ] && use_existing
+
+command -v git >/dev/null || die missing_git "git not found" "fix=xcode-select --install"
+mkdir -p "$(dirname "$WDA_REPO")"
+tmp="$(mktemp -d "$WDA_REPO.partial.XXXXXX")" || die mktemp_failed "cannot create a temporary directory next to $WDA_REPO"
+trap 'rm -rf "$tmp"' EXIT
+
+err="$(git clone -q --depth 1 --branch "$WDA_VERSION" https://github.com/appium/WebDriverAgent.git "$tmp/repo" 2>&1)" ||
+  die clone_failed "git clone of WebDriverAgent $WDA_VERSION failed" "detail=$err"
+
+# a moved tag would otherwise build different code under the same version name
+found="$(git -C "$tmp/repo" rev-parse HEAD)"
+[ "$found" = "$WDA_COMMIT" ] ||
+  die commit_mismatch "tag $WDA_VERSION points at a different commit than the pinned one" "expected=$WDA_COMMIT" "found=$found"
+
+# rename(2) refuses a non-empty target, so a concurrent wda-fetch that finished first wins and
+# this clone is discarded instead of landing inside its checkout
+python3 -I -c 'import os, sys; os.rename(sys.argv[1], sys.argv[2])' "$tmp/repo" "$WDA_REPO" 2>/dev/null || use_existing
+json ok:raw=true action=wda-fetch cached:raw=false "version=$WDA_VERSION" "dir=$WDA_REPO"

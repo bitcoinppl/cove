@@ -1,0 +1,2 @@
+# qa/device imports wdalib, which leaves bytecode here
+__pycache__/
