@@ -12,14 +12,14 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testWelcomeScreenShowsFirstLaunchEntryPoint() {
-        app.launch()
+        launchApp()
 
         XCTAssertTrue(app.staticTexts["Welcome to Cove"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Get Started"].exists)
     }
 
     func testSoftwareWalletImportShowsTermsBeforeWalletSelection() {
-        app.launch()
+        launchApp()
 
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
@@ -34,7 +34,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testCanReachExistingWalletStorageChoices() {
-        app.launch()
+        launchApp()
 
         reachStorageChoices()
 
@@ -45,7 +45,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testExistingUserCanGoBackToBitcoinChoice() {
-        app.launch()
+        launchApp()
 
         app.buttons["Get Started"].tap()
         acceptTermsIfNeeded()
@@ -58,7 +58,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testExchangeUserCanReachFundingAfterBackup() {
-        app.launch()
+        launchApp()
 
         reachStorageChoices()
         button(startingWith: "On an exchange").tap()
@@ -80,7 +80,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testHardwareWalletUserCanReachImportChoices() {
-        app.launch()
+        launchApp()
 
         reachStorageChoices()
         button(startingWith: "Hardware wallet").tap()
@@ -92,7 +92,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testHardwareWalletUserCanOpenQrScanner() {
-        app.launch()
+        launchApp()
 
         reachStorageChoices()
         button(startingWith: "Hardware wallet").tap()
@@ -103,7 +103,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testHardwareWalletUserCanOpenNfcScanner() {
-        app.launch()
+        launchApp()
 
         reachStorageChoices()
         button(startingWith: "Hardware wallet").tap()
@@ -114,7 +114,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testSoftwareWalletUserCanCreateNewWallet() {
-        app.launch()
+        launchApp()
 
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
@@ -127,7 +127,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testSoftwareWalletUserCanReachImportChoices() {
-        app.launch()
+        launchApp()
 
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
@@ -144,7 +144,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
             "Quarantined in CI until the missing import suggestion is diagnosed"
         )
 
-        app.launch()
+        launchApp()
 
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
@@ -184,7 +184,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testSoftwareWalletUserCanOpenQrScanner() {
-        app.launch()
+        launchApp()
 
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
@@ -196,7 +196,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testSoftwareWalletUserCanImportKnownWords() {
-        app.launch()
+        launchApp()
 
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
@@ -215,7 +215,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testSoftwareWalletUserCanImportKnownLegacyWalletWithHistory() {
-        app.launch()
+        launchApp()
 
         reachStorageChoices()
         button(startingWith: "Software wallet").tap()
@@ -234,7 +234,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testNewUserCanReachBackupWallet() {
-        app.launch()
+        launchApp()
 
         reachBackupWallet()
 
@@ -242,7 +242,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testNewUserCanViewRecoveryWordsAndReturn() {
-        app.launch()
+        launchApp()
 
         reachBackupWallet()
         button(startingWith: "Show Words").tap()
@@ -257,7 +257,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     func testNewUserCloudBackupDetailsCanCancel() {
-        app.launch()
+        launchApp()
 
         reachBackupWallet()
         button(startingWith: "Enable").tap()
@@ -269,6 +269,46 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Back up your wallet")).firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(button(startingWith: "Enable").exists)
+    }
+
+    /// Launches the app and waits for onboarding, relaunching once if startup timed out
+    ///
+    /// A freshly erased CI simulator can take over a minute to launch the app, which trips the
+    /// 10 second bootstrap watchdog; the timeout screen asks the user to force-quit and retry,
+    /// so do that once and still fail when a warm launch also times out
+    private func launchApp() {
+        app.launch()
+
+        guard waitForOnboardingOrStartupTimeout() == .startupTimedOut else { return }
+
+        app.terminate()
+        app.launch()
+
+        if waitForOnboardingOrStartupTimeout() == .startupTimedOut {
+            XCTFail("App startup timed out on relaunch")
+        }
+    }
+
+    private enum LaunchOutcome {
+        case onboarding
+        case startupTimedOut
+        case unknown
+    }
+
+    private func waitForOnboardingOrStartupTimeout() -> LaunchOutcome {
+        let welcome = app.staticTexts["Welcome to Cove"]
+        let startupTimedOut = staticText(containing: "App startup timed out")
+
+        // the watchdog allows up to 20 seconds while a migration runs
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline {
+            if welcome.exists { return .onboarding }
+            if startupTimedOut.exists { return .startupTimedOut }
+
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+
+        return .unknown
     }
 
     private func reachBackupWallet() {
