@@ -36,15 +36,38 @@ final class SendFlowBackNavigationTests: XCTestCase {
         // the hang needs a few round trips, and Send must finish focusing before Back
         for iteration in 0 ..< 3 {
             withAnimation { probe.path.append(iteration) }
-            try await Task.sleep(for: .seconds(3))
-            XCTAssertEqual(navigation.viewControllers.count, 2, "Send must be pushed")
-            XCTAssertEqual(fixture.presenter.focusField, .amount)
+            try await waitUntil("Send must be pushed and focus the amount") {
+                navigation.viewControllers.count == 2
+                    && navigation.transitionCoordinator == nil
+                    && fixture.presenter.focusField == .amount
+            }
 
             withAnimation { probe.path.removeLast() }
-            try await Task.sleep(for: .seconds(2))
-            XCTAssertEqual(navigation.viewControllers.count, 1, "Back must restore the wallet")
-            XCTAssertNil(navigation.transitionCoordinator, "Back transition must finish")
+            try await waitUntil("Back must restore the wallet and finish its transition") {
+                navigation.viewControllers.count == 1 && navigation.transitionCoordinator == nil
+            }
+
             host.view.layoutIfNeeded()
+        }
+    }
+
+    /// Polls on the main actor so a slow simulator gets time, while a pinned main thread still
+    /// fails through `executionTimeAllowance`
+    private func waitUntil(
+        _ message: String,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ condition: () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            guard Date() < deadline else {
+                XCTFail(message, file: file, line: line)
+                throw CancellationError()
+            }
+
+            try await Task.sleep(for: .milliseconds(50))
         }
     }
 
