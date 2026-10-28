@@ -330,13 +330,34 @@ fn ohttp_relay_candidates(preferred: &str) -> Vec<String> {
     candidates
 }
 
-/// Tries the session's sticky relay first, then falls back. Returns the relay that succeeded.
-async fn try_ohttp_relays<C>(
+/// Outcome of validating one relay's HTTP body with the payjoin state machine.
+enum RelayProcessError {
+    /// Unreadable / transient response — try the next candidate without adopting this relay.
+    TryNext(eyre::Report),
+    /// Receiver rejected the session (or other terminal API error) — stop trying relays.
+    Terminal(eyre::Report),
+}
+
+/// Result of a full relay round (HTTP + protocol checks).
+enum RelayRoundError {
+    /// Every candidate failed at HTTP or with a TryNext process error.
+    Exhausted(eyre::Report),
+    /// A Terminal process error — do not try further relays.
+    Terminal(eyre::Report),
+}
+
+/// Tries the sticky relay first, then falls back.
+///
+/// A candidate only counts as success after `process` accepts the body (#910 / Greptile P1).
+/// HTTP 200 with an unreadable OHTTP body is TryNext so another relay can be attempted;
+/// the sticky relay is adopted only by the caller after this returns Ok.
+async fn try_ohttp_relays<C, T>(
     client: &reqwest::Client,
     timeout: Duration,
     preferred: &str,
     build_request: impl Fn(&str) -> Result<(payjoin::Request, C)>,
-) -> Result<(Vec<u8>, C, String)> {
+    process: impl Fn(Vec<u8>, C) -> Result<T, RelayProcessError>,
+) -> Result<(T, String), RelayRoundError> {
     let mut last_err = eyre::eyre!("no OHTTP relays configured");
 
     for relay in ohttp_relay_candidates(preferred) {
@@ -348,15 +369,27 @@ async fn try_ohttp_relays<C>(
                 continue;
             }
         };
-        match http_post(client, req, timeout).await {
-            Ok(body) => return Ok((body, ctx, relay)),
+        let body = match http_post(client, req, timeout).await {
+            Ok(body) => body,
             Err(e) => {
                 warn!("payjoin: relay {relay} request failed: {e:?}");
                 last_err = e;
+                continue;
+            }
+        };
+
+        match process(body, ctx) {
+            Ok(value) => return Ok((value, relay)),
+            Err(RelayProcessError::TryNext(e)) => {
+                warn!("payjoin: relay {relay} response failed protocol checks, trying next: {e:?}");
+                last_err = e;
+            }
+            Err(RelayProcessError::Terminal(e)) => {
+                return Err(RelayRoundError::Terminal(e));
             }
         }
     }
-    Err(last_err)
+    Err(RelayRoundError::Exhausted(last_err))
 }
 
 // returns the index of the single external (recipient) output, or Err for batch/self-send PSBTs
@@ -460,48 +493,51 @@ async fn do_poll(
 
     // polls are long-polling: the directory holds the connection open until a
     // proposal arrives or its own timeout fires, so allow slightly more than
-    // the server-side timeout to avoid racing it
-    let (poll_response, poll_ctx, used_relay) =
-        match try_ohttp_relays(&client, Duration::from_secs(35), &preferred_relay, |relay| {
-            polling_sender.create_poll_request(relay).map_err(|e| eyre::eyre!("{e:?}"))
-        })
-        .await
-        {
-            Ok(triple) => triple,
-            Err(e) => {
-                warn!("payjoin poll: all relays failed, retrying: {e}");
-                tokio::time::sleep(Duration::from_secs(2)).await;
-                send!(addr.begin_next_poll_msg());
-                return;
+    // the server-side timeout to avoid racing it.
+    //
+    // process_response is inside the relay loop so HTTP 200 + unreadable OHTTP
+    // does not stick us on a broken relay, and we only adopt after checks pass.
+    let poll_result = try_ohttp_relays(
+        &client,
+        Duration::from_secs(35),
+        &preferred_relay,
+        |relay| polling_sender.create_poll_request(relay).map_err(|e| eyre::eyre!("{e:?}")),
+        |body, ctx| match polling_sender.clone().process_response(&body, ctx).save(&persister) {
+            Ok(outcome) => Ok(outcome),
+            Err(e) => match e.api_error_ref() {
+                // receiver explicitly rejected — do not try other relays
+                Some(ResponseError::WellKnown(_)) | Some(ResponseError::Unrecognized { .. }) => {
+                    Err(RelayProcessError::Terminal(eyre::eyre!("{e:?}")))
+                }
+                // unreadable OHTTP / transient directory errors — try next relay
+                _ => Err(RelayProcessError::TryNext(eyre::eyre!("{e:?}"))),
+            },
+        },
+    )
+    .await;
+
+    match poll_result {
+        Ok((OptionalTransitionOutcome::Progress(proposal_psbt), used_relay)) => {
+            if used_relay != preferred_relay {
+                send!(addr.adopt_session_relay(used_relay));
             }
-        };
-
-    if used_relay != preferred_relay {
-        send!(addr.adopt_session_relay(used_relay));
-    }
-
-    match polling_sender.process_response(&poll_response, poll_ctx).save(&persister) {
-        Ok(OptionalTransitionOutcome::Progress(proposal_psbt)) => {
             send!(addr.complete_with_success(proposal_psbt));
         }
-        Ok(OptionalTransitionOutcome::Stasis(next)) => {
+        Ok((OptionalTransitionOutcome::Stasis(next), used_relay)) => {
+            if used_relay != preferred_relay {
+                send!(addr.adopt_session_relay(used_relay));
+            }
             debug!("payjoin poll: no proposal yet, continuing");
             send!(addr.update_polling_sender(next));
         }
-        Err(e) => {
-            // WellKnown/Unrecognized mean the receiver explicitly rejected the session;
-            // the public API does not expose fatal/transient classification directly —
-            // other opaque response errors retry until the bounded session deadline fires
-            match e.api_error_ref() {
-                Some(ResponseError::WellKnown(_)) | Some(ResponseError::Unrecognized { .. }) => {
-                    warn!("payjoin poll: receiver rejected session: {e:?}");
-                    send!(addr.complete_with_fallback_msg());
-                }
-                _ => {
-                    warn!("payjoin poll: transient error, retrying: {e:?}");
-                    send!(addr.begin_next_poll_msg());
-                }
-            }
+        Err(RelayRoundError::Terminal(e)) => {
+            warn!("payjoin poll: receiver rejected session: {e:?}");
+            send!(addr.complete_with_fallback_msg());
+        }
+        Err(RelayRoundError::Exhausted(e)) => {
+            warn!("payjoin poll: all relays failed, retrying: {e}");
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            send!(addr.begin_next_poll_msg());
         }
     }
 }
@@ -643,35 +679,34 @@ impl PayjoinActor {
                 }
             };
 
-            let (post_response, post_ctx, used_relay) =
-                match try_ohttp_relays(&client, Duration::from_secs(30), &preferred_relay, |relay| {
-                    sender.create_v2_post_request(relay).map_err(|e| eyre::eyre!("{e:?}"))
-                })
-                .await
-                {
-                    Ok(triple) => triple,
-                    Err(e) => {
-                        warn!("payjoin POST: all relays failed: {e}");
-                        send!(addr.complete_with_fallback_msg());
-                        return;
-                    }
-                };
+            // Clone per candidate: process_response consumes the sender, and a
+            // broken relay's HTTP 200 must not prevent trying the next one.
+            let post_result = try_ohttp_relays(
+                &client,
+                Duration::from_secs(30),
+                &preferred_relay,
+                |relay| sender.create_v2_post_request(relay).map_err(|e| eyre::eyre!("{e:?}")),
+                |body, ctx| match sender.clone().process_response(&body, ctx).save(&persister) {
+                    Ok(polling_sender) => Ok(polling_sender),
+                    // POST has no WellKnown rejection path here; any process failure
+                    // is treated as a bad relay response so another candidate can run.
+                    Err(e) => Err(RelayProcessError::TryNext(eyre::eyre!("{e:?}"))),
+                },
+            )
+            .await;
 
-            if used_relay != preferred_relay {
-                send!(addr.adopt_session_relay(used_relay));
+            match post_result {
+                Ok((polling_sender, used_relay)) => {
+                    if used_relay != preferred_relay {
+                        send!(addr.adopt_session_relay(used_relay));
+                    }
+                    send!(addr.post_succeeded(polling_sender));
+                }
+                Err(RelayRoundError::Exhausted(e) | RelayRoundError::Terminal(e)) => {
+                    warn!("payjoin POST: all relays failed: {e}");
+                    send!(addr.complete_with_fallback_msg());
+                }
             }
-
-            let polling_sender =
-                match sender.process_response(&post_response, post_ctx).save(&persister) {
-                    Ok(ps) => ps,
-                    Err(e) => {
-                        warn!("payjoin POST: failed to process response: {e:?}");
-                        send!(addr.complete_with_fallback_msg());
-                        return;
-                    }
-                };
-
-            send!(addr.post_succeeded(polling_sender));
         });
 
         Produces::ok(())
