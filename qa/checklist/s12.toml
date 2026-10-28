@@ -1,0 +1,356 @@
+[[row]]
+id = "s12-google-drive-account-switch-cancel-and-interruption"
+section = "12"
+title = "Google Drive account switch cancel and interruption"
+platforms = ["android"]
+target = "manual"
+paths = [
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/account_switch.rs",
+  "rust/src/manager/cloud_backup_manager/ops/tests/account_switch.rs",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/DriveAuthorizationHelper.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/DriveTokenProvider.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/AndroidCloudStorageAccess.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios N/A, android BLOCKED
+# needs real google accounts and consent ui
+
+[[row]]
+id = "s12-enable-backup-without-existing-data"
+section = "12"
+title = "Enable backup without existing data"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/ops/enable.rs",
+  "rust/src/manager/cloud_backup_manager/ops/enable/*.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable/*.rs",
+  "rust/src/manager/cloud_backup_manager/pending_enable/coordinator.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/passkey.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/passkey/*.rs",
+  "ios/Cove/FFI/PasskeyProviderImpl.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProvider.kt",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingView.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingSections.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupPendingUploadSection.swift",
+  "ios/Cove/CloudBackupManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupPendingEnableRecoveryContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+# state machine is rust with fakes available; real passkey and cloud account still need a person
+
+[[row]]
+id = "s12-existing-namespace-uses-existing-passkey"
+section = "12"
+title = "Existing namespace uses existing passkey"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/ops/enable.rs",
+  "rust/src/manager/cloud_backup_manager/ops/enable/*.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable/*.rs",
+  "rust/src/manager/cloud_backup_manager/pending_enable/coordinator.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/passkey.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/passkey/*.rs",
+  "ios/Cove/FFI/PasskeyProviderImpl.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProvider.kt",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingView.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingSections.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupPendingUploadSection.swift",
+  "ios/Cove/CloudBackupManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupPendingEnableRecoveryContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s12-create-new-backup-staging"
+section = "12"
+title = "Create New Backup staging"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/ops/enable.rs",
+  "rust/src/manager/cloud_backup_manager/ops/enable/*.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable/*.rs",
+  "rust/src/manager/cloud_backup_manager/pending_enable/coordinator.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/passkey.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/passkey/*.rs",
+  "ios/Cove/FFI/PasskeyProviderImpl.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProvider.kt",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingView.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingSections.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupPendingUploadSection.swift",
+  "ios/Cove/CloudBackupManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupPendingEnableRecoveryContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s12-force-kill-registration-upload-confirmation-promotion"
+section = "12"
+title = "Force-kill registration upload confirmation promotion"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/ops/enable.rs",
+  "rust/src/manager/cloud_backup_manager/ops/enable/*.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable/*.rs",
+  "rust/src/manager/cloud_backup_manager/pending_enable/coordinator.rs",
+  "rust/src/backup/recovery.rs",
+  "rust/src/backup/recovery/**",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingView.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingSections.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupPendingUploadSection.swift",
+  "ios/Cove/CloudBackupManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupPendingEnableRecoveryContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+# recovery after kill is persisted rust state; the kill itself is a device action
+
+[[row]]
+id = "s12-retry-interrupted-setup-without-duplicates"
+section = "12"
+title = "Retry interrupted setup without duplicates"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/ops/enable.rs",
+  "rust/src/manager/cloud_backup_manager/ops/enable/*.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable/*.rs",
+  "rust/src/manager/cloud_backup_manager/pending_enable/coordinator.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/passkey.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/passkey/*.rs",
+  "ios/Cove/FFI/PasskeyProviderImpl.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProvider.kt",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingView.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingSections.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupPendingUploadSection.swift",
+  "ios/Cove/CloudBackupManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupPendingEnableRecoveryContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s12-cancel-incomplete-setup-preserves-active-data"
+section = "12"
+title = "Cancel incomplete setup preserves active data"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/ops/enable.rs",
+  "rust/src/manager/cloud_backup_manager/ops/enable/*.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable/*.rs",
+  "rust/src/manager/cloud_backup_manager/pending_enable/coordinator.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/enable/discard.rs",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingView.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupEnableOnboardingSections.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupPendingUploadSection.swift",
+  "ios/Cove/CloudBackupManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupPendingEnableRecoveryContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s12-passkey-and-provider-failure-retry-policy"
+section = "12"
+title = "Passkey and provider failure retry policy"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/wallets/passkey.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/passkey/*.rs",
+  "ios/Cove/FFI/PasskeyProviderImpl.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProvider.kt",
+  "rust/src/manager/cloud_backup_manager/verify/passkey_auth.rs",
+  "rust/src/manager/cloud_backup_manager/error.rs",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s12-verification-waits-for-cloud-visibility"
+section = "12"
+title = "Verification waits for cloud visibility"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/verify/*.rs",
+  "rust/src/manager/cloud_backup_manager/ops/sync.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/verification.rs",
+  "rust/src/manager/cloud_backup_manager/sync_health.rs",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupVerificationSection.swift",
+  "ios/Cove/CloudBackupManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/VerificationSection.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupVerificationPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s12-repair-verification-and-sync-now"
+section = "12"
+title = "Repair verification and Sync Now"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/verify/*.rs",
+  "rust/src/manager/cloud_backup_manager/ops/sync.rs",
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/verification.rs",
+  "rust/src/manager/cloud_backup_manager/sync_health.rs",
+  "rust/src/manager/cloud_backup_manager/verify/wrapper_repair.rs",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupVerificationSection.swift",
+  "ios/Cove/CloudBackupManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/VerificationSection.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupVerificationPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s12-restore-all-sequential-progress-and-deduplication"
+section = "12"
+title = "Restore All sequential progress and deduplication"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/restore_all.rs",
+  "rust/src/manager/cloud_backup_manager/actors/restore.rs",
+  "rust/src/manager/cloud_backup_manager/ops/restore.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/restore.rs",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupDetailCloudOnlySection.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupDetailScreen.swift",
+  "ios/Cove/CloudBackupManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudOnlySection.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailProgressPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s12-restore-all-navigation-and-cancel"
+section = "12"
+title = "Restore All navigation and cancel"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/restore_all.rs",
+  "rust/src/manager/cloud_backup_manager/actors/restore.rs",
+  "rust/src/manager/cloud_backup_manager/ops/restore.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/restore.rs",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupDetailCloudOnlySection.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupDetailScreen.swift",
+  "ios/Cove/CloudBackupManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudOnlySection.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailProgressPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s12-restore-all-wallet-and-provider-failure"
+section = "12"
+title = "Restore All wallet and provider failure"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/restore_all.rs",
+  "rust/src/manager/cloud_backup_manager/actors/restore.rs",
+  "rust/src/manager/cloud_backup_manager/ops/restore.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/restore.rs",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupDetailCloudOnlySection.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupDetailScreen.swift",
+  "ios/Cove/CloudBackupManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudOnlySection.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailProgressPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s12-force-kill-restore-all-recovery"
+section = "12"
+title = "Force-kill Restore All recovery"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/cloud_backup_manager/actors/supervisor/restore_all.rs",
+  "rust/src/manager/cloud_backup_manager/actors/restore.rs",
+  "rust/src/manager/cloud_backup_manager/ops/restore.rs",
+  "rust/src/manager/cloud_backup_manager/wallets/restore.rs",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupDetailCloudOnlySection.swift",
+  "ios/Cove/Flows/SettingsFlow/CloudBackupDetailScreen.swift",
+  "ios/Cove/CloudBackupManager.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudOnlySection.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailContent.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupDetailProgressPresentation.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s12-onboarding-cloud-recovery-and-late-discovery"
+section = "12"
+title = "Onboarding cloud recovery and late discovery"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/manager/onboarding_manager/cloud_restore.rs",
+  "rust/src/manager/onboarding_manager.rs",
+  "rust/src/manager/cloud_backup_manager/cloud_inventory.rs",
+  "ios/Cove/OnboardingManager.swift",
+  "ios/Cove/Flows/Onboarding/OnboardingRestoreStepView.swift",
+  "ios/Cove/Flows/Onboarding/StartupRecovery/CloudRestoreOfferView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/OnboardingManager.kt",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s12-icloud-local-eviction-and-delayed-discovery"
+section = "12"
+title = "iCloud local eviction and delayed discovery"
+platforms = ["ios"]
+target = "manual"
+paths = [
+  "ios/Cove/FFI/ICloudDriveHelper.swift",
+  "ios/Cove/FFI/ICloudDriveHelper+Metadata.swift",
+  "ios/Cove/FFI/CloudStorageAccessImpl.swift",
+  "rust/src/manager/cloud_backup_manager/cloud_inventory.rs",
+]
+coverage = ["human"]
+# 1.4.0: ios HUMAN, android N/A
+# needs a real icloud account and local eviction

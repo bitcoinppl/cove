@@ -1,0 +1,582 @@
+[[row]]
+id = "s10-explorer-choices-and-order"
+section = "10"
+title = "Explorer choices and order"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["rust:rust/src/custom_block_explorer.rs::block_explorer_options_expose_expected_order_and_labels"]
+# 1.4.0: ios BLOCKED, android PASS
+# order and labels come from the rust option list; both clients iterate it
+
+[[row]]
+id = "s10-preset-preview-mempool-guide"
+section = "10"
+title = "Preset preview mempool.guide"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s10-preset-preview-mempool-bullbitcoin-com"
+section = "10"
+title = "Preset preview mempool.bullbitcoin.com"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s10-preset-preview-blockstream-info"
+section = "10"
+title = "Preset preview blockstream.info"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s10-custom-lan-template-saves"
+section = "10"
+title = "Custom LAN template saves"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s10-scheme-default-public-host"
+section = "10"
+title = "Scheme default public-host"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["rust:rust/src/custom_block_explorer/template.rs::plain_base_url_normalizes_to_transaction_template"]
+# 1.4.0: ios BLOCKED, android PASS
+# scheme defaulting is decided in template parsing
+
+[[row]]
+id = "s10-scheme-default-ip-host"
+section = "10"
+title = "Scheme default ip-host"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["rust:rust/src/custom_block_explorer/template.rs::plain_base_url_normalizes_to_transaction_template"]
+# 1.4.0: ios BLOCKED, android PASS
+# scheme defaulting is decided in template parsing
+
+[[row]]
+id = "s10-scheme-default-localhost"
+section = "10"
+title = "Scheme default localhost"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["rust:rust/src/custom_block_explorer/template.rs::plain_base_url_normalizes_to_transaction_template"]
+# 1.4.0: ios BLOCKED, android PASS
+# scheme defaulting is decided in template parsing
+
+[[row]]
+id = "s10-scheme-default-local-host"
+section = "10"
+title = "Scheme default local-host"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["rust:rust/src/custom_block_explorer/template.rs::plain_base_url_normalizes_to_transaction_template"]
+# 1.4.0: ios BLOCKED, android PASS
+# scheme defaulting is decided in template parsing
+
+[[row]]
+id = "s10-lan-http-reaches-mac-once-with-correct"
+section = "10"
+title = "LAN HTTP reaches Mac once with correct transaction"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+  "rust/src/transaction/transaction_details.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
+  "ios/Cove/Info.plist",
+  "android/app/src/main/AndroidManifest.xml",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+# needs a phone browser reaching a LAN server over cleartext http
+
+[[row]]
+id = "s10-template-txid-opens-correct-transaction-once"
+section = "10"
+title = "Template {txid} opens correct transaction once"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "rust/src/transaction/transaction_details.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/custom_block_explorer/template.rs::placeholders_are_normalized_and_all_occurrences_render",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# substitution is rust; opening the link in a browser is not asserted
+
+[[row]]
+id = "s10-template-0-opens-correct-transaction-once"
+section = "10"
+title = "Template {0} opens correct transaction once"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "rust/src/transaction/transaction_details.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/custom_block_explorer/template.rs::placeholders_are_normalized_and_all_occurrences_render",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# substitution is rust; opening the link in a browser is not asserted
+
+[[row]]
+id = "s10-template-tx-id-opens-correct-transaction-once"
+section = "10"
+title = "Template {tx_id} opens correct transaction once"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "rust/src/transaction/transaction_details.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/custom_block_explorer/template.rs::placeholders_are_normalized_and_all_occurrences_render",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# substitution is rust; opening the link in a browser is not asserted
+
+[[row]]
+id = "s10-invalid-scheme-preserves-saved-explorer"
+section = "10"
+title = "Invalid scheme preserves saved explorer"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/custom_block_explorer/template.rs::invalid_values_are_rejected",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# rejection is asserted; that the saved value stays unchanged is not
+
+[[row]]
+id = "s10-invalid-host-preserves-saved-explorer"
+section = "10"
+title = "Invalid host preserves saved explorer"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/custom_block_explorer/template.rs::invalid_values_are_rejected",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# rejection is asserted; that the saved value stays unchanged is not
+
+[[row]]
+id = "s10-fragment-preserves-saved-explorer"
+section = "10"
+title = "Fragment preserves saved explorer"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/custom_block_explorer/template.rs::invalid_values_are_rejected",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# rejection is asserted; that the saved value stays unchanged is not
+
+[[row]]
+id = "s10-incomplete-placeholder-preserves-saved-explorer"
+section = "10"
+title = "Incomplete placeholder preserves saved explorer"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s10-empty-input-replaces-saved-custom-explorer"
+section = "10"
+title = "Empty input replaces saved custom explorer"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["rust:rust/src/database/global_config.rs::custom_block_explorer_setter_rejects_empty_input_and_keeps_the_saved_template"]
+# 1.4.0: ios BLOCKED, android FAIL
+# failing on android in 1.4.0; fix and test are in pr 924
+
+[[row]]
+id = "s10-preset-transaction-url-default-explorer"
+section = "10"
+title = "Preset transaction URL Default explorer"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+  "rust/src/transaction/transaction_details.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/custom_block_explorer/template.rs::defaults_match_existing_transaction_urls",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# url rendering is asserted; opening the browser is not
+
+[[row]]
+id = "s10-preset-transaction-url-mempool-guide"
+section = "10"
+title = "Preset transaction URL mempool.guide"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+  "rust/src/transaction/transaction_details.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s10-preset-transaction-url-mempool-bullbitcoin-com"
+section = "10"
+title = "Preset transaction URL mempool.bullbitcoin.com"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+  "rust/src/transaction/transaction_details.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s10-preset-transaction-url-blockstream-info"
+section = "10"
+title = "Preset transaction URL blockstream.info"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+  "rust/src/transaction/transaction_details.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/database/global_config.rs::block_explorer_option_setter_selects_presets_and_clears_default",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# preset template is asserted; opening the browser is not
+
+[[row]]
+id = "s10-custom-explorer-persists-after-cold-relaunch"
+section = "10"
+title = "Custom explorer persists after cold relaunch"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+# needs a force-stop and relaunch
+
+[[row]]
+id = "s10-testnet-transaction-explorer-isolation"
+section = "10"
+title = "Testnet transaction explorer isolation"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+  "rust/src/transaction/transaction_details.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/custom_block_explorer/template.rs::defaults_match_existing_transaction_urls",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# built-in per-network urls are asserted; bitcoin override not leaking is not
+
+[[row]]
+id = "s10-signet-transaction-explorer-isolation"
+section = "10"
+title = "Signet transaction explorer isolation"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+  "rust/src/transaction/transaction_details.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/custom_block_explorer/template.rs::defaults_match_existing_transaction_urls",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# built-in per-network urls are asserted; bitcoin override not leaking is not
+
+[[row]]
+id = "s10-explicit-reset-to-default"
+section = "10"
+title = "Explicit Reset to Default"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+]
+coverage = ["agent"]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s10-custom-explorer-manual-backup-round-trip"
+section = "10"
+title = "Custom explorer manual backup round trip"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/backup/export.rs",
+  "rust/src/backup/import.rs",
+  "rust/src/backup/import/**",
+  "rust/src/backup/model.rs",
+  "rust/src/backup/model/**",
+]
+coverage = [
+  "rust:rust/src/backup/export.rs::backup_export_gathers_only_normalized_custom_block_explorers",
+  "rust:rust/src/backup/model.rs::backup_payload_json_round_trip",
+  "rust:rust/src/backup/import.rs::backup_import_restores_valid_custom_block_explorers",
+]
+# 1.4.0: ios N/A, android N/A
+# export, payload serde and import are each asserted in rust; skipped on devices in 1.4.0
+
+[[row]]
+id = "s10-testnet4-explorer-isolation-deferred"
+section = "10"
+title = "Testnet4 explorer isolation deferred"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
+  "rust/src/transaction/transaction_details.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/custom_block_explorer/template.rs::defaults_match_existing_transaction_urls",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# built-in per-network urls are asserted; bitcoin override not leaking is not
+
+[[row]]
+id = "s10-ios-explorer-order-and-mempool-guide-preview"
+section = "10"
+title = "iOS explorer order and mempool.guide preview"
+platforms = ["ios"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/custom_block_explorer.rs::block_explorer_options_expose_expected_order_and_labels",
+]
+# 1.4.0: ios PASS, android N/A
+# order is asserted in rust; the preview url is not
+
+[[row]]
+id = "s10-ios-bull-bitcoin-preview"
+section = "10"
+title = "iOS Bull Bitcoin preview"
+platforms = ["ios"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s10-ios-blockstream-preview"
+section = "10"
+title = "iOS Blockstream preview"
+platforms = ["ios"]
+target = "rust"
+paths = [
+  "rust/src/custom_block_explorer.rs",
+  "rust/src/custom_block_explorer/template.rs",
+  "rust/src/database/global_config.rs",
+  "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
+]
+coverage = ["agent"]
+# 1.4.0: ios PASS, android N/A

@@ -1,0 +1,103 @@
+[[row]]
+id = "preflight-mirror-control-and-about"
+section = "Preflight"
+title = "Mirror control and About"
+platforms = ["ios", "android"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# test tooling and device environment, not app code
+
+[[row]]
+id = "preflight-network-and-wallets"
+section = "Preflight"
+title = "Network and wallets"
+platforms = ["ios", "android"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+# test tooling and device environment, not app code
+
+[[row]]
+id = "preflight-device-process-access"
+section = "Preflight"
+title = "Device process access"
+platforms = ["ios", "android"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+# test tooling and device environment, not app code
+
+[[row]]
+id = "preflight-signer-lab-cli"
+section = "Preflight"
+title = "Signer Lab CLI"
+platforms = ["ios", "android"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+# test tooling and device environment, not app code
+
+[[row]]
+id = "preflight-universal-clipboard"
+section = "Preflight"
+title = "Universal Clipboard"
+platforms = ["ios"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android N/A
+# test tooling and device environment, not app code
+
+[[row]]
+id = "preflight-keyboard-text-input"
+section = "Preflight"
+title = "Keyboard text input"
+platforms = ["ios"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android N/A
+# test tooling and device environment, not app code
+
+[[row]]
+id = "preflight-ios-scroll-fixes-access"
+section = "Preflight"
+title = "iOS scroll fixes access"
+platforms = ["ios"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android N/A
+# test tooling and device environment, not app code
+
+[[row]]
+id = "preflight-ios-mirror-unlocked-scroll-fixes-attempted"
+section = "Preflight"
+title = "iOS mirror unlocked; scroll fixes attempted"
+platforms = ["ios"]
+target = "device"
+paths = []
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android N/A
+# test tooling and device environment, not app code

@@ -1,0 +1,62 @@
+[[row]]
+id = "s19-watch-only-and-hww-remain-distinct-after"
+section = "19"
+title = "Watch-only and hww remain distinct after relaunch"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/wallet/builder.rs",
+    "rust/src/database/wallet_data.rs",
+    "rust/src/database/wallet_data/**",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# needs a process relaunch
+
+[[row]]
+id = "s19-complete-clean-install-watch-only-hardware-journey"
+section = "19"
+title = "Complete clean-install watch-only hardware journey"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "ios/Cove/Flows/SendFlow/SendFlowHardwareScreen.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowHardwareSections.swift",
+    "ios/Cove/Flows/NewWalletFlow/ColdWallet/QrCodeImportScreen.swift",
+    "ios/Cove/Flows/Onboarding/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/QrCodeImportScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/OnboardingFlow/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# end to end journey on clean installs
+
+[[row]]
+id = "s19-hardware-journey-qr-and-nfc-legs"
+section = "19"
+title = "Hardware journey QR and NFC legs"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "ios/Cove/Flows/SendFlow/SendFlowHardwareScreen.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowHardwareSections.swift",
+    "ios/Cove/Flows/NewWalletFlow/ColdWallet/QrCodeImportScreen.swift",
+    "ios/Cove/NFCReader.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/QrCodeImportScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/nfc/NfcReader.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# needs a hardware signer over qr and nfc

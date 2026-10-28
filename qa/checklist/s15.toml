@@ -1,0 +1,277 @@
+[[row]]
+id = "s15-wrong-pin-then-main-pin-on-cold"
+section = "15"
+title = "Wrong PIN then main PIN on cold launch"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/manager/auth_manager.rs",
+    "rust/src/auth.rs",
+    "ios/Cove/Views/LockView.swift",
+    "ios/Cove/Views/NumberPadPinView.swift",
+    "ios/Cove/AuthManager.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/LockView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/NumberPadPinView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/AuthManager.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# needs a cold launch with a pin set
+
+[[row]]
+id = "s15-decoy-mode-enter-leave-and-data-scope"
+section = "15"
+title = "Decoy mode enter leave and data scope"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/auth_manager.rs",
+    "rust/src/database/global_config.rs",
+    "ios/Cove/Views/LockView.swift",
+    "ios/Cove/Views/NumberPadPinView.swift",
+    "ios/Cove/AuthManager.swift",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/DecoyPinView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/LockView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/NumberPadPinView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/AuthManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/DecoyPinView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SecurityDecoyModeState.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# the auth manager owns the decoy mode flag and the wallet scope
+
+[[row]]
+id = "s15-biometric-authentication-and-prompt-cancel"
+section = "15"
+title = "Biometric authentication and prompt cancel"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "rust/src/manager/auth_manager.rs",
+    "ios/Cove/Views/LockView.swift",
+    "ios/Cove/Views/NumberPadPinView.swift",
+    "ios/Cove/AuthManager.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/LockView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/NumberPadPinView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/AuthManager.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s15-pin-keypad-haptic-strength-and-duplicates"
+section = "15"
+title = "PIN keypad haptic strength and duplicates"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "ios/Cove/Extention/HapticFeedback+Ext.swift",
+    "ios/Cove/Views/NumberPadPinView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/HapticFeedbackExt.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/ComposeHapticFeedbackExt.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/NumberPadPinView.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+
+[[row]]
+id = "s15-double-tap-final-watch-import-creates-one"
+section = "15"
+title = "Double-tap final watch import creates one wallet"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/import_wallet_manager.rs",
+    "rust/src/wallet/builder.rs",
+    "ios/Cove/Flows/NewWalletFlow/ColdWallet/QrCodeImportScreen.swift",
+    "ios/Cove/ImportWalletManager.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/QrCodeImportScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/ImportWalletManager.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s15-file-picker-and-share-cancellation-preserve-route"
+section = "15"
+title = "File picker and share cancellation preserve route"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/SendFlowHardwareSigning.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+# needs the os file picker and share sheet
+
+[[row]]
+id = "s15-system-credential-camera-and-nfc-prompt-cancels"
+section = "15"
+title = "System credential camera and NFC prompt cancels"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "ios/Cove/QrCodeScanView.swift",
+    "ios/Cove/NFCReader.swift",
+    "ios/Cove/FFI/PasskeyProviderImpl.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/QrCodeScanView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/nfc/NfcReader.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProvider.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# biometric, camera and nfc system prompts need a person
+
+[[row]]
+id = "s15-network-dialog-cancel-outside-and-back"
+section = "15"
+title = "Network dialog Cancel outside and Back"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SettingsFlow/SettingsContainer.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NetworkSettingsScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s15-bottom-sheet-outside-dismissal"
+section = "15"
+title = "Bottom sheet outside dismissal"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletSheets.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/MoreInfoPopover.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/WalletMoreOptionsSheet.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/wallet/WalletSheets.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s15-receiver-code-hides-after-app-background"
+section = "15"
+title = "Receiver code hides after app background"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/manager/key_teleport_manager/receive_session.rs",
+    "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportContainer.swift",
+    "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportRevealPair.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+# needs an os background and foreground
+
+[[row]]
+id = "s15-repeated-navigation-and-background-route-scope"
+section = "15"
+title = "Repeated navigation and background route scope"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/router.rs",
+    "ios/Cove/RouteView.swift",
+    "ios/Cove/NavigationCoordinator.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/RouteView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/RouterManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/navigation/CoveNavDisplay.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# needs repeated os backgrounding across several flows
+
+[[row]]
+id = "s15-double-tap-create-save-adds-one-wallet"
+section = "15"
+title = "Double-tap create Save adds one wallet"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/pending_wallet_manager.rs",
+    "ios/Cove/Flows/NewWalletFlow/PendingWalletViewModel.swift",
+    "ios/Cove/Flows/NewWalletFlow/HotWallet/HotWalletCreateScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/hot_wallet/HotWalletCreateScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/PendingWalletManager.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s15-ios-file-picker-cancellation"
+section = "15"
+title = "iOS file picker cancellation"
+platforms = ["ios"]
+target = "device"
+paths = [
+    "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android N/A
+# needs the os file picker
+
+[[row]]
+id = "s15-ios-network-change-cancel-keeps-signet"
+section = "15"
+title = "iOS network-change Cancel keeps Signet"
+platforms = ["ios"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SettingsFlow/SettingsContainer.swift",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s15-beta-wipe-data-pin-full-wipe"
+section = "15"
+title = "Beta Wipe Data PIN full wipe"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/manager/auth_manager.rs",
+    "rust/src/app/full_wipe.rs",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/WipeDataPinView.swift",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/WipePin.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/WipeDataPinView.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# destructive: needs a throwaway install and a relaunch to check the post-wipe state

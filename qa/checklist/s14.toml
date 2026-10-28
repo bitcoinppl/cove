@@ -1,0 +1,556 @@
+[[row]]
+id = "s14-unused-receive-address-stays-the-same-on"
+section = "14"
+title = "Unused receive address stays the same on reopen"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/receive_address.rs",
+    "rust/src/manager/wallet_manager/actor/receive_address.rs",
+    "rust/src/database/wallet_data.rs",
+    "rust/src/database/wallet_data/**",
+    "ios/Cove/Flows/SelectedWalletFlow/ReceiveView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+# the receive address cache is rust state
+
+[[row]]
+id = "s14-transaction-list-and-detail-use-different-dates"
+section = "14"
+title = "Transaction list and detail use different dates"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/transaction/transaction_details.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsCardView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
+]
+coverage = [
+    "rust:rust/src/transaction/transaction_details.rs::transaction_list_date_matches_detail_date_in_the_device_time_zone",
+]
+# 1.4.0: ios FAIL, android FAIL
+# both screens format the date rust hands them
+
+[[row]]
+id = "s14-testnet-scan-follow-up-deferred"
+section = "14"
+title = "Testnet scan follow-up deferred"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/manager/wallet_manager/actor/scan.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/discovery_scanner.rs",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# needs a live testnet server and a timed scan
+
+[[row]]
+id = "s14-offline-signet-scan-failure-has-no-visible"
+section = "14"
+title = "Offline Signet scan failure has no visible error"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/wallet_manager/actor/**",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletAlerts.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsScanState.kt",
+]
+coverage = [
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreenTest.kt::nodeConnectionFailureShowsAnAlertWithAWayToChangeNode",
+    "agent:ios",
+]
+# 1.4.0: ios BLOCKED, android FAIL
+# rust already reports the node failure; the missing piece is the alert, which a compose test can drive without toggling wifi
+
+[[row]]
+id = "s14-online-cold-restart-recovers-scan-start"
+section = "14"
+title = "Online cold restart recovers scan start"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/manager/wallet_manager/actor/scan.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsScanState.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# needs a process kill and relaunch
+
+[[row]]
+id = "s14-unused-receive-address-stays-stable"
+section = "14"
+title = "Unused Receive address stays stable"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/receive_address.rs",
+    "rust/src/manager/wallet_manager/actor/receive_address.rs",
+    "rust/src/database/wallet_data.rs",
+    "rust/src/database/wallet_data/**",
+    "ios/Cove/Flows/SelectedWalletFlow/ReceiveView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+# the receive address cache is rust state
+
+[[row]]
+id = "s14-android-scan-survives-short-background"
+section = "14"
+title = "Android scan survives short background"
+platforms = ["android"]
+target = "device"
+paths = [
+    "rust/src/manager/wallet_manager/actor/scan.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsScanState.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios N/A, android PASS
+# needs an os background and foreground
+
+[[row]]
+id = "s14-address-type-change-during-discovery"
+section = "14"
+title = "Address type change during discovery"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/actor/scan.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsSections.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSections.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# the actor restarts the scan on an address type switch
+
+[[row]]
+id = "s14-initial-unused-scan-starts-and-progresses"
+section = "14"
+title = "Initial unused scan starts and progresses"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/actor/scan.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsScanState.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsCardView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s14-transaction-detail-values-during-refresh"
+section = "14"
+title = "Transaction detail values during refresh"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/transaction/transaction_details.rs",
+    "rust/src/manager/wallet_manager/actor/transactions.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# the risk is a detail screen showing another transaction's values while a refresh reconciles
+
+[[row]]
+id = "s14-label-edit-updates-list-and-detail"
+section = "14"
+title = "Label edit updates list and detail"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/label_manager.rs",
+    "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/wallet_manager/**",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsCardView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s14-initial-scan-completion-and-scan-multiplicity"
+section = "14"
+title = "Initial scan completion and scan multiplicity"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/actor/scan.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsScanState.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# scan task multiplicity is only observable in rust
+
+[[row]]
+id = "s14-pending-to-confirmed-detail-refresh"
+section = "14"
+title = "Pending to confirmed detail refresh"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/actor/transaction_confirmation.rs",
+    "rust/src/transaction_watcher.rs",
+    "rust/src/transaction/transaction_details.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s14-quick-back-after-label-edit-leaves-list"
+section = "14"
+title = "Quick Back after label edit leaves list stale"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/label_manager.rs",
+    "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/wallet_manager/**",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsCardView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
+]
+coverage = [
+    "rust:rust/src/manager/wallet_manager.rs::single_label_edit_reconciles_the_transaction_list",
+]
+# 1.4.0: ios PASS, android FAIL
+
+[[row]]
+id = "s14-open-pending-details-and-confirm-during-refresh"
+section = "14"
+title = "Open pending details and confirm during refresh"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/actor/transaction_confirmation.rs",
+    "rust/src/transaction_watcher.rs",
+    "rust/src/transaction/transaction_details.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s14-initial-scan-blocks-send-before-completion"
+section = "14"
+title = "Initial scan blocks Send before completion"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/wallet_manager/actor/**",
+    "rust/src/manager/wallet_manager/ledger_state.rs",
+    "ios/Cove/Flows/SendFlow/SendFlowContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+# the rust spend guard decides; the alert wiring is platform code
+
+[[row]]
+id = "s14-unused-signet-wallet-initial-scan-completes"
+section = "14"
+title = "Unused Signet wallet initial scan completes"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/actor/scan.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletContainer.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/SelectedWalletScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsScanState.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsCardView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s14-initial-scan-hides-coin-control"
+section = "14"
+title = "Initial scan hides coin control"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/manager/wallet_manager/ledger_state.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/MoreInfoPopover.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/WalletMoreOptionsSheet.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+
+[[row]]
+id = "s14-ios-receive-copy-control-below-the-screen"
+section = "14"
+title = "iOS Receive Copy control below the screen"
+platforms = ["ios"]
+target = "ui"
+paths = [
+    "ios/Cove/Flows/SelectedWalletFlow/ReceiveView.swift",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android N/A
+# blocked by the mirror viewport, not an app defect; a simulator test can read the control frame
+
+[[row]]
+id = "s14-ios-wallet6-initial-scan-progresses"
+section = "14"
+title = "iOS Wallet6 initial scan progresses"
+platforms = ["ios"]
+target = "rust"
+paths = [
+    "rust/src/manager/wallet_manager/actor/scan.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s14-ios-initial-scan-continues-after-background"
+section = "14"
+title = "iOS initial scan continues after background"
+platforms = ["ios"]
+target = "device"
+paths = [
+    "rust/src/manager/wallet_manager/actor/scan.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletContainer.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/SelectedWalletScreen.swift",
+    "ios/Cove/BackgroundScanTaskHandler.swift",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android N/A
+# needs an os background and foreground
+
+[[row]]
+id = "s14-ios-receipt-label-persists-after-settled-save"
+section = "14"
+title = "iOS receipt label persists after settled save"
+platforms = ["ios"]
+target = "rust"
+paths = [
+    "rust/src/label_manager.rs",
+    "rust/src/manager/wallet_manager.rs",
+    "rust/src/manager/wallet_manager/**",
+    "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsLabelView.swift",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android N/A
+
+[[row]]
+id = "s14-beta-currency-change-preserves-satoshi-balance"
+section = "14"
+title = "Beta currency change preserves satoshi balance"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/fiat.rs",
+    "rust/src/fiat/**",
+    "ios/Cove/Flows/SettingsFlow/MainSettingsSections.swift",
+    "ios/Cove/Flows/SelectedWalletFlow/WalletBalanceHeaderView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/FiatCurrencySettingsScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/WalletBalanceHeaderView.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+# the risk is the home screen not refreshing fiat values after a currency change
+
+[[row]]
+id = "s14-beta-send-unit-change-keeps-amount-and"
+section = "14"
+title = "Beta send unit change keeps amount and fee"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/manager/send_flow_manager.rs",
+    "rust/src/manager/send_flow_manager/amount_input.rs",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/**",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android PASS
+# unit changes go through the send flow manager's selected unit action
+
+[[row]]
+id = "s14-beta-unreachable-custom-electrum-is-rejected"
+section = "14"
+title = "Beta unreachable custom Electrum is rejected"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/node.rs",
+    "rust/src/node_connect.rs",
+    "rust/src/node/client/electrum.rs",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeSelectionView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+
+[[row]]
+id = "s14-beta-custom-esplora-changes-https-url-to"
+section = "14"
+title = "Beta custom Esplora changes HTTPS URL to SSL"
+platforms = ["ios", "android"]
+target = "rust"
+paths = [
+    "rust/src/node.rs",
+    "rust/src/node_connect.rs",
+    "rust/src/node/client/esplora.rs",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeSelectionView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
+]
+coverage = [
+    "rust:rust/src/node_connect.rs::parse_custom_node_keeps_an_esplora_url_as_entered",
+    "rust:rust/src/node.rs::check_url_gives_up_on_a_node_that_never_responds",
+]
+# 1.4.0: ios FAIL, android FAIL
+
+[[row]]
+id = "s14-beta-custom-node-preset-restored-after-rejection"
+section = "14"
+title = "Beta custom node preset restored after rejection"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/node.rs",
+    "rust/src/node/**",
+    "rust/src/node_connect.rs",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeSelectionView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios PASS, android PASS
+# the screens decide whether a rejected node replaces the saved preset
+
+[[row]]
+id = "s14-custom-esplora-error-physical-screenshot"
+section = "14"
+title = "Custom Esplora error physical screenshot"
+platforms = ["android"]
+target = "manual"
+paths = [
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios N/A, android HUMAN
+# the protected alert returns no screencap over adb
+
+[[row]]
+id = "s14-beta-successful-custom-electrum-scan"
+section = "14"
+title = "Beta successful custom Electrum scan"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+    "rust/src/node.rs",
+    "rust/src/node_connect.rs",
+    "rust/src/node/client/electrum.rs",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeSelectionView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
+]
+coverage = [
+    "agent",
+]
+# 1.4.0: ios BLOCKED, android BLOCKED
+# needs a reachable signet electrum server fixture

@@ -1,0 +1,37 @@
+[[row]]
+id = "s20-ios-to-android-complete-keyteleport-migration"
+section = "20"
+title = "iOS to Android complete KeyTeleport migration"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "rust/src/key_teleport.rs",
+    "rust/src/manager/key_teleport_manager.rs",
+    "rust/src/manager/key_teleport_manager/**",
+    "ios/Cove/Flows/KeyTeleportFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# needs two phones
+
+[[row]]
+id = "s20-android-to-ios-private-key-migration"
+section = "20"
+title = "Android to iOS private-key migration"
+platforms = ["ios", "android"]
+target = "manual"
+paths = [
+    "rust/src/key_teleport.rs",
+    "rust/src/manager/key_teleport_manager.rs",
+    "rust/src/manager/key_teleport_manager/**",
+    "ios/Cove/Flows/KeyTeleportFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
+]
+coverage = [
+    "human",
+]
+# 1.4.0: ios HUMAN, android HUMAN
+# needs two phones
