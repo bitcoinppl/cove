@@ -41,17 +41,14 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
-      - name: Install Swift lint tools
+      - name: Install pinned Swift lint tools
         run: |
-          brew update
-          brew upgrade swiftformat || brew install swiftformat
-          brew upgrade swiftlint || brew install swiftlint
-          swiftformat --version
-          swiftlint version
+          tools/swift-tool.sh swiftformat --version
+          tools/swift-tool.sh swiftlint version
       - name: SwiftFormat
-        run: swiftformat --lint ios --reporter github-actions-log --swiftversion 6
+        run: tools/swift-tool.sh swiftformat --lint ios --reporter github-actions-log --swiftversion 6
       - name: SwiftLint
-        run: swiftlint lint --config .swiftlint.yml --reporter github-actions-logging
+        run: tools/swift-tool.sh swiftlint lint --config .swiftlint.yml --reporter github-actions-logging
       - name: Test Cove Swift lint rules
         run: swift test --package-path tools/cove-swift-lint
       - name: Cove Swift lint rules

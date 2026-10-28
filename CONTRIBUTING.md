@@ -13,7 +13,7 @@ Prefer direct, structurally correct fixes over temporary workarounds. The right 
 - [Rust](https://rustup.rs)
 - [Just](https://github.com/casey/just) (`cargo install just`)
 - `cargo-nextest` (`cargo install cargo-nextest`)
-- **iOS**: Xcode 16.0+, swiftformat 0.64.0+
+- **iOS**: Xcode 16.0+ (`just lint-swift` and `just fmt-swift` download the pinned swiftformat and swiftlint versions from `tools/swift-tool.sh`)
 - **Android**: Android Studio + NDK, Java 17/JDK
 - **Optional**: bacon, watchexec
 

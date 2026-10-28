@@ -315,8 +315,8 @@ lint-android *flags="":
 # [bounded] Lint Swift code and Cove-specific SwiftUI structure
 [group('lint')]
 lint-swift *flags="":
-    swiftformat --lint ios --swiftversion 6 {{ flags }}
-    swiftlint lint --config .swiftlint.yml
+    tools/swift-tool.sh swiftformat --lint ios --swiftversion 6 {{ flags }}
+    tools/swift-tool.sh swiftlint lint --config .swiftlint.yml
     swift test --package-path tools/cove-swift-lint
     swift run --package-path tools/cove-swift-lint cove-swift-lint ios --config .swift-ast-lint.yml
 
@@ -373,7 +373,7 @@ alias fi := fmt-swift
 [group('format')]
 [private]
 fmt-swift:
-    swiftformat ios --swiftversion 6
+    tools/swift-tool.sh swiftformat ios --swiftversion 6
 
 # Format Android code
 [group('format')]
