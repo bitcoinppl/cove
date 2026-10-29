@@ -217,12 +217,14 @@ fn handle(chain: &FakeChain, method: &str, params: &[Value]) -> Result<Value, Rp
                 return Ok(json!(raw));
             }
 
-            let confirmations = match entry.location {
-                TxLocation::Mempool => 0,
-                TxLocation::Confirmed { height } => chain.tip_height() - height + 1,
-            };
+            // electrs forwards bitcoind's `getrawtransaction`, which leaves out
+            // `confirmations` for a transaction that is not in a block
+            let mut reply = json!({ "txid": txid, "hex": raw });
+            if let TxLocation::Confirmed { height } = entry.location {
+                reply["confirmations"] = json!(chain.tip_height() - height + 1);
+            }
 
-            Ok(json!({ "txid": txid, "hex": raw, "confirmations": confirmations }))
+            Ok(reply)
         }
 
         "blockchain.transaction.get_merkle" => {

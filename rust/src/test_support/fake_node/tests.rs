@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use bdk_electrum::electrum_client::{self, Client as ElectrumClient, ElectrumApi as _};
 use bdk_esplora::esplora_client;
@@ -338,4 +338,23 @@ async fn rebroadcasts_are_accepted_until_the_transaction_confirms() {
 
     let electrum_error = electrum.transaction_broadcast(&tx).unwrap_err().to_string();
     assert!(electrum_error.contains("already in block chain"), "{electrum_error}");
+}
+
+#[tokio::test]
+async fn pending_transactions_are_not_reported_as_confirmed() {
+    let node = FakeNode::start(Network::Bitcoin);
+    let txid = node.chain().pay(&test_script(9), Amount::from_sat(5_000));
+    let clients = clients(&node).await;
+
+    // bitcoind leaves `confirmations` out of a mempool transaction's verbose reply
+    for (api, client) in &clients {
+        let pending = client.get_confirmed_transaction(Arc::new(txid)).await;
+        assert!(matches!(pending, Ok(None)), "{api:?} pending: {pending:?}");
+    }
+
+    node.chain().confirm(txid);
+    for (api, client) in &clients {
+        let confirmed = client.get_confirmed_transaction(Arc::new(txid)).await.unwrap();
+        assert_eq!(confirmed.map(|tx| tx.compute_txid()), Some(txid), "{api:?} confirmed");
+    }
 }
