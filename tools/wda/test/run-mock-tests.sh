@@ -7,7 +7,8 @@ tmp="$(mktemp -d)"
 port=$((20000 + RANDOM % 20000))
 python3 -I "$here/test/mock-wda.py" "$port" "$tmp/requests.log" &
 srv=$!
-trap 'kill $srv 2>/dev/null; rm -rf "$tmp"' EXIT
+# stand-in tools record their pids in stub-pids, so none outlives the suite
+trap '{ kill $srv $(cat "$tmp/stub-pids" 2>/dev/null); wait $srv; } 2>/dev/null; rm -rf "$tmp"' EXIT
 export WDA_BASE_URL="http://127.0.0.1:$port" WDA_STATE="$tmp/state" IOS_UDID=TEST-UDID
 for _ in $(seq 50); do curl -sf "$WDA_BASE_URL/status" >/dev/null && break; sleep 0.1; done
 
@@ -83,6 +84,77 @@ wait $locker
 expect "stop after the lock frees" 0 'd["ok"]' -- "${locked_env[@]}" "$here/wda-stop"
 # wda-start runs wda-stop under its lock, so the child must not wait on its own parent
 expect "child of the holder" 0 'd["ok"] and d["action"]=="wda-stop"' -- "${locked_env[@]}" bash -c '. "$1"; lock_state; "$2"; true' _ "$here/wda-env.sh" "$here/wda-stop"
+
+# stand-ins for xcodebuild, iproxy and the device tools. Each runs under a symlink to bash named
+# after the tool, so ps reports that name for it the way it does for the real tool
+mkdir -p "$tmp/bin" "$tmp/interp"
+stub() { # stub NAME BODY
+  ln -s /bin/bash "$tmp/interp/$1"
+  printf '#!%s\n%s\n' "$tmp/interp/$1" "$2" >"$tmp/bin/$1"
+  chmod +x "$tmp/bin/$1"
+}
+# a long-running stand-in records its pid in NAME-ARG1.pid, then on SIGTERM waits
+# STUB_STOP_DELAY seconds, touches NAME-ARG1.stopped and exits
+export STUB_DIR="$tmp"
+long_running='echo $$ >>"$STUB_DIR/stub-pids"
+mark="$STUB_DIR/$(basename "$0")-$1"
+echo $$ >"$mark.pid"
+trap '\''kill $!; sleep "${STUB_STOP_DELAY:-0}"; touch "$mark.stopped"; exit 143'\'' TERM
+sleep 30 & wait'
+# STUB_RUNNER_EXIT makes the runner fail a second in, after the forward has started
+stub xcodebuild '[ "$1" = test-without-building ] && [ -n "${STUB_RUNNER_EXIT:-}" ] && { sleep 1; exit "$STUB_RUNNER_EXIT"; }
+'"$long_running"
+stub iproxy "$long_running"
+stub idevice_id 'echo "$IOS_UDID"'
+stub security 'echo "$IOS_UDID"'
+alive() { kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null; }
+stub_env=(env PATH="$tmp/bin:$PATH" WDA_DERIVED="$tmp/derived")
+
+# wda-build stops its xcodebuild before a signal ends it, so the lock never frees mid-build
+git init -q "$tmp/wda-repo" && git -C "$tmp/wda-repo" -c user.name=t -c user.email=t commit -q --allow-empty -m x
+"${stub_env[@]}" WDA_STATE="$tmp/buildstate" WDA_REPO="$tmp/wda-repo" WDA_COMMIT="$(git -C "$tmp/wda-repo" rev-parse HEAD)" \
+  STUB_STOP_DELAY=1 "$here/wda-build" >"$tmp/build.json" &
+build=$!
+for _ in $(seq 50); do [ -s "$tmp/xcodebuild-build-for-testing.pid" ] && break; sleep 0.1; done
+kill -TERM $build
+wait $build
+if [ -e "$tmp/xcodebuild-build-for-testing.stopped" ] && ! alive "$tmp/xcodebuild-build-for-testing.pid" &&
+  grep -q '"error": "interrupted"' "$tmp/build.json"; then
+  echo "ok   build signal stops xcodebuild first"
+else
+  echo "FAIL build signal: $(cat "$tmp/build.json")"; fail=1
+fi
+
+# a start whose runner exits early stops the forward it started, so the port is free again
+mkdir -p "$tmp/derived/Build/Products/Debug-iphoneos/WebDriverAgentRunner-Runner.app"
+touch "$tmp/derived/Build/Products/WebDriverAgentRunner.xctestrun"
+python3 -I -c 'import plistlib, sys; plistlib.dump({"CFBundleIdentifier": "com.avencera.WebDriverAgentRunner.xctrunner"}, open(sys.argv[1], "wb"))' \
+  "$tmp/derived/Build/Products/Debug-iphoneos/WebDriverAgentRunner-Runner.app/Info.plist"
+start_state="$tmp/startstate/devices/TEST-UDID"
+expect "start stops its forward when the runner exits" 1 'd["error"]=="xcodebuild_exited"' -- \
+  "${stub_env[@]}" WDA_STATE="$tmp/startstate" WDA_PORT=1 WDA_BASE_URL=http://127.0.0.1:1 STUB_RUNNER_EXIT=65 "$here/wda-start"
+if [ -s "$tmp/iproxy--u.pid" ] && ! alive "$tmp/iproxy--u.pid" && [ ! -e "$start_state/iproxy.pid" ] && [ ! -e "$start_state/port" ]; then
+  echo "ok   failed start leaves no forward or pid files"
+else
+  echo "FAIL failed start left a forward or $(ls "$start_state")"; fail=1
+fi
+
+# wda-stop leaves a recorded pid alone when another phone's runner reused it
+stop_state="$tmp/stopstate/devices"
+mkdir -p "$stop_state/PHONE-A" "$stop_state/PHONE-B"
+"$tmp/bin/xcodebuild" test-without-building -xctestrun x -destination id=PHONE-B &
+echo $! | tee "$stop_state/PHONE-A/xcodebuild.pid" >"$stop_state/PHONE-B/xcodebuild.pid"
+"$tmp/bin/iproxy" -u PHONE-B 8101:8100 &
+echo $! | tee "$stop_state/PHONE-A/iproxy.pid" >"$stop_state/PHONE-B/iproxy.pid"
+expect "stop skips another phone's pids" 0 'd["stopped"]=="none"' -- \
+  env WDA_STATE="$tmp/stopstate" IOS_UDID=PHONE-A "$here/wda-stop"
+if alive "$stop_state/PHONE-B/xcodebuild.pid" && alive "$stop_state/PHONE-B/iproxy.pid" && [ -z "$(ls "$stop_state/PHONE-A")" ]; then
+  echo "ok   other phone's runner survives, stale pid files removed"
+else
+  echo "FAIL other phone's runner was stopped or stale pid files kept"; fail=1
+fi
+expect "stop stops its own phone's pids" 0 '"PHONE-B:xcodebuild:" in d["stopped"] and "PHONE-B:iproxy:" in d["stopped"]' -- \
+  env WDA_STATE="$tmp/stopstate" IOS_UDID=PHONE-B "$here/wda-stop"
 expect "vis bad args" 2 'd["error"]=="usage"' -- "$here/ios-vis" --all
 expect "vis dry-run" 0 'd["dry_run"] and "would_send" in d' -- "$here/ios-vis" --dry-run
 [ "$(head -c4 "$tmp/out/shot.png" | tail -c3)" = "PNG" ] && echo "ok   shot file is a PNG" || { echo "FAIL shot file"; fail=1; }

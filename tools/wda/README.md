@@ -26,9 +26,9 @@ Needs Xcode signed in to the signing team (`WDA_TEAM`, default Cove's team) and 
 | --- | --- |
 | `wda-doctor` | check prerequisites, print the next fix; read-only |
 | `wda-fetch` | clone the pinned WebDriverAgent release and verify its commit; `wda-build` calls it |
-| `wda-build` | signed `build-for-testing` for a generic iOS destination; `wda-start` calls it when needed |
-| `wda-start` | build if needed, run WDA on the phone, forward `localhost:$WDA_PORT`, wait for `/status` |
-| `wda-stop` | stop the runner and forward that `wda-start` started for `IOS_UDID`, or for every phone when it is unset |
+| `wda-build` | signed `build-for-testing` for a generic iOS destination; `wda-start` calls it when needed. A signal stops its `xcodebuild` before it exits |
+| `wda-start` | build if needed, run WDA on the phone, forward `localhost:$WDA_PORT`, wait for `/status`. When it fails, it stops the runner and forward it started |
+| `wda-stop` | stop the runner and forward that `wda-start` started for `IOS_UDID`, or for every phone when it is unset. A recorded pid whose process arguments don't name that phone is treated as stale and left running |
 | `ios-launch [--activate] BUNDLE_ID` | launch an app (`--activate` brings a running app forward instead of relaunching) |
 | `ios-vis [-a]` | one line per visible element with a label, id or value, with its tap center and size in points; `-a` includes hidden ones |
 | `ios-source [--json] [--raw]` | accessibility tree, XML by default; `--raw` prints only the tree |
@@ -94,6 +94,7 @@ Offline check of the commands against a mock server: `tools/wda/test/run-mock-te
 - **`status_timeout`.** The phone is probably locked or showing a passcode or trust prompt. Unlock it and rerun
 - **`wda_unreachable` from an `ios-*` command.** `wda-start` isn't running or `iproxy` died. Check `state/devices/<udid>/iproxy.log`, then `lsof -i :8100` for another process on the port
 - **`proxy_exited` from `wda-start`.** This phone's `iproxy` couldn't keep the port, usually because another process holds it. Check `state/devices/<udid>/iproxy.log` and `lsof -i :8100`
+- **`interrupted` from `wda-build`.** A signal stopped the build, and `wda-build` stopped its `xcodebuild` before releasing the lock. Rerun `wda-build`
 - **`locked` from `wda-start`, `wda-stop` or `wda-build`.** Another of them ran longer than `WDA_LOCK_WAIT`, usually a first build. Rerun when it finishes, or raise `WDA_LOCK_WAIT`
 - **`port_in_use` from `wda-start`.** Another phone's runner answers on the port. `WDA_PORT=8101 wda-start` moves this one; use the same variable for its `ios-*` commands
 - **Black screenshots, the same small image every time, or elements not found.** The screen is asleep even though WDA reports it unlocked. Unlock it, and set Auto-Lock to Never for the session

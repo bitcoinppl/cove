@@ -55,11 +55,29 @@ pid_alive() { # pid_alive PIDFILE NAME
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && ps -p "$pid" -o comm= | grep -q "$2"
 }
 
+# true when PIDFILE names a live NAME process whose arguments contain ARGS as whole words. A
+# name alone doesn't say which phone a reused pid now serves, but the UDID in its arguments does
+pid_owned() { # pid_owned PIDFILE NAME ARGS
+  pid_alive "$1" "$2" || return 1
+  ps -p "$(cat "$1")" -o args= | grep -qE -- "(^| )$3( |\$)"
+}
+
 # true when this phone's recorded iproxy is alive and forwarding PORT for it, so a port that
 # another phone's runner took over is never mistaken for this one
 proxy_serves() { # proxy_serves STATE_DIR UDID PORT
-  pid_alive "$1/iproxy.pid" iproxy || return 1
-  ps -p "$(cat "$1/iproxy.pid")" -o args= | grep -q -- "-u $2 $3:8100"
+  pid_owned "$1/iproxy.pid" iproxy "-u $2 $3:8100"
+}
+
+# stop PID and wait for it to exit, forcing it after 5 s: a restart binds the same port and
+# device session right after this returns
+stop_pid() { # stop_pid PID
+  kill "$1" 2>/dev/null || return 0
+  for _ in $(seq 50); do
+    kill -0 "$1" 2>/dev/null || return 0
+    sleep 0.1
+  done
+  kill -9 "$1" 2>/dev/null
+  return 0
 }
 
 # hold the lock on WDA state for the rest of this script. wda-start, wda-stop and wda-build take
