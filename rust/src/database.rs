@@ -281,6 +281,31 @@ pub(crate) mod test_support {
         let _ = DATABASE_LOCATION_OVERRIDE.set(root.join("cove.encrypted.db"));
     }
 
+    /// Restores the selected network and wallet mode when dropped
+    ///
+    /// Tests that switch networks or modes bind one after the global-state lock guard, so the
+    /// process-global config is restored before the lock is released, even when the test panics
+    pub(crate) struct RestoreWalletTarget(global_config::SelectedWalletTarget);
+
+    impl RestoreWalletTarget {
+        /// Captures the currently selected network and wallet mode
+        pub(crate) fn capture() -> Self {
+            Self(Database::global().global_config.wallet_target())
+        }
+    }
+
+    impl Drop for RestoreWalletTarget {
+        fn drop(&mut self) {
+            let config = &Database::global().global_config;
+            let global_config::SelectedWalletTarget { network, mode } = self.0;
+            let _ = config.set_selected_network(network);
+            let _ = match mode {
+                crate::wallet::metadata::WalletMode::Main => config.set_main_mode(),
+                crate::wallet::metadata::WalletMode::Decoy => config.set_decoy_mode(),
+            };
+        }
+    }
+
     pub(crate) fn delete_database() {
         init_test_database();
         let root = process_test_data_dir();
