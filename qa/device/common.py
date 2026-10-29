@@ -56,6 +56,8 @@ class Node:
     package: str
     # false while a control is shown but can't be used, such as a button waiting for data to load
     enabled: bool = True
+    # true for a list whose content doesn't fit, so some of its rows are off screen
+    scrollable: bool = False
 
     @property
     def label(self) -> str:
