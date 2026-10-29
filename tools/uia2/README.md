@@ -52,7 +52,7 @@ export ANDROID_SERIAL=<serial from adb devices>   # needed only when several dev
 | `android-tap X Y` | tap at pixel coordinates |
 | `android-tap-label [--nth N] [--wait S] LABEL` | tap the element whose test tag, text or content-desc equals LABEL, waiting up to S seconds (default 5) for it to appear; the first lookup always completes |
 | `android-pin DIGITS` | tap a PIN on Cove's keypad by its test tags (`numberPadPin.digit.N`); fails when that keypad isn't showing |
-| `android-type [--enter] [--] TEXT` | set the focused field to TEXT, report whether the field took it, then press Enter if asked |
+| `android-type [--enter] [--] TEXT` | set the focused field to TEXT, report whether the field took it, then press Enter if asked; refuses TEXT ending in a literal `\n`, which the server would read as Enter |
 | `android-swipe [--hold S] up\|down\|left\|right` | finger swipe across the middle of the screen; `up` moves the finger up, so a list shows items further down |
 | `android-drag [--hold S] X1 Y1 X2 Y2` | press at X1,Y1 for S seconds (default 1), then drag to X2,Y2 |
 | `android-hold X Y [SECONDS]` | long-press at pixel coordinates (default 1 s) |

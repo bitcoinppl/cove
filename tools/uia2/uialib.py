@@ -309,6 +309,12 @@ def cmd_type(args, dry):
     if len(args) != 1:
         raise Fail("usage", "usage: android-type [--dry-run] [--enter] [--] TEXT (replaces the focused field's text; quote it, and put -- before text that starts with -)")
     text = args[0]
+    # the server presses Enter after setting text that ends in a literal backslash-n, and keeps the
+    # backslash-n in the field (SendKeysToElement in v10.6.6); both routes to it do this, and a split
+    # send would need the field's text read back, which password fields hide, so refuse the text
+    if text.endswith("\\n"):
+        raise Fail("usage", "android-type can't type text that ends in a literal \\n: the server reads it as an Enter request; "
+                            "type it without the trailing \\n and pass --enter to press Enter")
     body = {"text": text, "replace": True}
     enter_req = ("/appium/device/press_keycode", {"keycode": KEYCODES["enter"]})
     if dry:

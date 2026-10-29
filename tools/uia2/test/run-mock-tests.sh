@@ -101,6 +101,12 @@ check "type enter presses Enter" sent /appium/device/press_keycode '{"keycode": 
 [ "$(requests | grep -E '^/keys$|press_keycode' | tr '\n' ' ')" = "/keys /appium/device/press_keycode " ] &&
   echo "ok   type enter presses Enter after setting the text" || { echo "FAIL type enter order: $(requests | tr '\n' ' ')"; fail=1; }
 expect "type no args" 2 'd["error"]=="usage"' -- "$here/android-type"
+# the server presses Enter for text ending in a literal backslash-n, so it never reaches the server
+: >"$tmp/requests.log"
+expect "type refuses a trailing backslash-n" 2 'd["error"]=="usage" and "secret" not in d["message"]' -- "$here/android-type" 'secret\n'
+check "type refuses a trailing backslash-n before sending" test ! -s "$tmp/requests.log"
+expect "type keeps a backslash-n inside the text" 0 'd["enter"] is False' -- "$here/android-type" 'a\nb'
+check "type sends an inner backslash-n as is" sent /keys '{"text": "a\\nb", "replace": true}'
 # after --, text that looks like a flag is typed as is
 expect "type flag-looking text after --" 0 'd["enter"] is False' -- "$here/android-type" -- --enter
 check "type sends the literal text after --" sent /keys '{"text": "--enter", "replace": true}'
