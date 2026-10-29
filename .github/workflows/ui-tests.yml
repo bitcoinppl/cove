@@ -1,0 +1,142 @@
+name: UI tests
+
+# emulator and simulator suites take far longer than the rest of CI, so they
+# run after merge, nightly, and on PRs that opt in with the `ui-tests` label
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 08:00 UTC is 03:00 US Central during daylight time and 02:00 in winter
+    - cron: "0 8 * * *"
+  push:
+    branches:
+      - master
+  # any base branch, so stacked PRs can opt in too; the job condition checks the label
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_HTTP_MULTIPLEXING: "false"
+  CARGO_NET_RETRY: "10"
+
+jobs:
+  android-instrumented:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    # one flavour per job: with both in one job the hosted runner shut down about 35 minutes in, twice
+    strategy:
+      fail-fast: false
+      matrix:
+        flavour: [Dev, UiTest]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          cache-bin: false
+          prefix-key: v1-rust-android-x86_64
+
+      - name: Set up just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Install build dependencies
+        run: cd rust && cargo --locked xtask install-deps
+
+      # the hosted emulator is x86_64, which the default arm64-only build skips
+      - name: Build Rust FFI for the x86_64 emulator
+        run: just xtask build-android debug --x86-64
+
+      - name: Run instrumented tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          # headroom for the software-rendered launcher, which stops responding on a busy emulator;
+          # the DismissAnrDialogs test listener clears its dialog when it does anyway
+          cores: 4
+          ram-size: 4096M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: just android-instrumented-ci ${{ matrix.flavour }}
+
+      - name: Upload Android test reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-instrumented-reports-${{ matrix.flavour }}
+          path: |
+            android/app/build/reports/androidTests/connected
+            android/app/build/outputs/androidTest-results/connected
+          retention-days: 7
+
+  ios-ui:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
+    runs-on: macos-26
+    # each test erases and reboots the simulator, about 6 minutes a test on the hosted runner
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          cache-bin: false
+          cache-targets: false
+          prefix-key: v2-rust-ios
+
+      - name: Set up just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      - name: Build Rust FFI bindings
+        run: just build-ios
+
+      # xtask resets the simulator before each test so every one starts at first launch
+      # xcodebuild passes TEST_RUNNER_-prefixed variables to the test process without the prefix
+      - name: Run CoveUITests
+        env:
+          TEST_RUNNER_COVE_SKIP_QUARANTINED: "1"
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17"
+
+      # CoveCloudBackupUITests stays out until its inventory scenarios pass on master; see #947
+
+      - name: Upload iOS test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ui-xcresults
+          path: ~/Library/Developer/Xcode/DerivedData/*/Logs/Test/*.xcresult
+          retention-days: 7

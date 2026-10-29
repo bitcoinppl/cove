@@ -26,6 +26,7 @@ pub use google_play::{release_android, upload_google_play};
 const ANDROID_TARGETS: &[&str] =
     &["aarch64-linux-android", "armv7-linux-androideabi", "x86_64-linux-android"];
 const ARM64_ANDROID_TARGET: &str = "aarch64-linux-android";
+const X86_64_ANDROID_TARGET: &str = "x86_64-linux-android";
 const JNI_LIBS_DIR: &str = "../android/app/src/main/jniLibs";
 const ANDROID_KOTLIN_DIR: &str = "../android/app/src/main/java";
 const BINDINGS_DIR: &str = "./bindings/kotlin";
@@ -79,6 +80,7 @@ pub enum BuildProfile {
 pub enum AndroidBuildTargets {
     All,
     Arm64,
+    X86_64,
     ConnectedDevice,
 }
 
@@ -204,6 +206,7 @@ fn resolve_targets(sh: &Shell, build_targets: AndroidBuildTargets) -> Result<Vec
     match build_targets {
         AndroidBuildTargets::All => Ok(ANDROID_TARGETS.to_vec()),
         AndroidBuildTargets::Arm64 => Ok(vec![ARM64_ANDROID_TARGET]),
+        AndroidBuildTargets::X86_64 => Ok(vec![X86_64_ANDROID_TARGET]),
         AndroidBuildTargets::ConnectedDevice => Ok(vec![connected_device_target(sh)?]),
     }
 }
@@ -249,6 +252,9 @@ pub fn build_android(
         AndroidBuildTargets::All => {}
         AndroidBuildTargets::Arm64 => {
             print_warning("Only building native Rust library for ARM64 Android devices");
+        }
+        AndroidBuildTargets::X86_64 => {
+            print_warning("Only building native Rust library for x86_64 Android emulators");
         }
         AndroidBuildTargets::ConnectedDevice => {
             print_warning("Only building native Rust library for the connected Android device ABI");
