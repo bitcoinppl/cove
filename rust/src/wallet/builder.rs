@@ -923,10 +923,29 @@ mod tests {
     const BIP49_TESTNET_UPUB: &str = "upub5EFU65HtV5TeiSHmZZm7FUffBGy8UKeqp7vw43jYbvZPpoVsgU93oac7Wk3u6moKegAEWtGNF8DehrnHtv21XXEMYRUocHqguyjknFHYfgY";
     const BIP84_TESTNET_VPUB: &str = "vpub5Y6cjg78GGuNLsaPhmYsiw4gYX3HoQiRBiSwDaBXKUafCt9bNwWQiitDk5VZ5BVxYnQdwoTyXSs2JHRPAgjAvtbBrf8ZhDYe2jWAqvZVnsc";
 
-    fn init_import_globals() {
+    /// Restores the selected network and wallet mode when dropped, so import tests that
+    /// switch networks leave the process-global database as they found it
+    struct RestoreWalletTarget(SelectedWalletTarget);
+
+    impl Drop for RestoreWalletTarget {
+        fn drop(&mut self) {
+            let config = &Database::global().global_config;
+            let SelectedWalletTarget { network, mode } = self.0;
+            let _ = config.set_selected_network(network);
+            let _ = match mode {
+                crate::wallet::metadata::WalletMode::Main => config.set_main_mode(),
+                crate::wallet::metadata::WalletMode::Decoy => config.set_decoy_mode(),
+            };
+        }
+    }
+
+    // hold the returned guard after the global-state lock so it restores before the lock is released
+    fn init_import_globals() -> RestoreWalletTarget {
         crate::test_support::ensure_tokio_runtime();
         crate::database::test_support::init_test_database();
         crate::test_support::init_test_keychain();
+
+        RestoreWalletTarget(Database::global().global_config.wallet_target())
     }
 
     fn wallet_count(network: Network) -> usize {
@@ -955,7 +974,7 @@ mod tests {
     #[test]
     fn bare_slip132_public_keys_import_with_expected_type_and_first_receive_address() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
-        init_import_globals();
+        let _restore_target = init_import_globals();
 
         for (key, network, address_type, first_receive) in [
             (
@@ -1009,7 +1028,7 @@ mod tests {
     #[test]
     fn ypub_file_contents_with_surrounding_whitespace_import_as_wrapped_segwit() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
-        init_import_globals();
+        let _restore_target = init_import_globals();
 
         for contents in
             [format!("{BIP49_YPUB}\n"), format!("{BIP49_YPUB}\r\n"), format!("  {BIP49_YPUB}\n\n")]
@@ -1026,7 +1045,7 @@ mod tests {
     #[test]
     fn slip132_public_key_for_another_network_is_rejected_without_saving_a_wallet() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
-        init_import_globals();
+        let _restore_target = init_import_globals();
 
         for (key, network) in [
             (BIP49_YPUB, Network::Testnet),
@@ -1052,7 +1071,7 @@ mod tests {
     #[test]
     fn corrupt_vpub_checksum_is_rejected_without_saving_a_wallet() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
-        init_import_globals();
+        let _restore_target = init_import_globals();
 
         // last base58 character changed, which breaks the checksum
         let corrupt = format!("{}x", &BIP84_TESTNET_VPUB[..BIP84_TESTNET_VPUB.len() - 1]);
@@ -1070,7 +1089,7 @@ mod tests {
     #[test]
     fn extended_private_keys_are_rejected_in_public_key_import() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
-        init_import_globals();
+        let _restore_target = init_import_globals();
 
         // public BIP32 test vector 1 master keys, never funded
         let xprv = "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi";
@@ -1093,7 +1112,7 @@ mod tests {
     #[test]
     fn importing_a_multi_account_json_export_twice_reports_the_existing_wallet() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
-        init_import_globals();
+        let _restore_target = init_import_globals();
         Database::global().global_config.set_selected_network(Network::Bitcoin).unwrap();
         Database::global().global_config.set_main_mode().unwrap();
 
