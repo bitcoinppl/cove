@@ -555,8 +555,9 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
 ]
 coverage = [
+    "agent",
     "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::custom_electrum_node_scans_the_wallet_after_being_saved",
     "rust:rust/src/node_connect.rs::reachable_custom_nodes_are_saved_as_the_selected_node",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# the rust tests run the scan against an in-process electrum server; the node screen is platform code
+# the rust tests run the scan against an in-process electrum server; the node screen's parsing and submit stay with the agent
