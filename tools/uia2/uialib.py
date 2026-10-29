@@ -9,6 +9,7 @@ import fcntl
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -24,6 +25,8 @@ SWIPE_HOLD = 0.05
 SWIPE_MOVE_MS = 300
 DRAG_MOVE_MS = 500
 SECURE_SCREEN = "unable to capture screen"
+# Android's package name grammar; android-launch rejects anything else before it reaches `adb shell`
+PACKAGE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+")
 
 # key names accepted by android-key, so agents don't need the numeric codes
 KEYCODES = {"home": 3, "back": 4, "tab": 61, "enter": 66, "del": 67, "menu": 82, "escape": 111,
@@ -596,13 +599,16 @@ def cmd_launch(args, dry):
     # an unknown flag must not fall through to a force-stop that wipes the app's in-memory state
     args, activate = pop_flag(args, "--activate")
     pkgs = operands(args)
-    if len(pkgs) != 1 or pkgs[0].startswith("-"):
-        raise Fail("usage", "usage: android-launch [--dry-run] [--activate] PACKAGE")
+    # adb joins `shell` arguments with spaces for the device shell, so `pkg; am force-stop other`
+    # would run a second command; an argument list doesn't prevent that, the grammar check does
+    if len(pkgs) != 1 or not PACKAGE_NAME.fullmatch(pkgs[0]):
+        raise Fail("usage", "usage: android-launch [--dry-run] [--activate] PACKAGE (an Android package name, such as org.bitcoinppl.cove)")
     pkg = pkgs[0]
+    shell_pkg = shlex.quote(pkg)
     adb = ["adb"] + (["-s", SERIAL] if SERIAL else [])
-    resolve = adb + ["shell", "cmd", "package", "resolve-activity", "--brief", "-c", "android.intent.category.LAUNCHER", pkg]
+    resolve = adb + ["shell", "cmd", "package", "resolve-activity", "--brief", "-c", "android.intent.category.LAUNCHER", shell_pkg]
     if dry:
-        return {"would_run": ([] if activate else [" ".join(adb + ["shell", "am", "force-stop", pkg])]) +
+        return {"would_run": ([] if activate else [" ".join(adb + ["shell", "am", "force-stop", shell_pkg])]) +
                 [" ".join(resolve), " ".join(adb + ["shell", "am", "start", "-W", "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", "-n", "<activity>"])]}
     r = subprocess.run(resolve, capture_output=True, text=True)
     if r.returncode != 0:
@@ -613,9 +619,10 @@ def cmd_launch(args, dry):
     if not activity:
         raise Fail("not_installed", "%s has no launcher activity on the device" % pkg)
     if not activate:
-        subprocess.run(adb + ["shell", "am", "force-stop", pkg], capture_output=True)
-    # a MAIN/LAUNCHER intent brings an existing task forward like the home screen icon does
-    r = subprocess.run(adb + ["shell", "am", "start", "-W", "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", "-n", activity],
+        subprocess.run(adb + ["shell", "am", "force-stop", shell_pkg], capture_output=True)
+    # a MAIN/LAUNCHER intent brings an existing task forward like the home screen icon does;
+    # the activity comes from the device, and a nested class name has a `$` the shell would expand
+    r = subprocess.run(adb + ["shell", "am", "start", "-W", "-a", "android.intent.action.MAIN", "-c", "android.intent.category.LAUNCHER", "-n", shlex.quote(activity)],
                        capture_output=True, text=True)
     if "Status: ok" not in r.stdout:
         raise Fail("launch_failed", (r.stdout + r.stderr).strip()[-300:])

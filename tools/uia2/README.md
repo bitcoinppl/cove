@@ -46,7 +46,7 @@ export ANDROID_SERIAL=<serial from adb devices>   # needed only when several dev
 | `uia2-fetch` | download the pinned server APKs with `gh` and verify their checksums; `uia2-start` calls it |
 | `uia2-start [--force]` | install if needed, run the server, forward `localhost:$UIA2_PORT`; refuses while other instrumentation, or another agent's server for the same device, is running |
 | `uia2-stop` | stop the server and remove its forward, leaving other forwards on the port alone; when the device can't be reached it reports `cleanup_incomplete` and keeps its state, so rerun it after reconnecting |
-| `android-launch [--activate] PACKAGE` | force-stop and start the app (`--activate` brings a running app forward instead) |
+| `android-launch [--activate] PACKAGE` | force-stop and start the app (`--activate` brings a running app forward instead); PACKAGE must be an Android package name, so shell syntax never reaches the device |
 | `android-vis [-a]` | one line per visible element worth acting on, with its tap center in pixels; `-a` includes hidden ones |
 | `android-source [--raw]` | full UI tree as XML; `--raw` prints only the tree |
 | `android-tap X Y` | tap at pixel coordinates |
