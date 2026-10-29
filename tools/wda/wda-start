@@ -54,25 +54,41 @@ TEST_CMD=(xcodebuild test-without-building -xctestrun "$XCTESTRUN" -destination 
 # stop this phone's leftovers from a previous run so its port and device session are free
 IOS_UDID="$IOS_UDID" "$(dirname "$0")/wda-stop" >/dev/null 2>&1
 
+# a failed start stops the runner and forward it started, so iproxy doesn't keep the port and a
+# later start on it can bind. Only this run's children are stopped, by the pids it got when
+# starting them. A signal exits too, so the same cleanup runs
+runner=
+proxy=
+stop_started() {
+  [ -z "$runner" ] || stop_pid "$runner"
+  [ -z "$proxy" ] || stop_pid "$proxy"
+  rm -f "$STATE_DIR/xcodebuild.pid" "$STATE_DIR/iproxy.pid" "$STATE_DIR/port"
+}
+trap stop_started EXIT
+trap 'exit 1' TERM INT HUP
+
 nohup "${TEST_CMD[@]}" >"$STATE_DIR/wda.log" 2>&1 9>&- &
-echo $! >"$STATE_DIR/xcodebuild.pid"
+runner=$!
+echo "$runner" >"$STATE_DIR/xcodebuild.pid"
 nohup "${PROXY_CMD[@]}" >"$STATE_DIR/iproxy.log" 2>&1 9>&- &
-echo $! >"$STATE_DIR/iproxy.pid"
+proxy=$!
+echo "$proxy" >"$STATE_DIR/iproxy.pid"
 echo "$WDA_PORT" >"$STATE_DIR/port"
 
 timeout="${WDA_START_TIMEOUT:-180}"
 for ((i = 0; i < timeout; i++)); do
   # a forward that couldn't bind exits. Only a dead pid counts as exited here: until nohup execs
   # iproxy, the process doesn't carry its name yet. Ownership is checked before reporting success
-  if ! kill -0 "$(cat "$STATE_DIR/iproxy.pid")" 2>/dev/null; then
+  if ! kill -0 "$proxy" 2>/dev/null; then
     die proxy_exited "iproxy for $IOS_UDID exited; another process may hold port $WDA_PORT" \
       "log=$STATE_DIR/iproxy.log" "fix=check lsof -i :$WDA_PORT, or set WDA_PORT to a free port"
   fi
   if curl -sf -m 2 "$WDA_BASE_URL/status" >/dev/null && proxy_serves "$STATE_DIR" "$IOS_UDID" "$WDA_PORT"; then
+    trap - EXIT
     json ok:raw=true action=wda-start "base_url=$WDA_BASE_URL" "udid=$IOS_UDID" "log=$STATE_DIR/wda.log"
     exit 0
   fi
-  if ! kill -0 "$(cat "$STATE_DIR/xcodebuild.pid")" 2>/dev/null; then
+  if ! kill -0 "$runner" 2>/dev/null; then
     die xcodebuild_exited "test-without-building exited before WDA answered; if the log mentions an untrusted developer, trust the certificate under Settings > General > VPN & Device Management and rerun" \
       "log=$STATE_DIR/wda.log" "log_tail=$(tail -n 15 "$STATE_DIR/wda.log")"
   fi

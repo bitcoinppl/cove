@@ -8,7 +8,7 @@ import re
 import time
 from typing import Callable
 
-from common import Device, Node, RowBlocked, RowFailed
+from common import Device, Node, RowBlocked, RowFailed, WaitTimedOut
 
 # text that only an error alert or banner carries; the app's normal copy never uses these words
 ERROR_TEXT = re.compile(r"\b(error|failed|failure|unable to|could not|couldn't|can't connect|no connection)\b", re.IGNORECASE)
@@ -73,7 +73,8 @@ def wait_for_scan_to_start(driver, evidence: dict, timeout: float = 30) -> None:
 
     The screen can't tell a scan that finished before its progress showed from one that never
     started, so a scan that never shows blocks the row instead of passing it. An error shown
-    while waiting is a clear answer, so it fails the row
+    while waiting is a clear answer, so it fails the row, and so does any other failure, such as
+    the app leaving the foreground
     """
     started = time.time()
     alerts: list[str] = []
@@ -86,9 +87,10 @@ def wait_for_scan_to_start(driver, evidence: dict, timeout: float = 30) -> None:
 
         return alert is not None or has(nodes, SCAN_IN_PROGRESS)
 
+    # only the timeout is unobservable; a crash or another app in front is a finding and must stay a failure
     try:
         driver.wait_until(started_or_failed, "a wallet history scan to show", timeout)
-    except RowFailed as error:
+    except WaitTimedOut as error:
         raise RowBlocked(
             f"no history scan showed within {timeout}s, so the row can't tell whether one started; a returning wallet "
             f"hides scan progress for its first {RETURNING_WALLET_SCAN_PROGRESS_DELAY}s, so use a wallet with "

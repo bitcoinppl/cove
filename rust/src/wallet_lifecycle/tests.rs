@@ -962,7 +962,7 @@ mod deletion_and_restore {
     use super::ShutdownDeadlineTier;
     use crate::{
         app::delete_wallet_with_tier,
-        database::Database,
+        database::{Database, test_support::RestoreWalletTarget},
         manager::import_wallet_manager::import_mnemonic_with_target,
         wallet::{
             Wallet, WalletAddressType,
@@ -981,11 +981,13 @@ mod deletion_and_restore {
         Mnemonic::from_str(words).unwrap()
     }
 
-    fn init_signet() {
+    // hold the returned guard after the global-state lock so it restores before the lock is released
+    fn init_signet() -> RestoreWalletTarget {
         crate::test_support::ensure_tokio_runtime();
         crate::test_support::init_test_keychain();
         crate::database::test_support::init_test_database();
 
+        let restore_target = RestoreWalletTarget::capture();
         let database = Database::global();
         database.global_config.set_selected_network(Network::Signet).unwrap();
         database.global_config.set_main_mode().unwrap();
@@ -994,6 +996,8 @@ mod deletion_and_restore {
         for mode in [WalletMode::Main, WalletMode::Decoy] {
             database.wallets.save_all_wallets(Network::Signet, mode, Vec::new()).unwrap();
         }
+
+        restore_target
     }
 
     fn wallet_ids(mode: WalletMode) -> Vec<WalletId> {
@@ -1035,7 +1039,7 @@ mod deletion_and_restore {
     #[tokio::test]
     async fn deleting_the_current_hot_wallet_clears_it_and_the_words_restore_it() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
-        init_signet();
+        let _restore_target = init_signet();
         let database = Database::global();
         let keychain = Keychain::global();
 
@@ -1072,7 +1076,7 @@ mod deletion_and_restore {
     #[tokio::test]
     async fn deleting_a_non_current_watch_wallet_keeps_the_selection_and_the_export_restores_it() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
-        init_signet();
+        let _restore_target = init_signet();
         let database = Database::global();
         let keychain = Keychain::global();
 
@@ -1099,7 +1103,7 @@ mod deletion_and_restore {
     #[tokio::test]
     async fn deleting_the_last_decoy_wallet_leaves_main_alone_and_the_export_restores_it() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
-        init_signet();
+        let _restore_target = init_signet();
         let database = Database::global();
 
         let main =

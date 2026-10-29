@@ -1,5 +1,7 @@
 """Offline checks for the device-script helpers; run with `python3 -I -m unittest discover qa/device`"""
 
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -8,8 +10,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from android.driver import parse_badging, parse_hierarchy  # noqa: E402
-from android.rows import wallet_names  # noqa: E402
+import run  # noqa: E402
+from android.driver import Android, parse_badging, parse_hierarchy  # noqa: E402
+from android.rows import UPGRADE_ROW, build_under_test, wallet_names  # noqa: E402
 from common import Device, ForbiddenTap, Node, RowBlocked, RowFailed, ensure_tap_allowed  # noqa: E402
 from ios.driver import Ios, parse_source  # noqa: E402
 from screens import error_text, row_registry, wait_for_scan_to_start  # noqa: E402
@@ -96,6 +99,81 @@ class IosFrontAppTest(unittest.TestCase):
 
         self.assertEqual(driver.posted, ["/wda/tap"])
 
+    def test_refuses_to_scroll_another_app(self):
+        driver = FakeWda("com.apple.Preferences")
+        driver.screen_size = lambda: (402, 874)
+
+        with self.assertRaises(RowFailed):
+            driver.scroll_down()
+        self.assertEqual(driver.posted, [])
+
+
+COVE = "org.bitcoinppl.cove.dev"
+
+
+class FakeAdb(Android):
+    """An Android driver whose device reports `front` as the resumed app and records input commands"""
+
+    def __init__(self, front: str, nodes: list[Node] | None = None):
+        super().__init__("emulator-5554", COVE)
+        self.front = front
+        self._nodes = nodes or []
+        self.inputs = []
+
+    def shell(self, *args, timeout=60):
+        if args[:2] == ("dumpsys", "activity"):
+            return f"  topResumedActivity=ActivityRecord{{37487863 u0 {self.front}/.MainActivity t2}}"
+
+        if args[:2] == ("wm", "size"):
+            return "Physical size: 1080x2400"
+
+        if args[0] == "input":
+            self.inputs.append(args)
+
+        return ""
+
+    def nodes(self):
+        return self._nodes
+
+
+def android_node(label, package):
+    return Node(label, "", "", "android.widget.TextView", (40, 300, 540, 380), package)
+
+
+class AndroidFrontAppTest(unittest.TestCase):
+    def test_refuses_a_node_from_another_package_even_with_the_app_in_front(self):
+        driver = FakeAdb(COVE)
+
+        with self.assertRaisesRegex(RowFailed, "com.android.settings"):
+            driver.tap(android_node("Settings", "com.android.settings"))
+        self.assertEqual(driver.inputs, [])
+
+    def test_refuses_to_tap_swipe_or_go_back_while_another_app_is_in_front(self):
+        driver = FakeAdb("com.android.settings")
+        actions = {
+            "tap": lambda: driver.tap(android_node("Settings", COVE)),
+            "swipe": lambda: driver.swipe(700, 1200, 100, 1200),
+            "scroll": driver.scroll_down,
+            "back": driver.back,
+        }
+
+        for name, action in actions.items():
+            with self.subTest(action=name), self.assertRaisesRegex(RowFailed, "com.android.settings is in front"):
+                action()
+        self.assertEqual(driver.inputs, [])
+
+    def test_a_package_that_only_starts_with_the_app_id_is_not_the_app(self):
+        driver = FakeAdb(COVE)
+        driver.package = "org.bitcoinppl.cove"
+
+        self.assertFalse(driver.is_foreground())
+
+    def test_taps_the_apps_own_control_when_another_window_has_the_same_label(self):
+        driver = FakeAdb(COVE, [android_node("Settings", "com.android.systemui"), android_node("Settings", COVE)])
+        driver.tap_label(r"^Settings$")
+
+        self.assertEqual(driver.inputs, [("input", "tap", "290", "340")])
+
 
 class FakeScreen(Device):
     def __init__(self, nodes):
@@ -148,6 +226,17 @@ class ScreenReadTest(unittest.TestCase):
         evidence = {}
         wait_for_scan_to_start(screen, evidence, timeout=0.6)
         self.assertIn("scan_start_seconds", evidence)
+
+    def test_the_app_leaving_the_foreground_while_waiting_for_a_scan_stays_a_failure(self):
+        screen = FakeScreen([])
+
+        def springboard_in_front():
+            raise RowFailed("com.apple.springboard is in front instead of org.bitcoinppl.cove")
+
+        screen.app_nodes = springboard_in_front
+
+        with self.assertRaisesRegex(RowFailed, "springboard"):
+            wait_for_scan_to_start(screen, {}, timeout=0.6)
 
     def test_an_error_while_waiting_for_a_scan_fails_the_row_with_its_text(self):
         screen = FakeScreen(text_nodes("Receive", "Transactions", "Node Connection Failed"))
@@ -224,6 +313,66 @@ class RowRegistryTest(unittest.TestCase):
         self.assertEqual(evidence["crashes"], ["FATAL EXCEPTION app"])
 
         rows["some-row"](self.Driver([]), {})
+
+
+class FakeUpgradeDevice:
+    """An Android device whose installed versionCode moves to the apk's only when the upgrade row installs it"""
+
+    package = COVE
+
+    def __init__(self, apk: Path):
+        self.upgrade_apk = apk
+        self.installed = 41
+        self.ran = []
+
+    def apk_package_and_version(self, apk):
+        return COVE, 42
+
+    def installed_version_code(self):
+        return self.installed
+
+
+class RunOrderTest(unittest.TestCase):
+    def run_rows(self, upgrade):
+        def recorder(row):
+            def body(driver, evidence):
+                driver.ran.append(row)
+                if row == UPGRADE_ROW:
+                    upgrade(driver)
+
+            return body
+
+        # registration order puts the upgrade row last, as in android/rows.py
+        rows = {row: recorder(row) for row in ("font", "scan", UPGRADE_ROW)}
+
+        with tempfile.TemporaryDirectory() as out, contextlib.redirect_stdout(io.StringIO()):
+            apk = Path(out) / "app.apk"
+            apk.touch()
+            driver = FakeUpgradeDevice(apk)
+            gates, results = run.run_rows("android", driver, rows, list(rows), lambda driver: None, Path(out), UPGRADE_ROW, build_under_test)
+
+        return driver, gates, {result.row: result for result in results}
+
+    def test_the_upgrade_runs_first_and_the_other_rows_test_the_installed_build(self):
+        def install(driver):
+            driver.installed = 42
+
+        driver, gates, results = self.run_rows(install)
+
+        self.assertEqual(driver.ran, [UPGRADE_ROW, "font", "scan"])
+        self.assertEqual({row: result.status for row, result in results.items()}, dict.fromkeys(results, "pass"))
+        self.assertEqual(gates[-1].evidence["installed_version_code"], 42)
+
+    def test_a_blocked_upgrade_blocks_the_rows_that_would_test_the_old_build(self):
+        def refuse(driver):
+            raise RowBlocked("installed versionCode is not older")
+
+        driver, _, results = self.run_rows(refuse)
+
+        self.assertEqual(driver.ran, [UPGRADE_ROW])
+        for row in ("font", "scan"):
+            self.assertEqual(results[row].status, "blocked")
+            self.assertIn("versionCode 41 is installed", results[row].message)
 
 
 class TapGuardTest(unittest.TestCase):

@@ -31,6 +31,9 @@ RECEIVE_CONTROLS = ("Copy Address", "Create New Address")
 # the largest font scale Android's own settings screen offers
 LARGEST_FONT_SCALE = "2.0"
 
+# installs `--upgrade-apk` over the previous release, so it runs before every other row
+UPGRADE_ROW = "s01-two-cold-launches-after-upgrade"
+
 
 # navigation
 
@@ -123,6 +126,23 @@ def preflight(driver: Android) -> None:
 
     if network.lower() not in ALLOWED_NETWORKS:
         raise RowBlocked(f"selected network is {network}; switch the app to Signet, Testnet or Testnet4 first")
+
+
+def build_under_test(driver: Android, evidence: dict) -> None:
+    """Block unless the `--upgrade-apk` build is the one installed, so rows after the upgrade never test the release it replaces"""
+    if not driver.upgrade_apk.is_file():
+        raise RowBlocked(f"{driver.upgrade_apk} does not exist")
+
+    apk_package, apk_version = driver.apk_package_and_version(driver.upgrade_apk)
+    installed_version = driver.installed_version_code()
+    evidence["apk_version_code"] = apk_version
+    evidence["installed_version_code"] = installed_version
+
+    if apk_package != driver.package or installed_version != apk_version:
+        raise RowBlocked(
+            f"{driver.package} versionCode {installed_version} is installed, not {apk_package} versionCode {apk_version} "
+            f"from {driver.upgrade_apk}, so the rows would test another build; install it, or run the upgrade row, first"
+        )
 
 
 # receive sheet
@@ -291,7 +311,7 @@ def scan_survives_short_background(driver: Android, evidence: dict) -> None:
     check(error_text(driver) is None, f"error shown after a short background: {error_text(driver)}")
 
 
-@row("s01-two-cold-launches-after-upgrade")
+@row(UPGRADE_ROW)
 def two_cold_launches_after_upgrade(driver: Android, evidence: dict) -> None:
     if driver.upgrade_apk is None:
         raise RowBlocked("pass --upgrade-apk PATH to install the build under test over the existing install")

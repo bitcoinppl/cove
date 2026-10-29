@@ -16,6 +16,9 @@ BOUNDS = re.compile(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]")
 # the `package:` line `aapt2 dump badging` prints for an apk
 BADGING_PACKAGE = re.compile(r"^package: name='([^']+)' versionCode='(\d+)'", re.MULTILINE)
 
+# the resumed activity in `dumpsys activity activities`, such as `topResumedActivity=ActivityRecord{37487863 u0 org.example/.Main t2}`
+RESUMED_ACTIVITY = re.compile(r"ResumedActivity[=:]\s*ActivityRecord\{\S+ u\d+ ([^/\s]+)/")
+
 
 def parse_hierarchy(xml: str) -> list[Node]:
     """Flatten a `uiautomator dump` hierarchy into visible nodes"""
@@ -43,6 +46,12 @@ def parse_hierarchy(xml: str) -> list[Node]:
         )
 
     return nodes
+
+
+def resumed_package(activities: str) -> str | None:
+    """Package of the activity in front, from `dumpsys activity activities`, or None when nothing is resumed"""
+    match = RESUMED_ACTIVITY.search(activities)
+    return match.group(1) if match else None
 
 
 def parse_badging(badging: str) -> tuple[str, int]:
@@ -152,8 +161,12 @@ class Android(Device):
 
         return result.stdout.strip() or None
 
+    def foreground_package(self) -> str | None:
+        return resumed_package(self.shell("dumpsys", "activity", "activities"))
+
     def is_foreground(self) -> bool:
-        return self.package in self.shell("dumpsys", "activity", "activities").split("ResumedActivity", 1)[-1][:300]
+        # an exact match, since a substring check would take `org.bitcoinppl.cove.dev` in front for `org.bitcoinppl.cove`
+        return self.foreground_package() == self.package
 
     def clear_crash_log(self) -> None:
         self.adb("logcat", "-b", "crash", "-c")
@@ -180,12 +193,28 @@ class Android(Device):
     def app_nodes(self) -> list[Node]:
         return [node for node in self.nodes() if node.package == self.package]
 
+    def ensure_app_in_front(self, node: Node | None = None) -> None:
+        """Fail unless this app is in front and, when given, owns `node`
+
+        uiautomator dumps every window and input lands on whatever is in front, so another app
+        coming forward mid-row (a system dialog, a notification, another test) must stop the row
+        instead of taking a tap, swipe or key meant for this app
+        """
+        if node is not None and node.package != self.package:
+            raise RowFailed(f"{node.label!r} belongs to {node.package or 'an unknown package'}, not {self.package}")
+
+        front = self.foreground_package()
+        if front != self.package:
+            raise RowFailed(f"{front or 'no app'} is in front instead of {self.package}")
+
     def tap(self, node: Node) -> None:
         ensure_tap_allowed(node.label)
+        self.ensure_app_in_front(node)
         x, y = node.center
         self.shell("input", "tap", str(x), str(y))
 
     def back(self) -> None:
+        self.ensure_app_in_front()
         self.shell("input", "keyevent", "KEYCODE_BACK")
 
     def screen_size(self) -> tuple[int, int]:
@@ -199,10 +228,11 @@ class Android(Device):
         """Drag the middle of the screen upward so content further down comes into view"""
         width, height = self.screen_size()
         x = width // 2
-        self.shell("input", "swipe", str(x), str(height * 3 // 4), str(x), str(height // 4), "400")
+        self.swipe(x, height * 3 // 4, x, height // 4, 400)
 
-    def swipe(self, x1: int, y1: int, x2: int, y2: int) -> None:
-        self.shell("input", "swipe", str(x1), str(y1), str(x2), str(y2), "300")
+    def swipe(self, x1: int, y1: int, x2: int, y2: int, millis: int = 300) -> None:
+        self.ensure_app_in_front()
+        self.shell("input", "swipe", str(x1), str(y1), str(x2), str(y2), str(millis))
 
     def screenshot(self, path: str) -> None:
         # another app's screen can hold private content, and failure screenshots get uploaded

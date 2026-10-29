@@ -18,24 +18,26 @@ fi
 stopped=()
 for dir in "${dirs[@]}"; do
   [ -d "$dir" ] || continue
+  udid="$(basename "$dir")"
   for name in xcodebuild iproxy; do
     pidfile="$dir/$name.pid"
     [ -f "$pidfile" ] || continue
-    if pid_alive "$pidfile" "$name"; then
+
+    # a runner that died without cleanup leaves its pid behind, and another phone's runner can
+    # reuse it, so only a process whose arguments name this phone counts; any other is stale
+    case "$name" in
+      xcodebuild) owner="-destination id=$udid" ;;
+      iproxy) owner="-u $udid" ;;
+    esac
+
+    if pid_owned "$pidfile" "$name" "$owner"; then
       pid="$(cat "$pidfile")"
       if $dry; then
-        stopped+=("$(basename "$dir"):$name:$pid(dry-run)")
+        stopped+=("$udid:$name:$pid(dry-run)")
         continue
       fi
-      kill "$pid" 2>/dev/null
-      # a restart binds the same port and device session right after this returns, so wait for
-      # the process to exit, and force it after 5 s
-      for _ in $(seq 50); do
-        kill -0 "$pid" 2>/dev/null || break
-        sleep 0.1
-      done
-      kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
-      stopped+=("$(basename "$dir"):$name:$pid")
+      stop_pid "$pid"
+      stopped+=("$udid:$name:$pid")
     fi
     $dry || rm -f "$pidfile"
   done
