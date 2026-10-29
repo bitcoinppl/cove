@@ -299,6 +299,14 @@ expect "start after a half-finished upgrade" 0 'd["ok"]' -- "$here/uia2-start"
 check "start reinstalls only the stale test APK" bash -c "[ \"\$(grep -c '^install ' '$FAKE_ADB/calls.log')\" = 1 ] && grep -q '^install .*androidTest' '$FAKE_ADB/calls.log'"
 "$here/uia2-stop" >/dev/null
 
+# a test run that starts while the APKs install is still caught before the launch
+echo stale >"$FAKE_ADB/installed/io.appium.uiautomator2.server.test"
+echo "com.android.commands.am.Am instrument -w org.bitcoinppl.cove.test/androidx.test.runner.AndroidJUnitRunner" >"$FAKE_ADB/ps_after_install"
+: >"$FAKE_ADB/calls.log"
+expect "start while a test run begins during setup" 1 'd["error"]=="device_busy"' -- "$here/uia2-start"
+check "start launches nothing over the new test run" bash -c "! grep -q 'shell am instrument' '$FAKE_ADB/calls.log'"
+: >"$FAKE_ADB/ps"
+
 # a pid file whose process was replaced must not get that process killed, even when the new
 # process looks like this device's adb
 bash -c 'exec -a "adb -s TEST-SERIAL shell am instrument" sleep 30' &
