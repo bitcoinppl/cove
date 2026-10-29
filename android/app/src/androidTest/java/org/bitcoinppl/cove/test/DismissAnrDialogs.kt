@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.test
 
+import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.StaleObjectException
@@ -43,7 +44,13 @@ private class AnrDialogWatcher(
     private val worker =
         thread(start = false, isDaemon = true, name = "DismissAnrDialogs") {
             while (!stopped.await(POLL_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)) {
-                device.dismissAnrDialogs()
+                // an uncaught exception on this thread would crash the whole run, not just one
+                // test, so log it and try again on the next poll
+                try {
+                    device.dismissAnrDialogs()
+                } catch (e: RuntimeException) {
+                    Log.w(TAG, "ANR dialog check failed", e)
+                }
             }
         }
 
@@ -77,6 +84,8 @@ private fun UiDevice.dismissAnrDialogs() {
 private val ANR_WAIT_BUTTON = By.pkg("android").res("android", "aerr_wait")
 
 private const val MAX_DIALOGS = 3
+
+private const val TAG = "DismissAnrDialogs"
 
 // the full-launch waits give the app 20 seconds, so a dialog never covers it for long
 private const val POLL_INTERVAL_MILLIS = 1_000L
