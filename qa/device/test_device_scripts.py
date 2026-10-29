@@ -1,15 +1,17 @@
 """Offline checks for the device-script helpers; run with `python3 -I -m unittest discover qa/device`"""
 
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from android.driver import parse_hierarchy  # noqa: E402
-from common import Device, ForbiddenTap, RowFailed, ensure_tap_allowed  # noqa: E402
+from android.driver import parse_badging, parse_hierarchy  # noqa: E402
+from common import Device, ForbiddenTap, Node, RowBlocked, RowFailed, ensure_tap_allowed  # noqa: E402
 from ios.driver import Ios, parse_source  # noqa: E402
-from screens import row_registry  # noqa: E402
+from screens import error_text, row_registry, wait_for_scan_to_start  # noqa: E402
 
 DUMP = """UI hierchary dumped to: /dev/tty<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
 <hierarchy rotation="0">
@@ -21,6 +23,8 @@ DUMP = """UI hierchary dumped to: /dev/tty<?xml version='1.0' encoding='UTF-8' s
           content-desc="Open menu" visible-to-user="true" bounds="[0,100][120,220]" />
     <node text="Hidden" resource-id="" class="android.widget.TextView" package="org.bitcoinppl.cove.dev"
           content-desc="" visible-to-user="false" bounds="[0,0][10,10]" />
+    <node text="Copy Address" resource-id="" class="android.widget.Button" package="org.bitcoinppl.cove.dev"
+          content-desc="" enabled="false" visible-to-user="true" bounds="[40,900][1040,1000]" />
   </node>
 </hierarchy>"""
 
@@ -79,6 +83,12 @@ class IosFrontAppTest(unittest.TestCase):
             driver.tap(receive)
         self.assertEqual(driver.posted, [])
 
+    def test_refuses_to_screenshot_another_app(self):
+        driver = FakeWda("com.apple.MobileSMS")
+
+        with tempfile.TemporaryDirectory() as out, self.assertRaises(RowFailed):
+            driver.screenshot(str(Path(out) / "shot.png"))
+
     def test_taps_when_the_app_is_in_front(self):
         driver = FakeWda("org.bitcoinppl.cove")
         driver.tap(driver.find(r"^Receive$"))
@@ -92,6 +102,9 @@ class FakeScreen(Device):
         self.tapped = []
 
     def nodes(self):
+        return self._nodes
+
+    def app_nodes(self):
         return self._nodes
 
     def tap(self, node):
@@ -112,6 +125,28 @@ class FindTest(unittest.TestCase):
         screen._nodes = parse_source(WDA_SOURCE.replace('label="Receive"', 'label="Send"').replace('name="Receive"', 'name="Send"').replace('value="Receive"', 'value="Send"'), "app")
         with self.assertRaises(ForbiddenTap):
             screen.tap_label(r"^Send$")
+
+
+def text_nodes(*texts):
+    return [Node(text, "", "", "", (0, index * 50, 400, index * 50 + 40), "app") for index, text in enumerate(texts)]
+
+
+class ScreenReadTest(unittest.TestCase):
+    def test_finds_the_node_connection_alert_whatever_its_case(self):
+        screen = FakeScreen(text_nodes("Receive", "Node Connection Failed", "OK"))
+
+        self.assertEqual(error_text(screen), "Node Connection Failed")
+
+    def test_a_scan_that_never_shows_blocks_the_row(self):
+        screen = FakeScreen(text_nodes("Receive", "Transactions"))
+
+        with self.assertRaises(RowBlocked):
+            wait_for_scan_to_start(screen, {}, timeout=0.6)
+
+        screen._nodes = text_nodes("Receive", "Transactions", "Scanning for transactions...")
+        evidence = {}
+        wait_for_scan_to_start(screen, evidence, timeout=0.6)
+        self.assertIn("scan_start_seconds", evidence)
 
 
 class RowRegistryTest(unittest.TestCase):
@@ -161,9 +196,24 @@ class HierarchyTest(unittest.TestCase):
         nodes = parse_hierarchy(DUMP)
         labels = [node.label for node in nodes]
 
-        self.assertEqual(labels, ["", "Signet", "Open menu"])
+        self.assertEqual(labels, ["", "Signet", "Open menu", "Copy Address"])
         self.assertEqual(nodes[1].center, (290, 340))
         self.assertEqual(nodes[2].desc, "Open menu")
+        self.assertEqual([node.enabled for node in nodes], [True, True, True, False])
+
+    def test_reads_the_package_and_version_code_from_badging(self):
+        badging = "package: name='org.bitcoinppl.cove.dev' versionCode='42' versionName='1.4.0' platformBuildVersionName='15'\nsdkVersion:'26'\n"
+
+        self.assertEqual(parse_badging(badging), ("org.bitcoinppl.cove.dev", 42))
+
+
+class CommandLineTest(unittest.TestCase):
+    def test_rejects_a_loop_count_below_one(self):
+        run = Path(__file__).resolve().parent / "run.py"
+        result = subprocess.run([sys.executable, "-I", str(run), "ios", "--loops", "0", "--list"], capture_output=True, text=True)
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--loops", result.stderr)
 
 
 if __name__ == "__main__":

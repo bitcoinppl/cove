@@ -54,6 +54,8 @@ class Node:
     clazz: str
     bounds: tuple[int, int, int, int]
     package: str
+    # false while a control is shown but can't be used, such as a button waiting for data to load
+    enabled: bool = True
 
     @property
     def label(self) -> str:
@@ -74,7 +76,7 @@ class Device:
     def tap(self, node: Node) -> None:
         raise NotImplementedError
 
-    def find(self, pattern: str, nodes: list[Node] | None = None) -> Node | None:
+    def find(self, pattern: str | re.Pattern, nodes: list[Node] | None = None) -> Node | None:
         """First node whose label or identifier matches the regex"""
         regex = re.compile(pattern)
         candidates = self.nodes() if nodes is None else nodes

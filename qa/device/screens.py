@@ -8,13 +8,16 @@ import re
 import time
 from typing import Callable
 
-from common import Device, Node, RowFailed, check
+from common import Device, Node, RowBlocked, RowFailed
 
 # text that only an error alert or banner carries; the app's normal copy never uses these words
 ERROR_TEXT = re.compile(r"\b(error|failed|failure|unable to|could not|couldn't|can't connect|no connection)\b", re.IGNORECASE)
 
-# shown on the wallet home until the history scan finishes
-SCAN_IN_PROGRESS = r"^Checking wallet history"
+# shown on the wallet home while a history scan runs: the first scan, then later scans of a wallet with transactions
+SCAN_IN_PROGRESS = r"^(Checking wallet history|Scanning for transactions)"
+
+# a wallet that finished its first scan hides scan progress for this long, so a quicker scan never shows
+RETURNING_WALLET_SCAN_PROGRESS_DELAY = 5
 
 
 def labels(nodes: list[Node], package: str) -> list[str]:
@@ -38,7 +41,8 @@ def is_wallet_home(nodes: list[Node]) -> bool:
 
 
 def error_text(driver: Device) -> str | None:
-    node = driver.find(ERROR_TEXT.pattern, driver.app_nodes())
+    # pass the compiled regex so its IGNORECASE flag survives, which alert titles like `Node Connection Failed` need
+    node = driver.find(ERROR_TEXT, driver.app_nodes())
     return node.label if node else None
 
 
@@ -62,6 +66,26 @@ def wait_for_wallet_home(driver, timeout: float = 45) -> float:
     driver.wait_until(lambda: is_wallet_home(driver.app_nodes()), "the wallet home to render", timeout)
 
     return round(time.time() - started, 1)
+
+
+def wait_for_scan_to_start(driver, evidence: dict, timeout: float = 30) -> None:
+    """Wait until the wallet home shows a history scan running, recording how long that took
+
+    The screen can't tell a scan that finished before its progress showed from one that never
+    started, so a scan that never shows blocks the row instead of passing it
+    """
+    started = time.time()
+
+    try:
+        driver.wait_until(lambda: has(driver.app_nodes(), SCAN_IN_PROGRESS), "a wallet history scan to show", timeout)
+    except RowFailed as error:
+        raise RowBlocked(
+            f"no history scan showed within {timeout}s, so the row can't tell whether one started; a returning wallet "
+            f"hides scan progress for its first {RETURNING_WALLET_SCAN_PROGRESS_DELAY}s, so use a wallet with "
+            "transactions whose scan takes longer than that"
+        ) from error
+
+    evidence["scan_start_seconds"] = round(time.time() - started, 1)
 
 
 def wait_for_scan_to_settle(driver, evidence: dict, timeout: float = 90) -> None:
