@@ -64,14 +64,20 @@ fi
 # connectedAndroidTest and breaks that run mid-test. The device may list the process as
 # `am instrument` or as `com.android.commands.am.Am instrument`. A failed query proves nothing,
 # so it blocks the start too
-if ! procs="$(adb shell ps -A -o ARGS 2>&1)"; then
-  $force || die device_query_failed "could not list processes on $ANDROID_SERIAL: $procs" "fix=check the device in adb devices, or pass --force"
-fi
-others="$(grep -i 'am instrument' <<<"$procs" | grep -v "$UIA2_SERVER_PKG")"
-if [ -n "$others" ] && ! $force; then
-  die device_busy "another instrumentation is running on $ANDROID_SERIAL; starting the server would break it" \
-    "running=$others" "fix=wait for it to finish, or pass --force if it is safe to interrupt"
-fi
+check_no_other_instrumentation() {
+  $force && return
+  local procs others
+  procs="$(adb shell ps -A -o ARGS 2>&1)" ||
+    die device_query_failed "could not list processes on $ANDROID_SERIAL: $procs" "fix=check the device in adb devices, or pass --force"
+  others="$(grep -i 'am instrument' <<<"$procs" | grep -v "$UIA2_SERVER_PKG")"
+  [ -z "$others" ] ||
+    die device_busy "another instrumentation is running on $ANDROID_SERIAL; starting the server would break it" \
+      "running=$others" "fix=wait for it to finish, or pass --force if it is safe to interrupt"
+}
+
+# check before the slow download and install, then again just before the launch below, since a
+# test run can start while they take place
+check_no_other_instrumentation
 
 "$(dirname "$0")/uia2-fetch" >"$STATE/fetch.json" || { cat "$STATE/fetch.json"; exit 1; }
 
@@ -96,6 +102,7 @@ install_if_changed "$UIA2_SERVER_PKG.test" "$UIA2_TEST_SHA256" "$UIA2_TEST_APK"
 
 # stop leftovers from a previous run so the port and the UiAutomation connection are free
 stop_out="$("$(dirname "$0")/uia2-stop" 2>&1)" || die stop_failed "could not stop the previous server" "stop=$stop_out"
+check_no_other_instrumentation
 
 # from here on, any exit before the server answers stops it again, so a failed, interrupted or
 # aborted start never leaves it holding the device's UiAutomation connection. die only records
