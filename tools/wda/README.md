@@ -43,7 +43,7 @@ Needs Xcode signed in to the signing team (`WDA_TEAM`, default Cove's team) and 
 
 `wda-doctor` and `wda-start` need `IOS_UDID`. The `ios-*` commands only need WDA on localhost and echo `IOS_UDID` when it is set. Every command except the read-only `wda-doctor` accepts `--dry-run`, which prints what it would do without touching the phone. Options are read only before `--`, so `ios-type -- --dry-run` types the text `--dry-run`.
 
-To drive two phones at once, start the second with its own `IOS_UDID` and `WDA_PORT`, and pass the same `WDA_PORT` to the `ios-*` commands for it.
+To drive two phones at once, start the second with its own `IOS_UDID` and `WDA_PORT`, and pass the same `WDA_PORT` to the `ios-*` commands for it. Both phones share one build of the runner, so `wda-start`, `wda-stop` and `wda-build` take turns: starting both phones at once is safe, and the second start waits for the first to finish, including its build.
 
 ## Reading `ios-vis`
 
@@ -64,9 +64,10 @@ Each line is the element type, its tap center in points, its size, then its labe
 | `WDA_TEAM` | Cove's team | signing team for the runner |
 | `WDA_BUNDLE_ID` | `com.avencera.WebDriverAgentRunner` | runner bundle id; `ios-pasteboard` activates `$WDA_RUNNER_ID` (`<bundle id>.xctrunner`) |
 | `WDA_CACHE` | `~/.cache/cove-wda` | WebDriverAgent checkout, build products (one per WDA version) and state, shared across worktrees |
+| `WDA_LOCK_WAIT` | `600` | seconds `wda-start`, `wda-stop` and `wda-build` wait for another one to finish |
 | `WDA_WAIT_FOR_IDLE` | `0` | XCTest idle wait for new sessions; see below |
 
-State is in `$WDA_CACHE/state/`: `build.log`, one cached session id per WDA address (`session-127_0_0_1_8100`), and per phone under `devices/<udid>/` the runner and forward pids, the port, `wda.log` (the test run) and `iproxy.log`.
+State is in `$WDA_CACHE/state/`: `wda.lock`, `build.log`, one cached session id per WDA address (`session-127_0_0_1_8100`), and per phone under `devices/<udid>/` the runner and forward pids, the port, `wda.log` (the test run) and `iproxy.log`.
 
 Offline check of the commands against a mock server: `tools/wda/test/run-mock-tests.sh`.
 
@@ -93,7 +94,7 @@ Offline check of the commands against a mock server: `tools/wda/test/run-mock-te
 - **`status_timeout`.** The phone is probably locked or showing a passcode or trust prompt. Unlock it and rerun
 - **`wda_unreachable` from an `ios-*` command.** `wda-start` isn't running or `iproxy` died. Check `state/devices/<udid>/iproxy.log`, then `lsof -i :8100` for another process on the port
 - **`proxy_exited` from `wda-start`.** This phone's `iproxy` couldn't keep the port, usually because another process holds it. Check `state/devices/<udid>/iproxy.log` and `lsof -i :8100`
-- **`locked` from `wda-start`.** Another `wda-start` on the same port is still starting. Wait for it, or use another `WDA_PORT`
+- **`locked` from `wda-start`, `wda-stop` or `wda-build`.** Another of them ran longer than `WDA_LOCK_WAIT`, usually a first build. Rerun when it finishes, or raise `WDA_LOCK_WAIT`
 - **`port_in_use` from `wda-start`.** Another phone's runner answers on the port. `WDA_PORT=8101 wda-start` moves this one; use the same variable for its `ios-*` commands
 - **Black screenshots, the same small image every time, or elements not found.** The screen is asleep even though WDA reports it unlocked. Unlock it, and set Auto-Lock to Never for the session
 - **Session errors after the phone sleeps.** Delete the `state/session-*` file; the next command creates a session

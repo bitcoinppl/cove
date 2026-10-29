@@ -62,14 +62,21 @@ proxy_serves() { # proxy_serves STATE_DIR UDID PORT
   ps -p "$(cat "$1/iproxy.pid")" -o args= | grep -q -- "-u $2 $3:8100"
 }
 
-# hold a lock on PORT for the rest of this script, so two wda-start runs can't both pass the
-# port check before either forward binds. macOS has no flock(1), so a helper locks fd 9: the lock
-# belongs to that open file and the OS releases it when this script exits, even when killed.
+# hold the lock on WDA state for the rest of this script. wda-start, wda-stop and wda-build take
+# it, so they take turns over everything they share: the forwarded ports, each phone's pid files
+# and the build products that every phone's runner uses. Without it, two starts could both pass
+# the port check, stop each other's runners, or build into the same DerivedData. One lock instead
+# of one per port, phone and build needs no lock ordering; the cost is that a second phone's
+# start waits for the first one's to finish.
+# macOS has no flock(1), so a helper locks fd 9: the lock belongs to that open file and the OS
+# releases it when this script exits, even when killed. A script run by the holder inherits fd 9
+# and so already holds the lock; reopening the file there would wait on its own parent.
 # Background children must close fd 9 (9>&-), or they would hold the lock after this script exits
-lock_port() { # lock_port PORT
-  local lock="$WDA_STATE/port-$1.lock"
+lock_state() {
+  local lock="$WDA_STATE/wda.lock" wait="${WDA_LOCK_WAIT:-600}"
   mkdir -p "$WDA_STATE"
-  exec 9>>"$lock"
+  python3 -I -c 'import os, sys; a, b = os.fstat(9), os.stat(sys.argv[1]); sys.exit((a.st_dev, a.st_ino) != (b.st_dev, b.st_ino))' "$lock" 2>/dev/null ||
+    exec 9>>"$lock"
   python3 -I -c 'import fcntl, sys, time
 deadline = time.monotonic() + float(sys.argv[1])
 while True:
@@ -79,6 +86,6 @@ while True:
     except BlockingIOError:
         if time.monotonic() >= deadline:
             sys.exit(1)
-        time.sleep(0.1)' "${WDA_LOCK_WAIT:-30}" ||
-    die locked "another wda-start held $lock for ${WDA_LOCK_WAIT:-30} s" "fix=wait for it to finish, or use another WDA_PORT"
+        time.sleep(0.1)' "$wait" ||
+    die locked "another wda-start, wda-stop or wda-build held $lock for $wait s" "fix=wait for it to finish, or raise WDA_LOCK_WAIT"
 }
