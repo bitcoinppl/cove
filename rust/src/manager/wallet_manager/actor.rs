@@ -2948,7 +2948,7 @@ mod tests {
             &mut wallet.bdk,
             BlockId { height: 1, hash: BlockHash::from_byte_array([2; 32]) },
         );
-        let selected = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(4_845));
+        let selected = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(50_000));
         let unselected = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(80_000));
 
         let (sender, _receiver) = flume::bounded(10);
@@ -2956,35 +2956,28 @@ mod tests {
         let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
         actor.db = db;
 
-        // the unselected 80_000 sat output could easily pay this fee, so the build must
-        // fail instead of silently spending it
+        // the selected coin clears the per-input fee estimate at 100 sat/vbyte, so the fee probe
+        // and the final build both run; the probe's first attempt falls short of the full fee,
+        // which is where coin selection would reach for the unselected 80_000 sat output
         let result = actor
             .build_manual_tx(
                 vec![selected],
-                Amount::from_sat(4_000),
+                Amount::from_sat(50_000),
                 Address::preview_new(),
                 high_sat_vbyte_fee_rate(),
             )
             .await;
-        let error =
-            actor_value(result).await.expect_err("selected coin cannot cover a 100 sat/vbyte fee");
-
-        assert!(matches!(error, super::Error::InsufficientFunds(_)));
-
-        // at an affordable rate the same selection builds and spends exactly the selected coin
-        let result = actor
-            .build_manual_tx(
-                vec![selected],
-                Amount::from_sat(4_000),
-                Address::preview_new(),
-                one_sat_vbyte_fee_rate(),
-            )
-            .await;
-        let psbt = actor_value(result).await.expect("selected coin covers a 1 sat/vbyte fee");
+        let psbt = actor_value(result).await.expect("selected coin covers a 100 sat/vbyte fee");
         let spent = spent_outpoints(&psbt);
+        let fee = psbt.fee().expect("psbt fee");
+        let outputs: Vec<Amount> =
+            psbt.unsigned_tx.output.iter().map(|output| output.value).collect();
 
         assert_eq!(spent, HashSet::from([selected]));
         assert!(!spent.contains(&unselected));
+
+        // a max send sized against a two-input fee would leave change behind instead
+        assert_eq!(outputs, vec![Amount::from_sat(50_000) - fee]);
     }
 
     #[tokio::test(flavor = "current_thread")]
