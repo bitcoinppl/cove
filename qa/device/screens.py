@@ -72,18 +72,31 @@ def wait_for_scan_to_start(driver, evidence: dict, timeout: float = 30) -> None:
     """Wait until the wallet home shows a history scan running, recording how long that took
 
     The screen can't tell a scan that finished before its progress showed from one that never
-    started, so a scan that never shows blocks the row instead of passing it
+    started, so a scan that never shows blocks the row instead of passing it. An error shown
+    while waiting is a clear answer, so it fails the row
     """
     started = time.time()
+    alerts: list[str] = []
+
+    def started_or_failed() -> bool:
+        nodes = driver.app_nodes()
+        alert = driver.find(ERROR_TEXT, nodes)
+        if alert:
+            alerts.append(alert.label)
+
+        return alert is not None or has(nodes, SCAN_IN_PROGRESS)
 
     try:
-        driver.wait_until(lambda: has(driver.app_nodes(), SCAN_IN_PROGRESS), "a wallet history scan to show", timeout)
+        driver.wait_until(started_or_failed, "a wallet history scan to show", timeout)
     except RowFailed as error:
         raise RowBlocked(
             f"no history scan showed within {timeout}s, so the row can't tell whether one started; a returning wallet "
             f"hides scan progress for its first {RETURNING_WALLET_SCAN_PROGRESS_DELAY}s, so use a wallet with "
             "transactions whose scan takes longer than that"
         ) from error
+
+    if alerts:
+        raise RowFailed(f"error shown while waiting for a history scan: {alerts[-1]}")
 
     evidence["scan_start_seconds"] = round(time.time() - started, 1)
 

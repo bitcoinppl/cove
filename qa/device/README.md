@@ -34,7 +34,7 @@ python3 -I qa/device/run.py android --serial emulator-5554 --rows s15-repeated-n
 
 `--loops` sets how many background and foreground cycles the s15 row repeats (default 10, about 20 seconds each on an emulator); raise it for a long-session soak. It must be at least 1. Each cycle opens the next of the Appearance, Network and Currency settings screens and the Receive sheet, on both platforms.
 
-The s14 scan rows pass only after they see a history scan running and then finishing. A wallet that has finished its first scan hides scan progress for its first 5 seconds, so a scan that finishes sooner can't be told apart from one that never started, and the row is blocked instead. Use a wallet with transactions whose scan takes longer than that.
+The s14 scan rows pass only after they see a history scan running and then finishing. A wallet that has finished its first scan hides scan progress for its first 5 seconds, so a scan that finishes sooner can't be told apart from one that never started, and the row is blocked instead. Use a wallet with transactions whose scan takes longer than that. An error shown while the row waits for the scan, such as `Node Connection Failed`, fails the row with that error's text.
 
 Offline unit tests, which need no device: `python3 -I -m unittest discover -s qa/device -p "test_*.py"`
 
@@ -43,7 +43,7 @@ Offline unit tests, which need no device: `python3 -I -m unittest discover -s qa
 - `adb` on `PATH`, and the device visible to `adb devices`
 - The app installed and a wallet created on Signet, Testnet or Testnet4. Onboarding can be completed by hand, and a new wallet can skip word verification
 - A run takes about 7 minutes on an emulator, most of it the s15 loop and the font and animation rows
-- For the upgrade row: the previous release installed with a wallet open in it, an apk of the build under test for the same package with a higher versionCode, and `aapt2` from the SDK build-tools, found through `ANDROID_HOME`, `ANDROID_SDK_ROOT` or the SDK holding `adb`. The row reads the apk's package and versionCode before installing, and is blocked when the package differs or the versionCode isn't higher
+- For the upgrade row: the previous release installed with a wallet open in it, an apk of the build under test for the same package with a higher versionCode, and `aapt2` from the SDK build-tools, found through `ANDROID_HOME`, `ANDROID_SDK_ROOT` or the SDK holding `adb`. The row reads the apk's package and versionCode before installing, and is blocked when the package differs or the versionCode isn't higher. The row compares the wallet names in the sidebar before and after the upgrade, so every wallet must fit in the sidebar without scrolling; when the list scrolls, the row is blocked
 
 ### iOS prerequisites
 
@@ -80,7 +80,7 @@ A row file holds:
 
 - `pass`: the row's assertions held
 - `fail`: an assertion about the app failed, which is a finding. Evidence names the screen labels seen
-- `blocked`: the device or fixture wasn't in a state the row can run from (no wallet, wrong network, no `--upgrade-apk` or one that isn't an upgrade, a scan too quick to see), so the result says nothing about the app. A failed preflight blocks every row
+- `blocked`: the device or fixture wasn't in a state the row can run from (no wallet, wrong network, no `--upgrade-apk` or one that isn't an upgrade, a scan too quick to see, more wallets than the sidebar shows at once), so the result says nothing about the app. A failed preflight blocks every row
 - `error`: the script itself broke or tried a forbidden tap; `evidence.traceback` has the stack
 
 ## Exit codes
