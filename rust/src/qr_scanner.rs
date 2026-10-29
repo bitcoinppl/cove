@@ -1304,6 +1304,36 @@ mod tests {
     }
 
     #[test]
+    fn replayed_and_bad_bbqr_frames_do_not_grow_retained_parts() {
+        let address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
+        let parts = multi_part_bbqr_text(address, 3);
+        let mut mismatched_part = parts[0].clone();
+        mismatched_part.replace_range(4..6, "04");
+        let scanner = QrScannerFFI::new();
+
+        let retained_parts = || match &*scanner.0.lock() {
+            QrScanner::InProgress(MultiQr::Bbqr(bbqr)) => bbqr.accepted_parts.len(),
+            _ => panic!("scanner should still be in progress"),
+        };
+
+        scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
+        scanner.scan(StringOrData::String(parts[1].clone())).unwrap();
+        assert_eq!(retained_parts(), 2);
+
+        // a camera holding one frame in view replays it on every tick
+        for _ in 0..500 {
+            scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
+            scanner.scan(StringOrData::String(parts[1].clone())).unwrap();
+            scanner.scan(StringOrData::String(mismatched_part.clone())).unwrap_err();
+        }
+
+        assert_eq!(retained_parts(), 2);
+
+        let complete = scanner.scan(StringOrData::String(parts[2].clone())).unwrap();
+        assert!(matches!(complete, ScanResult::Complete { .. }));
+    }
+
+    #[test]
     fn malformed_final_bbqr_frame_does_not_poison_progress() {
         let mnemonic = format!("{} art", "abandon ".repeat(23).trim_end());
         let parts = multi_part_bbqr_text(&mnemonic, 2);

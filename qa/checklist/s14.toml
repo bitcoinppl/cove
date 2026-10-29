@@ -13,7 +13,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/actor.rs::reopening_receive_shows_the_same_unused_address_until_a_new_one_is_requested",
 ]
 # 1.4.0: ios PASS, android PASS
 # the receive address cache is rust state
@@ -114,7 +114,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/actor.rs::reopening_receive_shows_the_same_unused_address_until_a_new_one_is_requested",
 ]
 # 1.4.0: ios PASS, android PASS
 # the receive address cache is rust state
@@ -214,7 +214,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/actor.rs::edited_label_reaches_both_the_transaction_list_and_the_detail_screen",
 ]
 # 1.4.0: ios PASS, android PASS
 
@@ -460,7 +460,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/**",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/send_flow_manager.rs::unit_change_keeps_the_amount_and_fee_and_only_changes_their_display",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 # unit changes go through the send flow manager's selected unit action
