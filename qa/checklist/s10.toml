@@ -466,6 +466,7 @@ paths = [
 coverage = [
   "rust:rust/src/custom_block_explorer/template.rs::defaults_match_existing_transaction_urls",
   "rust:rust/src/database/global_config.rs::custom_block_explorer_does_not_leak_into_other_networks",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_uses_the_transaction_network_explorer",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
 # built-in per-network urls and per-network override isolation are asserted in rust
@@ -489,6 +490,7 @@ paths = [
 coverage = [
   "rust:rust/src/custom_block_explorer/template.rs::defaults_match_existing_transaction_urls",
   "rust:rust/src/database/global_config.rs::custom_block_explorer_does_not_leak_into_other_networks",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_uses_the_transaction_network_explorer",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 # built-in per-network urls and per-network override isolation are asserted in rust
@@ -552,6 +554,7 @@ paths = [
 coverage = [
   "rust:rust/src/custom_block_explorer/template.rs::defaults_match_existing_transaction_urls",
   "rust:rust/src/database/global_config.rs::custom_block_explorer_does_not_leak_into_other_networks",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_uses_the_transaction_network_explorer",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
 # built-in per-network urls and per-network override isolation are asserted in rust

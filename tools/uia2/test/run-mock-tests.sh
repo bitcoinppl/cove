@@ -101,6 +101,12 @@ check "type enter presses Enter" sent /appium/device/press_keycode '{"keycode": 
 [ "$(requests | grep -E '^/keys$|press_keycode' | tr '\n' ' ')" = "/keys /appium/device/press_keycode " ] &&
   echo "ok   type enter presses Enter after setting the text" || { echo "FAIL type enter order: $(requests | tr '\n' ' ')"; fail=1; }
 expect "type no args" 2 'd["error"]=="usage"' -- "$here/android-type"
+# the server presses Enter for text ending in a literal backslash-n, so it never reaches the server
+: >"$tmp/requests.log"
+expect "type refuses a trailing backslash-n" 2 'd["error"]=="usage" and "secret" not in d["message"]' -- "$here/android-type" 'secret\n'
+check "type refuses a trailing backslash-n before sending" test ! -s "$tmp/requests.log"
+expect "type keeps a backslash-n inside the text" 0 'd["enter"] is False' -- "$here/android-type" 'a\nb'
+check "type sends an inner backslash-n as is" sent /keys '{"text": "a\\nb", "replace": true}'
 # after --, text that looks like a flag is typed as is
 expect "type flag-looking text after --" 0 'd["enter"] is False' -- "$here/android-type" -- --enter
 check "type sends the literal text after --" sent /keys '{"text": "--enter", "replace": true}'
@@ -186,6 +192,16 @@ check "launch force-stops first" grep -q "shell am force-stop org.bitcoinppl.cov
 expect "activate" 0 'd["action"]=="activate"' -- "$here/android-launch" --activate org.bitcoinppl.cove
 check "activate does not force-stop" bash -c "! grep -q force-stop '$FAKE_ADB/calls.log'"
 expect "launch misspelled flag" 2 'd["error"]=="usage"' -- "$here/android-launch" --activte org.bitcoinppl.cove
+# adb runs `shell` arguments through the device shell, so a package must not carry shell syntax
+: >"$FAKE_ADB/calls.log"
+expect "launch rejects an injected package" 2 'd["error"]=="usage"' -- "$here/android-launch" 'org.bitcoinppl.cove; am force-stop com.example.other'
+check "launch rejects an injected package before any adb call" test ! -s "$FAKE_ADB/calls.log"
+expect "launch rejects a one-segment package" 2 'd["error"]=="usage"' -- "$here/android-launch" cove
+# a nested activity class has a `$` the device shell would expand unless it's quoted
+echo 'org.bitcoinppl.cove/.MainActivity$Alias' >"$FAKE_ADB/activity"
+expect "launch nested activity" 0 'd["activity"]=="org.bitcoinppl.cove/.MainActivity$Alias"' -- "$here/android-launch" org.bitcoinppl.cove
+check "launch quotes the activity for the device shell" grep -qF -- "-n 'org.bitcoinppl.cove/.MainActivity\$Alias'" "$FAKE_ADB/calls.log"
+rm -f "$FAKE_ADB/activity"
 touch "$FAKE_ADB/resolve_fail"
 expect "launch adb failure" 1 'd["error"]=="adb_failed" and "more than one device" in d["message"]' -- "$here/android-launch" org.bitcoinppl.cove
 rm "$FAKE_ADB/resolve_fail"

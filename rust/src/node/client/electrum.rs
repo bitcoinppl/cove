@@ -29,7 +29,9 @@ type ElectrumClientInner = BdkElectrumClient<Client>;
 #[derive(Debug, Deserialize)]
 struct ElectrumTransactionResponse {
     hex: String,
-    confirmations: i64,
+    /// Missing for a mempool transaction, since electrs forwards bitcoind's
+    /// `getrawtransaction` reply, which only counts confirmations for a block
+    confirmations: Option<i64>,
 }
 
 #[derive(Clone)]
@@ -149,7 +151,7 @@ impl ElectrumClient {
         let tx_response: ElectrumTransactionResponse = serde_json::from_value(response)
             .map_err(|e| err(format!("failed to deserialize electrum response: {e:?}")))?;
 
-        if tx_response.confirmations < 1 {
+        if tx_response.confirmations.is_none_or(|confirmations| confirmations < 1) {
             return Ok(None);
         }
 
