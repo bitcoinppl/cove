@@ -1,7 +1,7 @@
 use std::{str::FromStr as _, sync::Arc};
 
 use bitcoin::{
-    Amount, Transaction, Txid,
+    Transaction, Txid,
     consensus::{deserialize, encode::serialize},
     hex::DisplayHex as _,
 };
@@ -14,7 +14,7 @@ use tokio::{
 
 use super::{
     FakeChain, Shared,
-    chain::{AlreadyConfirmed, HistoryEntry, TxLocation},
+    chain::{AlreadyConfirmed, Balance, HistoryEntry, TxLocation},
     control::{Protocol, Verdict},
 };
 
@@ -177,29 +177,7 @@ fn handle(chain: &FakeChain, method: &str, params: &[Value]) -> Result<Value, Rp
                 return Ok(json!({ "confirmed": 0, "unconfirmed": 0 }));
             };
 
-            // a pending spend of confirmed funds makes `unconfirmed` negative, as in electrs
-            let (mut confirmed, mut unconfirmed) = (0i64, 0i64);
-            for entry in chain.history(&script) {
-                let tx = chain.tx(entry.txid).expect("history entries exist").tx;
-                let received = tx
-                    .output
-                    .iter()
-                    .filter(|output| output.script_pubkey == script)
-                    .map(|output| output.value)
-                    .sum::<Amount>();
-                let spent = chain
-                    .spent_from(&tx, &script)
-                    .iter()
-                    .map(|output| output.value)
-                    .sum::<Amount>();
-                let change = received.to_signed().expect("amount fits").to_sat()
-                    - spent.to_signed().expect("amount fits").to_sat();
-
-                match entry.location {
-                    TxLocation::Mempool => unconfirmed += change,
-                    TxLocation::Confirmed { .. } => confirmed += change,
-                }
-            }
+            let Balance { confirmed, unconfirmed } = chain.balance(&script);
 
             Ok(json!({ "confirmed": confirmed, "unconfirmed": unconfirmed }))
         }
