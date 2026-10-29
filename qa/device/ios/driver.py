@@ -63,6 +63,7 @@ def parse_source(xml: str, bundle_id: str = "") -> list[Node]:
                 clazz=kind,
                 bounds=(x, y, x + width, y + height),
                 package=bundle_id,
+                enabled=element.get("enabled") != "false",
             )
         )
 
@@ -192,5 +193,7 @@ class Ios(Device):
         )
 
     def screenshot(self, path: str) -> None:
+        # WDA captures whatever app is in front, and failure screenshots get uploaded
+        self.ensure_app_in_front()
         data = self.request("GET", "/screenshot")["value"]
         Path(path).write_bytes(base64.b64decode(data))

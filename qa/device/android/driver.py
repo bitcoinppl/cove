@@ -1,15 +1,20 @@
 """adb and uiautomator driver for Cove on an Android device or emulator"""
 
 import contextlib
+import os
 import re
+import shutil
 import subprocess
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from common import Device, Node, RowBlocked, ensure_tap_allowed
+from common import Device, Node, RowBlocked, RowFailed, ensure_tap_allowed
 
 BOUNDS = re.compile(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]")
+
+# the `package:` line `aapt2 dump badging` prints for an apk
+BADGING_PACKAGE = re.compile(r"^package: name='([^']+)' versionCode='(\d+)'", re.MULTILINE)
 
 
 def parse_hierarchy(xml: str) -> list[Node]:
@@ -31,10 +36,33 @@ def parse_hierarchy(xml: str) -> list[Node]:
                 clazz=element.get("class", ""),
                 bounds=tuple(int(value) for value in match.groups()),
                 package=element.get("package", ""),
+                enabled=element.get("enabled", "true") == "true",
             )
         )
 
     return nodes
+
+
+def parse_badging(badging: str) -> tuple[str, int]:
+    """Package name and versionCode from `aapt2 dump badging` output"""
+    match = BADGING_PACKAGE.search(badging)
+    if not match:
+        raise RuntimeError("aapt2 dump badging printed no package line")
+
+    return match.group(1), int(match.group(2))
+
+
+def find_aapt2() -> Path:
+    """The newest `aapt2` in the Android SDK, found from ANDROID_HOME, ANDROID_SDK_ROOT or the adb on PATH"""
+    adb = shutil.which("adb")
+    roots = [os.environ.get("ANDROID_HOME"), os.environ.get("ANDROID_SDK_ROOT"), adb and str(Path(adb).resolve().parents[1])]
+
+    for root in filter(None, roots):
+        tools = sorted(Path(root).glob("build-tools/*/aapt2"), key=lambda path: [int(part) for part in re.findall(r"\d+", path.parent.name)])
+        if tools:
+            return tools[-1]
+
+    raise RowBlocked("aapt2 not found; set ANDROID_HOME to an Android SDK with build-tools so the apk can be read")
 
 
 class Android(Device):
@@ -76,6 +104,20 @@ class Android(Device):
     def ensure_installed(self) -> None:
         if f"package:{self.package}" not in self.shell("pm", "list", "packages", self.package).split():
             raise RowBlocked(f"{self.package} is not installed on {self.serial}")
+
+    def apk_package_and_version(self, apk: Path) -> tuple[str, int]:
+        result = subprocess.run([str(find_aapt2()), "dump", "badging", str(apk)], capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            raise RowBlocked(f"aapt2 could not read {apk}: {result.stderr.strip()}")
+
+        return parse_badging(result.stdout)
+
+    def installed_version_code(self) -> int:
+        match = re.search(r"versionCode=(\d+)", self.shell("dumpsys", "package", self.package))
+        if not match:
+            raise RuntimeError(f"dumpsys package {self.package} shows no versionCode")
+
+        return int(match.group(1))
 
     def install_over_existing(self, apk: Path) -> None:
         # -r keeps app data, which is what makes this an upgrade and not a fresh install
@@ -161,6 +203,10 @@ class Android(Device):
         self.shell("input", "swipe", str(x1), str(y1), str(x2), str(y2), "300")
 
     def screenshot(self, path: str) -> None:
+        # another app's screen can hold private content, and failure screenshots get uploaded
+        if not self.is_foreground():
+            raise RowFailed(f"{self.package} is not in front, so no screenshot was taken")
+
         with open(path, "wb") as file:
             file.write(subprocess.run(["adb", "-s", self.serial, "exec-out", "screencap", "-p"], capture_output=True, check=True).stdout)
 
