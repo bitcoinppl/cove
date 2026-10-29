@@ -7,6 +7,7 @@ import glob
 import json
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -61,10 +62,15 @@ def main():
     teams = set()
     for pem in out.split("-----END CERTIFICATE-----"):
         if "BEGIN CERTIFICATE" in pem:
-            r = subprocess.run(["openssl", "x509", "-noout", "-subject"], input=pem + "-----END CERTIFICATE-----\n", capture_output=True, text=True)
-            for part in r.stdout.replace("/", ",").split(","):
-                if part.strip().startswith("OU="):
-                    teams.add(part.strip()[3:].strip())
+            # the default subject format differs between OpenSSL versions and LibreSSL (slashes,
+            # spaces around =), so ask for RFC 2253, where only an escaped comma is not a separator
+            r = subprocess.run(["openssl", "x509", "-noout", "-subject", "-nameopt", "RFC2253"],
+                               input=pem + "-----END CERTIFICATE-----\n", capture_output=True, text=True)
+            subject = r.stdout.strip().removeprefix("subject=")
+            for part in re.split(r"(?<!\\),", subject):
+                key, _, value = part.partition("=")
+                if key.strip() == "OU":
+                    teams.add(value.strip())
     check("signing_team", TEAM in teams, "team %s; Apple Development certs for teams: %s" % (TEAM, sorted(teams) or "none"),
           "open Xcode > Settings > Accounts and sign in to team %s, or set WDA_TEAM" % TEAM)
 
