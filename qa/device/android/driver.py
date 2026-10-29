@@ -37,6 +37,8 @@ def parse_hierarchy(xml: str) -> list[Node]:
                 bounds=tuple(int(value) for value in match.groups()),
                 package=element.get("package", ""),
                 enabled=element.get("enabled", "true") == "true",
+                # compose marks a lazy list scrollable only while its items overflow the viewport
+                scrollable=element.get("scrollable", "false") == "true",
             )
         )
 

@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from android.driver import parse_badging, parse_hierarchy  # noqa: E402
+from android.rows import wallet_names  # noqa: E402
 from common import Device, ForbiddenTap, Node, RowBlocked, RowFailed, ensure_tap_allowed  # noqa: E402
 from ios.driver import Ios, parse_source  # noqa: E402
 from screens import error_text, row_registry, wait_for_scan_to_start  # noqa: E402
@@ -147,6 +148,52 @@ class ScreenReadTest(unittest.TestCase):
         evidence = {}
         wait_for_scan_to_start(screen, evidence, timeout=0.6)
         self.assertIn("scan_start_seconds", evidence)
+
+    def test_an_error_while_waiting_for_a_scan_fails_the_row_with_its_text(self):
+        screen = FakeScreen(text_nodes("Receive", "Transactions", "Node Connection Failed"))
+
+        with self.assertRaisesRegex(RowFailed, "Node Connection Failed"):
+            wait_for_scan_to_start(screen, {}, timeout=0.6)
+
+
+def drawer_dump(wallets, scrollable):
+    """An open sidebar over the wallet home, whose wallet list reports `scrollable` as given"""
+    rows = "".join(
+        f'<node text="{name}" class="android.widget.TextView" package="app" bounds="[40,{300 + index * 100}][500,{360 + index * 100}]" />'
+        for index, name in enumerate(wallets)
+    )
+
+    return f"""<hierarchy>
+  <node text="" class="android.view.View" package="app" bounds="[0,0][1080,2400]">
+    <node text="Receive" class="android.widget.TextView" package="app" bounds="[700,300][1040,360]" />
+    <node text="Transactions" class="android.widget.TextView" package="app" bounds="[700,900][1040,960]" />
+    <node text="" content-desc="Menu" class="android.view.View" package="app" bounds="[0,100][120,220]" />
+    <node text="My Wallets" class="android.widget.TextView" package="app" bounds="[40,200][500,250]" />
+    <node text="" class="android.view.View" package="app" scrollable="{str(scrollable).lower()}" bounds="[0,280][700,1800]">{rows}</node>
+    <node text="Add Wallet" class="android.widget.TextView" package="app" bounds="[40,1900][500,1960]" />
+  </node>
+</hierarchy>"""
+
+
+class FakeAndroidScreen(FakeScreen):
+    def screen_size(self):
+        return 1080, 2400
+
+    def swipe(self, x1, y1, x2, y2):
+        pass
+
+
+class WalletNamesTest(unittest.TestCase):
+    def test_reads_the_wallets_when_the_whole_list_fits(self):
+        screen = FakeAndroidScreen(parse_hierarchy(drawer_dump(["Main", "Savings"], scrollable=False)))
+
+        self.assertEqual(wallet_names(screen), ["Main", "Savings"])
+
+    def test_a_list_that_scrolls_blocks_the_row_instead_of_comparing_part_of_it(self):
+        screen = FakeAndroidScreen(parse_hierarchy(drawer_dump(["Main", "Savings"], scrollable=True)))
+
+        with self.assertRaisesRegex(RowBlocked, "more wallets than fit"):
+            wallet_names(screen)
 
 
 class RowRegistryTest(unittest.TestCase):

@@ -336,19 +336,24 @@ def two_cold_launches_after_upgrade(driver: Android, evidence: dict) -> None:
 # shared by the scan rows
 
 def wallet_names(driver: Android) -> list[str]:
-    """Wallet names listed in the sidebar between `My Wallets` and `Add Wallet`"""
+    """Wallet names listed in the sidebar between `My Wallets` and `Add Wallet`
+
+    The list is lazy, so rows scrolled out of view aren't on screen at all; a list that doesn't
+    fit blocks the row, because comparing only the visible part could miss a lost wallet
+    """
     driver.tap_label(r"^Menu$")
     top = driver.wait_for(r"^My Wallets$").center[1]
     bottom = driver.wait_for(r"^Add Wallet$").center[1]
     width, _ = driver.screen_size()
 
-    # the home screen stays drawn to the right of the drawer, so only text in the drawer's own column counts
-    names = [
-        node.label
-        for node in driver.app_nodes()
-        if top < node.center[1] < bottom and node.center[0] < width // 2 and node.clazz.endswith("TextView") and node.label
-    ]
+    # the home screen stays drawn to the right of the drawer, so only nodes in the drawer's own column count
+    drawer = [node for node in driver.app_nodes() if top < node.center[1] < bottom and node.center[0] < width // 2]
+    names = [node.label for node in drawer if node.clazz.endswith("TextView") and node.label]
+    overflows = any(node.scrollable for node in drawer)
     close_sidebar(driver)
     wait_for_wallet_home(driver, 15)
+
+    if overflows:
+        raise RowBlocked(f"the sidebar lists more wallets than fit on screen, so the row can't compare them all; showing {names}")
 
     return names
