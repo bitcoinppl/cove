@@ -316,8 +316,13 @@ impl NodeSelection {
 
 #[cfg(test)]
 mod tests {
+    use bitcoin::Network as BitcoinNetwork;
+
     use super::*;
-    use crate::node::ApiType;
+    use crate::{
+        node::ApiType,
+        test_support::{ensure_tokio_runtime, fake_node::FakeNode, global_state_test_lock},
+    };
 
     fn selector(network: Network) -> NodeSelector {
         NodeSelector { network, node_list: Vec::new() }
@@ -369,5 +374,68 @@ mod tests {
         assert_eq!(parse("http://electrum.example.com").url, "tcp://electrum.example.com:50001");
         assert_eq!(parse("electrum.example.com:50002").url, "ssl://electrum.example.com:50002/");
         assert_eq!(parse("electrum.example.com").url, "tcp://electrum.example.com:50001/");
+    }
+
+    fn selected_node() -> Node {
+        Database::global().global_config.selected_node_for_network(Network::Bitcoin)
+    }
+
+    fn reset_selected_node() {
+        Database::global()
+            .global_config
+            .set_selected_node(&Node::default(Network::Bitcoin))
+            .expect("default node is saved");
+    }
+
+    #[tokio::test]
+    async fn reachable_custom_nodes_are_saved_as_the_selected_node() {
+        let _guard = global_state_test_lock().lock().await;
+        ensure_tokio_runtime();
+        crate::database::test_support::init_test_database();
+        reset_selected_node();
+
+        let node = FakeNode::start(BitcoinNetwork::Bitcoin);
+        let selector = NodeSelector::new();
+
+        for custom in [node.esplora_node("custom esplora"), node.electrum_node("custom electrum")] {
+            selector.check_and_save_node(custom.clone()).await.expect("a reachable node is saved");
+            assert_eq!(selected_node(), custom);
+        }
+
+        reset_selected_node();
+    }
+
+    #[tokio::test]
+    async fn unreachable_custom_nodes_are_rejected_and_leave_the_selection_alone() {
+        let _guard = global_state_test_lock().lock().await;
+        ensure_tokio_runtime();
+        crate::database::test_support::init_test_database();
+        reset_selected_node();
+
+        let selector = NodeSelector::new();
+        let mut offline = FakeNode::start(BitcoinNetwork::Bitcoin);
+        let refused_electrum = offline.electrum_node("dead electrum");
+        let refused_esplora = offline.esplora_node("dead esplora");
+        offline.go_offline();
+
+        // a server that answers, but with an error, is as unusable as a missing one
+        let broken = FakeNode::start(BitcoinNetwork::Bitcoin);
+        broken.on("/blocks/tip/height").fail(400, "not an esplora server");
+        let erroring_esplora = broken.esplora_node("erroring esplora");
+
+        let before = selected_node();
+
+        for rejected in [refused_electrum, refused_esplora, erroring_esplora] {
+            let name = rejected.name.clone();
+            let error = selector
+                .check_and_save_node(rejected)
+                .await
+                .expect_err(&format!("{name} must be rejected"));
+
+            assert!(matches!(error, Error::NodeAccessError(_)), "{name}: {error:?}");
+            assert_eq!(selected_node(), before, "{name} must not replace the selected node");
+        }
+
+        reset_selected_node();
     }
 }

@@ -175,7 +175,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::unused_wallet_initial_scan_reports_progress_then_completes",
 ]
 # 1.4.0: ios PASS, android PASS
 
@@ -234,7 +234,8 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsScanState.kt",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::repeated_scan_requests_during_the_first_scan_run_it_once",
+    "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::unused_wallet_initial_scan_reports_progress_then_completes",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
 # scan task multiplicity is only observable in rust
@@ -253,7 +254,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::pending_transaction_refreshes_to_confirmed_when_the_node_confirms_it",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 
@@ -293,6 +294,7 @@ paths = [
 ]
 coverage = [
     "agent",
+    "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::pending_transaction_refreshes_to_confirmed_when_the_node_confirms_it",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 
@@ -315,6 +317,7 @@ paths = [
 ]
 coverage = [
     "agent",
+    "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::sending_is_refused_until_the_initial_scan_completes",
 ]
 # 1.4.0: ios PASS, android PASS
 # the rust spend guard decides; the alert wiring is platform code
@@ -338,7 +341,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::unused_signet_wallet_initial_scan_completes",
 ]
 # 1.4.0: ios PASS, android PASS
 
@@ -389,6 +392,7 @@ paths = [
 ]
 coverage = [
     "agent",
+    "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::unused_wallet_initial_scan_reports_progress_then_completes",
 ]
 # 1.4.0: ios PASS, android N/A
 
@@ -480,7 +484,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/node_connect.rs::unreachable_custom_nodes_are_rejected_and_leave_the_selection_alone",
 ]
 # 1.4.0: ios PASS, android PASS
 
@@ -552,6 +556,8 @@ paths = [
 ]
 coverage = [
     "agent",
+    "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::custom_electrum_node_scans_the_wallet_after_being_saved",
+    "rust:rust/src/node_connect.rs::reachable_custom_nodes_are_saved_as_the_selected_node",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# needs a reachable signet electrum server fixture
+# the rust tests run the scan against an in-process electrum server; the node screen's parsing and submit stay with the agent
