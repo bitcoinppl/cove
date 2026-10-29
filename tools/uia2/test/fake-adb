@@ -1,0 +1,62 @@
+#!/bin/bash
+# Fake adb for testing uia2-start, uia2-stop and android-launch without a device
+# State lives in $FAKE_ADB: forwards (adb forward --list), ps (device processes), calls.log,
+# flag files resolve_fail, forward_fail, query_fail, force_stop_fail and daemon, activity, which
+# replaces the launcher activity that resolve-activity prints, and ps_after_install, which becomes
+# ps once an install finishes
+echo "$*" >>"$FAKE_ADB/calls.log"
+# daemon: the first call starts a long-lived host server that inherits this process's fds, as
+# real adb does when its server isn't running yet
+if [ -e "$FAKE_ADB/daemon" ] && [ ! -e "$FAKE_ADB/daemon.pid" ]; then
+  sleep 30 >/dev/null 2>&1 </dev/null &
+  echo $! >"$FAKE_ADB/daemon.pid"
+fi
+serial="${ANDROID_SERIAL:-}"
+if [ "${1:-}" = "-s" ]; then serial="$2"; shift 2; fi
+touch "$FAKE_ADB/forwards"
+
+case "$1 ${2:-} ${3:-}" in
+  "devices  ") printf 'List of devices attached\n%s\tdevice\n' "${serial:-TEST-SERIAL}" ;;
+  "forward --list "*) cat "$FAKE_ADB/forwards" ;;
+  "forward --remove "*) grep -v " $3 " "$FAKE_ADB/forwards" >"$FAKE_ADB/forwards.new"; mv "$FAKE_ADB/forwards.new" "$FAKE_ADB/forwards" ;;
+  "forward --no-rebind "*)
+    [ -e "$FAKE_ADB/forward_fail" ] && { echo "error: cannot bind listener" >&2; exit 1; }
+    grep -q " $3 " "$FAKE_ADB/forwards" && { echo "error: cannot rebind existing socket" >&2; exit 1; }
+    echo "$serial $3 $4" >>"$FAKE_ADB/forwards" ;;
+  "shell ps "*)
+    [ -e "$FAKE_ADB/query_fail" ] && { echo "error: device offline" >&2; exit 1; }
+    cat "$FAKE_ADB/ps" 2>/dev/null || true ;;
+  "shell getprop ro.build.version.sdk") echo 33 ;;
+  "shell getprop ro.product.model") echo FakePhone ;;
+  "shell dumpsys power") echo "  mWakefulness=Awake" ;;
+  "shell dumpsys window")
+    [ -e "$FAKE_ADB/query_fail" ] && { echo "error: device offline" >&2; exit 1; }
+    echo "    isKeyguardShowing=false" ;;
+  "shell am force-stop")
+    # a number in force_stop_fail lets that many force-stops succeed before the rest fail
+    if [ -e "$FAKE_ADB/force_stop_fail" ]; then
+      left="$(cat "$FAKE_ADB/force_stop_fail")"
+      if [ "${left:-0}" -gt 0 ]; then echo $((left - 1)) >"$FAKE_ADB/force_stop_fail"; else echo "error: device offline" >&2; exit 1; fi
+    fi ;;
+  "shell dumpsys package") echo "    versionName=10.6.6" ;;
+  # installed/PACKAGE holds the checksum of the APK installed for it
+  "shell pm path")
+    [ -e "$FAKE_ADB/installed/$4" ] || exit 1
+    echo "package:/data/app/$4/base.apk" ;;
+  "shell sha256sum "*)
+    pkg="$(basename "$(dirname "$3")")"
+    echo "$(cat "$FAKE_ADB/installed/$pkg")  $3" ;;
+  "install -r -g")
+    case "$4" in *androidTest*) pkg=io.appium.uiautomator2.server.test ;; *) pkg=io.appium.uiautomator2.server ;; esac
+    mkdir -p "$FAKE_ADB/installed"
+    shasum -a 256 "$4" | cut -d' ' -f1 >"$FAKE_ADB/installed/$pkg"
+    [ -e "$FAKE_ADB/ps_after_install" ] && mv "$FAKE_ADB/ps_after_install" "$FAKE_ADB/ps"
+    true ;;
+  "shell am instrument") while :; do sleep 1; done ;;
+  "shell am start") echo "Status: ok" ;;
+  "shell cmd package")
+    [ -e "$FAKE_ADB/resolve_fail" ] && { echo "adb: more than one device/emulator" >&2; exit 1; }
+    cat "$FAKE_ADB/activity" 2>/dev/null || echo "org.bitcoinppl.cove/.MainActivity" ;;
+  "shell input keyevent") ;;
+  *) echo "fake adb: unhandled: $*" >&2; exit 1 ;;
+esac
