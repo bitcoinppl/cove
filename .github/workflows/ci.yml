@@ -198,6 +198,10 @@ jobs:
       - name: Check QA checklist manifest
         run: cd rust && cargo run --locked -p xtask -- qa check
 
+      # the device scripts only run on attached devices, so CI checks their parsers and tap guard offline
+      - name: Test device-script helpers
+        run: python3 -I -m unittest discover -s qa/device -p "test_*.py"
+
   test:
     strategy:
       matrix:

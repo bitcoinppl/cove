@@ -94,7 +94,8 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsScanState.kt",
 ]
 coverage = [
-    "agent",
+    "device-script:qa/device/android/rows.py::s14-online-cold-restart-recovers-scan-start",
+    "device-script:qa/device/ios/rows.py::s14-online-cold-restart-recovers-scan-start",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 # needs a process kill and relaunch
@@ -133,7 +134,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsScanState.kt",
 ]
 coverage = [
-    "agent",
+    "device-script:qa/device/android/rows.py::s14-android-scan-survives-short-background",
 ]
 # 1.4.0: ios N/A, android PASS
 # needs an os background and foreground
