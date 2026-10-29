@@ -125,18 +125,26 @@ else
   echo "FAIL build signal: $(cat "$tmp/build.json")"; fail=1
 fi
 
-# a start whose runner exits early stops the forward it started, so the port is free again
+# a start whose runner exits early stops the forward it started, so the port is free again. The
+# products below are a ready build, so the start must not rebuild; the fake checkout keeps a
+# rebuild it does attempt offline
 mkdir -p "$tmp/derived/Build/Products/Debug-iphoneos/WebDriverAgentRunner-Runner.app"
 touch "$tmp/derived/Build/Products/WebDriverAgentRunner.xctestrun"
 python3 -I -c 'import plistlib, sys; plistlib.dump({"CFBundleIdentifier": "com.avencera.WebDriverAgentRunner.xctrunner"}, open(sys.argv[1], "wb"))' \
   "$tmp/derived/Build/Products/Debug-iphoneos/WebDriverAgentRunner-Runner.app/Info.plist"
 start_state="$tmp/startstate/devices/TEST-UDID"
 expect "start stops its forward when the runner exits" 1 'd["error"]=="xcodebuild_exited"' -- \
-  "${stub_env[@]}" WDA_STATE="$tmp/startstate" WDA_PORT=1 WDA_BASE_URL=http://127.0.0.1:1 STUB_RUNNER_EXIT=65 "$here/wda-start"
+  "${stub_env[@]}" WDA_STATE="$tmp/startstate" WDA_REPO="$tmp/wda-repo" WDA_COMMIT="$(git -C "$tmp/wda-repo" rev-parse HEAD)" \
+  WDA_PORT=1 WDA_BASE_URL=http://127.0.0.1:1 STUB_RUNNER_EXIT=65 "$here/wda-start"
 if [ -s "$tmp/iproxy--u.pid" ] && ! alive "$tmp/iproxy--u.pid" && [ ! -e "$start_state/iproxy.pid" ] && [ ! -e "$start_state/port" ]; then
   echo "ok   failed start leaves no forward or pid files"
 else
   echo "FAIL failed start left a forward or $(ls "$start_state")"; fail=1
+fi
+if [ ! -e "$start_state/wda-build.json" ]; then
+  echo "ok   start reuses a ready build"
+else
+  echo "FAIL start rebuilt a ready build: $(cat "$start_state/wda-build.json")"; fail=1
 fi
 
 # wda-stop leaves a recorded pid alone when another phone's runner reused it

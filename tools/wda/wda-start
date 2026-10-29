@@ -42,7 +42,9 @@ XCTESTRUN="$(ls "$WDA_DERIVED"/Build/Products/*.xctestrun 2>/dev/null | head -1)
 # not include this device; a destination with the real UDID lets Xcode register the device and
 # refresh the profile
 APP="$WDA_DERIVED/Build/Products/Debug-iphoneos/WebDriverAgentRunner-Runner.app"
-BUILT_ID="$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.plist" 2>/dev/null)"
+# plistlib reads binary and XML plists alike, and unlike PlistBuddy it exists off macOS, where the
+# mock tests run in CI
+BUILT_ID="$(python3 -I -c 'import plistlib, sys; print(plistlib.load(open(sys.argv[1], "rb")).get("CFBundleIdentifier", ""))' "$APP/Info.plist" 2>/dev/null)"
 if [ -z "$XCTESTRUN" ] || [ "$BUILT_ID" != "$WDA_BUNDLE_ID.xctrunner" ] ||
   ! security cms -D -i "$APP/embedded.mobileprovision" 2>/dev/null | grep -q "$IOS_UDID"; then
   WDA_BUILD_DESTINATION="id=$IOS_UDID" "$(dirname "$0")/wda-build" >"$STATE_DIR/wda-build.json" || {

@@ -36,6 +36,34 @@ def has(nodes: list[Node], pattern: str) -> bool:
     return any(regex.search(node.label) for node in nodes)
 
 
+# a screen still fetching its data: Receive shows these and disables Copy Address until its
+# address loads
+LOADING_TEXT = r"^(Loading|Refreshing\.\.\.)$"
+DISABLED_WHILE_LOADING = ("Copy Address",)
+
+
+def settled_labels(driver, timeout: float = 15) -> set[str]:
+    """The screen's labels once it has finished loading and two reads in a row agree
+
+    A route can still be loading when its marker shows, and the labels that appear when the load
+    finishes, such as the Receive address, are not a change of route
+    """
+    reads: list[set[str]] = []
+
+    def settled() -> bool:
+        nodes = driver.app_nodes()
+        loading = has(nodes, LOADING_TEXT) or any(
+            not node.enabled for node in nodes if node.label in DISABLED_WHILE_LOADING
+        )
+        reads.append(set(labels(nodes, driver.package)))
+
+        return not loading and len(reads) > 1 and reads[-1] == reads[-2]
+
+    driver.wait_until(settled, "the screen to finish loading", timeout)
+
+    return reads[-1]
+
+
 def is_wallet_home(nodes: list[Node]) -> bool:
     return has(nodes, r"^Receive$") and has(nodes, r"^Transactions$")
 
