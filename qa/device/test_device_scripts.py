@@ -186,6 +186,9 @@ class FakeScreen(Device):
     def app_nodes(self):
         return self._nodes
 
+    def ensure_app_in_front(self):
+        pass
+
     def tap(self, node):
         ensure_tap_allowed(node.label)
         self.tapped.append(node.label)
@@ -236,6 +239,18 @@ class ScreenReadTest(unittest.TestCase):
         screen.app_nodes = springboard_in_front
 
         with self.assertRaisesRegex(RowFailed, "springboard"):
+            wait_for_scan_to_start(screen, {}, timeout=0.6)
+
+    def test_the_app_crashing_while_waiting_for_a_scan_is_a_failure_not_a_timeout(self):
+        # an Android dump after a crash still succeeds, it just holds no nodes from the app
+        screen = FakeScreen([])
+
+        def launcher_in_front():
+            raise RowFailed("com.android.launcher3 is in front instead of org.bitcoinppl.cove")
+
+        screen.ensure_app_in_front = launcher_in_front
+
+        with self.assertRaisesRegex(RowFailed, "launcher3"):
             wait_for_scan_to_start(screen, {}, timeout=0.6)
 
     def test_an_error_while_waiting_for_a_scan_fails_the_row_with_its_text(self):
@@ -313,6 +328,20 @@ class RowRegistryTest(unittest.TestCase):
         self.assertEqual(evidence["crashes"], ["FATAL EXCEPTION app"])
 
         rows["some-row"](self.Driver([]), {})
+
+    def test_a_crash_fails_a_row_that_reported_blocked(self):
+        rows = {}
+        row = row_registry("android", rows, lambda driver: None)
+
+        @row("some-row")
+        def body(driver, evidence):
+            raise RowBlocked("no history scan showed")
+
+        with self.assertRaisesRegex(RowFailed, "app crashed: FATAL"):
+            rows["some-row"](self.Driver(["FATAL EXCEPTION app"]), {})
+
+        with self.assertRaisesRegex(RowBlocked, "no history scan"):
+            rows["some-row"](self.Driver([]), {})
 
 
 class FakeUpgradeDevice:

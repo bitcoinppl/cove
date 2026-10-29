@@ -80,6 +80,9 @@ def wait_for_scan_to_start(driver, evidence: dict, timeout: float = 30) -> None:
     alerts: list[str] = []
 
     def started_or_failed() -> bool:
+        # an Android dump only filters out other apps' nodes, so a crashed app would otherwise read
+        # as a screen with no scan on it and turn into a timeout
+        driver.ensure_app_in_front()
         nodes = driver.app_nodes()
         alert = driver.find(ERROR_TEXT, nodes)
         if alert:
@@ -130,13 +133,15 @@ def row_registry(platform: str, rows: dict, return_to_home: Callable) -> Callabl
     """Build the `@row(id)` decorator for one platform
 
     A registered row starts from a clean crash log and the wallet home, takes a failure
-    screenshot, and fails if the app crashed while it ran
+    screenshot, and fails if the app crashed while it ran, even when the crash made the row
+    look blocked
     """
 
     def row(row_id: str):
         def register(body: Callable):
             def run(driver, evidence: dict) -> None:
                 driver.clear_crash_log()
+                blocked = None
 
                 try:
                     return_to_home(driver)
@@ -144,11 +149,16 @@ def row_registry(platform: str, rows: dict, return_to_home: Callable) -> Callabl
                 except RowFailed:
                     save_screenshot(driver, platform, row_id, evidence)
                     raise
+                except RowBlocked as error:
+                    blocked = error
                 finally:
                     evidence["crashes"] = driver.crashes()
 
                 if evidence["crashes"]:
-                    raise RowFailed(f"app crashed: {evidence['crashes'][0]}")
+                    raise RowFailed(f"app crashed: {evidence['crashes'][0]}") from blocked
+
+                if blocked is not None:
+                    raise blocked
 
             rows[row_id] = run
 
