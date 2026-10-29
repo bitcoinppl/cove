@@ -28,8 +28,9 @@ NETWORKS = ("Bitcoin", "Testnet", "Testnet4", "Signet")
 # the receive sheet controls the font rows compare; both must stay reachable at any font scale
 RECEIVE_CONTROLS = ("Copy Address", "Create New Address")
 
-# the largest font scale Android's own settings screen offers
+# the largest font scale Android's own settings screen offers, and the default one
 LARGEST_FONT_SCALE = "2.0"
+NORMAL_FONT_SCALE = "1.0"
 
 # installs `--upgrade-apk` over the previous release, so it runs before every other row
 UPGRADE_ROW = "s01-two-cold-launches-after-upgrade"
@@ -228,9 +229,13 @@ def restore_normal_font_and_compare(driver: Android, evidence: dict) -> None:
         wait_for_wallet_home(driver, 20)
         largest = receive_controls(driver, evidence, "largest_font")
 
+    # the device may already sit at a large scale, so set the normal one rather than trust the
+    # original to be it
+    with driver.setting("system", "font_scale", NORMAL_FONT_SCALE):
+        wait_for_wallet_home(driver, 20)
+        normal = receive_controls(driver, evidence, "normal_font")
+
     check(driver.shell("settings", "get", "system", "font_scale") == original, "font scale was not restored")
-    wait_for_wallet_home(driver, 20)
-    normal = receive_controls(driver, evidence, "normal_font")
 
     check(sorted(normal) == sorted(RECEIVE_CONTROLS), f"controls missing at normal font: {normal}")
     check(sorted(largest) == sorted(normal), f"largest font shows {largest} but normal font shows {normal}")
