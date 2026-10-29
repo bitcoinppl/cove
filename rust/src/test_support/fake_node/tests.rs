@@ -1,11 +1,15 @@
 use std::{sync::Arc, time::Duration};
 
-use bdk_electrum::electrum_client::{self, Client as ElectrumClient, ElectrumApi as _};
+use bdk_electrum::electrum_client::{self, Client as ElectrumClient, ElectrumApi as _, Param};
 use bdk_esplora::esplora_client;
 use bitcoin::{
     Address, Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid,
-    Witness, absolute::LockTime, transaction::Version,
+    Witness,
+    absolute::LockTime,
+    hashes::{Hash as _, sha256},
+    transaction::Version,
 };
+use serde_json::Value;
 
 use super::{FakeNode, Protocol, TxLocation, unreachable_url, wait_until};
 use crate::{
@@ -357,4 +361,39 @@ async fn pending_transactions_are_not_reported_as_confirmed() {
         let confirmed = client.get_confirmed_transaction(Arc::new(txid)).await.unwrap();
         assert_eq!(confirmed.map(|tx| tx.compute_txid()), Some(txid), "{api:?} confirmed");
     }
+}
+
+#[tokio::test]
+async fn script_hashes_only_match_in_the_byte_order_each_protocol_uses() {
+    ensure_tokio_runtime();
+
+    let node = FakeNode::start(Network::Bitcoin);
+    let script = test_script(10);
+    node.chain().pay(&script, Amount::from_sat(1_000));
+
+    let digest = sha256::Hash::hash(script.as_bytes()).to_byte_array();
+    let forward = hex::encode(digest);
+    let reversed = hex::encode(digest.iter().rev().copied().collect::<Vec<_>>());
+
+    // Electrum takes the digest reversed
+    let electrum = ElectrumClient::new(&node.electrum_url()).unwrap();
+    let electrum_history = |hash: &str| {
+        let params = [Param::String(hash.to_string())];
+        let history = electrum.raw_call("blockchain.scripthash.get_history", params).unwrap();
+
+        history.as_array().expect("history is an array").len()
+    };
+    assert_eq!(electrum_history(&reversed), 1);
+    assert_eq!(electrum_history(&forward), 0);
+
+    // Esplora takes the digest as hashed
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let esplora_history = async |hash: &str| {
+        let url = format!("{}/scripthash/{hash}/txs", node.esplora_url());
+        let history = reqwest::get(url).await.unwrap().json::<Value>().await.unwrap();
+
+        history.as_array().expect("history is an array").len()
+    };
+    assert_eq!(esplora_history(&forward).await, 1);
+    assert_eq!(esplora_history(&reversed).await, 0);
 }

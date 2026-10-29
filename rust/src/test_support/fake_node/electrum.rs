@@ -278,17 +278,21 @@ fn txid_param(params: &[Value], index: usize) -> Result<Txid, RpcError> {
 }
 
 /// The script behind the scripthash param, `None` when the chain has never seen it
+///
+/// The Electrum protocol sends the SHA-256 digest of the script reversed:
+/// https://electrum-protocol.readthedocs.io/en/latest/protocol-basics.html#script-hashes
 fn script_param(
     chain: &FakeChain,
     params: &[Value],
 ) -> Result<Option<bitcoin::ScriptBuf>, RpcError> {
     let text = params.first().and_then(Value::as_str).ok_or_else(RpcError::invalid_params)?;
-    let hash = hex::decode(text)
+    let mut digest = hex::decode(text)
         .ok()
         .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
         .ok_or_else(RpcError::invalid_params)?;
+    digest.reverse();
 
-    Ok(chain.script_for_hash(&hash))
+    Ok(chain.script_for_digest(&digest))
 }
 
 fn history_for(chain: &FakeChain, params: &[Value]) -> Result<Vec<HistoryEntry>, RpcError> {

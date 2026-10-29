@@ -283,11 +283,11 @@ impl FakeChain {
             .collect()
     }
 
-    /// Maps a script hash, in either byte order, back to a script the chain has seen
-    pub(crate) fn script_for_hash(&self, hash: &[u8; 32]) -> Option<ScriptBuf> {
-        let mut reversed = *hash;
-        reversed.reverse();
-
+    /// Maps the SHA-256 digest of a script back to a script the chain has seen
+    ///
+    /// The digest is in hash output order; each protocol converts its own wire
+    /// format first, so a client that sends the wrong byte order finds nothing
+    pub(crate) fn script_for_digest(&self, digest: &[u8; 32]) -> Option<ScriptBuf> {
         let state = self.state.lock();
         let known_scripts = state.txs.values().flat_map(|entry| {
             let outputs = entry.tx.output.iter().map(|output| output.script_pubkey.clone());
@@ -301,10 +301,9 @@ impl FakeChain {
             outputs.chain(inputs).collect::<Vec<_>>()
         });
 
-        known_scripts.into_iter().find(|script| {
-            let digest = sha256::Hash::hash(script.as_bytes()).to_byte_array();
-            digest == *hash || digest == reversed
-        })
+        known_scripts
+            .into_iter()
+            .find(|script| sha256::Hash::hash(script.as_bytes()).to_byte_array() == *digest)
     }
 
     pub(crate) fn merkle_proof(&self, txid: Txid) -> Option<MerkleProof> {

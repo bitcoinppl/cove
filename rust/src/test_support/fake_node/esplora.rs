@@ -340,7 +340,7 @@ enum Page<'a> {
 }
 
 fn scripthash_txs(chain: &FakeChain, hash: &str, page: Page<'_>) -> Response {
-    let Some(script) = parse_hash(hash).and_then(|hash| chain.script_for_hash(&hash)) else {
+    let Some(script) = parse_hash(hash).and_then(|digest| chain.script_for_digest(&digest)) else {
         return Response::json(&json!([]));
     };
 
@@ -426,6 +426,8 @@ fn address_stats(chain: &FakeChain, address: &str) -> Response {
     }))
 }
 
+/// Esplora takes the SHA-256 digest of the script in hash output order, unlike
+/// Electrum, which reverses it
 fn parse_hash(hash: &str) -> Option<[u8; 32]> {
     hex::decode(hash).ok()?.try_into().ok()
 }
