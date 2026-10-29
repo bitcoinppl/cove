@@ -1,0 +1,49 @@
+#!/bin/bash
+# build WebDriverAgentRunner for any iOS device (no device needed when signing allows it)
+# usage: wda-build [--dry-run]
+set -u
+. "$(dirname "$0")/wda-env.sh"
+
+cmd=(xcodebuild build-for-testing
+  -project "$WDA_REPO/WebDriverAgent.xcodeproj"
+  -scheme WebDriverAgentRunner
+  -destination "${WDA_BUILD_DESTINATION:-generic/platform=iOS}"
+  -derivedDataPath "$WDA_DERIVED"
+  -allowProvisioningUpdates
+  "DEVELOPMENT_TEAM=$WDA_TEAM"
+  "PRODUCT_BUNDLE_IDENTIFIER=$WDA_BUNDLE_ID")
+
+if [ "${1:-}" = "--dry-run" ]; then
+  json ok:raw=true action=wda-build "command=${cmd[*]}"
+  exit 0
+fi
+
+lock_state
+fetched="$("$(dirname "$0")/wda-fetch")" || { echo "$fetched"; exit 1; }
+
+# a signal must not free the lock while xcodebuild still writes to DerivedData, or another build
+# could take the lock and write there too, so stop xcodebuild and wait for it first. It runs in
+# the background, where SIGINT is ignored, so every signal is passed on as SIGTERM
+stop_build() { # stop_build SIGNAL
+  # xcodebuild is this script's only background job, and jobs finds it even when the signal
+  # lands before the wait below starts
+  local pids
+  pids="$(jobs -p)"
+  if [ -n "$pids" ]; then
+    kill $pids 2>/dev/null
+    wait $pids
+  fi
+  die interrupted "wda-build got SIG$1 and stopped xcodebuild" "log=$WDA_STATE/build.log"
+}
+trap 'stop_build TERM' TERM
+trap 'stop_build INT' INT
+trap 'stop_build HUP' HUP
+
+# xcodebuild may start build services that outlive it, and they must not keep the lock
+"${cmd[@]}" >"$WDA_STATE/build.log" 2>&1 9>&- &
+wait $!
+rc=$?
+if [ $rc -ne 0 ]; then
+  die build_failed "xcodebuild exited $rc; see $WDA_STATE/build.log" "log=$WDA_STATE/build.log"
+fi
+json ok:raw=true action=wda-build "derived_data=$WDA_DERIVED" "log=$WDA_STATE/build.log"

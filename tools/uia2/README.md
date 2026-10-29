@@ -6,7 +6,7 @@ Android counterpart of WebDriverAgent. These tools let an agent read the screen 
 text, tap elements by name, type and scroll. The server stays running on the device,
 so each step is one HTTP call instead of a fresh `uiautomator dump`.
 
-The `android-*` commands mirror the `ios-*` WDA scripts: same names, same arguments
+The `android-*` commands mirror the [`ios-*` WDA scripts](../wda/README.md): same names, same arguments
 where the platforms agree, and the same one-JSON-object output with an `"ok"` field.
 They use only the Python standard library and talk to the server directly, with no
 Appium server or Node.

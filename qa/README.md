@@ -11,7 +11,7 @@
 
 ## Driving devices
 
-An agent pass on Android drives the device with [`tools/uia2`](../tools/uia2/README.md): read the screen with `android-vis`, act with `android-tap-label` and the other `android-*` commands, and take screenshots only for visual checks.
+An agent pass drives Android with [`tools/uia2`](../tools/uia2/README.md) and iOS with [`tools/wda`](../tools/wda/README.md): read the screen with `android-vis` or `ios-vis`, act with `android-tap-label`, `ios-tap-label` and the other commands, and take screenshots only for visual checks.
 
 ## Row format
 

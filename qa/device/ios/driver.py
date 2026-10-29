@@ -1,7 +1,7 @@
 """WebDriverAgent driver for Cove on a real iPhone
 
 HTTP and session handling come from `wdalib`, the client behind the `ios-*` scripts in `$WDA_TOOLS`
-(default `~/code/tools/wda`). It is imported on first use so the XML parser here can be tested
+(default `tools/wda` in this repository). It is imported on first use so the XML parser here can be tested
 without those tools or a phone. Nothing here changes an OS setting: iOS rows that need one are not written
 """
 
@@ -12,6 +12,9 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from common import Device, Node, RowBlocked, RowFailed, ensure_tap_allowed
+
+# qa/device/ios/driver.py -> repository root
+REPO_WDA_TOOLS = Path(__file__).resolve().parents[3] / "tools" / "wda"
 
 # WDA reports `/wda/apps/state` 4 for an app running in the foreground
 FOREGROUND = 4
@@ -83,7 +86,7 @@ class Ios(Device):
     @property
     def wda(self):
         if self._wda is None:
-            tools = Path(os.environ.get("WDA_TOOLS", "~/code/tools/wda")).expanduser()
+            tools = Path(os.environ.get("WDA_TOOLS") or REPO_WDA_TOOLS).expanduser()
             if not (tools / "wdalib.py").is_file():
                 raise RowBlocked(f"wdalib.py not found in {tools}; set WDA_TOOLS to the WebDriverAgent tools directory")
 

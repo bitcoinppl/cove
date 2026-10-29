@@ -1,0 +1,47 @@
+#!/bin/bash
+# stop the WDA test runs and iproxy forwards started by wda-start: the phone in IOS_UDID, or every
+# phone when it is unset
+# usage: [IOS_UDID=<udid>] wda-stop [--dry-run]
+set -u
+. "$(dirname "$0")/wda-env.sh"
+
+dry=false
+[ "${1:-}" = "--dry-run" ] && dry=true
+$dry || lock_state
+
+if [ -n "$IOS_UDID" ]; then
+  dirs=("$(device_state "$IOS_UDID")")
+else
+  dirs=("$WDA_STATE"/devices/*)
+fi
+
+stopped=()
+for dir in "${dirs[@]}"; do
+  [ -d "$dir" ] || continue
+  udid="$(basename "$dir")"
+  for name in xcodebuild iproxy; do
+    pidfile="$dir/$name.pid"
+    [ -f "$pidfile" ] || continue
+
+    # a runner that died without cleanup leaves its pid behind, and another phone's runner can
+    # reuse it, so only a process whose arguments name this phone counts; any other is stale
+    case "$name" in
+      xcodebuild) owner="-destination id=$udid" ;;
+      iproxy) owner="-u $udid" ;;
+    esac
+
+    if pid_owned "$pidfile" "$name" "$owner"; then
+      pid="$(cat "$pidfile")"
+      if $dry; then
+        stopped+=("$udid:$name:$pid(dry-run)")
+        continue
+      fi
+      stop_pid "$pid"
+      stopped+=("$udid:$name:$pid")
+    fi
+    $dry || rm -f "$pidfile"
+  done
+  $dry || rm -f "$dir/port"
+done
+
+json ok:raw=true action=wda-stop "stopped=${stopped[*]:-none}" "dry_run:raw=$dry"
