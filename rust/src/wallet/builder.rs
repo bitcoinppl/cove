@@ -1004,6 +1004,25 @@ mod tests {
         }
     }
 
+    // the iOS and Android file importers pass decoded file contents straight to
+    // `try_new_persisted_from_xpub`, so surrounding whitespace must not change the result
+    #[test]
+    fn ypub_file_contents_with_surrounding_whitespace_import_as_wrapped_segwit() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_import_globals();
+
+        for contents in
+            [format!("{BIP49_YPUB}\n"), format!("{BIP49_YPUB}\r\n"), format!("  {BIP49_YPUB}\n\n")]
+        {
+            let (address, imported_type, wallet_type) =
+                import_public_key(&contents, Network::Bitcoin).unwrap();
+
+            assert_eq!(address, "37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf", "{contents:?}");
+            assert_eq!(imported_type, WalletAddressType::WrappedSegwit, "{contents:?}");
+            assert_eq!(wallet_type, WalletType::XpubOnly, "{contents:?}");
+        }
+    }
+
     #[test]
     fn slip132_public_key_for_another_network_is_rejected_without_saving_a_wallet() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
