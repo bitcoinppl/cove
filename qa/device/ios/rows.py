@@ -143,7 +143,14 @@ def repeated_background_route_scope(driver: Ios, evidence: dict) -> None:
         check(after == before, f"loop {index + 1}: {route} changed after background; lost {sorted(before - after)}, gained {sorted(after - before)}")
         check(not has(nodes, SETTINGS_ROOT), f"loop {index + 1}: {route} fell back to the settings root after background")
 
-        return_to_wallet_home(driver)
+        # the sheet has no Back button, and the cold restart return_to_wallet_home falls back to
+        # would end the long-running session this row soaks
+        if route == "Receive":
+            driver.tap_label(r"^Done$")
+            wait_for_wallet_home(driver, 15)
+        else:
+            return_to_wallet_home(driver)
+
         timings.append(round(time.time() - started, 1))
 
     evidence["loops"] = driver.loops
