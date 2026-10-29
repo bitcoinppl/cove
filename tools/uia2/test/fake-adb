@@ -1,7 +1,8 @@
 #!/bin/bash
 # Fake adb for testing uia2-start, uia2-stop and android-launch without a device
 # State lives in $FAKE_ADB: forwards (adb forward --list), ps (device processes), calls.log,
-# and flag files resolve_fail, forward_fail, query_fail, force_stop_fail and daemon
+# flag files resolve_fail, forward_fail, query_fail, force_stop_fail and daemon, and activity,
+# which replaces the launcher activity that resolve-activity prints
 echo "$*" >>"$FAKE_ADB/calls.log"
 # daemon: the first call starts a long-lived host server that inherits this process's fds, as
 # real adb does when its server isn't running yet
@@ -52,7 +53,7 @@ case "$1 ${2:-} ${3:-}" in
   "shell am start") echo "Status: ok" ;;
   "shell cmd package")
     [ -e "$FAKE_ADB/resolve_fail" ] && { echo "adb: more than one device/emulator" >&2; exit 1; }
-    echo "org.bitcoinppl.cove/.MainActivity" ;;
+    cat "$FAKE_ADB/activity" 2>/dev/null || echo "org.bitcoinppl.cove/.MainActivity" ;;
   "shell input keyevent") ;;
   *) echo "fake adb: unhandled: $*" >&2; exit 1 ;;
 esac
