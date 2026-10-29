@@ -100,7 +100,7 @@ These still need hands and eyes:
 - Passkey creation, approval and cancel during Cloud Backup setup, verification and restore
 - Signing in or out of iCloud or Google accounts
 
-Some neighboring checks don't need a person. Cove's HTTP client trusts only its bundled webpki roots, not certificates installed on the phone, so an intercepting proxy can't read the diagnostics upload. The wire format is covered by the tests in `rust/src/diagnostics/upload.rs`, and debug builds send reports to `COVE_DIAGNOSTICS_URL` when it is set, so a local server can inspect them.
+Some neighboring checks don't need a person. Cove's HTTP client trusts only its bundled webpki roots, not certificates installed on the phone, so an intercepting proxy can't read the diagnostics upload. The wire format is covered by the tests in `rust/src/diagnostics/upload.rs`, and debug builds send reports to `COVE_DIAGNOSTICS_URL` when it is set, so a local server can check that a report arrives and what headers it carries. The report itself is still encrypted to the production key, so that server can't read its contents.
 
 ## After a pass
 
