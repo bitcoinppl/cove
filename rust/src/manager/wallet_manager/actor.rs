@@ -4278,6 +4278,95 @@ mod tests {
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn edited_label_reaches_both_the_transaction_list_and_the_detail_screen() {
+        use crate::fiat::client::{PRICES, PriceResponse};
+        use crate::label_manager::LabelManager;
+        use crate::transaction::Transaction;
+
+        // PRICES is process-global, so put the previous cache back even if an assertion panics
+        struct RestorePrices(Arc<Option<PriceResponse>>);
+
+        impl Drop for RestorePrices {
+            fn drop(&mut self) {
+                PRICES.store(self.0.clone());
+            }
+        }
+
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::database::test_support::init_test_database();
+
+        // cached prices keep the list build from fetching them over the network; a current
+        // fetched_at keeps price age checks from underflowing in later tests
+        let _restore_prices = RestorePrices(PRICES.swap(Arc::new(Some(PriceResponse {
+            time: 0,
+            fetched_at: jiff::Timestamp::now().as_second() as u64,
+            usd: 100_000,
+            eur: 100_000,
+            gbp: 100_000,
+            cad: 100_000,
+            chf: 100_000,
+            aud: 100_000,
+            jpy: 100_000,
+        }))));
+
+        let mut wallet = Wallet::preview_new_wallet();
+        insert_checkpoint(
+            &mut wallet.bdk,
+            BlockId { height: 1, hash: BlockHash::from_byte_array([2; 32]) },
+        );
+        let outpoint = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(50_000));
+
+        // the label manager shares the actor's in-memory wallet db, which also keeps the edit
+        // away from cloud backup scheduling
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor = new_test_wallet_actor(wallet, sender);
+        actor.db =
+            WalletDataDb::new_in_memory(actor.wallet.id.clone()).expect("in-memory wallet db");
+        let manager = LabelManager::new_with_db(actor.db.clone());
+        let tx_id = crate::transaction::TxId::from(outpoint.txid);
+
+        let list_label = async |actor: &mut super::WalletActor| {
+            let transactions = actor_value(actor.transactions().await).await;
+            assert_eq!(transactions.len(), 1);
+
+            match &transactions[0] {
+                Transaction::Confirmed(tx) => tx.label(),
+                Transaction::Unconfirmed(tx) => tx.label(),
+            }
+        };
+
+        // the detail screen reads the label from the details inside this presentation
+        let detail_details = async |actor: &mut super::WalletActor| {
+            actor_value(actor.transaction_details(tx_id).await).await.details()
+        };
+
+        let unlabeled = list_label(&mut actor).await;
+        let details = detail_details(&mut actor).await;
+        assert_eq!(details.transaction_label(), None);
+
+        manager
+            .insert_or_update_labels_for_txn(details, "  Rent  ".to_string(), None)
+            .expect("label is saved");
+        assert_eq!(list_label(&mut actor).await, "Rent");
+        let details = detail_details(&mut actor).await;
+        assert_eq!(details.transaction_label().as_deref(), Some("Rent"));
+
+        manager
+            .insert_or_update_labels_for_txn(details, "Groceries".to_string(), None)
+            .expect("label is edited");
+        assert_eq!(list_label(&mut actor).await, "Groceries");
+        let details = detail_details(&mut actor).await;
+        assert_eq!(details.transaction_label().as_deref(), Some("Groceries"));
+
+        // clearing the field removes the label and the list falls back to the default text
+        manager
+            .insert_or_update_labels_for_txn(details, "   ".to_string(), None)
+            .expect("label is cleared");
+        assert_eq!(list_label(&mut actor).await, unlabeled);
+        assert_eq!(detail_details(&mut actor).await.transaction_label(), None);
+    }
+
     #[test]
     fn prepare_failure_before_first_full_scan_returns_to_initial_state() {
         assert_eq!(
