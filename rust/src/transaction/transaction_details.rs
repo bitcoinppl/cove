@@ -634,6 +634,50 @@ mod tests {
     use super::*;
     use cove_types::unit::BitcoinUnit;
 
+    /// Clears the Bitcoin explorer override and restores the selected network when dropped,
+    /// since both live in the process-global database
+    struct RestoreExplorerConfig(Network);
+
+    impl Drop for RestoreExplorerConfig {
+        fn drop(&mut self) {
+            let config = &Database::global().global_config;
+            let _ = config.clear_custom_block_explorer(Network::Bitcoin);
+            let _ = config.set_selected_network(self.0);
+        }
+    }
+
+    // both apps open this url, so it must follow the transaction's network, not the selected one
+    #[test]
+    fn transaction_url_uses_the_transaction_network_explorer() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::init_test_database();
+        let config = &Database::global().global_config;
+        let _restore = RestoreExplorerConfig(config.selected_network());
+
+        config.set_selected_network(Network::Bitcoin).unwrap();
+        config
+            .set_custom_block_explorer(
+                Network::Bitcoin,
+                "https://example.com/tx/{txid}".to_string(),
+            )
+            .unwrap();
+
+        let bitcoin = TransactionDetails::preview_new_confirmed();
+        let txid = bitcoin.tx_id.0.to_string();
+
+        assert_eq!(bitcoin.transaction_url(), format!("https://example.com/tx/{txid}"));
+
+        for (network, prefix) in [
+            (Network::Testnet, "https://mempool.space/testnet/tx/"),
+            (Network::Testnet4, "https://mempool.space/testnet4/tx/"),
+            (Network::Signet, "https://mutinynet.com/tx/"),
+        ] {
+            let details = TransactionDetails { network, ..bitcoin.clone() };
+
+            assert_eq!(details.transaction_url(), format!("{prefix}{txid}"), "{network:?}");
+        }
+    }
+
     #[test]
     fn confirmed_transaction_always_has_at_least_one_confirmation() {
         assert_eq!(confirmed_transaction_confirmation_count(840_000, 839_999).get(), 1);
