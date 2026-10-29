@@ -227,11 +227,18 @@ async fn both_protocols_agree_on_history_and_confirmation() {
     let esplora_proof = esplora.get_merkle_proof(&txid).await.unwrap().unwrap();
     assert_eq!((esplora_proof.block_height, esplora_proof.pos), (height, proof.pos));
 
-    // evicting a pending transaction removes it from both
-    let evicted = node.chain().pay(&test_script(4), Amount::from_sat(1));
+    // evicting a pending transaction removes it and its pending child from both
+    let evicted = node.chain().pay(&test_script(4), Amount::from_sat(2_000));
+    let child_script = test_script(13);
+    let child =
+        node.chain().add_to_mempool(spend(evicted, child_script.clone(), Amount::from_sat(1_000)));
     node.chain().evict(evicted);
     assert!(esplora.get_tx_status(&evicted).await.is_err());
     assert!(electrum.transaction_get(&evicted).is_err());
+
+    assert_eq!(node.chain().location(child), None);
+    assert!(electrum.script_get_history(&child_script).unwrap().is_empty());
+    assert!(esplora.scripthash_txs(&child_script, None).await.unwrap().is_empty());
 }
 
 /// Selects a network for one test and restores the previous selection on drop
