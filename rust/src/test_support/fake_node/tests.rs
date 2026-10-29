@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use bdk_electrum::electrum_client::{self, Client as ElectrumClient, ElectrumApi as _};
 use bdk_esplora::esplora_client;
-use bitcoin::{Amount, Network, ScriptBuf};
+use bitcoin::{
+    Address, Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid,
+    Witness, absolute::LockTime, transaction::Version,
+};
 
 use super::{FakeNode, Protocol, TxLocation, unreachable_url, wait_until};
 use crate::{
@@ -17,6 +20,21 @@ fn test_script(tag: u8) -> ScriptBuf {
     ScriptBuf::from_bytes(vec![
         0x00, 0x14, tag, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
     ])
+}
+
+/// A transaction spending output 0 of `txid`, which pays to `script`
+fn spend(txid: Txid, script: ScriptBuf, amount: Amount) -> Transaction {
+    Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint { txid, vout: 0 },
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        }],
+        output: vec![TxOut { value: amount, script_pubkey: script }],
+    }
 }
 
 async fn clients(node: &FakeNode) -> Vec<(ApiType, NodeClient)> {
@@ -111,6 +129,20 @@ async fn gate_holds_requests_until_opened() {
     gate.open();
     check.await.unwrap().unwrap();
     assert_eq!(gate.waiting(), 0);
+}
+
+#[tokio::test]
+async fn going_offline_releases_held_requests_from_the_gate_count() {
+    let mut node = FakeNode::start(Network::Bitcoin);
+    let (gate, _) = node.on("/blocks/tip/height").hold();
+    let client = clients(&node).await.remove(0).1;
+
+    let check = tokio::spawn(async move { client.check_url().await });
+    wait_until("the request to reach the gate", || gate.waiting() == 1).await;
+
+    node.go_offline();
+    assert_eq!(gate.waiting(), 0);
+    assert!(check.await.unwrap().is_err(), "the held request loses its connection");
 }
 
 #[tokio::test]
@@ -215,4 +247,70 @@ async fn selecting_a_node_points_the_wallet_config_at_it() {
     assert_eq!(electrum.api_type, ApiType::Electrum);
 
     global_config.set_selected_node(&Node::default(CoveNetwork::Bitcoin)).unwrap();
+}
+
+#[tokio::test]
+async fn balances_subtract_spent_outputs_on_both_protocols() {
+    ensure_tokio_runtime();
+
+    let node = FakeNode::start(Network::Bitcoin);
+    let script = test_script(5);
+    let address = Address::from_script(&script, Network::Bitcoin).unwrap();
+    let funding = node.chain().pay(&script, Amount::from_sat(5_000));
+    node.chain().confirm(funding);
+
+    let esplora = esplora_client::Builder::new(&node.esplora_url()).build_async().unwrap();
+    let electrum = ElectrumClient::new(&node.electrum_url()).unwrap();
+
+    // pending: the spend takes the confirmed funds out of the unconfirmed balance
+    let spending =
+        node.chain().add_to_mempool(spend(funding, test_script(6), Amount::from_sat(4_000)));
+
+    let balance = electrum.script_get_balance(&script).unwrap();
+    assert_eq!((balance.confirmed, balance.unconfirmed), (5_000, -5_000));
+
+    let stats = esplora.get_address_stats(&address).await.unwrap();
+    assert_eq!((stats.chain_stats.funded_txo_sum, stats.chain_stats.spent_txo_sum), (5_000, 0));
+    assert_eq!(
+        (stats.mempool_stats.spent_txo_count, stats.mempool_stats.spent_txo_sum),
+        (1, 5_000)
+    );
+
+    // confirmed: nothing is left on either protocol
+    node.chain().confirm(spending);
+
+    let balance = electrum.script_get_balance(&script).unwrap();
+    assert_eq!((balance.confirmed, balance.unconfirmed), (0, 0));
+
+    let stats = esplora.get_address_stats(&address).await.unwrap();
+    assert_eq!((stats.chain_stats.spent_txo_count, stats.chain_stats.spent_txo_sum), (1, 5_000));
+    assert_eq!(stats.mempool_stats.spent_txo_count, 0);
+}
+
+#[tokio::test]
+async fn rebroadcasts_are_accepted_until_the_transaction_confirms() {
+    ensure_tokio_runtime();
+
+    let node = FakeNode::start(Network::Bitcoin);
+    let funding = node.chain().pay(&test_script(7), Amount::from_sat(5_000));
+    let tx = spend(funding, test_script(8), Amount::from_sat(4_000));
+    let txid = tx.compute_txid();
+
+    let esplora = esplora_client::Builder::new(&node.esplora_url()).build_async().unwrap();
+    let electrum = ElectrumClient::new(&node.electrum_url()).unwrap();
+
+    // a retry of a pending broadcast succeeds on both protocols
+    for _ in 0..2 {
+        esplora.broadcast(&tx).await.unwrap();
+        assert_eq!(electrum.transaction_broadcast(&tx).unwrap(), txid);
+    }
+
+    // a confirmed transaction is rejected with a reply rather than a dropped connection
+    node.chain().confirm_together(&[funding, txid]);
+
+    let esplora_error = esplora.broadcast(&tx).await.unwrap_err().to_string();
+    assert!(esplora_error.contains("already in block chain"), "{esplora_error}");
+
+    let electrum_error = electrum.transaction_broadcast(&tx).unwrap_err().to_string();
+    assert!(electrum_error.contains("already in block chain"), "{electrum_error}");
 }

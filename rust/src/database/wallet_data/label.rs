@@ -1219,10 +1219,11 @@ mod tests {
                 Timestamps::now(),
             )
             .expect("failed to insert existing labels");
+        // lock both first so unlocking writes a record instead of returning early
         wallet_db
             .labels
-            .set_output_spendability_for_outpoints([locked], false)
-            .expect("failed to lock output");
+            .set_output_spendability_for_outpoints([locked, unlocked], false)
+            .expect("failed to lock outputs");
         wallet_db
             .labels
             .set_output_spendability_for_outpoints([unlocked], true)
@@ -1239,12 +1240,18 @@ mod tests {
             .get_output_record(locked)
             .expect("failed to get output record")
             .expect("missing output record");
+        let unlocked_record = reopened
+            .labels
+            .get_output_record(unlocked)
+            .expect("failed to get unlocked output record")
+            .expect("missing unlocked output record");
 
         assert_eq!(
             reopened.labels.locked_output_outpoints().expect("failed to get locked outputs"),
             std::collections::HashSet::from([locked])
         );
         assert_eq!(record.item.label, Some("cold storage".to_string()));
+        assert_eq!(unlocked_record.item.spendable, Some(true));
 
         clear_wallet_registry_entry(&id);
     }

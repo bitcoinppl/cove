@@ -1,7 +1,7 @@
 use std::{str::FromStr as _, sync::Arc};
 
 use bitcoin::{
-    Transaction, Txid,
+    Amount, Transaction, Txid,
     consensus::{deserialize, encode::serialize},
     hex::DisplayHex as _,
 };
@@ -14,7 +14,7 @@ use tokio::{
 
 use super::{
     FakeChain, Shared,
-    chain::{HistoryEntry, TxLocation},
+    chain::{AlreadyConfirmed, HistoryEntry, TxLocation},
     control::{Protocol, Verdict},
 };
 
@@ -26,6 +26,8 @@ const MAX_HEADERS_PER_REQUEST: usize = 2016;
 const METHOD_NOT_FOUND: i64 = -32601;
 const INVALID_PARAMS: i64 = -32602;
 const NOT_FOUND: i64 = 2;
+/// What electrs answers when bitcoind rejects a broadcast
+const DAEMON_ERROR: i64 = 2;
 
 struct RpcError {
     code: i64,
@@ -169,21 +171,31 @@ fn handle(chain: &FakeChain, method: &str, params: &[Value]) -> Result<Value, Rp
         }
 
         "blockchain.scripthash.get_balance" => {
-            let script = script_param(chain, params)?;
-            let (mut confirmed, mut unconfirmed) = (0u64, 0u64);
-            for entry in script.iter().flat_map(|script| chain.history(script)) {
-                let tx = chain.tx(entry.txid).expect("history entries exist");
+            let Some(script) = script_param(chain, params)? else {
+                return Ok(json!({ "confirmed": 0, "unconfirmed": 0 }));
+            };
+
+            // a pending spend of confirmed funds makes `unconfirmed` negative, as in electrs
+            let (mut confirmed, mut unconfirmed) = (0i64, 0i64);
+            for entry in chain.history(&script) {
+                let tx = chain.tx(entry.txid).expect("history entries exist").tx;
                 let received = tx
-                    .tx
                     .output
                     .iter()
-                    .filter(|output| Some(&output.script_pubkey) == script.as_ref())
-                    .map(|output| output.value.to_sat())
-                    .sum::<u64>();
+                    .filter(|output| output.script_pubkey == script)
+                    .map(|output| output.value)
+                    .sum::<Amount>();
+                let spent = chain
+                    .spent_from(&tx, &script)
+                    .iter()
+                    .map(|output| output.value)
+                    .sum::<Amount>();
+                let change = received.to_signed().expect("amount fits").to_sat()
+                    - spent.to_signed().expect("amount fits").to_sat();
 
                 match entry.location {
-                    TxLocation::Mempool => unconfirmed += received,
-                    TxLocation::Confirmed { .. } => confirmed += received,
+                    TxLocation::Mempool => unconfirmed += change,
+                    TxLocation::Confirmed { .. } => confirmed += change,
                 }
             }
 
@@ -240,7 +252,11 @@ fn handle(chain: &FakeChain, method: &str, params: &[Value]) -> Result<Value, Rp
             let raw = hex::decode(hex).map_err(|_| RpcError::invalid_params())?;
             let tx = deserialize::<Transaction>(&raw).map_err(|_| RpcError::invalid_params())?;
 
-            Ok(json!(chain.add_to_mempool(tx)))
+            let txid = chain.broadcast(tx).map_err(|AlreadyConfirmed| {
+                RpcError::new(DAEMON_ERROR, "Transaction already in block chain")
+            })?;
+
+            Ok(json!(txid))
         }
 
         other => Err(RpcError::new(METHOD_NOT_FOUND, format!("unknown method {other}"))),

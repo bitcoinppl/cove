@@ -45,6 +45,10 @@ pub(crate) struct HistoryEntry {
     pub(crate) location: TxLocation,
 }
 
+/// A broadcast of a transaction that is already confirmed, which a node rejects
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) struct AlreadyConfirmed;
+
 /// A merkle inclusion proof with sibling hashes in internal byte order
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct MerkleProof {
@@ -131,6 +135,19 @@ impl FakeChain {
         txid
     }
 
+    /// Accepts a transaction broadcast to the node
+    ///
+    /// Like bitcoind, a transaction already in the mempool is accepted again so
+    /// a retried broadcast succeeds, while a confirmed one is rejected
+    pub(crate) fn broadcast(&self, tx: Transaction) -> Result<Txid, AlreadyConfirmed> {
+        let txid = tx.compute_txid();
+        match self.location(txid) {
+            Some(TxLocation::Mempool) => Ok(txid),
+            Some(TxLocation::Confirmed { .. }) => Err(AlreadyConfirmed),
+            None => Ok(self.add_to_mempool(tx)),
+        }
+    }
+
     /// Pays `amount` to `script` from a synthetic funding output and leaves the
     /// transaction in the mempool
     pub(crate) fn pay(&self, script: &ScriptBuf, amount: Amount) -> Txid {
@@ -205,6 +222,17 @@ impl FakeChain {
     /// The previous output of `outpoint` when the chain knows it
     pub(crate) fn prevout(&self, outpoint: &OutPoint) -> Option<TxOut> {
         self.state.lock().prevout(outpoint)
+    }
+
+    /// The previous outputs paying to `script` that the inputs of `tx` spend
+    pub(crate) fn spent_from(&self, tx: &Transaction, script: &ScriptBuf) -> Vec<TxOut> {
+        let state = self.state.lock();
+
+        tx.input
+            .iter()
+            .filter_map(|input| state.prevout(&input.previous_output))
+            .filter(|output| &output.script_pubkey == script)
+            .collect()
     }
 
     pub(crate) fn header(&self, height: u32) -> Option<Header> {

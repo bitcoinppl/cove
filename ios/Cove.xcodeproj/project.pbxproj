@@ -17,7 +17,7 @@
 		C0B000022F00000000000001 /* Fixtures/wallet_2_descriptors.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */; };
 		C0B000102F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */; };
 		C0B000122F00000000000001 /* TransactionsScanUiTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000132F00000000000001 /* TransactionsScanUiTests.swift */; };
-		C0B000902F00000000000001 /* MoreInfoPopoverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000912F00000000000001 /* MoreInfoPopoverTests.swift */; };
+		C0B000A02F00000000000001 /* MoreInfoPopoverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000A12F00000000000001 /* MoreInfoPopoverTests.swift */; };
 		C0B000142F00000000000001 /* OnboardingBackupViewsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */; };
 		C0B000162F00000000000001 /* CustomFeeRateErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */; };
 		C0B000902F00000000000001 /* HardwareImportErrorMessageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000912F00000000000001 /* HardwareImportErrorMessageTests.swift */; };
@@ -92,7 +92,7 @@
 		C0B000052F00000000000001 /* CoveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupPresentationCoordinatorTests.swift; sourceTree = "<group>"; };
 		C0B000132F00000000000001 /* TransactionsScanUiTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsScanUiTests.swift; sourceTree = "<group>"; };
-		C0B000912F00000000000001 /* MoreInfoPopoverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreInfoPopoverTests.swift; sourceTree = "<group>"; };
+		C0B000A12F00000000000001 /* MoreInfoPopoverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreInfoPopoverTests.swift; sourceTree = "<group>"; };
 		C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingBackupViewsTests.swift; sourceTree = "<group>"; };
 		C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomFeeRateErrorTests.swift; sourceTree = "<group>"; };
 		C0B000912F00000000000001 /* HardwareImportErrorMessageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareImportErrorMessageTests.swift; sourceTree = "<group>"; };
@@ -222,7 +222,7 @@
 				C0C000052F70000000000001 /* PresenterIdleTests.swift */,
 				C0F000022F40000000000001 /* PresentationTransitionCoordinatorTests.swift */,
 				C0B000132F00000000000001 /* TransactionsScanUiTests.swift */,
-				C0B000912F00000000000001 /* MoreInfoPopoverTests.swift */,
+				C0B000A12F00000000000001 /* MoreInfoPopoverTests.swift */,
 				C0F000042F40000000000001 /* WalletSettingsPresentationTests.swift */,
 				C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */,
 			);
@@ -498,7 +498,7 @@
 				C0C000062F70000000000001 /* PresenterIdleTests.swift in Sources */,
 				C0F000012F40000000000001 /* PresentationTransitionCoordinatorTests.swift in Sources */,
 				C0B000122F00000000000001 /* TransactionsScanUiTests.swift in Sources */,
-				C0B000902F00000000000001 /* MoreInfoPopoverTests.swift in Sources */,
+				C0B000A02F00000000000001 /* MoreInfoPopoverTests.swift in Sources */,
 				C0F000032F40000000000001 /* WalletSettingsPresentationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
