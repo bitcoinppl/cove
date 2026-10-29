@@ -16,6 +16,7 @@ from screens import (
     is_wallet_home,
     labels,
     row_registry,
+    settled_labels,
     wait_for_scan_to_settle,
     wait_for_scan_to_start,
     wait_for_wallet_home,
@@ -261,14 +262,14 @@ def repeated_background_route_scope(driver: Android, evidence: dict) -> None:
             marker = r"^Back$"
 
         driver.wait_for(marker)
-        before = set(labels(driver.app_nodes(), driver.package))
+        before = settled_labels(driver)
         driver.background()
         time.sleep(1)
         driver.foreground()
         driver.wait_for(marker, 15)
 
+        after = settled_labels(driver)
         nodes = driver.app_nodes()
-        after = set(labels(nodes, driver.package))
         check(after == before, f"loop {index + 1}: {route} changed after background; lost {sorted(before - after)}, gained {sorted(after - before)}")
         check(not has(nodes, r"^General$"), f"loop {index + 1}: {route} fell back to the settings root after background")
         check(driver.pid() == pid, f"loop {index + 1}: the app process was replaced while backgrounded")

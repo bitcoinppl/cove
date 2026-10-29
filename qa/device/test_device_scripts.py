@@ -15,7 +15,7 @@ from android.driver import Android, parse_badging, parse_hierarchy  # noqa: E402
 from android.rows import UPGRADE_ROW, build_under_test, wallet_names  # noqa: E402
 from common import Device, ForbiddenTap, Node, RowBlocked, RowFailed, ensure_tap_allowed  # noqa: E402
 from ios.driver import Ios, parse_source  # noqa: E402
-from screens import error_text, row_registry, wait_for_scan_to_start  # noqa: E402
+from screens import error_text, row_registry, settled_labels, wait_for_scan_to_start  # noqa: E402
 
 DUMP = """UI hierchary dumped to: /dev/tty<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
 <hierarchy rotation="0">
@@ -176,6 +176,8 @@ class AndroidFrontAppTest(unittest.TestCase):
 
 
 class FakeScreen(Device):
+    package = "app"
+
     def __init__(self, nodes):
         self._nodes = nodes
         self.tapped = []
@@ -252,6 +254,16 @@ class ScreenReadTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RowFailed, "launcher3"):
             wait_for_scan_to_start(screen, {}, timeout=0.6)
+
+    def test_settled_labels_wait_for_receive_to_load_its_address(self):
+        loading = text_nodes("Wallet Address", "Copy Address", "Create New Address")
+        loading[1] = Node("Copy Address", "", "", "", loading[1].bounds, "app", enabled=False)
+        loaded = text_nodes("Wallet Address", "bc1qexampleaddress", "Copy Address", "Create New Address")
+        reads = [loading, loading, loading, loaded]
+        screen = FakeScreen([])
+        screen.app_nodes = lambda: reads.pop(0) if len(reads) > 1 else reads[0]
+
+        self.assertIn("bc1qexampleaddress", settled_labels(screen, timeout=5))
 
     def test_an_error_while_waiting_for_a_scan_fails_the_row_with_its_text(self):
         screen = FakeScreen(text_nodes("Receive", "Transactions", "Node Connection Failed"))
