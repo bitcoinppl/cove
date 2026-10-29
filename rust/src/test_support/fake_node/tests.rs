@@ -1,11 +1,15 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use bdk_electrum::electrum_client::{self, Client as ElectrumClient, ElectrumApi as _};
+use bdk_electrum::electrum_client::{self, Client as ElectrumClient, ElectrumApi as _, Param};
 use bdk_esplora::esplora_client;
 use bitcoin::{
     Address, Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid,
-    Witness, absolute::LockTime, transaction::Version,
+    Witness,
+    absolute::LockTime,
+    hashes::{Hash as _, sha256},
+    transaction::Version,
 };
+use serde_json::Value;
 
 use super::{FakeNode, Protocol, TxLocation, unreachable_url, wait_until};
 use crate::{
@@ -230,10 +234,35 @@ async fn both_protocols_agree_on_history_and_confirmation() {
     assert!(electrum.transaction_get(&evicted).is_err());
 }
 
+/// Selects a network for one test and restores the previous selection on drop
+///
+/// `selected_node` follows the selected network, which other tests change
+struct SelectedNetwork(CoveNetwork);
+
+impl SelectedNetwork {
+    fn select(network: CoveNetwork) -> Self {
+        let global_config = &crate::database::Database::global().global_config;
+        let previous = global_config.selected_network();
+        global_config.set_selected_network(network).expect("selected network is set");
+
+        Self(previous)
+    }
+}
+
+impl Drop for SelectedNetwork {
+    fn drop(&mut self) {
+        crate::database::Database::global()
+            .global_config
+            .set_selected_network(self.0)
+            .expect("selected network is restored");
+    }
+}
+
 #[tokio::test]
 async fn selecting_a_node_points_the_wallet_config_at_it() {
     let _guard = crate::test_support::global_state_test_lock().lock().await;
     crate::database::test_support::init_test_database();
+    let _network = SelectedNetwork::select(CoveNetwork::Bitcoin);
 
     let node = FakeNode::start(Network::Bitcoin);
     let global_config = &crate::database::Database::global().global_config;
@@ -313,4 +342,84 @@ async fn rebroadcasts_are_accepted_until_the_transaction_confirms() {
 
     let electrum_error = electrum.transaction_broadcast(&tx).unwrap_err().to_string();
     assert!(electrum_error.contains("already in block chain"), "{electrum_error}");
+}
+
+#[tokio::test]
+async fn pending_transactions_are_not_reported_as_confirmed() {
+    let node = FakeNode::start(Network::Bitcoin);
+    let txid = node.chain().pay(&test_script(9), Amount::from_sat(5_000));
+    let clients = clients(&node).await;
+
+    // bitcoind leaves `confirmations` out of a mempool transaction's verbose reply
+    for (api, client) in &clients {
+        let pending = client.get_confirmed_transaction(Arc::new(txid)).await;
+        assert!(matches!(pending, Ok(None)), "{api:?} pending: {pending:?}");
+    }
+
+    node.chain().confirm(txid);
+    for (api, client) in &clients {
+        let confirmed = client.get_confirmed_transaction(Arc::new(txid)).await.unwrap();
+        assert_eq!(confirmed.map(|tx| tx.compute_txid()), Some(txid), "{api:?} confirmed");
+    }
+}
+
+#[tokio::test]
+async fn script_hashes_only_match_in_the_byte_order_each_protocol_uses() {
+    ensure_tokio_runtime();
+
+    let node = FakeNode::start(Network::Bitcoin);
+    let script = test_script(10);
+    node.chain().pay(&script, Amount::from_sat(1_000));
+
+    let digest = sha256::Hash::hash(script.as_bytes()).to_byte_array();
+    let forward = hex::encode(digest);
+    let reversed = hex::encode(digest.iter().rev().copied().collect::<Vec<_>>());
+
+    // Electrum takes the digest reversed
+    let electrum = ElectrumClient::new(&node.electrum_url()).unwrap();
+    let electrum_history = |hash: &str| {
+        let params = [Param::String(hash.to_string())];
+        let history = electrum.raw_call("blockchain.scripthash.get_history", params).unwrap();
+
+        history.as_array().expect("history is an array").len()
+    };
+    assert_eq!(electrum_history(&reversed), 1);
+    assert_eq!(electrum_history(&forward), 0);
+
+    // Esplora takes the digest as hashed
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let esplora_history = async |hash: &str| {
+        let url = format!("{}/scripthash/{hash}/txs", node.esplora_url());
+        let history = reqwest::get(url).await.unwrap().json::<Value>().await.unwrap();
+
+        history.as_array().expect("history is an array").len()
+    };
+    assert_eq!(esplora_history(&forward).await, 1);
+    assert_eq!(esplora_history(&reversed).await, 0);
+}
+
+#[tokio::test]
+async fn pending_children_of_pending_parents_report_height_minus_one() {
+    ensure_tokio_runtime();
+
+    let node = FakeNode::start(Network::Bitcoin);
+    let (parent_script, child_script) = (test_script(11), test_script(12));
+    let parent = node.chain().pay(&parent_script, Amount::from_sat(5_000));
+    let child =
+        node.chain().add_to_mempool(spend(parent, child_script.clone(), Amount::from_sat(4_000)));
+
+    let electrum = ElectrumClient::new(&node.electrum_url()).unwrap();
+    let heights = |script: &ScriptBuf| {
+        let history = electrum.script_get_history(script).unwrap();
+
+        history.into_iter().map(|entry| (entry.tx_hash, entry.height)).collect::<Vec<_>>()
+    };
+
+    assert_eq!(heights(&parent_script), [(parent, 0), (child, -1)]);
+    assert_eq!(heights(&child_script), [(child, -1)]);
+
+    // once the parent confirms, the child no longer depends on a pending transaction
+    let height = node.chain().confirm(parent) as i32;
+    assert_eq!(heights(&parent_script), [(parent, height), (child, 0)]);
+    assert_eq!(heights(&child_script), [(child, 0)]);
 }

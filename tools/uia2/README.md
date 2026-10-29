@@ -46,13 +46,13 @@ export ANDROID_SERIAL=<serial from adb devices>   # needed only when several dev
 | `uia2-fetch` | download the pinned server APKs with `gh` and verify their checksums; `uia2-start` calls it |
 | `uia2-start [--force]` | install if needed, run the server, forward `localhost:$UIA2_PORT`; refuses while other instrumentation, or another agent's server for the same device, is running |
 | `uia2-stop` | stop the server and remove its forward, leaving other forwards on the port alone; when the device can't be reached it reports `cleanup_incomplete` and keeps its state, so rerun it after reconnecting |
-| `android-launch [--activate] PACKAGE` | force-stop and start the app (`--activate` brings a running app forward instead) |
+| `android-launch [--activate] PACKAGE` | force-stop and start the app (`--activate` brings a running app forward instead); PACKAGE must be an Android package name, so shell syntax never reaches the device |
 | `android-vis [-a]` | one line per visible element worth acting on, with its tap center in pixels; `-a` includes hidden ones |
 | `android-source [--raw]` | full UI tree as XML; `--raw` prints only the tree |
 | `android-tap X Y` | tap at pixel coordinates |
 | `android-tap-label [--nth N] [--wait S] LABEL` | tap the element whose test tag, text or content-desc equals LABEL, waiting up to S seconds (default 5) for it to appear; the first lookup always completes |
 | `android-pin DIGITS` | tap a PIN on Cove's keypad by its test tags (`numberPadPin.digit.N`); fails when that keypad isn't showing |
-| `android-type [--enter] [--] TEXT` | set the focused field to TEXT, report whether the field took it, then press Enter if asked |
+| `android-type [--enter] [--] TEXT` | set the focused field to TEXT, report whether the field took it, then press Enter if asked; refuses TEXT ending in a literal `\n`, which the server would read as Enter |
 | `android-swipe [--hold S] up\|down\|left\|right` | finger swipe across the middle of the screen; `up` moves the finger up, so a list shows items further down |
 | `android-drag [--hold S] X1 Y1 X2 Y2` | press at X1,Y1 for S seconds (default 1), then drag to X2,Y2 |
 | `android-hold X Y [SECONDS]` | long-press at pixel coordinates (default 1 s) |

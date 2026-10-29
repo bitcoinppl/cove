@@ -215,6 +215,20 @@ impl FakeChain {
         self.state.lock().txs.get(&txid).map(|entry| entry.location)
     }
 
+    /// Whether a pending transaction spends an output of another pending one,
+    /// which bitcoind reports as a non-empty `depends` list
+    pub(crate) fn has_unconfirmed_parent(&self, txid: Txid) -> bool {
+        let state = self.state.lock();
+        let Some(entry) = state.txs.get(&txid) else { return false };
+
+        entry.tx.input.iter().any(|input| {
+            state
+                .txs
+                .get(&input.previous_output.txid)
+                .is_some_and(|parent| parent.location == TxLocation::Mempool)
+        })
+    }
+
     pub(crate) fn tx(&self, txid: Txid) -> Option<ChainTx> {
         self.state.lock().txs.get(&txid).cloned()
     }
@@ -283,11 +297,11 @@ impl FakeChain {
             .collect()
     }
 
-    /// Maps a script hash, in either byte order, back to a script the chain has seen
-    pub(crate) fn script_for_hash(&self, hash: &[u8; 32]) -> Option<ScriptBuf> {
-        let mut reversed = *hash;
-        reversed.reverse();
-
+    /// Maps the SHA-256 digest of a script back to a script the chain has seen
+    ///
+    /// The digest is in hash output order; each protocol converts its own wire
+    /// format first, so a client that sends the wrong byte order finds nothing
+    pub(crate) fn script_for_digest(&self, digest: &[u8; 32]) -> Option<ScriptBuf> {
         let state = self.state.lock();
         let known_scripts = state.txs.values().flat_map(|entry| {
             let outputs = entry.tx.output.iter().map(|output| output.script_pubkey.clone());
@@ -301,10 +315,9 @@ impl FakeChain {
             outputs.chain(inputs).collect::<Vec<_>>()
         });
 
-        known_scripts.into_iter().find(|script| {
-            let digest = sha256::Hash::hash(script.as_bytes()).to_byte_array();
-            digest == *hash || digest == reversed
-        })
+        known_scripts
+            .into_iter()
+            .find(|script| sha256::Hash::hash(script.as_bytes()).to_byte_array() == *digest)
     }
 
     pub(crate) fn merkle_proof(&self, txid: Txid) -> Option<MerkleProof> {

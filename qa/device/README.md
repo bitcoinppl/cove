@@ -7,6 +7,7 @@ Scripts only navigate and observe. They never send, broadcast, sign, delete, exp
 ## Safety rules
 
 - Every tap goes through the driver, which refuses any control whose label matches `FORBIDDEN_LABEL` in `common.py` (send, delete, export, backup, restore, sign out, and similar). Rows must not use raw `input tap`
+- Every tap, swipe, scroll and Back first checks that the app under test is in front, and an Android tap also checks that the control belongs to the app's package. Otherwise the row fails and names the app that was in front, so another app coming forward mid-row never takes the input. Label lookups match only the app's own controls
 - Preflight blocks every row unless the app is on Signet, Testnet or Testnet4. It reads the network from Settings and never changes it
 - Android requires `--serial`, so a second attached phone is never picked by accident. Pass the serial of the device you mean to test
 - OS settings a row changes (font scale, animation scales, airplane mode) go through context managers in `android/driver.py` that restore the original value, even when the row fails. iOS rows don't change OS settings, so none are scripted that would need to
@@ -32,9 +33,11 @@ python3 -I qa/device/run.py android --serial emulator-5554 --list
 python3 -I qa/device/run.py android --serial emulator-5554 --rows s15-repeated-navigation-and-background-route-scope --loops 30
 ```
 
+Rows run after preflight, in the order `--list` prints or `--rows` gives. With `--upgrade-apk`, the Android upgrade row runs first, because it installs the build under test. Every other row then runs only if the apk's package and versionCode are the ones installed, which the `build-under-test` check confirms. When the upgrade was blocked or failed before installing, that check blocks the remaining rows and names the versionCode still installed, so they never report on the previous release. Without `--upgrade-apk`, rows test whatever build is installed.
+
 `--loops` sets how many background and foreground cycles the s15 row repeats (default 10, about 20 seconds each on an emulator); raise it for a long-session soak. It must be at least 1. Each cycle opens the next of the Appearance, Network and Currency settings screens and the Receive sheet, on both platforms.
 
-The s14 scan rows pass only after they see a history scan running and then finishing. A wallet that has finished its first scan hides scan progress for its first 5 seconds, so a scan that finishes sooner can't be told apart from one that never started, and the row is blocked instead. Use a wallet with transactions whose scan takes longer than that. An error shown while the row waits for the scan, such as `Node Connection Failed`, fails the row with that error's text.
+The s14 scan rows pass only after they see a history scan running and then finishing. A wallet that has finished its first scan hides scan progress for its first 5 seconds, so a scan that finishes sooner can't be told apart from one that never started, and the row is blocked instead. Use a wallet with transactions whose scan takes longer than that. An error shown while the row waits for the scan, such as `Node Connection Failed`, fails the row with that error's text, and so does the app crashing or leaving the foreground.
 
 Offline unit tests, which need no device: `python3 -I -m unittest discover -s qa/device -p "test_*.py"`
 
@@ -58,9 +61,9 @@ The iOS rows have been checked only against canned WDA output (`test_device_scri
 
 Each run writes to `--out`, default `_scratch/device-results/<platform>-<timestamp>/`:
 
-- `<platform>-preflight.json` and `<platform>-<row id>.json`
+- `<platform>-preflight.json`, `android-build-under-test.json` when `--upgrade-apk` is given, and `<platform>-<row id>.json`
 - `<platform>-<row id>.png`, a screenshot taken when a row fails
-- `summary.json`: platform, preflight status, counts and each row's status
+- `summary.json`: platform, preflight status, the `build_under_test` check's status with the installed and apk versionCodes (null without `--upgrade-apk`), counts and each row's status
 
 A row file holds:
 
@@ -80,7 +83,7 @@ A row file holds:
 
 - `pass`: the row's assertions held
 - `fail`: an assertion about the app failed, which is a finding. Evidence names the screen labels seen
-- `blocked`: the device or fixture wasn't in a state the row can run from (no wallet, wrong network, no `--upgrade-apk` or one that isn't an upgrade, a scan too quick to see, more wallets than the sidebar shows at once), so the result says nothing about the app. A failed preflight blocks every row
+- `blocked`: the device or fixture wasn't in a state the row can run from (no wallet, wrong network, no `--upgrade-apk` or one that isn't an upgrade, a scan too quick to see, more wallets than the sidebar shows at once, the build under test not installed), so the result says nothing about the app. A failed preflight blocks every row
 - `error`: the script itself broke or tried a forbidden tap; `evidence.traceback` has the stack
 
 ## Exit codes

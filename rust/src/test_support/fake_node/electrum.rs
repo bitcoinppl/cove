@@ -160,14 +160,16 @@ fn handle(chain: &FakeChain, method: &str, params: &[Value]) -> Result<Value, Rp
         "blockchain.scripthash.get_history" => {
             let history = history_for(chain, params)?;
 
-            Ok(Value::Array(history.iter().map(history_json).collect()))
+            let entries = history.iter().map(|entry| history_json(chain, entry)).collect();
+
+            Ok(Value::Array(entries))
         }
 
         "blockchain.scripthash.subscribe" => {
             let history = history_for(chain, params)?;
 
             // the status is a hash over the history, null when there is none
-            Ok(status_hash(&history).map_or(Value::Null, Value::String))
+            Ok(status_hash(chain, &history).map_or(Value::Null, Value::String))
         }
 
         "blockchain.scripthash.get_balance" => {
@@ -217,12 +219,14 @@ fn handle(chain: &FakeChain, method: &str, params: &[Value]) -> Result<Value, Rp
                 return Ok(json!(raw));
             }
 
-            let confirmations = match entry.location {
-                TxLocation::Mempool => 0,
-                TxLocation::Confirmed { height } => chain.tip_height() - height + 1,
-            };
+            // electrs forwards bitcoind's `getrawtransaction`, which leaves out
+            // `confirmations` for a transaction that is not in a block
+            let mut reply = json!({ "txid": txid, "hex": raw });
+            if let TxLocation::Confirmed { height } = entry.location {
+                reply["confirmations"] = json!(chain.tip_height() - height + 1);
+            }
 
-            Ok(json!({ "txid": txid, "hex": raw, "confirmations": confirmations }))
+            Ok(reply)
         }
 
         "blockchain.transaction.get_merkle" => {
@@ -276,17 +280,21 @@ fn txid_param(params: &[Value], index: usize) -> Result<Txid, RpcError> {
 }
 
 /// The script behind the scripthash param, `None` when the chain has never seen it
+///
+/// The Electrum protocol sends the SHA-256 digest of the script reversed:
+/// https://electrum-protocol.readthedocs.io/en/latest/protocol-basics.html#script-hashes
 fn script_param(
     chain: &FakeChain,
     params: &[Value],
 ) -> Result<Option<bitcoin::ScriptBuf>, RpcError> {
     let text = params.first().and_then(Value::as_str).ok_or_else(RpcError::invalid_params)?;
-    let hash = hex::decode(text)
+    let mut digest = hex::decode(text)
         .ok()
         .and_then(|bytes| <[u8; 32]>::try_from(bytes).ok())
         .ok_or_else(RpcError::invalid_params)?;
+    digest.reverse();
 
-    Ok(chain.script_for_hash(&hash))
+    Ok(chain.script_for_digest(&digest))
 }
 
 fn history_for(chain: &FakeChain, params: &[Value]) -> Result<Vec<HistoryEntry>, RpcError> {
@@ -295,16 +303,21 @@ fn history_for(chain: &FakeChain, params: &[Value]) -> Result<Vec<HistoryEntry>,
     Ok(script.map(|script| chain.history(&script)).unwrap_or_default())
 }
 
-fn history_json(entry: &HistoryEntry) -> Value {
-    let height = match entry.location {
-        TxLocation::Mempool => 0,
+/// The height electrs reports for a history entry, with a pending transaction
+/// at `-1` when it spends another pending one and at `0` otherwise
+fn history_height(chain: &FakeChain, entry: &HistoryEntry) -> i64 {
+    match entry.location {
         TxLocation::Confirmed { height } => i64::from(height),
-    };
-
-    json!({ "height": height, "tx_hash": entry.txid })
+        TxLocation::Mempool if chain.has_unconfirmed_parent(entry.txid) => -1,
+        TxLocation::Mempool => 0,
+    }
 }
 
-fn status_hash(history: &[HistoryEntry]) -> Option<String> {
+fn history_json(chain: &FakeChain, entry: &HistoryEntry) -> Value {
+    json!({ "height": history_height(chain, entry), "tx_hash": entry.txid })
+}
+
+fn status_hash(chain: &FakeChain, history: &[HistoryEntry]) -> Option<String> {
     use bitcoin::hashes::{Hash as _, sha256};
 
     if history.is_empty() {
@@ -313,14 +326,7 @@ fn status_hash(history: &[HistoryEntry]) -> Option<String> {
 
     let preimage = history
         .iter()
-        .map(|entry| {
-            let height = match entry.location {
-                TxLocation::Mempool => 0,
-                TxLocation::Confirmed { height } => height,
-            };
-
-            format!("{}:{height}:", entry.txid)
-        })
+        .map(|entry| format!("{}:{}:", entry.txid, history_height(chain, entry)))
         .collect::<String>();
 
     Some(sha256::Hash::hash(preimage.as_bytes()).to_string())

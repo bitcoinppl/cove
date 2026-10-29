@@ -215,7 +215,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
 ]
 coverage = [
-    "rust:rust/src/label_manager.rs::edited_label_reaches_both_the_transaction_list_and_the_detail_label",
+    "rust:rust/src/manager/wallet_manager/actor.rs::edited_label_reaches_both_the_transaction_list_and_the_detail_screen",
 ]
 # 1.4.0: ios PASS, android PASS
 

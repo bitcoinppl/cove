@@ -189,6 +189,8 @@ class Ios(Device):
         return int(width), int(height)
 
     def scroll_down(self) -> None:
+        # a drag lands on whatever app is in front, like a tap
+        self.ensure_app_in_front()
         width, height = self.screen_size()
         self.session_post(
             "/wda/dragfromtoforduration",

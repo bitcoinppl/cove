@@ -21,7 +21,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from common import run_row  # noqa: E402
+from common import RowResult, run_row  # noqa: E402
+
+BUILD_GATE = "build-under-test"
 
 
 def positive_int(value: str) -> int:
@@ -31,6 +33,58 @@ def positive_int(value: str) -> int:
         raise argparse.ArgumentTypeError(f"must be at least 1, got {number}")
 
     return number
+
+
+def run_rows(
+    platform: str,
+    driver,
+    rows: dict,
+    selected: list[str],
+    preflight,
+    out: Path,
+    upgrade_row: str | None = None,
+    build_under_test=None,
+) -> tuple[list[RowResult], list[RowResult]]:
+    """Run preflight and then the selected rows, returning the gate results and the row results
+
+    With an upgrade apk, the upgrade row runs first because it installs the build under test, and
+    the other rows run only once `build_under_test` confirms that build is installed. A gate that
+    doesn't pass blocks every row after it
+    """
+    upgrading = driver.upgrade_apk is not None
+    first = [upgrade_row] if upgrading and upgrade_row in selected else []
+    rest = [row for row in selected if row not in first]
+
+    # a failed preflight blocks every row instead of producing misleading failures
+    gates = [run_row("preflight", platform, lambda: preflight(driver), {})]
+    gates[0].write(out)
+
+    def run(row: str) -> RowResult:
+        evidence: dict = {}
+        failed = next((gate for gate in gates if gate.status != "pass"), None)
+
+        if failed:
+            result = run_row(row, platform, lambda: None, evidence)
+            result.status, result.message = "blocked", f"{failed.row} {failed.status}: {failed.message}"
+        else:
+            result = run_row(row, platform, lambda: rows[row](driver, evidence), evidence)
+
+        result.write(out)
+        print(json.dumps({"row": row, "status": result.status, "message": result.message, "seconds": result.seconds}), flush=True)
+
+        return result
+
+    results = [run(row) for row in first]
+
+    # a blocked or failed upgrade can leave the previous release installed, and rows run against it would vouch for the wrong build
+    if upgrading and build_under_test is not None and rest and gates[0].status == "pass":
+        evidence: dict = {}
+        gates.append(run_row(BUILD_GATE, platform, lambda: build_under_test(driver, evidence), evidence))
+        gates[-1].write(out)
+
+    results += [run(row) for row in rest]
+
+    return gates, results
 
 
 def main() -> int:
@@ -53,7 +107,7 @@ def main() -> int:
             parser.error("--serial is required for android")
 
         from android.driver import Android
-        from android.rows import ROWS, preflight
+        from android.rows import ROWS, UPGRADE_ROW, build_under_test, preflight
 
         driver = Android(args.serial, args.package, args.upgrade_apk, out, args.loops)
     else:
@@ -61,6 +115,7 @@ def main() -> int:
         from ios.rows import ROWS, preflight
 
         driver = Ios(args.bundle_id, out, args.loops)
+        UPGRADE_ROW, build_under_test = None, None
 
     if args.list:
         print("\n".join(ROWS))
@@ -71,28 +126,14 @@ def main() -> int:
     if unknown:
         parser.error(f"unknown rows: {', '.join(unknown)}")
 
-    results = []
-
-    # a failed preflight blocks every row instead of producing misleading failures
-    blocked = run_row("preflight", args.platform, lambda: preflight(driver), {})
-    blocked.write(out)
-
-    for row in selected:
-        evidence: dict = {}
-
-        if blocked.status != "pass":
-            result = run_row(row, args.platform, lambda: None, evidence)
-            result.status, result.message = "blocked", f"preflight {blocked.status}: {blocked.message}"
-        else:
-            result = run_row(row, args.platform, lambda row=row, evidence=evidence: ROWS[row](driver, evidence), evidence)
-
-        result.write(out)
-        results.append(result)
-        print(json.dumps({"row": row, "status": result.status, "message": result.message, "seconds": result.seconds}), flush=True)
+    gates, results = run_rows(args.platform, driver, ROWS, selected, preflight, out, UPGRADE_ROW, build_under_test)
+    build_gate = next((gate for gate in gates if gate.row == BUILD_GATE), None)
 
     summary = {
         "platform": args.platform,
-        "preflight": blocked.status,
+        "preflight": gates[0].status,
+        # which build the rows after the upgrade ran against, or null without --upgrade-apk
+        "build_under_test": build_gate and {"status": build_gate.status, "message": build_gate.message, **build_gate.evidence},
         "counts": {status: sum(r.status == status for r in results) for status in ("pass", "fail", "blocked", "error")},
         "rows": {r.row: r.status for r in results},
     }

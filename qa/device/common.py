@@ -22,6 +22,10 @@ class RowFailed(Exception):
     """An assertion about the app failed"""
 
 
+class WaitTimedOut(RowFailed):
+    """A wait ran out of time, kept apart from other failures so a caller can treat only the timeout differently"""
+
+
 class RowBlocked(Exception):
     """The device or fixture isn't in a state the row can run from, so the result says nothing about the app"""
 
@@ -75,13 +79,19 @@ class Device:
     def nodes(self) -> list[Node]:
         raise NotImplementedError
 
+    def app_nodes(self) -> list[Node]:
+        """Nodes of the app under test only; a driver that sees other apps' windows filters them out"""
+        return self.nodes()
+
     def tap(self, node: Node) -> None:
         raise NotImplementedError
 
     def find(self, pattern: str | re.Pattern, nodes: list[Node] | None = None) -> Node | None:
-        """First node whose label or identifier matches the regex"""
+        """First node whose label or identifier matches the regex, by default among the app's own nodes"""
         regex = re.compile(pattern)
-        candidates = self.nodes() if nodes is None else nodes
+
+        # another app's window can carry the same label, such as a system `Settings`, and must never be the match
+        candidates = self.app_nodes() if nodes is None else nodes
 
         return next((node for node in candidates if regex.search(node.label) or regex.search(node.res_id)), None)
 
@@ -92,7 +102,7 @@ class Device:
                 return
             time.sleep(0.5)
 
-        raise RowFailed(f"timed out after {timeout}s waiting for {what}")
+        raise WaitTimedOut(f"timed out after {timeout}s waiting for {what}")
 
     def wait_for(self, pattern: str, timeout: float = 20) -> Node:
         found: list[Node] = []
