@@ -17,6 +17,7 @@ from screens import (
     labels,
     row_registry,
     wait_for_scan_to_settle,
+    wait_for_scan_to_start,
     wait_for_wallet_home,
 )
 
@@ -129,6 +130,14 @@ def preflight(driver: Android) -> None:
 def receive_controls(driver: Android, evidence: dict, key: str) -> list[str]:
     """Open Receive and list the expected controls that can be reached, scrolling the sheet when one is off screen"""
     open_receive(driver)
+
+    # Copy Address shows disabled until the address loads, and a control that never enables is not usable
+    driver.wait_until(
+        lambda: all(node.enabled for node in driver.app_nodes() if node.label in RECEIVE_CONTROLS),
+        "the receive controls to enable",
+        15,
+    )
+
     _, height = driver.screen_size()
     found: list[str] = []
     scrolls = 0
@@ -138,8 +147,8 @@ def receive_controls(driver: Android, evidence: dict, key: str) -> list[str]:
         for control in RECEIVE_CONTROLS:
             node = driver.find(f"^{control}$", nodes)
 
-            # a control drawn under the navigation bar counts as unreachable
-            if node and control not in found and node.bounds[3] <= height:
+            # a control drawn under the navigation bar, or one that can't be used, counts as unreachable
+            if node and control not in found and node.enabled and node.bounds[3] <= height:
                 found.append(control)
 
         if len(found) == len(RECEIVE_CONTROLS):
@@ -261,6 +270,7 @@ def online_cold_restart(driver: Android, evidence: dict) -> None:
     evidence["home_seconds"] = wait_for_wallet_home(driver)
     evidence["first_labels"] = labels(driver.app_nodes(), driver.package)[:15]
 
+    wait_for_scan_to_start(driver, evidence)
     wait_for_scan_to_settle(driver, evidence)
     check(error_text(driver) is None, f"error shown after an online cold restart: {error_text(driver)}")
 
@@ -271,6 +281,7 @@ def scan_survives_short_background(driver: Android, evidence: dict) -> None:
     wait_for_wallet_home(driver)
 
     # the scan starts right after launch, so this is the window a background could interrupt it
+    wait_for_scan_to_start(driver, evidence)
     driver.background()
     time.sleep(3)
     driver.foreground()
@@ -288,6 +299,21 @@ def two_cold_launches_after_upgrade(driver: Android, evidence: dict) -> None:
     if not driver.upgrade_apk.is_file():
         raise RowBlocked(f"{driver.upgrade_apk} does not exist")
 
+    # installing another app's apk, or the same version again, succeeds without running any upgrade
+    apk_package, apk_version = driver.apk_package_and_version(driver.upgrade_apk)
+    installed_version = driver.installed_version_code()
+    evidence["version_code_before"] = installed_version
+    evidence["apk_version_code"] = apk_version
+
+    if apk_package != driver.package:
+        raise RowBlocked(f"{driver.upgrade_apk} is {apk_package}, not {driver.package}")
+
+    if apk_version <= installed_version:
+        raise RowBlocked(
+            f"installed versionCode {installed_version} is not older than the apk's {apk_version}, so installing it "
+            "is not an upgrade; install the previous release and open a wallet in it first"
+        )
+
     wallets_before = wallet_names(driver)
     check(bool(wallets_before), "no wallets listed before the upgrade, so there is nothing to keep")
 
@@ -295,6 +321,7 @@ def two_cold_launches_after_upgrade(driver: Android, evidence: dict) -> None:
     driver.install_over_existing(driver.upgrade_apk)
     evidence["install_seconds"] = round(time.time() - started, 1)
     evidence["wallets_before"] = wallets_before
+    check(driver.installed_version_code() == apk_version, f"versionCode {apk_version} is not installed after the upgrade")
 
     for launch in (1, 2):
         driver.cold_restart()

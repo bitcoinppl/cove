@@ -15,7 +15,7 @@ use tokio::{
 
 use super::{
     FakeChain, Shared,
-    chain::{ChainTx, HistoryEntry, TxLocation},
+    chain::{AlreadyConfirmed, ChainTx, HistoryEntry, TxLocation},
     control::{Protocol, Verdict},
 };
 
@@ -327,7 +327,10 @@ fn broadcast(chain: &FakeChain, body: &[u8]) -> Response {
         return Response::error(400, "Invalid transaction");
     };
 
-    Response::text(chain.add_to_mempool(tx).to_string())
+    match chain.broadcast(tx) {
+        Ok(txid) => Response::text(txid.to_string()),
+        Err(AlreadyConfirmed) => Response::error(400, "Transaction already in block chain"),
+    }
 }
 
 enum Page<'a> {
@@ -396,18 +399,22 @@ fn address_stats(chain: &FakeChain, address: &str) -> Response {
             .into_iter()
             .filter(|entry| (entry.location != TxLocation::Mempool) == confirmed)
             .collect::<Vec<_>>();
-        let funded = entries
+        let txs = entries.iter().filter_map(|entry| chain.tx(entry.txid)).collect::<Vec<_>>();
+        let funded = txs
             .iter()
-            .filter_map(|entry| chain.tx(entry.txid))
-            .flat_map(|entry| entry.tx.output)
+            .flat_map(|entry| &entry.tx.output)
             .filter(|output| output.script_pubkey == script)
             .collect::<Vec<_>>();
+
+        // esplora counts a spend under the status of the spending transaction
+        let spent =
+            txs.iter().flat_map(|entry| chain.spent_from(&entry.tx, &script)).collect::<Vec<_>>();
 
         json!({
             "funded_txo_count": funded.len(),
             "funded_txo_sum": funded.iter().map(|output| output.value.to_sat()).sum::<u64>(),
-            "spent_txo_count": 0,
-            "spent_txo_sum": 0,
+            "spent_txo_count": spent.len(),
+            "spent_txo_sum": spent.iter().map(|output| output.value.to_sat()).sum::<u64>(),
             "tx_count": entries.len(),
         })
     };

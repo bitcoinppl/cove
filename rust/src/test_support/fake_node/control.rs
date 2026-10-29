@@ -57,11 +57,20 @@ impl Gate {
     async fn pass(&self) {
         self.waiting.fetch_add(1, Ordering::SeqCst);
 
+        // decrement on drop too, since stopping the server cancels a held request
+        let _held = Held(&self.waiting);
         let mut open = self.open.subscribe();
         // the sender lives as long as this gate, so the wait only ends when opened
         let _ = open.wait_for(|is_open| *is_open).await;
+    }
+}
 
-        self.waiting.fetch_sub(1, Ordering::SeqCst);
+/// Removes a request from the gate's count when it stops waiting
+struct Held<'a>(&'a AtomicUsize);
+
+impl Drop for Held<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
     }
 }
 

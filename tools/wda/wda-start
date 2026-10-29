@@ -18,7 +18,7 @@ need_udid
 command -v iproxy >/dev/null || die missing_iproxy "iproxy not found" "fix=brew install libimobiledevice"
 STATE_DIR="$(device_state "$IOS_UDID")"
 mkdir -p "$STATE_DIR"
-lock_port "$WDA_PORT"
+lock_state
 
 if curl -sf -m 2 "$WDA_BASE_URL/status" >/dev/null; then
   # the port can belong to another phone's runner, so only reuse one whose runner and forward
@@ -34,6 +34,10 @@ if [ -x "$IDEVICE_ID" ] && ! "$IDEVICE_ID" -l | grep -qx "$IOS_UDID"; then
   die device_not_on_usb "phone $IOS_UDID is not visible over USB" "fix=plug it in, unlock it, tap Trust, run wda-doctor"
 fi
 
+# another phone's start may have built while this one waited for the lock, so read the products
+# again now that nothing else can change them
+XCTESTRUN="$(ls "$WDA_DERIVED"/Build/Products/*.xctestrun 2>/dev/null | head -1)"
+
 # rebuild when there are no products, they were built for another bundle id, or the profile does
 # not include this device; a destination with the real UDID lets Xcode register the device and
 # refresh the profile
@@ -44,8 +48,8 @@ if [ -z "$XCTESTRUN" ] || [ "$BUILT_ID" != "$WDA_BUNDLE_ID.xctrunner" ] ||
   WDA_BUILD_DESTINATION="id=$IOS_UDID" "$(dirname "$0")/wda-build" >"$STATE_DIR/wda-build.json" || {
     cat "$STATE_DIR/wda-build.json"; exit 1; }
   XCTESTRUN="$(ls "$WDA_DERIVED"/Build/Products/*.xctestrun | head -1)"
-  TEST_CMD=(xcodebuild test-without-building -xctestrun "$XCTESTRUN" -destination "id=$IOS_UDID")
 fi
+TEST_CMD=(xcodebuild test-without-building -xctestrun "$XCTESTRUN" -destination "id=$IOS_UDID")
 
 # stop this phone's leftovers from a previous run so its port and device session are free
 IOS_UDID="$IOS_UDID" "$(dirname "$0")/wda-stop" >/dev/null 2>&1

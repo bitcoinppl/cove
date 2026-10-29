@@ -24,6 +24,15 @@ sys.path.insert(0, str(HERE))
 from common import run_row  # noqa: E402
 
 
+def positive_int(value: str) -> int:
+    # zero loops would skip every check in a looping row and still report a pass
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {number}")
+
+    return number
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("platform", choices=["android", "ios"])
@@ -33,7 +42,7 @@ def main() -> int:
     parser.add_argument("--rows", help="comma-separated row ids; default is every row for the platform")
     parser.add_argument("--out", type=Path)
     parser.add_argument("--upgrade-apk", type=Path, help="android apk to install over the existing install for the upgrade row")
-    parser.add_argument("--loops", type=int, default=10, help="repetitions for rows that loop, such as repeated background and foreground")
+    parser.add_argument("--loops", type=positive_int, default=10, help="repetitions for rows that loop, such as repeated background and foreground")
     parser.add_argument("--list", action="store_true", help="print the row ids and exit")
     args = parser.parse_args()
 

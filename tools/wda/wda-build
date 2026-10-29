@@ -18,9 +18,10 @@ if [ "${1:-}" = "--dry-run" ]; then
   exit 0
 fi
 
+lock_state
 fetched="$("$(dirname "$0")/wda-fetch")" || { echo "$fetched"; exit 1; }
-mkdir -p "$WDA_STATE"
-"${cmd[@]}" >"$WDA_STATE/build.log" 2>&1
+# xcodebuild may start build services that outlive it, and they must not keep the lock
+"${cmd[@]}" >"$WDA_STATE/build.log" 2>&1 9>&-
 rc=$?
 if [ $rc -ne 0 ]; then
   die build_failed "xcodebuild exited $rc; see $WDA_STATE/build.log" "log=$WDA_STATE/build.log"

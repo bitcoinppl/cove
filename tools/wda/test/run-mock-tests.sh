@@ -71,13 +71,18 @@ expect "pasteboard set text after --" 0 'd["chars"]==5 and d["app"]=="org.bitcoi
 expect "pasteboard --app without value" 2 'd["error"]=="usage"' -- "$here/ios-pasteboard" --app
 expect "launch activate after -- is a bundle id" 2 'd["error"]=="usage"' -- "$here/ios-launch" -- --activate x.y
 
-# a second wda-start for the same port waits on the first one's lock instead of racing its check
-(. "$here/wda-env.sh"; WDA_STATE="$tmp/lockstate" lock_port 9999; sleep 3) &
+# wda-start, wda-stop and wda-build take turns over the shared WDA state
+locked_env=(env WDA_STATE="$tmp/lockstate" WDA_CACHE="$tmp/cache" WDA_LOCK_WAIT=0.5)
+(export WDA_STATE="$tmp/lockstate"; . "$here/wda-env.sh"; lock_state; sleep 3) &
 locker=$!
 sleep 1
-expect "port lock held" 1 'd["error"]=="locked"' -- env WDA_STATE="$tmp/lockstate" WDA_LOCK_WAIT=0.5 bash -c '. "$1"; lock_port 9999; json ok:raw=true' _ "$here/wda-env.sh"
+expect "stop waits for the lock" 1 'd["error"]=="locked"' -- "${locked_env[@]}" "$here/wda-stop"
+expect "build waits for the lock" 1 'd["error"]=="locked"' -- "${locked_env[@]}" "$here/wda-build"
+expect "stop dry-run skips the lock" 0 'd["dry_run"]' -- "${locked_env[@]}" "$here/wda-stop" --dry-run
 wait $locker
-expect "port lock free" 0 'd["ok"]' -- env WDA_STATE="$tmp/lockstate" WDA_LOCK_WAIT=0.5 bash -c '. "$1"; lock_port 9999; json ok:raw=true' _ "$here/wda-env.sh"
+expect "stop after the lock frees" 0 'd["ok"]' -- "${locked_env[@]}" "$here/wda-stop"
+# wda-start runs wda-stop under its lock, so the child must not wait on its own parent
+expect "child of the holder" 0 'd["ok"] and d["action"]=="wda-stop"' -- "${locked_env[@]}" bash -c '. "$1"; lock_state; "$2"; true' _ "$here/wda-env.sh" "$here/wda-stop"
 expect "vis bad args" 2 'd["error"]=="usage"' -- "$here/ios-vis" --all
 expect "vis dry-run" 0 'd["dry_run"] and "would_send" in d' -- "$here/ios-vis" --dry-run
 [ "$(head -c4 "$tmp/out/shot.png" | tail -c3)" = "PNG" ] && echo "ok   shot file is a PNG" || { echo "FAIL shot file"; fail=1; }
