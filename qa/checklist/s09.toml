@@ -5,7 +5,7 @@ title = "ypub UTF-8 file import uses wrapped SegWit"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/wallet/builder.rs", "rust/src/xpub.rs", "rust/src/multi_format.rs", "rust/src/hardware_export.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
-coverage = ["rust:rust/src/wallet/builder.rs::bare_ypub_import_selects_wrapped_segwit_descriptor", "rust:rust/src/multi_format.rs::slip132_public_keys_from_text_and_utf8_data_land_in_their_account_slot"]
+coverage = ["rust:rust/src/wallet/builder.rs::bare_ypub_import_selects_wrapped_segwit_descriptor", "rust:rust/src/wallet/builder.rs::ypub_file_contents_with_surrounding_whitespace_import_as_wrapped_segwit", "rust:rust/src/multi_format.rs::slip132_public_keys_from_text_and_utf8_data_land_in_their_account_slot"]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
