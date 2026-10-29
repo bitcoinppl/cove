@@ -183,7 +183,7 @@ enum ICloudEventuallyConsistentListing {
     ) throws -> [String] {
         switch metadata {
         case let .success(metadata):
-            return Array(Set(local + metadata)).sorted()
+            Array(Set(local + metadata)).sorted()
         case let .failure(error):
             throw error
         }

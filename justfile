@@ -315,10 +315,23 @@ lint-android *flags="":
 # [bounded] Lint Swift code and Cove-specific SwiftUI structure
 [group('lint')]
 lint-swift *flags="":
-    swiftformat --lint ios --swiftversion 6 {{ flags }}
-    swiftlint lint --config .swiftlint.yml
+    just swift-tool swiftformat --lint ios --swiftversion 6 {{ flags }}
+    just swift-tool swiftlint lint --config .swiftlint.yml
     swift test --package-path tools/cove-swift-lint
     swift run --package-path tools/cove-swift-lint cove-swift-lint ios --config .swift-ast-lint.yml
+
+# [quick] Run the pinned swiftformat or swiftlint release from tools/swift-tools.json
+[group('lint')]
+[working-directory('rust')]
+swift-tool tool *args:
+    cargo --locked -q xtask swift-tools run {{ tool }} {{ args }}
+
+# [quick, external] Pin the locally installed swiftformat and swiftlint, then reformat and lint with them
+[group('lint')]
+swift-tools-sync:
+    just xtask swift-tools sync
+    just fmt-swift
+    just lint-swift
 
 # [quick] Run clippy
 [group('lint')]
@@ -373,7 +386,7 @@ alias fi := fmt-swift
 [group('format')]
 [private]
 fmt-swift:
-    swiftformat ios --swiftversion 6
+    just swift-tool swiftformat ios --swiftversion 6
 
 # Format Android code
 [group('format')]

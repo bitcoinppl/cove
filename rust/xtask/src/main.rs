@@ -10,6 +10,7 @@ mod mobile;
 mod mobile_artifact;
 mod qa;
 mod rebase;
+mod swift_tools;
 mod util;
 mod version;
 
@@ -281,6 +282,10 @@ enum Commands {
     #[command(subcommand)]
     Qa(qa::QaCommand),
 
+    /// Run or re-pin the SwiftFormat and SwiftLint releases used by lint and CI
+    #[command(name = "swift-tools", subcommand)]
+    SwiftTools(swift_tools::SwiftToolsCommand),
+
     /// Utility commands for development and testing
     #[command(subcommand)]
     Util(UtilCommands),
@@ -436,6 +441,8 @@ fn main() -> Result<()> {
 
         Commands::Qa(command) => qa::run(command),
 
+        Commands::SwiftTools(command) => swift_tools::run(command),
+
         Commands::Util(util_cmd) => match util_cmd {
             UtilCommands::SignPsbt { mnemonic, psbt, network, format, output } => {
                 util::sign_psbt(&mnemonic, &psbt, &network, format.into(), output.as_deref())
@@ -494,6 +501,7 @@ fn install_deps(verbose: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{Cli, Commands};
+    use crate::swift_tools::{SwiftTool, SwiftToolsCommand};
     use clap::Parser;
 
     #[test]
@@ -542,6 +550,28 @@ mod tests {
         };
 
         assert_eq!(device_name, ["se", "main"]);
+    }
+
+    #[test]
+    fn swift_tools_run_passes_tool_flags_through() {
+        let cli = Cli::try_parse_from([
+            "xtask",
+            "swift-tools",
+            "run",
+            "swiftformat",
+            "--lint",
+            "ios",
+            "--version",
+            "-v",
+        ])
+        .expect("tool flags should parse as passthrough args");
+
+        let Commands::SwiftTools(SwiftToolsCommand::Run { tool, args }) = cli.command else {
+            panic!("expected swift-tools run command");
+        };
+
+        assert_eq!(tool, SwiftTool::Swiftformat);
+        assert_eq!(args, ["--lint", "ios", "--version", "-v"]);
     }
 
     #[test]

@@ -13,7 +13,7 @@ Prefer direct, structurally correct fixes over temporary workarounds. The right 
 - [Rust](https://rustup.rs)
 - [Just](https://github.com/casey/just) (`cargo install just`)
 - `cargo-nextest` (`cargo install cargo-nextest`)
-- **iOS**: Xcode 16.0+, swiftformat 0.64.0+
+- **iOS**: Xcode 16.0+, plus `brew install swiftformat swiftlint` for editor integration (see [Swift lint tools](#swift-lint-tools))
 - **Android**: Android Studio + NDK, Java 17/JDK
 - **Optional**: bacon, watchexec
 
@@ -102,6 +102,12 @@ Run `just` to see the public recipes. Aliases are shortcuts for commands you use
 - Do not manually edit generated UniFFI bindings
 - Regenerate bindings with `just build-ios` or `just build-android` after changing exported Rust APIs
 - Use `just compile-ios` and `just compile-android` only when Rust exports have not changed
+
+### Swift Lint Tools
+
+`just lint-swift`, `just fmt-swift`, and CI run the swiftformat and swiftlint releases pinned in `tools/swift-tools.json`, so a new Homebrew release can't change lint results on one machine only. `just swift-tool <swiftformat|swiftlint> [args]` downloads the pinned release on first use, verifies its checksum, and caches it under `~/.cache/cove/swift-tools`.
+
+Editors still format with the Homebrew tools on `PATH`, and the lint recipes warn when those versions differ from the pins. When Homebrew upgrades swiftformat or swiftlint, run `just swift-tools-sync`. It pins the locally installed versions with their GitHub release checksums, then reformats and lints with them. Commit `tools/swift-tools.json` together with any fixes the new rules need. If the pins are newer than your local tools, run `brew upgrade swiftformat swiftlint` instead.
 
 ### Debugging Tips
 

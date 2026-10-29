@@ -41,17 +41,23 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
-      - name: Install Swift lint tools
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          cache-bin: false
+          prefix-key: v1-rust-xtask
+      - name: Install pinned Swift lint tools
         run: |
-          brew update
-          brew upgrade swiftformat || brew install swiftformat
-          brew upgrade swiftlint || brew install swiftlint
-          swiftformat --version
-          swiftlint version
+          cd rust
+          cargo --locked xtask swift-tools run swiftformat --version
+          cargo --locked xtask swift-tools run swiftlint version
       - name: SwiftFormat
-        run: swiftformat --lint ios --reporter github-actions-log --swiftversion 6
+        run: cd rust && cargo --locked -q xtask swift-tools run swiftformat --lint ios --reporter github-actions-log --swiftversion 6
       - name: SwiftLint
-        run: swiftlint lint --config .swiftlint.yml --reporter github-actions-logging
+        run: cd rust && cargo --locked -q xtask swift-tools run swiftlint lint --config .swiftlint.yml --reporter github-actions-logging
       - name: Test Cove Swift lint rules
         run: swift test --package-path tools/cove-swift-lint
       - name: Cove Swift lint rules
