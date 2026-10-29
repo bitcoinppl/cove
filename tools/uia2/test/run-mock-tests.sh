@@ -218,6 +218,25 @@ echo test >"$tmp/cache/apk/v10.6.6/appium-uiautomator2-server-debug-androidTest.
 export UIA2_SERVER_SHA256="$(shasum -a 256 "$tmp/cache/apk/v10.6.6/appium-uiautomator2-server-v10.6.6.apk" | cut -d' ' -f1)"
 export UIA2_TEST_SHA256="$(shasum -a 256 "$tmp/cache/apk/v10.6.6/appium-uiautomator2-server-debug-androidTest.apk" | cut -d' ' -f1)"
 
+# uia2-fetch through a fake gh that writes FAKE_GH_SERVER into the -D directory; downloads land in
+# a private directory first, so a bad one never touches the shared cache
+cat >"$tmp/bin/gh" <<'EOF'
+#!/bin/bash
+while [ $# -gt 0 ]; do [ "$1" = "-D" ] && dir="$2"; shift; done
+echo "${FAKE_GH_SERVER:-server}" >"$dir/appium-uiautomator2-server-v10.6.6.apk"
+echo test >"$dir/appium-uiautomator2-server-debug-androidTest.apk"
+EOF
+chmod +x "$tmp/bin/gh"
+apk_dir="$tmp/cache/apk/v10.6.6"
+expect "fetch cached" 0 'd["ok"] and d["cached"]' -- "$here/uia2-fetch"
+rm "$apk_dir"/*.apk
+expect "fetch download" 0 'd["ok"] and not d["cached"]' -- "$here/uia2-fetch"
+check "fetch publishes verified APKs and cleans up" bash -c "[ \"\$(cat '$apk_dir/appium-uiautomator2-server-v10.6.6.apk')\" = server ] && [ -z \"\$(ls -A '$apk_dir' | grep fetch)\" ]"
+echo stale >"$apk_dir/appium-uiautomator2-server-v10.6.6.apk"
+FAKE_GH_SERVER=corrupt expect "fetch checksum mismatch" 1 'd["error"]=="checksum_mismatch"' -- "$here/uia2-fetch"
+check "bad download leaves the cache alone" bash -c "[ \"\$(cat '$apk_dir/appium-uiautomator2-server-v10.6.6.apk')\" = stale ] && [ -z \"\$(ls -A '$apk_dir' | grep fetch)\" ]"
+echo server >"$apk_dir/appium-uiautomator2-server-v10.6.6.apk"
+
 touch "$FAKE_ADB/forward_fail"
 expect "start forward failure" 1 'd["error"]=="forward_failed"' -- "$here/uia2-start"
 pid="$(cat "$tmp/state/TEST-SERIAL/instrument.pid" 2>/dev/null)"
