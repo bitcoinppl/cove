@@ -230,10 +230,35 @@ async fn both_protocols_agree_on_history_and_confirmation() {
     assert!(electrum.transaction_get(&evicted).is_err());
 }
 
+/// Selects a network for one test and restores the previous selection on drop
+///
+/// `selected_node` follows the selected network, which other tests change
+struct SelectedNetwork(CoveNetwork);
+
+impl SelectedNetwork {
+    fn select(network: CoveNetwork) -> Self {
+        let global_config = &crate::database::Database::global().global_config;
+        let previous = global_config.selected_network();
+        global_config.set_selected_network(network).expect("selected network is set");
+
+        Self(previous)
+    }
+}
+
+impl Drop for SelectedNetwork {
+    fn drop(&mut self) {
+        crate::database::Database::global()
+            .global_config
+            .set_selected_network(self.0)
+            .expect("selected network is restored");
+    }
+}
+
 #[tokio::test]
 async fn selecting_a_node_points_the_wallet_config_at_it() {
     let _guard = crate::test_support::global_state_test_lock().lock().await;
     crate::database::test_support::init_test_database();
+    let _network = SelectedNetwork::select(CoveNetwork::Bitcoin);
 
     let node = FakeNode::start(Network::Bitcoin);
     let global_config = &crate::database::Database::global().global_config;
