@@ -26,7 +26,7 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 | Agent pass | Checklist rows that need judgment, fixtures or multi-app flows, run by a coding agent driving a real phone | This document |
 | Person | Camera, NFC, biometrics, haptics, spoken screen-reader output, hardware signers | Batched into one sitting at the end |
 
-The `UI tests` workflow runs the iOS UI tests and Android instrumented tests nightly, on pushes to master, and on pull requests labeled `ui-tests`. CI runs the manifest check behind `just qa-check` on every pull request, so the manifest stays consistent with the tests it names.
+The `UI tests` workflow runs the iOS UI tests and Android instrumented tests nightly, on pushes to master, and on pull requests labeled `ui-tests`. CI runs the manifest check behind `just qa-check` on pull requests, so the manifest stays consistent with the tests it names. Its workflow filters pull requests to those targeting master, so run `just qa-check` locally before pushing a checklist change on a stacked branch.
 
 ## Planning a release pass
 
@@ -41,7 +41,7 @@ The `UI tests` workflow runs the iOS UI tests and Android instrumented tests nig
 Use test networks only. Cove's default Signet node is MutinyNet, whose 30-second blocks make funding fast. Never use production seed material, and keep fixture secrets out of the repository.
 
 - **Two funded Signet wallets** (for example Main and Secondary) with several UTXOs, including one small output, and known history
-- **A watch-only hardware wallet** backed by a software signer such as Signer Lab, so the PSBT loop runs without a camera: export the unsigned PSBT to a file, review and sign it with the signer's CLI, then import the signed file in Cove. For QR and file fixtures, `just sign-psbt` signs a PSBT with the test mnemonic in `$MNEMONIC` and writes the result as base64, hex, binary, BBQr and UR images
+- **A watch-only hardware wallet** backed by a software signer such as Signer Lab, so the PSBT loop runs without a camera: export the unsigned PSBT to a file, review and sign it with the signer's CLI, then import the signed file in Cove. For QR and file fixtures, `just sign-psbt <psbt>`, where `<psbt>` is base64 or an absolute path to a `.psbt` file, signs it with the test mnemonic in `$MNEMONIC` and writes the result as base64, hex, binary, BBQr and UR images
 - **Public-key fixtures** (`xpub`, `ypub`, `zpub`, `upub`, `vpub`, descriptors). To check the first receive address, use a freshly generated key with no history: published test vectors have on-chain history, so the receive index has already advanced past `/0/0` by the time Receive opens
 - **A LAN HTTP block explorer** on the test machine, so explorer templates can be checked against the request log
 - **The previous release** for in-place upgrade tests. On Android, the GitHub release APK and a locally signed build share the upload key, but a Play install is signed with Google's key and only updates through Play. iOS upgrades need the previous build from the App Store, since TestFlight only lists builds of the current version
