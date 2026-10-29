@@ -2938,6 +2938,49 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
+    async fn actor_manual_tx_never_adds_unselected_inputs_to_cover_a_high_fee() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::database::test_support::init_test_database();
+
+        let mut wallet = Wallet::preview_new_wallet();
+        mark_wallet_ledger_ready(&mut wallet);
+        insert_checkpoint(
+            &mut wallet.bdk,
+            BlockId { height: 1, hash: BlockHash::from_byte_array([2; 32]) },
+        );
+        let selected = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(50_000));
+        let unselected = receive_output_in_latest_block(&mut wallet.bdk, Amount::from_sat(80_000));
+
+        let (sender, _receiver) = flume::bounded(10);
+        let mut actor = new_test_wallet_actor(wallet, sender);
+        let (db, _tmp) = new_test_wallet_data_db(actor.wallet.id.clone());
+        actor.db = db;
+
+        // the selected coin clears the per-input fee estimate at 100 sat/vbyte, so the fee probe
+        // and the final build both run; the probe's first attempt falls short of the full fee,
+        // which is where coin selection would reach for the unselected 80_000 sat output
+        let result = actor
+            .build_manual_tx(
+                vec![selected],
+                Amount::from_sat(50_000),
+                Address::preview_new(),
+                high_sat_vbyte_fee_rate(),
+            )
+            .await;
+        let psbt = actor_value(result).await.expect("selected coin covers a 100 sat/vbyte fee");
+        let spent = spent_outpoints(&psbt);
+        let fee = psbt.fee().expect("psbt fee");
+        let outputs: Vec<Amount> =
+            psbt.unsigned_tx.output.iter().map(|output| output.value).collect();
+
+        assert_eq!(spent, HashSet::from([selected]));
+        assert!(!spent.contains(&unselected));
+
+        // a max send sized against a two-input fee would leave change behind instead
+        assert_eq!(outputs, vec![Amount::from_sat(50_000) - fee]);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
     async fn broadcast_transaction_posts_to_node_exactly_once() {
         let _guard = crate::test_support::global_state_test_lock().lock().await;
 

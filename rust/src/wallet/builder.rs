@@ -632,6 +632,8 @@ pub(crate) mod test_support {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr as _;
+
     use bip39::Mnemonic;
 
     use super::*;
@@ -915,6 +917,222 @@ mod tests {
         };
 
         assert_eq!(found_json.as_ref().0, json);
+    }
+
+    // BIP49 and BIP84 spec vectors for the "abandon ... about" mnemonic, account 0
+    const BIP49_TESTNET_UPUB: &str = "upub5EFU65HtV5TeiSHmZZm7FUffBGy8UKeqp7vw43jYbvZPpoVsgU93oac7Wk3u6moKegAEWtGNF8DehrnHtv21XXEMYRUocHqguyjknFHYfgY";
+    const BIP84_TESTNET_VPUB: &str = "vpub5Y6cjg78GGuNLsaPhmYsiw4gYX3HoQiRBiSwDaBXKUafCt9bNwWQiitDk5VZ5BVxYnQdwoTyXSs2JHRPAgjAvtbBrf8ZhDYe2jWAqvZVnsc";
+
+    /// Restores the selected network and wallet mode when dropped, so import tests that
+    /// switch networks leave the process-global database as they found it
+    struct RestoreWalletTarget(SelectedWalletTarget);
+
+    impl Drop for RestoreWalletTarget {
+        fn drop(&mut self) {
+            let config = &Database::global().global_config;
+            let SelectedWalletTarget { network, mode } = self.0;
+            let _ = config.set_selected_network(network);
+            let _ = match mode {
+                crate::wallet::metadata::WalletMode::Main => config.set_main_mode(),
+                crate::wallet::metadata::WalletMode::Decoy => config.set_decoy_mode(),
+            };
+        }
+    }
+
+    // hold the returned guard after the global-state lock so it restores before the lock is released
+    fn init_import_globals() -> RestoreWalletTarget {
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::init_test_database();
+        crate::test_support::init_test_keychain();
+
+        RestoreWalletTarget(Database::global().global_config.wallet_target())
+    }
+
+    fn wallet_count(network: Network) -> usize {
+        let mode = Database::global().global_config.wallet_target().mode;
+
+        Database::global().wallets.get_all(network, mode).unwrap().len()
+    }
+
+    /// Imports `key` on `network`, then removes the saved wallet so tests sharing the
+    /// process-global database do not see each other's imports
+    fn import_public_key(
+        key: &str,
+        network: Network,
+    ) -> Result<(String, WalletAddressType, WalletType), WalletError> {
+        Database::global().global_config.set_selected_network(network).unwrap();
+        Database::global().global_config.set_main_mode().unwrap();
+
+        let wallet = Wallet::try_new_persisted_from_xpub(key.to_string())?;
+        let first_receive = wallet.bdk.peek_address(KeychainKind::External, 0).address.to_string();
+        let imported = (first_receive, wallet.metadata.address_type, wallet.metadata.wallet_type);
+        Database::global().wallets.delete(&wallet.id).unwrap();
+
+        Ok(imported)
+    }
+
+    #[test]
+    fn bare_slip132_public_keys_import_with_expected_type_and_first_receive_address() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let _restore_target = init_import_globals();
+
+        for (key, network, address_type, first_receive) in [
+            (
+                BIP49_YPUB,
+                Network::Bitcoin,
+                WalletAddressType::WrappedSegwit,
+                "37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf",
+            ),
+            (
+                BIP84_ZPUB,
+                Network::Bitcoin,
+                WalletAddressType::NativeSegwit,
+                "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu",
+            ),
+            (
+                BIP49_TESTNET_UPUB,
+                Network::Testnet,
+                WalletAddressType::WrappedSegwit,
+                "2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2",
+            ),
+            (
+                BIP84_TESTNET_VPUB,
+                Network::Testnet,
+                WalletAddressType::NativeSegwit,
+                "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl",
+            ),
+            // signet shares testnet's key version bytes and address encoding
+            (
+                BIP49_TESTNET_UPUB,
+                Network::Signet,
+                WalletAddressType::WrappedSegwit,
+                "2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2",
+            ),
+            (
+                BIP84_TESTNET_VPUB,
+                Network::Signet,
+                WalletAddressType::NativeSegwit,
+                "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl",
+            ),
+        ] {
+            let (address, imported_type, wallet_type) = import_public_key(key, network).unwrap();
+
+            assert_eq!(address, first_receive, "{network:?} {key}");
+            assert_eq!(imported_type, address_type, "{network:?} {key}");
+            assert_eq!(wallet_type, WalletType::XpubOnly, "{network:?} {key}");
+        }
+    }
+
+    // the iOS and Android file importers pass decoded file contents straight to
+    // `try_new_persisted_from_xpub`, so surrounding whitespace must not change the result
+    #[test]
+    fn ypub_file_contents_with_surrounding_whitespace_import_as_wrapped_segwit() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let _restore_target = init_import_globals();
+
+        for contents in
+            [format!("{BIP49_YPUB}\n"), format!("{BIP49_YPUB}\r\n"), format!("  {BIP49_YPUB}\n\n")]
+        {
+            let (address, imported_type, wallet_type) =
+                import_public_key(&contents, Network::Bitcoin).unwrap();
+
+            assert_eq!(address, "37VucYSaXLCAsxYyAPfbSi9eh4iEcbShgf", "{contents:?}");
+            assert_eq!(imported_type, WalletAddressType::WrappedSegwit, "{contents:?}");
+            assert_eq!(wallet_type, WalletType::XpubOnly, "{contents:?}");
+        }
+    }
+
+    #[test]
+    fn slip132_public_key_for_another_network_is_rejected_without_saving_a_wallet() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let _restore_target = init_import_globals();
+
+        for (key, network) in [
+            (BIP49_YPUB, Network::Testnet),
+            (BIP49_YPUB, Network::Signet),
+            (BIP84_ZPUB, Network::Testnet),
+            (BIP49_TESTNET_UPUB, Network::Bitcoin),
+            (BIP84_TESTNET_VPUB, Network::Bitcoin),
+        ] {
+            Database::global().global_config.set_selected_network(network).unwrap();
+            let before = wallet_count(network);
+
+            let error = import_public_key(key, network).unwrap_err();
+
+            assert_eq!(
+                error,
+                WalletError::BdkError("Key error: Invalid network kind".to_string()),
+                "{network:?} {key}"
+            );
+            assert_eq!(wallet_count(network), before, "{network:?} {key}");
+        }
+    }
+
+    #[test]
+    fn corrupt_vpub_checksum_is_rejected_without_saving_a_wallet() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let _restore_target = init_import_globals();
+
+        // last base58 character changed, which breaks the checksum
+        let corrupt = format!("{}x", &BIP84_TESTNET_VPUB[..BIP84_TESTNET_VPUB.len() - 1]);
+        assert_ne!(corrupt, BIP84_TESTNET_VPUB);
+
+        Database::global().global_config.set_selected_network(Network::Testnet).unwrap();
+        let before = wallet_count(Network::Testnet);
+
+        let error = import_public_key(&corrupt, Network::Testnet).unwrap_err();
+
+        assert!(matches!(error, WalletError::ParseXpubError(_)), "{error:?}");
+        assert_eq!(wallet_count(Network::Testnet), before);
+    }
+
+    #[test]
+    fn extended_private_keys_are_rejected_in_public_key_import() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let _restore_target = init_import_globals();
+
+        // public BIP32 test vector 1 master keys, never funded
+        let xprv = "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi";
+        let tprv = "tprv8ZgxMBicQKsPd7Uf69XL1XwhmjHopUGep8GuEiJDZmbQz6o58LninorQAfcKZWARbtRtfnLcJ5MQ2AtHcQJCCRUcMRvmDUjyEmNUWwx8UbK";
+
+        for (key, network) in [(xprv, Network::Bitcoin), (tprv, Network::Testnet)] {
+            // the fixture must be a valid private key, otherwise the rejection proves nothing
+            assert!(bdk_wallet::bitcoin::bip32::Xpriv::from_str(key).is_ok(), "{key}");
+
+            Database::global().global_config.set_selected_network(network).unwrap();
+            let before = wallet_count(network);
+
+            let error = import_public_key(key, network).unwrap_err();
+
+            assert!(matches!(error, WalletError::ParseXpubError(_)), "{network:?}: {error:?}");
+            assert_eq!(wallet_count(network), before, "{network:?}");
+        }
+    }
+
+    #[test]
+    fn importing_a_multi_account_json_export_twice_reports_the_existing_wallet() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let _restore_target = init_import_globals();
+        Database::global().global_config.set_selected_network(Network::Bitcoin).unwrap();
+        Database::global().global_config.set_main_mode().unwrap();
+
+        let export = || {
+            pubport::Format::Json(Box::new(descriptor_json(
+                Some(bip44_descriptors()),
+                Some(bip49_descriptors()),
+                Some(bip84_descriptors()),
+            )))
+        };
+
+        let first = Wallet::try_new_persisted_from_pubport(export()).unwrap();
+        let second = Wallet::try_new_persisted_from_pubport(export());
+
+        // bip84 wins the preference order, so the wallet that exists is the native segwit one
+        assert_eq!(first.metadata.address_type, WalletAddressType::NativeSegwit);
+        assert_eq!(first.metadata.wallet_type, WalletType::Cold);
+        assert_eq!(second.err(), Some(WalletError::WalletAlreadyExists(first.id.clone())));
+
+        Database::global().wallets.delete(&first.id).unwrap();
     }
 
     #[test]

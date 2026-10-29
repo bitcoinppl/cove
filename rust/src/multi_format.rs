@@ -449,6 +449,40 @@ mod tests {
     }
 
     #[test]
+    fn slip132_public_keys_from_text_and_utf8_data_land_in_their_account_slot() {
+        const YPUB: &str = "ypub6Ww3ibxVfGzLrAH1PNcjyAWenMTbbAosGNB6VvmSEgytSER9azLDWCxoJwW7Ke7icmizBMXrzBx9979FfaHxHcrArf3zbeJJJUZPf663zsP";
+        const UPUB: &str = "upub5EFU65HtV5TeiSHmZZm7FUffBGy8UKeqp7vw43jYbvZPpoVsgU93oac7Wk3u6moKegAEWtGNF8DehrnHtv21XXEMYRUocHqguyjknFHYfgY";
+        const VPUB: &str = "vpub5Y6cjg78GGuNLsaPhmYsiw4gYX3HoQiRBiSwDaBXKUafCt9bNwWQiitDk5VZ5BVxYnQdwoTyXSs2JHRPAgjAvtbBrf8ZhDYe2jWAqvZVnsc";
+
+        // (key, expects a bip49 account, expects a bip84 account)
+        for (key, wrapped, native) in [
+            (YPUB, true, false),
+            (UPUB, true, false),
+            (ACCOUNT_ZPUB, false, true),
+            (VPUB, false, true),
+        ] {
+            let padded = format!("  {key}\n");
+
+            for result in [
+                MultiFormat::try_from_string(key),
+                MultiFormat::try_from_string(&padded),
+                MultiFormat::try_from_data(key.as_bytes()),
+            ] {
+                let Ok(MultiFormat::HardwareExport(export)) = result else {
+                    panic!("expected hardware export for {key}: {result:?}");
+                };
+                let pubport::Format::Json(json) = export.format() else {
+                    panic!("expected JSON account export for {key}");
+                };
+
+                assert_eq!(json.bip49.is_some(), wrapped, "{key}");
+                assert_eq!(json.bip84.is_some(), native, "{key}");
+                assert!(json.bip44.is_none() && json.bip86.is_none(), "{key}");
+            }
+        }
+    }
+
+    #[test]
     fn test_non_utf8_data_returns_unrecognized_format() {
         let result = MultiFormat::try_from_data(&[0xff, 0xfe, 0xfd]);
 
