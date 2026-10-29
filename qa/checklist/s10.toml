@@ -28,7 +28,9 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
 ]
-coverage = ["agent"]
+coverage = [
+  "rust:rust/src/database/global_config.rs::preset_explorer_selection_renders_preview_and_transaction_url",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -44,7 +46,9 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
 ]
-coverage = ["agent"]
+coverage = [
+  "rust:rust/src/database/global_config.rs::preset_explorer_selection_renders_preview_and_transaction_url",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -60,7 +64,9 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
 ]
-coverage = ["agent"]
+coverage = [
+  "rust:rust/src/database/global_config.rs::preset_explorer_selection_renders_preview_and_transaction_url",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -76,7 +82,9 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
 ]
-coverage = ["agent"]
+coverage = [
+  "rust:rust/src/database/global_config.rs::custom_lan_template_saves_and_renders_transaction_url",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -246,11 +254,11 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
 ]
 coverage = [
-  "agent",
   "rust:rust/src/custom_block_explorer/template.rs::invalid_values_are_rejected",
+  "rust:rust/src/database/global_config.rs::invalid_custom_block_explorer_input_keeps_saved_template",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# rejection is asserted; that the saved value stays unchanged is not
+# rejection and the saved value staying unchanged are asserted in rust
 
 [[row]]
 id = "s10-invalid-host-preserves-saved-explorer"
@@ -266,11 +274,11 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
 ]
 coverage = [
-  "agent",
   "rust:rust/src/custom_block_explorer/template.rs::invalid_values_are_rejected",
+  "rust:rust/src/database/global_config.rs::invalid_custom_block_explorer_input_keeps_saved_template",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# rejection is asserted; that the saved value stays unchanged is not
+# rejection and the saved value staying unchanged are asserted in rust
 
 [[row]]
 id = "s10-fragment-preserves-saved-explorer"
@@ -286,11 +294,11 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
 ]
 coverage = [
-  "agent",
   "rust:rust/src/custom_block_explorer/template.rs::invalid_values_are_rejected",
+  "rust:rust/src/database/global_config.rs::invalid_custom_block_explorer_input_keeps_saved_template",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# rejection is asserted; that the saved value stays unchanged is not
+# rejection and the saved value staying unchanged are asserted in rust
 
 [[row]]
 id = "s10-incomplete-placeholder-preserves-saved-explorer"
@@ -305,7 +313,9 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
 ]
-coverage = ["agent"]
+coverage = [
+  "rust:rust/src/database/global_config.rs::invalid_custom_block_explorer_input_keeps_saved_template",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -344,6 +354,7 @@ paths = [
 coverage = [
   "agent",
   "rust:rust/src/custom_block_explorer/template.rs::defaults_match_existing_transaction_urls",
+  "rust:rust/src/database/global_config.rs::explicit_reset_to_default_restores_network_default_url",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 # url rendering is asserted; opening the browser is not
@@ -364,7 +375,10 @@ paths = [
   "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
 ]
-coverage = ["agent"]
+coverage = [
+  "agent",
+  "rust:rust/src/database/global_config.rs::preset_explorer_selection_renders_preview_and_transaction_url",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -383,7 +397,10 @@ paths = [
   "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsView.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
 ]
-coverage = ["agent"]
+coverage = [
+  "agent",
+  "rust:rust/src/database/global_config.rs::preset_explorer_selection_renders_preview_and_transaction_url",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -405,6 +422,7 @@ paths = [
 coverage = [
   "agent",
   "rust:rust/src/database/global_config.rs::block_explorer_option_setter_selects_presets_and_clears_default",
+  "rust:rust/src/database/global_config.rs::preset_explorer_selection_renders_preview_and_transaction_url",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 # preset template is asserted; opening the browser is not
@@ -422,7 +440,10 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
 ]
-coverage = ["agent"]
+coverage = [
+  "agent",
+  "rust:rust/src/database/global_config.rs::custom_block_explorer_survives_reopening_the_database",
+]
 # 1.4.0: ios BLOCKED, android PASS
 # needs a force-stop and relaunch
 
@@ -443,11 +464,12 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
 ]
 coverage = [
-  "agent",
   "rust:rust/src/custom_block_explorer/template.rs::defaults_match_existing_transaction_urls",
+  "rust:rust/src/database/global_config.rs::custom_block_explorer_does_not_leak_into_other_networks",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_uses_the_transaction_network_explorer",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# built-in per-network urls are asserted; bitcoin override not leaking is not
+# built-in per-network urls and per-network override isolation are asserted in rust
 
 [[row]]
 id = "s10-signet-transaction-explorer-isolation"
@@ -466,11 +488,12 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
 ]
 coverage = [
-  "agent",
   "rust:rust/src/custom_block_explorer/template.rs::defaults_match_existing_transaction_urls",
+  "rust:rust/src/database/global_config.rs::custom_block_explorer_does_not_leak_into_other_networks",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_uses_the_transaction_network_explorer",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# built-in per-network urls are asserted; bitcoin override not leaking is not
+# built-in per-network urls and per-network override isolation are asserted in rust
 
 [[row]]
 id = "s10-explicit-reset-to-default"
@@ -485,7 +508,10 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BlockExplorerSettingsScreen.kt",
 ]
-coverage = ["agent"]
+coverage = [
+  "rust:rust/src/database/global_config.rs::explicit_reset_to_default_restores_network_default_url",
+  "rust:rust/src/database/global_config.rs::block_explorer_option_setter_selects_presets_and_clears_default",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -526,11 +552,12 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
 ]
 coverage = [
-  "agent",
   "rust:rust/src/custom_block_explorer/template.rs::defaults_match_existing_transaction_urls",
+  "rust:rust/src/database/global_config.rs::custom_block_explorer_does_not_leak_into_other_networks",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_uses_the_transaction_network_explorer",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# built-in per-network urls are asserted; bitcoin override not leaking is not
+# built-in per-network urls and per-network override isolation are asserted in rust
 
 [[row]]
 id = "s10-ios-explorer-order-and-mempool-guide-preview"
@@ -545,11 +572,11 @@ paths = [
   "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
 ]
 coverage = [
-  "agent",
   "rust:rust/src/custom_block_explorer.rs::block_explorer_options_expose_expected_order_and_labels",
+  "rust:rust/src/database/global_config.rs::preset_explorer_selection_renders_preview_and_transaction_url",
 ]
 # 1.4.0: ios PASS, android N/A
-# order is asserted in rust; the preview url is not
+# order and the preview url are asserted in rust
 
 [[row]]
 id = "s10-ios-bull-bitcoin-preview"
@@ -563,7 +590,9 @@ paths = [
   "rust/src/database/global_config.rs",
   "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
 ]
-coverage = ["agent"]
+coverage = [
+  "rust:rust/src/database/global_config.rs::preset_explorer_selection_renders_preview_and_transaction_url",
+]
 # 1.4.0: ios PASS, android N/A
 
 [[row]]
@@ -578,5 +607,7 @@ paths = [
   "rust/src/database/global_config.rs",
   "ios/Cove/Flows/SettingsFlow/BlockExplorerSettingsView.swift",
 ]
-coverage = ["agent"]
+coverage = [
+  "rust:rust/src/database/global_config.rs::preset_explorer_selection_renders_preview_and_transaction_url",
+]
 # 1.4.0: ios PASS, android N/A
