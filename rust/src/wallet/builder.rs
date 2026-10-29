@@ -637,6 +637,7 @@ mod tests {
     use bip39::Mnemonic;
 
     use super::*;
+    use crate::database::test_support::RestoreWalletTarget;
 
     const BIP49_YPUB: &str = "ypub6Ww3ibxVfGzLrAH1PNcjyAWenMTbbAosGNB6VvmSEgytSER9azLDWCxoJwW7Ke7icmizBMXrzBx9979FfaHxHcrArf3zbeJJJUZPf663zsP";
     const BIP84_ZPUB: &str = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
@@ -923,29 +924,13 @@ mod tests {
     const BIP49_TESTNET_UPUB: &str = "upub5EFU65HtV5TeiSHmZZm7FUffBGy8UKeqp7vw43jYbvZPpoVsgU93oac7Wk3u6moKegAEWtGNF8DehrnHtv21XXEMYRUocHqguyjknFHYfgY";
     const BIP84_TESTNET_VPUB: &str = "vpub5Y6cjg78GGuNLsaPhmYsiw4gYX3HoQiRBiSwDaBXKUafCt9bNwWQiitDk5VZ5BVxYnQdwoTyXSs2JHRPAgjAvtbBrf8ZhDYe2jWAqvZVnsc";
 
-    /// Restores the selected network and wallet mode when dropped, so import tests that
-    /// switch networks leave the process-global database as they found it
-    struct RestoreWalletTarget(SelectedWalletTarget);
-
-    impl Drop for RestoreWalletTarget {
-        fn drop(&mut self) {
-            let config = &Database::global().global_config;
-            let SelectedWalletTarget { network, mode } = self.0;
-            let _ = config.set_selected_network(network);
-            let _ = match mode {
-                crate::wallet::metadata::WalletMode::Main => config.set_main_mode(),
-                crate::wallet::metadata::WalletMode::Decoy => config.set_decoy_mode(),
-            };
-        }
-    }
-
     // hold the returned guard after the global-state lock so it restores before the lock is released
     fn init_import_globals() -> RestoreWalletTarget {
         crate::test_support::ensure_tokio_runtime();
         crate::database::test_support::init_test_database();
         crate::test_support::init_test_keychain();
 
-        RestoreWalletTarget(Database::global().global_config.wallet_target())
+        RestoreWalletTarget::capture()
     }
 
     fn wallet_count(network: Network) -> usize {
