@@ -215,6 +215,20 @@ impl FakeChain {
         self.state.lock().txs.get(&txid).map(|entry| entry.location)
     }
 
+    /// Whether a pending transaction spends an output of another pending one,
+    /// which bitcoind reports as a non-empty `depends` list
+    pub(crate) fn has_unconfirmed_parent(&self, txid: Txid) -> bool {
+        let state = self.state.lock();
+        let Some(entry) = state.txs.get(&txid) else { return false };
+
+        entry.tx.input.iter().any(|input| {
+            state
+                .txs
+                .get(&input.previous_output.txid)
+                .is_some_and(|parent| parent.location == TxLocation::Mempool)
+        })
+    }
+
     pub(crate) fn tx(&self, txid: Txid) -> Option<ChainTx> {
         self.state.lock().txs.get(&txid).cloned()
     }

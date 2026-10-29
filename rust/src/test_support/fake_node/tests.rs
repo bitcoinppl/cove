@@ -397,3 +397,29 @@ async fn script_hashes_only_match_in_the_byte_order_each_protocol_uses() {
     assert_eq!(esplora_history(&forward).await, 1);
     assert_eq!(esplora_history(&reversed).await, 0);
 }
+
+#[tokio::test]
+async fn pending_children_of_pending_parents_report_height_minus_one() {
+    ensure_tokio_runtime();
+
+    let node = FakeNode::start(Network::Bitcoin);
+    let (parent_script, child_script) = (test_script(11), test_script(12));
+    let parent = node.chain().pay(&parent_script, Amount::from_sat(5_000));
+    let child =
+        node.chain().add_to_mempool(spend(parent, child_script.clone(), Amount::from_sat(4_000)));
+
+    let electrum = ElectrumClient::new(&node.electrum_url()).unwrap();
+    let heights = |script: &ScriptBuf| {
+        let history = electrum.script_get_history(script).unwrap();
+
+        history.into_iter().map(|entry| (entry.tx_hash, entry.height)).collect::<Vec<_>>()
+    };
+
+    assert_eq!(heights(&parent_script), [(parent, 0), (child, -1)]);
+    assert_eq!(heights(&child_script), [(child, -1)]);
+
+    // once the parent confirms, the child no longer depends on a pending transaction
+    let height = node.chain().confirm(parent) as i32;
+    assert_eq!(heights(&parent_script), [(parent, height), (child, 0)]);
+    assert_eq!(heights(&child_script), [(child, 0)]);
+}

@@ -160,14 +160,16 @@ fn handle(chain: &FakeChain, method: &str, params: &[Value]) -> Result<Value, Rp
         "blockchain.scripthash.get_history" => {
             let history = history_for(chain, params)?;
 
-            Ok(Value::Array(history.iter().map(history_json).collect()))
+            let entries = history.iter().map(|entry| history_json(chain, entry)).collect();
+
+            Ok(Value::Array(entries))
         }
 
         "blockchain.scripthash.subscribe" => {
             let history = history_for(chain, params)?;
 
             // the status is a hash over the history, null when there is none
-            Ok(status_hash(&history).map_or(Value::Null, Value::String))
+            Ok(status_hash(chain, &history).map_or(Value::Null, Value::String))
         }
 
         "blockchain.scripthash.get_balance" => {
@@ -301,16 +303,21 @@ fn history_for(chain: &FakeChain, params: &[Value]) -> Result<Vec<HistoryEntry>,
     Ok(script.map(|script| chain.history(&script)).unwrap_or_default())
 }
 
-fn history_json(entry: &HistoryEntry) -> Value {
-    let height = match entry.location {
-        TxLocation::Mempool => 0,
+/// The height electrs reports for a history entry, with a pending transaction
+/// at `-1` when it spends another pending one and at `0` otherwise
+fn history_height(chain: &FakeChain, entry: &HistoryEntry) -> i64 {
+    match entry.location {
         TxLocation::Confirmed { height } => i64::from(height),
-    };
-
-    json!({ "height": height, "tx_hash": entry.txid })
+        TxLocation::Mempool if chain.has_unconfirmed_parent(entry.txid) => -1,
+        TxLocation::Mempool => 0,
+    }
 }
 
-fn status_hash(history: &[HistoryEntry]) -> Option<String> {
+fn history_json(chain: &FakeChain, entry: &HistoryEntry) -> Value {
+    json!({ "height": history_height(chain, entry), "tx_hash": entry.txid })
+}
+
+fn status_hash(chain: &FakeChain, history: &[HistoryEntry]) -> Option<String> {
     use bitcoin::hashes::{Hash as _, sha256};
 
     if history.is_empty() {
@@ -319,14 +326,7 @@ fn status_hash(history: &[HistoryEntry]) -> Option<String> {
 
     let preimage = history
         .iter()
-        .map(|entry| {
-            let height = match entry.location {
-                TxLocation::Mempool => 0,
-                TxLocation::Confirmed { height } => height,
-            };
-
-            format!("{}:{height}:", entry.txid)
-        })
+        .map(|entry| format!("{}:{}:", entry.txid, history_height(chain, entry)))
         .collect::<String>();
 
     Some(sha256::Hash::hash(preimage.as_bytes()).to_string())
