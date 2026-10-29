@@ -207,6 +207,8 @@ impl FakeChain {
     }
 
     /// Drops a transaction from the mempool, as a node does when it evicts it
+    ///
+    /// Its pending descendants go with it, since their inputs no longer exist
     pub(crate) fn evict(&self, txid: Txid) {
         let mut state = self.state.lock();
         let entry = state.txs.get(&txid).unwrap_or_else(|| panic!("unknown transaction {txid}"));
@@ -216,8 +218,26 @@ impl FakeChain {
             "{txid} is confirmed and cannot be evicted"
         );
 
-        state.txs.remove(&txid);
-        state.order.retain(|ordered| *ordered != txid);
+        let mut evicted = vec![txid];
+        let mut next = 0;
+        while let Some(&parent) = evicted.get(next) {
+            let children = state
+                .txs
+                .iter()
+                .filter(|(child, entry)| {
+                    entry.location == TxLocation::Mempool
+                        && !evicted.contains(child)
+                        && entry.tx.input.iter().any(|input| input.previous_output.txid == parent)
+                })
+                .map(|(child, _)| *child)
+                .collect::<Vec<_>>();
+
+            evicted.extend(children);
+            next += 1;
+        }
+
+        state.txs.retain(|txid, _| !evicted.contains(txid));
+        state.order.retain(|ordered| !evicted.contains(ordered));
     }
 
     pub(crate) fn location(&self, txid: Txid) -> Option<TxLocation> {
