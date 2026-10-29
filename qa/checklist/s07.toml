@@ -94,6 +94,7 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/qr_scanner.rs", "rust/src/key_teleport.rs", "ios/Cove/ScanManager+KeyTeleport.swift", "ios/Cove/ScanManager.swift", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt", "android/app/src/main/java/org/bitcoinppl/cove/ScanManager.kt"]
 coverage = [
+    "human",
     "rust:rust/src/qr_scanner.rs::replayed_and_bad_bbqr_frames_do_not_grow_retained_parts",
     "rust:rust/src/qr_scanner.rs::malformed_final_bbqr_frame_does_not_poison_progress",
 ]

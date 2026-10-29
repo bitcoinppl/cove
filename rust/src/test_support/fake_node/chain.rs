@@ -45,6 +45,15 @@ pub(crate) struct HistoryEntry {
     pub(crate) location: TxLocation,
 }
 
+/// Net satoshis a script gains, split by whether the transactions are confirmed
+///
+/// A pending spend of confirmed funds makes `unconfirmed` negative, as in electrs
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+pub(crate) struct Balance {
+    pub(crate) confirmed: i64,
+    pub(crate) unconfirmed: i64,
+}
+
 /// A broadcast of a transaction that is already confirmed, which a node rejects
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) struct AlreadyConfirmed;
@@ -295,6 +304,44 @@ impl FakeChain {
             .filter(|(_, entry)| state.touches_script(&entry.tx, script))
             .map(|(txid, entry)| HistoryEntry { txid: *txid, location: entry.location })
             .collect()
+    }
+
+    /// The balance of `script` over its history
+    ///
+    /// Reads the history and its transactions under one lock, so a test that
+    /// evicts a transaction mid-request never leaves an entry without its
+    /// transaction
+    pub(crate) fn balance(&self, script: &ScriptBuf) -> Balance {
+        let state = self.state.lock();
+        let mut balance = Balance::default();
+
+        let entries = state.order.iter().filter_map(|txid| state.txs.get(txid));
+        for entry in entries.filter(|entry| state.touches_script(&entry.tx, script)) {
+            let received = entry
+                .tx
+                .output
+                .iter()
+                .filter(|output| &output.script_pubkey == script)
+                .map(|output| output.value)
+                .sum::<Amount>();
+            let spent = entry
+                .tx
+                .input
+                .iter()
+                .filter_map(|input| state.prevout(&input.previous_output))
+                .filter(|output| &output.script_pubkey == script)
+                .map(|output| output.value)
+                .sum::<Amount>();
+            let change = received.to_signed().expect("amount fits").to_sat()
+                - spent.to_signed().expect("amount fits").to_sat();
+
+            match entry.location {
+                TxLocation::Mempool => balance.unconfirmed += change,
+                TxLocation::Confirmed { .. } => balance.confirmed += change,
+            }
+        }
+
+        balance
     }
 
     /// Maps the SHA-256 digest of a script back to a script the chain has seen
