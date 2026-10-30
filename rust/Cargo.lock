@@ -2249,9 +2249,9 @@ dependencies = [
 
 [[package]]
 name = "foundation-ur"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de4d0b63162220b26a3a955478ebc02e51fe77aa38181d058c55f3d1d6664428"
+checksum = "6f61a07868d631ad2b32bef710f3d4e4ed9787bd760d87db4aca04f6fdd330a8"
 dependencies = [
  "bitcoin_hashes 0.15.0",
  "crc",
