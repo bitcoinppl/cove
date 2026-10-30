@@ -181,8 +181,36 @@ impl PayjoinSessionPersister {
             fallback_tx: consensus::serialize(fallback_tx).into(),
             created_at_secs,
             pending_action: None,
+            // sticky relay for the whole session so the directory cannot learn the
+            // sender IP from every configured relay (see #910)
+            relay: Some(pick_session_relay().to_string()),
         };
         self.db.set_payjoin_sender_session(session)
+    }
+
+    /// Updates the sticky OHTTP relay after a successful fallback to a different relay.
+    pub(crate) fn set_session_relay(&self, relay: &str) -> Result<(), WalletDataError> {
+        let _guard = self
+            .lock
+            .lock()
+            .map_err(|_| WalletDataError::Save("session lock poisoned".to_string()))?;
+
+        let mut session = self
+            .db
+            .get_payjoin_sender_session()?
+            .ok_or_else(|| WalletDataError::Save("no payjoin session record".to_string()))?;
+
+        if session.relay.as_deref() == Some(relay) {
+            return Ok(());
+        }
+
+        session.relay = Some(relay.to_string());
+        self.db.set_payjoin_sender_session(session)
+    }
+
+    /// Returns the sticky OHTTP relay for this session, or `None` for legacy records.
+    pub(crate) fn session_relay(&self) -> Option<String> {
+        self.db.get_payjoin_sender_session().ok().flatten().and_then(|s| s.relay)
     }
 
     /// Returns the txid committed in the session's terminal marker, if any.
@@ -283,22 +311,57 @@ async fn http_post(
         .to_vec())
 }
 
-// returns OHTTP relay URLs shuffled per call for resilience and privacy
-fn ohttp_relays() -> Vec<&'static str> {
+/// Picks one OHTTP relay at random for a new session (#910).
+fn pick_session_relay() -> &'static str {
     let mut relays = OHTTP_RELAYS.to_vec();
     relays.shuffle(&mut rand::rng());
-    relays
+    relays[0]
 }
 
-// tries each OHTTP relay in shuffled order, returning the first successful (body, context) pair
-async fn try_ohttp_relays<C>(
+/// Sticky relay first, then the remaining known relays in shuffled order for fallback only.
+fn ohttp_relay_candidates(preferred: &str) -> Vec<String> {
+    let mut rest: Vec<&'static str> =
+        OHTTP_RELAYS.iter().copied().filter(|relay| *relay != preferred).collect();
+    rest.shuffle(&mut rand::rng());
+
+    let mut candidates = Vec::with_capacity(rest.len() + 1);
+    candidates.push(preferred.to_string());
+    candidates.extend(rest.into_iter().map(str::to_string));
+    candidates
+}
+
+/// Outcome of validating one relay's HTTP body with the payjoin state machine.
+enum RelayProcessError {
+    /// Unreadable / transient response — try the next candidate without adopting this relay.
+    TryNext(eyre::Report),
+    /// Receiver rejected the session (or other terminal API error) — stop trying relays.
+    Terminal(eyre::Report),
+}
+
+/// Result of a full relay round (HTTP + protocol checks).
+enum RelayRoundError {
+    /// Every candidate failed at HTTP or with a TryNext process error.
+    Exhausted(eyre::Report),
+    /// A Terminal process error — do not try further relays.
+    Terminal(eyre::Report),
+}
+
+/// Tries the sticky relay first, then falls back.
+///
+/// A candidate only counts as success after `process` accepts the body (#910 / Greptile P1).
+/// HTTP 200 with an unreadable OHTTP body is TryNext so another relay can be attempted;
+/// the sticky relay is adopted only by the caller after this returns Ok.
+async fn try_ohttp_relays<C, T>(
     client: &reqwest::Client,
     timeout: Duration,
+    preferred: &str,
     build_request: impl Fn(&str) -> Result<(payjoin::Request, C)>,
-) -> Result<(Vec<u8>, C)> {
+    process: impl Fn(Vec<u8>, C) -> Result<T, RelayProcessError>,
+) -> Result<(T, String), RelayRoundError> {
     let mut last_err = eyre::eyre!("no OHTTP relays configured");
-    for relay in ohttp_relays() {
-        let (req, ctx) = match build_request(relay) {
+
+    for relay in ohttp_relay_candidates(preferred) {
+        let (req, ctx) = match build_request(&relay) {
             Ok(pair) => pair,
             Err(e) => {
                 warn!("payjoin: relay {relay} rejected: {e:?}");
@@ -306,15 +369,27 @@ async fn try_ohttp_relays<C>(
                 continue;
             }
         };
-        match http_post(client, req, timeout).await {
-            Ok(body) => return Ok((body, ctx)),
+        let body = match http_post(client, req, timeout).await {
+            Ok(body) => body,
             Err(e) => {
                 warn!("payjoin: relay {relay} request failed: {e:?}");
                 last_err = e;
+                continue;
+            }
+        };
+
+        match process(body, ctx) {
+            Ok(value) => return Ok((value, relay)),
+            Err(RelayProcessError::TryNext(e)) => {
+                warn!("payjoin: relay {relay} response failed protocol checks, trying next: {e:?}");
+                last_err = e;
+            }
+            Err(RelayProcessError::Terminal(e)) => {
+                return Err(RelayRoundError::Terminal(e));
             }
         }
     }
-    Err(last_err)
+    Err(RelayRoundError::Exhausted(last_err))
 }
 
 // returns the index of the single external (recipient) output, or Err for batch/self-send PSBTs
@@ -405,6 +480,7 @@ async fn do_poll(
     addr: WeakAddr<PayjoinActor>,
     polling_sender: V2Sender<PollingForProposal>,
     persister: PayjoinSessionPersister,
+    preferred_relay: String,
 ) {
     let client = match cove_http::new_client() {
         Ok(c) => c,
@@ -417,44 +493,51 @@ async fn do_poll(
 
     // polls are long-polling: the directory holds the connection open until a
     // proposal arrives or its own timeout fires, so allow slightly more than
-    // the server-side timeout to avoid racing it
-    let (poll_response, poll_ctx) =
-        match try_ohttp_relays(&client, Duration::from_secs(35), |relay| {
-            polling_sender.create_poll_request(relay).map_err(|e| eyre::eyre!("{e:?}"))
-        })
-        .await
-        {
-            Ok(pair) => pair,
-            Err(e) => {
-                warn!("payjoin poll: all relays failed, retrying: {e}");
-                tokio::time::sleep(Duration::from_secs(2)).await;
-                send!(addr.begin_next_poll_msg());
-                return;
-            }
-        };
+    // the server-side timeout to avoid racing it.
+    //
+    // process_response is inside the relay loop so HTTP 200 + unreadable OHTTP
+    // does not stick us on a broken relay, and we only adopt after checks pass.
+    let poll_result = try_ohttp_relays(
+        &client,
+        Duration::from_secs(35),
+        &preferred_relay,
+        |relay| polling_sender.create_poll_request(relay).map_err(|e| eyre::eyre!("{e:?}")),
+        |body, ctx| match polling_sender.clone().process_response(&body, ctx).save(&persister) {
+            Ok(outcome) => Ok(outcome),
+            Err(e) => match e.api_error_ref() {
+                // receiver explicitly rejected — do not try other relays
+                Some(ResponseError::WellKnown(_)) | Some(ResponseError::Unrecognized { .. }) => {
+                    Err(RelayProcessError::Terminal(eyre::eyre!("{e:?}")))
+                }
+                // unreadable OHTTP / transient directory errors — try next relay
+                _ => Err(RelayProcessError::TryNext(eyre::eyre!("{e:?}"))),
+            },
+        },
+    )
+    .await;
 
-    match polling_sender.process_response(&poll_response, poll_ctx).save(&persister) {
-        Ok(OptionalTransitionOutcome::Progress(proposal_psbt)) => {
+    match poll_result {
+        Ok((OptionalTransitionOutcome::Progress(proposal_psbt), used_relay)) => {
+            if used_relay != preferred_relay {
+                send!(addr.adopt_session_relay(used_relay));
+            }
             send!(addr.complete_with_success(proposal_psbt));
         }
-        Ok(OptionalTransitionOutcome::Stasis(next)) => {
+        Ok((OptionalTransitionOutcome::Stasis(next), used_relay)) => {
+            if used_relay != preferred_relay {
+                send!(addr.adopt_session_relay(used_relay));
+            }
             debug!("payjoin poll: no proposal yet, continuing");
             send!(addr.update_polling_sender(next));
         }
-        Err(e) => {
-            // WellKnown/Unrecognized mean the receiver explicitly rejected the session;
-            // the public API does not expose fatal/transient classification directly —
-            // other opaque response errors retry until the bounded session deadline fires
-            match e.api_error_ref() {
-                Some(ResponseError::WellKnown(_)) | Some(ResponseError::Unrecognized { .. }) => {
-                    warn!("payjoin poll: receiver rejected session: {e:?}");
-                    send!(addr.complete_with_fallback_msg());
-                }
-                _ => {
-                    warn!("payjoin poll: transient error, retrying: {e:?}");
-                    send!(addr.begin_next_poll_msg());
-                }
-            }
+        Err(RelayRoundError::Terminal(e)) => {
+            warn!("payjoin poll: receiver rejected session: {e:?}");
+            send!(addr.complete_with_fallback_msg());
+        }
+        Err(RelayRoundError::Exhausted(e)) => {
+            warn!("payjoin poll: all relays failed, retrying: {e}");
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            send!(addr.begin_next_poll_msg());
         }
     }
 }
@@ -478,6 +561,8 @@ pub(crate) struct PayjoinActor {
     fallback_tx: BdkTransaction,
     session: PayjoinSession,
     poll_deadline: Option<Instant>,
+    /// Sticky OHTTP relay for this session (#910). Prefer this relay on every request.
+    relay: String,
 }
 
 impl PayjoinActor {
@@ -487,6 +572,9 @@ impl PayjoinActor {
         sender: V2Sender<WithReplyKey>,
         fallback_tx: BdkTransaction,
     ) -> Self {
+        let relay = persister
+            .session_relay()
+            .unwrap_or_else(|| pick_session_relay().to_string());
         Self {
             addr: WeakAddr::default(),
             wallet_addr,
@@ -494,6 +582,7 @@ impl PayjoinActor {
             fallback_tx,
             session: PayjoinSession::PrePost { sender },
             poll_deadline: None,
+            relay,
         }
     }
 
@@ -504,6 +593,7 @@ impl PayjoinActor {
         polling_sender: V2Sender<PollingForProposal>,
         fallback_tx: BdkTransaction,
         created_at_secs: Option<u64>,
+        relay: Option<String>,
     ) -> Self {
         let poll_deadline = Some(match created_at_secs {
             None => Instant::now() + PAYJOIN_SESSION_TIMEOUT,
@@ -515,6 +605,20 @@ impl PayjoinActor {
                 Instant::now() + PAYJOIN_SESSION_TIMEOUT.saturating_sub(elapsed)
             }
         });
+
+        // legacy records (pre-#910) have no relay; pick one and persist so the rest of the
+        // resumed session stays sticky
+        let relay = match relay {
+            Some(relay) => relay,
+            None => {
+                let picked = pick_session_relay().to_string();
+                if let Err(error) = persister.set_session_relay(&picked) {
+                    warn!("payjoin resume: failed to persist newly picked relay: {error}");
+                }
+                picked
+            }
+        };
+
         Self {
             addr: WeakAddr::default(),
             wallet_addr,
@@ -522,6 +626,7 @@ impl PayjoinActor {
             fallback_tx,
             session: PayjoinSession::Polling { polling_sender },
             poll_deadline,
+            relay,
         }
     }
 }
@@ -562,6 +667,7 @@ impl PayjoinActor {
         };
 
         let persister = self.persister.clone();
+        let preferred_relay = self.relay.clone();
 
         self.addr.send_fut_with(|addr| async move {
             let client = match cove_http::new_client() {
@@ -573,33 +679,55 @@ impl PayjoinActor {
                 }
             };
 
-            let (post_response, post_ctx) =
-                match try_ohttp_relays(&client, Duration::from_secs(30), |relay| {
-                    sender.create_v2_post_request(relay).map_err(|e| eyre::eyre!("{e:?}"))
-                })
-                .await
-                {
-                    Ok(pair) => pair,
-                    Err(e) => {
-                        warn!("payjoin POST: all relays failed: {e}");
-                        send!(addr.complete_with_fallback_msg());
-                        return;
-                    }
-                };
+            // Clone per candidate: process_response consumes the sender, and a
+            // broken relay's HTTP 200 must not prevent trying the next one.
+            let post_result = try_ohttp_relays(
+                &client,
+                Duration::from_secs(30),
+                &preferred_relay,
+                |relay| sender.create_v2_post_request(relay).map_err(|e| eyre::eyre!("{e:?}")),
+                |body, ctx| match sender.clone().process_response(&body, ctx).save(&persister) {
+                    Ok(polling_sender) => Ok(polling_sender),
+                    // POST has no WellKnown rejection path here; any process failure
+                    // is treated as a bad relay response so another candidate can run.
+                    Err(e) => Err(RelayProcessError::TryNext(eyre::eyre!("{e:?}"))),
+                },
+            )
+            .await;
 
-            let polling_sender =
-                match sender.process_response(&post_response, post_ctx).save(&persister) {
-                    Ok(ps) => ps,
-                    Err(e) => {
-                        warn!("payjoin POST: failed to process response: {e:?}");
-                        send!(addr.complete_with_fallback_msg());
-                        return;
+            match post_result {
+                Ok((polling_sender, used_relay)) => {
+                    if used_relay != preferred_relay {
+                        send!(addr.adopt_session_relay(used_relay));
                     }
-                };
-
-            send!(addr.post_succeeded(polling_sender));
+                    send!(addr.post_succeeded(polling_sender));
+                }
+                Err(RelayRoundError::Exhausted(e) | RelayRoundError::Terminal(e)) => {
+                    warn!("payjoin POST: all relays failed: {e}");
+                    send!(addr.complete_with_fallback_msg());
+                }
+            }
         });
 
+        Produces::ok(())
+    }
+
+    /// Sticky relay changed because a fallback relay succeeded; persist and keep using it.
+    pub(crate) async fn adopt_session_relay(&mut self, relay: String) -> ActorResult<()> {
+        if matches!(self.session, PayjoinSession::Closed) {
+            return Produces::ok(());
+        }
+
+        if self.relay == relay {
+            return Produces::ok(());
+        }
+
+        if let Err(error) = self.persister.set_session_relay(&relay) {
+            warn!("payjoin: failed to persist sticky relay {relay}: {error}");
+        } else {
+            debug!("payjoin: adopted sticky relay {relay}");
+        }
+        self.relay = relay;
         Produces::ok(())
     }
 
@@ -645,7 +773,8 @@ impl PayjoinActor {
         };
 
         let persister = self.persister.clone();
-        self.addr.send_fut_with(|addr| do_poll(addr, polling_sender, persister));
+        let preferred_relay = self.relay.clone();
+        self.addr.send_fut_with(|addr| do_poll(addr, polling_sender, persister, preferred_relay));
 
         Produces::ok(())
     }
@@ -864,6 +993,7 @@ pub(crate) fn resume_session(
                 polling_sender,
                 fallback_tx,
                 record.created_at_secs,
+                record.relay,
             )))
         }
 
@@ -944,6 +1074,9 @@ pub(crate) mod test_support {
         persister: PayjoinSessionPersister,
         fallback_tx: BdkTransaction,
     ) -> PayjoinActor {
+        let relay = persister
+            .session_relay()
+            .unwrap_or_else(|| pick_session_relay().to_string());
         PayjoinActor {
             addr: WeakAddr::default(),
             wallet_addr: WeakAddr::default(),
@@ -951,6 +1084,7 @@ pub(crate) mod test_support {
             fallback_tx,
             session: PayjoinSession::Posting,
             poll_deadline: Some(Instant::now()),
+            relay,
         }
     }
 }
@@ -1136,6 +1270,7 @@ mod tests {
             fallback_tx: empty_transaction(),
             session: PayjoinSession::Posting,
             poll_deadline: Some(Instant::now()),
+            relay: OHTTP_RELAYS[0].to_string(),
         };
 
         assert!(actor.close_session());
@@ -1292,6 +1427,7 @@ mod tests {
             fallback_tx: consensus::serialize(&tx).into(),
             created_at_secs: None,
             pending_action: Some(PendingAction::BroadcastFallback),
+            relay: None,
         };
         db.set_payjoin_sender_session(session).unwrap();
 
@@ -1357,6 +1493,7 @@ mod tests {
             pending_action: Some(PendingAction::BroadcastProposal {
                 transaction: consensus::serialize(&tx).into(),
             }),
+            relay: None,
         };
         db.set_payjoin_sender_session(session).unwrap();
 
@@ -1380,6 +1517,7 @@ mod tests {
             pending_action: Some(PendingAction::BroadcastProposal {
                 transaction: vec![0xff].into(),
             }),
+            relay: None,
         };
         db.set_payjoin_sender_session(session).unwrap();
 
@@ -1404,6 +1542,7 @@ mod tests {
             fallback_tx: vec![0xff].into(),
             created_at_secs: None,
             pending_action: None,
+            relay: None,
         };
         db.set_payjoin_sender_session(session).unwrap();
 
@@ -1428,6 +1567,7 @@ mod tests {
             fallback_tx: vec![0xff].into(),
             created_at_secs: None,
             pending_action: Some(PendingAction::BroadcastFallback), // marker written before crash
+            relay: None,
         };
         db.set_payjoin_sender_session(session).unwrap();
 
@@ -1441,5 +1581,41 @@ mod tests {
             db.get_payjoin_sender_session().unwrap().is_some(),
             "record must be retained when broadcast outcome is unknown"
         );
+    }
+
+    #[test]
+    fn create_session_stores_a_known_sticky_relay() {
+        let (persister, db) = new_test_persister();
+        persister.create_session(&test_fallback_tx()).unwrap();
+
+        let session = db.get_payjoin_sender_session().unwrap().unwrap();
+        let relay = session.relay.expect("new sessions must store a sticky relay");
+        assert!(
+            OHTTP_RELAYS.contains(&relay.as_str()),
+            "sticky relay must be one of the configured OHTTP relays: {relay}"
+        );
+    }
+
+    #[test]
+    fn ohttp_relay_candidates_puts_preferred_first() {
+        let preferred = OHTTP_RELAYS[1];
+        let candidates = ohttp_relay_candidates(preferred);
+        assert_eq!(candidates.first().map(String::as_str), Some(preferred));
+        assert_eq!(candidates.len(), OHTTP_RELAYS.len());
+        for relay in OHTTP_RELAYS {
+            assert!(candidates.iter().any(|c| c == relay), "missing relay {relay}");
+        }
+    }
+
+    #[test]
+    fn set_session_relay_updates_persisted_sticky_relay() {
+        let (persister, db) = new_test_persister();
+        persister.create_session(&test_fallback_tx()).unwrap();
+        let next = OHTTP_RELAYS[2];
+
+        persister.set_session_relay(next).unwrap();
+
+        let session = db.get_payjoin_sender_session().unwrap().unwrap();
+        assert_eq!(session.relay.as_deref(), Some(next));
     }
 }
