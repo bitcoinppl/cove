@@ -61,6 +61,27 @@ struct UrInProgress {
     previous_progress: Option<ScanProgress>,
 }
 
+impl UrInProgress {
+    /// Decoder that keeps foundation-ur's fragment-count and message-size bounds
+    /// but retains as many mixed parts as the largest allowed message has fragments
+    ///
+    /// The default cap of 128 mixed parts clears the decoder on long animated QRs
+    /// scanned with heavy frame loss, so those scans never finish. Retained parts
+    /// are still bounded by the fragment count and frame size
+    fn new_decoder() -> UrDecoder {
+        use foundation_ur::fountain::decoder::{DEFAULT_MAX_SEQUENCE_COUNT, Limits};
+
+        let mut decoder = UrDecoder::default();
+        decoder.set_limits(Limits {
+            max_sequence_count: DEFAULT_MAX_SEQUENCE_COUNT,
+            max_mixed_parts: DEFAULT_MAX_SEQUENCE_COUNT,
+            max_queued_parts: DEFAULT_MAX_SEQUENCE_COUNT,
+        });
+
+        decoder
+    }
+}
+
 impl BbqrInProgress {
     fn restore_accepted_parts(&mut self) -> Result<(), MultiQrError> {
         let mut joiner = ContinuousJoiner::new();
@@ -249,7 +270,7 @@ fn parse_ur(qr: &str) -> Result<(QrScanner, ScanResult), MultiQrError> {
             use cove_ur::UrError;
 
             debug!("Multi-part UR, using decoder");
-            let mut decoder = UrDecoder::default();
+            let mut decoder = UrInProgress::new_decoder();
             let foundation_ur = ur.to_foundation_ur()?;
             decoder.receive(foundation_ur).map_err_str(UrError::UrParseError)?;
 
@@ -779,6 +800,76 @@ mod tests {
         // empty UR
         let result = scanner.scan(StringOrData::String("ur:crypto-seed/".to_string()));
         assert!(result.is_err(), "Should fail on empty UR payload");
+    }
+
+    /// A crafted seq_len must be rejected before the decoder sizes anything from it
+    ///
+    /// Frames from floppy's BC-UR disclosure: on foundation-ur 0.4.0 the mixed
+    /// frame ran for minutes, and larger seq_len values aborted the app on a
+    /// failed sampler allocation
+    #[test]
+    fn test_ur_huge_sequence_count_rejected() {
+        const SIMPLE_FRAME: &str =
+            "ur:bytes/1-3000000000/lpadcyprtihyaecsiecybgeehfksfdaeaeaeaeaeaeaeaehgvetlby";
+        const MIXED_FRAME: &str =
+            "ur:bytes/20000001-20000000/lpcyadehdpadcyadehdpaecsiecybgeehfksfpaerkpdrsgs";
+
+        for frame in [SIMPLE_FRAME, MIXED_FRAME] {
+            let scanner = QrScannerFFI::new();
+            let result = scanner.scan(StringOrData::String(frame.to_string()));
+            assert!(result.is_err(), "first frame {frame} should be rejected");
+        }
+
+        // mid-scan, the bad frame is dropped and the real transfer still completes
+        let cbor = cove_ur::CryptoSeed::from_entropy(vec![0xA5; 32]).unwrap().encode().unwrap();
+        let mut encoder = foundation_ur::Encoder::new();
+        encoder.start("crypto-seed", &cbor, 15);
+        let parts: Vec<String> =
+            (0..encoder.sequence_count()).map(|_| encoder.next_part().to_string()).collect();
+
+        let scanner = QrScannerFFI::new();
+        scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
+
+        let result = scanner.scan(StringOrData::String(MIXED_FRAME.to_string()));
+        assert!(matches!(result, Err(MultiQrError::RecoverableFrame(_))));
+
+        let mut last = None;
+        for part in &parts[1..] {
+            last = Some(scanner.scan(StringOrData::String(part.clone())).unwrap());
+        }
+
+        assert!(matches!(last, Some(ScanResult::Complete { .. })));
+    }
+
+    /// A long animated UR still decodes when the camera misses most frames
+    #[test]
+    fn test_ur_decoder_completes_long_lossy_stream() {
+        let message: Vec<u8> = (0..20_000).map(|i| (i * 31 % 251) as u8).collect();
+        let mut encoder = foundation_ur::Encoder::new();
+        encoder.start("bytes", &message, 50);
+
+        let sequence_count = encoder.sequence_count() as usize;
+        let mut decoder = UrInProgress::new_decoder();
+        let mut rng = 0x9E37_79B9_7F4A_7C15_u64;
+
+        for _ in 0..sequence_count * 20 {
+            let part = encoder.next_part();
+
+            // xorshift so the dropped frames are the same on every run
+            rng ^= rng << 13;
+            rng ^= rng >> 7;
+            rng ^= rng << 17;
+            if rng % 100 < 60 {
+                continue;
+            }
+
+            decoder.receive(part).unwrap();
+            if decoder.is_complete() {
+                break;
+            }
+        }
+
+        assert_eq!(decoder.message().unwrap(), Some(message.as_slice()));
     }
 
     /// Test QrScanner reset behavior
