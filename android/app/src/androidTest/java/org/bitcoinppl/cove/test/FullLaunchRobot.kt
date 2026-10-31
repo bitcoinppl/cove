@@ -8,6 +8,7 @@ import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
@@ -284,8 +285,7 @@ class FullLaunchOnboardingRobot(
 
         knownEmptyMainnetMnemonic.forEachIndexed { index, word ->
             val wordSelector = tag("hotWalletImport.word.${index + 1}")
-            device.waitUntilVisible(wordSelector).text = word
-            device.waitUntilTextEquals(wordSelector, word)
+            device.enterText(wordSelector, word)
         }
 
         device.dismissKeyboardIfShown()
@@ -712,9 +712,14 @@ private fun UiDevice.clickUntilVisible(
     while (System.currentTimeMillis() < deadline) {
         findObject(targetSelector.value)?.let { return }
 
-        val clickNode = tryScrollUntilSafelyClickable(clickSelector)
-        if (clickNode?.isEnabled == true) {
-            clickNode.click()
+        // a recomposition can replace the node between finding and clicking it; the
+        // next pass finds the new one
+        try {
+            val clickNode = tryScrollUntilSafelyClickable(clickSelector)
+            if (clickNode?.isEnabled == true) {
+                clickNode.click()
+            }
+        } catch (_: StaleObjectException) {
         }
 
         Thread.sleep(500)
@@ -872,7 +877,13 @@ private fun UiDevice.tryScrollUntilSafelyClickable(selector: DescribedSelector):
 }
 
 private fun UiDevice.isSafelyClickable(node: UiObject2): Boolean {
-    val bounds = node.visibleBounds
+    val bounds =
+        try {
+            node.visibleBounds
+        } catch (_: StaleObjectException) {
+            return false
+        }
+
     val safeBottom = displayHeight - 200
 
     return bounds.width() > 0 &&
@@ -897,23 +908,28 @@ private fun UiDevice.clickCenterIfVisible(selector: DescribedSelector): Boolean 
     return false
 }
 
-private fun UiDevice.waitUntilTextEquals(
+// a recomposition can replace the field between finding and typing into it, so this
+// keeps setting the text on whichever node is current until the field holds it
+private fun UiDevice.enterText(
     selector: DescribedSelector,
-    expected: String,
-    timeoutMillis: Long = 5_000,
+    text: String,
+    timeoutMillis: Long = 20_000,
 ) {
     val deadline = System.currentTimeMillis() + timeoutMillis
 
     while (System.currentTimeMillis() < deadline) {
-        val node = findObject(selector.value)
-        if (node?.text == expected) {
-            return
+        try {
+            findObject(selector.value)?.let { node ->
+                if (node.text == text) return
+                node.text = text
+            }
+        } catch (_: StaleObjectException) {
         }
 
         Thread.sleep(100)
     }
 
-    error("Timed out waiting for ${selector.description} to equal \"$expected\"\n${dumpWindowHierarchy()}")
+    error("Timed out entering \"$text\" into ${selector.description}\n${dumpWindowHierarchy()}")
 }
 
 private class DescribedSelector(

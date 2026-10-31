@@ -171,10 +171,9 @@ final class UtxoLockFullLaunchUITests: XCTestCase {
             useAnotherWallet.tap()
         }
 
-        tapButton(startingWith: "Software wallet")
-        tapButton(startingWith: "Enter recovery words")
-        tapButton(startingWith: "12 words")
-        XCTAssertTrue(app.navigationBars["Import Wallet"].waitForExistence(timeout: 10))
+        tapButton(startingWith: "Software wallet", until: button(startingWith: "Enter recovery words"))
+        tapButton(startingWith: "Enter recovery words", until: button(startingWith: "12 words"))
+        tapButton(startingWith: "12 words", until: app.navigationBars["Import Wallet"])
 
         for (index, word) in Self.mnemonic.split(separator: " ").enumerated() {
             let field = app.textFields["hotWalletImport.word.\(index + 1)"]
@@ -443,6 +442,23 @@ final class UtxoLockFullLaunchUITests: XCTestCase {
         let button = button(startingWith: labelPrefix)
         XCTAssertTrue(button.waitForExistence(timeout: 10), "Timed out waiting for button starting with '\(labelPrefix)'")
         button.tap()
+    }
+
+    /// On CI a tap can land while the screen settles or a system banner passes over it and do
+    /// nothing, so tap again while the button is still showing
+    private func tapButton(startingWith labelPrefix: String, until target: XCUIElement) {
+        let button = button(startingWith: labelPrefix)
+        XCTAssertTrue(button.waitForExistence(timeout: 10), "Timed out waiting for button starting with '\(labelPrefix)'")
+
+        for _ in 0 ..< 3 {
+            if button.exists, button.isHittable {
+                button.tap()
+            }
+
+            if target.waitForExistence(timeout: 5) { return }
+        }
+
+        XCTFail("Tapping the button starting with '\(labelPrefix)' never showed \(target)")
     }
 
     private func goBack() {
