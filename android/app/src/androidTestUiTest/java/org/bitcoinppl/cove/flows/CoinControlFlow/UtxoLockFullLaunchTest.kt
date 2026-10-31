@@ -86,6 +86,7 @@ class UtxoLockFullLaunchTest {
         const val MARKER_MAX_AGE_MS = 30 * 60 * 1_000L
         const val LOCKED_SELECTION_MESSAGE = "Unlock this UTXO before selecting it."
         const val LOCK_TOGGLE_TAG = "transactionDetails.lockToggle"
+        const val STALE_READ_ATTEMPTS = 5
     }
 
     private data class Coins(
@@ -276,8 +277,9 @@ class UtxoLockFullLaunchTest {
             dismissWalletSelectionSheetIfShown()
 
             // the balance renders only after bootstrap, before which AppManager can't be read
-            lastText = device.findObject(By.res("selectedWallet.balance"))?.anyText()
-            if (lastText?.let(::parseSats) == sats && isInitialScanComplete()) return
+            val shown = device.findText(By.res("selectedWallet.balance"))
+            if (shown != null) lastText = shown
+            if (shown?.let(::parseSats) == sats && isInitialScanComplete()) return
 
             Thread.sleep(250)
         }
@@ -392,17 +394,17 @@ class UtxoLockFullLaunchTest {
 
     private fun assertNothingSelected() {
         assertNull("a locked UTXO must not be selectable", device.findObject(By.res("coinControl.selectedTotal")))
-        assertEquals("Continue", device.waitFor(By.res("coinControl.continue")).anyText())
-        assertEquals("Select All", device.waitFor(By.res("coinControl.selectAll")).anyText())
+        assertEquals("Continue", device.waitForText(By.res("coinControl.continue")))
+        assertEquals("Select All", device.waitForText(By.res("coinControl.selectAll")))
     }
 
     private fun assertSelection(
         sats: Long,
         count: Int,
     ) {
-        val total = device.waitFor(By.res("coinControl.selectedTotal")).anyText().orEmpty()
+        val total = device.waitForText(By.res("coinControl.selectedTotal")).orEmpty()
         assertEquals("selected total \"$total\"", sats, parseSats(total))
-        assertEquals("Continue ($count)", device.waitFor(By.res("coinControl.continue")).anyText())
+        assertEquals("Continue ($count)", device.waitForText(By.res("coinControl.continue")))
     }
 
     private fun openReceiveTransaction(sats: Long) {
@@ -446,15 +448,19 @@ class UtxoLockFullLaunchTest {
 
             // the toggle sits at the bottom of the details and the expanded rows push it below the fold
             val toggle = device.findObject(By.res("transactionDetails.showDetails"))
-            when {
-                toggle == null -> device.swipe(device.displayWidth / 2, device.displayHeight * 2 / 3, device.displayWidth / 2, device.displayHeight / 3, 20)
+            try {
+                when {
+                    toggle == null -> device.swipe(device.displayWidth / 2, device.displayHeight * 2 / 3, device.displayWidth / 2, device.displayHeight / 3, 20)
 
-                toggle.anyText() == "Show Details" -> {
-                    toggle.click()
-                    device.wait(Until.hasObject(By.res(LOCK_TOGGLE_TAG)), 5_000L)
+                    toggle.anyText() == "Show Details" -> {
+                        toggle.click()
+                        device.wait(Until.hasObject(By.res(LOCK_TOGGLE_TAG)), 5_000L)
+                    }
+
+                    else -> Thread.sleep(250)
                 }
-
-                else -> Thread.sleep(250)
+            } catch (_: StaleObjectException) {
+                // the details recompose as the transaction loads; find the toggle again
             }
         }
 
@@ -469,17 +475,21 @@ class UtxoLockFullLaunchTest {
         while (System.currentTimeMillis() < deadline) {
             // the label is briefly replaced by a progress indicator while the lock change saves
             val toggle = device.scrollTo(By.res(LOCK_TOGGLE_TAG))
-            when (toggle.anyText()) {
-                expectedAfter -> return
+            try {
+                when (toggle.anyText()) {
+                    expectedAfter -> return
 
-                before -> {
-                    toggle.click()
+                    before -> {
+                        toggle.click()
 
-                    // BySelector builders mutate in place, so the wait gets its own selector
-                    device.wait(Until.hasObject(By.res(LOCK_TOGGLE_TAG).hasDescendant(By.text(expectedAfter))), 5_000L)
+                        // BySelector builders mutate in place, so the wait gets its own selector
+                        device.wait(Until.hasObject(By.res(LOCK_TOGGLE_TAG).hasDescendant(By.text(expectedAfter))), 5_000L)
+                    }
+
+                    else -> Thread.sleep(250)
                 }
-
-                else -> Thread.sleep(250)
+            } catch (_: StaleObjectException) {
+                // the toggle is replaced while the lock change saves; find it again
             }
         }
 
@@ -498,11 +508,11 @@ class UtxoLockFullLaunchTest {
         device.waitFor(By.res("sendFlow.amount")).click()
         device.waitFor(By.res("sendFlow.max")).click()
         waitUntil("expected Max to fill in the amount") {
-            device.findObject(By.res("sendFlow.amount"))?.anyText()?.any { it in '1'..'9' } == true
+            device.findText(By.res("sendFlow.amount"))?.any { it in '1'..'9' } == true
         }
 
         // the field shows the number alone, with the unit beside it; a BTC amount always has a point here
-        val maxText = device.waitFor(By.res("sendFlow.amount")).anyText().orEmpty()
+        val maxText = device.waitForText(By.res("sendFlow.amount")).orEmpty()
         val maxNumber = BigDecimal(maxText.filter { it.isDigit() || it == '.' })
         val maxSats = if ('.' in maxText) maxNumber.movePointRight(8).longValueExact() else maxNumber.longValueExact()
         assertTrue("Max filled \"$maxText\", more than unlocked A can cover", maxSats in 1 until SATS_A)
@@ -701,6 +711,27 @@ class UtxoLockFullLaunchTest {
 
     // a tag on a layout wrapper puts the text on a child node
     private fun UiObject2.anyText(): String? = text ?: children.firstNotNullOfOrNull { it.anyText() }
+
+    // a recomposition can replace a node between finding and reading it, which UiAutomator reports
+    // as stale, so these find the node again instead of failing on a slow device
+    private fun UiDevice.findText(selector: BySelector): String? =
+        try {
+            findObject(selector)?.anyText()
+        } catch (_: StaleObjectException) {
+            null
+        }
+
+    private fun UiDevice.waitForText(selector: BySelector): String? {
+        repeat(STALE_READ_ATTEMPTS - 1) {
+            try {
+                return waitFor(selector).anyText()
+            } catch (_: StaleObjectException) {
+                Thread.sleep(100)
+            }
+        }
+
+        return waitFor(selector).anyText()
+    }
 
     private fun UiDevice.hierarchy(): String =
         ByteArrayOutputStream().use { output ->

@@ -9,6 +9,12 @@ name = "cove-fake-node"
 path = "src/main.rs"
 required-features = ["cli"]
 
+# drives the binary, so it needs the feature that builds it
+[[test]]
+name = "control_api"
+path = "tests/control_api.rs"
+required-features = ["cli"]
+
 [features]
 default = ["cli"]
 # the binary's argument parsing, error reports and signal handling, which the
