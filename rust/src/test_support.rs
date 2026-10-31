@@ -7,6 +7,8 @@ use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
 use parking_lot::Mutex;
 
 pub(crate) mod fake_node;
+pub(crate) mod hardware_signing;
+pub(crate) mod tap_signer_emulator;
 
 use crate::wallet::fingerprint::Fingerprint;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};

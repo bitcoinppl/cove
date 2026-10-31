@@ -5,6 +5,7 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 ## Table of Contents
 
 - [Layers](#layers)
+- [Hardware signer tests](#hardware-signer-tests)
 - [Planning a release pass](#planning-a-release-pass)
 - [Fixtures](#fixtures)
 - [Driving devices](#driving-devices)
@@ -19,14 +20,24 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 
 | Layer | What it covers | How to run it |
 | --- | --- | --- |
-| Rust tests | Core behavior shared by both apps: wallets, send flow, labels, KeyTeleport, cloud backup, diagnostics, node and explorer settings | `just test` |
+| Rust tests | Core behavior shared by both apps: wallets, send flow, labels, KeyTeleport, cloud backup, diagnostics, node and explorer settings, and the hardware-signer QR loop | `just test` |
+| TAPSIGNER emulator tests | Cove's TAPSIGNER setup, PIN, derive, import and signing logic against Coinkite's card emulator | `just test-tapsigner-emulator` |
 | iOS UI tests | Full-launch flows in the simulator | `just ios-ui-background` runs `CoveUITests/OnboardingFullLaunchUITests`, the class CI runs; pass another class as the second argument, as in `just ios-ui-background "iPhone 17" CoveUITests/<Class>`. `just ios-ui-foreground` shows the simulator |
 | Android instrumented tests | Compose screens and full-launch flows on an emulator or device | `just android-instrumented-ci`; staged process-death tests need `just android-ui-manual` |
 | Device scripts | Navigate-and-observe checks on a real phone, with JSON results per row | `python3 -I qa/device/run.py android --serial <serial> --package org.bitcoinppl.cove.dev` or `python3 -I qa/device/run.py ios --bundle-id org.bitcoinppl.cove`; see [qa/device/README.md](../qa/device/README.md) for setup, `--list` and running a subset of rows |
 | Agent pass | Checklist rows that need judgment, fixtures or multi-app flows, run by a coding agent driving a real phone | This document |
 | Person | Camera, NFC, biometrics, haptics, spoken screen-reader output, hardware signers | Batched into one sitting at the end |
 
-The `UI tests` workflow runs the iOS UI tests and Android instrumented tests nightly, on pushes to master, and on pull requests labeled `ui-tests`. CI runs the manifest check behind `just qa-check` on pull requests, so the manifest stays consistent with the tests it names. Its workflow filters pull requests to those targeting master, so run `just qa-check` locally before pushing a checklist change on a stacked branch.
+The CI workflow runs the TAPSIGNER emulator tests in their own job. The `UI tests` workflow runs the iOS UI tests and Android instrumented tests nightly, on pushes to master, and on pull requests labeled `ui-tests`. CI runs the manifest check behind `just qa-check` on pull requests, so the manifest stays consistent with the tests it names. Its workflow filters pull requests to those targeting master, so run `just qa-check` locally before pushing a checklist change on a stacked branch.
+
+## Hardware signer tests
+
+These Rust tests run the PSBT signing loops that a release pass would otherwise leave to a person with a camera or a card.
+
+- **QR signing round trip** (`rust/src/hardware_signing_tests.rs`). A watch-only wallet is imported from the public descriptor of a fixed BIP39 test mnemonic and funded offline. Cove's send code then builds and saves a two-input draft, which is exported as animated UR (`crypto-psbt`) and BBQr frames with Cove's encoders. A BDK signer for the same mnemonic reads those frames with the `foundation-ur`, `ciborium` and `bbqr` crates, signs the PSBT and re-encodes it with the same crates. The signed frames go through `QrScanner::scan` one at a time: out of order, with repeats, and for UR with a missing frame that fountain parts later fill in. The result goes through the draft lookup and `finalize_psbt` that the hardware send screen uses, and the finalized transaction must spend the drafted inputs and pay the drafted recipient, change and fee, with valid signatures. The error-path test covers a truncated BBQr set, a PSBT from an unrelated signer, a PSBT the same seed signed on mainnet, and a signature for a deleted draft. Both tests run in `just test`
+- **TAPSIGNER against the card emulator** (`rust/src/tap_card/tap_signer_reader/emulator_tests.rs`). Each test starts its own factory-fresh emulated card and drives Cove's `TapSignerReader` through the `TapcardTransportProtocol` callback that the iOS and Android NFC layers implement. The tests cover setup with the default and an advanced chain code, the factory PIN being replaced, a wrong PIN during setup, derive, backup and signing followed by a successful retry, import of the card's account as a wallet whose addresses must match the card's own xpub, and signing and finalizing a saved draft. The emulator's certificate chain doesn't lead to Coinkite's factory root, so the tests skip only that check after asserting that `create_tap_signer_reader` rejects the card. The emulator implements neither the rate limit nor `wait`, so the auth-delay paths stay covered only by the mock-transport tests in `tap_signer_reader.rs`
+
+`just test-tapsigner-emulator` runs the emulator tests. It finds `ecard.py` in the `coinkite-tap-proto` submodule of the pinned rust-cktap checkout, installs the emulator's Python dependencies with uv into `~/.cache/cove/tapsigner-emulator-venv`, and runs the tests with `COVE_TAPSIGNER_EMULATOR_PYTHON` and `COVE_TAPSIGNER_EMULATOR_SCRIPT` set. `just test` and `cargo test` list these tests as ignored, and when they are run without the emulator they fail with a message naming the recipe.
 
 ## Planning a release pass
 
@@ -92,8 +103,8 @@ Keep screenshots, UI trees and logs next to the results, and never include secre
 
 These still need hands and eyes:
 
-- QR camera scans: PSBT UR and BBQr, SeedQR, KeyTeleport responses, watch-only import
-- NFC: TAPSIGNER setup and signing, NFC import, removing a card mid-operation
+- QR camera scans: PSBT UR and BBQr, SeedQR, KeyTeleport responses, watch-only import. The [hardware signer tests](#hardware-signer-tests) cover the PSBT frames and their import; the camera and a strict external signer still need a person
+- NFC: TAPSIGNER setup and signing, NFC import, removing a card mid-operation. The emulator tests cover Cove's card logic; a physical card, the NFC session and card removal still need a person
 - Biometric success, and the strength of PIN keypad haptics
 - Spoken VoiceOver and TalkBack output and natural focus order
 - COLDCARD and other hardware signers

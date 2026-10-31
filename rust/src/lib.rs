@@ -31,6 +31,9 @@ mod database;
 #[cfg(test)]
 mod test_support;
 
+#[cfg(test)]
+mod hardware_signing_tests;
+
 mod app;
 mod bootstrap;
 mod router;

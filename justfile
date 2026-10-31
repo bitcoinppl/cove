@@ -271,6 +271,35 @@ qa-check:
 test test="" flags="":
     cargo nextest run --locked {{ test }} --workspace {{ flags }}
 
+# Needs uv, which installs Python 3.12 for the emulator when it is missing
+# [bounded] Run the TAPSIGNER tests against Coinkite's card emulator
+[group('test')]
+[script('bash')]
+[working-directory('rust')]
+test-tapsigner-emulator:
+    set -euo pipefail
+    if ! command -v uv >/dev/null; then
+        echo "error: the TAPSIGNER emulator tests need uv to install the emulator's Python; see https://docs.astral.sh/uv/" >&2
+        exit 1
+    fi
+    # the emulator ships as a submodule of the pinned rust-cktap checkout, so it always matches the card code Cove builds
+    cargo fetch --locked
+    manifest=$(cargo metadata --locked --offline --format-version 1 | python3 -I -c 'import json, sys; print(next(p["manifest_path"] for p in json.load(sys.stdin)["packages"] if p["name"] == "rust-cktap"))')
+    script="$(dirname "$(dirname "$manifest")")/coinkite/coinkite-tap-proto/emulator/ecard.py"
+    if [ ! -f "$script" ]; then
+        echo "error: no TAPSIGNER emulator at $script; the rust-cktap checkout is missing its coinkite-tap-proto submodule" >&2
+        exit 1
+    fi
+    venv="${XDG_CACHE_HOME:-$HOME/.cache}/cove/tapsigner-emulator-venv"
+    if [ ! -x "$venv/bin/python" ]; then
+        uv venv --quiet --python 3.12 "$venv"
+    fi
+    # only what ecard.py imports; its requirements.txt also lists pyscard and nfcpy for real readers
+    uv pip install --quiet --python "$venv/bin/python" "cbor2==5.4.6" "hexdump==3.3" "wallycore>=0.8.5" "bech32==1.2.0" "base58==2.1.1" "click>=6.7" "cryptography>=36.0.1"
+    export COVE_TAPSIGNER_EMULATOR_PYTHON="$venv/bin/python"
+    export COVE_TAPSIGNER_EMULATOR_SCRIPT="$script"
+    cargo test --locked -p cove --lib tap_card::tap_signer_reader::emulator_tests -- --ignored
+
 # [bounded] Run tests the same way as GitHub Actions
 [group('test')]
 [working-directory('rust')]

@@ -322,6 +322,8 @@ uniffi = { workspace = true, features = ["bindgen-tests"] }
 ctor = "1.0.13"
 dtor = "1.0.6"
 
+# test builds talk to Coinkite's card emulator; keep the rev in step with the dependency above
+rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap", rev = "8248eab8f5914abd35de95dc6a677e8b3b747f30", features = ["emulator"] }
 
 [profile.dev]
 debug = "line-tables-only"
