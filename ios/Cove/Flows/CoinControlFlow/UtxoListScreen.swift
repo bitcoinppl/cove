@@ -334,6 +334,7 @@ private struct UtxoSelectionSection: View {
                 .opacity(manager.selected.isEmpty ? 0 : 0.8)
                 .contentTransition(.numericText())
                 .animation(.easeInOut(duration: 0.1), value: manager.totalSelectedAmount)
+                .accessibilityIdentifier("coinControl.selectedTotal")
         }
     }
 }
@@ -365,6 +366,8 @@ private struct UtxoSelectionHeader: View {
                     )
                 )
                 .onTapGesture(perform: onToggleSelectAll)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("coinControl.selectAll")
         }
         .padding(.horizontal)
         .padding(.horizontal)
@@ -520,6 +523,7 @@ private struct UtxoContinueButton: View {
             .frame(maxWidth: .infinity)
             .disabled(!isEnabled)
             .contentTransition(.interpolate)
+            .accessibilityIdentifier("coinControl.continue")
     }
 }
 
@@ -597,6 +601,10 @@ private struct UtxoRow: View {
         .padding(.vertical, 4)
         .opacity(utxo.spendable ? 1 : 0.58)
         .contentShape(Rectangle())
+        // one element per row, keyed by outpoint so UI tests can find a known coin and read its lock
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("coinControl.utxo.\(utxo.outpoint.txidStr()):\(utxo.outpoint.vout())")
+        .accessibilityValue(utxo.spendable ? "unlocked" : "locked")
         .simultaneousGesture(
             TapGesture().onEnded {
                 guard !utxo.spendable else { return }

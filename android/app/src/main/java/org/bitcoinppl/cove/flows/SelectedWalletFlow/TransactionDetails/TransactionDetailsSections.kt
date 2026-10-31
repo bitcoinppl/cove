@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -598,7 +599,8 @@ private fun TransactionDetailsActions(
             modifier =
                 Modifier
                     .align(Alignment.CenterHorizontally)
-                    .offset(y = (-20).dp),
+                    .offset(y = (-20).dp)
+                    .testTag("transactionDetails.showDetails"),
         ) {
             Text(
                 text = stringResource(if (isExpanded) R.string.btn_hide_details else R.string.btn_show_details),
@@ -759,6 +761,7 @@ private fun TransactionLockAction(
         verticalAlignment = Alignment.CenterVertically,
         modifier =
             Modifier
+                .testTag("transactionDetails.lockToggle")
                 .clickable(enabled = !updating, onClick = onToggle)
                 .padding(vertical = 4.dp),
     ) {

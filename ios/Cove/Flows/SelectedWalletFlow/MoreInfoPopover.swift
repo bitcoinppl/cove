@@ -209,6 +209,7 @@ private struct MoreInfoWalletActions: View {
                 Button(action: manageUtxos) {
                     Label("Manage UTXOs", systemImage: "circlebadge.2")
                 }
+                .accessibilityIdentifier("selectedWallet.manageUtxos")
             }
 
             Button(action: openWalletSettings) {

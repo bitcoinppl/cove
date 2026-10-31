@@ -24,46 +24,51 @@ const FUNDING_FEE: Amount = Amount::from_sat(1_000);
 
 /// Where a transaction is in the fake chain
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) enum TxLocation {
+pub enum TxLocation {
     Mempool,
     Confirmed { height: u32 },
 }
 
 /// A transaction together with its location in the fake chain
 #[derive(Debug, Clone)]
-pub(crate) struct ChainTx {
-    pub(crate) tx: Transaction,
-    pub(crate) location: TxLocation,
+pub struct ChainTx {
+    pub tx: Transaction,
+    /// Whether the transaction is in the mempool or which block holds it
+    pub location: TxLocation,
     /// Position of the transaction inside its block, only set once confirmed
-    pub(crate) position: Option<usize>,
+    pub position: Option<usize>,
 }
 
 /// One entry of a script's history, in the shape both node protocols report it
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) struct HistoryEntry {
-    pub(crate) txid: Txid,
-    pub(crate) location: TxLocation,
+pub struct HistoryEntry {
+    pub txid: Txid,
+    /// Whether the transaction is in the mempool or which block holds it
+    pub location: TxLocation,
 }
 
 /// Net satoshis a script gains, split by whether the transactions are confirmed
 ///
 /// A pending spend of confirmed funds makes `unconfirmed` negative, as in electrs
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
-pub(crate) struct Balance {
-    pub(crate) confirmed: i64,
-    pub(crate) unconfirmed: i64,
+pub struct Balance {
+    pub confirmed: i64,
+    pub unconfirmed: i64,
 }
 
 /// A broadcast of a transaction that is already confirmed, which a node rejects
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) struct AlreadyConfirmed;
+pub struct AlreadyConfirmed;
 
 /// A merkle inclusion proof with sibling hashes in internal byte order
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct MerkleProof {
-    pub(crate) height: u32,
-    pub(crate) position: usize,
-    pub(crate) branch: Vec<[u8; 32]>,
+pub struct MerkleProof {
+    /// Height of the block that holds the transaction
+    pub height: u32,
+    /// Index of the transaction inside the block, the coinbase being 0
+    pub position: usize,
+    /// Sibling hashes from the leaf up to the root
+    pub branch: Vec<[u8; 32]>,
 }
 
 #[derive(Debug)]
@@ -81,6 +86,8 @@ struct ChainState {
     /// Outputs that synthetic funding inputs spend, so fees can be reported
     funding_outputs: HashMap<OutPoint, TxOut>,
     next_funding_index: u64,
+    /// Transactions first accepted through a broadcast, in the order they arrived
+    broadcasts: Vec<Txid>,
 }
 
 /// Deterministic chain state shared by the fake Esplora and Electrum servers
@@ -90,76 +97,120 @@ struct ChainState {
 /// transactions the test confirms, with headers that carry valid merkle
 /// roots (nothing in BDK or the node clients checks proof of work)
 #[derive(Debug, Clone)]
-pub(crate) struct FakeChain {
+pub struct FakeChain {
     network: Network,
     state: Arc<Mutex<ChainState>>,
 }
 
 impl FakeChain {
     /// Creates a chain that contains only the genesis block of `network`
-    pub(crate) fn new(network: Network) -> Self {
-        let genesis = Block { txids: Vec::new(), header: genesis_block(network).header };
-        let state = ChainState {
-            blocks: vec![genesis],
-            txs: HashMap::new(),
-            order: Vec::new(),
-            funding_outputs: HashMap::new(),
-            next_funding_index: 0,
-        };
-
-        Self { network, state: Arc::new(Mutex::new(state)) }
+    pub fn new(network: Network) -> Self {
+        Self { network, state: Arc::new(Mutex::new(ChainState::new(network))) }
     }
 
-    pub(crate) const fn network(&self) -> Network {
+    /// Drops every block after genesis, every transaction and the broadcast log
+    ///
+    /// Clones of this chain see the reset too, since they share its state
+    pub fn reset(&self) {
+        *self.state.lock() = ChainState::new(self.network);
+    }
+
+    /// The network whose genesis block the chain starts from
+    pub const fn network(&self) -> Network {
         self.network
     }
 
-    pub(crate) fn tip_height(&self) -> u32 {
+    /// Height of the newest block, 0 when the chain holds only genesis
+    pub fn tip_height(&self) -> u32 {
         self.state.lock().tip_height()
     }
 
-    pub(crate) fn tip_hash(&self) -> bitcoin::BlockHash {
+    /// Hash of the newest block
+    pub fn tip_hash(&self) -> bitcoin::BlockHash {
         let state = self.state.lock();
 
         state.blocks[state.tip_height() as usize].header.block_hash()
     }
 
     /// Appends `count` blocks that hold only their coinbase
-    pub(crate) fn mine(&self, count: u32) {
+    pub fn mine(&self, count: u32) {
         let mut state = self.state.lock();
         for _ in 0..count {
             state.push_block(&[]);
         }
     }
 
-    /// Adds a transaction to the mempool
-    pub(crate) fn add_to_mempool(&self, tx: Transaction) -> Txid {
-        let txid = tx.compute_txid();
+    /// Mines `count` blocks, the first of which confirms every pending
+    /// transaction, and returns the new tip height
+    pub fn mine_with_mempool(&self, count: u32) -> u32 {
         let mut state = self.state.lock();
-        assert!(!state.txs.contains_key(&txid), "transaction {txid} is already in the fake chain");
+        let pending = state
+            .order
+            .iter()
+            .filter(|txid| state.txs[*txid].location == TxLocation::Mempool)
+            .copied()
+            .collect::<Vec<_>>();
 
-        state.order.push(txid);
-        state.txs.insert(txid, ChainTx { tx, location: TxLocation::Mempool, position: None });
+        // insertion order keeps every parent ahead of its children in the block
+        for block in 0..count {
+            let txids = if block == 0 { pending.as_slice() } else { &[] };
+            state.push_block(txids);
+        }
 
-        txid
+        state.tip_height()
+    }
+
+    /// Adds a transaction to the mempool
+    pub fn add_to_mempool(&self, tx: Transaction) -> Txid {
+        self.state.lock().add_to_mempool(tx)
     }
 
     /// Accepts a transaction broadcast to the node
     ///
     /// Like bitcoind, a transaction already in the mempool is accepted again so
-    /// a retried broadcast succeeds, while a confirmed one is rejected
-    pub(crate) fn broadcast(&self, tx: Transaction) -> Result<Txid, AlreadyConfirmed> {
+    /// a retried broadcast succeeds, while a confirmed one is rejected. Only the
+    /// first acceptance is added to the broadcast log
+    pub fn broadcast(&self, tx: Transaction) -> Result<Txid, AlreadyConfirmed> {
         let txid = tx.compute_txid();
-        match self.location(txid) {
+        let mut state = self.state.lock();
+
+        match state.txs.get(&txid).map(|entry| entry.location) {
             Some(TxLocation::Mempool) => Ok(txid),
             Some(TxLocation::Confirmed { .. }) => Err(AlreadyConfirmed),
-            None => Ok(self.add_to_mempool(tx)),
+            None => {
+                state.add_to_mempool(tx);
+                state.broadcasts.push(txid);
+
+                Ok(txid)
+            }
         }
+    }
+
+    /// Transactions accepted through a broadcast, oldest first
+    ///
+    /// An evicted transaction drops out of the log along with the chain
+    pub fn broadcasts(&self) -> Vec<Transaction> {
+        let state = self.state.lock();
+
+        state
+            .broadcasts
+            .iter()
+            .filter_map(|txid| state.txs.get(txid).map(|entry| entry.tx.clone()))
+            .collect()
+    }
+
+    /// The pending or confirmed transaction that spends `outpoint`, if any
+    pub fn spender_of(&self, outpoint: &OutPoint) -> Option<Txid> {
+        let state = self.state.lock();
+
+        state.order.iter().copied().find(|txid| {
+            state.txs[txid].tx.input.iter().any(|input| input.previous_output == *outpoint)
+        })
     }
 
     /// Pays `amount` to `script` from a synthetic funding output and leaves the
     /// transaction in the mempool
-    pub(crate) fn pay(&self, script: &ScriptBuf, amount: Amount) -> Txid {
+    pub fn pay(&self, script: &ScriptBuf, amount: Amount) -> Txid {
         let tx = {
             let mut state = self.state.lock();
             let index = state.next_funding_index;
@@ -191,12 +242,12 @@ impl FakeChain {
     }
 
     /// Mines one block that confirms `txid` and returns its height
-    pub(crate) fn confirm(&self, txid: Txid) -> u32 {
+    pub fn confirm(&self, txid: Txid) -> u32 {
         self.confirm_together(&[txid])
     }
 
     /// Mines one block that confirms every transaction in `txids`
-    pub(crate) fn confirm_together(&self, txids: &[Txid]) -> u32 {
+    pub fn confirm_together(&self, txids: &[Txid]) -> u32 {
         let mut state = self.state.lock();
         for txid in txids {
             let entry = state.txs.get(txid).unwrap_or_else(|| panic!("unknown transaction {txid}"));
@@ -209,7 +260,7 @@ impl FakeChain {
     /// Drops a transaction from the mempool, as a node does when it evicts it
     ///
     /// Its pending descendants go with it, since their inputs no longer exist
-    pub(crate) fn evict(&self, txid: Txid) {
+    pub fn evict(&self, txid: Txid) {
         let mut state = self.state.lock();
         let entry = state.txs.get(&txid).unwrap_or_else(|| panic!("unknown transaction {txid}"));
         assert_eq!(
@@ -240,13 +291,14 @@ impl FakeChain {
         state.order.retain(|ordered| !evicted.contains(ordered));
     }
 
-    pub(crate) fn location(&self, txid: Txid) -> Option<TxLocation> {
+    /// Where `txid` is, `None` when the chain has never seen it or evicted it
+    pub fn location(&self, txid: Txid) -> Option<TxLocation> {
         self.state.lock().txs.get(&txid).map(|entry| entry.location)
     }
 
     /// Whether a pending transaction spends an output of another pending one,
     /// which bitcoind reports as a non-empty `depends` list
-    pub(crate) fn has_unconfirmed_parent(&self, txid: Txid) -> bool {
+    pub fn has_unconfirmed_parent(&self, txid: Txid) -> bool {
         let state = self.state.lock();
         let Some(entry) = state.txs.get(&txid) else { return false };
 
@@ -258,17 +310,18 @@ impl FakeChain {
         })
     }
 
-    pub(crate) fn tx(&self, txid: Txid) -> Option<ChainTx> {
+    /// The transaction with `txid` and where it is in the chain
+    pub fn tx(&self, txid: Txid) -> Option<ChainTx> {
         self.state.lock().txs.get(&txid).cloned()
     }
 
     /// The previous output of `outpoint` when the chain knows it
-    pub(crate) fn prevout(&self, outpoint: &OutPoint) -> Option<TxOut> {
+    pub fn prevout(&self, outpoint: &OutPoint) -> Option<TxOut> {
         self.state.lock().prevout(outpoint)
     }
 
     /// The previous outputs paying to `script` that the inputs of `tx` spend
-    pub(crate) fn spent_from(&self, tx: &Transaction, script: &ScriptBuf) -> Vec<TxOut> {
+    pub fn spent_from(&self, tx: &Transaction, script: &ScriptBuf) -> Vec<TxOut> {
         let state = self.state.lock();
 
         tx.input
@@ -278,17 +331,19 @@ impl FakeChain {
             .collect()
     }
 
-    pub(crate) fn header(&self, height: u32) -> Option<Header> {
+    /// The header of the block at `height`
+    pub fn header(&self, height: u32) -> Option<Header> {
         self.state.lock().blocks.get(height as usize).map(|block| block.header)
     }
 
-    pub(crate) fn block_txids(&self, height: u32) -> Option<Vec<Txid>> {
+    /// The transactions of the block at `height`, coinbase first
+    pub fn block_txids(&self, height: u32) -> Option<Vec<Txid>> {
         self.state.lock().blocks.get(height as usize).map(|block| block.txids.clone())
     }
 
     /// The tip block header and height, newest first for `count` blocks
     /// starting at `start_height`
-    pub(crate) fn headers_descending(
+    pub fn headers_descending(
         &self,
         start_height: Option<u32>,
         count: usize,
@@ -303,7 +358,8 @@ impl FakeChain {
             .collect()
     }
 
-    pub(crate) fn height_of_block(&self, hash: bitcoin::BlockHash) -> Option<u32> {
+    /// The height of the block with `hash`
+    pub fn height_of_block(&self, hash: bitcoin::BlockHash) -> Option<u32> {
         let state = self.state.lock();
 
         state
@@ -314,7 +370,7 @@ impl FakeChain {
     }
 
     /// Every transaction that pays to or spends from `script`
-    pub(crate) fn history(&self, script: &ScriptBuf) -> Vec<HistoryEntry> {
+    pub fn history(&self, script: &ScriptBuf) -> Vec<HistoryEntry> {
         let state = self.state.lock();
 
         state
@@ -331,7 +387,7 @@ impl FakeChain {
     /// Reads the history and its transactions under one lock, so a test that
     /// evicts a transaction mid-request never leaves an entry without its
     /// transaction
-    pub(crate) fn balance(&self, script: &ScriptBuf) -> Balance {
+    pub fn balance(&self, script: &ScriptBuf) -> Balance {
         let state = self.state.lock();
         let mut balance = Balance::default();
 
@@ -368,7 +424,7 @@ impl FakeChain {
     ///
     /// The digest is in hash output order; each protocol converts its own wire
     /// format first, so a client that sends the wrong byte order finds nothing
-    pub(crate) fn script_for_digest(&self, digest: &[u8; 32]) -> Option<ScriptBuf> {
+    pub fn script_for_digest(&self, digest: &[u8; 32]) -> Option<ScriptBuf> {
         let state = self.state.lock();
         let known_scripts = state.txs.values().flat_map(|entry| {
             let outputs = entry.tx.output.iter().map(|output| output.script_pubkey.clone());
@@ -387,7 +443,8 @@ impl FakeChain {
             .find(|script| sha256::Hash::hash(script.as_bytes()).to_byte_array() == *digest)
     }
 
-    pub(crate) fn merkle_proof(&self, txid: Txid) -> Option<MerkleProof> {
+    /// Proof that `txid` is in its block, `None` while it is pending
+    pub fn merkle_proof(&self, txid: Txid) -> Option<MerkleProof> {
         let state = self.state.lock();
         let entry = state.txs.get(&txid)?;
         let TxLocation::Confirmed { height } = entry.location else { return None };
@@ -398,7 +455,7 @@ impl FakeChain {
     }
 
     /// The fee a transaction pays when every input's previous output is known
-    pub(crate) fn fee(&self, tx: &Transaction) -> Option<Amount> {
+    pub fn fee(&self, tx: &Transaction) -> Option<Amount> {
         let state = self.state.lock();
         let inputs = tx
             .input
@@ -413,6 +470,29 @@ impl FakeChain {
 }
 
 impl ChainState {
+    fn new(network: Network) -> Self {
+        let genesis = Block { txids: Vec::new(), header: genesis_block(network).header };
+
+        Self {
+            blocks: vec![genesis],
+            txs: HashMap::new(),
+            order: Vec::new(),
+            funding_outputs: HashMap::new(),
+            next_funding_index: 0,
+            broadcasts: Vec::new(),
+        }
+    }
+
+    fn add_to_mempool(&mut self, tx: Transaction) -> Txid {
+        let txid = tx.compute_txid();
+        assert!(!self.txs.contains_key(&txid), "transaction {txid} is already in the fake chain");
+
+        self.order.push(txid);
+        self.txs.insert(txid, ChainTx { tx, location: TxLocation::Mempool, position: None });
+
+        txid
+    }
+
     fn tip_height(&self) -> u32 {
         (self.blocks.len() - 1) as u32
     }

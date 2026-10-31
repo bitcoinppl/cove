@@ -13,13 +13,14 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
 ]
 coverage = [
-    "agent",
     "rust:rust/src/manager/coin_control_manager.rs::select_all_skips_locked_utxos",
     "rust:rust/src/manager/coin_control_manager.rs::selected_total_excludes_locked_utxos",
     "rust:rust/src/manager/coin_control_manager.rs::direct_selection_prunes_locked_utxos",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/CoinControlFlow/UtxoLockFullLaunchTest.kt::stage1LocksFromCoinControlAndTransactionDetails",
+    "ios-ui:ios/CoveUITests/UtxoLockFullLaunchUITests.swift::testLockedUtxosAreExcludedFromCoinControlAndSends",
 ]
 # 1.4.0: ios PASS, android PASS
-# rust decides selection and totals; the visible lock row stays agent
+# rust decides selection and totals; the UI tests lock a row, check its lock state and the refused tap, and check Select All
 
 [[row]]
 id = "s03-received-transaction-locked-status"
@@ -39,6 +40,8 @@ paths = [
 coverage = [
     "agent",
     "rust:rust/src/manager/wallet_manager/actor.rs::lock_state_for_outpoints_returns_locked_when_all_outputs_are_locked",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/CoinControlFlow/UtxoLockFullLaunchTest.kt::stage1LocksFromCoinControlAndTransactionDetails",
+    "ios-ui:ios/CoveUITests/UtxoLockFullLaunchUITests.swift::testLockedUtxosAreExcludedFromCoinControlAndSends",
 ]
 # 1.4.0: ios PASS, android PASS
 # rust decides the locked state; list and detail labels stay agent
@@ -60,6 +63,8 @@ coverage = [
     "rust:rust/src/manager/wallet_manager/actor.rs::actor_build_tx_excludes_db_locked_outpoints_from_psbt_inputs",
     "rust:rust/src/manager/wallet_manager/actor.rs::actor_drain_tx_excludes_db_locked_outpoints_from_psbt_inputs",
     "rust:rust/src/manager/wallet_manager/actor.rs::unlocked_trusted_spendable_balance_subtracts_locked_bdk_spendable_outputs",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/CoinControlFlow/UtxoLockFullLaunchTest.kt::stage2LocksSurviveRelaunchAndExcludeCoinsFromSends",
+    "ios-ui:ios/CoveUITests/UtxoLockFullLaunchUITests.swift::testLockedUtxosAreExcludedFromCoinControlAndSends",
 ]
 # 1.4.0: ios PASS, android PASS
 
@@ -78,6 +83,8 @@ paths = [
 ]
 coverage = [
     "rust:rust/src/database/wallet_data/label.rs::locks_and_labels_survive_reopening_the_wallet_database",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/CoinControlFlow/UtxoLockFullLaunchTest.kt::stage2LocksSurviveRelaunchAndExcludeCoinsFromSends",
+    "ios-ui:ios/CoveUITests/UtxoLockFullLaunchUITests.swift::testLockedUtxosAreExcludedFromCoinControlAndSends",
 ]
 # 1.4.0: ios PASS, android PASS
 # lock state is a redb record, decided by a reopen test

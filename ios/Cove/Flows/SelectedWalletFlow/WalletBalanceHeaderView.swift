@@ -176,6 +176,7 @@ private struct WalletBalanceDisplay: View {
                 .foregroundStyle(.white.opacity(balancePresentation.primaryOpacity))
                 .font(.system(size: fontSize, weight: .bold))
                 .contentTransition(.numericText())
+                .accessibilityIdentifier("selectedWallet.balance")
 
                 Spacer()
 

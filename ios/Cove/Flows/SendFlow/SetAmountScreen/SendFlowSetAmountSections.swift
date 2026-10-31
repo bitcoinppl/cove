@@ -33,6 +33,7 @@ struct SendFlowAmountKeyboardToolbar: View {
             }
             .tint(.primary)
             .buttonStyle(.bordered)
+            .accessibilityIdentifier("sendFlow.max")
 
             Button(action: clearAmount) {
                 Label("Clear", systemImage: "xmark.circle")
@@ -464,5 +465,6 @@ struct SendFlowNextButton: View {
                 .cornerRadius(10)
         }
         .padding(.vertical, 10)
+        .accessibilityIdentifier("sendFlow.next")
     }
 }
