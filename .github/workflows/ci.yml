@@ -248,10 +248,10 @@ jobs:
           cache-bin: false
           prefix-key: v1-rust
 
-      - name: Set up just
+      - name: Set up just and cargo-nextest
         uses: taiki-e/install-action@v2
         with:
-          tool: just
+          tool: just,cargo-nextest
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v10.3.3

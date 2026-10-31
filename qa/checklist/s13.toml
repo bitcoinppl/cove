@@ -121,6 +121,7 @@ paths = [
   "ios/Cove/TapSignerNFC.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/TapSignerFlow/*.kt",
   "rust/src/tap_card/tap_signer_reader.rs",
+  "rust/src/tap_card/tap_signer_reader/**",
   "rust/crates/cove-device/src/keychain/tap_signer.rs",
   "rust/src/tap_card.rs",
 ]

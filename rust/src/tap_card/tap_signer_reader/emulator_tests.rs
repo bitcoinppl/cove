@@ -141,6 +141,12 @@ async fn setup_with_default_and_advanced_chain_codes_imports_the_card_account() 
         let setup = set_up(&card, cmd.clone()).await;
         let (master, account) = card_xpubs(&card, NEW_CVC).await;
 
+        // the xpub and setup's report both reflect wherever the card's path points, so read the
+        // path from the card itself to prove setup moved it off the factory m/84'/0'/0'
+        let hardened = |index: u32| index | (1 << 31);
+        let card_path = card.tap().await.path;
+        assert_eq!(card_path, Some(vec![hardened(84), hardened(1), hardened(0)]), "{label}");
+
         // the card's master key carries exactly the chain code setup sent
         assert_eq!(master.chain_code.to_bytes(), cmd.chain_code, "{label}");
         assert_eq!(setup.derive_info.master_pubkey, master.public_key.serialize(), "{label}");

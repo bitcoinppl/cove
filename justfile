@@ -271,7 +271,7 @@ qa-check:
 test test="" flags="":
     cargo nextest run --locked {{ test }} --workspace {{ flags }}
 
-# Needs uv, which installs Python 3.12 for the emulator when it is missing
+# Needs uv, which installs Python 3.12 for the emulator when it is missing, and cargo-nextest
 # [bounded] Run the TAPSIGNER tests against Coinkite's card emulator
 [group('test')]
 [script('bash')]
@@ -298,7 +298,8 @@ test-tapsigner-emulator:
     uv pip install --quiet --python "$venv/bin/python" "cbor2==5.4.6" "hexdump==3.3" "wallycore>=0.8.5" "bech32==1.2.0" "base58==2.1.1" "click>=6.7" "cryptography>=36.0.1"
     export COVE_TAPSIGNER_EMULATOR_PYTHON="$venv/bin/python"
     export COVE_TAPSIGNER_EMULATOR_SCRIPT="$script"
-    cargo test --locked -p cove --lib tap_card::tap_signer_reader::emulator_tests -- --ignored
+    # nextest fails when the filter selects nothing, so a renamed module or a dropped #[ignore] cannot pass silently
+    cargo nextest run --locked -p cove --lib --run-ignored only --no-tests fail -E 'test(/^tap_card::tap_signer_reader::emulator_tests::/)'
 
 # [bounded] Run tests the same way as GitHub Actions
 [group('test')]
