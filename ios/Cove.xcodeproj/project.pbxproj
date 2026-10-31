@@ -13,6 +13,7 @@
 		ACC61E2F2ECBD8BE00D13947 /* MijickPopups in Frameworks */ = {isa = PBXBuildFile; productRef = ACC61E2E2ECBD8BE00D13947 /* MijickPopups */; };
 		ACD0053C2DB5309A003DC493 /* CoveCore in Frameworks */ = {isa = PBXBuildFile; productRef = ACD0053B2DB5309A003DC493 /* CoveCore */; };
 		C0A000012EF0000000000001 /* OnboardingFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */; };
+		C0A0000E2EF0000000000001 /* UtxoLockFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0000D2EF0000000000001 /* UtxoLockFullLaunchUITests.swift */; };
 		C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */; };
 		C0B000022F00000000000001 /* Fixtures/wallet_2_descriptors.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */; };
 		C0B000102F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */; };
@@ -86,6 +87,7 @@
 /* Begin PBXFileReference section */
 		AC9AB5782C34956C00BAE3BE /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFullLaunchUITests.swift; sourceTree = "<group>"; };
+		C0A0000D2EF0000000000001 /* UtxoLockFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UtxoLockFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0A000022EF0000000000001 /* CoveUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPromptLayoutTests.swift; sourceTree = "<group>"; };
 		C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Fixtures/wallet_2_descriptors.txt; sourceTree = "<group>"; };
@@ -194,6 +196,7 @@
 			children = (
 				C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */,
 				C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */,
+				C0A0000D2EF0000000000001 /* UtxoLockFullLaunchUITests.swift */,
 			);
 			path = CoveUITests;
 			sourceTree = "<group>";
@@ -470,6 +473,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C0A000012EF0000000000001 /* OnboardingFullLaunchUITests.swift in Sources */,
+				C0A0000E2EF0000000000001 /* UtxoLockFullLaunchUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -33,6 +33,7 @@
 - `cove-bip39` - BIP39 mnemonic handling
 - `cove-common` - Shared constants and utilities
 - `cove-device` - Platform abstraction for keychain and device features
+- `cove-fake-node` - Fake Esplora and Electrum node for tests and UI test runs; a dev-dependency only, never linked into the app
 - `cove-macros` - Common Macros used by the other crates
 - `cove-nfc` - NFC communication protocols
 - `cove-tap-card` - TAPSIGNER/SATSCARD integration

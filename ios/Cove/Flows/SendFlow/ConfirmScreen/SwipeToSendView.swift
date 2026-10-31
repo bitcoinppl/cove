@@ -90,6 +90,8 @@ struct SwipeToSendView: View {
             SwipeToSendStatus(sendState: $sendState)
         }
         .frame(height: height)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("sendFlowConfirm.swipeToSend")
         .onChange(of: sendState, initial: true, onChangeSendState)
         .onPreferenceChange(SwipeToSendTextHeightPreferenceKey.self) { height in
             measuredTextHeight = height

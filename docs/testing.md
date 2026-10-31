@@ -26,6 +26,8 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 | Agent pass | Checklist rows that need judgment, fixtures or multi-app flows, run by a coding agent driving a real phone | This document |
 | Person | Camera, NFC, biometrics, haptics, spoken screen-reader output, hardware signers | Batched into one sitting at the end |
 
+UI tests that need a funded wallet get it from the fake Esplora and Electrum node in [`rust/crates/cove-fake-node`](../rust/crates/cove-fake-node/README.md), so they need no Signet funds or network. `just ios-ui-background`, `just ios-ui-foreground`, `just android-ui-manual` and `just android-instrumented-ci` start it on ports 39000 (control API), 39001 (Esplora) and 39002 (Electrum) for the length of the run, and forward the ports to Android with `adb reverse`. With more than one Android device connected, set `ANDROID_SERIAL` to pick one, since tests on two devices would reset and fund the same node. To run another command with the node up, use `just fake-node-run <command>` or `cargo xtask fake-node run -- <command>` from `rust/`.
+
 The `UI tests` workflow runs the iOS UI tests and Android instrumented tests nightly, on pushes to master, and on pull requests labeled `ui-tests`. CI runs the manifest check behind `just qa-check` on pull requests, so the manifest stays consistent with the tests it names. Its workflow filters pull requests to those targeting master, so run `just qa-check` locally before pushing a checklist change on a stacked branch.
 
 ## Planning a release pass
@@ -39,6 +41,8 @@ The `UI tests` workflow runs the iOS UI tests and Android instrumented tests nig
 ## Fixtures
 
 Use test networks only. Cove's default Signet node is MutinyNet, whose 30-second blocks make funding fast. Never use production seed material, and keep fixture secrets out of the repository.
+
+Automated UI tests don't use these fixtures. They reset the fake node, fund the wallet they import through its control API (`POST /reset`, then `POST /fund-wallet` with a public test mnemonic such as abandon ×11 about), and point the app at a custom Esplora node at `http://127.0.0.1:39001`. Debug builds also fetch fee rates from `COVE_FEE_URL` when it is set, and the tests point it at the fake node so a send never reaches mempool.space. On iOS a fresh install can't reach Settings before it has a wallet, so debug builds launched with `COVE_UI_TEST_ESPLORA_URL` select Signet and that Esplora node at startup. The [crate README](../rust/crates/cove-fake-node/README.md) documents the API. `UtxoLockFullLaunchUITests` and `UtxoLockFullLaunchTest` use this setup to lock and unlock UTXOs from coin control and transaction details, then check which outputs the app's broadcasts spent.
 
 - **Two funded Signet wallets** (for example Main and Secondary) with several UTXOs, including one small output, and known history
 - **A watch-only hardware wallet** backed by a software signer such as Signer Lab, so the PSBT loop runs without a camera: export the unsigned PSBT to a file, review and sign it with the signer's CLI, then import the signed file in Cove. For QR and file fixtures, `just sign-psbt <psbt>`, where `<psbt>` is base64 or an absolute path to a `.psbt` file, signs it with the test mnemonic in `$MNEMONIC` and writes the result as base64, hex, binary, BBQr and UR images

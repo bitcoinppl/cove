@@ -72,6 +72,8 @@ jobs:
       - name: Build Rust FFI for the x86_64 emulator
         run: just xtask build-android debug --x86-64
 
+      # the recipe starts cove-fake-node and forwards its ports 39000-39002 into the
+      # emulator, for the tests that fund a wallet from it
       - name: Run instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -124,12 +126,18 @@ jobs:
       - name: Build Rust FFI bindings
         run: just build-ios
 
-      # xtask resets the simulator before each test so every one starts at first launch
+      # xtask resets the simulator before each test so every one starts at first launch, and
+      # keeps cove-fake-node up on ports 39000-39002 for the tests that fund a wallet from it
       # xcodebuild passes TEST_RUNNER_-prefixed variables to the test process without the prefix
       - name: Run CoveUITests
         env:
           TEST_RUNNER_COVE_SKIP_QUARANTINED: "1"
         run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17"
+
+      # runs even when an onboarding test failed, so one broken suite doesn't hide the other
+      - name: Run UTXO lock UI tests
+        if: ${{ !cancelled() }}
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/UtxoLockFullLaunchUITests
 
       # CoveCloudBackupUITests stays out until its inventory scenarios pass on master; see #947
 

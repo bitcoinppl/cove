@@ -398,6 +398,7 @@ private struct TransactionDetailsFooterActions: View {
             }
             .padding(.top, 10)
             .offset(y: -20)
+            .accessibilityIdentifier("transactionDetails.showDetails")
         }
     }
 }

@@ -3,6 +3,7 @@ use crate::common::{
     print_error, print_info, print_success, print_warning, resolve_readable_file,
     trim_generated_trailing_whitespace,
 };
+use crate::fake_node::{AndroidPorts, FakeNodeGuard};
 use crate::version::BuildNumberFile;
 use color_eyre::{
     eyre::{eyre, Context},
@@ -63,8 +64,7 @@ const IOS_DEVICE_DERIVED_DATA_SUFFIX: &str = "device-run";
 const IOS_SIMULATOR_PRODUCTS_DIR: &str = "Debug-iphonesimulator";
 const IOS_DEVICE_PRODUCTS_DIR: &str = "Debug-iphoneos";
 const IOS_UI_SCHEME: &str = "CoveManualUITests";
-const IOS_UI_TEST_CLASS: &str = "CoveUITests/OnboardingFullLaunchUITests";
-const IOS_UI_TEST_FILE: &str = "CoveUITests/OnboardingFullLaunchUITests.swift";
+const IOS_UI_TEST_TARGET: &str = "CoveUITests";
 // each test starts on a freshly erased simulator, where Xcode's runner and the first app
 // launch both fail now and then, so retry those environment failures on a clean simulator
 const IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS: usize = 2;
@@ -599,6 +599,10 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
 
     let udid = SimctlDevices::load(&sh)?.resolve(&options.device)?;
     boot_simulator(&sh, &udid)?;
+
+    // tests that need a funded wallet reset and fund this node; the simulator shares
+    // this machine's loopback, so no forwarding is needed
+    let _fake_node = FakeNodeGuard::start(AndroidPorts::Skip)?;
 
     // run every test before failing so one broken test doesn't hide the state of the rest
     let mut failures = Vec::new();
@@ -1334,26 +1338,33 @@ fn non_empty_output<'a>(output: &'a str, fallback: &'a str) -> &'a str {
     }
 }
 
+/// Expands a `CoveUITests/<Class>` with a matching source file into one test per method, so each
+/// method starts on a freshly erased simulator; anything else runs as given
 fn ios_ui_tests_to_run(sh: &Shell, test: &str) -> Result<Vec<String>> {
-    if test != IOS_UI_TEST_CLASS {
+    let Some(file) = ios_ui_test_class_file(test).filter(|file| sh.path_exists(file)) else {
         return Ok(vec![test.to_string()]);
-    }
+    };
 
-    let contents = sh
-        .read_file(IOS_UI_TEST_FILE)
-        .wrap_err_with(|| format!("Failed to read {IOS_UI_TEST_FILE}"))?;
+    let contents = sh.read_file(&file).wrap_err_with(|| format!("Failed to read {file}"))?;
 
     let tests = contents
         .lines()
         .filter_map(test_method_name)
-        .map(|method| format!("{IOS_UI_TEST_CLASS}/{method}"))
+        .map(|method| format!("{test}/{method}"))
         .collect::<Vec<_>>();
 
     if tests.is_empty() {
-        color_eyre::eyre::bail!("No test methods found in {IOS_UI_TEST_FILE}");
+        color_eyre::eyre::bail!("No test methods found in {file}");
     }
 
     Ok(tests)
+}
+
+fn ios_ui_test_class_file(test: &str) -> Option<String> {
+    let class = test.strip_prefix(IOS_UI_TEST_TARGET)?.strip_prefix('/')?;
+    let is_class = !class.is_empty() && !class.contains('/');
+
+    is_class.then(|| format!("{IOS_UI_TEST_TARGET}/{class}.swift"))
 }
 
 fn test_method_name(line: &str) -> Option<&str> {
@@ -1805,6 +1816,56 @@ fn available_device_context(devices: &[ResolvedDevice]) -> String {
 
 #[cfg(test)]
 mod tests {
+    mod ui_test_expansion {
+        use crate::ios::ios_ui_tests_to_run;
+        use xshell::Shell;
+
+        fn ios_shell() -> Shell {
+            let sh = Shell::new().unwrap();
+            sh.change_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../../ios"));
+            sh
+        }
+
+        #[test]
+        fn expands_a_class_with_a_source_file_into_its_test_methods() {
+            let tests =
+                ios_ui_tests_to_run(&ios_shell(), "CoveUITests/UtxoLockFullLaunchUITests").unwrap();
+
+            assert_eq!(
+                tests,
+                ["CoveUITests/UtxoLockFullLaunchUITests/testLockedUtxosAreExcludedFromCoinControlAndSends"]
+            );
+        }
+
+        #[test]
+        fn expanded_onboarding_class_lists_only_test_methods() {
+            let tests =
+                ios_ui_tests_to_run(&ios_shell(), "CoveUITests/OnboardingFullLaunchUITests")
+                    .unwrap();
+
+            assert!(tests.contains(
+                &"CoveUITests/OnboardingFullLaunchUITests/testWelcomeScreenShowsFirstLaunchEntryPoint"
+                    .to_string()
+            ));
+            assert!(tests.iter().all(|test| {
+                test.strip_prefix("CoveUITests/OnboardingFullLaunchUITests/test").is_some()
+            }));
+        }
+
+        #[test]
+        fn runs_methods_targets_and_unknown_classes_as_given() {
+            let sh = ios_shell();
+
+            for test in [
+                "CoveUITests/UtxoLockFullLaunchUITests/testLockedUtxosAreExcludedFromCoinControlAndSends",
+                "CoveUITests",
+                "CoveUITests/NoSuchClass",
+            ] {
+                assert_eq!(ios_ui_tests_to_run(&sh, test).unwrap(), [test]);
+            }
+        }
+    }
+
     mod ui_environment_failure {
         use crate::ios::IosUiEnvironmentFailure;
 

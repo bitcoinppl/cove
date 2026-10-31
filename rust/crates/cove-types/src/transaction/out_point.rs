@@ -16,6 +16,11 @@ impl OutPoint {
     }
 
     #[must_use]
+    pub const fn vout(&self) -> u32 {
+        self.vout
+    }
+
+    #[must_use]
     pub fn txid_str(&self) -> String {
         self.txid.to_string()
     }

@@ -288,6 +288,7 @@ private struct EnterAmountTextField: View {
             .padding(.horizontal, 30)
             .focused(focusField, equals: .amount)
             .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
+            .accessibilityIdentifier("sendFlow.amount")
     }
 }
 

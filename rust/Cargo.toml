@@ -304,6 +304,7 @@ libc = "0.2.186"
 uniffi = { workspace = true, features = ["build"] }
 
 [dev-dependencies]
+cove-fake-node = { path = "./crates/cove-fake-node", default-features = false }
 bdk_wallet = { workspace = true, features = ["test-utils"] }
 ciborium = "0.2.2"
 tempfile = "3.27.0"
