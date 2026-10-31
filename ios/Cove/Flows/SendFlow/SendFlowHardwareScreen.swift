@@ -203,9 +203,10 @@ struct SendFlowHardwareScreen: View {
     func handleFileImport(result: Result<URL, Error>) {
         do {
             let file = try result.get()
-            let fileContents = try FileReader(for: file).read()
 
-            let (txnRecord, parsed) = try parseSignedImport(fileContents)
+            // signers write binary PSBTs and transactions, so Rust detects the format from raw bytes
+            let fileData = try FileReader(for: file).readData()
+            let (txnRecord, parsed) = try parseSignedImport(fileData)
 
             let route = parsed.sendConfirmRoute(
                 id: txnRecord.walletId(),
@@ -260,10 +261,21 @@ struct SendFlowHardwareScreen: View {
         }
     }
 
-    /// Parse signed import (PSBT or finalized transaction) and retrieve original unsigned transaction record
+    /// Parse signed import text (PSBT or finalized transaction) and retrieve original unsigned transaction record
     func parseSignedImport(_ input: String) throws -> (UnsignedTransactionRecord, SignedTransactionOrPsbt) {
         Log.info("parseSignedImport")
-        let parsed = try SignedTransactionOrPsbt.tryParse(input: input)
+        return try withUnsignedRecord(SignedTransactionOrPsbt.tryParse(input: input))
+    }
+
+    /// Parse signed import file bytes (binary or text PSBT or finalized transaction) and retrieve original unsigned transaction record
+    func parseSignedImport(_ data: Data) throws -> (UnsignedTransactionRecord, SignedTransactionOrPsbt) {
+        Log.info("parseSignedImport bytes")
+        return try withUnsignedRecord(SignedTransactionOrPsbt.tryFromBytes(data: data))
+    }
+
+    private func withUnsignedRecord(
+        _ parsed: SignedTransactionOrPsbt
+    ) throws -> (UnsignedTransactionRecord, SignedTransactionOrPsbt) {
         let db = Database().unsignedTransactions()
         let record = try db.getTxThrow(txId: parsed.unsignedTxId())
         return (record, parsed)

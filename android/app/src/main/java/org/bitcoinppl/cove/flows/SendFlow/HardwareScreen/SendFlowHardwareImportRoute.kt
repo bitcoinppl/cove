@@ -18,6 +18,7 @@ import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SignedTransactionOrPsbt
 import org.bitcoinppl.cove_core.UnsignedTransactionRecord
+import org.bitcoinppl.cove_core.signedTransactionOrPsbtTryFromBytes
 import org.bitcoinppl.cove_core.signedTransactionOrPsbtTryParse
 
 internal object TransactionImportErrors {
@@ -40,14 +41,13 @@ internal fun rememberSignedImportFilePicker(
         uri?.let {
             scope.launch {
                 try {
-                    val fileContents =
+                    // signers write binary PSBTs and transactions, so Rust detects the format from raw bytes
+                    val fileData =
                         withContext(Dispatchers.IO) {
-                            context.contentResolver.openInputStream(uri)?.use { input ->
-                                input.bufferedReader().use { it.readText() }
-                            }
+                            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                         } ?: throw Exception(TransactionImportErrors.FILE_READ_ERROR)
 
-                    app.pushRoute(signedImportRoute(fileContents.trim()))
+                    app.pushRoute(signedImportRoute(fileData))
                 } catch (e: Exception) {
                     onError(e.message ?: TransactionImportErrors.FAILED_TO_IMPORT)
                 }
@@ -57,7 +57,14 @@ internal fun rememberSignedImportFilePicker(
 }
 
 internal fun signedImportRoute(input: String): Route {
-    val (txnRecord, parsed) = parseSignedImport(input)
+    val (txnRecord, parsed) = parseSignedImport { signedTransactionOrPsbtTryParse(input) }
+
+    return signedImportRoute(txnRecord, parsed)
+}
+
+/** Route for a signed import file's raw bytes, which may be a binary or text PSBT or transaction */
+internal fun signedImportRoute(data: ByteArray): Route {
+    val (txnRecord, parsed) = parseSignedImport { signedTransactionOrPsbtTryFromBytes(data) }
 
     return signedImportRoute(txnRecord, parsed)
 }
@@ -67,10 +74,12 @@ internal fun signedImportRoute(input: String): Route {
  * Returns pair of (UnsignedTransactionRecord, SignedTransactionOrPsbt)
  * Throws exception if parsing fails or transaction not found
  */
-internal fun parseSignedImport(input: String): Pair<UnsignedTransactionRecord, SignedTransactionOrPsbt> {
+private fun parseSignedImport(
+    parse: () -> SignedTransactionOrPsbt,
+): Pair<UnsignedTransactionRecord, SignedTransactionOrPsbt> {
     val parsed =
         try {
-            signedTransactionOrPsbtTryParse(input)
+            parse()
         } catch (e: Exception) {
             throw IllegalArgumentException(TransactionImportErrors.INVALID_HEX_FORMAT, e)
         }

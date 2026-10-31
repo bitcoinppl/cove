@@ -55,6 +55,25 @@ coverage = ["agent"]
 # needs an external signer tool and a signed file pushed to the device
 
 [[row]]
+id = "s13-signed-file-import-binary-and-text-forms"
+section = "13"
+title = "Signed file import accepts binary and text PSBTs and transactions"
+platforms = ["ios", "android"]
+target = "device"
+paths = [
+  "rust/src/signed_import.rs",
+  "ios/Cove/FileReader.swift",
+  "ios/Cove/Flows/SendFlow/SendFlowHardwareScreen.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/SendFlowHardwareImportRoute.kt",
+]
+coverage = [
+  "agent",
+  "rust:rust/src/signed_import.rs::signed_import_file_bytes_accept_binary_and_text_forms",
+]
+# 1.4.0: ios FAIL, android FAIL
+# rust decides every file format; an agent still checks each app passes the picked file's raw bytes
+
+[[row]]
 id = "s13-strict-signer-animated-ur-and-signed-ur"
 section = "13"
 title = "Strict signer animated UR and signed UR import"
