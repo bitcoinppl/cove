@@ -62,6 +62,8 @@ class SelectedWalletContainerRecoveryTest {
         when (route) {
             is Route.NewWallet -> true
             is Route.SelectedWallet -> app.walletMetadata(route.v1) != null
+            // with a wallet on the device, the container falls back through a brief load to it
+            is Route.LoadAndReset -> route.resetTo.isNotEmpty() && route.resetTo.all { isRecoveryRoute(app, it.route()) }
             else -> false
         }
 
