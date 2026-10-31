@@ -3,6 +3,7 @@ use crate::common::{
     cargo_target_dir, command_exists, print_error, print_info, print_success, print_warning,
     trim_generated_trailing_whitespace,
 };
+use crate::fake_node::{AndroidPorts, FakeNodeGuard};
 use crate::version::KeepBuildNumber;
 use color_eyre::{
     eyre::{bail, Context, ContextCompat},
@@ -952,6 +953,9 @@ pub fn run_with_stay_awake(command: &[String]) -> Result<()> {
 }
 
 pub fn run_manual_ui_tests() -> Result<()> {
+    // tests that need a funded wallet reset and fund this node through adb reverse
+    let _fake_node = FakeNodeGuard::start(AndroidPorts::Required)?;
+
     run_independent_manual_ui_tests()?;
     run_durable_relaunch_ui_test()?;
     run_restore_all_relaunch_ui_test()

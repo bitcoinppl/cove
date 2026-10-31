@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -338,7 +339,8 @@ fun SendFlowSetAmountScreen(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 24.dp),
+                                    .padding(bottom = 24.dp)
+                                    .testTag("sendFlow.next"),
                         )
                     }
 
@@ -493,7 +495,10 @@ private fun KeyboardToolbar(
 
             // Right: Max + Clear
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onMaxSelected) {
+                FilledTonalButton(
+                    onClick = onMaxSelected,
+                    modifier = Modifier.testTag("sendFlow.max"),
+                ) {
                     Text("Max")
                 }
 

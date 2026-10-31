@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -166,7 +167,10 @@ internal fun BalanceWidget(
                     textContent = { text ->
                         BalanceAutoSizeText(
                             text = text,
-                            modifier = Modifier.padding(end = 12.dp),
+                            modifier =
+                                Modifier
+                                    .padding(end = 12.dp)
+                                    .testTag("selectedWallet.balance"),
                             color = Color.White.copy(alpha = balancePresentation.primaryOpacity.toFloat()),
                             baseFontSize = 34.sp,
                             minimumScaleFactor = 0.5f,

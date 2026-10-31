@@ -4,6 +4,7 @@ use color_eyre::Result;
 mod android;
 mod android_device;
 mod common;
+mod fake_node;
 mod github;
 mod ios;
 mod mobile;
@@ -282,6 +283,10 @@ enum Commands {
         new_base: String,
     },
 
+    /// Run commands against the fake Esplora and Electrum node that UI tests fund wallets from
+    #[command(name = "fake-node", subcommand)]
+    FakeNode(fake_node::FakeNodeCommand),
+
     /// Release checklist manifest: per-change plan, coverage, and consistency check
     #[command(subcommand)]
     Qa(qa::QaCommand),
@@ -445,6 +450,8 @@ fn main() -> Result<()> {
 
         Commands::Rebase { new_base } => rebase::rebase(&new_base),
 
+        Commands::FakeNode(command) => fake_node::run(command),
+
         Commands::Qa(command) => qa::run(command),
 
         Commands::SwiftTools(command) => swift_tools::run(command),
@@ -507,7 +514,10 @@ fn install_deps(verbose: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{Cli, Commands};
-    use crate::swift_tools::{SwiftTool, SwiftToolsCommand};
+    use crate::{
+        fake_node::FakeNodeCommand,
+        swift_tools::{SwiftTool, SwiftToolsCommand},
+    };
     use clap::Parser;
 
     #[test]
@@ -578,6 +588,28 @@ mod tests {
 
         assert_eq!(tool, SwiftTool::Swiftformat);
         assert_eq!(args, ["--lint", "ios", "--version", "-v"]);
+    }
+
+    #[test]
+    fn fake_node_run_passes_command_flags_through() {
+        let cli = Cli::try_parse_from([
+            "xtask",
+            "fake-node",
+            "run",
+            "--android",
+            "--",
+            "./gradlew",
+            "connectedDevDebugAndroidTest",
+            "--continue",
+        ])
+        .expect("command flags should parse as passthrough args");
+
+        let Commands::FakeNode(FakeNodeCommand::Run { android, command }) = cli.command else {
+            panic!("expected fake-node run command");
+        };
+
+        assert!(android);
+        assert_eq!(command, ["./gradlew", "connectedDevDebugAndroidTest", "--continue"]);
     }
 
     #[test]

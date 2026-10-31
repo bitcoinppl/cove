@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -213,7 +214,8 @@ fun CoinControlSetAmountScreen(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 24.dp),
+                                .padding(bottom = 24.dp)
+                                .testTag("sendFlow.next"),
                     )
                 }
             }
@@ -496,6 +498,7 @@ private fun AddressWidget(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .testTag("sendFlow.address")
                         .focusRequester(focusRequester)
                         .onFocusChanged { focusState ->
                             isFocused = focusState.isFocused

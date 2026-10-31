@@ -12,9 +12,9 @@ use tokio::{
     sync::watch,
 };
 
-use super::{
-    FakeChain, Shared,
-    chain::{AlreadyConfirmed, Balance, HistoryEntry, TxLocation},
+use crate::{
+    Shared,
+    chain::{AlreadyConfirmed, Balance, FakeChain, HistoryEntry, TxLocation},
     control::{Protocol, Verdict},
 };
 

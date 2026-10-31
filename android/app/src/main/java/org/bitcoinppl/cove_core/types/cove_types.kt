@@ -881,6 +881,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_types_checksum_method_outpoint_txn_link(
     ): Short
+    external fun uniffi_cove_types_checksum_method_outpoint_vout(
+    ): Short
     external fun uniffi_cove_types_checksum_method_sentandreceived_amount(
     ): Short
     external fun uniffi_cove_types_checksum_method_sentandreceived_amount_fmt(
@@ -1231,6 +1233,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_types_fn_method_outpoint_txn_link(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_types_fn_method_outpoint_vout(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Int
     external fun uniffi_cove_types_fn_clone_sentandreceived(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Long
     external fun uniffi_cove_types_fn_free_sentandreceived(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
@@ -1756,6 +1760,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_outpoint_txn_link() != 14032.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_types_checksum_method_outpoint_vout() != 62893.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_types_checksum_method_sentandreceived_amount() != 64130.toShort()) {
@@ -6881,6 +6888,8 @@ public interface OutPointInterface {
 
     fun `txnLink`(): kotlin.String
 
+    fun `vout`(): kotlin.UInt
+
     companion object
 }
 
@@ -7043,6 +7052,19 @@ open class OutPoint: Disposable, AutoCloseable, OutPointInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_cove_types_fn_method_outpoint_txn_link(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `vout`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_types_fn_method_outpoint_vout(
         it,
         _status)
 }

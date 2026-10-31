@@ -142,7 +142,9 @@ impl<M: DebugSend> ReconcileChannel<M> {
 
 #[cfg(test)]
 mod tests {
-    use crate::manager::deferred_sender::SingleOrMany;
+    use std::time::Duration;
+
+    use crate::{manager::deferred_sender::SingleOrMany, test_support::ensure_tokio_runtime};
 
     use super::ReconcileChannel;
 
@@ -151,6 +153,43 @@ mod tests {
         One,
         Two,
         Three,
+        Numbered(usize),
+    }
+
+    #[test]
+    fn messages_keep_their_order_when_the_queue_overflows() {
+        ensure_tokio_runtime();
+
+        const COUNT: usize = 2_000;
+        let channel = ReconcileChannel::new(1);
+        let receiver = channel.receiver();
+
+        // drain slowly on another thread so the queue fills and frees up while sends continue,
+        // the way the UI thread lags behind fast typing
+        let drain = std::thread::spawn(move || {
+            (0..COUNT)
+                .map(|_| {
+                    let message = receiver.recv_timeout(Duration::from_secs(10)).expect("message");
+                    std::thread::yield_now();
+                    message
+                })
+                .collect::<Vec<_>>()
+        });
+
+        for index in 0..COUNT {
+            channel.send(TestMessage::Numbered(index));
+        }
+
+        let received = drain.join().expect("drain thread");
+        let first_out_of_order = received.iter().enumerate().position(|(index, message)| {
+            *message != SingleOrMany::Single(TestMessage::Numbered(index))
+        });
+        assert_eq!(
+            first_out_of_order,
+            None,
+            "got {:?}",
+            first_out_of_order.map(|index| &received[index])
+        );
     }
 
     #[test]

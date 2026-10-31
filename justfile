@@ -210,12 +210,19 @@ android-ui-manual:
 
 alias aum := android-ui-manual
 
+# The command runs from rust/, with the node's control API on 39000, Esplora on 39001 and Electrum on 39002
+# [variable] Run a command with the fake Esplora and Electrum node up, forwarded to the Android device; set ANDROID_SERIAL when several are connected
+[group('test')]
+fake-node-run *command:
+    just xtask fake-node run -- {{ command }}
+
 # Skips staged process-death tests, which need `android-ui-manual`, and tests marked @QuarantinedInCi
+# Runs with the fake node up and forwarded to the device, for tests that need a funded wallet
 # [long, external] Run Android instrumented tests the way the UI tests workflow does; flavours: Dev, UiTest or both
 [group('test')]
 [working-directory('android')]
 android-instrumented-ci flavours="Dev UiTest":
-    ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi" "-Pandroid.testInstrumentationRunnerArguments.listener=org.bitcoinppl.cove.test.DismissAnrDialogs"
+    cargo run --locked -q --manifest-path ../rust/Cargo.toml --package xtask -- fake-node run --android -- ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi" "-Pandroid.testInstrumentationRunnerArguments.listener=org.bitcoinppl.cove.test.DismissAnrDialogs"
 
 # [bounded] Update Android Compose preview screenshot references
 [group('test')]
@@ -229,6 +236,7 @@ android-preview-screenshots-update:
 android-preview-screenshots-validate:
     ./gradlew :app:validateDevDebugScreenshotTest
 
+# Every iOS UI run starts the fake node, for tests that need a funded wallet
 # [external] Run manual iOS full-launch UI tests without opening Simulator
 [group('test')]
 [script('bash')]
@@ -618,8 +626,16 @@ logcat:
 # text-to-speech helper
 [private]
 say *args:
-    @say {{ args }} 2>/dev/null || echo {{ args }} || true
-    @just notf {{ args }} || true
+    #!/usr/bin/env bash
+    # `say` can block forever without an audio session, as in background or daemon-run builds,
+    # so a watchdog kills it and the message falls back to stdout
+    say {{ args }} >/dev/null 2>&1 &
+    pid=$!
+    (sleep 10; kill "$pid" 2>/dev/null) >/dev/null 2>&1 &
+    watchdog=$!
+    wait "$pid" || echo {{ args }}
+    kill "$watchdog" 2>/dev/null
+    just notf {{ args }} || true
 
 [private]
 notf *args:
