@@ -14,6 +14,10 @@
 //! apps link whichever Rust library was built last, which is usually a debug one.
 //! It also scans a debug build and fails when a marker is missing there, so a
 //! scan that can't see the markers doesn't pass by accident
+//!
+//! Because the apps link whichever Rust library was built last, the TestFlight
+//! archive and the Play bundle also scan the library they are about to package,
+//! see [`ensure_packaged_rust_is_release`]
 
 use std::{
     fs,
@@ -58,8 +62,7 @@ pub struct CheckReleaseSeams {
 }
 
 pub fn run(args: CheckReleaseSeams) -> Result<()> {
-    let repo =
-        Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().nth(2).expect("xtask is in rust/xtask");
+    let repo = repo_root();
     let all = !args.ios && !args.android && !args.rust;
 
     if all || args.ios {
@@ -75,6 +78,21 @@ pub fn run(args: CheckReleaseSeams) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Fails when the Rust library under `libraries` has a UI test seam
+///
+/// Release packaging calls this before Xcode or Gradle copies the library in: neither rebuilds
+/// Rust, so after a debug Rust build they would ship the debug library and its seam
+pub fn ensure_packaged_rust_is_release(libraries: &Path) -> Result<()> {
+    let libraries = repo_root().join(libraries);
+    expect_markers(&[libraries], RUST_MARKERS, false).wrap_err(format!(
+        "The Rust library this release would package has UI test seams; rebuild it with the {RUST_RELEASE_PROFILE} profile"
+    ))
+}
+
+fn repo_root() -> &'static Path {
+    Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().nth(2).expect("xtask is in rust/xtask")
 }
 
 fn check_ios(repo: &Path) -> Result<()> {
