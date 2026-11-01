@@ -33,34 +33,15 @@ pub fn sign_psbt(
     format: OutputFormat,
     output_path: Option<&str>,
 ) -> Result<()> {
-    let network = match network_str {
-        "bitcoin" | "mainnet" => Network::Bitcoin,
-        "testnet" => Network::Testnet,
-        "signet" => Network::Signet,
-        "regtest" => Network::Regtest,
-        _ => return Err(eyre!("Unknown network: {}", network_str)),
-    };
+    let network = parse_network(network_str)?;
 
     println!("{}", "=== Parsing mnemonic ===".blue().bold());
     let mnemonic = Mnemonic::parse(mnemonic).map_err(|e| eyre!("Invalid mnemonic: {}", e))?;
     println!("  Mnemonic parsed successfully");
 
     println!("{}", "\n=== Creating wallet ===".blue().bold());
-    let seed = mnemonic.to_seed("");
-    let xprv = bitcoin::bip32::Xpriv::new_master(network, &seed)?;
-
-    // Use coin type based on network
-    let coin_type = if network == Network::Bitcoin { 0 } else { 1 };
-
-    let external_desc = format!("wpkh({}/84'/{}'/0'/0/*)", xprv, coin_type);
-    let internal_desc = format!("wpkh({}/84'/{}'/0'/1/*)", xprv, coin_type);
-
-    let wallet = Wallet::create(external_desc.clone(), internal_desc)
-        .network(network)
-        .create_wallet_no_persist()?;
-
+    let wallet = bip84_signing_wallet(&mnemonic, network)?;
     println!("  Network: {:?}", network);
-    println!("  External descriptor: {}...", &external_desc[..50.min(external_desc.len())]);
 
     println!("{}", "\n=== Decoding PSBT ===".blue().bold());
 
@@ -106,10 +87,7 @@ pub fn sign_psbt(
 
     println!("{}", "\n=== Signing (without finalizing) ===".blue().bold());
 
-    #[allow(deprecated)]
-    let sign_options = SignOptions { try_finalize: false, ..Default::default() };
-
-    let signed = wallet.sign(&mut psbt, sign_options)?;
+    let signed = sign_without_finalizing(&wallet, &mut psbt)?;
 
     if signed {
         println!("  {}", "Signed successfully".green());
@@ -185,6 +163,94 @@ pub fn sign_psbt(
     Ok(())
 }
 
+/// Parse a network name as the `util sign-psbt` command accepts it
+pub fn parse_network(network: &str) -> Result<Network> {
+    match network {
+        "bitcoin" | "mainnet" => Ok(Network::Bitcoin),
+        "testnet" => Ok(Network::Testnet),
+        "signet" => Ok(Network::Signet),
+        "regtest" => Ok(Network::Regtest),
+        _ => Err(eyre!("Unknown network: {network}")),
+    }
+}
+
+/// A wallet holding the BIP84 account 0 private keys of a mnemonic, the account
+/// hardware wallet test fixtures export
+pub fn bip84_signing_wallet(mnemonic: &Mnemonic, network: Network) -> Result<Wallet> {
+    let seed = mnemonic.to_seed("");
+    let xprv = bitcoin::bip32::Xpriv::new_master(network, &seed)?;
+    let coin_type = if network == Network::Bitcoin { 0 } else { 1 };
+
+    let external_desc = format!("wpkh({xprv}/84'/{coin_type}'/0'/0/*)");
+    let internal_desc = format!("wpkh({xprv}/84'/{coin_type}'/0'/1/*)");
+
+    Ok(Wallet::create(external_desc, internal_desc).network(network).create_wallet_no_persist()?)
+}
+
+/// Sign every input the wallet owns and leave finalizing to the app, as a
+/// hardware wallet does. Returns whether any signature was added
+pub fn sign_without_finalizing(wallet: &Wallet, psbt: &mut Psbt) -> Result<bool> {
+    #[allow(deprecated)]
+    let sign_options = SignOptions { try_finalize: false, ..Default::default() };
+    let signatures =
+        |psbt: &Psbt| psbt.inputs.iter().map(|input| input.partial_sigs.len()).sum::<usize>();
+    let before = signatures(psbt);
+
+    // `sign` reports whether it finalized, which it never does here, so count signatures instead
+    wallet.sign(psbt, sign_options)?;
+
+    Ok(signatures(psbt) > before)
+}
+
+/// Split a PSBT into BBQr QR payloads, at least `min_parts` of them
+pub fn bbqr_parts(psbt_bytes: &[u8], min_parts: usize) -> Result<Vec<String>> {
+    use bbqr::{
+        encode::Encoding,
+        file_type::FileType,
+        qr::Version,
+        split::{Split, SplitOptions},
+    };
+
+    let split = Split::try_from_data(
+        psbt_bytes,
+        FileType::Psbt,
+        SplitOptions {
+            encoding: Encoding::Zlib,
+            min_split_number: min_parts.max(1),
+            max_split_number: 100,
+            min_version: Version::V01,
+            max_version: Version::V15,
+        },
+    )
+    .map_err(|e| eyre!("BBQr encoding failed: {e}"))?;
+
+    Ok(split.parts)
+}
+
+/// Encode a PSBT as UR `crypto-psbt` parts, at least `min_parts` of them
+///
+/// The first parts of a fountain encoder are the plain fragments, so the
+/// returned parts decode on their own without any mixed parts
+pub fn ur_parts(psbt_bytes: &[u8], min_parts: usize) -> Result<Vec<String>> {
+    use cove_ur::CryptoPsbt;
+    use foundation_ur::Encoder;
+
+    let crypto_psbt = CryptoPsbt::from_psbt_bytes(psbt_bytes.to_vec())
+        .map_err(|e| eyre!("Invalid PSBT bytes: {e}"))?;
+
+    let cbor = crypto_psbt.encode().map_err(|e| eyre!("CBOR encoding failed: {e}"))?;
+
+    // QR v15 alphanumeric capacity is ~758 chars, leaving room for UR overhead
+    let max_fragment_len = foundation_ur::max_fragment_len("crypto-psbt", 100, 700)
+        .min(cbor.len().div_ceil(min_parts.max(1)).max(10));
+
+    let mut ur_encoder = Encoder::new();
+    ur_encoder.start("crypto-psbt", &cbor, max_fragment_len);
+
+    let total_parts = ur_encoder.sequence_count().max(1);
+    Ok((0..total_parts).map(|_| ur_encoder.next_part().to_string()).collect())
+}
+
 /// Print a QR code to the terminal if the data fits
 fn print_terminal_qr(data: &str) {
     println!("{}", "\n=== QR Code ===".blue().bold());
@@ -210,32 +276,11 @@ fn print_terminal_qr(data: &str) {
 
 /// Generate an animated GIF with BBQr-encoded QR codes
 fn generate_bbqr_gif(psbt_bytes: &[u8], output_path: &str) -> Result<()> {
-    use bbqr::{
-        encode::Encoding,
-        file_type::FileType,
-        qr::Version,
-        split::{Split, SplitOptions},
-    };
-
-    // Split the PSBT data into BBQr parts
-    let split = Split::try_from_data(
-        psbt_bytes,
-        FileType::Psbt,
-        SplitOptions {
-            encoding: Encoding::Zlib,
-            min_split_number: 1,
-            max_split_number: 100,
-            min_version: Version::V01,
-            max_version: Version::V15,
-        },
-    )
-    .map_err(|e| eyre!("BBQr encoding failed: {e}"))?;
-
-    println!("  Split into {} QR codes", split.parts.len());
+    let parts = bbqr_parts(psbt_bytes, 1)?;
+    println!("  Split into {} QR codes", parts.len());
 
     // Generate QR code images for each part
-    let mut qr_images: Vec<GrayImage> = split
-        .parts
+    let mut qr_images: Vec<GrayImage> = parts
         .iter()
         .map(|part| {
             let qr = QrCode::new(part.as_bytes())
@@ -266,35 +311,11 @@ fn generate_bbqr_gif(psbt_bytes: &[u8], output_path: &str) -> Result<()> {
 
 /// Generate an animated GIF with UR-encoded QR codes (crypto-psbt)
 fn generate_ur_gif(psbt_bytes: &[u8], output_path: &str) -> Result<()> {
-    use cove_ur::CryptoPsbt;
-    use foundation_ur::Encoder;
-
-    let crypto_psbt = CryptoPsbt::from_psbt_bytes(psbt_bytes.to_vec())
-        .map_err(|e| eyre!("Invalid PSBT bytes: {e}"))?;
-
-    let cbor = crypto_psbt.encode().map_err(|e| eyre!("CBOR encoding failed: {e}"))?;
-
-    // Calculate max fragment length for QR code version 15
-    // QR v15 alphanumeric capacity is ~758 chars, leaving room for UR overhead
-    let max_fragment_len = foundation_ur::max_fragment_len("crypto-psbt", 100, 700);
-
-    // Create UR encoder for multi-part encoding
-    let mut ur_encoder = Encoder::new();
-    ur_encoder.start("crypto-psbt", &cbor, max_fragment_len);
-
-    // Determine how many parts we need (at minimum, the sequence count)
-    let total_parts = ur_encoder.sequence_count().max(1);
-    println!("  Split into {} UR parts", total_parts);
-
-    // Generate all the UR parts
-    let mut ur_parts = Vec::new();
-    for _ in 0..total_parts {
-        let part = ur_encoder.next_part();
-        ur_parts.push(part.to_string());
-    }
+    let parts = ur_parts(psbt_bytes, 1)?;
+    println!("  Split into {} UR parts", parts.len());
 
     // Generate QR code images for each part
-    let qr_images: Vec<_> = ur_parts
+    let qr_images: Vec<_> = parts
         .iter()
         .map(|part| {
             let qr = QrCode::new(part.as_bytes())

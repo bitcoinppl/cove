@@ -923,7 +923,19 @@ impl VerifiedTapSigner {
             }
         }?;
 
-        let root = card.check_certificate().await.map_err(TransportError::from)?;
+        let root = match card.check_certificate().await {
+            Ok(root) => root,
+
+            #[cfg(debug_assertions)]
+            Err(rust_cktap::CertsError::InvalidRootCert(root))
+                if crate::tap_card::ui_test_emulator::trusts_root(&root) =>
+            {
+                return Ok(Self(card));
+            }
+
+            Err(error) => return Err(TransportError::from(error).into()),
+        };
+
         if matches!(root, rust_cktap::shared::FactoryRootKey::Dev(_)) {
             return Err(TransportError::IncorrectSignature(
                 "TAPSIGNER uses a development factory certificate".to_string(),

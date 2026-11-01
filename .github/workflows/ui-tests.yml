@@ -72,8 +72,13 @@ jobs:
       - name: Build Rust FFI for the x86_64 emulator
         run: just xtask build-android debug --x86-64
 
-      # the recipe starts cove-fake-node and forwards its ports 39000-39002 into the
-      # emulator, for the tests that fund a wallet from it
+      # the TAPSIGNER emulator runs in a Python environment uv builds
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.3.3
+
+      # the recipe starts cove-fake-node and the hardware signer host and forwards their
+      # ports 39000-39002 and 39010-39011 into the emulator, for the tests that fund a
+      # wallet or sign with a hardware wallet
       - name: Run instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -133,8 +138,13 @@ jobs:
       - name: Build Rust FFI bindings
         run: just build-ios
 
+      # the TAPSIGNER emulator runs in a Python environment uv builds
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.3.3
+
       # xtask resets the simulator before each test so every one starts at first launch, and
       # keeps cove-fake-node up on ports 39000-39002 for the tests that fund a wallet from it
+      # and the hardware signer host on 39010-39011 for the hardware signing tests
       # xcodebuild passes TEST_RUNNER_-prefixed variables to the test process without the prefix
       - name: Run CoveUITests
         env:

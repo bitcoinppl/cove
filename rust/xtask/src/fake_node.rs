@@ -246,7 +246,7 @@ fn check_health(control: &str) -> Result<()> {
     Ok(())
 }
 
-fn run_command(command: &[String]) -> Result<()> {
+pub fn run_command(command: &[String]) -> Result<()> {
     let [program, args @ ..] = command else {
         bail!("Command is required after --");
     };

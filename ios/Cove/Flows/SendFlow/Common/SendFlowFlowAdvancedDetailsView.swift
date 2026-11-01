@@ -110,6 +110,7 @@ private struct SendFlowAdvancedDetailsHeader: View {
                     .background(Circle().fill(Color.secondary.opacity(0.15)))
                     .contentShape(Circle())
             }
+            .accessibilityLabel("Close")
             .buttonStyle(.plain)
         }
     }

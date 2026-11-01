@@ -317,7 +317,7 @@ class TapSignerNFC {
 @Observable
 private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     private var tag: NFCISO7816Tag?
-    private var transport: TapCardTransport?
+    private var transport: (any TapcardTransportProtocol)?
     private var activeOperation: TapSignerOperationToken?
     private var command: TapSignerCmd?
     private var tapSignerReader: TapSignerReader?
@@ -345,6 +345,14 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
 
         logger.info("started scanning for \(operationKind(command))")
         isScanning = true
+
+        #if DEBUG
+            if let bridge = UITestTapSignerBridge.configured {
+                startBridgeSession(bridge, operation: operation)
+                return
+            }
+        #endif
+
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
         session?.alertMessage = scanMessage(for: command)
         session?.begin()
@@ -554,10 +562,41 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         session: NFCTagReaderSession,
         operation: TapSignerOperationToken
     ) async {
+        await runReader(
+            transport: TapCardTransport(session: session, tag: tag),
+            session: session,
+            operation: operation
+        )
+    }
+
+    #if DEBUG
+        /// Runs the command against the UI test card emulator instead of an NFC session
+        private func startBridgeSession(
+            _ bridge: UITestTapSignerBridge,
+            operation: TapSignerOperationToken
+        ) {
+            let transport = bridge.transport { message in
+                logger.debug("TAPSIGNER bridge message: \(message)")
+            }
+
+            Task { @MainActor [weak self, operation] in
+                await self?.runReader(transport: transport, session: nil, operation: operation)
+                transport.close()
+            }
+        }
+    #endif
+
+    /// Runs the pending command on a connected card; `session` is nil when no
+    /// NFC session backs the transport
+    @MainActor
+    private func runReader(
+        transport: any TapcardTransportProtocol,
+        session: NFCTagReaderSession?,
+        operation: TapSignerOperationToken
+    ) async {
         guard activeOperation === operation, let command else { return }
 
         do {
-            let transport = TapCardTransport(session: session, tag: tag)
             self.transport = transport
 
             switch tapcard {

@@ -1,14 +1,11 @@
 package org.bitcoinppl.cove.flows.CoinControlFlow
 
-import android.graphics.Rect
 import android.os.Process
 import android.system.Os
-import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
@@ -16,22 +13,25 @@ import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
-import kotlinx.coroutines.runBlocking
-import org.bitcoinppl.cove.AppManager
-import org.bitcoinppl.cove.initialScanComplete
 import org.bitcoinppl.cove.test.AndroidDeviceStayAwakeRule
+import org.bitcoinppl.cove.test.EXTERNAL_ADDRESS
 import org.bitcoinppl.cove.test.FAKE_NODE_ESPLORA_URL
 import org.bitcoinppl.cove.test.FakeNodeBroadcast
 import org.bitcoinppl.cove.test.FakeNodeControl
 import org.bitcoinppl.cove.test.FakeNodeOutPoint
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchStartupRobot
+import org.bitcoinppl.cove.test.FullLaunchWalletRobot
+import org.bitcoinppl.cove.test.TEST_MNEMONIC
+import org.bitcoinppl.cove.test.anyText
 import org.bitcoinppl.cove.test.fullLaunchDevice
+import org.bitcoinppl.cove.test.hierarchy
+import org.bitcoinppl.cove.test.isTappable
 import org.bitcoinppl.cove.test.launchFullApp
-import org.bitcoinppl.cove_core.AppAction
-import org.bitcoinppl.cove_core.Database
-import org.bitcoinppl.cove_core.NodeSelector
-import org.bitcoinppl.cove_core.types.Network
+import org.bitcoinppl.cove.test.parseSats
+import org.bitcoinppl.cove.test.scrollTo
+import org.bitcoinppl.cove.test.waitFor
+import org.bitcoinppl.cove.test.waitForText
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -44,9 +44,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
-import java.io.ByteArrayOutputStream
 import java.io.File
-import java.math.BigDecimal
 import java.util.regex.Pattern
 
 /**
@@ -72,12 +70,6 @@ import java.util.regex.Pattern
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class UtxoLockFullLaunchTest {
     private companion object {
-        val MNEMONIC = List(11) { "abandon" }.plus("about").joinToString(" ")
-
-        // BIP173 test vector: the P2WPKH address of the secp256k1 generator point's public key,
-        // which no account of the abandon ×11 about mnemonic derives
-        const val EXTERNAL_ADDRESS = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx"
-
         const val SATS_A = 100_000L
         const val SATS_B = 60_000L
         const val SATS_C = 30_000L
@@ -86,7 +78,6 @@ class UtxoLockFullLaunchTest {
         const val MARKER_MAX_AGE_MS = 30 * 60 * 1_000L
         const val LOCKED_SELECTION_MESSAGE = "Unlock this UTXO before selecting it."
         const val LOCK_TOGGLE_TAG = "transactionDetails.lockToggle"
-        const val STALE_READ_ATTEMPTS = 5
     }
 
     private data class Coins(
@@ -100,6 +91,7 @@ class UtxoLockFullLaunchTest {
 
     private lateinit var device: UiDevice
     private val node = FakeNodeControl()
+    private val wallet by lazy { FullLaunchWalletRobot(device) }
     private var previousShowImeWithHardKeyboard: String? = null
 
     private val markerFile: File
@@ -136,7 +128,7 @@ class UtxoLockFullLaunchTest {
         // 1. reset app data, launch, and point the app at Signet and the fake node
         launchFullApp()
         FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
-        selectSignetFakeNode()
+        wallet.selectSignetFakeNode()
 
         // 2. import the funded mnemonic and wait for the scan
         FullLaunchOnboardingRobot(device)
@@ -147,7 +139,7 @@ class UtxoLockFullLaunchTest {
             .importKnownEmptyMainnetWalletWords()
             .skipCloudBackupAfterImport()
             .acceptTermsAfterImport()
-        waitForBalance(SATS_A + SATS_B + SATS_C)
+        wallet.waitForBalance(SATS_A + SATS_B + SATS_C)
 
         // 3. lock B from coin control
         openManageUtxos()
@@ -183,7 +175,7 @@ class UtxoLockFullLaunchTest {
 
         // 5. cold relaunch without resetting data; the locks persisted
         launchFullApp(resetData = false)
-        waitForBalance(SATS_A + SATS_B + SATS_C)
+        wallet.waitForBalance(SATS_A + SATS_B + SATS_C)
         openManageUtxos()
         assertLockState(coins.a, locked = false)
         assertLockState(coins.b, locked = true)
@@ -200,7 +192,7 @@ class UtxoLockFullLaunchTest {
         assertTrue("C must stay unspent while locked", !node.isSpent(coins.c))
 
         node.mine()
-        waitForBalance(SATS_B + SATS_C)
+        wallet.waitForBalance(SATS_B + SATS_C)
 
         // 7. unlock B from coin control and C from its transaction details
         openManageUtxos()
@@ -220,9 +212,9 @@ class UtxoLockFullLaunchTest {
 
         // 8. a coin control send spends the unlocked coins
         device.waitFor(By.res("coinControl.continue")).click()
-        enterExternalAddress()
-        clickNext()
-        swipeToSend()
+        wallet.enterAddress()
+        wallet.clickNext()
+        wallet.swipeToSend()
 
         val broadcasts = node.broadcasts()
         assertEquals("expected the Max send and the coin control send", 2, broadcasts.size)
@@ -236,70 +228,12 @@ class UtxoLockFullLaunchTest {
 
     private fun fundWallet(): Coins {
         node.reset()
-        val outputs = node.fundWallet(MNEMONIC, listOf(0 to SATS_A, 1 to SATS_B, 2 to SATS_C))
+        val outputs = node.fundWallet(TEST_MNEMONIC, listOf(0 to SATS_A, 1 to SATS_B, 2 to SATS_C))
         node.mine()
 
         fun outpointFor(sats: Long) = outputs.single { it.sats == sats }.outpoint
 
         return Coins(a = outpointFor(SATS_A), b = outpointFor(SATS_B), c = outpointFor(SATS_C))
-    }
-
-    // onboarding has no route to network or node settings, so this does in process what
-    // Settings → Network and Settings → Node do
-    private fun selectSignetFakeNode() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        var dispatched = false
-        instrumentation.runOnMainSync {
-            dispatched = AppManager.getInstance().dispatch(AppAction.ChangeNetwork(Network.SIGNET))
-        }
-        assertTrue("expected the network change to dispatch", dispatched)
-
-        runBlocking {
-            NodeSelector().use { selector ->
-                val node = selector.parseCustomNode(FAKE_NODE_ESPLORA_URL, "Custom Esplora", "Fake node")
-                selector.checkAndSaveNode(node)
-            }
-        }
-
-        Database().globalConfig().use { config ->
-            assertEquals(Network.SIGNET, config.selectedNetwork())
-            assertEquals(FAKE_NODE_ESPLORA_URL, config.selectedNode().url.trimEnd('/'))
-        }
-    }
-
-    // coin control and send refuse to open until the initial full scan completes, which can finish
-    // after the balance first shows
-    private fun waitForBalance(sats: Long) {
-        val deadline = System.currentTimeMillis() + 90_000L
-        var lastText: String? = null
-
-        while (System.currentTimeMillis() < deadline) {
-            dismissWalletSelectionSheetIfShown()
-
-            // the balance renders only after bootstrap, before which AppManager can't be read
-            val shown = device.findText(By.res("selectedWallet.balance"))
-            if (shown != null) lastText = shown
-            if (shown?.let(::parseSats) == sats && isInitialScanComplete()) return
-
-            Thread.sleep(250)
-        }
-
-        error("Timed out waiting for a balance of $sats sats after the initial scan, last shown \"$lastText\"\n${device.hierarchy()}")
-    }
-
-    private fun isInitialScanComplete(): Boolean {
-        var complete = false
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            complete = AppManager.getInstance().walletManager?.ledgerState?.initialScanComplete == true
-        }
-
-        return complete
-    }
-
-    // the import can offer other address types when they have history; the fake node gives them none,
-    // but keep the native segwit wallet if the sheet shows anyway
-    private fun dismissWalletSelectionSheetIfShown() {
-        device.findObject(By.text("Keep Current"))?.click()
     }
 
     private fun openManageUtxos() {
@@ -497,96 +431,17 @@ class UtxoLockFullLaunchTest {
     }
 
     private fun sendMaxToExternalAddress() {
-        // Max lives in a toolbar shown only while the soft keyboard is up, which an emulator with a
-        // hardware keyboard hides unless this is set. It stays off until here because the onboarding
-        // robot dismisses a visible keyboard with Back, which can race the import screen
-        device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 1")
+        wallet.startSend()
+        val maxSats = wallet.tapMax()
+        assertTrue("Max filled $maxSats sats, more than unlocked A can cover", maxSats in 1 until SATS_A)
 
-        device.waitFor(By.text("Send")).click()
-        enterExternalAddress()
-
-        device.waitFor(By.res("sendFlow.amount")).click()
-        device.waitFor(By.res("sendFlow.max")).click()
-        waitUntil("expected Max to fill in the amount") {
-            device.findText(By.res("sendFlow.amount"))?.any { it in '1'..'9' } == true
-        }
-
-        // the field shows the number alone, with the unit beside it; a BTC amount always has a point here
-        val maxText = device.waitForText(By.res("sendFlow.amount")).orEmpty()
-        val maxNumber = BigDecimal(maxText.filter { it.isDigit() || it == '.' })
-        val maxSats = if ('.' in maxText) maxNumber.movePointRight(8).longValueExact() else maxNumber.longValueExact()
-        assertTrue("Max filled \"$maxText\", more than unlocked A can cover", maxSats in 1 until SATS_A)
-
-        clickNext()
-        swipeToSend()
-    }
-
-    private fun enterExternalAddress() {
-        // the send screen opens with the amount focused, and the keyboard sliding in can move the
-        // address field out from under a tap; tapping again is harmless once it has focus
-        for (attempt in 1..3) {
-            device.waitForIdle()
-            device.scrollTo(By.res("sendFlow.address")).click()
-            if (device.wait(Until.hasObject(By.res("sendFlow.address").focused(true)), 3_000L)) break
-        }
-
-        device.waitFor(By.res("sendFlow.address").focused(true))
-        device.findObject(By.res("sendFlow.address")).text = EXTERNAL_ADDRESS
-
-        // once the address is accepted the field can lose focus and show it in groups of four
-        waitUntil("expected the address field to hold the external address") {
-            try {
-                device.findObjects(By.textStartsWith("tb1q")).any { node ->
-                    node.text?.filterNot { it.isWhitespace() } == EXTERNAL_ADDRESS
-                }
-            } catch (_: StaleObjectException) {
-                false
-            }
-        }
-    }
-
-    private fun clickNext() {
-        dismissKeyboard()
-        device.scrollTo(By.res("sendFlow.next")).click()
-        device.waitFor(By.res("sendFlowConfirm.swipeToSend"), timeoutMs = 30_000L)
-    }
-
-    private fun swipeToSend() {
-        val track = device.waitFor(By.res("sendFlowConfirm.swipeToSend")).visibleBounds
-        device.swipe(track.left + 40, track.centerY(), track.right - 4, track.centerY(), 40)
-
-        device.waitFor(By.text("Transaction sent successfully!"), timeoutMs = 60_000L)
-        device.waitFor(By.text("OK")).click()
-        device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
+        wallet.clickNext()
+        wallet.swipeToSend()
     }
 
     private fun assertSendsOnlyToExternalAddress(broadcast: FakeNodeBroadcast) {
         assertEquals("a Max send has no change output", 1, broadcast.outputs.size)
         assertEquals(EXTERNAL_ADDRESS, broadcast.outputs.single().address)
-    }
-
-    private fun dismissKeyboard() {
-        if (!isImeVisible()) return
-
-        device.pressBack()
-        waitUntil("expected the keyboard to close") { !isImeVisible() }
-    }
-
-    private fun isImeVisible(): Boolean {
-        var visible = false
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            visible =
-                ActivityLifecycleMonitorRegistry
-                    .getInstance()
-                    .getActivitiesInStage(Stage.RESUMED)
-                    .firstOrNull()
-                    ?.window
-                    ?.decorView
-                    ?.rootWindowInsets
-                    ?.isVisible(WindowInsets.Type.ime()) == true
-        }
-
-        return visible
     }
 
     private fun writeMarker(coins: Coins) {
@@ -626,116 +481,4 @@ class UtxoLockFullLaunchTest {
             c = FakeNodeOutPoint.parse(marker.getString("c")),
         )
     }
-
-    // amounts show as e.g. "130,000 SATS" or "0.0013 BTC" depending on the wallet's unit
-    private fun parseSats(text: String): Long? {
-        val digits = text.filter { it.isDigit() || it == '.' }
-        if (digits.isEmpty()) return null
-
-        return when {
-            text.contains("BTC", ignoreCase = true) -> BigDecimal(digits).movePointRight(8).longValueExact()
-            text.contains("SAT", ignoreCase = true) -> digits.toLongOrNull()
-            else -> null
-        }
-    }
-
-    private fun waitUntil(
-        message: String,
-        timeoutMs: Long = 20_000L,
-        condition: () -> Boolean,
-    ) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) return
-
-            Thread.sleep(100)
-        }
-
-        assertTrue("$message\n${device.hierarchy()}", condition())
-    }
-
-    private fun UiDevice.waitFor(
-        selector: BySelector,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 = wait(Until.findObject(selector), timeoutMs) ?: error("Timed out waiting for $selector\n${hierarchy()}")
-
-    private fun UiDevice.scrollTo(
-        selector: BySelector,
-        timeoutMs: Long = 20_000L,
-    ): UiObject2 {
-        val deadline = System.currentTimeMillis() + timeoutMs
-
-        while (System.currentTimeMillis() < deadline) {
-            findObject(selector)?.let { node ->
-                if (isTappable(node)) {
-                    settledObject(selector)?.takeIf { isTappable(it) }?.let { return it }
-                }
-            }
-
-            swipe(displayWidth / 2, displayHeight * 2 / 3, displayWidth / 2, displayHeight / 3, 20)
-            Thread.sleep(250)
-        }
-
-        error("Timed out scrolling to $selector\n${hierarchy()}")
-    }
-
-    // a tap in the 48dp gesture navigation strip goes to the system instead of the app
-    private fun UiDevice.isTappable(node: UiObject2): Boolean {
-        val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
-
-        return node.visibleBounds.bottom <= displayHeight - (48 * density).toInt()
-    }
-
-    // a swipe keeps flinging after it ends, and a tap on a moving node lands on whatever scrolls under it
-    private fun UiDevice.settledObject(selector: BySelector): UiObject2? {
-        var lastBounds: Rect? = null
-
-        repeat(10) {
-            val node = findObject(selector) ?: return null
-            val bounds =
-                try {
-                    node.visibleBounds
-                } catch (_: StaleObjectException) {
-                    null
-                }
-
-            if (bounds != null && bounds == lastBounds) return node
-
-            lastBounds = bounds
-            Thread.sleep(200)
-        }
-
-        return null
-    }
-
-    // a tag on a layout wrapper puts the text on a child node
-    private fun UiObject2.anyText(): String? = text ?: children.firstNotNullOfOrNull { it.anyText() }
-
-    // a recomposition can replace a node between finding and reading it, which UiAutomator reports
-    // as stale, so these find the node again instead of failing on a slow device
-    private fun UiDevice.findText(selector: BySelector): String? =
-        try {
-            findObject(selector)?.anyText()
-        } catch (_: StaleObjectException) {
-            null
-        }
-
-    private fun UiDevice.waitForText(selector: BySelector): String? {
-        repeat(STALE_READ_ATTEMPTS - 1) {
-            try {
-                return waitFor(selector).anyText()
-            } catch (_: StaleObjectException) {
-                Thread.sleep(100)
-            }
-        }
-
-        return waitFor(selector).anyText()
-    }
-
-    private fun UiDevice.hierarchy(): String =
-        ByteArrayOutputStream().use { output ->
-            dumpWindowHierarchy(output)
-            output.toString(Charsets.UTF_8.name()).take(120_000)
-        }
 }

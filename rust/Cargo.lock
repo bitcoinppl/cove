@@ -6535,6 +6535,8 @@ dependencies = [
  "hex",
  "image",
  "jsonwebtoken",
+ "memchr",
+ "parking_lot",
  "qrcode",
  "reqwest 0.13.3",
  "serde",

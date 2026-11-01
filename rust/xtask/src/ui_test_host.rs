@@ -1,0 +1,671 @@
+//! Host services for UI tests that sign with a hardware wallet
+//!
+//! Debug builds of the app have two test seams: the QR scanner can read frames
+//! from a script file instead of the camera, and TAPSIGNER commands can go to a
+//! TCP bridge instead of an NFC session. This module serves the host side of
+//! both on fixed ports, reachable from the iOS simulator over the shared
+//! loopback and from Android through `adb reverse`:
+//!
+//! - [`CONTROL_PORT`]: a JSON API. `POST /sign-psbt` signs a PSBT the way a
+//!   hardware wallet would and returns it as UR and BBQr frames for the QR
+//!   seam, `/unrelated-psbt` signs one that matches no draft, and
+//!   `/watch-only-descriptor` returns the account a hardware wallet exports.
+//!   `/simulator-pasteboard` reads an iOS simulator's pasteboard. The
+//!   `/tapsigner/...` routes start the card emulator and inject dropped sessions
+//! - [`BRIDGE_PORT`]: the TAPSIGNER bridge. Each APDU arrives as a frame with a
+//!   4-byte big-endian length, goes to Coinkite's `ecard.py` emulator, and the
+//!   card's response goes back the same way. Closing the connection is how a
+//!   dropped NFC session looks to the app
+
+use std::{
+    env,
+    fs::{self, File},
+    io::{self, BufRead, BufReader, Read, Write},
+    net::{Shutdown, TcpListener, TcpStream},
+    os::unix::net::UnixStream,
+    path::{Path, PathBuf},
+    process::{Child, Command, Stdio},
+    sync::Arc,
+    thread,
+    time::{Duration, Instant},
+};
+
+use base64::{engine::general_purpose::STANDARD, Engine};
+use bdk_wallet::KeychainKind;
+use bip39::Mnemonic;
+use bitcoin::{
+    absolute::LockTime, hashes::Hash, transaction, Amount, FeeRate, OutPoint, Psbt, Transaction,
+    TxIn, TxOut, Txid,
+};
+use clap::Subcommand;
+use color_eyre::{
+    eyre::{bail, eyre, Context},
+    Result,
+};
+use parking_lot::Mutex;
+use serde::Deserialize;
+use serde_json::{json, Value};
+
+use crate::{
+    android_device::AndroidDevice,
+    common::{command_exists, print_info, print_success, print_warning},
+    fake_node::{AndroidPorts, FakeNodeGuard},
+    util,
+};
+
+pub const CONTROL_PORT: u16 = 39010;
+pub const BRIDGE_PORT: u16 = 39011;
+const PORTS: [u16; 2] = [CONTROL_PORT, BRIDGE_PORT];
+
+/// The emulator derives every key from this seed, so the card and its wallet
+/// are the same on every run
+const EMULATOR_RNG_SEED: &str = "1337";
+const EMULATOR_START_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Python packages `ecard.py` imports
+const EMULATOR_PACKAGES: [&str; 7] =
+    ["cbor2==5.4.6", "hexdump", "wallycore", "bech32==1.2.0", "base58", "click", "cryptography"];
+
+// rust-cktap opens every session with this applet SELECT; the emulator has no
+// applet, so the bridge answers it with a status command as a real card does
+const SELECT_APDU: &[u8] = b"\x00\xa4\x04\x00\x0f\xf0CoinkiteCARDv1";
+const STATUS_REQUEST: &[u8] = b"\xa1\x63cmd\x66status";
+const CBOR_APDU_HEADER: &[u8] = &[0x00, 0xcb, 0x00, 0x00];
+const STATUS_OK: [u8; 2] = [0x90, 0x00];
+const INSTRUCTION_NOT_SUPPORTED: [u8; 2] = [0x6d, 0x00];
+
+#[derive(Subcommand)]
+pub enum UiTestHostCommand {
+    /// Start the fake node and the hardware signer services, run a command, then stop them
+    Run {
+        /// Forward the ports to Android with adb reverse and fail when no device is connected. Without it, ports are forwarded only to devices adb already lists
+        #[arg(long)]
+        android: bool,
+
+        /// Command and arguments to run after --, from the current directory
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
+}
+
+pub fn run(command: UiTestHostCommand) -> Result<()> {
+    match command {
+        UiTestHostCommand::Run { android, command } => {
+            let android = if android { AndroidPorts::Required } else { AndroidPorts::IfConnected };
+            let _host = UiTestHost::start(android)?;
+
+            crate::fake_node::run_command(&command)
+        }
+    }
+}
+
+/// Everything the full-launch UI tests reach on the host; dropping it stops them
+pub struct UiTestHost {
+    // the signer stops first so its forwards go before the node's
+    _signer: HardwareSignerGuard,
+    _node: FakeNodeGuard,
+}
+
+impl UiTestHost {
+    pub fn start(android: AndroidPorts) -> Result<Self> {
+        let node = FakeNodeGuard::start(android)?;
+        let signer = HardwareSignerGuard::start(android)?;
+
+        Ok(Self { _signer: signer, _node: node })
+    }
+}
+
+/// The control API and TAPSIGNER bridge; dropping it removes the port forwards
+/// and stops the card emulator
+///
+/// The servers run on threads of this process, which ends with the test run
+pub struct HardwareSignerGuard {
+    state: Arc<SignerState>,
+    forwarded: Vec<AndroidDevice>,
+}
+
+impl HardwareSignerGuard {
+    pub fn start(android: AndroidPorts) -> Result<Self> {
+        let state = Arc::new(SignerState::default());
+
+        let control = TcpListener::bind(("127.0.0.1", CONTROL_PORT)).wrap_err_with(|| {
+            format!("Failed to listen on {CONTROL_PORT}; is another test run using it?")
+        })?;
+        let bridge = TcpListener::bind(("127.0.0.1", BRIDGE_PORT)).wrap_err_with(|| {
+            format!("Failed to listen on {BRIDGE_PORT}; is another test run using it?")
+        })?;
+
+        spawn_server(control, state.clone(), serve_control);
+        spawn_server(bridge, state.clone(), serve_bridge);
+        print_success(&format!(
+            "Hardware signer up: control http://127.0.0.1:{CONTROL_PORT}, TAPSIGNER bridge 127.0.0.1:{BRIDGE_PORT}"
+        ));
+
+        let mut guard = Self { state, forwarded: Vec::new() };
+        guard.forward_to_android(android)?;
+
+        Ok(guard)
+    }
+
+    fn forward_to_android(&mut self, android: AndroidPorts) -> Result<()> {
+        if android == AndroidPorts::Skip || !command_exists("adb") {
+            return Ok(());
+        }
+
+        // the fake node guard already rejected a missing or ambiguous device
+        for device in AndroidDevice::list_targeted()? {
+            self.forwarded.push(device.clone());
+            for port in PORTS {
+                device.reverse_port(port)?;
+            }
+
+            print_info(&format!("Forwarded hardware signer ports to {}", device.description()));
+        }
+
+        Ok(())
+    }
+}
+
+impl Drop for HardwareSignerGuard {
+    fn drop(&mut self) {
+        for device in self.forwarded.drain(..) {
+            for port in PORTS {
+                if let Err(error) = device.remove_reverse_port(port) {
+                    print_warning(&format!("{error}"));
+                }
+            }
+        }
+
+        if let Some(mut emulator) = self.state.emulator.lock().take() {
+            emulator.stop();
+        }
+    }
+}
+
+#[derive(Default)]
+struct SignerState {
+    emulator: Mutex<Option<CardEmulator>>,
+    // the next bridge session closes after this many exchanges
+    drop_after: Mutex<Option<u32>>,
+}
+
+fn spawn_server(
+    listener: TcpListener,
+    state: Arc<SignerState>,
+    serve: fn(TcpStream, &SignerState) -> Result<()>,
+) {
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(stream) = stream else { continue };
+            let state = state.clone();
+
+            thread::spawn(move || {
+                if let Err(error) = serve(stream, &state) {
+                    print_warning(&format!("Hardware signer: {error:#}"));
+                }
+            });
+        }
+    });
+}
+
+// ----------------------------------------------------------------------------
+// Control API
+// ----------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SignPsbtRequest {
+    /// The unsigned PSBT as base64 or hex
+    psbt: String,
+    mnemonic: String,
+    #[serde(default = "default_network")]
+    network: String,
+    /// Split the signed PSBT into at least this many UR and BBQr frames, so a
+    /// test can scan an animated QR
+    #[serde(default = "default_min_parts")]
+    min_parts: usize,
+}
+
+fn default_network() -> String {
+    "signet".to_string()
+}
+
+fn default_min_parts() -> usize {
+    1
+}
+
+/// A signed PSBT that spends a made-up output, so it matches no transaction
+/// the app drafted
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UnrelatedPsbtRequest {
+    mnemonic: String,
+    #[serde(default = "default_network")]
+    network: String,
+    #[serde(default = "default_min_parts")]
+    min_parts: usize,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WalletRequest {
+    mnemonic: String,
+    #[serde(default = "default_network")]
+    network: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PasteboardRequest {
+    /// The simulator's UDID, which the XCUITest runner reads from `SIMULATOR_UDID`
+    udid: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DropRequest {
+    after_exchanges: u32,
+}
+
+fn serve_control(stream: TcpStream, state: &SignerState) -> Result<()> {
+    let mut reader = BufReader::new(stream.try_clone()?);
+    let (method, path, body) = read_http_request(&mut reader)?;
+
+    let (status, body) = match route(state, &method, &path, &body) {
+        Ok(value) => (200, value),
+        Err(error) => (400, json!({ "error": format!("{error:#}") })),
+    };
+
+    write_http_response(stream, status, &body)
+}
+
+fn route(state: &SignerState, method: &str, path: &str, body: &[u8]) -> Result<Value> {
+    match (method, path) {
+        ("GET", "/health") => Ok(json!({ "ok": true })),
+        ("POST", "/sign-psbt") => sign_psbt(serde_json::from_slice(body)?),
+        ("POST", "/unrelated-psbt") => unrelated_psbt(serde_json::from_slice(body)?),
+        ("POST", "/watch-only-descriptor") => watch_only_descriptor(serde_json::from_slice(body)?),
+        ("POST", "/simulator-pasteboard") => simulator_pasteboard(serde_json::from_slice(body)?),
+        ("POST", "/tapsigner/start") => {
+            let mut emulator = state.emulator.lock();
+            if let Some(mut old) = emulator.take() {
+                old.stop();
+            }
+
+            *state.drop_after.lock() = None;
+            *emulator = Some(CardEmulator::start()?);
+            Ok(json!({ "ok": true }))
+        }
+        ("POST", "/tapsigner/drop") => {
+            let request: DropRequest = serde_json::from_slice(body)?;
+            *state.drop_after.lock() = Some(request.after_exchanges);
+            Ok(json!({ "ok": true }))
+        }
+        _ => Err(eyre!("No route for {method} {path}")),
+    }
+}
+
+fn sign_psbt(request: SignPsbtRequest) -> Result<Value> {
+    let network = util::parse_network(&request.network)?;
+    let mnemonic = Mnemonic::parse(&request.mnemonic).wrap_err("Invalid mnemonic")?;
+
+    let input = request.psbt.trim();
+    let bytes = match hex::decode(input) {
+        Ok(bytes) => bytes,
+        Err(_) => STANDARD.decode(input).wrap_err("The PSBT is neither hex nor base64")?,
+    };
+
+    let mut psbt = Psbt::deserialize(&bytes).wrap_err("Failed to parse the PSBT")?;
+    let wallet = util::bip84_signing_wallet(&mnemonic, network)?;
+    if !util::sign_without_finalizing(&wallet, &mut psbt)? {
+        bail!("The mnemonic owns none of the PSBT's inputs");
+    }
+
+    signed_frames(&psbt, request.min_parts)
+}
+
+fn unrelated_psbt(request: UnrelatedPsbtRequest) -> Result<Value> {
+    let network = util::parse_network(&request.network)?;
+    let mnemonic = Mnemonic::parse(&request.mnemonic).wrap_err("Invalid mnemonic")?;
+    let mut wallet = util::bip84_signing_wallet(&mnemonic, network)?;
+    let address = wallet.reveal_next_address(KeychainKind::External).address;
+
+    // no node has seen this funding transaction, so no app draft can spend it
+    let funding = Transaction {
+        version: transaction::Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: vec![TxIn {
+            previous_output: OutPoint::new(Txid::from_byte_array([0x42; 32]), 0),
+            ..TxIn::default()
+        }],
+        output: vec![TxOut {
+            value: Amount::from_sat(50_000),
+            script_pubkey: address.script_pubkey(),
+        }],
+    };
+    wallet.apply_unconfirmed_txs([(funding, 0)]);
+
+    let mut builder = wallet.build_tx();
+    builder
+        .drain_wallet()
+        .drain_to(address.script_pubkey())
+        .fee_rate(FeeRate::from_sat_per_vb_u32(2));
+    let mut psbt = builder.finish().wrap_err("Failed to build the unrelated PSBT")?;
+
+    if !util::sign_without_finalizing(&wallet, &mut psbt)? {
+        bail!("Failed to sign the unrelated PSBT");
+    }
+
+    signed_frames(&psbt, request.min_parts)
+}
+
+/// The account a hardware wallet exports for the mnemonic, with key origin
+fn watch_only_descriptor(request: WalletRequest) -> Result<Value> {
+    let network = util::parse_network(&request.network)?;
+    let mnemonic = Mnemonic::parse(&request.mnemonic).wrap_err("Invalid mnemonic")?;
+    let wallet = util::bip84_signing_wallet(&mnemonic, network)?;
+
+    Ok(json!({
+        "external": wallet.public_descriptor(KeychainKind::External).to_string(),
+        "internal": wallet.public_descriptor(KeychainKind::Internal).to_string(),
+    }))
+}
+
+/// Reads the simulator's pasteboard from the host, so the XCUITest runner
+/// doesn't trigger the paste permission prompt by reading it itself
+fn simulator_pasteboard(request: PasteboardRequest) -> Result<Value> {
+    let output = Command::new("xcrun")
+        .args(["simctl", "pbpaste", &request.udid])
+        .output()
+        .wrap_err("Failed to run simctl pbpaste")?;
+
+    if !output.status.success() {
+        bail!("simctl pbpaste failed: {}", String::from_utf8_lossy(&output.stderr).trim());
+    }
+
+    Ok(json!({ "text": String::from_utf8(output.stdout).wrap_err("The pasteboard is not UTF-8")? }))
+}
+
+fn signed_frames(psbt: &Psbt, min_parts: usize) -> Result<Value> {
+    let signed = psbt.serialize();
+    Ok(json!({
+        "psbt": STANDARD.encode(&signed),
+        "ur": util::ur_parts(&signed, min_parts)?,
+        "bbqr": util::bbqr_parts(&signed, min_parts)?,
+    }))
+}
+
+fn read_http_request(reader: &mut impl BufRead) -> Result<(String, String, Vec<u8>)> {
+    let mut request_line = String::new();
+    reader.read_line(&mut request_line)?;
+
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().ok_or_else(|| eyre!("Empty HTTP request"))?.to_string();
+    let path = parts.next().ok_or_else(|| eyre!("HTTP request has no path"))?.to_string();
+
+    let mut content_length = 0;
+    loop {
+        let mut header = String::new();
+        reader.read_line(&mut header)?;
+
+        let header = header.trim_end();
+        if header.is_empty() {
+            break;
+        }
+
+        if let Some((name, value)) = header.split_once(':') {
+            if name.eq_ignore_ascii_case("content-length") {
+                content_length = value.trim().parse().wrap_err("Invalid Content-Length")?;
+            }
+        }
+    }
+
+    let mut body = vec![0; content_length];
+    reader.read_exact(&mut body)?;
+
+    Ok((method, path, body))
+}
+
+fn write_http_response(mut stream: TcpStream, status: u16, body: &Value) -> Result<()> {
+    let body = body.to_string();
+    let reason = if status == 200 { "OK" } else { "Bad Request" };
+
+    write!(
+        stream,
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    )?;
+
+    Ok(stream.flush()?)
+}
+
+// ----------------------------------------------------------------------------
+// TAPSIGNER bridge
+// ----------------------------------------------------------------------------
+
+/// One app NFC session: APDU frames in, card responses out, until the app closes it
+fn serve_bridge(mut stream: TcpStream, state: &SignerState) -> Result<()> {
+    let drop_after = state.drop_after.lock().take();
+    let mut exchanges = 0;
+
+    while let Some(apdu) = read_frame(&mut stream)? {
+        if drop_after == Some(exchanges) {
+            print_info(&format!(
+                "TAPSIGNER bridge: dropping the session after {exchanges} exchanges"
+            ));
+            stream.shutdown(Shutdown::Both)?;
+            return Ok(());
+        }
+
+        let response = exchange(state, &apdu)?;
+        write_frame(&mut stream, &response)?;
+        exchanges += 1;
+    }
+
+    Ok(())
+}
+
+/// Send one APDU to the emulator and return the response with its status word
+fn exchange(state: &SignerState, apdu: &[u8]) -> Result<Vec<u8>> {
+    let request = if apdu == SELECT_APDU {
+        STATUS_REQUEST
+    } else if apdu.starts_with(CBOR_APDU_HEADER)
+        && apdu.len() > 5
+        && usize::from(apdu[4]) == apdu.len() - 5
+    {
+        &apdu[5..]
+    } else {
+        return Ok(INSTRUCTION_NOT_SUPPORTED.to_vec());
+    };
+
+    // holding the lock serializes card commands, as one card would
+    let emulator = state.emulator.lock();
+    let emulator = emulator
+        .as_ref()
+        .ok_or_else(|| eyre!("The test sent a TAPSIGNER command before POST /tapsigner/start"))?;
+
+    let mut card = UnixStream::connect(&emulator.socket).wrap_err_with(|| {
+        format!("Failed to reach the emulator at {}", emulator.socket.display())
+    })?;
+    card.write_all(request)?;
+
+    // the emulator answers each request with one CBOR value and closes the
+    // connection once our side is done writing, so the response ends at EOF
+    card.shutdown(Shutdown::Write)?;
+    let mut response = Vec::new();
+    card.read_to_end(&mut response)?;
+
+    response.extend_from_slice(&STATUS_OK);
+    Ok(response)
+}
+
+fn read_frame(stream: &mut TcpStream) -> Result<Option<Vec<u8>>> {
+    let mut length = [0; 4];
+    match stream.read_exact(&mut length) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
+        Err(error) => return Err(error.into()),
+    }
+
+    let mut frame = vec![0; u32::from_be_bytes(length) as usize];
+    stream.read_exact(&mut frame)?;
+
+    Ok(Some(frame))
+}
+
+fn write_frame(stream: &mut TcpStream, frame: &[u8]) -> Result<()> {
+    let length = u32::try_from(frame.len()).wrap_err("Frame is too large")?;
+    stream.write_all(&length.to_be_bytes())?;
+    stream.write_all(frame)?;
+
+    Ok(stream.flush()?)
+}
+
+// ----------------------------------------------------------------------------
+// Card emulator
+// ----------------------------------------------------------------------------
+
+/// A running `ecard.py` TAPSIGNER, already set up with factory CVC 123456
+struct CardEmulator {
+    child: Child,
+    socket: PathBuf,
+}
+
+impl CardEmulator {
+    fn start() -> Result<Self> {
+        let python = emulator_python()?;
+        let script = ecard_script()?;
+
+        // Unix socket paths are limited to about 100 bytes, which rules out the
+        // per-user temporary directory on macOS
+        let socket = PathBuf::from(format!("/tmp/cove-ecard-{}.sock", std::process::id()));
+        if socket.exists() {
+            fs::remove_file(&socket)?;
+        }
+
+        let log_path = host_dir()?.join("ecard.log");
+        let log = File::create(&log_path)?;
+        let child = Command::new(&python)
+            .arg(&script)
+            .args(["--rng-seed", EMULATOR_RNG_SEED, "emulate", "--tapsigner", "--pipe"])
+            .arg(&socket)
+            .env("PYTHONUNBUFFERED", "1")
+            .stdout(log.try_clone()?)
+            .stderr(log)
+            .spawn()
+            .wrap_err_with(|| format!("Failed to start {}", script.display()))?;
+
+        let mut emulator = Self { child, socket };
+        let deadline = Instant::now() + EMULATOR_START_TIMEOUT;
+        while !emulator.socket.exists() {
+            if let Some(status) = emulator.child.try_wait()? {
+                bail!("ecard.py exited with {status}; see {}", log_path.display());
+            }
+
+            if Instant::now() > deadline {
+                emulator.stop();
+                bail!(
+                    "ecard.py did not listen within {EMULATOR_START_TIMEOUT:?}; see {}",
+                    log_path.display()
+                );
+            }
+
+            thread::sleep(Duration::from_millis(100));
+        }
+
+        print_info(&format!("TAPSIGNER emulator listening on {}", emulator.socket.display()));
+        Ok(emulator)
+    }
+
+    fn stop(&mut self) {
+        if let Err(error) = self.child.kill().and_then(|()| self.child.wait().map(drop)) {
+            print_warning(&format!("Failed to stop ecard.py: {error}"));
+        }
+
+        let _ = fs::remove_file(&self.socket);
+    }
+}
+
+/// A directory under the cargo target dir for the emulator's venv and log
+fn host_dir() -> Result<PathBuf> {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("xtask is in rust/");
+    let dir = workspace.join("target").join("ui-test-host");
+    fs::create_dir_all(&dir)?;
+
+    Ok(dir)
+}
+
+/// `COVE_ECARD_PYTHON`, or a uv-managed venv with the emulator's packages
+fn emulator_python() -> Result<PathBuf> {
+    if let Some(python) = env::var_os("COVE_ECARD_PYTHON") {
+        return Ok(PathBuf::from(python));
+    }
+
+    let venv = host_dir()?.join("ecard-venv");
+    let python = venv.join("bin").join("python");
+    if python.exists() {
+        return Ok(python);
+    }
+
+    if !command_exists("uv") {
+        bail!("The TAPSIGNER emulator needs uv to build its Python environment, or COVE_ECARD_PYTHON set to a Python with its packages");
+    }
+
+    print_info("Creating the TAPSIGNER emulator's Python environment");
+
+    // wallycore publishes wheels for released Pythons only, so pin one rather
+    // than build it from source
+    let status =
+        Command::new("uv").args(["venv", "--quiet", "--python", "3.12"]).arg(&venv).status()?;
+    if !status.success() {
+        bail!("uv venv failed with {status}");
+    }
+
+    let status = Command::new("uv")
+        .args(["pip", "install", "--quiet", "--python"])
+        .arg(&python)
+        .args(EMULATOR_PACKAGES)
+        .status()?;
+    if !status.success() {
+        // a half-built venv would be reused next time
+        fs::remove_dir_all(&venv)?;
+        bail!("Installing the emulator's packages failed with {status}");
+    }
+
+    Ok(python)
+}
+
+/// The `ecard.py` that ships in the rust-cktap checkout Cargo.lock pins
+fn ecard_script() -> Result<PathBuf> {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("xtask is in rust/");
+    let output = Command::new("cargo")
+        .args(["metadata", "--format-version", "1", "--locked"])
+        .current_dir(workspace)
+        .stderr(Stdio::inherit())
+        .output()
+        .wrap_err("Failed to run cargo metadata")?;
+    if !output.status.success() {
+        bail!("cargo metadata failed");
+    }
+
+    let metadata: Value = serde_json::from_slice(&output.stdout)?;
+    let manifest = metadata["packages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|package| package["name"] == "rust-cktap")
+        .and_then(|package| package["manifest_path"].as_str())
+        .ok_or_else(|| eyre!("rust-cktap is not in the dependency graph"))?;
+
+    // the crate lives in lib/, beside the coinkite-tap-proto submodule
+    let checkout = Path::new(manifest)
+        .ancestors()
+        .nth(2)
+        .ok_or_else(|| eyre!("Unexpected rust-cktap manifest path {manifest}"))?;
+    let script = checkout.join("coinkite/coinkite-tap-proto/emulator/ecard.py");
+    if !script.exists() {
+        bail!("{} is missing; the rust-cktap checkout has no emulator submodule", script.display());
+    }
+
+    Ok(script)
+}

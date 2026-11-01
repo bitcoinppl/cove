@@ -1,4 +1,6 @@
 pub mod tap_signer_reader;
+#[cfg(debug_assertions)]
+mod ui_test_emulator;
 
 use rust_cktap::{CkTapError as CkTapTransportError, CkTransport};
 use std::{fmt::Debug, sync::Arc};

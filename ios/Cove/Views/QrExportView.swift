@@ -137,6 +137,7 @@ private struct QrExportHeader: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Copy")
                 .padding(.trailing, 4)
             }
         }
