@@ -3621,6 +3621,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_xpuberror_uniffi_trait_display(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_walletmetadata_ident_or_fingerprint(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_walletmetadata_is_equal(`ptr`: RustBuffer.ByValue,`other`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_walletmetadata_stablehash(`ptr`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -35872,6 +35874,20 @@ data class WalletMetadata (
     var `internal`: InternalOnlyMetadata
 
 ): Disposable{
+
+    /**
+     * Identity line shown above the wallet name: the TAPSIGNER card ident for TAPSIGNER
+     * wallets, otherwise the uppercase master fingerprint
+     */ fun `identOrFingerprint`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_walletmetadata_ident_or_fingerprint(FfiConverterTypeWalletMetadata.lower(this),
+        _status)
+}
+    )
+    }
+
+
      fun `isEqual`(`other`: WalletMetadata): kotlin.Boolean {
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->

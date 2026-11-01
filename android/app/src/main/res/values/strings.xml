@@ -155,7 +155,6 @@
     <string name="label_enter_address">Enter address</string>
     <string name="label_where_send_to">Where do you want to send to?</string>
     <string name="label_account">Account</string>
-    <string name="label_main">Main</string>
     <string name="btn_change_speed">Change speed</string>
     <string name="label_total_spending">Total Spending</string>
     <string name="label_you_are_sending">You\'re sending</string>

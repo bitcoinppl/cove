@@ -414,11 +414,6 @@ private fun SendFlowRouteToScreen(
                 sendingDenomination = walletManager.unit,
                 dollarEquivalentText = sendFlowManager.sendAmountFiat,
                 initialAddress = sendFlowManager.enteringAddress,
-                accountShort =
-                    walletManager.walletMetadata
-                        ?.masterFingerprint
-                        ?.asUppercase()
-                        ?.take(8) ?: "",
                 feeEta =
                     sendFlowManager.selectedFeeRate?.let {
                         when (it.feeSpeed()) {

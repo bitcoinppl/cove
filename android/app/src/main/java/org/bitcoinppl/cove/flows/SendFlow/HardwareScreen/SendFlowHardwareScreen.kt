@@ -55,6 +55,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowAccountSection
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.title3
@@ -237,7 +238,7 @@ fun SendFlowHardwareScreen(
                             )
                         }
 
-                        AccountSection(metadata)
+                        SendFlowAccountSection(metadata)
 
                         HorizontalDivider()
 
