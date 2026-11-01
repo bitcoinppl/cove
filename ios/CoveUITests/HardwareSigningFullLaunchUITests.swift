@@ -267,12 +267,13 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
         formatButton.tap()
         XCTAssertTrue(formatButton.isSelected)
 
-        app.tapButton(named: "Copy")
-        XCTAssertTrue(app.staticTexts["Copied"].waitForExistence(timeout: 5))
-
+        // the "Copied" popup shows for only two seconds, which a slow CI simulator's existence
+        // checks can miss, so wait on the pasteboard itself
         let psbt: String
         do {
-            psbt = try signer.simulatorPasteboard().trimmingCharacters(in: .whitespacesAndNewlines)
+            let previous = try copiedText()
+            app.tapButton(named: "Copy")
+            psbt = try waitForCopiedText(changingFrom: previous, timeout: 15)
         } catch {
             XCTFail("couldn't read the copied PSBT: \(error)")
             return ""
@@ -285,6 +286,23 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Import Signature"].waitForExistence(timeout: 10))
 
         return psbt
+    }
+
+    private func copiedText() throws -> String {
+        try signer.simulatorPasteboard().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Polls the simulator pasteboard until it holds new text, returning empty text on timeout
+    private func waitForCopiedText(changingFrom previous: String, timeout: TimeInterval) throws -> String {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let text = try copiedText()
+            if !text.isEmpty, text != previous { return text }
+
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+
+        return ""
     }
 
     private func openSignatureScanner() {
