@@ -173,7 +173,7 @@ impl App {
         // Set up the updater channel
         let reconcile = ReconcileChannel::new(1000);
 
-        Updater::init(reconcile.raw_sender());
+        Updater::init(reconcile.sender().clone());
         let state = Arc::new(RwLock::new(AppState::new()));
 
         #[cfg(debug_assertions)]

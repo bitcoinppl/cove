@@ -58,16 +58,13 @@ use cove_types::confirm::{ConfirmDetails, SplitOutput};
 use cove_types::{confirm::AddressAndAmount, fees::FeeRateOptions};
 
 use super::{
-    coin_control_manager::RustCoinControlManager,
-    deferred_sender::{self, DeferredSender},
-    reconcile_channel::ReconcileChannel,
-    send_flow_manager::RustSendFlowManager,
+    coin_control_manager::RustCoinControlManager, deferred_sender::DeferredSender,
+    reconcile_channel::ReconcileChannel, send_flow_manager::RustSendFlowManager,
 };
 
 type Action = WalletManagerAction;
 type Message = WalletManagerReconcileMessage;
 type Reconciler = dyn WalletManagerReconciler;
-pub type SingleOrMany = deferred_sender::SingleOrMany<Message>;
 
 #[derive(Debug, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum WalletManagerReconcileMessage {
@@ -1244,7 +1241,7 @@ impl RustWalletManager {
         let shared_metadata = Arc::new(RwLock::new(metadata.clone()));
         let wallet_actor = WalletActor::new_with_metadata_and_db(
             wallet,
-            channel.raw_sender(),
+            channel.sender().clone(),
             scan_status.clone(),
             wallet_snapshot.clone(),
             wallet_data_db,

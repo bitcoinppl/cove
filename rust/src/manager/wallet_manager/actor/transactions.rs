@@ -1393,7 +1393,10 @@ mod tests {
             unsigned_transactions::UnsignedTransactionRecord,
             wallet_data::{WalletDataDb, wallet_data_artifact_paths},
         },
-        manager::wallet_manager::{WalletScanStatus, WalletSnapshot},
+        manager::{
+            deferred_sender::MessageSender,
+            wallet_manager::{WalletScanStatus, WalletSnapshot},
+        },
         wallet::{Wallet, metadata::WalletMetadata},
     };
 
@@ -1415,7 +1418,7 @@ mod tests {
         let (reconciler, _) = flume::bounded(1);
         let actor = WalletActor::new_with_db(
             wallet,
-            reconciler,
+            MessageSender::new(reconciler),
             scan_status,
             wallet_snapshot,
             wallet_data_db,
