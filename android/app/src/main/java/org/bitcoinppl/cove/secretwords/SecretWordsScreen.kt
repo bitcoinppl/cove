@@ -47,13 +47,45 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.SecureFlagPolicy
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
+import org.bitcoinppl.cove.AuthManager
+import org.bitcoinppl.cove.CredentialUnlockRequest
+import org.bitcoinppl.cove.CredentialUnlockStatus
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
-import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.Mnemonic
 import org.bitcoinppl.cove_core.types.WalletId
+
+/**
+ * Whether the recovery words are loaded
+ *
+ * The mnemonic exists only in [Revealed], which is reached only after the user opens the app lock
+ * with a credential, so no word is in UI state while the lock cover is up
+ */
+private sealed interface SecretWordsState {
+    data object Unrequested : SecretWordsState
+
+    data class AwaitingCredential(
+        val request: CredentialUnlockRequest,
+    ) : SecretWordsState
+
+    data class Revealed(
+        val mnemonic: Mnemonic,
+        val lockGeneration: Long,
+        val sensitiveContentGeneration: Long,
+    ) : SecretWordsState {
+        // access ends the moment the lock engages or onPause conceals, even before the effect drops the words
+        fun isAccessible(auth: AuthManager): Boolean =
+            !auth.isLocked &&
+                auth.lockGeneration == lockGeneration &&
+                auth.sensitiveContentGeneration == sensitiveContentGeneration
+    }
+
+    data class Failed(
+        val message: String,
+    ) : SecretWordsState
+}
 
 /**
  * secret words screen - displays recovery phrase with auth guard
@@ -65,8 +97,7 @@ fun SecretWordsScreen(
     app: AppManager,
     walletId: WalletId,
 ) {
-    var words by remember(walletId) { mutableStateOf<Mnemonic?>(null) }
-    var errorMessage by remember(walletId) { mutableStateOf<String?>(null) }
+    var state by remember(walletId) { mutableStateOf<SecretWordsState>(SecretWordsState.Unrequested) }
     var pendingSensitiveAction by remember { mutableStateOf<SecretWordsSensitiveAction?>(null) }
     var showSeedQrSheet by remember { mutableStateOf(false) }
 
@@ -90,33 +121,35 @@ fun SecretWordsScreen(
         }
     }
 
-    // lock on appear and reload when walletId changes
-    LaunchedEffect(walletId) {
-        // lock authentication before showing seed words
-        auth.lock(AppLockReason.REAUTHENTICATION)
+    // ask for a credential on appear, load only once it is presented, and drop the words when the lock engages again
+    LaunchedEffect(
+        walletId,
+        auth.isLocked,
+        auth.lockGeneration,
+        auth.credentialUnlockGeneration,
+        auth.sensitiveContentGeneration,
+    ) {
+        val next = state.next(auth, walletId)
+        if (next == state) return@LaunchedEffect
 
-        // close previous mnemonic before loading new one
-        words?.close()
-        words = null
-
-        try {
-            words = Mnemonic(id = walletId)
-        } catch (e: Exception) {
-            errorMessage = e.message ?: "failed to load recovery words"
-            android.util.Log.e("SecretWordsScreen", "error loading mnemonic", e)
-        }
+        (state as? SecretWordsState.Revealed)?.mnemonic?.close()
+        if (next !is SecretWordsState.Revealed) showSeedQrSheet = false
+        state = next
     }
 
     // cleanup on dispose
     DisposableEffect(walletId) {
         onDispose {
             // clear words from memory
-            words?.close()
-            words = null
+            (state as? SecretWordsState.Revealed)?.mnemonic?.close()
+            state = SecretWordsState.Unrequested
         }
     }
 
     val requestKeyTeleportSend = rememberKeyTeleportSendRequest(app, auth, walletId)
+
+    // the effect above drops the words one composition after access ends, so never render them past that point
+    val revealed = (state as? SecretWordsState.Revealed)?.takeIf { it.isAccessible(auth) }
 
     // force white status bar icons for midnight blue background
     ForceLightStatusBarIcons()
@@ -187,12 +220,13 @@ fun SecretWordsScreen(
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
                 // words grid
-                if (words != null) {
+                if (revealed != null) {
                     RecoveryWordsGrid(
-                        words = words!!.words(),
+                        words = revealed.mnemonic.words(),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
+                    val failure = state as? SecretWordsState.Failed
                     Box(
                         modifier =
                             Modifier
@@ -201,7 +235,7 @@ fun SecretWordsScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = errorMessage ?: stringResource(R.string.label_loading),
+                            text = failure?.message ?: stringResource(R.string.label_loading),
                             color = Color.White.copy(alpha = 0.7f),
                             fontSize = 17.sp,
                         )
@@ -258,7 +292,7 @@ fun SecretWordsScreen(
     }
 
     // seed QR bottom sheet
-    if (showSeedQrSheet && words != null) {
+    if (showSeedQrSheet && revealed != null) {
         ModalBottomSheet(
             onDismissRequest = { showSeedQrSheet = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -267,7 +301,54 @@ fun SecretWordsScreen(
                     securePolicy = SecureFlagPolicy.SecureOn,
                 ),
         ) {
-            SeedQrSheetContent(seedQrString = words!!.toSeedQrString())
+            SeedQrSheetContent(seedQrString = revealed.mnemonic.toSeedQrString())
         }
     }
 }
+
+private fun SecretWordsState.next(
+    auth: AuthManager,
+    walletId: WalletId,
+): SecretWordsState =
+    when (this) {
+        SecretWordsState.Unrequested -> requestCredentialOrLoad(auth, walletId)
+
+        is SecretWordsState.AwaitingCredential ->
+            when (auth.credentialUnlockStatus(request)) {
+                CredentialUnlockStatus.SATISFIED -> loadWords(auth, walletId)
+
+                // a lock after the credential that the quick-return grace released is not a credential, so ask again
+                CredentialUnlockStatus.UNLOCKED_WITHOUT_CREDENTIAL -> requestCredentialOrLoad(auth, walletId)
+
+                // a mode switch resets the app, so this screen is on its way out and must stay empty
+                CredentialUnlockStatus.PENDING, CredentialUnlockStatus.SUPERSEDED -> this
+            }
+
+        // onPause conceals right away because the background lock only lands after the process stops
+        is SecretWordsState.Revealed ->
+            if (isAccessible(auth)) this else requestCredentialOrLoad(auth, walletId)
+
+        is SecretWordsState.Failed -> this
+    }
+
+private fun requestCredentialOrLoad(
+    auth: AuthManager,
+    walletId: WalletId,
+): SecretWordsState =
+    auth.requestCredentialUnlock()?.let { SecretWordsState.AwaitingCredential(it) }
+        ?: loadWords(auth, walletId)
+
+private fun loadWords(
+    auth: AuthManager,
+    walletId: WalletId,
+): SecretWordsState =
+    try {
+        SecretWordsState.Revealed(
+            mnemonic = Mnemonic(id = walletId),
+            lockGeneration = auth.lockGeneration,
+            sensitiveContentGeneration = auth.sensitiveContentGeneration,
+        )
+    } catch (e: Exception) {
+        android.util.Log.e("SecretWordsScreen", "error loading mnemonic", e)
+        SecretWordsState.Failed(e.message ?: "failed to load recovery words")
+    }

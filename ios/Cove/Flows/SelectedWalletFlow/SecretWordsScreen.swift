@@ -7,6 +7,21 @@
 
 import SwiftUI
 
+/// Whether the recovery words are loaded
+///
+/// The mnemonic exists only in `revealed`, which is reached only after the user opens the app lock
+/// with a credential, so no word is in UI state while the lock cover is up
+enum SecretWordsRevealState {
+    case unrequested
+    case awaitingCredential(CredentialUnlockRequest)
+    case revealed(Mnemonic, lockGeneration: UInt64)
+    case failed(String)
+
+    var errorMessage: String? {
+        if case let .failed(message) = self { message } else { nil }
+    }
+}
+
 struct SecretWordsScreen: View {
     @Environment(\.sizeCategory) private var sizeCategory
     @Environment(AppManager.self) private var app
@@ -15,8 +30,7 @@ struct SecretWordsScreen: View {
     let id: WalletId
 
     // private
-    @State var words: Mnemonic?
-    @State var errorMessage: String?
+    @State private var revealState = SecretWordsRevealState.unrequested
     @State private var pendingSensitiveAction: SecretWordsSensitiveAction?
     @State private var showSeedQrSheet = false
     @State private var showingKeyTeleportCredentialVerification = false
@@ -27,7 +41,17 @@ struct SecretWordsScreen: View {
     private let numberOfColumns = 2
 
     var numberOfRows: Int {
-        (words?.words().count ?? 24) / numberOfColumns
+        (accessibleWords?.words().count ?? 24) / numberOfColumns
+    }
+
+    /// The words, only while the lock that guarded them has not engaged since they loaded
+    ///
+    /// `reconcileRevealState` drops them after the update that ends access, so rendering checks
+    /// access itself rather than waiting for it
+    private var accessibleWords: Mnemonic? {
+        guard case let .revealed(words, lockGeneration) = revealState else { return nil }
+        guard auth.lockState == .unlocked, auth.lockGeneration == lockGeneration else { return nil }
+        return words
     }
 
     private var showingSensitiveActionConfirmation: Binding<Bool> {
@@ -44,13 +68,16 @@ struct SecretWordsScreen: View {
     var body: some View {
         SecretWordsLayout(
             sizeCategory: sizeCategory,
-            words: words,
-            errorMessage: errorMessage,
+            words: accessibleWords,
+            errorMessage: revealState.errorMessage,
             rowHeight: rowHeight,
             numberOfRows: numberOfRows,
             numberOfColumns: numberOfColumns
         )
-        .onAppear(perform: loadWords)
+        .onAppear(perform: reconcileRevealState)
+        .onChange(of: auth.lockState) { reconcileRevealState() }
+        .onChange(of: auth.lockGeneration) { reconcileRevealState() }
+        .onChange(of: auth.credentialUnlockGeneration) { reconcileRevealState() }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .adaptiveToolbarStyle()
         .toolbar {
@@ -63,7 +90,7 @@ struct SecretWordsScreen: View {
             )
         }
         .sheet(isPresented: $showSeedQrSheet) {
-            SeedQrPresentation(words: words)
+            SeedQrPresentation(words: accessibleWords)
         }
         .fullScreenCover(
             isPresented: $showingKeyTeleportCredentialVerification,
@@ -115,26 +142,76 @@ struct SecretWordsScreen: View {
         app.startKeyTeleportSend(walletId: id)
     }
 
-    private func loadWords() {
-        auth.lock(reason: .reauthentication)
-        guard words == nil else { return }
+    /// Ask for a credential on appear, load only once it is presented, and drop the words when the lock engages again
+    private func reconcileRevealState() {
+        switch revealState {
+        case .unrequested:
+            requestCredentialOrLoad()
 
+        case let .awaitingCredential(request):
+            switch auth.credentialUnlockStatus(request) {
+            case .satisfied:
+                loadWords()
+
+            // a lock after the credential that the quick-return grace released is not a credential, so ask again
+            case .unlockedWithoutCredential:
+                requestCredentialOrLoad()
+
+            // a mode switch resets the app, so this screen is on its way out and must stay empty
+            case .pending, .superseded:
+                break
+            }
+
+        case .revealed:
+            guard accessibleWords == nil else { return }
+
+            showSeedQrSheet = false
+            requestCredentialOrLoad()
+
+        case .failed:
+            break
+        }
+    }
+
+    private func requestCredentialOrLoad() {
+        if let request = auth.requestCredentialUnlock() {
+            revealState = .awaitingCredential(request)
+        } else {
+            loadWords()
+        }
+    }
+
+    private func loadWords() {
         do {
-            words = try Mnemonic(id: id)
+            revealState = try .revealed(Mnemonic(id: id), lockGeneration: auth.lockGeneration)
         } catch {
-            errorMessage = error.localizedDescription
+            revealState = .failed(error.localizedDescription)
         }
     }
 }
 
 #Preview("12") {
-    SecretWordsScreen(id: WalletId(), words: Mnemonic.preview(numberOfBip39Words: .twelve))
-        .environment(AppManager.shared)
-        .environment(AuthManager.shared)
+    SecretWordsLayoutPreview(words: Mnemonic.preview(numberOfBip39Words: .twelve))
 }
 
 #Preview("24") {
-    SecretWordsScreen(id: WalletId(), words: Mnemonic.preview(numberOfBip39Words: .twentyFour))
-        .environment(AppManager.shared)
-        .environment(AuthManager.shared)
+    SecretWordsLayoutPreview(words: Mnemonic.preview(numberOfBip39Words: .twentyFour))
+}
+
+/// previews render the layout directly because the screen only loads words after a credential
+private struct SecretWordsLayoutPreview: View {
+    let words: Mnemonic
+
+    var body: some View {
+        SecretWordsLayout(
+            sizeCategory: .medium,
+            words: words,
+            errorMessage: nil,
+            rowHeight: 30,
+            numberOfRows: words.words().count / 2,
+            numberOfColumns: 2
+        )
+        .background(SecretWordsPatternBackground())
+        .background(Color.midnightBlue)
+    }
 }

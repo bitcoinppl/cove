@@ -97,8 +97,31 @@ class AuthManager internal constructor(
     var mainCredentialGeneration by mutableStateOf(0L)
         private set
 
+    /**
+     * Counts app lock unlocks made with a PIN, decoy PIN, or biometric credential
+     *
+     * Grace-period releases and disabled authentication never increment it, so screens can tell
+     * a presented credential apart from the lock simply opening
+     */
+    var credentialUnlockGeneration by mutableStateOf(0L)
+        private set
+
+    /**
+     * Counts every time the app lock engages
+     *
+     * Lets a screen tell that the lock engaged even when a grace-period release has already opened
+     * it again before the screen observed the lock
+     */
+    var lockGeneration by mutableStateOf(0L)
+        private set
+
     var sensitiveContentGeneration by mutableStateOf(0L)
         private set
+
+    // the lock and conceal counts when the last credential opened the app, so a credential that a
+    // later lock or conceal has outlived cannot satisfy a request
+    private var lastCredentialLockGeneration = 0L
+    private var lastCredentialSensitiveContentGeneration = 0L
 
     var isWipeDataPinEnabled by mutableStateOf<Boolean>(rust.isWipeDataPinEnabled())
         private set
@@ -159,6 +182,7 @@ class AuthManager internal constructor(
      */
     fun lock(reason: AppLockReason) {
         logDebug("[AUTH] locking for $reason")
+        lockGeneration += 1
         isLocked = withRustOr(true) { lock(reason) }
     }
 
@@ -167,6 +191,7 @@ class AuthManager internal constructor(
      */
     fun lockForSendConfirmation(): SendConfirmationLock? {
         val lock = withRustOr<SendConfirmationLock?>(null) { lockForSendConfirmation() } ?: return null
+        lockGeneration += 1
         isLocked = true
         return lock
     }
@@ -192,12 +217,48 @@ class AuthManager internal constructor(
         isLocked = withRustOr(true) { unlockIfAuthDisabled() }
     }
 
+    /**
+     * Lock the app with [AppLockReason.REAUTHENTICATION] before showing secret content
+     *
+     * Returns null when the app stays unlocked because no app lock is set up, so there is no
+     * credential to ask for
+     */
+    fun requestCredentialUnlock(): CredentialUnlockRequest? {
+        val request =
+            CredentialUnlockRequest(
+                generation = credentialUnlockGeneration,
+                isInDecoyMode = isInDecoyMode(),
+            )
+
+        // rust decides whether the lock applies, so an unreadable auth type still asks for a credential
+        lock(AppLockReason.REAUTHENTICATION)
+        return request.takeIf { isLocked }
+    }
+
+    fun credentialUnlockStatus(request: CredentialUnlockRequest): CredentialUnlockStatus =
+        when {
+            isInDecoyMode() != request.isInDecoyMode -> CredentialUnlockStatus.SUPERSEDED
+            isLocked -> CredentialUnlockStatus.PENDING
+            credentialUnlockGeneration > request.generation && isLastCredentialCurrent() ->
+                CredentialUnlockStatus.SATISFIED
+            else -> CredentialUnlockStatus.UNLOCKED_WITHOUT_CREDENTIAL
+        }
+
+    private fun isLastCredentialCurrent(): Boolean =
+        lastCredentialLockGeneration == lockGeneration &&
+            lastCredentialSensitiveContentGeneration == sensitiveContentGeneration
+
     // only called after the user authenticated with a PIN, biometrics, or a trick PIN
     private fun unlockAuthenticated() {
         try {
             withRust {
                 unlockAuthenticated()
             }
+
+            // count the credential before publishing the unlock so observers never see the lock open without it
+            lastCredentialLockGeneration = lockGeneration
+            lastCredentialSensitiveContentGeneration = sensitiveContentGeneration
+            credentialUnlockGeneration += 1
             isLocked = false
         } catch (e: Exception) {
             android.util.Log.e(tag, "failed to unlock", e)
