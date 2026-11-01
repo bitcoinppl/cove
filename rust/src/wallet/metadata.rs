@@ -505,6 +505,19 @@ impl WalletMetadata {
         self.hash(&mut hasher);
         hasher.finish()
     }
+
+    /// Identity line shown above the wallet name: the TAPSIGNER card ident for TAPSIGNER
+    /// wallets, otherwise the uppercase master fingerprint
+    pub fn ident_or_fingerprint(&self) -> String {
+        if let Some(HardwareWalletMetadata::TapSigner(tap_signer)) = &self.hardware_metadata {
+            return tap_signer.full_card_ident();
+        }
+
+        match &self.master_fingerprint {
+            Some(fingerprint) => fingerprint.as_uppercase(),
+            None => "No Fingerprint".to_string(),
+        }
+    }
 }
 
 #[uniffi::export]

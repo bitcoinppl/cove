@@ -15,7 +15,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -51,6 +50,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.SendFlow.Common.CoinControlCustomAmountSheet
+import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowAccountSection
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
@@ -67,6 +67,7 @@ import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.SetAmountFocusField
 import org.bitcoinppl.cove_core.WalletManagerAction
+import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.BitcoinUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,7 +87,6 @@ fun CoinControlSetAmountScreen(
     sendingDenomination: String,
     dollarEquivalentText: String,
     initialAddress: String,
-    accountShort: String,
     feeEta: String,
     feeAmount: String?,
     totalSpendingCrypto: String,
@@ -192,7 +192,7 @@ fun CoinControlSetAmountScreen(
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                     SpendingWidget(
-                        accountShort = accountShort,
+                        metadata = walletManager.walletMetadata,
                         feeEta = feeEta,
                         feeAmount = feeAmount,
                         totalSpendingCrypto = totalSpendingCrypto,
@@ -534,7 +534,7 @@ private fun AddressWidget(
 
 @Composable
 private fun SpendingWidget(
-    accountShort: String,
+    metadata: WalletMetadata?,
     feeEta: String,
     feeAmount: String?,
     totalSpendingCrypto: String,
@@ -545,32 +545,19 @@ private fun SpendingWidget(
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(20.dp))
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // the label is measured first so a long wallet name wraps instead of hiding it
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
                 stringResource(R.string.label_account),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.padding(end = 12.dp),
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.CurrencyBitcoin,
-                    contentDescription = null,
-                    tint = CoveColor.WarningOrange,
-                    modifier = Modifier.size(28.dp),
-                )
-                Spacer(Modifier.size(8.dp))
-                Column(horizontalAlignment = Alignment.Start) {
-                    Text(accountShort, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                    Spacer(Modifier.size(4.dp))
-                    Text(
-                        stringResource(R.string.label_main),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
+            SendFlowAccountSection(metadata, modifier = Modifier.weight(1f, fill = false))
         }
         Spacer(Modifier.height(24.dp))
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

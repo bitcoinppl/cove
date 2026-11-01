@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowAccountSection
 import org.bitcoinppl.cove.ui.theme.caption
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AddressText
@@ -53,7 +54,7 @@ internal fun TransactionDetailsSheet(
             modifier = Modifier.align(Alignment.CenterHorizontally),
         )
 
-        AccountSection(metadata)
+        SendFlowAccountSection(metadata)
 
         HorizontalDivider()
 

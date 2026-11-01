@@ -43,7 +43,6 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove.views.AutoSizeText
-import org.bitcoinppl.cove.views.BitcoinShieldIcon
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.HardwareWalletMetadata
 import org.bitcoinppl.cove_core.TapSignerRoute
@@ -124,36 +123,6 @@ internal fun BalanceHeader(
                     imageVector = if (isHidden) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
                     contentDescription = null,
                     tint = Color.White,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-internal fun AccountSection(metadata: WalletMetadata?) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        BitcoinShieldIcon(size = 24.dp, color = CoveColor.bitcoinOrange)
-
-        Column(modifier = Modifier.padding(start = 4.dp)) {
-            metadata?.masterFingerprint?.let { fingerprint ->
-                Text(
-                    text = fingerprint.asUppercase(),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-
-            metadata?.name?.let { name ->
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }

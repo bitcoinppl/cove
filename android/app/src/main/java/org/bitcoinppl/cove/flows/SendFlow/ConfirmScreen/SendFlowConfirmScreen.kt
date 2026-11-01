@@ -25,7 +25,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CurrencyBitcoin
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -52,6 +51,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowAccountSection
 import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowAdvancedDetailsView
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.flows.SendFlow.SendState
@@ -62,6 +62,7 @@ import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove.views.AutoSizeText
 import org.bitcoinppl.cove.views.KeyValueRow
 import org.bitcoinppl.cove_core.WalletManagerAction
+import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 
 private enum class SheetState {
@@ -110,7 +111,6 @@ fun SendFlowConfirmScreen(
     val sendingAmount = walletManager.amountFmt(details.sendingAmount())
     val sendingAmountDenomination = walletManager.unit
     val dollarEquivalentText = fiatAmount
-    val accountShort = metadata?.masterFingerprint?.asUppercase()?.take(8) ?: ""
     val networkFee = walletManager.amountFmtUnit(details.feeTotal())
     val willReceive = walletManager.amountFmtUnit(details.sendingAmount())
     val willPay = walletManager.amountFmtUnit(details.spendingAmount())
@@ -183,7 +183,7 @@ fun SendFlowConfirmScreen(
                                 amount = sendingAmount,
                                 denomination = sendingAmountDenomination,
                                 dollarText = dollarEquivalentText,
-                                accountShort = accountShort,
+                                metadata = metadata,
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, thickness = 1.dp)
                             SummaryWidget(
@@ -311,7 +311,7 @@ private fun AmountWidget(
     amount: String,
     denomination: String,
     dollarText: String,
-    accountShort: String,
+    metadata: WalletMetadata?,
 ) {
     val density = LocalDensity.current
     var unitLabelWidth by remember { mutableStateOf(0.dp) }
@@ -377,28 +377,7 @@ private fun AmountWidget(
             )
         }
         Spacer(Modifier.height(28.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Filled.CurrencyBitcoin,
-                contentDescription = null,
-                tint = CoveColor.WarningOrange,
-                modifier = Modifier.size(28.dp),
-            )
-            Spacer(Modifier.size(12.dp))
-            Column(horizontalAlignment = Alignment.Start) {
-                Text(accountShort, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                Spacer(Modifier.size(4.dp))
-                Text(
-                    stringResource(R.string.label_main),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
+        SendFlowAccountSection(metadata, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(24.dp))
     }
 }

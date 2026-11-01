@@ -213,14 +213,6 @@ public extension WalletMetadata {
     func isTapSigner() -> Bool {
         hardwareMetadata?.isTapSigner() ?? false
     }
-
-    func identOrFingerprint() -> String {
-        if case let .tapSigner(t) = hardwareMetadata {
-            return t.fullCardIdent()
-        }
-
-        return masterFingerprint?.asUppercase() ?? "No Fingerprint"
-    }
 }
 
 extension SendFlowAlertState {

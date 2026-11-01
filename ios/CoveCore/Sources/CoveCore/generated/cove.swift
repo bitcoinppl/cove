@@ -19841,6 +19841,19 @@ public struct WalletMetadata: Equatable, Hashable {
     }
 
 
+    /**
+     * Identity line shown above the wallet name: the TAPSIGNER card ident for TAPSIGNER
+     * wallets, otherwise the uppercase master fingerprint
+     */
+public func identOrFingerprint() -> String  {
+    return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_walletmetadata_ident_or_fingerprint(
+            FfiConverterTypeWalletMetadata_lower(self),uniffiCallStatus
+    )
+})
+}
+
 public func isEqual(other: WalletMetadata) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
