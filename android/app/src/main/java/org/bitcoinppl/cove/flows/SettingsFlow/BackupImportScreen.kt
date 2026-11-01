@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.documentfile.provider.DocumentFile
 import androidx.compose.foundation.background
@@ -69,6 +68,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.runCatchingCancellable
+import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.BackupException
 import org.bitcoinppl.cove_core.BackupImportApproval
@@ -280,7 +280,7 @@ fun BackupImportScreen(
         }
     }
 
-    val filePickerLauncher = rememberLauncherForActivityResult(
+    val filePickerLauncher = rememberLockAwareLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         uri?.let {

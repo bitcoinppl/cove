@@ -74,6 +74,29 @@ coverage = [
 # rust decides every file format; an agent still checks each app passes the picked file's raw bytes
 
 [[row]]
+id = "s13-android-signed-file-pick-survives-pin-lock"
+section = "13"
+title = "Android signed file pick survives the app PIN lock"
+platforms = ["android"]
+target = "ui"
+paths = [
+  "android/app/src/main/java/org/bitcoinppl/cove/views/LockAwareActivityResult.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/views/LockView.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/SendFlowHardwareImportRoute.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/CoveApplication.kt",
+  "android/app/src/main/java/org/bitcoinppl/cove/MainActivityAppShell.kt",
+]
+coverage = [
+  "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/views/LockAwareActivityResultTest.kt::pickerResultFromAModalIsHandledAfterThePin",
+  "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/MainActivityAppShellLockTest.kt::appAlertStaysUnderTheLockWhenTheActivityIsRecreated",
+  "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/views/LockAwareActivityResultTest.kt::heldPickerResultSurvivesActivityRecreationBeforeThePin",
+  "agent:android",
+]
+# 1.4.0: android FAIL
+# with a PIN and decoy PIN, wait ~8 s in the system picker, pick a signed file, enter the PIN and expect send-confirm or File Import Error
+# the agent pass covers the real system picker on a phone
+
+[[row]]
 id = "s13-strict-signer-animated-ur-and-signed-ur"
 section = "13"
 title = "Strict signer animated UR and signed UR import"

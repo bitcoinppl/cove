@@ -6,6 +6,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.biometric.BiometricPrompt.PromptInfo
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -32,6 +33,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,12 +43,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.ui.theme.callout
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -156,10 +164,14 @@ fun LockView(
         }
     }
 
+    // keeps the lock window up until the unlock animation finishes
+    val lockTransition = remember { MutableTransitionState(auth.isLocked) }
+    lockTransition.targetState = auth.isLocked
+
     Box(modifier = Modifier.fillMaxSize()) {
         // main content, kept composed so its state survives the lock, but cleared from the
-        // semantics tree while locked: the overlay only blocks touches, so accessibility services
-        // could otherwise still read the screen under it and invoke its actions
+        // semantics tree while locked: the lock window only covers this window, so accessibility
+        // services could otherwise still read the screen under it and invoke its actions
         Box(
             modifier =
                 if (auth.isLocked) {
@@ -171,52 +183,44 @@ fun LockView(
             content()
         }
 
-        // lock overlay
-        AnimatedVisibility(
-            visible = auth.isLocked,
-            enter = slideInVertically { it },
-            exit = slideOutVertically { it },
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .background(Color.Black),
-                contentAlignment = Alignment.Center,
+        // the lock gets its own window, opened after any dialog or sheet that was up when the app
+        // locked, so it covers them and a picker result held in one can still reach the PIN
+        if (lockTransition.currentState || lockTransition.targetState) {
+            Dialog(
+                // back sends the app away instead of navigating underneath the lock
+                onDismissRequest = { activity?.moveTaskToBack(true) },
+                properties =
+                    DialogProperties(
+                        dismissOnClickOutside = false,
+                        usePlatformDefaultWidth = false,
+                        decorFitsSystemWindows = false,
+                    ),
             ) {
-                when {
-                    // biometric not available but auth type is biometric only
-                    auth.type == AuthType.BIOMETRIC && !isBiometricAvailable -> {
-                        PermissionsNeeded()
-                    }
-                    // show biometric screen
-                    screen == Screen.BIOMETRIC && (auth.type == AuthType.BIOMETRIC || auth.type == AuthType.BOTH) && isBiometricAvailable -> {
-                        BiometricView(
-                            showBoth = auth.type == AuthType.BOTH,
+                val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+                SideEffect { dialogWindow?.setDimAmount(0f) }
+
+                AnimatedVisibility(
+                    visibleState = lockTransition,
+                    enter = slideInVertically { it },
+                    exit = slideOutVertically { it },
+                ) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color.Black)
+                                .semantics { testTagsAsResourceId = true },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        LockScreenContent(
+                            screen = screen,
+                            isBiometricAvailable = isBiometricAvailable,
+                            onScreenChange = { screen = it },
                             onBiometricTap = { triggerBiometric() },
-                            onEnterPinTap = { screen = Screen.PIN },
                             onResetBiometricFlag = {
                                 biometricTimeoutJob?.cancel()
                                 auth.isUsingBiometrics = false
                             },
-                        )
-                    }
-                    // show PIN screen
-                    else -> {
-                        NumberPadPinView(
-                            title = "Enter Cove PIN",
-                            isPinCorrect = { pin ->
-                                when (auth.handleAndReturnUnlockMode(pin)) {
-                                    UnlockMode.MAIN, UnlockMode.DECOY, UnlockMode.WIPE -> true
-                                    UnlockMode.LOCKED -> false
-                                }
-                            },
-                            backAction =
-                                if (auth.type == AuthType.BOTH && isBiometricAvailable) {
-                                    { screen = Screen.BIOMETRIC }
-                                } else {
-                                    null
-                                },
                         )
                     }
                 }
@@ -254,6 +258,53 @@ fun LockView(
             }
 
             WipePresentationState.Idle, WipePresentationState.Running -> Unit
+        }
+    }
+}
+
+@Composable
+private fun LockScreenContent(
+    screen: Screen,
+    isBiometricAvailable: Boolean,
+    onScreenChange: (Screen) -> Unit,
+    onBiometricTap: () -> Unit,
+    onResetBiometricFlag: () -> Unit,
+) {
+    val auth = Auth
+
+    when {
+        // biometric not available but auth type is biometric only
+        auth.type == AuthType.BIOMETRIC && !isBiometricAvailable -> {
+            PermissionsNeeded()
+        }
+
+        // show biometric screen
+        screen == Screen.BIOMETRIC && (auth.type == AuthType.BIOMETRIC || auth.type == AuthType.BOTH) && isBiometricAvailable -> {
+            BiometricView(
+                showBoth = auth.type == AuthType.BOTH,
+                onBiometricTap = onBiometricTap,
+                onEnterPinTap = { onScreenChange(Screen.PIN) },
+                onResetBiometricFlag = onResetBiometricFlag,
+            )
+        }
+
+        // show PIN screen
+        else -> {
+            NumberPadPinView(
+                title = "Enter Cove PIN",
+                isPinCorrect = { pin ->
+                    when (auth.handleAndReturnUnlockMode(pin)) {
+                        UnlockMode.MAIN, UnlockMode.DECOY, UnlockMode.WIPE -> true
+                        UnlockMode.LOCKED -> false
+                    }
+                },
+                backAction =
+                    if (auth.type == AuthType.BOTH && isBiometricAvailable) {
+                        { onScreenChange(Screen.BIOMETRIC) }
+                    } else {
+                        null
+                    },
+            )
         }
     }
 }
