@@ -28,6 +28,7 @@ import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.AuthManagerAction
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -53,6 +54,8 @@ class LockAwareActivityResultTest {
     @After
     fun disablePin() {
         instrumentation.runOnMainSync {
+            if (Auth.isInDecoyMode()) Auth.switchToMainMode()
+            Auth.dispatch(AuthManagerAction.DisableDecoyPin)
             Auth.dispatch(AuthManagerAction.DisablePin)
             Auth.unlockIfAuthDisabled()
         }
@@ -90,6 +93,31 @@ class LockAwareActivityResultTest {
         enterPinAndExpectTheResult()
     }
 
+    @Test
+    fun heldPickerResultIsDroppedWhenTheUnlockSwitchesMode() {
+        instrumentation.runOnMainSync { Auth.setDecoyPin(DECOY_PIN) }
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { LockedApp { PickerHost() } }
+
+        // picked for the main wallets, unlocked into decoy mode
+        returnFromPickerLocked()
+        restoration.emulateSavedInstanceStateRestore()
+        unlockWith(DECOY_PIN)
+        compose.runOnIdle {
+            assertTrue(Auth.isInDecoyMode())
+            assertEquals(emptyList<Uri?>(), handled)
+        }
+
+        // picked for the decoy wallets, unlocked back into main mode
+        returnFromPickerLocked()
+        restoration.emulateSavedInstanceStateRestore()
+        unlockWith(PIN)
+        compose.runOnIdle {
+            assertFalse(Auth.isInDecoyMode())
+            assertEquals(emptyList<Uri?>(), handled)
+        }
+    }
+
     @Composable
     private fun LockedApp(content: @Composable () -> Unit) {
         CompositionLocalProvider(LocalActivityResultRegistryOwner provides picker) {
@@ -118,15 +146,20 @@ class LockAwareActivityResultTest {
         compose.runOnIdle { assertEquals(emptyList<Uri?>(), handled) }
     }
 
-    private fun enterPinAndExpectTheResult() {
-        repeat(PIN.length) { compose.onNodeWithTag("numberPadPin.digit.1").performClick() }
+    private fun unlockWith(pin: String) {
+        pin.forEach { digit -> compose.onNodeWithTag("numberPadPin.digit.$digit").performClick() }
+        compose.waitUntil(timeoutMillis = 5_000) { !Auth.isLocked }
+    }
 
+    private fun enterPinAndExpectTheResult() {
+        unlockWith(PIN)
         compose.waitUntil(timeoutMillis = 5_000) { handled.isNotEmpty() }
         compose.runOnIdle { assertEquals(listOf<Uri?>(pickedFile), handled) }
     }
 
     private companion object {
         const val PIN = "111111"
+        const val DECOY_PIN = "222222"
     }
 }
 

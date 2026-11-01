@@ -90,6 +90,7 @@ coverage = [
   "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/views/LockAwareActivityResultTest.kt::pickerResultFromAModalIsHandledAfterThePin",
   "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/MainActivityAppShellLockTest.kt::appAlertStaysUnderTheLockWhenTheActivityIsRecreated",
   "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/views/LockAwareActivityResultTest.kt::heldPickerResultSurvivesActivityRecreationBeforeThePin",
+  "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/views/LockAwareActivityResultTest.kt::heldPickerResultIsDroppedWhenTheUnlockSwitchesMode",
   "agent:android",
 ]
 # 1.4.0: android FAIL
