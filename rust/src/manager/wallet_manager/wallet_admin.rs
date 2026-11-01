@@ -1,10 +1,5 @@
 use crate::{
-    app::{
-        AppError, FfiApp,
-        reconcile::{Update, Updater},
-    },
-    database::Database,
-    router::Route,
+    app::{AppError, FfiApp, WalletDeletionPresentation},
     wallet::metadata::{WalletMetadata, WalletType},
     wallet_lifecycle::{ShutdownAttemptId, ShutdownDeadlineTier},
 };
@@ -26,7 +21,7 @@ impl RustWalletManager {
             .await
             .map_err(wallet_deletion_error)?;
 
-        self.finish_delete_wallet(wallet_id);
+        FfiApp::global().finish_wallet_deletion(wallet_id, WalletDeletionPresentation::KeepRoute);
 
         Ok(())
     }
@@ -44,24 +39,9 @@ impl RustWalletManager {
         .await
         .map_err(wallet_deletion_error)?;
 
-        self.finish_delete_wallet(wallet_id);
+        FfiApp::global().finish_wallet_deletion(wallet_id, WalletDeletionPresentation::KeepRoute);
 
         Ok(())
-    }
-
-    fn finish_delete_wallet(&self, wallet_id: crate::wallet::metadata::WalletId) {
-        let database = Database::global();
-
-        Updater::send_update(Update::ClearCachedWalletManager(wallet_id));
-
-        // check if other wallets exist and select the first one, or go to new wallet flow
-        let remaining_wallets = database.wallets().all().unwrap_or_default();
-        if let Some(next_wallet) = remaining_wallets.first() {
-            let _ = FfiApp::global().select_wallet(next_wallet.id.clone(), None);
-        } else {
-            // no wallets remaining, go to new wallet flow
-            FfiApp::global().load_and_reset_default_route(Route::NewWallet(Default::default()));
-        }
     }
 
     pub(crate) async fn set_wallet_type_internal(

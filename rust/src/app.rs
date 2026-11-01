@@ -560,7 +560,7 @@ impl FfiApp {
     /// Delete a wallet with a corrupted database, cleaning up all associated data
     pub async fn delete_corrupted_wallet(&self, id: WalletId) -> Result<(), Error> {
         delete_wallet_with_tier(id.clone(), ShutdownDeadlineTier::Initial, None).await?;
-        self.finish_wallet_deletion_presentation(id);
+        self.finish_wallet_deletion(id, WalletDeletionPresentation::ShowSelectedWallet);
         Ok(())
     }
 
@@ -571,7 +571,7 @@ impl FfiApp {
         attempt_id: ShutdownAttemptId,
     ) -> Result<(), Error> {
         delete_wallet_with_tier(id.clone(), ShutdownDeadlineTier::Retry, Some(attempt_id)).await?;
-        self.finish_wallet_deletion_presentation(id);
+        self.finish_wallet_deletion(id, WalletDeletionPresentation::ShowSelectedWallet);
         Ok(())
     }
 
@@ -958,16 +958,41 @@ impl FfiApp {
         App::global()
     }
 
-    fn finish_wallet_deletion_presentation(&self, id: WalletId) {
-        let database = Database::global();
+    /// Settle selection and routing after a wallet deletion completes
+    ///
+    /// Deletion already forgot the wallet in every selection key, so a selection that is still
+    /// set belongs to another wallet and is kept. Only a lost selection falls back to the most
+    /// recently active wallet, or to the new wallet flow when none remain
+    pub(crate) fn finish_wallet_deletion(
+        &self,
+        id: WalletId,
+        presentation: WalletDeletionPresentation,
+    ) {
         Updater::send_update(AppMessage::ClearCachedWalletManager(id));
 
-        let remaining_wallets = database.wallets().all().unwrap_or_default();
-        if let Some(next_wallet) = remaining_wallets.first() {
-            let _ = self.select_wallet(next_wallet.id.clone(), None);
-        } else {
-            self.load_and_reset_default_route(Route::NewWallet(Default::default()));
+        let Some(selected) = surviving_selected_wallet() else {
+            self.replace_deleted_selection();
+            return;
+        };
+
+        match presentation {
+            WalletDeletionPresentation::KeepRoute => {}
+            WalletDeletionPresentation::ShowSelectedWallet => {
+                if let Err(error) = self.select_wallet(selected, None) {
+                    warn!("unable to show the selected wallet after deletion: {error}");
+                    self.replace_deleted_selection();
+                }
+            }
         }
+    }
+
+    /// Move off a deleted selection, even when the wallet list cannot be read
+    fn replace_deleted_selection(&self) {
+        let Err(error) = self.select_latest_or_new_wallet() else { return };
+        warn!("unable to select a wallet after deletion: {error}");
+
+        // the current route may still name the deleted wallet, so never leave it in place
+        self.load_and_reset_default_route(Route::NewWallet(NewWalletRoute::default()));
     }
 
     pub(crate) fn select_wallet(
@@ -1013,6 +1038,32 @@ impl FfiApp {
             .map_err(SelectLatestWalletError::WalletSelection)?;
 
         Ok(())
+    }
+}
+
+/// How the app presents a deletion that left another wallet selected
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WalletDeletionPresentation {
+    /// The deleting screen dismisses itself, so the current route stays in place
+    KeepRoute,
+    /// The deleted wallet may be the one on screen, so the selected wallet is shown again
+    ShowSelectedWallet,
+}
+
+/// The selected wallet when it still exists in the current network and mode
+///
+/// A failed wallet read keeps the selection, since deletion already cleared any selection that
+/// named the deleted wallet
+fn surviving_selected_wallet() -> Option<WalletId> {
+    let database = Database::global();
+    let selected = database.global_config.selected_wallet()?;
+
+    match database.wallets().all() {
+        Ok(wallets) => wallets.iter().any(|wallet| wallet.id == selected).then_some(selected),
+        Err(error) => {
+            warn!("unable to read wallets after deletion, keeping the selection: {error}");
+            Some(selected)
+        }
     }
 }
 
@@ -1298,6 +1349,207 @@ mod tests {
         );
 
         keychain.reset();
+    }
+
+    mod wallet_deletion {
+        use std::str::FromStr as _;
+
+        use bip39::Mnemonic;
+        use cove_types::network::Network;
+
+        use super::{App, FfiApp, LOAD_AND_RESET_DELAY_MS, Route, wallet_selection_loading_route};
+        use crate::{
+            database::{
+                Database, global_config::GlobalConfigKey, test_support::RestoreWalletTarget,
+            },
+            manager::{
+                import_wallet_manager::import_mnemonic_with_target,
+                wallet_manager::RustWalletManager,
+            },
+            router::{Router, SettingsRoute, WalletSettingsRoute},
+            wallet::metadata::{WalletId, WalletMetadata, WalletMode},
+        };
+
+        const MNEMONIC_A: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        const MNEMONIC_B: &str =
+            "legal winner thank year wave sausage worth useful legal winner thank yellow";
+        const MNEMONIC_C: &str =
+            "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
+
+        const SELECTION_KEYS: [GlobalConfigKey; 3] = [
+            GlobalConfigKey::SelectedWalletId,
+            GlobalConfigKey::MainSelectedWalletId,
+            GlobalConfigKey::DecoySelectedWalletId,
+        ];
+
+        /// Restores the wallets, selections, wallet target, and router these tests change
+        ///
+        /// Hold it after the global-state lock so it restores before the lock is released
+        struct RestoreDeletionTestState {
+            target: Option<RestoreWalletTarget>,
+            selections: Vec<(GlobalConfigKey, Option<String>)>,
+            router: Router,
+        }
+
+        impl RestoreDeletionTestState {
+            /// Captures the current state, then starts from an empty signet main wallet list
+            fn empty_signet() -> Self {
+                crate::test_support::ensure_tokio_runtime();
+                crate::test_support::init_test_keychain();
+                crate::database::test_support::init_test_database();
+
+                let config = &Database::global().global_config;
+                let restore = Self {
+                    target: Some(RestoreWalletTarget::capture()),
+                    selections: SELECTION_KEYS
+                        .into_iter()
+                        .map(|key| (key, config.get(key).unwrap()))
+                        .collect(),
+                    router: App::global().get_state().router,
+                };
+
+                config.set_selected_network(Network::Signet).unwrap();
+                config.set_main_mode().unwrap();
+                config.clear_selected_wallet().unwrap();
+                clear_signet_wallets();
+
+                restore
+            }
+        }
+
+        impl Drop for RestoreDeletionTestState {
+            fn drop(&mut self) {
+                clear_signet_wallets();
+
+                // a mode switch moves selection keys, so restore the target before the selections
+                drop(self.target.take());
+
+                let config = &Database::global().global_config;
+                for (key, value) in self.selections.drain(..) {
+                    let _ = match value {
+                        Some(value) => config.set(key, value),
+                        None => config.delete(key),
+                    };
+                }
+
+                App::global().state.write().router = self.router.clone();
+            }
+        }
+
+        fn clear_signet_wallets() {
+            for mode in [WalletMode::Main, WalletMode::Decoy] {
+                let _ =
+                    Database::global().wallets.save_all_wallets(Network::Signet, mode, Vec::new());
+            }
+        }
+
+        fn import(words: &str) -> WalletMetadata {
+            let mnemonic = Mnemonic::from_str(words).unwrap();
+            import_mnemonic_with_target(mnemonic, Network::Signet, WalletMode::Main).unwrap()
+        }
+
+        /// Delete through the wallet settings path, whose screen pops itself afterwards
+        async fn delete_from_wallet_settings(id: &WalletId) {
+            RustWalletManager::try_new(id.clone())
+                .unwrap()
+                .delete_wallet_internal()
+                .await
+                .expect("wallet deletion succeeds");
+        }
+
+        fn select_with_routes(id: &WalletId, routes: Vec<Route>) {
+            Database::global().global_config.select_wallet(id.clone()).unwrap();
+            FfiApp::global().reset_default_route_to(Route::SelectedWallet(id.clone()));
+            App::global().state.write().router.routes = routes;
+        }
+
+        fn selected_wallet() -> Option<WalletId> {
+            Database::global().global_config.selected_wallet()
+        }
+
+        fn router() -> (Route, Vec<Route>) {
+            let router = App::global().get_state().router;
+            (router.default, router.routes)
+        }
+
+        // the selected wallet sits between two others so a first-wallet fallback is visible
+        fn import_three_wallets() -> (WalletMetadata, WalletMetadata, WalletMetadata) {
+            let first = import(MNEMONIC_A);
+            let selected = import(MNEMONIC_B);
+            let last = import(MNEMONIC_C);
+
+            (first, selected, last)
+        }
+
+        #[tokio::test]
+        async fn deleting_a_non_selected_wallet_from_settings_keeps_the_selection_and_route() {
+            let _guard = crate::test_support::global_state_test_lock().lock().await;
+            let _restore = RestoreDeletionTestState::empty_signet();
+
+            let (_first, selected, last) = import_three_wallets();
+            let settings_routes = vec![
+                Route::Settings(SettingsRoute::Main),
+                Route::Settings(SettingsRoute::AllWallets),
+                Route::Settings(SettingsRoute::Wallet {
+                    id: last.id.clone(),
+                    route: WalletSettingsRoute::Main,
+                }),
+            ];
+            select_with_routes(&selected.id, settings_routes.clone());
+
+            delete_from_wallet_settings(&last.id).await;
+
+            assert_eq!(selected_wallet(), Some(selected.id.clone()));
+            assert_eq!(
+                router(),
+                (Route::SelectedWallet(selected.id), settings_routes),
+                "the settings screen pops itself back to the untouched route"
+            );
+        }
+
+        #[tokio::test]
+        async fn deleting_a_non_selected_corrupted_wallet_shows_the_selected_wallet() {
+            let _guard = crate::test_support::global_state_test_lock().lock().await;
+            let _restore = RestoreDeletionTestState::empty_signet();
+
+            let (_first, selected, last) = import_three_wallets();
+            select_with_routes(&selected.id, Vec::new());
+
+            FfiApp::global().delete_corrupted_wallet(last.id).await.unwrap();
+
+            assert_eq!(selected_wallet(), Some(selected.id.clone()));
+            assert_eq!(router(), (wallet_selection_loading_route(selected.id, None), vec![]));
+        }
+
+        #[tokio::test]
+        async fn deleting_the_selected_wallet_moves_to_a_remaining_wallet_then_new_wallet() {
+            let _guard = crate::test_support::global_state_test_lock().lock().await;
+            let _restore = RestoreDeletionTestState::empty_signet();
+
+            let remaining = import(MNEMONIC_A);
+            let selected = import(MNEMONIC_B);
+            select_with_routes(&selected.id, vec![Route::Settings(SettingsRoute::Main)]);
+
+            delete_from_wallet_settings(&selected.id).await;
+
+            assert_eq!(selected_wallet(), Some(remaining.id.clone()));
+            assert_eq!(
+                router(),
+                (wallet_selection_loading_route(remaining.id.clone(), None), vec![])
+            );
+
+            delete_from_wallet_settings(&remaining.id).await;
+
+            assert_eq!(selected_wallet(), None);
+            assert_eq!(
+                router(),
+                (
+                    Route::NewWallet(Default::default())
+                        .load_and_reset_after(LOAD_AND_RESET_DELAY_MS),
+                    vec![]
+                )
+            );
+        }
     }
 }
 
