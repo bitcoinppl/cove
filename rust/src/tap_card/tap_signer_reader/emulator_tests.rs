@@ -93,6 +93,7 @@ async fn card_xpubs(card: &EmulatedCard, cvc: &str) -> (Xpub, Xpub) {
 fn p2wpkh_at(account: &Xpub, keychain: u32, index: u32) -> ScriptBuf {
     let path = [ChildNumber::from_normal_idx(keychain), ChildNumber::from_normal_idx(index)]
         .map(|child| child.expect("normal child index"));
+
     let child = account.derive_pub(&Secp256k1::new(), &path).expect("child derives");
 
     ScriptBuf::new_p2wpkh(&CompressedPublicKey(child.public_key).wpubkey_hash())
@@ -134,6 +135,7 @@ async fn setup_with_default_and_advanced_chain_codes_imports_the_card_account() 
 
         let cmd = SetupCmd::try_new(cvc(FACTORY_CVC), cvc(NEW_CVC), chain_code.clone())
             .expect("setup command builds");
+
         if let Some(chain_code) = &chain_code {
             assert_eq!(cmd.chain_code.as_slice(), chain_code.as_slice(), "{label}");
         }
@@ -257,6 +259,7 @@ async fn signs_a_hardware_draft_that_then_finalizes() {
         .get_tx(&signed.tx_id())
         .expect("draft lookup reads")
         .expect("signed PSBT matches the saved draft");
+
     assert_eq!(record.wallet_id, manager.id);
 
     let transaction = manager.finalize_psbt(signed).await.expect("signed draft finalizes");

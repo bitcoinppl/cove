@@ -214,6 +214,7 @@ async fn signed_animated_ur_and_bbqr_from_an_external_signer_finalize_the_saved_
     let from_ur = read_cove_ur_export(
         &fixture.details.psbt_to_ur_with_density(&density).expect("UR export encodes"),
     );
+
     let from_bbqr = read_cove_bbqr_export(
         &fixture.details.psbt_to_bbqr_with_density(&density).expect("BBQr export encodes"),
     );
@@ -246,6 +247,7 @@ async fn signed_animated_ur_and_bbqr_from_an_external_signer_finalize_the_saved_
     else {
         panic!("UR scan reports UR progress");
     };
+
     assert!(percentage < 1.0, "a scan missing a frame is not complete: {percentage}");
 
     let completing = fountain
@@ -263,6 +265,7 @@ async fn signed_animated_ur_and_bbqr_from_an_external_signer_finalize_the_saved_
     else {
         panic!("a completed scan keeps returning its result until reset");
     };
+
     assert_eq!(scanned_psbt(data).0, signed, "fountain-recovered scan returns the signed PSBT");
 
     // BBQr: out of order, with repeats
@@ -295,6 +298,7 @@ async fn signed_psbts_that_match_no_saved_draft_are_rejected() {
     else {
         panic!("BBQr scan reports BBQr progress");
     };
+
     assert_eq!((scanned, total), (bbqr.len() as u32 - 1, bbqr.len() as u32));
 
     // another signer's PSBT, and a PSBT the same seed signed on mainnet, match no draft and

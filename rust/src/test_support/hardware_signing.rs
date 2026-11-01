@@ -151,6 +151,7 @@ impl TestSigner {
             &mut self.wallet,
             BlockId { height: 1, hash: BlockHash::from_byte_array([3; 32]) },
         );
+
         receive_output_in_latest_block(&mut self.wallet, BdkAmount::from_sat(40_000));
 
         let mut builder = self.wallet.build_tx();
@@ -254,6 +255,7 @@ pub(crate) fn assert_matches_draft(
         .iter()
         .filter(|output| output.script_pubkey == recipient_script)
         .collect();
+
     assert_eq!(to_recipient.len(), 1, "one output pays the recipient");
     assert_eq!(to_recipient[0].value.to_sat(), SEND_SATS);
     assert_eq!(details.sending_amount.as_sats(), SEND_SATS);
@@ -263,6 +265,7 @@ pub(crate) fn assert_matches_draft(
         .iter()
         .filter(|output| output.script_pubkey != recipient_script)
         .collect();
+
     assert_eq!(change.len(), 1, "one change output");
     assert!(owns_change(&change[0].script_pubkey), "change returns to the signer's wallet");
 
@@ -293,6 +296,7 @@ pub(crate) fn assert_p2wpkh_witnesses_verify(transaction: &Transaction, prevouts
 
         let signature = bitcoin::ecdsa::Signature::from_slice(&witness[0])
             .unwrap_or_else(|error| panic!("input {index} signature parses: {error}"));
+
         let pubkey = CompressedPublicKey::from_slice(&witness[1])
             .unwrap_or_else(|error| panic!("input {index} pubkey parses: {error}"));
 
