@@ -90,7 +90,7 @@ class TapCardNfcManager private constructor(
             operationToken.ensureActive()
 
             if (UiTestSeams.tapSignerBridgeConfigured) {
-                return@withLock performBridgeOperation(cmd, callbacks)
+                return@withLock performBridgeOperation(cmd, callbacks, mainHandler, logTag)
             }
 
             val session =
@@ -181,26 +181,6 @@ class TapCardNfcManager private constructor(
             }
 
             withContext(NonCancellable) { finishSession(session) }
-        }
-    }
-
-    /** Runs the command against the UI test card emulator instead of an NFC tag */
-    private suspend fun performBridgeOperation(
-        cmd: TapSignerCmd,
-        callbacks: OperationCallbacks,
-    ): TapSignerResponse {
-        Log.d(logTag, "Running TapSigner ${operationKind(cmd)} through the UI test bridge")
-        mainHandler.post { callbacks.onTagDetected?.invoke() }
-
-        return UiTestSeams.withTapSignerTransport(
-            onMessage = { message -> mainHandler.post { callbacks.onMessageUpdate?.invoke(message) } },
-        ) { transport ->
-            val reader = createTapSignerReader(transport, cmd)
-            try {
-                reader.run()
-            } finally {
-                reader.close()
-            }
         }
     }
 
@@ -341,6 +321,31 @@ private fun Handler.runOnMain(block: () -> Unit) {
         block()
     } else {
         post(block)
+    }
+}
+
+/** Runs the command against the UI test card emulator instead of an NFC tag */
+// detekt cannot resolve the generated cove_core types it excludes, so it misses that
+// withTapSignerTransport suspends
+@Suppress("RedundantSuspendModifier")
+private suspend fun performBridgeOperation(
+    cmd: TapSignerCmd,
+    callbacks: TapCardNfcManager.OperationCallbacks,
+    mainHandler: Handler,
+    logTag: String,
+): TapSignerResponse {
+    Log.d(logTag, "Running TapSigner ${operationKind(cmd)} through the UI test bridge")
+    mainHandler.post { callbacks.onTagDetected?.invoke() }
+
+    return UiTestSeams.withTapSignerTransport(
+        onMessage = { message -> mainHandler.post { callbacks.onMessageUpdate?.invoke(message) } },
+    ) { transport ->
+        val reader = createTapSignerReader(transport, cmd)
+        try {
+            reader.run()
+        } finally {
+            reader.close()
+        }
     }
 }
 

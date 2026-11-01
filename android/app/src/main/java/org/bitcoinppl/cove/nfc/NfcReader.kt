@@ -46,21 +46,19 @@ class NfcReader(
         private set
 
     fun startScanning() {
-        if (UiTestSeams.tapSignerBridgeConfigured) {
-            scanBridge()
-            return
+        when {
+            UiTestSeams.tapSignerBridgeConfigured -> scanBridge()
+            nfcAdapter == null -> scanFailed("NFC is not supported on this device")
+            !nfcAdapter.isEnabled -> scanFailed("NFC is disabled. Please enable it in Settings")
+            else -> scanTag(nfcAdapter)
         }
+    }
 
-        if (nfcAdapter == null) {
-            _scanResults.trySend(NfcScanResult.Error("NFC is not supported on this device"))
-            return
-        }
+    private fun scanFailed(message: String) {
+        _scanResults.trySend(NfcScanResult.Error(message))
+    }
 
-        if (!nfcAdapter.isEnabled) {
-            _scanResults.trySend(NfcScanResult.Error("NFC is disabled. Please enable it in Settings"))
-            return
-        }
-
+    private fun scanTag(nfcAdapter: NfcAdapter) {
         isScanning = true
         message = "Hold your phone near the NFC tag"
         readingState = NfcReadingState.WAITING
@@ -93,6 +91,8 @@ class NfcReader(
     }
 
     /** Reads the UI test card emulator as if a TAPSIGNER were held to the phone */
+    // debug-only test path, so it does not justify threading a dispatcher through the reader
+    @Suppress("InjectDispatcher")
     private fun scanBridge() {
         isScanning = true
         message = "Hold your phone near the NFC tag"

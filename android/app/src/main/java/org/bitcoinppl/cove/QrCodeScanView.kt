@@ -279,17 +279,10 @@ private fun QrScannerContent(
                                                     .addOnSuccessListener(mainExecutor) { barcodes ->
                                                         if (scanComplete || isDisposed) return@addOnSuccessListener
 
-                                                        val barcode =
-                                                            barcodes.firstOrNull { it.format == Barcode.FORMAT_QR_CODE }
-                                                                ?: return@addOnSuccessListener
-
-                                                        // prioritize text, fall back to binary
-                                                        val qrData =
-                                                            barcode.rawValue?.let { StringOrData.String(it) }
-                                                                ?: barcode.rawBytes?.let { StringOrData.Data(it) }
-                                                                ?: return@addOnSuccessListener
-
-                                                        onQrData(qrData)
+                                                        barcodes
+                                                            .firstOrNull { it.format == Barcode.FORMAT_QR_CODE }
+                                                            ?.let(::barcodeQrData)
+                                                            ?.let(::onQrData)
                                                     }.addOnFailureListener(mainExecutor) { e ->
                                                         Log.e("QrCodeScanView", "Barcode processing failed", e)
                                                     }.addOnCompleteListener {
@@ -485,6 +478,11 @@ private fun QrScannerContent(
         }
     }
 }
+
+// prioritize text, fall back to binary
+private fun barcodeQrData(barcode: Barcode): StringOrData? =
+    barcode.rawValue?.let { StringOrData.String(it) }
+        ?: barcode.rawBytes?.let { StringOrData.Data(it) }
 
 private fun handleQrCode(
     context: android.content.Context,

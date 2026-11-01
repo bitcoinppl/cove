@@ -8,6 +8,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.nio.ByteBuffer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -17,6 +18,7 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove_core.TapcardTransportProtocol
 import org.bitcoinppl.cove_core.TransportException
+import org.json.JSONException
 import org.json.JSONObject
 
 /**
@@ -35,6 +37,8 @@ import org.json.JSONObject
  *   `xtask ui-test-host` serves, which `adb reverse` forwards to the device.
  *   TAPSIGNER commands and NFC tag reads talk to it instead of an NFC tag
  */
+// debug-only test seam with no caller that could inject a dispatcher
+@Suppress("InjectDispatcher")
 internal object UiTestSeams {
     private const val TAG = "UiTestSeams"
     private const val QR_SCRIPT_ENV = "COVE_UI_TEST_QR_SCRIPT"
@@ -96,7 +100,7 @@ internal object UiTestSeams {
     ): T {
         val address =
             tapSignerBridgeAddress()
-                ?: throw IllegalStateException("$TAPSIGNER_BRIDGE_ENV is not set")
+                ?: error("$TAPSIGNER_BRIDGE_ENV is not set")
 
         return BridgeTransport(address, onMessage).use { block(it) }
     }
@@ -115,7 +119,10 @@ internal object UiTestSeams {
             val json = JSONObject(script.readText())
             val frames = json.getJSONArray("frames")
             List(frames.length()) { frames.getString(it) }
-        } catch (e: Exception) {
+        } catch (e: IOException) {
+            Log.e(TAG, "UI test QR script at ${script.path} could not be read", e)
+            emptyList()
+        } catch (e: JSONException) {
             Log.e(TAG, "UI test QR script at ${script.path} is not valid", e)
             emptyList()
         } finally {
@@ -125,41 +132,37 @@ internal object UiTestSeams {
 
     private fun tapSignerBridgeAddress(): InetSocketAddress? {
         val value = Os.getenv(TAPSIGNER_BRIDGE_ENV) ?: return null
-        val host = value.substringBeforeLast(':')
         val port = value.substringAfterLast(':').toIntOrNull()
+        if (port == null) Log.e(TAG, "$TAPSIGNER_BRIDGE_ENV must be host:port, got $value")
 
-        if (port == null) {
-            Log.e(TAG, "$TAPSIGNER_BRIDGE_ENV must be host:port, got $value")
-            return null
-        }
-
-        return InetSocketAddress.createUnresolved(host, port)
+        return port?.let { InetSocketAddress.createUnresolved(value.substringBeforeLast(':'), it) }
     }
 
     /** Reads `{"url": text}` from a card response, ignoring the trailing status word */
     private fun cborUrl(response: ByteArray): String? {
         val prefix = byteArrayOf(0xA1.toByte(), 0x63, 0x75, 0x72, 0x6C)
-        if (response.size <= prefix.size || !response.copyOfRange(0, prefix.size).contentEquals(prefix)) {
-            return null
-        }
+        val hasPrefix =
+            response.size > prefix.size && response.copyOfRange(0, prefix.size).contentEquals(prefix)
+        if (!hasPrefix) return null
 
-        // a CBOR text string header: major type 3 with an inline, 1-byte or 2-byte length
-        var index = prefix.size
-        val header = response[index++].toInt() and 0xFF
-        val length =
+        // a CBOR text string header: major type 3 with an inline, 1-byte or 2-byte length,
+        // as (offset of the text, text length)
+        val start = prefix.size
+        fun byteAt(index: Int) = response[index].toUByte().toInt()
+
+        val header = byteAt(start)
+        val span =
             when {
-                header in 0x60..0x77 -> header - 0x60
-                header == 0x78 && response.size > index -> response[index++].toInt() and 0xFF
-                header == 0x79 && response.size > index + 1 -> {
-                    val value = (response[index].toInt() and 0xFF shl 8) or (response[index + 1].toInt() and 0xFF)
-                    index += 2
-                    value
-                }
-                else -> return null
+                header in 0x60..0x77 -> start + 1 to header - 0x60
+                header == 0x78 && response.size > start + 1 -> start + 2 to byteAt(start + 1)
+                header == 0x79 && response.size > start + 2 ->
+                    start + 3 to ((byteAt(start + 1) shl 8) or byteAt(start + 2))
+                else -> null
             }
 
-        if (response.size < index + length) return null
-        return String(response, index, length, Charsets.UTF_8)
+        return span
+            ?.takeIf { (offset, length) -> response.size >= offset + length }
+            ?.let { (offset, length) -> String(response, offset, length, Charsets.UTF_8) }
     }
 
     /**
@@ -222,20 +225,14 @@ internal object UiTestSeams {
             output: OutputStream,
             frame: ByteArray,
         ) {
-            val length = frame.size
-            output.write(byteArrayOf((length ushr 24).toByte(), (length ushr 16).toByte(), (length ushr 8).toByte(), length.toByte()))
+            // ByteBuffer is big-endian by default, as the bridge expects
+            output.write(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(frame.size).array())
             output.write(frame)
             output.flush()
         }
 
         private fun readFrame(input: InputStream): ByteArray {
-            val header = readExactly(input, 4)
-            val length =
-                (header[0].toInt() and 0xFF shl 24) or
-                    (header[1].toInt() and 0xFF shl 16) or
-                    (header[2].toInt() and 0xFF shl 8) or
-                    (header[3].toInt() and 0xFF)
-
+            val length = ByteBuffer.wrap(readExactly(input, Int.SIZE_BYTES)).int
             return readExactly(input, length)
         }
 
