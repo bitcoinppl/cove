@@ -48,8 +48,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     func testExistingUserCanGoBackToBitcoinChoice() {
         launchApp()
 
-        app.buttons["Get Started"].tap()
-        acceptTermsIfNeeded()
+        getStarted()
         button(startingWith: "Yes, I have Bitcoin").tap()
         app.buttons["Back"].tap()
 
@@ -320,16 +319,14 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     private func reachBackupWallet() {
-        tapButton(named: "Get Started")
-        acceptTermsIfNeeded()
+        getStarted()
         tapButton(startingWith: "No, I")
 
         assertBackupWallet(titlePrefix: "Back up your wallet")
     }
 
     private func reachStorageChoices() {
-        tapButton(named: "Get Started")
-        acceptTermsIfNeeded()
+        getStarted()
         tapButton(startingWith: "Yes, I have Bitcoin")
 
         XCTAssertTrue(app.staticTexts["How do you store your Bitcoin?"].waitForExistence(timeout: 10))
@@ -361,6 +358,42 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         }
 
         app.buttons["onboarding.terms.agree"].tap()
+    }
+
+    /// Leaves the welcome screen, accepting the terms when they show
+    ///
+    /// On CI the app can take over a minute to launch, and a tap that lands before it handles input
+    /// does nothing, so the tap repeats until the terms or the next question shows
+    private func getStarted() {
+        let getStarted = app.buttons["Get Started"]
+        let terms = app.staticTexts["Terms & Conditions"]
+        let bitcoinChoice = app.staticTexts["Do you already have Bitcoin?"]
+
+        guard getStarted.waitForExistence(timeout: 10) else {
+            XCTFail("Timed out waiting for button 'Get Started'")
+            return
+        }
+
+        for _ in 0 ..< 3 where getStarted.exists {
+            getStarted.tap()
+            if waitForAny(of: [terms, bitcoinChoice], timeout: 10) { break }
+        }
+
+        XCTAssertTrue(terms.exists || bitcoinChoice.exists, "Get Started never left the welcome screen")
+        acceptTermsIfNeeded()
+    }
+
+    private func waitForAny(of elements: [XCUIElement], timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            for element in elements where element.exists {
+                return true
+            }
+
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+
+        return false
     }
 
     private func acceptTermsIfNeeded() {
