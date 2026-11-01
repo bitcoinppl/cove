@@ -23,7 +23,7 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 | --- | --- | --- |
 | Rust tests | Core behavior shared by both apps: wallets, send flow, labels, KeyTeleport, cloud backup, diagnostics, node and explorer settings, and the hardware-signer QR loop | `just test` |
 | TAPSIGNER emulator tests | Cove's TAPSIGNER setup, PIN, derive, import and signing logic against Coinkite's card emulator | `just test-tapsigner-emulator` |
-| iOS UI tests | Full-launch flows in the simulator | `just ios-ui-background` runs `CoveUITests/OnboardingFullLaunchUITests`, the class CI runs; pass another class as the second argument, as in `just ios-ui-background "iPhone 17" CoveUITests/<Class>`. `just ios-ui-foreground` shows the simulator |
+| iOS UI tests | Full-launch flows in the simulator | `just ios-ui-background` runs `CoveUITests/OnboardingFullLaunchUITests` by default; CI also runs `UtxoLockFullLaunchUITests` and `HardwareSigningFullLaunchUITests`; pass another class as the second argument, as in `just ios-ui-background "iPhone 17" CoveUITests/<Class>`. `just ios-ui-foreground` shows the simulator |
 | Android instrumented tests | Compose screens and full-launch flows on an emulator or device | `just android-instrumented-ci`; staged process-death tests need `just android-ui-manual` |
 | Device scripts | Navigate-and-observe checks on a real phone, with JSON results per row | `python3 -I qa/device/run.py android --serial <serial> --package org.bitcoinppl.cove.dev` or `python3 -I qa/device/run.py ios --bundle-id org.bitcoinppl.cove`; see [qa/device/README.md](../qa/device/README.md) for setup, `--list` and running a subset of rows |
 | Agent pass | Checklist rows that need judgment, fixtures or multi-app flows, run by a coding agent driving a real phone | This document |
@@ -67,10 +67,10 @@ Automated UI tests don't use these fixtures. They reset the fake node, fund the 
 
 `HardwareSigningFullLaunchUITests` (iOS) and `HardwareSigningFullLaunchTest` (Android, `androidTestUiTest`) sign sends from hardware wallets without a camera or a card. They cover:
 
-- **Animated QR signing:** a watch-only wallet imported from a scanned export sends Max, exports the unsigned PSBT as an animated UR or BBQr QR, imports the signature as animated frames, checks the confirm screen and Advanced Details, and broadcasts to the fake node
+- **Animated QR signing:** a watch-only wallet imported from a scanned export sends Max, opens the unsigned PSBT's UR or BBQr export and takes the PSBT from its Copy button (the tests don't decode the displayed QR), imports the signature as animated frames, checks the confirm screen and Advanced Details, and broadcasts to the fake node
 - **Partial frames:** two BBQr frames show `Scanned 2 of N` and the parts left, a repeated frame doesn't count twice, and the rest complete the scan
 - **Signatures that match no draft:** a signature for a deleted draft, one for an unrelated transaction and a mainnet one each show No Unsigned Transaction Found. On Android, a pasted signature for the deleted draft shows a Paste Error saying the transaction isn't pending. iOS doesn't test paste: under XCUITest the app reads an empty pasteboard, even after the host sets it with `simctl pbcopy`, and no paste prompt shows. Nothing checks a PSBT's network, so a mainnet signature is reported as an unknown transaction
-- **TAPSIGNER:** import and signing through an emulated card, each with a wrong CVC and then a session that drops partway through before the retry succeeds. Signing is marked as an expected failure until [#965](https://github.com/bitcoinppl/cove/issues/965) is fixed: rust-cktap rejects every BIP84 PSBT before it contacts the card
+- **TAPSIGNER:** import and signing through an emulated card, each with a wrong CVC and then a session that drops partway through before the retry succeeds. Until [#965](https://github.com/bitcoinppl/cove/issues/965) is fixed, rust-cktap rejects every BIP84 PSBT before it contacts the card, so the wrong CVC ends in the generic signing failure instead of Wrong PIN. The signing test stops there, as an expected failure on iOS and a skipped test on Android, and any other outcome runs the whole flow
 
 ### Test seams
 

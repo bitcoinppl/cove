@@ -115,6 +115,20 @@ struct QrScript {
         try data.write(to: URL(fileURLWithPath: path), options: .atomic)
     }
 
+    /// Waits until the scanner takes the last frames shown and has had time to scan them, for
+    /// checks that the scan didn't change
+    func waitUntilScanned(frameCount: Int) {
+        let deadline = Date().addingTimeInterval(10)
+        while FileManager.default.fileExists(atPath: path), Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: path), "the scanner never took the QR frames")
+
+        // the scanner feeds the frames it took 150 ms apart
+        Thread.sleep(forTimeInterval: 0.15 * Double(frameCount) + 0.5)
+    }
+
     func remove() {
         try? FileManager.default.removeItem(atPath: path)
     }

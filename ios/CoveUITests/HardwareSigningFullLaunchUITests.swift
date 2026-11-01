@@ -100,7 +100,8 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
 
         // a repeated frame doesn't count twice
         try qr.show([frames[1]])
-        XCTAssertTrue(app.staticTexts["Scanned 2 of \(total)"].waitForExistence(timeout: 5))
+        qr.waitUntilScanned(frameCount: 1)
+        XCTAssertTrue(app.staticTexts["Scanned 2 of \(total)"].exists)
 
         try qr.show(Array(frames.dropFirst(2)))
         assertConfirmationScreen()
@@ -180,24 +181,38 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
         app.tapMax()
         app.tapNext()
 
-        // rust-cktap rejects every BIP84 PSBT before it contacts the card, so not even the wrong
-        // CVC reaches it. Strict, so this fails once signing works and the expectation can go
-        try XCTExpectFailure("TAPSIGNER signing fails with Invalid path, https://github.com/bitcoinppl/cove/issues/965") {
-            app.tapButton(named: "Sign using TAPSIGNER")
-            enterCvc("000000")
-            tryAgainAfterWrongPin()
+        app.tapButton(named: "Sign using TAPSIGNER")
+        enterCvc("000000")
 
-            try signer.dropNextTapSignerSession(afterExchanges: 1)
-            enterCvc(HardwareSignerControl.tapSignerCvc)
-            retryInterruptedSigning()
-
-            assertConfirmationScreen()
-            app.swipeToSend()
-
-            let broadcast = try node.waitForBroadcasts(count: 1)[0]
-            XCTAssertEqual(broadcast.inputs, funded.map(\.outpoint))
-            XCTAssertEqual(broadcast.outputs.map(\.address), [XCUIApplication.externalAddress])
+        // rust-cktap rejects every BIP84 PSBT before it contacts the card, so even the wrong CVC
+        // ends in the generic failure instead of Wrong PIN. Only that outcome is expected to fail;
+        // once signing reaches the card, the whole flow runs
+        let wrongPin = app.alerts["Wrong PIN"]
+        let signingFailed = app.alerts["Signing Failed!"]
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline, !wrongPin.exists, !signingFailed.exists {
+            Thread.sleep(forTimeInterval: 0.25)
         }
+
+        if signingFailed.exists {
+            XCTExpectFailure("TAPSIGNER signing fails with Invalid path, https://github.com/bitcoinppl/cove/issues/965") {
+                XCTFail("the wrong CVC ended in Signing Failed! instead of Wrong PIN")
+            }
+            return
+        }
+
+        tryAgainAfterWrongPin()
+
+        try signer.dropNextTapSignerSession(afterExchanges: 1)
+        enterCvc(HardwareSignerControl.tapSignerCvc)
+        retryInterruptedSigning()
+
+        assertConfirmationScreen()
+        app.swipeToSend()
+
+        let broadcast = try node.waitForBroadcasts(count: 1)[0]
+        XCTAssertEqual(broadcast.inputs, funded.map(\.outpoint))
+        XCTAssertEqual(broadcast.outputs.map(\.address), [XCUIApplication.externalAddress])
     }
 
     // MARK: - Fixture

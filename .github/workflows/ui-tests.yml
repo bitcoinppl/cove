@@ -115,7 +115,7 @@ jobs:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
     runs-on: macos-26
     # each test erases and reboots the simulator, about 6 minutes a test on the hosted runner
-    timeout-minutes: 150
+    timeout-minutes: 200
     steps:
       - uses: actions/checkout@v6
 
@@ -155,6 +155,10 @@ jobs:
       - name: Run UTXO lock UI tests
         if: ${{ !cancelled() }}
         run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/UtxoLockFullLaunchUITests
+
+      - name: Run hardware signing UI tests
+        if: ${{ !cancelled() }}
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/HardwareSigningFullLaunchUITests
 
       # CoveCloudBackupUITests stays out until its inventory scenarios pass on master; see #947
 

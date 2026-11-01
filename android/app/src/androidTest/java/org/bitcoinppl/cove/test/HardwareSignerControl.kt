@@ -111,6 +111,22 @@ class QrScript {
         check(temporary.renameTo(file)) { "couldn't move the QR script into place" }
     }
 
+    /**
+     * Waits until the scanner takes the last frames shown and has had time to scan them, for
+     * checks that the scan didn't change
+     */
+    fun waitUntilScanned(frameCount: Int) {
+        val deadline = System.currentTimeMillis() + 10_000L
+        while (file.exists() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(100)
+        }
+
+        check(!file.exists()) { "the scanner never took the QR frames" }
+
+        // the scanner feeds the frames it took 150 ms apart
+        Thread.sleep(150L * frameCount + 500L)
+    }
+
     fun remove() {
         file.delete()
         Os.unsetenv("COVE_UI_TEST_QR_SCRIPT")

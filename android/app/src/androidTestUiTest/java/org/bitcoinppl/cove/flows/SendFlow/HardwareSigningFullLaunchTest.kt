@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.system.Os
-import android.util.Log
 import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -34,13 +33,14 @@ import org.bitcoinppl.cove.test.waitFor
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeFalse
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.math.BigDecimal
+import java.util.regex.Pattern
 
 /**
  * Signs sends from hardware wallets in the real app: animated UR and BBQr signatures over the QR
@@ -62,6 +62,9 @@ class HardwareSigningFullLaunchTest {
         // enough frames that the scanner shows progress before it completes
         const val ANIMATED_PARTS = 5
         const val WRONG_CVC = "000000"
+
+        // what the TAPSIGNER sheet shows when signing fails for any reason but the CVC
+        const val SIGNING_FAILED = "Connection failed, please try again"
     }
 
     @get:Rule
@@ -153,8 +156,8 @@ class HardwareSigningFullLaunchTest {
 
         // a repeated frame doesn't count twice
         qr.show(listOf(frames[1]))
-        Thread.sleep(1_000)
-        device.waitFor(By.text("Scanned 2 of $total"))
+        qr.waitUntilScanned(frameCount = 1)
+        assertTrue(device.hasObject(By.text("Scanned 2 of $total")))
 
         qr.show(frames.drop(2))
         assertConfirmationScreen()
@@ -240,39 +243,38 @@ class HardwareSigningFullLaunchTest {
         wallet.tapMax()
         wallet.clickNext(expecting = By.text("Sign using TAPSIGNER"))
 
-        // rust-cktap rejects every BIP84 PSBT before it contacts the card, so not even the wrong
-        // CVC reaches it
-        expectFailure("https://github.com/bitcoinppl/cove/issues/965") {
-            device.waitFor(By.text("Sign using TAPSIGNER")).click()
-            enterCvc(WRONG_CVC)
-            tryAgainAfterWrongPin()
+        device.waitFor(By.text("Sign using TAPSIGNER")).click()
+        enterCvc(WRONG_CVC)
 
-            signer.dropNextTapSignerSession(afterExchanges = 1)
-            enterCvc(TAPSIGNER_CVC)
-            retryAfterDroppedSession()
+        // rust-cktap rejects every BIP84 PSBT before it contacts the card, so even the wrong CVC
+        // ends in the generic failure instead of Wrong PIN. Only that outcome skips the rest; once
+        // signing reaches the card, the whole flow runs
+        val outcome =
+            checkNotNull(device.wait(Until.findObject(By.text(Pattern.compile("Wrong PIN|$SIGNING_FAILED"))), 30_000L)) {
+                "the wrong CVC showed neither Wrong PIN nor a signing failure"
+            }
+        assumeFalse(
+            "TAPSIGNER signing fails with Invalid path, see https://github.com/bitcoinppl/cove/issues/965",
+            outcome.text == SIGNING_FAILED,
+        )
+        tryAgainAfterWrongPin()
 
-            assertConfirmationScreen()
-            wallet.swipeToSend()
+        signer.dropNextTapSignerSession(afterExchanges = 1)
+        enterCvc(TAPSIGNER_CVC)
+        retryAfterDroppedSession()
 
-            val broadcast = node.broadcasts().single()
-            assertEquals(funded.map { it.outpoint }, broadcast.inputs)
-            assertEquals(listOf(EXTERNAL_ADDRESS), broadcast.outputs.map { it.address })
-        }
+        assertConfirmationScreen()
+        wallet.swipeToSend()
+
+        val broadcast = node.broadcasts().single()
+        assertEquals(funded.map { it.outpoint }, broadcast.inputs)
+        assertEquals(listOf(EXTERNAL_ADDRESS), broadcast.outputs.map { it.address })
     }
 
     /**
      * Runs steps a known bug breaks. It passes while they fail and fails once they pass, so the test
      * is updated when the bug is fixed, like XCTExpectFailure on iOS
      */
-    private fun expectFailure(
-        issue: String,
-        steps: () -> Unit,
-    ) {
-        val failure = runCatching(steps).exceptionOrNull()
-        assertNotNull("these steps pass now, so $issue looks fixed; remove expectFailure", failure)
-        Log.i("HardwareSigningFullLaunchTest", "expected failure, see $issue", failure)
-    }
-
     // MARK: fixture
 
     /** Funds external indexes 0 and 1 of the test mnemonic, each its own UTXO */
