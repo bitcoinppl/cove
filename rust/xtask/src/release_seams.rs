@@ -15,9 +15,9 @@
 //! It also scans a debug build and fails when a marker is missing there, so a
 //! scan that can't see the markers doesn't pass by accident
 //!
-//! Because the apps link whichever Rust library was built last, the TestFlight
-//! archive and the Play bundle also scan the library they are about to package,
-//! see [`ensure_packaged_rust_is_release`]
+//! Because the apps link whichever Rust library was built last, device Release
+//! builds in Xcode and release packaging in Gradle also scan the library they
+//! are about to package, with `tools/release-seams/check-packaged-rust.sh`
 
 use std::{
     fs,
@@ -37,11 +37,9 @@ use crate::common::{print_info, print_success};
 /// Strings only the apps' seam code contains: the variables that turn the seams on
 const APP_MARKERS: &[&str] = &["COVE_UI_TEST_QR_SCRIPT", "COVE_UI_TEST_TAPSIGNER_BRIDGE"];
 
-/// Strings only the Rust seam contains: its variable and the emulator's root key
-const RUST_MARKERS: &[&str] = &[
-    "COVE_UI_TEST_TAPSIGNER_BRIDGE",
-    "0312d005ca1501b1603c3b00412eefe27c6b20a74c29377263b357b3aff12de6fa",
-];
+/// Strings only the Rust seam contains, its variable and the emulator's root key, one per
+/// line; the Xcode and Gradle release checks read the same file
+const RUST_MARKERS: &str = include_str!("../../../tools/release-seams/rust-markers.txt");
 
 /// The profile release builds of both apps compile Rust with
 const RUST_RELEASE_PROFILE: &str = "release-speed";
@@ -78,17 +76,6 @@ pub fn run(args: CheckReleaseSeams) -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Fails when the Rust library under `libraries` has a UI test seam
-///
-/// Release packaging calls this before Xcode or Gradle copies the library in: neither rebuilds
-/// Rust, so after a debug Rust build they would ship the debug library and its seam
-pub fn ensure_packaged_rust_is_release(libraries: &Path) -> Result<()> {
-    let libraries = repo_root().join(libraries);
-    expect_markers(&[libraries], RUST_MARKERS, false).wrap_err(format!(
-        "The Rust library this release would package has UI test seams; rebuild it with the {RUST_RELEASE_PROFILE} profile"
-    ))
 }
 
 fn repo_root() -> &'static Path {
@@ -182,9 +169,10 @@ fn check_rust(repo: &Path) -> Result<()> {
         }
     }
 
+    let markers = RUST_MARKERS.lines().filter(|line| !line.is_empty()).collect::<Vec<_>>();
     let rlib = |profile_dir: &str| target_dir.join(profile_dir).join("libcove.rlib");
-    expect_markers(&[rlib("debug")], RUST_MARKERS, true)?;
-    expect_markers(&[rlib(RUST_RELEASE_PROFILE)], RUST_MARKERS, false)?;
+    expect_markers(&[rlib("debug")], &markers, true)?;
+    expect_markers(&[rlib(RUST_RELEASE_PROFILE)], &markers, false)?;
 
     print_success(&format!("Rust {RUST_RELEASE_PROFILE} has no UI test seams"));
     Ok(())

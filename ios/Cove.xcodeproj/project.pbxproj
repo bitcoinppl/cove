@@ -358,6 +358,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = D0245F5A2C0F7B500042B447 /* Build configuration list for PBXNativeTarget "Cove" */;
 			buildPhases = (
+				C0F000012F30000000000001 /* Check Rust Library for UI Test Seams */,
 				D0245F482C0F7B4E0042B447 /* Sources */,
 				D0245F492C0F7B4E0042B447 /* Frameworks */,
 				D0245F4A2C0F7B4E0042B447 /* Resources */,
@@ -478,6 +479,31 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		C0F000012F30000000000001 /* Check Rust Library for UI Test Seams */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../tools/release-seams/check-packaged-rust.sh",
+				"$(SRCROOT)/../tools/release-seams/rust-markers.txt",
+				"$(SRCROOT)/CoveCore/Sources/cove_core_ffi.xcframework/$(COVE_RUST_XCFRAMEWORK_SLICE)/libcove.a",
+			);
+			name = "Check Rust Library for UI Test Seams";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# device Release builds package the xcframework as it is, and a debug Rust build leaves the UI test seams in it, see docs/testing.md\n# the script sandbox only allows reading declared input files, so the library is an input, picked per SDK\nif [ \"$CONFIGURATION\" = \"Release\" ] && [ \"$PLATFORM_NAME\" = \"iphoneos\" ]; then\n    \"$SRCROOT/../tools/release-seams/check-packaged-rust.sh\" \"$SRCROOT/CoveCore/Sources/cove_core_ffi.xcframework/$COVE_RUST_XCFRAMEWORK_SLICE/libcove.a\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		C0A000082EF0000000000001 /* Sources */ = {
@@ -941,6 +967,8 @@
 				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
+				"COVE_RUST_XCFRAMEWORK_SLICE[sdk=iphoneos*]" = "ios-arm64";
+				"COVE_RUST_XCFRAMEWORK_SLICE[sdk=iphonesimulator*]" = "ios-arm64-simulator";
 				CURRENT_PROJECT_VERSION = 132;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;
@@ -991,6 +1019,8 @@
 				CODE_SIGN_ENTITLEMENTS = Cove/Cove.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
+				"COVE_RUST_XCFRAMEWORK_SLICE[sdk=iphoneos*]" = "ios-arm64";
+				"COVE_RUST_XCFRAMEWORK_SLICE[sdk=iphonesimulator*]" = "ios-arm64-simulator";
 				CURRENT_PROJECT_VERSION = 132;
 				DEVELOPMENT_ASSET_PATHS = "\"Cove/Preview Content\"";
 				DEVELOPMENT_TEAM = Q8UP8C53Y8;

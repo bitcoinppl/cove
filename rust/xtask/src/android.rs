@@ -633,11 +633,6 @@ pub fn bundle_android(verbose: bool) -> Result<()> {
         signing.keystore_path, signing.key_alias
     ));
 
-    // gradle packages jniLibs as they are, which a debug Rust build leaves with UI test seams
-    crate::release_seams::ensure_packaged_rust_is_release(Path::new(
-        "android/app/src/main/jniLibs",
-    ))?;
-
     // change to android directory
     sh.change_dir(ANDROID_PROJECT_DIR);
 

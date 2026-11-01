@@ -697,11 +697,6 @@ fn archive_testflight(
         color_eyre::eyre::bail!("xcodebuild command not found");
     }
 
-    // archiving packages the xcframework as it is, which a debug Rust build leaves with UI test seams
-    crate::release_seams::ensure_packaged_rust_is_release(
-        &Path::new("ios/CoveCore/Sources").join(XCFRAMEWORK_NAME),
-    )?;
-
     sh.change_dir("../ios");
 
     let archive_path = temp_artifact_path("Cove-TestFlight", "xcarchive")?;
