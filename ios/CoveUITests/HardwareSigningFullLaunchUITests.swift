@@ -65,8 +65,9 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
         let frames = signed.frames(format)
         XCTAssertGreaterThan(frames.count, 1, "the signature must be an animated QR")
 
+        // the camera can catch an animated QR at any frame, so feed them out of order
         openSignatureScanner()
-        try qr.show(frames)
+        try qr.show(Array(frames.reversed()))
 
         assertConfirmationScreen()
         assertAdvancedDetails()

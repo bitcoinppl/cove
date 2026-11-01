@@ -125,8 +125,9 @@ class HardwareSigningFullLaunchTest {
         val animated = frames(signed)
         assertTrue("the signature must be an animated QR", animated.size > 1)
 
+        // the camera can catch an animated QR at any frame, so feed them out of order
         openSignatureScanner()
-        qr.show(animated)
+        qr.show(animated.reversed())
 
         assertConfirmationScreen()
         assertAdvancedDetails()
