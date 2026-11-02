@@ -132,6 +132,7 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
+  "human",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_restart_discards_only_unregistered_staged_material",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_restart_hydrates_registered_passkey_for_manual_confirmation",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_restart_finishes_promoted_state_with_matching_completion",
@@ -143,7 +144,7 @@ coverage = [
   "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testPendingEnableRecoveryPresentationSeparatesSafeCleanupFromSupportOnly",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust restarts from the persisted journal at each phase; the apps show the support code and offer cleanup only when safe
+# tests build the interrupted state and call recovery directly; recovery through a new manager's normal startup stays human
 
 [[row]]
 id = "s12-retry-interrupted-setup-without-duplicates"
@@ -170,6 +171,7 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
+  "human",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::registered_passkey_confirmation_session_prevents_duplicate_create",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::registered_passkey_stages_confirmation_without_duplicate_create",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::confirm_saved_passkey_reuses_original_credential_id",
@@ -178,6 +180,7 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::startup_resume_retries_interrupted_uploading_wallets",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
+# tests cover retry session extraction and uploads for an enabled backup; retrying a failed setup upload through the production action stays human
 
 [[row]]
 id = "s12-cancel-incomplete-setup-preserves-active-data"
