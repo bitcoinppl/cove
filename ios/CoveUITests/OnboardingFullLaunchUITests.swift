@@ -23,12 +23,10 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachStorageChoices()
-        button(startingWith: "Software wallet").tap()
-
-        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
+        openSoftwareWalletImport()
 
         importKnownEmptyMainnetWalletWords()
-        app.buttons["Not Now"].tap()
+        tap(app.buttons["Not Now"], until: app.staticTexts["Terms & Conditions"])
         acceptTermsAndContinue()
 
         XCTAssertTrue(app.staticTexts["Multiple wallets found, please choose one"].waitForExistence(timeout: 30))
@@ -49,10 +47,9 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         getStarted()
-        button(startingWith: "Yes, I have Bitcoin").tap()
-        app.buttons["Back"].tap()
+        tap(button(startingWith: "Yes, I have Bitcoin"), until: app.staticTexts["How do you store your Bitcoin?"])
+        tap(app.buttons["Back"], until: app.staticTexts["Do you already have Bitcoin?"])
 
-        XCTAssertTrue(app.staticTexts["Do you already have Bitcoin?"].waitForExistence(timeout: 10))
         XCTAssertTrue(button(startingWith: "No, I").exists)
         XCTAssertTrue(button(startingWith: "Yes, I have Bitcoin").exists)
     }
@@ -61,18 +58,15 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachStorageChoices()
-        button(startingWith: "On an exchange").tap()
+        tap(button(startingWith: "On an exchange"), until: backupWalletTitle(), timeout: 15)
         assertBackupWallet(titlePrefix: "Back up your wallet before funding it")
 
-        button(startingWith: "Show Words").tap()
-        XCTAssertTrue(app.staticTexts["Your Recovery Words"].waitForExistence(timeout: 10))
+        tap(button(startingWith: "Show Words"), until: app.staticTexts["Your Recovery Words"])
 
-        app.buttons["I Saved These Words"].tap()
+        tap(app.buttons["I Saved These Words"], until: button(startingWith: "Saved"))
         assertBackupWallet(titlePrefix: "Back up your wallet before funding it", recoveryWordsSaved: true)
 
-        app.buttons["Continue"].tap()
-
-        XCTAssertTrue(app.staticTexts["Your wallet is ready to fund"].waitForExistence(timeout: 15))
+        tap(app.buttons["Continue"], until: app.staticTexts["Your wallet is ready to fund"], timeout: 15)
         XCTAssertTrue(app.staticTexts["Deposit address"].waitForExistence(timeout: 30))
 
         // the "Copied" label reverts after 2 seconds, which a slow accessibility snapshot can miss,
@@ -90,9 +84,8 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachStorageChoices()
-        button(startingWith: "Hardware wallet").tap()
+        openHardwareWalletImport()
 
-        XCTAssertTrue(app.staticTexts["Import your hardware wallet"].waitForExistence(timeout: 10))
         XCTAssertTrue(button(startingWith: "Scan export QR").exists)
         XCTAssertTrue(button(startingWith: "Import export file").exists)
         XCTAssertTrue(button(startingWith: "Scan with NFC").exists)
@@ -102,10 +95,9 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachStorageChoices()
-        button(startingWith: "Hardware wallet").tap()
-        button(startingWith: "Scan export QR").tap()
+        openHardwareWalletImport()
+        tap(button(startingWith: "Scan export QR"), until: app.navigationBars["Scan Hardware QR"])
 
-        XCTAssertTrue(app.navigationBars["Scan Hardware QR"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Scan Wallet Export QR Code"].waitForExistence(timeout: 10))
     }
 
@@ -113,10 +105,9 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachStorageChoices()
-        button(startingWith: "Hardware wallet").tap()
-        button(startingWith: "Scan with NFC").tap()
+        openHardwareWalletImport()
+        tap(button(startingWith: "Scan with NFC"), until: app.staticTexts["Scan your hardware wallet with NFC"])
 
-        XCTAssertTrue(app.staticTexts["Scan your hardware wallet with NFC"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["Start NFC Scan"].exists)
     }
 
@@ -124,10 +115,8 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachStorageChoices()
-        button(startingWith: "Software wallet").tap()
-
-        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
-        app.buttons["Create a new wallet instead"].tap()
+        openSoftwareWalletImport()
+        tap(app.buttons["Create a new wallet instead"], until: backupWalletTitle(), timeout: 15)
 
         assertBackupWallet(titlePrefix: "Back up your wallet")
         viewRecoveryWords()
@@ -137,9 +126,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachStorageChoices()
-        button(startingWith: "Software wallet").tap()
-
-        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
+        openSoftwareWalletImport()
         XCTAssertTrue(button(startingWith: "Enter recovery words").exists)
         XCTAssertTrue(button(startingWith: "Scan QR code").exists)
     }
@@ -154,9 +141,9 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachStorageChoices()
-        button(startingWith: "Software wallet").tap()
-        button(startingWith: "Enter recovery words").tap()
-        button(startingWith: "12 words").tap()
+        openSoftwareWalletImport()
+        tap(button(startingWith: "Enter recovery words"), until: app.staticTexts["How many words do you have?"])
+        tap(button(startingWith: "12 words"), until: app.navigationBars["Import Wallet"])
 
         let firstField = app.textFields["hotWalletImport.word.1"]
         XCTAssertTrue(firstField.waitForExistence(timeout: 10))
@@ -194,24 +181,18 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachStorageChoices()
-        button(startingWith: "Software wallet").tap()
-
-        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
-        button(startingWith: "Scan QR code").tap()
-
-        assertQrScannerVisible()
+        openSoftwareWalletImport()
+        tap(button(startingWith: "Scan QR code"), until: app.buttons["1x"], app.alerts["Camera Access Required"])
     }
 
     func testSoftwareWalletUserCanImportKnownWords() {
         launchApp()
 
         reachStorageChoices()
-        button(startingWith: "Software wallet").tap()
-
-        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
+        openSoftwareWalletImport()
 
         importKnownEmptyMainnetWalletWords()
-        app.buttons["Not Now"].tap()
+        tap(app.buttons["Not Now"], until: app.staticTexts["Terms & Conditions"])
         acceptTermsAndContinue()
         chooseNativeImportedWalletFromSelectionSheet()
 
@@ -225,12 +206,10 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachStorageChoices()
-        button(startingWith: "Software wallet").tap()
-
-        XCTAssertTrue(app.staticTexts["Import your software wallet"].waitForExistence(timeout: 10))
+        openSoftwareWalletImport()
 
         importKnownEmptyMainnetWalletWords()
-        app.buttons["Not Now"].tap()
+        tap(app.buttons["Not Now"], until: app.staticTexts["Terms & Conditions"])
         acceptTermsAndContinue()
         chooseLegacyImportedWalletFromSelectionSheet()
 
@@ -252,14 +231,9 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachBackupWallet()
-        button(startingWith: "Show Words").tap()
+        viewRecoveryWords()
 
-        XCTAssertTrue(app.staticTexts["Your Recovery Words"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["I Saved These Words"].exists)
-
-        app.buttons["Back"].tap()
-
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Back up your wallet")).firstMatch.waitForExistence(timeout: 10))
+        tap(app.buttons["Back"], until: backupWalletTitle())
         XCTAssertTrue(button(startingWith: "Show Words").exists)
     }
 
@@ -267,14 +241,10 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachBackupWallet()
-        button(startingWith: "Enable").tap()
-
-        XCTAssertTrue(app.staticTexts["Cloud Backup"].waitForExistence(timeout: 10))
+        tap(button(startingWith: "Enable"), until: app.staticTexts["Cloud Backup"])
         XCTAssertTrue(app.buttons["Cancel"].exists)
 
-        app.buttons["Cancel"].tap()
-
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Back up your wallet")).firstMatch.waitForExistence(timeout: 10))
+        tap(app.buttons["Cancel"], until: backupWalletTitle())
         XCTAssertTrue(button(startingWith: "Enable").exists)
     }
 
@@ -320,16 +290,26 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
     private func reachBackupWallet() {
         getStarted()
-        tapButton(startingWith: "No, I")
+        tap(button(startingWith: "No, I"), until: backupWalletTitle(), timeout: 15)
 
         assertBackupWallet(titlePrefix: "Back up your wallet")
     }
 
     private func reachStorageChoices() {
         getStarted()
-        tapButton(startingWith: "Yes, I have Bitcoin")
+        tap(button(startingWith: "Yes, I have Bitcoin"), until: app.staticTexts["How do you store your Bitcoin?"])
+    }
 
-        XCTAssertTrue(app.staticTexts["How do you store your Bitcoin?"].waitForExistence(timeout: 10))
+    private func openSoftwareWalletImport() {
+        tap(button(startingWith: "Software wallet"), until: app.staticTexts["Import your software wallet"])
+    }
+
+    private func openHardwareWalletImport() {
+        tap(button(startingWith: "Hardware wallet"), until: app.staticTexts["Import your hardware wallet"])
+    }
+
+    private func backupWalletTitle() -> XCUIElement {
+        staticText(startingWith: "Back up your wallet")
     }
 
     private func assertBackupWallet(titlePrefix: String, recoveryWordsSaved: Bool = false) {
@@ -339,8 +319,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     }
 
     private func viewRecoveryWords() {
-        button(startingWith: "Show Words").tap()
-        XCTAssertTrue(app.staticTexts["Your Recovery Words"].waitForExistence(timeout: 10))
+        tap(button(startingWith: "Show Words"), until: app.staticTexts["Your Recovery Words"])
         XCTAssertTrue(app.buttons["I Saved These Words"].exists)
     }
 
@@ -357,30 +336,42 @@ final class OnboardingFullLaunchUITests: XCTestCase {
             element(identifier: identifier).tap()
         }
 
-        app.buttons["onboarding.terms.agree"].tap()
+        tap(app.buttons["onboarding.terms.agree"], until: app.staticTexts["Multiple wallets found, please choose one"], timeout: 30)
     }
 
     /// Leaves the welcome screen, accepting the terms when they show
-    ///
-    /// On CI the app can take over a minute to launch, and a tap that lands before it handles input
-    /// does nothing, so the tap repeats until the terms or the next question shows
     private func getStarted() {
-        let getStarted = app.buttons["Get Started"]
-        let terms = app.staticTexts["Terms & Conditions"]
-        let bitcoinChoice = app.staticTexts["Do you already have Bitcoin?"]
+        tap(app.buttons["Get Started"], until: app.staticTexts["Terms & Conditions"], app.staticTexts["Do you already have Bitcoin?"])
+        acceptTermsIfNeeded()
+    }
 
-        guard getStarted.waitForExistence(timeout: 10) else {
-            XCTFail("Timed out waiting for button 'Get Started'")
+    /// Taps a button until one of the screens it leads to shows
+    ///
+    /// On a slow CI simulator a tap can be sent before the app handles input and do nothing, so
+    /// the tap repeats while the button is still hittable and no destination has shown; a
+    /// navigation that is only slow leaves the button unhittable, so it isn't tapped twice
+    private func tap(
+        _ button: XCUIElement,
+        until destinations: XCUIElement...,
+        timeout: TimeInterval = 10,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard button.waitForExistence(timeout: 10) else {
+            XCTFail("Timed out waiting for \(button)", file: file, line: line)
             return
         }
 
-        for _ in 0 ..< 3 where getStarted.exists {
-            getStarted.tap()
-            if waitForAny(of: [terms, bitcoinChoice], timeout: 10) { break }
+        for _ in 0 ..< 3 {
+            button.tap()
+            if waitForAny(of: destinations, timeout: timeout) { return }
+            guard button.exists, button.isHittable else { break }
         }
 
-        XCTAssertTrue(terms.exists || bitcoinChoice.exists, "Get Started never left the welcome screen")
-        acceptTermsIfNeeded()
+        // the last tap may have started a navigation that finishes late
+        if waitForAny(of: destinations, timeout: timeout) { return }
+
+        XCTFail("Tapping \(button) never showed \(destinations)", file: file, line: line)
     }
 
     private func waitForAny(of elements: [XCUIElement], timeout: TimeInterval) -> Bool {
@@ -409,7 +400,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
             element(identifier: identifier).tap()
         }
 
-        app.buttons["onboarding.terms.agree"].tap()
+        tap(app.buttons["onboarding.terms.agree"], until: app.staticTexts["Do you already have Bitcoin?"])
     }
 
     private func chooseNativeImportedWalletFromSelectionSheet() {
@@ -417,25 +408,17 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         XCTAssertTrue(button(startingWith: "Keep Current").exists)
         XCTAssertTrue(app.staticTexts["Wrapped Segwit"].exists || app.buttons["Wrapped Segwit"].exists)
         XCTAssertTrue(app.staticTexts["Legacy"].exists || app.buttons["Legacy"].exists)
-        button(startingWith: "Keep Current").tap()
-        XCTAssertTrue(app.staticTexts["Transactions"].waitForExistence(timeout: 30))
+        tap(button(startingWith: "Keep Current"), until: app.staticTexts["Transactions"], timeout: 30)
     }
 
     private func chooseLegacyImportedWalletFromSelectionSheet() {
         XCTAssertTrue(app.staticTexts["Multiple wallets found, please choose one"].waitForExistence(timeout: 30))
-        button(startingWith: "Legacy").tap()
-        XCTAssertTrue(app.staticTexts["Transactions"].waitForExistence(timeout: 30))
-    }
-
-    private func assertQrScannerVisible() {
-        XCTAssertTrue(app.buttons["1x"].waitForExistence(timeout: 10) || app.alerts["Camera Access Required"].waitForExistence(timeout: 1))
+        tap(button(startingWith: "Legacy"), until: app.staticTexts["Transactions"], timeout: 30)
     }
 
     private func importKnownEmptyMainnetWalletWords() {
-        button(startingWith: "Enter recovery words").tap()
-        XCTAssertTrue(app.staticTexts["How many words do you have?"].waitForExistence(timeout: 10))
-        button(startingWith: "12 words").tap()
-        XCTAssertTrue(app.navigationBars["Import Wallet"].waitForExistence(timeout: 10))
+        tap(button(startingWith: "Enter recovery words"), until: app.staticTexts["How many words do you have?"])
+        tap(button(startingWith: "12 words"), until: app.navigationBars["Import Wallet"])
 
         for (index, word) in knownEmptyMainnetMnemonic.enumerated() {
             let field = app.textFields["hotWalletImport.word.\(index + 1)"]
@@ -462,26 +445,6 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
     private func button(startingWith labelPrefix: String) -> XCUIElement {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", labelPrefix)).firstMatch
-    }
-
-    private func tapButton(named name: String) {
-        let button = app.buttons[name]
-        guard button.waitForExistence(timeout: 10) else {
-            XCTFail("Timed out waiting for button '\(name)'")
-            return
-        }
-
-        button.tap()
-    }
-
-    private func tapButton(startingWith labelPrefix: String) {
-        let button = button(startingWith: labelPrefix)
-        guard button.waitForExistence(timeout: 10) else {
-            XCTFail("Timed out waiting for button starting with '\(labelPrefix)'")
-            return
-        }
-
-        button.tap()
     }
 
     private func staticText(startingWith labelPrefix: String) -> XCUIElement {
