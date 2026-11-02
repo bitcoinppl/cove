@@ -528,7 +528,12 @@ fn metadata_for_cold_upgrade(
     descriptors: &Descriptors,
 ) -> WalletMetadata {
     existing_metadata.wallet_type = WalletType::Cold;
-    existing_metadata.origin = descriptors.origin().ok();
+
+    // an import without a key origin must not erase the one the wallet already stores
+    if let Ok(origin) = descriptors.origin() {
+        existing_metadata.origin = Some(origin);
+    }
+
     existing_metadata.address_type = import_metadata.address_type;
 
     if import_metadata.discovery_state != DiscoveryState::Single {
@@ -919,6 +924,93 @@ mod tests {
         };
 
         assert_eq!(found_json.as_ref().0, json);
+    }
+
+    #[test]
+    fn cold_upgrade_keeps_the_stored_origin_when_the_import_has_none() {
+        let descriptors = Descriptors::from(pubport_descriptors(
+            "wpkh(xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/<0;1>/*)",
+        ));
+
+        assert_eq!(descriptors.origin().ok(), None, "the fixture has no key origin");
+
+        let mut existing_metadata = WalletMetadata::preview_new();
+        existing_metadata.wallet_type = WalletType::WatchOnly;
+        existing_metadata.origin = Some("wpkh([817e7be0/84'/0'/0'])".to_string());
+
+        let mut import_metadata = existing_metadata.clone();
+        import_metadata.wallet_type = WalletType::Cold;
+
+        let updated =
+            metadata_for_cold_upgrade(existing_metadata.clone(), &import_metadata, &descriptors);
+
+        assert_eq!(updated.wallet_type, WalletType::Cold);
+        assert_eq!(updated.origin, existing_metadata.origin);
+    }
+
+    const BIP49_ORIGIN: &str = "sh(wpkh([817e7be0/49'/0'/0']))";
+
+    fn import_wrapped_segwit_cold_wallet() -> Wallet {
+        Database::global().global_config.set_selected_network(Network::Bitcoin).unwrap();
+        Database::global().global_config.set_main_mode().unwrap();
+
+        let export = pubport::Format::Descriptor(bip49_descriptors());
+        let wallet = Wallet::try_new_persisted_from_pubport(export).unwrap();
+
+        assert_eq!(wallet.metadata.wallet_type, WalletType::Cold);
+        assert_eq!(wallet.metadata.address_type, WalletAddressType::WrappedSegwit);
+        wallet
+    }
+
+    fn stored_origin(id: &WalletId) -> Option<String> {
+        Database::global()
+            .wallets
+            .get(id, Network::Bitcoin, metadata::WalletMode::Main)
+            .unwrap()
+            .expect("the wallet row exists")
+            .origin
+    }
+
+    #[test]
+    fn wrapped_segwit_cold_import_stores_its_origin() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let _restore_target = init_import_globals();
+
+        let wallet = import_wrapped_segwit_cold_wallet();
+        let id = wallet.id.clone();
+        let in_memory = wallet.metadata.origin.clone();
+        let stored = stored_origin(&id);
+
+        drop(wallet);
+        crate::wallet::test_support::remove_wallet(&id);
+
+        assert_eq!(in_memory.as_deref(), Some(BIP49_ORIGIN));
+        assert_eq!(stored.as_deref(), Some(BIP49_ORIGIN));
+    }
+
+    // rows saved before wrapped segwit had an origin format are backfilled on load
+    #[test]
+    fn loading_a_wrapped_segwit_wallet_without_an_origin_repairs_the_stored_row() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let _restore_target = init_import_globals();
+
+        let wallet = import_wrapped_segwit_cold_wallet();
+        let id = wallet.id.clone();
+
+        let mut origin_less = wallet.metadata.clone();
+        origin_less.origin = None;
+        Database::global().wallets.replace_wallet_metadata(origin_less).unwrap();
+        drop(wallet);
+
+        let loaded = Wallet::try_load_persisted(id.clone());
+        let loaded_origin = loaded.as_ref().ok().and_then(|wallet| wallet.metadata.origin.clone());
+        let stored = stored_origin(&id);
+
+        drop(loaded);
+        crate::wallet::test_support::remove_wallet(&id);
+
+        assert_eq!(loaded_origin.as_deref(), Some(BIP49_ORIGIN));
+        assert_eq!(stored.as_deref(), Some(BIP49_ORIGIN));
     }
 
     // BIP49 and BIP84 spec vectors for the "abandon ... about" mnemonic, account 0

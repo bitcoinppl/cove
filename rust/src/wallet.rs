@@ -389,7 +389,7 @@ fn metadata_with_repaired_origin(
         return metadata;
     }
 
-    // wrapped segwit and multisig descriptors have no supported origin format
+    // multisig descriptors have no supported origin format
     let extended_descriptor = wallet.public_descriptor(KeychainKind::External);
     let Ok(origin) = Descriptor::from(extended_descriptor.clone()).full_origin() else {
         return metadata;

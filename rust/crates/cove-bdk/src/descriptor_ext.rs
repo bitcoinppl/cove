@@ -33,6 +33,8 @@ pub trait DescriptorExt {
 
     /// Returns the full origin string including descriptor type and fingerprint/path
     ///
+    /// This is the BIP-329 abbreviated descriptor, such as `sh(wpkh([fingerprint/49'/0'/0']))`
+    ///
     /// # Errors
     /// Returns an error if the descriptor type is unsupported or has no origin
     fn full_origin(&self) -> Result<String>;
@@ -176,12 +178,12 @@ impl DescriptorExt for Descriptor<DescriptorPublicKey> {
     }
 
     fn full_origin(&self) -> Result<String> {
-        let desc_type = self.desc_type();
-        let desc_type_str = match desc_type {
-            DescriptorType::Pkh => "pkh",
-            DescriptorType::Wpkh => "wpkh",
-            DescriptorType::Tr => "tr",
-            DescriptorType::Sh => "sh",
+        // the BIP-329 abbreviated descriptor keeps every script wrapper and drops only the key
+        let (open, close) = match self.desc_type() {
+            DescriptorType::Pkh => ("pkh(", ")"),
+            DescriptorType::Wpkh => ("wpkh(", ")"),
+            DescriptorType::ShWpkh => ("sh(wpkh(", "))"),
+            DescriptorType::Tr => ("tr(", ")"),
             DescriptorType::Wsh
             | DescriptorType::ShWsh
             | DescriptorType::WshSortedMulti
@@ -189,10 +191,8 @@ impl DescriptorExt for Descriptor<DescriptorPublicKey> {
             other => Err(Error::UnsupportedDescriptorType(other))?,
         };
 
-        let origin = self.origin()?;
-        let (fingerprint, path) = origin;
-        let origin = format!("{desc_type_str}([{fingerprint}/{path}])");
-        Ok(origin)
+        let (fingerprint, path) = self.origin()?;
+        Ok(format!("{open}[{fingerprint}/{path}]{close}"))
     }
 }
 
@@ -250,6 +250,35 @@ mod tests {
             .unwrap();
 
         assert_eq!(desc.account_index(), Some(1));
+    }
+
+    // the stored origin is the BIP-329 abbreviated descriptor, so wrapped segwit keeps both wrappers
+    #[test]
+    fn full_origin_abbreviates_each_single_sig_descriptor() {
+        let cases = [
+            (
+                "pkh([817e7be0/44h/0h/0h]xpub6BoKN14JzSFN1T3cqe9FnrwnXGAsmbgETJyeazoa3F7aMXh4XndvVrJAYyM127FsrH8KFv5XFXDroqXNfZMfsinow7xp93ueYSpnrjBBFs4/0/*)",
+                "pkh([817e7be0/44'/0'/0'])",
+            ),
+            (
+                "sh(wpkh([817e7be0/49h/0h/0h]xpub6CCKAvUTNursEnaJ8k1d27LfqEUzeAx2N9wFqYE3W1xh7nqgJEBEbLSSmohwDxzsSvcsYqiQqFzRvta65Njbe5o84bF5YXHFqfSH2Dkhonm/0/*))",
+                "sh(wpkh([817e7be0/49'/0'/0']))",
+            ),
+            (
+                "wpkh([817e7be0/84h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/0/*)",
+                "wpkh([817e7be0/84'/0'/0'])",
+            ),
+            (
+                "tr([817e7be0/86h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/0/*)",
+                "tr([817e7be0/86'/0'/0'])",
+            ),
+        ];
+
+        for (descriptor, expected) in cases {
+            let desc: ExtendedDescriptor = descriptor.parse().unwrap();
+
+            assert_eq!(desc.full_origin().unwrap(), expected, "origin of {descriptor}");
+        }
     }
 
     #[test]
