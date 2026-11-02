@@ -89,8 +89,11 @@ pub(crate) use passkey::{
     PasskeyMaterialAcquirer, PasskeyMaterialOutcome, PlatformAuthorizationRetrier,
     delay_before_new_passkey_auth, map_wrapper_repair_passkey_error,
 };
+#[cfg(test)]
+pub(crate) use payload::test_support as payload_test_support;
 pub(crate) use payload::{
-    decode_cloud_labels_jsonl, prepare_wallet_backup, wallet_metadata_change_requires_upload,
+    decode_cloud_labels_jsonl, prepare_wallet_backup, restored_content_revision_hash,
+    wallet_metadata_change_requires_upload,
 };
 pub(crate) use restore::{
     CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,

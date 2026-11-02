@@ -1,7 +1,10 @@
 use std::{fmt, str::FromStr as _, sync::Arc};
 
 use bip39::Mnemonic;
-use bitcoin::bip32::{ChildNumber, Fingerprint, Xpriv};
+use bitcoin::{
+    NetworkKind,
+    bip32::{ChildNumber, Fingerprint, Xpriv},
+};
 use parking_lot::Mutex;
 use zeroize::{Zeroize as _, Zeroizing};
 
@@ -49,6 +52,22 @@ impl WalletXprv {
     /// Exposes the encoded extended private key
     pub fn expose(&self) -> &str {
         &self.0
+    }
+
+    /// Encodes this key for `network`: xprv for mainnet, tprv for test networks
+    ///
+    /// The version prefix does not change the key material or derivation, so a backup's key can
+    /// be stored in its wallet's own form without changing the wallet it restores
+    #[must_use]
+    pub fn into_network_kind(self, network: NetworkKind) -> Self {
+        let mut xpriv = self.to_xpriv();
+        if xpriv.network == network {
+            return self;
+        }
+
+        // the replaced encoding is wiped when `self` drops
+        xpriv.network = network;
+        Self(xpriv.to_string())
     }
 
     /// Parses the validated value into an extended private key
@@ -112,6 +131,17 @@ impl WalletSecret {
         match self {
             Self::Mnemonic(mnemonic) => Some(mnemonic),
             Self::Xpriv(_) => None,
+        }
+    }
+
+    /// Encodes an extended private key for `network`, leaving a mnemonic unchanged
+    ///
+    /// Every writer of a wallet's secret uses this so the stored key matches its wallet's network
+    #[must_use]
+    pub fn into_network_kind(self, network: NetworkKind) -> Self {
+        match self {
+            Self::Mnemonic(_) => self,
+            Self::Xpriv(xprv) => Self::Xpriv(xprv.into_network_kind(network)),
         }
     }
 

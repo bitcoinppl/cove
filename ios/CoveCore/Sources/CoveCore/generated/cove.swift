@@ -10400,6 +10400,8 @@ public protocol RustWalletManagerProtocol: AnyObject, Sendable {
     /**
      * Returns the wallet's master extended private key string for export
      *
+     * The key is encoded for the wallet's network: xprv on mainnet, tprv on test networks
+     *
      * Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
      * zeroized; same limitation as displaying the mnemonic words
      */
@@ -10826,6 +10828,8 @@ open func dispatch(action: WalletManagerAction)throws   {try rustCallWithError(F
 
     /**
      * Returns the wallet's master extended private key string for export
+     *
+     * The key is encoded for the wallet's network: xprv on mainnet, tprv on test networks
      *
      * Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
      * zeroized; same limitation as displaying the mnemonic words
@@ -48107,7 +48111,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 12354) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustwalletmanager_expose_xprv() != 36145) {
+    if (uniffi_cove_checksum_method_rustwalletmanager_expose_xprv() != 30847) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options() != 36497) {

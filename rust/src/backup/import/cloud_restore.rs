@@ -129,9 +129,13 @@ impl VerifiedCloudRestorePlan<HotWalletWrites> {
             return Err(LocalWalletConflict::Mismatch.into());
         }
 
+        // a key restored before #988 can be stored in the backup's network form, which is the
+        // same key as the wallet-network form `prepared` carries, so adopt it unchanged
+        let local_secret =
+            local.secret.map(|secret| secret.into_network_kind(metadata.network.into()));
         let PreparedHotWallet { secret, xpub, descriptors } = prepared;
         let writes = HotWalletWrites {
-            secret: plan_entry(local.secret, Some(secret))?,
+            secret: plan_entry(local_secret, Some(secret))?,
             xpub: plan_entry(local.xpub, Some(xpub))?,
             descriptors: plan_entry(local.descriptors, Some(public_descriptor_pair(&descriptors)))?,
             bdk_descriptors: descriptors,
@@ -323,6 +327,37 @@ mod tests {
 
         restore_cloud_mnemonic_wallet(&metadata, mnemonic).expect("adopt matching keychain items");
 
+        assert_eq!(raw_keychain_entries(&metadata.id), before);
+        assert!(restored_metadata_exists(&metadata));
+    }
+
+    // a mainnet wallet restored before #988 may hold its key in a backup's tprv form, which is the
+    // same key as the xprv form a restore of that wallet now carries
+    #[test]
+    fn cloud_restore_adopts_a_local_xpriv_stored_in_another_network_form() {
+        use bdk_wallet::bitcoin::{NetworkKind, bip32::Xpriv};
+
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_cloud_restore_test_state();
+
+        let metadata = cloud_restore_metadata("Legacy tprv wallet", WalletType::Hot);
+        assert_eq!(NetworkKind::from(metadata.network), NetworkKind::Main);
+
+        let local_tprv = Xpriv::new_master(NetworkKind::Test, &[8; 32]).unwrap();
+        let mut incoming_xprv = local_tprv;
+        incoming_xprv.network = NetworkKind::Main;
+
+        let local_secret = KeychainWalletSecret::Xpriv(WalletXprv::try_from(local_tprv).unwrap());
+        let (secret, xpub, (external, internal)) = hot_wallet_items(&metadata, local_secret);
+        Keychain::global().save_wallet_secret(&metadata.id, secret).unwrap();
+        Keychain::global().save_wallet_xpub(&metadata.id, xpub).unwrap();
+        Keychain::global().save_public_descriptor(&metadata.id, external, internal).unwrap();
+        let before = raw_keychain_entries(&metadata.id);
+
+        restore_cloud_xpriv_wallet(&metadata, WalletXprv::try_from(incoming_xprv).unwrap())
+            .expect("adopt the same key in another form");
+
+        // the write-once entries are adopted as they are, not rewritten in the incoming form
         assert_eq!(raw_keychain_entries(&metadata.id), before);
         assert!(restored_metadata_exists(&metadata));
     }

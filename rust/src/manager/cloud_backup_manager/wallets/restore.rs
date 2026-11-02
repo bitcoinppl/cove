@@ -618,4 +618,46 @@ mod tests {
 
         assert_eq!(summary.updated_at, None);
     }
+
+    // regression for #988: a restored master key is stored for the wallet's network, not in the
+    // form the backup carried
+    #[test]
+    fn cloud_restore_stores_master_key_in_wallet_network_form() {
+        use bdk_wallet::bitcoin::{NetworkKind, bip32::Xpriv};
+        use cove_types::Network;
+
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::delete_database();
+        test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let cases = [
+            (Network::Bitcoin, NetworkKind::Test, "xprv", 71),
+            (Network::Signet, NetworkKind::Main, "tprv", 72),
+        ];
+
+        for (network, key_network, expected_prefix, seed) in cases {
+            let xpriv = Xpriv::new_master(key_network, &[seed; 32]).unwrap();
+            let mut metadata = WalletMetadata::preview_new();
+            metadata.name = format!("Cloud xprv wallet {seed}");
+            metadata.network = network;
+            metadata.wallet_type = crate::wallet::metadata::WalletType::Hot;
+            metadata.master_fingerprint = None;
+
+            let mut entry = test_wallet_entry(&metadata);
+            entry.secret = WalletSecret::Xprv(xpriv.to_string());
+            let wallet = DownloadedWalletBackup { metadata: metadata.clone(), entry };
+            let mut session = WalletRestoreSession::new(ExistingWalletIdentitySet::default());
+
+            let outcome = session.restore_downloaded(&wallet).unwrap();
+            assert_eq!(outcome, WalletRestoreOutcome::Restored { labels_warning: None });
+
+            let stored = Keychain::global().get_wallet_secret(&metadata.id).unwrap().unwrap();
+            let stored = stored.as_xprv().unwrap();
+
+            assert!(stored.expose().starts_with(expected_prefix), "{network:?}");
+            assert_eq!(stored.to_xpriv().private_key, xpriv.private_key);
+            assert_eq!(stored.to_xpriv().chain_code, xpriv.chain_code);
+        }
+    }
 }

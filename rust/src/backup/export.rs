@@ -64,9 +64,13 @@ impl BackupExporter {
                             Ok(Some(KeychainWalletSecret::Mnemonic(mnemonic))) => {
                                 WalletSecret::Mnemonic(mnemonic.to_string())
                             }
-                            Ok(Some(KeychainWalletSecret::Xpriv(xpriv))) => {
-                                WalletSecret::Xprv(xpriv.expose().to_string())
-                            }
+                            // a wallet restored before #988 can hold the other network's form
+                            Ok(Some(KeychainWalletSecret::Xpriv(xpriv))) => WalletSecret::Xprv(
+                                xpriv
+                                    .into_network_kind(metadata.network.into())
+                                    .expose()
+                                    .to_string(),
+                            ),
                             Ok(None) => {
                                 return Err(BackupError::Gather(format!(
                                     "hot wallet '{name}' ({network}){mode_tag} has no private key in keychain"
@@ -290,6 +294,60 @@ mod tests {
             explorers.get("Bitcoin").map(String::as_str),
             Some("https://example.com/tx/{txid}")
         );
+    }
+
+    // regression for #988: a wallet restored before the fix can hold its key in the backup's form,
+    // and a file backup of it carries the wallet's own form
+    #[tokio::test(flavor = "current_thread")]
+    async fn backup_export_writes_master_keys_in_the_wallet_network_form() {
+        use bdk_wallet::bitcoin::{NetworkKind, bip32::Xpriv};
+        use cove_device::keychain::WalletXprv;
+
+        use crate::wallet::metadata::WalletMetadata;
+
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::delete_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        // cargo test shares one open database across tests, and the export gathers every
+        // wallet, including ones other tests left behind whose secrets the keychain reset removed
+        for network in Network::iter() {
+            for mode in [WalletMode::Main, WalletMode::Decoy] {
+                let wallets = &Database::global().wallets;
+                for leftover in wallets.get_all(network, mode).unwrap() {
+                    // delete by this scope, since remove_wallet deletes from the selected one
+                    wallets.remove_wallet_metadata(network, mode, &leftover.id).unwrap();
+                }
+            }
+        }
+
+        let tprv = Xpriv::new_master(NetworkKind::Test, &[95; 32]).unwrap();
+        let mut legacy_xprv = tprv;
+        legacy_xprv.network = NetworkKind::Main;
+
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.network = Network::Signet;
+        metadata.wallet_type = WalletType::Hot;
+        Database::global()
+            .wallets
+            .save_all_wallets(Network::Signet, metadata.wallet_mode, vec![metadata.clone()])
+            .unwrap();
+
+        let secret = KeychainWalletSecret::Xpriv(WalletXprv::try_from(legacy_xprv).unwrap());
+        Keychain::global().save_wallet_secret(&metadata.id, secret).unwrap();
+
+        let backups = BackupExporter::new().gather_wallets().await;
+        crate::wallet::test_support::remove_wallet(&metadata.id);
+
+        let [backup] = backups.unwrap().try_into().unwrap();
+        let WalletSecret::Xprv(exported) = &backup.secret else {
+            panic!("a hot xprv wallet exports its master key")
+        };
+
+        assert_eq!(*exported, tprv.to_string());
     }
 
     fn test_config() -> (tempfile::TempDir, GlobalConfigTable) {

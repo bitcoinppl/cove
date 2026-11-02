@@ -61,6 +61,8 @@ struct PreparedHotWallet {
 
 impl PreparedHotWallet {
     fn from_secret(secret: KeychainWalletSecret, metadata: &WalletMetadata) -> Self {
+        // a backup can carry its key in another network's form, the stored key matches the wallet
+        let secret = secret.into_network_kind(metadata.network.into());
         let xpub = secret.xpub(metadata.network);
         let descriptors = secret.clone().into_descriptors(metadata.network, metadata.address_type);
 
@@ -1294,5 +1296,81 @@ mod tests {
         assert!(journal.rollback().is_empty());
         assert!(artifact.exists());
         std::fs::remove_file(artifact).unwrap();
+    }
+
+    /// A hot wallet backup on `network` whose master key is encoded for `key_network`
+    fn xprv_backup(
+        network: Network,
+        key_network: bdk_wallet::bitcoin::NetworkKind,
+        seed: u8,
+    ) -> (WalletMetadata, WalletBackup, bdk_wallet::bitcoin::bip32::Xpriv) {
+        let xpriv =
+            bdk_wallet::bitcoin::bip32::Xpriv::new_master(key_network, &[seed; 32]).unwrap();
+        let fingerprint = xpriv.fingerprint(&bdk_wallet::bitcoin::key::Secp256k1::new());
+        let mut metadata = hot_metadata(&format!("Imported xprv wallet {seed}"));
+        metadata.network = network;
+        metadata.master_fingerprint =
+            Some(Arc::new(crate::wallet::fingerprint::Fingerprint::from(fingerprint)));
+
+        let backup = WalletBackup {
+            metadata: serde_json::to_value(&metadata).unwrap(),
+            secret: WalletSecret::Xprv(xpriv.to_string()),
+            descriptors: None,
+            xpub: None,
+            labels_jsonl: None,
+        };
+
+        (metadata, backup, xpriv)
+    }
+
+    // regression for #988: the key's version prefix comes from the backup, the stored form from
+    // the wallet's network
+    #[tokio::test(flavor = "current_thread")]
+    async fn file_import_stores_master_key_in_wallet_network_form() {
+        use bdk_wallet::bitcoin::NetworkKind;
+
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::delete_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let cases = [
+            (Network::Bitcoin, NetworkKind::Test, "xprv", 61),
+            (Network::Signet, NetworkKind::Main, "tprv", 62),
+        ];
+
+        for (network, key_network, expected_prefix, seed) in cases {
+            let (metadata, backup, xpriv) = xprv_backup(network, key_network, seed);
+            let payload = BackupPayload {
+                version: super::super::model::PAYLOAD_VERSION,
+                created_at: 0,
+                wallets: vec![backup],
+                settings: super::super::model::AppSettings {
+                    selected_network: None,
+                    selected_fiat_currency: None,
+                    color_scheme: None,
+                    selected_nodes: Vec::new(),
+                    custom_block_explorers: BTreeMap::new(),
+                },
+            };
+            let wallets = preflight_wallets(&payload).unwrap();
+            let preparation = ImportPreparationState {
+                payload: Some(payload),
+                payload_digest: format!("file-import-{seed}"),
+                wallets,
+            };
+
+            let report = import_prepared(preparation, None).await.unwrap();
+            assert_eq!(report.wallets_imported, 1, "{:?}", report.failed_wallet_errors);
+
+            let stored = Keychain::global().get_wallet_secret(&metadata.id).unwrap().unwrap();
+            let stored = stored.as_xprv().unwrap();
+
+            assert!(stored.expose().starts_with(expected_prefix), "{network:?}");
+            assert_eq!(stored.to_xpriv().private_key, xpriv.private_key);
+            assert_eq!(stored.to_xpriv().chain_code, xpriv.chain_code);
+        }
     }
 }

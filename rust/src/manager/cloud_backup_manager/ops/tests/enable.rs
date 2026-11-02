@@ -564,6 +564,153 @@ async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace(
     assert!(active_records.contains(&third_record_id));
 }
 
+// regression for #988: a backup written before the fix can carry a Signet wallet's master key as
+// an xprv. Merging its namespace restores the key as a tprv, so the copy uploaded to the active
+// namespace has a new revision hash, and cleanup must still delete the source namespace
+#[tokio::test(flavor = "current_thread")]
+async fn enable_merge_cleans_up_a_namespace_holding_a_master_key_in_another_network_form() {
+    use bdk_wallet::bitcoin::{NetworkKind, bip32::Xpriv, key::Secp256k1};
+    use cove_cspp::backup_data::WalletSecret as CloudWalletSecret;
+    use cove_device::keychain::{WalletSecret as KeychainWalletSecret, WalletXprv};
+
+    use crate::manager::cloud_backup_manager::wallets::payload_test_support;
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+
+    let prf_key = [7u8; 32];
+    let source_master_key = cove_cspp::master_key::MasterKey::generate();
+    let active_master_key = cove_cspp::master_key::MasterKey::generate();
+    let source_namespace = source_master_key.namespace_id();
+    let active_namespace = active_master_key.namespace_id();
+
+    for (namespace, master_key, salt) in [
+        (&source_namespace, &source_master_key, [9; 32]),
+        (&active_namespace, &active_master_key, [8; 32]),
+    ] {
+        let encrypted =
+            cove_cspp::master_key_crypto::encrypt_master_key(master_key, &prf_key, &salt).unwrap();
+        globals
+            .cloud
+            .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted).unwrap());
+    }
+
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+
+    // the active namespace is the larger one, so it holds two watch-only wallets
+    let mut active_record_files = Vec::new();
+    for byte in [1, 2] {
+        let wallet = WalletMetadata { master_fingerprint: None, ..xpub_only_wallet_metadata() };
+        let mnemonic = Mnemonic::from_entropy(&[byte; 16]).unwrap();
+        let xpub = crate::mnemonic::MnemonicExt::xpub(&mnemonic, wallet.network.into());
+        Keychain::global().save_wallet_xpub(&wallet.id, xpub).unwrap();
+
+        let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+        let revision = crate::manager::cloud_backup_manager::wallets::prepare_wallet_backup(
+            &wallet,
+            wallet.wallet_mode,
+        )
+        .await
+        .unwrap()
+        .revision_hash;
+
+        globals.cloud.set_wallet_backup(
+            active_namespace.clone(),
+            record_id.clone(),
+            encrypted_remote_wallet_backup_bytes(&wallet, &active_master_key, &revision, 1).await,
+        );
+        active_record_files.push(wallet_filename_from_record_id(&record_id));
+    }
+
+    globals.cloud.set_wallet_files(active_namespace.clone(), active_record_files);
+
+    // the source namespace holds a Signet hot wallet whose key an older build uploaded as an xprv
+    let tprv = Xpriv::new_master(NetworkKind::Test, &[93; 32]).unwrap();
+    let mut legacy_xprv = tprv;
+    legacy_xprv.network = NetworkKind::Main;
+
+    let mut legacy_wallet = WalletMetadata::preview_new();
+    legacy_wallet.network = cove_types::Network::Signet;
+    legacy_wallet.wallet_type = WalletType::Hot;
+    legacy_wallet.master_fingerprint = Some(Arc::new(
+        crate::wallet::fingerprint::Fingerprint::from(tprv.fingerprint(&Secp256k1::new())),
+    ));
+
+    // a hot wallet keeps its xpub and public descriptors beside the secret, as a restore writes them
+    let secret = KeychainWalletSecret::Xpriv(WalletXprv::try_from(legacy_xprv).unwrap());
+    let xpub = crate::wallet_secret::WalletSecretExt::xpub(&secret, legacy_wallet.network);
+    let descriptors = crate::wallet_secret::WalletSecretExt::into_descriptors(
+        secret.clone(),
+        legacy_wallet.network,
+        legacy_wallet.address_type,
+    );
+    Keychain::global().save_wallet_secret(&legacy_wallet.id, secret).unwrap();
+    Keychain::global().save_wallet_xpub(&legacy_wallet.id, xpub).unwrap();
+    Keychain::global()
+        .save_public_descriptor(
+            &legacy_wallet.id,
+            descriptors.external.extended_descriptor,
+            descriptors.internal.extended_descriptor,
+        )
+        .unwrap();
+
+    let mut legacy_entry = crate::manager::cloud_backup_manager::wallets::prepare_wallet_backup(
+        &legacy_wallet,
+        legacy_wallet.wallet_mode,
+    )
+    .await
+    .unwrap()
+    .entry;
+    legacy_entry.secret = CloudWalletSecret::Xprv(legacy_xprv.to_string());
+    legacy_entry.content_revision_hash =
+        payload_test_support::content_revision_hash(&legacy_wallet, &legacy_entry);
+
+    let critical_key = zeroize::Zeroizing::new(source_master_key.critical_data_key());
+    let encrypted =
+        cove_cspp::wallet_crypto::encrypt_wallet_entry(&legacy_entry, &critical_key).unwrap();
+    assert!(Keychain::global().delete_wallet_items(&legacy_wallet.id));
+    crate::wallet::delete_wallet_specific_data(&legacy_wallet.id).unwrap();
+
+    let legacy_record_id = cove_cspp::backup_data::wallet_record_id(legacy_wallet.id.as_ref());
+    globals.cloud.set_wallet_backup(
+        source_namespace.clone(),
+        legacy_record_id.clone(),
+        serde_json::to_vec(&encrypted).unwrap(),
+    );
+    globals.cloud.set_wallet_files(
+        source_namespace.clone(),
+        vec![wallet_filename_from_record_id(&legacy_record_id)],
+    );
+
+    enable_cloud_backup_create_new(&manager).await.unwrap();
+
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+    assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(active_namespace.clone()));
+
+    let restored = Keychain::global().get_wallet_secret(&legacy_wallet.id).unwrap().unwrap();
+    assert_eq!(restored.as_xprv().unwrap().expose(), tprv.to_string());
+
+    wait_for_test_condition(
+        Duration::from_secs(1),
+        "the merged source namespace should be deleted",
+        || !globals.cloud.has_namespace(&source_namespace),
+    )
+    .await;
+
+    let active_records =
+        CloudStorage::global_explicit_client().list_wallet_backups(active_namespace).await.unwrap();
+    assert!(active_records.contains(&legacy_record_id));
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn enable_recovery_fails_closed_when_matched_wallet_listing_is_missing() {
     let _guard = async_test_lock().lock().await;

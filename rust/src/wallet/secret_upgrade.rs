@@ -88,7 +88,10 @@ impl ExistingWalletSecretUpgrade {
         let target =
             existing_wallet_for_secret(database, keychain, secret, network, mode, fingerprint)?;
 
-        Ok(target.map(|target| Self { secret: secret.clone(), network, fingerprint, target }))
+        // the stored key matches the wallet's network whatever form the incoming key used
+        let secret = secret.clone().into_network_kind(network.into());
+
+        Ok(target.map(|target| Self { secret, network, fingerprint, target }))
     }
 
     /// Saves the secret for the matched wallet and marks it hot, rolling back on failure
