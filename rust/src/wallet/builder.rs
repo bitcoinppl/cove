@@ -1013,6 +1013,31 @@ mod tests {
         assert_eq!(stored.as_deref(), Some(BIP49_ORIGIN));
     }
 
+    // a wallet switched to wrapped segwit before that type had an origin format kept its old one
+    #[test]
+    fn loading_a_wrapped_segwit_wallet_with_a_stale_origin_repairs_the_stored_row() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let _restore_target = init_import_globals();
+
+        let wallet = import_wrapped_segwit_cold_wallet();
+        let id = wallet.id.clone();
+
+        let mut stale = wallet.metadata.clone();
+        stale.origin = Some("wpkh([817e7be0/84'/0'/0'])".to_string());
+        Database::global().wallets.replace_wallet_metadata(stale).unwrap();
+        drop(wallet);
+
+        let loaded = Wallet::try_load_persisted(id.clone());
+        let loaded_origin = loaded.as_ref().ok().and_then(|wallet| wallet.metadata.origin.clone());
+        let stored = stored_origin(&id);
+
+        drop(loaded);
+        crate::wallet::test_support::remove_wallet(&id);
+
+        assert_eq!(loaded_origin.as_deref(), Some(BIP49_ORIGIN));
+        assert_eq!(stored.as_deref(), Some(BIP49_ORIGIN));
+    }
+
     // BIP49 and BIP84 spec vectors for the "abandon ... about" mnemonic, account 0
     const BIP49_TESTNET_UPUB: &str = "upub5EFU65HtV5TeiSHmZZm7FUffBGy8UKeqp7vw43jYbvZPpoVsgU93oac7Wk3u6moKegAEWtGNF8DehrnHtv21XXEMYRUocHqguyjknFHYfgY";
     const BIP84_TESTNET_VPUB: &str = "vpub5Y6cjg78GGuNLsaPhmYsiw4gYX3HoQiRBiSwDaBXKUafCt9bNwWQiitDk5VZ5BVxYnQdwoTyXSs2JHRPAgjAvtbBrf8ZhDYe2jWAqvZVnsc";

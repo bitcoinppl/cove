@@ -375,27 +375,38 @@ impl Wallet {
     }
 }
 
-/// Fills a missing origin from the wallet store into the existing metadata row
+/// Brings the stored origin in line with the wallet store when it is missing or stale
 ///
-/// Rows written before origins were recorded, and backups restored from them, have none. The
-/// in-memory copy only takes the origin once the row holds it, because wallet managers refuse to
-/// open when the loaded metadata differs from the stored row. A failed repair keeps the stored
-/// metadata so the wallet still opens and the next load retries
+/// Rows written before origins were recorded, and backups restored from them, have none. A
+/// wallet switched to wrapped segwit before that type had an origin format kept the origin of
+/// its previous address type. The in-memory copy only takes the new origin once the row holds
+/// it, because wallet managers refuse to open when the loaded metadata differs from the stored
+/// row. A failed repair keeps the stored metadata so the wallet still opens and the next load
+/// retries
 fn metadata_with_repaired_origin(
     mut metadata: WalletMetadata,
     wallet: &bdk_wallet::Wallet,
 ) -> WalletMetadata {
-    if metadata.origin.is_some() || metadata.wallet_type == WalletType::XpubOnly {
+    if metadata.wallet_type == WalletType::XpubOnly {
         return metadata;
     }
 
-    // multisig descriptors have no supported origin format
+    // multisig descriptors and keys without origin info have no origin to compare against
     let extended_descriptor = wallet.public_descriptor(KeychainKind::External);
     let Ok(origin) = Descriptor::from(extended_descriptor.clone()).full_origin() else {
         return metadata;
     };
 
-    warn!(id = %metadata.id, "wallet metadata has no origin; repairing it from the wallet store");
+    if metadata.origin.as_deref() == Some(origin.as_str()) {
+        return metadata;
+    }
+
+    warn!(
+        id = %metadata.id,
+        stored = ?metadata.origin,
+        "wallet metadata origin is missing or stale; repairing it from the wallet store"
+    );
+
     let patch = WalletMetadataPatch::Origin(origin.clone());
     let repaired = Database::global().wallets.patch_wallet_metadata(
         &metadata.id,
