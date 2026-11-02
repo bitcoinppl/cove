@@ -281,11 +281,28 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
 
         XCTAssertFalse(psbt.isEmpty, "the Copy button copied nothing")
 
-        // close the export sheet
-        app.swipeDown(velocity: .fast)
-        XCTAssertTrue(app.buttons["Import Signature"].waitForExistence(timeout: 10))
-
+        closeExportSheet()
         return psbt
+    }
+
+    /// Swipes the export sheet away and waits until the hardware screen under it takes taps
+    private func closeExportSheet() {
+        // the "Copied" popup can dismiss on a tap outside it, so while it shows its window takes
+        // every touch and a swipe never reaches the sheet
+        XCTAssertTrue(app.staticTexts["Copied"].waitForNonExistence(timeout: 10), "the Copied popup never went away")
+
+        // the sheet has no close button, and the Import Signature button behind it stays in the
+        // accessibility tree while it shows, so wait for the sheet itself to go
+        let sheetTitle = app.staticTexts["Scan this QR"]
+        for _ in 0 ..< 3 where sheetTitle.exists {
+            app.swipeDown(velocity: .fast)
+            _ = sheetTitle.waitForNonExistence(timeout: 5)
+        }
+
+        XCTAssertFalse(sheetTitle.exists, "the export sheet never closed")
+
+        let hittable = NSPredicate(format: "isHittable == true")
+        waitUntil(app.buttons["Import Signature"], matches: hittable, timeout: 10, "Import Signature never became tappable")
     }
 
     private func copiedText() throws -> String {
