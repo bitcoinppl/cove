@@ -5,14 +5,14 @@ use std::{
 };
 
 use bip39::Mnemonic;
-use cove_device::keychain::{Keychain, WalletSecret};
+use cove_device::keychain::{Keychain, WalletSecret, WalletXprv};
 use keyteleport::{
     DecodedPayload, NumericCode, Payload, ReceiverSession, SenderSession, UnsupportedPayloadKind,
 };
 
 use crate::{
     database::Database, manager::deferred_sender::SingleOrMany, wallet::metadata::WalletType,
-    wallet_secret::WalletSecretExt as _,
+    wallet_identity::PublicWalletIdentity, wallet_secret::WalletSecretExt as _,
 };
 
 use super::*;
@@ -948,6 +948,62 @@ fn receiver_code_reaches_send_ready_for_xprv_stash() {
     };
 
     assert_eq!(decoded.expose_string(), xprv.to_string());
+}
+
+#[test]
+fn receiver_code_sends_a_testnet_encoded_master_key() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let config = &Database::global().global_config;
+    let original_network = config.selected_network();
+    config.set_selected_network(Network::Signet).unwrap();
+
+    // file backup import and cloud restore store the backup's key string as parsed, so a
+    // Signet wallet can hold its master key in tprv form
+    let tprv = bdk_wallet::bitcoin::bip32::Xpriv::new_master(
+        bdk_wallet::bitcoin::Network::Signet,
+        &[14; 32],
+    )
+    .unwrap();
+    let stored = WalletXprv::parse(tprv.to_string()).unwrap();
+    assert!(stored.expose().starts_with("tprv"));
+
+    let fixture = SendWalletFixture::with_secret(WalletSecret::Xpriv(stored));
+    let manager = RustKeyTeleportManager::new();
+    let receiver = ReceiverSession::from_private_key_bytes([14; 32]).unwrap();
+    let request = receiver.request().unwrap();
+    manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
+    manager
+        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::from(request.packet)))
+        .unwrap();
+
+    let result = manager.enter_receiver_code(request.numeric_code.as_str());
+    let ready = match manager.state() {
+        KeyTeleportManagerState::SendReady(ready) => Some(ready),
+        _ => None,
+    };
+
+    config.set_selected_network(original_network).unwrap();
+    assert_eq!(result, Ok(()));
+
+    let ready = ready.expect("expected send ready");
+    let DecodedPayload::Xprv(decoded) =
+        receiver.decode(ready.packet.as_ref(), &ready.password.0).unwrap()
+    else {
+        panic!("expected xprv")
+    };
+
+    // the receiver rebuilds the same Signet wallet from the transferred key material
+    let decoded = WalletXprv::parse(decoded.expose_string()).unwrap();
+    let address_type = ready.selected_wallet.address_type;
+    let sent = WalletSecret::Xpriv(WalletXprv::try_from(tprv).unwrap())
+        .into_descriptors(Network::Signet, address_type);
+    let received = WalletSecret::Xpriv(decoded).into_descriptors(Network::Signet, address_type);
+
+    assert_eq!(
+        PublicWalletIdentity::from_descriptors(&received),
+        PublicWalletIdentity::from_descriptors(&sent)
+    );
 }
 
 #[test]
