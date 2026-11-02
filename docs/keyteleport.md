@@ -31,3 +31,9 @@ A KeyTeleport master key payload carries only the chain code and private key, so
 Secret zeroization is best effort. The `WalletXprv` wrapper wipes its storage. Copies of `Xpriv` values in rust-bitcoin or BDK do not guarantee zeroization.
 
 Decrypted TapSigner backup bytes use zeroizing storage inside the Rust keychain API. A plain byte copy is still required when data crosses the UniFFI boundary.
+
+## Leaving the app
+
+When Cove leaves the foreground, KeyTeleport hides any revealed receiver code, QR code, password, recovery words, or private key. It also clears a receiver code or sender password that was typed but not yet submitted. After unlocking, the user enters it again. Both platforms follow this rule.
+
+The receiver code only decrypts the receiver's one-time public key from the request QR, so it cannot decrypt a transfer on its own. Cove still clears it to keep both platforms consistent and to keep typed values off a locked screen.

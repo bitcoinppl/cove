@@ -76,7 +76,8 @@ internal fun SendEnterCodeView(
     manager: KeyTeleportManager,
     send: KeyTeleportSendEnterCode,
 ) {
-    var code by remember { mutableStateOf("") }
+    // leaving the app clears a value typed but not yet submitted, as on iOS
+    var code by remember(manager.concealmentGeneration) { mutableStateOf("") }
 
     SecureScreenEffect()
     TextBlock(

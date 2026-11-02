@@ -100,7 +100,8 @@ private fun ReceiverCode(code: String) {
 
 @Composable
 internal fun ReceivePasswordView(manager: KeyTeleportManager) {
-    var password by remember { mutableStateOf("") }
+    // leaving the app clears a value typed but not yet submitted, as on iOS
+    var password by remember(manager.concealmentGeneration) { mutableStateOf("") }
 
     SecureScreenEffect()
     TextBlock(
