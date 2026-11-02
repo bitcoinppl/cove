@@ -91,10 +91,12 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
 coverage = [
+    "human",
     "rust:rust/src/manager/key_teleport_manager/tests/coldcard.rs::coldcard_mnemonic_stashes_import_with_the_expected_fingerprint_and_first_address",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# payloads are built by a port of coldcard's encode_payload checked against the firmware vector; the single-part BBQr camera scan is the path s08-bbqr-scans-and-opened-shared-response-links and the s20 rows exercise
+# payloads are built by a port of coldcard's encode_payload checked against the firmware vector;
+# one send from a real COLDCARD stays human so firmware changes the port doesn't track still get caught
 
 [[row]]
 id = "s08-coldcard-private-key-raw-master-secret"
