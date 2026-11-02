@@ -6,10 +6,6 @@ An unlocked Cove session is trusted. A KeyTeleport seed transfer does not requir
 
 PIN or biometric prompts on other secret views are defense-in-depth and convenience controls. These prompts are not a Rust authorization boundary.
 
-## Extended private key encoding
-
-A KeyTeleport master key payload carries only the chain code and private key, so the transfer has no network. A stored master key can be in xprv or tprv form, because file and cloud backups keep the form they were given. The wallet's network comes from its metadata either way. When sending, Cove re-encodes the key as an xprv, because the `keyteleport` crate accepts only that form. Received keys are always stored as xprv.
-
 ## Android clipboard cleanup
 
 Sensitive clipboard cleanup on Android is best effort. Cove uses:
@@ -20,11 +16,13 @@ Sensitive clipboard cleanup on Android is best effort. Cove uses:
 
 Cove cannot guarantee clipboard deletion at an exact time.
 
-## Stored master key encoding
+## Master key encoding
 
 Cove stores a wallet's master private key encoded for the wallet's network: xprv on mainnet, tprv on testnet, testnet4 and signet. File backup import, Cloud Backup restore, KeyTeleport receive and other key imports re-encode a key given in the other form. The version prefix does not change the key or its derivation, so Cove never refuses a backup over it.
 
 Wallets restored by older versions can still hold the other form. Their keychain entry is left as it is, and Export Private Key re-encodes the key for the wallet's network when it reads it.
+
+A KeyTeleport master key payload carries only the chain code and private key, so the transfer has no network. When sending, Cove re-encodes the key as an xprv, because the `keyteleport` crate accepts only that form, and the receiver stores it in its own wallet's form.
 
 ## Secret zeroization
 
