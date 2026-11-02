@@ -1467,6 +1467,16 @@ mod tests {
             Database::global().global_config.selected_wallet()
         }
 
+        fn signet_wallet_ids() -> Vec<WalletId> {
+            Database::global()
+                .wallets
+                .get_all(Network::Signet, WalletMode::Main)
+                .unwrap()
+                .into_iter()
+                .map(|wallet| wallet.id)
+                .collect()
+        }
+
         fn router() -> (Route, Vec<Route>) {
             let router = App::global().get_state().router;
             (router.default, router.routes)
@@ -1486,7 +1496,7 @@ mod tests {
             let _guard = crate::test_support::global_state_test_lock().lock().await;
             let _restore = RestoreDeletionTestState::empty_signet();
 
-            let (_first, selected, last) = import_three_wallets();
+            let (first, selected, last) = import_three_wallets();
             let settings_routes = vec![
                 Route::Settings(SettingsRoute::Main),
                 Route::Settings(SettingsRoute::AllWallets),
@@ -1499,6 +1509,7 @@ mod tests {
 
             delete_from_wallet_settings(&last.id).await;
 
+            assert_eq!(signet_wallet_ids(), vec![first.id, selected.id.clone()]);
             assert_eq!(selected_wallet(), Some(selected.id.clone()));
             assert_eq!(
                 router(),
@@ -1512,11 +1523,12 @@ mod tests {
             let _guard = crate::test_support::global_state_test_lock().lock().await;
             let _restore = RestoreDeletionTestState::empty_signet();
 
-            let (_first, selected, last) = import_three_wallets();
+            let (first, selected, last) = import_three_wallets();
             select_with_routes(&selected.id, Vec::new());
 
             FfiApp::global().delete_corrupted_wallet(last.id).await.unwrap();
 
+            assert_eq!(signet_wallet_ids(), vec![first.id, selected.id.clone()]);
             assert_eq!(selected_wallet(), Some(selected.id.clone()));
             assert_eq!(router(), (wallet_selection_loading_route(selected.id, None), vec![]));
         }
@@ -1532,6 +1544,7 @@ mod tests {
 
             delete_from_wallet_settings(&selected.id).await;
 
+            assert_eq!(signet_wallet_ids(), vec![remaining.id.clone()]);
             assert_eq!(selected_wallet(), Some(remaining.id.clone()));
             assert_eq!(
                 router(),
@@ -1540,6 +1553,7 @@ mod tests {
 
             delete_from_wallet_settings(&remaining.id).await;
 
+            assert_eq!(signet_wallet_ids(), Vec::<WalletId>::new());
             assert_eq!(selected_wallet(), None);
             assert_eq!(
                 router(),
