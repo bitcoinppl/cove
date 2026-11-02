@@ -312,6 +312,16 @@ mod tests {
         crate::test_support::init_test_keychain();
         crate::test_support::shared_mock_keychain().reset();
 
+        // cargo test shares one open database across tests, and the export gathers every
+        // wallet, including ones other tests left behind whose secrets the keychain reset removed
+        for network in Network::iter() {
+            for mode in [WalletMode::Main, WalletMode::Decoy] {
+                for leftover in Database::global().wallets.get_all(network, mode).unwrap() {
+                    crate::wallet::test_support::remove_wallet(&leftover.id);
+                }
+            }
+        }
+
         let tprv = Xpriv::new_master(NetworkKind::Test, &[95; 32]).unwrap();
         let mut legacy_xprv = tprv;
         legacy_xprv.network = NetworkKind::Main;
