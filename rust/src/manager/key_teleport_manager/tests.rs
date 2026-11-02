@@ -1239,3 +1239,74 @@ fn send_start_reports_distinct_alerts_for_no_eligible_ineligible_and_unreadable_
 
     assert!(Keychain::global().delete_wallet_items(&unreadable.id));
 }
+
+// regression for #988: a key received over KeyTeleport is stored in the receiving wallet's form,
+// and sending it on re-encodes it for the wire, so the next receiver gets the key the sender had
+#[test]
+fn received_xprv_is_stored_in_the_wallet_network_form_and_sent_on_as_an_xprv() {
+    use bdk_wallet::bitcoin::bip32::Xpriv;
+
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    crate::test_support::ensure_tokio_runtime();
+    let config = &Database::global().global_config;
+    let original_network = config.selected_network();
+    config.set_selected_network(Network::Signet).unwrap();
+
+    let xprv = Xpriv::new_master(bdk_wallet::bitcoin::Network::Bitcoin, &[17; 32]).unwrap();
+    let receive_manager = RustKeyTeleportManager::new();
+    receive_manager.start_receive().unwrap();
+    let request = receive_request(&receive_manager);
+    let sender = SenderSession::new(
+        request.packet.as_ref(),
+        &NumericCode::from_str(&request.numeric_code).unwrap(),
+    )
+    .unwrap();
+    let response = sender.send(Payload::xprv(xprv.to_string()).unwrap()).unwrap();
+
+    receive_manager
+        .ingest(KeyTeleportInput::Sender(Arc::new(KeyTeleportSenderPacket::from(response.packet))))
+        .unwrap();
+    receive_manager.enter_sender_password(&response.password.as_display_text()).unwrap();
+    let imported = receive_manager.import_received_wallet();
+    let state = receive_manager.state();
+
+    let KeyTeleportManagerState::ReceiveImportedWallet(wallet) = state else {
+        config.set_selected_network(original_network).unwrap();
+        panic!("expected a new imported wallet, got {state:?} from {imported:?}")
+    };
+
+    let stored = Keychain::global().get_wallet_secret(&wallet.id).unwrap().unwrap();
+    let stored = stored.as_xprv().unwrap().to_xpriv();
+
+    let send_manager = RustKeyTeleportManager::new();
+    let receiver = ReceiverSession::from_private_key_bytes([18; 32]).unwrap();
+    let next_request = receiver.request().unwrap();
+    send_manager.start_send_from_wallet(wallet.id.clone()).unwrap();
+    send_manager
+        .start_send_with_receiver_packet(Arc::new(KeyTeleportReceiverPacket::from(
+            next_request.packet,
+        )))
+        .unwrap();
+    send_manager.enter_receiver_code(next_request.numeric_code.as_str()).unwrap();
+
+    let sent = {
+        let model = send_manager.model.lock();
+        let Phase::Send(SendPhase::Ready(ready)) = &model.phase else {
+            panic!("expected send ready")
+        };
+
+        receiver.decode(ready.packet.as_ref(), &ready.password.0).unwrap()
+    };
+
+    crate::wallet::test_support::remove_wallet(&wallet.id);
+    config.set_selected_network(original_network).unwrap();
+
+    assert_eq!(wallet.network, Network::Signet);
+    assert_eq!(stored.network, bdk_wallet::bitcoin::NetworkKind::Test);
+    assert_eq!(stored.private_key, xprv.private_key);
+    assert_eq!(stored.chain_code, xprv.chain_code);
+
+    let DecodedPayload::Xprv(sent) = sent else { panic!("expected xprv") };
+    assert_eq!(sent.expose_string(), xprv.to_string());
+}

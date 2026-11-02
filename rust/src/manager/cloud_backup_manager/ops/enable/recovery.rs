@@ -12,7 +12,7 @@ use crate::manager::cloud_backup_manager::actors::{
 };
 use crate::manager::cloud_backup_manager::wallets::{
     NamespaceMatch, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
-    WalletRestoreSession,
+    WalletRestoreSession, restored_content_revision_hash,
 };
 use crate::manager::cloud_backup_manager::{
     CloudBackupEnableContext, CloudBackupError, CloudBackupStore, is_connectivity_related_issue,
@@ -180,9 +180,13 @@ impl RustCloudBackupManager {
             for record_id in &namespace.wallet_record_ids {
                 let wallet = match reader.lookup(record_id).await {
                     Ok(WalletBackupLookup::Found(wallet)) => {
+                        // the restored copy is uploaded with the key in its wallet's network form
+                        let content_revision_hash =
+                            restored_content_revision_hash(&wallet.metadata, &wallet.entry);
+
                         expected_wallets.push(CleanupExpectedWalletRecord {
                             record_id: record_id.clone(),
-                            content_revision_hash: Some(wallet.entry.content_revision_hash.clone()),
+                            content_revision_hash: Some(content_revision_hash),
                         });
 
                         wallet

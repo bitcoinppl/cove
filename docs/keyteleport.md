@@ -20,7 +20,7 @@ Cove cannot guarantee clipboard deletion at an exact time.
 
 Cove stores a wallet's master private key encoded for the wallet's network: xprv on mainnet, tprv on testnet, testnet4 and signet. File backup import, Cloud Backup restore, KeyTeleport receive and other key imports re-encode a key given in the other form. The version prefix does not change the key or its derivation, so Cove never refuses a backup over it.
 
-Wallets restored by older versions can still hold the other form. Their keychain entry is left as it is, and Export Private Key re-encodes the key for the wallet's network when it reads it.
+Wallets restored by older versions can still hold the other form. Their keychain entry is left as it is, and Export Private Key, Cloud Backup upload and file backup export re-encode the key for the wallet's network when they read it. Devices that hold either form of a key therefore upload the same Cloud Backup revision. When enabling Cloud Backup merges an older namespace whose backup carries the other form, the merge expects the re-encoded revision, so cleanup still removes that namespace.
 
 A KeyTeleport master key payload carries only the chain code and private key, so the transfer has no network. When sending, Cove re-encodes the key as an xprv, because the `keyteleport` crate accepts only that form, and the receiver stores it in its own wallet's form.
 

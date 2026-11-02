@@ -130,9 +130,11 @@ async fn build_wallet_entry(
                     CloudWalletSecret::Mnemonic(mnemonic.to_string())
                 }
 
-                KeychainWalletSecret::Xpriv(xpriv) => {
-                    CloudWalletSecret::Xprv(xpriv.expose().to_string())
-                }
+                // a wallet restored before #988 can hold the other network's form, and devices
+                // holding either form must agree on the revision hash of the same key
+                KeychainWalletSecret::Xpriv(xpriv) => CloudWalletSecret::Xprv(
+                    xpriv.into_network_kind(metadata.network.into()).expose().to_string(),
+                ),
             }
         }
         WalletType::Cold => build_cold_wallet_secret(keychain, metadata, id)?,
@@ -260,6 +262,49 @@ fn build_cold_wallet_secret(
     }
 }
 
+/// Returns the revision hash a downloaded backup has once it is restored and uploaded again
+///
+/// A restore stores a master key in its wallet's network form, and an upload sends that form. A
+/// backup written before #988 can carry the other form, so its copy in another namespace gets a
+/// different hash although it holds the same key. The recomputed hash is used only when the
+/// entry's own contents reproduce its stored hash, so any other mismatch still blocks cleanup
+pub(crate) fn restored_content_revision_hash(
+    metadata: &WalletMetadata,
+    entry: &WalletEntry,
+) -> String {
+    let stored = &entry.content_revision_hash;
+    let CloudWalletSecret::Xprv(value) = &entry.secret else {
+        return stored.clone();
+    };
+
+    let Ok(xprv) = WalletXprv::parse(value.as_str()) else {
+        return stored.clone();
+    };
+
+    let network_form = xprv.into_network_kind(metadata.network.into());
+    if network_form.expose() == value.as_str() {
+        return stored.clone();
+    }
+
+    let revision_hash = |secret: &CloudWalletSecret| {
+        WalletBackupRevisionPayload::for_backup(
+            metadata,
+            entry.labels_hash.clone(),
+            secret,
+            &entry.descriptors,
+            &entry.xpub,
+        )
+        .and_then(|payload| payload.content_revision_hash())
+    };
+
+    if revision_hash(&entry.secret).ok().as_ref() != Some(stored) {
+        return stored.clone();
+    }
+
+    let restored_secret = CloudWalletSecret::Xprv(network_form.expose().to_string());
+    revision_hash(&restored_secret).unwrap_or_else(|_| stored.clone())
+}
+
 pub(crate) async fn prepare_wallet_backup(
     metadata: &WalletMetadata,
     mode: LocalWalletMode,
@@ -374,6 +419,27 @@ pub(crate) fn descriptor_pair_from_cloud(
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use cove_cspp::backup_data::WalletEntry;
+
+    use super::WalletBackupRevisionPayload;
+    use crate::wallet::metadata::WalletMetadata;
+
+    /// Computes the revision hash of `entry` from its contents, as the build that uploaded it did
+    pub(crate) fn content_revision_hash(metadata: &WalletMetadata, entry: &WalletEntry) -> String {
+        WalletBackupRevisionPayload::for_backup(
+            metadata,
+            entry.labels_hash.clone(),
+            &entry.secret,
+            &entry.descriptors,
+            &entry.xpub,
+        )
+        .and_then(|payload| payload.content_revision_hash())
+        .unwrap()
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -409,6 +475,47 @@ mod tests {
 
         assert!(descriptors.external.starts_with("wpkh("));
         assert!(descriptors.internal.starts_with("wpkh("));
+    }
+
+    // regression for #988: a device that restored a master key in its wallet's form and one that
+    // still holds the backup's form must not mark each other's backups stale
+    #[tokio::test(flavor = "current_thread")]
+    async fn either_stored_form_of_a_master_key_backs_up_identically() {
+        use bdk_wallet::bitcoin::{NetworkKind, bip32::Xpriv};
+        use cove_types::Network;
+
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::delete_database();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.network = Network::Signet;
+        metadata.wallet_type = WalletType::Hot;
+
+        let tprv = Xpriv::new_master(NetworkKind::Test, &[91; 32]).unwrap();
+        let mut xprv = tprv;
+        xprv.network = NetworkKind::Main;
+
+        let backup_holding = async |stored: Xpriv| {
+            let secret = KeychainWalletSecret::Xpriv(WalletXprv::try_from(stored).unwrap());
+            Keychain::global().delete_wallet_secret(&metadata.id);
+            Keychain::global().save_wallet_secret(&metadata.id, secret).unwrap();
+
+            prepare_wallet_backup(&metadata, LocalWalletMode::Main).await.unwrap()
+        };
+
+        let legacy = backup_holding(xprv).await;
+        let current = backup_holding(tprv).await;
+        Keychain::global().delete_wallet_items(&metadata.id);
+
+        assert_eq!(legacy.revision_hash, current.revision_hash);
+
+        let CloudWalletSecret::Xprv(uploaded) = &legacy.entry.secret else {
+            panic!("a hot xprv wallet uploads its master key");
+        };
+        assert_eq!(uploaded.as_str(), tprv.to_string());
     }
 
     fn content_revision_hash_for_metadata(metadata: &WalletMetadata) -> String {
