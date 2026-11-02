@@ -99,15 +99,15 @@ id = "s17-sender-psbt-error-physical-screenshot"
 section = "17"
 title = "Sender PSBT error physical screenshot"
 platforms = ["android"]
-target = "ui"
+target = "manual"
 paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
 ]
 coverage = [
-    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPasteRejectionTest.kt::senderRejectsANonKeyTeleportPasteByAskingForTheReceiverRequest",
+    "human",
 ]
 # 1.4.0: ios N/A, android HUMAN
-# asserts the sender error asks for the receiver request; returning to Scan Receiver Request after OK is s17-sender-rejects-psbt-text-without-secret-import
+# the protected screen returns no screencap over adb
 
 [[row]]
 id = "s17-ios-pj-uri-parses-to-ordinary-draft"
