@@ -7,38 +7,56 @@ use bdk_wallet::{
 };
 use strum::IntoEnumIterator as _;
 
-use crate::{multi_format::StringOrData, wallet::Wallet, wallet::fingerprint::Fingerprint};
+use crate::{
+    database::global_config::GlobalConfigKey, multi_format::StringOrData, wallet::Wallet,
+    wallet::fingerprint::Fingerprint,
+};
 
 use super::*;
 
 /// The published BIP84 test vector mnemonic
-pub(super) const ABANDON_ABOUT: &str =
+pub(crate) const ABANDON_ABOUT: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
-/// Selects a network and wallet mode for one test, then restores them and every wallet list
+/// Wallet selections a test can change: the live one and the ones saved for each mode
+const SELECTION_KEYS: [GlobalConfigKey; 3] = [
+    GlobalConfigKey::SelectedWalletId,
+    GlobalConfigKey::MainSelectedWalletId,
+    GlobalConfigKey::DecoySelectedWalletId,
+];
+
+/// Selects a network and wallet mode for one test, then restores them, every wallet list, and
+/// every wallet selection
 ///
-/// Wallets the test creates in any scope are removed with their keychain entries on drop, so a
-/// later test that imports the same secret sees a new wallet instead of a duplicate
-pub(super) struct WalletTargetGuard {
+/// The target scope starts empty, because other tests in this binary leave wallets behind and a
+/// leftover wallet with the same fingerprint would turn an import into a duplicate. Wallets the
+/// test creates in any scope are removed with their keychain entries on drop, so a later test
+/// that imports the same secret sees a new wallet instead of a duplicate
+pub(crate) struct WalletTargetGuard {
     network: Network,
     mode: WalletMode,
+    selections: Vec<(GlobalConfigKey, Option<String>)>,
     wallets: Vec<(Network, WalletMode, Vec<WalletMetadata>)>,
 }
 
 impl WalletTargetGuard {
-    pub(super) fn new(network: Network, mode: WalletMode) -> Self {
+    pub(crate) fn new(network: Network, mode: WalletMode) -> Self {
         crate::test_support::ensure_tokio_runtime();
 
-        let config = &Database::global().global_config;
+        let database = Database::global();
+        let config = &database.global_config;
         let guard = Self {
             network: config.selected_network(),
             mode: config.wallet_mode(),
+            selections: SELECTION_KEYS.iter().map(|&key| (key, config.get(key).unwrap())).collect(),
             wallets: every_scope()
                 .map(|(network, mode)| (network, mode, wallets_in(network, mode)))
                 .collect(),
         };
 
         select_target(network, mode);
+        database.wallets.save_all_wallets(network, mode, Vec::new()).unwrap();
+
         guard
     }
 }
@@ -56,11 +74,18 @@ impl Drop for WalletTargetGuard {
             database.wallets.save_all_wallets(*network, *mode, original.clone()).unwrap();
         }
 
+        // switching modes moves the live selection into the saved ones, so restore the mode first
         select_target(self.network, self.mode);
+        for (key, value) in &self.selections {
+            match value {
+                Some(value) => database.global_config.set(*key, value.clone()).unwrap(),
+                None => database.global_config.delete(*key).unwrap(),
+            }
+        }
     }
 }
 
-pub(super) fn select_target(network: Network, mode: WalletMode) {
+pub(crate) fn select_target(network: Network, mode: WalletMode) {
     let config = &Database::global().global_config;
     config.set_selected_network(network).unwrap();
     match mode {
@@ -69,16 +94,16 @@ pub(super) fn select_target(network: Network, mode: WalletMode) {
     }
 }
 
-pub(super) fn every_scope() -> impl Iterator<Item = (Network, WalletMode)> {
+pub(crate) fn every_scope() -> impl Iterator<Item = (Network, WalletMode)> {
     Network::iter().flat_map(|network| [(network, WalletMode::Main), (network, WalletMode::Decoy)])
 }
 
-pub(super) fn wallets_in(network: Network, mode: WalletMode) -> Vec<WalletMetadata> {
+pub(crate) fn wallets_in(network: Network, mode: WalletMode) -> Vec<WalletMetadata> {
     Database::global().wallets.get_all(network, mode).unwrap_or_default()
 }
 
 /// Every wallet on the device, across all networks and modes
-pub(super) fn all_wallet_ids() -> Vec<WalletId> {
+pub(crate) fn all_wallet_ids() -> Vec<WalletId> {
     every_scope()
         .flat_map(|(network, mode)| wallets_in(network, mode))
         .map(|wallet| wallet.id)
@@ -86,7 +111,7 @@ pub(super) fn all_wallet_ids() -> Vec<WalletId> {
 }
 
 /// Opens Receive on a new manager, as the receiving phone does, and returns its request
-pub(super) fn start_receiver() -> (Arc<RustKeyTeleportManager>, KeyTeleportReceiveState) {
+pub(crate) fn start_receiver() -> (Arc<RustKeyTeleportManager>, KeyTeleportReceiveState) {
     let manager = RustKeyTeleportManager::new();
     manager.handle_action(Action::StartReceive).unwrap();
     let request = receive_request(&manager);
@@ -95,7 +120,7 @@ pub(super) fn start_receiver() -> (Arc<RustKeyTeleportManager>, KeyTeleportRecei
 }
 
 /// Scans the sender's response and types its password on the receiving phone
-pub(super) fn deliver_response(
+pub(crate) fn deliver_response(
     manager: &RustKeyTeleportManager,
     packet: &KeyTeleportSenderPacket,
     password: &str,
@@ -106,7 +131,7 @@ pub(super) fn deliver_response(
 }
 
 /// Imports the reviewed secret and returns the new wallet, failing on any other outcome
-pub(super) fn import_new_wallet(manager: &RustKeyTeleportManager) -> WalletMetadata {
+pub(crate) fn import_new_wallet(manager: &RustKeyTeleportManager) -> WalletMetadata {
     manager.handle_action(Action::ImportReceivedWallet).unwrap();
     let KeyTeleportManagerState::ReceiveImportedWallet(wallet) = manager.state() else {
         panic!("expected a newly imported wallet, got {:?}", manager.state())
@@ -119,7 +144,7 @@ pub(super) fn import_new_wallet(manager: &RustKeyTeleportManager) -> WalletMetad
 ///
 /// Both phones share one test database, so the sender's wallet is removed before the receiver
 /// imports, the way a second phone has never seen it
-pub(super) fn send_from_cove(
+pub(crate) fn send_from_cove(
     secret: WalletSecret,
     request: &KeyTeleportReceiveState,
 ) -> (Arc<KeyTeleportSenderPacket>, String) {
@@ -140,22 +165,22 @@ pub(super) fn send_from_cove(
 
 /// The wallet a receiver should end up with, derived with BDK's BIP84 template instead of Cove's
 /// own descriptor code
-pub(super) struct ExpectedWallet {
-    pub(super) network: Network,
-    pub(super) fingerprint: Fingerprint,
-    pub(super) first_address: String,
+pub(crate) struct ExpectedWallet {
+    network: Network,
+    fingerprint: Fingerprint,
+    pub(crate) first_address: String,
 }
 
 impl ExpectedWallet {
-    pub(super) fn from_mnemonic(mnemonic: &Mnemonic, network: Network) -> Self {
+    pub(crate) fn from_mnemonic(mnemonic: &Mnemonic, network: Network) -> Self {
         Self::from_seed(&mnemonic.to_seed(""), network)
     }
 
-    pub(super) fn from_seed(seed: &[u8], network: Network) -> Self {
+    fn from_seed(seed: &[u8], network: Network) -> Self {
         Self::from_xprv(Xpriv::new_master(NetworkKind::Main, seed).unwrap(), network)
     }
 
-    pub(super) fn from_xprv(mut xprv: Xpriv, network: Network) -> Self {
+    pub(crate) fn from_xprv(mut xprv: Xpriv, network: Network) -> Self {
         let bitcoin_network = bdk_wallet::bitcoin::Network::from(network);
         xprv.network = bitcoin_network.into();
 
@@ -171,7 +196,7 @@ impl ExpectedWallet {
     }
 
     /// Checks the wallet the receiver imported the way its Receive screen and wallet list see it
-    pub(super) fn assert_imported(&self, wallet: &WalletMetadata) {
+    pub(crate) fn assert_imported(&self, wallet: &WalletMetadata) {
         assert_eq!(wallet.network, self.network, "imported wallet network");
         assert_eq!(wallet.master_fingerprint.as_deref(), Some(&self.fingerprint));
         assert_eq!(wallet.wallet_type, WalletType::Hot);
