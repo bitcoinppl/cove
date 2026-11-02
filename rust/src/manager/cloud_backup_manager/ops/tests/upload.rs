@@ -557,3 +557,78 @@ async fn backup_wallets_preserves_newer_dirty_state() {
         Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
     ));
 }
+
+// the load-time origin repair changes a field of the backup revision, so a wallet whose backup is
+// already confirmed must be uploaded again with the repaired origin
+#[tokio::test(flavor = "current_thread")]
+async fn repairing_a_wallet_origin_on_load_marks_its_confirmed_backup_dirty() {
+    use crate::database::cloud_backup::CloudBlobConfirmedState;
+    use crate::wallet::{Wallet, metadata::WalletMetadata};
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 1);
+    crate::app::reconcile::test_support::init_noop_updater();
+
+    // offline keeps the dirty mark in place instead of starting an upload
+    CONNECTIVITY_MANAGER.set_connection_state(false);
+
+    let database = Database::global();
+    database.global_config.set_selected_network(crate::network::Network::Bitcoin).unwrap();
+    database.global_config.set_main_mode().unwrap();
+
+    let mnemonic = Mnemonic::parse_normalized(
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    )
+    .unwrap();
+    let wallet = Wallet::try_new_persisted_from_mnemonic_segwit(
+        WalletMetadata::preview_new(),
+        mnemonic.clone(),
+        None,
+    )
+    .unwrap();
+    let id = wallet.id.clone();
+    let expected_origin = wallet.metadata.origin.clone();
+    assert!(expected_origin.is_some(), "a mnemonic wallet build derives an origin");
+
+    // a hot wallet without its secret is downgraded on load, which rewrites the whole row
+    Keychain::global()
+        .save_wallet_secret(&id, cove_device::keychain::WalletSecret::Mnemonic(mnemonic))
+        .unwrap();
+
+    let mut origin_less = wallet.metadata.clone();
+    origin_less.origin = None;
+    database.wallets.save_new_wallet_metadata(origin_less).unwrap();
+    drop(wallet);
+
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let record_id = wallet_record_id(id.as_ref());
+    let confirmed = PersistedCloudBlobSyncState::wallet(
+        namespace_id,
+        id.clone(),
+        record_id.clone(),
+        PersistedCloudBlobState::Confirmed(CloudBlobConfirmedState {
+            revision_hash: "uploaded-without-origin".into(),
+            confirmed_at: 1,
+        }),
+    );
+    database.cloud_blob_sync_states.set(&confirmed).unwrap();
+
+    let loaded = Wallet::try_load_persisted(id.clone());
+    let loaded_origin = loaded.as_ref().ok().and_then(|wallet| wallet.metadata.origin.clone());
+    let sync_state = database.cloud_blob_sync_states.get(&record_id).unwrap();
+
+    drop(loaded);
+    crate::wallet::test_support::remove_wallet(&id);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+
+    assert_eq!(loaded_origin, expected_origin);
+    assert!(
+        matches!(
+            sync_state,
+            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
+        ),
+        "{sync_state:?}"
+    );
+}
