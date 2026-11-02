@@ -75,6 +75,8 @@ pub(crate) enum WalletMetadataPatch {
     WalletType(WalletType),
     DiscoveryState(DiscoveryState),
     AddressType(WalletAddressTypePatch),
+    /// Fills an origin derived from the wallet store into a row that lacks one
+    Origin(String),
     Internal(WalletInternalMetadataPatch),
 }
 
@@ -156,6 +158,7 @@ impl WalletMetadataPatch {
                 metadata.master_fingerprint = patch.master_fingerprint.clone();
                 metadata.internal.reset_scan_state_for_address_type_switch();
             }
+            Self::Origin(origin) => metadata.origin = Some(origin.clone()),
             Self::Internal(patch) => {
                 if let Some(address_index) = &patch.address_index {
                     metadata.internal.address_index = Some(address_index.clone());
