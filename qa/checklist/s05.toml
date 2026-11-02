@@ -82,11 +82,12 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
+    "human",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_refresh_completes_inventory_once_per_wallet_without_passkey",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_retries_verification_after_offline_failure",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# scripted provider fails offline, then the reconnect refresh lists each cloud wallet once without any passkey call
+# the test starts the detail refresh itself after reconnecting; reconnect alone restoring a complete inventory stays human
 
 [[row]]
 id = "s05-cloud-only-wallet-restore-data-matches"
