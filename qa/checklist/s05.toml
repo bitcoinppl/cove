@@ -127,12 +127,13 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
+    "human",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::deleting_the_matching_local_wallet_makes_its_cloud_duplicate_restorable",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_deleted",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/round_trip.rs::cloud_round_trip_restores_labels_locks_and_seed_without_scan_state",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# local deletion keeps the cloud blob, turns the row restorable and the wallet restores from it
+# tests remove wallet data directly and send the change notification themselves; the production delete path stays human
 
 [[row]]
 id = "s05-cloud-restored-wallet-performs-full-rescan"
