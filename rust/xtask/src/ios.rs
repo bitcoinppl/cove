@@ -158,11 +158,17 @@ pub struct IosUiOptions {
     device: String,
     test: String,
     foreground: bool,
+    results_dir: Option<PathBuf>,
 }
 
 impl IosUiOptions {
-    pub fn new(device: String, test: String, foreground: bool) -> Self {
-        Self { device, test, foreground }
+    pub fn new(
+        device: String,
+        test: String,
+        foreground: bool,
+        results_dir: Option<PathBuf>,
+    ) -> Self {
+        Self { device, test, foreground, results_dir }
     }
 }
 
@@ -591,6 +597,12 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
         color_eyre::eyre::bail!("xcrun command not found");
     }
 
+    // resolved before changing into ../ios so a relative path means the caller's directory
+    let results_dir = options.results_dir.map(std::path::absolute).transpose()?;
+    if let Some(dir) = &results_dir {
+        fs::create_dir_all(dir).wrap_err_with(|| format!("Failed to create {}", dir.display()))?;
+    }
+
     sh.change_dir("../ios");
 
     if options.foreground {
@@ -606,7 +618,7 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
         reset_simulator_state(&sh, &udid)?;
         boot_simulator(&sh, &udid)?;
 
-        if let Err(error) = run_ios_ui_test(&sh, &udid, &test, verbose) {
+        if let Err(error) = run_ios_ui_test(&sh, &udid, &test, results_dir.as_deref(), verbose) {
             print_error(&format!("{error:?}"));
             failures.push(test);
         }
@@ -1201,19 +1213,37 @@ fn simctl_shutdown_already_shutdown(stdout: &str, stderr: &str) -> bool {
         || stderr.contains("Unable to shutdown device in current state: Shutdown")
 }
 
-fn run_ios_ui_test(sh: &Shell, udid: &str, test: &str, verbose: bool) -> Result<()> {
+fn run_ios_ui_test(
+    sh: &Shell,
+    udid: &str,
+    test: &str,
+    results_dir: Option<&Path>,
+    verbose: bool,
+) -> Result<()> {
     print_info(&format!("Running iOS UI test {test}"));
 
     let destination = format!("platform=iOS Simulator,id={udid}");
     let only_testing = format!("-only-testing:{test}");
 
-    let test_cmd = cmd!(
-        sh,
-        "xcodebuild test -project {IOS_PROJECT} -scheme {IOS_UI_SCHEME} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
-    );
-
     if verbose {
-        test_cmd.run().wrap_err_with(|| format!("Failed to run iOS UI test {test}"))?;
+        let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, test, 0));
+        let test_cmd = cmd!(
+            sh,
+            "xcodebuild test -project {IOS_PROJECT} -scheme {IOS_UI_SCHEME} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
+        )
+        .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
+
+        if let Err(error) = test_cmd.run() {
+            if let Some(artifacts) = &artifacts {
+                artifacts.collect_app_logs(sh, udid);
+            }
+
+            return Err(error).wrap_err_with(|| format!("Failed to run iOS UI test {test}"));
+        }
+
+        if let Some(artifacts) = &artifacts {
+            artifacts.discard_passing_result();
+        }
         print_success(&format!("iOS UI test passed: {test}"));
 
         return Ok(());
@@ -1227,10 +1257,12 @@ fn run_ios_ui_test(sh: &Shell, udid: &str, test: &str, verbose: bool) -> Result<
             boot_simulator(sh, udid)?;
         }
 
+        let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, test, attempt));
         let test_cmd = cmd!(
             sh,
             "xcodebuild test -project {IOS_PROJECT} -scheme {IOS_UI_SCHEME} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
-        );
+        )
+        .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
 
         let output = test_cmd
             .quiet()
@@ -1239,9 +1271,17 @@ fn run_ios_ui_test(sh: &Shell, udid: &str, test: &str, verbose: bool) -> Result<
             .wrap_err_with(|| format!("Failed to run iOS UI test {test}"))?;
 
         if output.status.success() {
+            if let Some(artifacts) = &artifacts {
+                artifacts.discard_passing_result();
+            }
             print_success(&format!("iOS UI test passed: {test}"));
 
             return Ok(());
+        }
+
+        // collected before a retry or the next test erases the simulator
+        if let Some(artifacts) = &artifacts {
+            artifacts.collect_app_logs(sh, udid);
         }
 
         let failure = XcodebuildFailure::from_output(output)?;
@@ -1255,6 +1295,90 @@ fn run_ios_ui_test(sh: &Shell, udid: &str, test: &str, verbose: bool) -> Result<
     }
 
     unreachable!("iOS UI test retry loop should return from every branch")
+}
+
+/// Where one attempt of one iOS UI test keeps the evidence of a failure
+///
+/// Xcode keeps only the newest few result bundles in DerivedData, so by the end of a run the
+/// failing test's screenshots and hierarchy snapshots are gone, and the app's own log lives in
+/// the simulator, which the next test erases
+struct IosUiAttemptArtifacts {
+    result_bundle: PathBuf,
+    app_log_dir: PathBuf,
+    unified_log: PathBuf,
+}
+
+impl IosUiAttemptArtifacts {
+    fn new(results_dir: &Path, test: &str, attempt: usize) -> Self {
+        let name = format!("{}-attempt{}", test.replace('/', "-"), attempt + 1);
+
+        Self {
+            result_bundle: results_dir.join(format!("{name}.xcresult")),
+            app_log_dir: results_dir.join(format!("{name}-app-logs")),
+            unified_log: results_dir.join(format!("{name}-unified.log")),
+        }
+    }
+
+    fn xcodebuild_args(&self) -> [String; 2] {
+        ["-resultBundlePath".to_string(), self.result_bundle.display().to_string()]
+    }
+
+    fn discard_passing_result(&self) {
+        if let Err(error) = fs::remove_dir_all(&self.result_bundle) {
+            print_warning(&format!(
+                "Failed to remove passing result bundle {}: {error}",
+                self.result_bundle.display()
+            ));
+        }
+    }
+
+    /// Copies the app's diagnostics log and the simulator's unified log for the app and runner
+    ///
+    /// Collection is best effort: a missing log must not hide the test failure itself
+    fn collect_app_logs(&self, sh: &Shell, udid: &str) {
+        if let Err(error) = self.copy_app_diagnostics_log(sh, udid) {
+            print_warning(&format!("Failed to copy the app diagnostics log: {error:?}"));
+        }
+
+        if let Err(error) = self.write_unified_log(sh, udid) {
+            print_warning(&format!("Failed to write the simulator unified log: {error:?}"));
+        }
+    }
+
+    fn copy_app_diagnostics_log(&self, sh: &Shell, udid: &str) -> Result<()> {
+        let container = cmd!(sh, "xcrun simctl get_app_container {udid} {IOS_BUNDLE_ID} data")
+            .quiet()
+            .read()
+            .wrap_err("Failed to find the app data container")?;
+
+        // matches ROOT_DATA_DIR on iOS, where the Rust diagnostics capture writes its log files
+        let logs_dir = Path::new(container.trim()).join("Library/Application Support/.data/logs");
+        fs::create_dir_all(&self.app_log_dir)?;
+
+        for entry in fs::read_dir(&logs_dir)
+            .wrap_err_with(|| format!("Failed to read {}", logs_dir.display()))?
+        {
+            let entry = entry?;
+            fs::copy(entry.path(), self.app_log_dir.join(entry.file_name()))?;
+        }
+
+        Ok(())
+    }
+
+    fn write_unified_log(&self, sh: &Shell, udid: &str) -> Result<()> {
+        // one erased simulator per test, so the window only needs to cover this attempt
+        let predicate = r#"process == "Cove" OR process == "CoveUITests-Runner""#;
+        let log = cmd!(
+            sh,
+            "xcrun simctl spawn {udid} log show --last 20m --style compact --info --debug --predicate {predicate}"
+        )
+        .quiet()
+        .ignore_stderr()
+        .read()?;
+
+        fs::write(&self.unified_log, log)
+            .wrap_err_with(|| format!("Failed to write {}", self.unified_log.display()))
+    }
 }
 
 struct XcodebuildFailure {

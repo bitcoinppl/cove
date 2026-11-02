@@ -225,6 +225,10 @@ enum Commands {
         /// Open Simulator before running tests
         #[arg(long)]
         foreground: bool,
+
+        /// Keep each failed attempt's result bundle and app logs in this directory
+        #[arg(long)]
+        results_dir: Option<std::path::PathBuf>,
     },
 
     /// Bump and upload to TestFlight, copy previous test notes, and add to me-only
@@ -420,8 +424,8 @@ fn main() -> Result<()> {
             mobile::build_run_all(ios_options, android_options, cli.verbose)
         }
 
-        Commands::IosUi { device, test, foreground } => {
-            let options = ios::IosUiOptions::new(device, test, foreground);
+        Commands::IosUi { device, test, foreground, results_dir } => {
+            let options = ios::IosUiOptions::new(device, test, foreground, results_dir);
             ios::run_ios_ui_tests(options, cli.verbose)
         }
 

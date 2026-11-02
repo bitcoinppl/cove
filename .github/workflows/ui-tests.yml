@@ -87,6 +87,13 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: just android-instrumented-ci ${{ matrix.flavour }}
 
+      # the emulator has died mid-run with no output of its own, so record whether the host killed it
+      - name: Show host memory and kernel kills
+        if: failure()
+        run: |
+          free -m
+          sudo dmesg --ctime | grep -iE 'out of memory|oom|killed process' || echo "no kernel OOM kills recorded"
+
       - name: Upload Android test reports
         if: failure()
         uses: actions/upload-artifact@v7
@@ -129,14 +136,15 @@ jobs:
       - name: Run CoveUITests
         env:
           TEST_RUNNER_COVE_SKIP_QUARANTINED: "1"
-        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17"
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --results-dir "$RUNNER_TEMP/ios-ui-results"
 
       # CoveCloudBackupUITests stays out until its inventory scenarios pass on master; see #947
 
+      # xtask keeps each failed attempt's result bundle and app logs; DerivedData keeps only the newest bundles
       - name: Upload iOS test results
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: ios-ui-xcresults
-          path: ~/Library/Developer/Xcode/DerivedData/*/Logs/Test/*.xcresult
+          name: ios-ui-results
+          path: ${{ runner.temp }}/ios-ui-results
           retention-days: 7
