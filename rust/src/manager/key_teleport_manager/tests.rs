@@ -1273,7 +1273,9 @@ fn received_xprv_is_stored_in_the_wallet_network_form_and_sent_on_as_an_xprv() {
 
     let KeyTeleportManagerState::ReceiveImportedWallet(wallet) = state else {
         config.set_selected_network(original_network).unwrap();
-        panic!("expected a new imported wallet, got {state:?} from {imported:?}")
+
+        // the received key flows into both values, so the message prints neither
+        panic!("expected a new imported wallet, import succeeded: {}", imported.is_ok())
     };
 
     let stored = Keychain::global().get_wallet_secret(&wallet.id).unwrap().unwrap();
