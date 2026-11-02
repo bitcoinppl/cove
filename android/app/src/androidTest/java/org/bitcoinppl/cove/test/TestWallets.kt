@@ -7,6 +7,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.ImportWalletManager
+import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.ImportWalletException
 import org.bitcoinppl.cove_core.WalletMetadata
 import org.bitcoinppl.cove_core.types.WalletId
@@ -18,19 +19,25 @@ private const val POLL_INTERVAL_MILLIS = 50L
 private const val DELETE_TIMEOUT_MILLIS = 30_000L
 
 /**
- * Import a hot wallet from published test words
+ * Import a hot wallet from published test words, returning it only when the import created it
  *
- * Returns null when the wallet already exists, since a test that deletes its wallet afterwards
- * cannot know who else relies on an existing one
+ * Returns null when a wallet for these words already existed, since a test that deletes its wallet
+ * afterwards cannot know who else relies on an existing one
  */
-fun importTestWalletOrNull(words: List<String>): WalletMetadata? =
-    ImportWalletManager().use { manager ->
-        try {
-            manager.importWallet(listOf(words))
-        } catch (_: ImportWalletException.WalletAlreadyExists) {
-            null
+fun importTestWalletOrNull(words: List<String>): WalletMetadata? {
+    val existingIds = Database().wallets().all().map { it.id }.toSet()
+    val imported =
+        ImportWalletManager().use { manager ->
+            try {
+                manager.importWallet(listOf(words))
+            } catch (_: ImportWalletException.WalletAlreadyExists) {
+                null
+            }
         }
-    }
+
+    // a matching watch-only wallet is upgraded in place and returned under its existing id
+    return imported?.takeUnless { it.id in existingIds }
+}
 
 /** Delete a wallet a test imported, logging instead of failing so cleanup never hides the result */
 fun deleteTestWallet(walletId: WalletId) {
