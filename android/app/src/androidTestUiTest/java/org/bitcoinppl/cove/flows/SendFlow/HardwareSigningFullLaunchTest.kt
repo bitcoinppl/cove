@@ -3,6 +3,7 @@ package org.bitcoinppl.cove.flows.SendFlow
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
 import android.system.Os
 import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -26,6 +27,7 @@ import org.bitcoinppl.cove.test.TAPSIGNER_CVC
 import org.bitcoinppl.cove.test.TEST_MNEMONIC
 import org.bitcoinppl.cove.test.findText
 import org.bitcoinppl.cove.test.fullLaunchDevice
+import org.bitcoinppl.cove.test.hierarchy
 import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.test.parseSats
 import org.bitcoinppl.cove.test.scrollTo
@@ -151,14 +153,14 @@ class HardwareSigningFullLaunchTest {
         // two frames in, the scanner shows how far it got and stays open
         openSignatureScanner()
         qr.show(frames.take(2))
-        device.waitFor(By.text("Scanned 2 of $total"))
-        device.waitFor(By.text("${total - 2} parts left"))
+        waitForScanProgress("Scanned 2 of $total")
+        waitForScanProgress("${total - 2} parts left")
         assertFalse(device.hasObject(By.res("sendFlowConfirm.swipeToSend")))
 
         // a repeated frame doesn't count twice
         qr.show(listOf(frames[1]))
         qr.waitUntilScanned(frameCount = 1)
-        assertTrue(device.hasObject(By.text("Scanned 2 of $total")))
+        waitForScanProgress("Scanned 2 of $total")
 
         qr.show(frames.drop(2))
         assertConfirmationScreen()
@@ -390,6 +392,27 @@ class HardwareSigningFullLaunchTest {
         device.waitFor(By.textStartsWith("No unsigned transaction found for transaction"))
         device.waitFor(By.text("OK")).click()
         device.waitFor(By.text("Import Signature"))
+    }
+
+    /**
+     * Waits for the scanner's progress text, reading the screen afresh on each try
+     *
+     * The progress text is the last thing that changes on an otherwise idle screen, and
+     * uiautomator answers from the accessibility node cache, so a content change the cache misses
+     * stays hidden from it for good
+     */
+    private fun waitForScanProgress(text: String) {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val deadline = System.currentTimeMillis() + 20_000L
+
+        while (System.currentTimeMillis() < deadline) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) automation.clearCache()
+            if (device.hasObject(By.text(text))) return
+
+            Thread.sleep(250)
+        }
+
+        error("Timed out waiting for scan progress \"$text\"\n${device.hierarchy()}")
     }
 
     private fun assertConfirmationScreen() {

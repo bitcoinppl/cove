@@ -220,7 +220,13 @@ private fun QrScannerContent(
     }
 
     LaunchedEffect(scriptedFrames) {
-        scriptedFrames?.collect { frame -> onQrData(StringOrData.String(frame)) }
+        scriptedFrames?.collect { frame ->
+            onQrData(StringOrData.String(frame))
+
+            // ui tests read progress through accessibility, so log where the scan got to for when
+            // the screen they see disagrees
+            Log.d("QrCodeScanView", "Scanned a scripted frame, progress: ${progress?.displayText()}")
+        }
     }
 
     // toggle flashlight

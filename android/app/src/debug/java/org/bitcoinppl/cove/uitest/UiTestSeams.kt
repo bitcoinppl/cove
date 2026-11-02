@@ -118,6 +118,7 @@ internal object UiTestSeams {
         return try {
             val json = JSONObject(script.readText())
             val frames = json.getJSONArray("frames")
+            Log.d(TAG, "Took ${frames.length()} QR frames from ${script.path}")
             List(frames.length()) { frames.getString(it) }
         } catch (e: IOException) {
             Log.e(TAG, "UI test QR script at ${script.path} could not be read", e)
