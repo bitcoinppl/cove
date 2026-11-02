@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -156,8 +157,19 @@ fun LockView(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // main content
-        content()
+        // main content, kept composed so its state survives the lock, but cleared from the
+        // semantics tree while locked: the overlay only blocks touches, so accessibility services
+        // could otherwise still read the screen under it and invoke its actions
+        Box(
+            modifier =
+                if (auth.isLocked) {
+                    Modifier.fillMaxSize().clearAndSetSemantics {}
+                } else {
+                    Modifier.fillMaxSize()
+                },
+        ) {
+            content()
+        }
 
         // lock overlay
         AnimatedVisibility(

@@ -240,8 +240,11 @@ private struct LockContentLayer<Content: View>: View {
 
     var body: some View {
         GeometryReader { geometry in
+            // the overlay only covers the content visually, so hide it from VoiceOver while
+            // locked; otherwise VoiceOver can still read the screen under it and activate controls
             content
                 .frame(width: geometry.size.width, height: geometry.size.height)
+                .accessibilityHidden(lockState == .locked)
 
             if lockState == .locked {
                 LockOverlay(
