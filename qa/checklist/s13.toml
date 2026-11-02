@@ -78,10 +78,13 @@ coverage = [
   "human",
   "rust:rust/crates/cove-ur/src/crypto_psbt.rs::test_crypto_psbt_cbor_is_untagged_bytes",
   "rust:rust/src/hardware_signing_tests.rs::signed_animated_ur_and_bbqr_from_an_external_signer_finalize_the_saved_draft",
+  "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testAnimatedUrSignatureReachesConfirmationAndBroadcasts",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::animatedUrSignatureReachesConfirmationAndBroadcasts",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# the export, scan and finalize loop with an independent signer is asserted in rust; a strict
-# physical signer scanning the animated qr with a camera needs a person
+# the export, scan and finalize loop with an independent signer is asserted in rust, and the ui
+# tests export the draft, feed signed ur frames out of order through the qr seam and check the
+# broadcast; a strict physical signer and the camera still need a person
 
 [[row]]
 id = "s13-bbqr-unsigned-and-signed-scan-path"
@@ -105,10 +108,15 @@ coverage = [
   "human",
   "rust:rust/src/hardware_signing_tests.rs::signed_animated_ur_and_bbqr_from_an_external_signer_finalize_the_saved_draft",
   "rust:rust/src/hardware_signing_tests.rs::signed_psbts_that_match_no_saved_draft_are_rejected",
+  "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testAnimatedBbqrSignatureReachesConfirmationAndBroadcasts",
+  "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testPartialBbqrFramesShowProgressUntilTheRestArrive",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::animatedBbqrSignatureReachesConfirmationAndBroadcasts",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::partialBbqrFramesShowProgressUntilTheRestArrive",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# bbqr export, out-of-order and truncated scans and finalize are asserted in rust; the camera
-# exchange between two devices needs a person
+# bbqr export, out-of-order and truncated scans and finalize are asserted in rust, and the ui tests
+# cover bbqr export, partial and repeated frames and the broadcast through the qr seam; the camera
+# exchange with a physical signer still needs a person
 
 [[row]]
 id = "s13-nfc-and-tapsigner-setup-retry-and-signing"
@@ -130,10 +138,15 @@ coverage = [
   "rust:rust/src/tap_card/tap_signer_reader/emulator_tests.rs::setup_with_default_and_advanced_chain_codes_imports_the_card_account",
   "rust:rust/src/tap_card/tap_signer_reader/emulator_tests.rs::a_wrong_pin_changes_nothing_and_the_retry_succeeds",
   "rust:rust/src/tap_card/tap_signer_reader/emulator_tests.rs::signs_a_hardware_draft_that_then_finalizes",
+  "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testTapSignerImportRetriesAfterWrongPinAndDroppedSession",
+  "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testTapSignerSignsAfterWrongPinAndDroppedSession",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::tapSignerImportRetriesAfterWrongPinAndDroppedSession",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::tapSignerSignsAfterWrongPinAndDroppedSession",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# cove's card logic runs against coinkite's emulator in `just test-tapsigner-emulator`; a
-# physical tapsigner, the nfc session and the rate limit need a person
+# cove's card logic runs against coinkite's emulator in `just test-tapsigner-emulator`, and the ui
+# tests drive the tapsigner screens against it through the transport seam, with a wrong pin and a
+# dropped session; a physical card, the nfc session and the rate limit still need a person
 
 [[row]]
 id = "s13-watch-only-badge-and-secret-action-isolation"
@@ -173,7 +186,10 @@ coverage = [
   "agent",
   "rust:rust/src/database/unsigned_transactions.rs::delete_tx_removes_the_record_and_its_wallet_index_entry",
   "rust:rust/src/hardware_signing_tests.rs::signed_psbts_that_match_no_saved_draft_are_rejected",
+  "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testSignaturesThatMatchNoDraftAreRejected",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::signaturesThatMatchNoDraftAreRejected",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# draft deletion and unrelated or deleted-draft signature rejection are asserted; reservation
-# release and the error text the apps show are not
+# draft deletion and unrelated or deleted-draft signature rejection are asserted in rust, and the ui
+# tests assert the no-draft alert for deleted, unrelated and mainnet signatures; reservation release
+# is not
