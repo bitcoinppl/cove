@@ -350,9 +350,26 @@ fn stable_sync_hash<T>(value: &T) -> Result<String, CloudBackupError>
 where
     T: Serialize,
 {
-    let bytes = serde_json::to_vec(value)
+    // stream the JSON into the hasher, so a serialized secret never sits in an unwiped buffer
+    let mut hasher = HashWriter(Sha256::new());
+    serde_json::to_writer(&mut hasher, value)
         .map_err(|source| CloudBackupError::internal_context("serialize sync field", source))?;
-    Ok(hex::encode(Sha256::digest(bytes)))
+
+    Ok(hex::encode(hasher.0.finalize()))
+}
+
+/// Feeds written bytes straight into a SHA-256 hasher
+struct HashWriter(Sha256);
+
+impl std::io::Write for HashWriter {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.update(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 fn stable_sync_hash_option<T>(value: &Option<T>) -> Result<Option<String>, CloudBackupError>
@@ -516,6 +533,30 @@ mod tests {
             panic!("a hot xprv wallet uploads its master key");
         };
         assert_eq!(uploaded.as_str(), tprv.to_string());
+    }
+
+    // revision hashes are stored in Cloud Backup, so streaming the serialization must hash exactly
+    // the bytes that serializing into a buffer did
+    #[test]
+    fn streamed_sync_hash_matches_existing_revision_hashes() {
+        let secret = CloudWalletSecret::Xprv(
+            "xprv9s21ZrQH143K4BwRCYKSEPwcAMYweWkfKLURabnnv2GLNhJN1LSCgDQyGWyNcat72najQKwyshCBXWfHHVbcdxPAZPqByMyWDbWp5SjCfEa"
+                .to_string(),
+        );
+        let descriptors = Some(DescriptorPair {
+            external: "wpkh([73c5da0a/84h/0h/0h]xpub/0/*)".to_string(),
+            internal: "wpkh([73c5da0a/84h/0h/0h]xpub/1/*)".to_string(),
+        });
+        let buffered = |bytes: Vec<u8>| hex::encode(Sha256::digest(bytes));
+
+        assert_eq!(
+            stable_sync_hash(&secret).unwrap(),
+            buffered(serde_json::to_vec(&secret).unwrap())
+        );
+        assert_eq!(
+            stable_sync_hash_option(&descriptors).unwrap(),
+            Some(buffered(serde_json::to_vec(descriptors.as_ref().unwrap()).unwrap()))
+        );
     }
 
     fn content_revision_hash_for_metadata(metadata: &WalletMetadata) -> String {
