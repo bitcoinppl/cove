@@ -316,8 +316,10 @@ mod tests {
         // wallet, including ones other tests left behind whose secrets the keychain reset removed
         for network in Network::iter() {
             for mode in [WalletMode::Main, WalletMode::Decoy] {
-                for leftover in Database::global().wallets.get_all(network, mode).unwrap() {
-                    crate::wallet::test_support::remove_wallet(&leftover.id);
+                let wallets = &Database::global().wallets;
+                for leftover in wallets.get_all(network, mode).unwrap() {
+                    // delete by this scope, since remove_wallet deletes from the selected one
+                    wallets.remove_wallet_metadata(network, mode, &leftover.id).unwrap();
                 }
             }
         }
