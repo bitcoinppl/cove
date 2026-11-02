@@ -169,7 +169,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/TapSignerLayoutFullLaunchUITests
 
-      # CoveCloudBackupUITests stays out until its inventory scenarios pass on master; see #947
+      # the rest of CoveCloudBackupUITests stays out until its inventory scenarios pass on master; see #947
+      # these classes use the scripted cloud host only to restore a fixture wallet or reach a screen
+      - name: Run private key export and large text cloud backup UI tests
+        if: ${{ !cancelled() }}
+        run: |
+          cd rust
+          cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveCloudBackupUITests/PrivateKeyExportFullAppUITests
+          cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests
 
       # xtask keeps each failed attempt's result bundle and app logs; DerivedData keeps only the newest bundles
       - name: Upload iOS test results
