@@ -191,8 +191,12 @@ impl DescriptorExt for Descriptor<DescriptorPublicKey> {
             other => Err(Error::UnsupportedDescriptorType(other))?,
         };
 
+        // a fingerprint-only key origin has no path, and BIP-329 forbids an empty path element
         let (fingerprint, path) = self.origin()?;
-        Ok(format!("{open}[{fingerprint}/{path}]{close}"))
+        let key_origin =
+            if path.is_empty() { fingerprint.to_string() } else { format!("{fingerprint}/{path}") };
+
+        Ok(format!("{open}[{key_origin}]{close}"))
     }
 }
 
@@ -271,6 +275,15 @@ mod tests {
             (
                 "tr([817e7be0/86h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/0/*)",
                 "tr([817e7be0/86'/0'/0'])",
+            ),
+            // a key origin with only a fingerprint keeps no path separator
+            (
+                "wpkh([817e7be0]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/0/*)",
+                "wpkh([817e7be0])",
+            ),
+            (
+                "sh(wpkh([817e7be0]xpub6CCKAvUTNursEnaJ8k1d27LfqEUzeAx2N9wFqYE3W1xh7nqgJEBEbLSSmohwDxzsSvcsYqiQqFzRvta65Njbe5o84bF5YXHFqfSH2Dkhonm/0/*))",
+                "sh(wpkh([817e7be0]))",
             ),
         ];
 

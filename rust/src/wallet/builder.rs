@@ -1038,6 +1038,37 @@ mod tests {
         assert_eq!(stored.as_deref(), Some(BIP49_ORIGIN));
     }
 
+    // a hardware export can give a key origin with only a fingerprint, and rows saved before the
+    // origin format dropped the empty path element hold `[817e7be0/]`
+    #[test]
+    fn fingerprint_only_wrapped_segwit_import_stores_an_origin_without_a_path() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let _restore_target = init_import_globals();
+        Database::global().global_config.set_selected_network(Network::Bitcoin).unwrap();
+        Database::global().global_config.set_main_mode().unwrap();
+
+        let export = pubport::Format::Descriptor(pubport_descriptors(
+            "sh(wpkh([817e7be0]xpub6CCKAvUTNursEnaJ8k1d27LfqEUzeAx2N9wFqYE3W1xh7nqgJEBEbLSSmohwDxzsSvcsYqiQqFzRvta65Njbe5o84bF5YXHFqfSH2Dkhonm/<0;1>/*))",
+        ));
+        let wallet = Wallet::try_new_persisted_from_pubport(export).unwrap();
+        let id = wallet.id.clone();
+        let imported = stored_origin(&id);
+
+        let mut old_format = wallet.metadata.clone();
+        old_format.origin = Some("sh(wpkh([817e7be0/]))".to_string());
+        Database::global().wallets.replace_wallet_metadata(old_format).unwrap();
+        drop(wallet);
+
+        let loaded = Wallet::try_load_persisted(id.clone());
+        let repaired = stored_origin(&id);
+
+        drop(loaded);
+        crate::wallet::test_support::remove_wallet(&id);
+
+        assert_eq!(imported.as_deref(), Some("sh(wpkh([817e7be0]))"));
+        assert_eq!(repaired.as_deref(), Some("sh(wpkh([817e7be0]))"));
+    }
+
     // BIP49 and BIP84 spec vectors for the "abandon ... about" mnemonic, account 0
     const BIP49_TESTNET_UPUB: &str = "upub5EFU65HtV5TeiSHmZZm7FUffBGy8UKeqp7vw43jYbvZPpoVsgU93oac7Wk3u6moKegAEWtGNF8DehrnHtv21XXEMYRUocHqguyjknFHYfgY";
     const BIP84_TESTNET_VPUB: &str = "vpub5Y6cjg78GGuNLsaPhmYsiw4gYX3HoQiRBiSwDaBXKUafCt9bNwWQiitDk5VZ5BVxYnQdwoTyXSs2JHRPAgjAvtbBrf8ZhDYe2jWAqvZVnsc";
