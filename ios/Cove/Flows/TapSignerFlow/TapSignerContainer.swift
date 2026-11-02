@@ -269,6 +269,9 @@ struct TapSignerResultBackground: View {
             Spacer()
         }
         .opacity(0.8)
+        // decorative; as an accessibility element it sits under the header and takes the
+        // accessibility hit test meant for its Cancel and Back buttons
+        .accessibilityHidden(true)
     }
 }
 
