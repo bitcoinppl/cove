@@ -20,6 +20,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
+import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.deleteTestWallet
@@ -65,7 +66,7 @@ class KeyTeleportBackgroundLockTest {
         assumeTrue("an app lock is already set up on this device", Auth.type == AuthType.NONE)
 
         // the test deletes its wallet afterwards, so never run it over one it did not create
-        val imported = importTestWalletOrNull(TEST_WORDS)
+        val imported = importTestWalletOrNull(TEST_WALLET)
         assumeTrue("the test wallet already exists on this device", imported != null)
         walletId = requireNotNull(imported).id
 
@@ -95,12 +96,12 @@ class KeyTeleportBackgroundLockTest {
         val requestSecrets = listOf(request.numericCode, request.groupedNumericCode)
 
         // the receiver request, with its code revealed
-        compose.onNodeWithContentDescription("Tap to show receiver code").performClick()
-        compose.waitUntil(REVEAL_TIMEOUT_MILLIS) { compose.containsAnyOf(requestSecrets) }
+        reveal(RECEIVER_CODE_HINT, requestSecrets)
         leaveAndReturnPastTheGracePeriod()
         assertPinCoverWithoutSecrets("the receiver request", requestSecrets)
         unlock()
         assertNoSecretsInTree("the receiver request after unlocking", requestSecrets)
+        reveal(RECEIVER_CODE_HINT, requestSecrets)
 
         val response = KeyTeleportTestPeer().use { sender -> sender.sendWallet(walletId, request) }
         val passwordSecrets = listOf(response.password, response.password.filterNot(Char::isWhitespace))
@@ -122,12 +123,12 @@ class KeyTeleportBackgroundLockTest {
         // the received recovery words, revealed
         compose.onNodeWithText("Continue").performClick()
         compose.waitUntil(STATE_TIMEOUT_MILLIS) { receiver.state is KeyTeleportManagerState.ReceiveMnemonicReview }
-        compose.onNodeWithContentDescription("Tap to reveal recovery words").performClick()
-        compose.waitUntil(REVEAL_TIMEOUT_MILLIS) { compose.containsAnyOf(TEST_WORDS, substring = false) }
+        reveal(RECOVERY_WORDS_HINT, TEST_WORDS, substring = false)
         leaveAndReturnPastTheGracePeriod()
         assertPinCoverWithoutSecrets("the received wallet review", TEST_WORDS, substring = false)
         unlock()
         assertNoSecretsInTree("the received wallet review after unlocking", TEST_WORDS, substring = false)
+        reveal(RECOVERY_WORDS_HINT, TEST_WORDS, substring = false)
 
         compose.onNodeWithText("Finish Without Importing").performClick()
     }
@@ -152,12 +153,12 @@ class KeyTeleportBackgroundLockTest {
             val passwordSecrets = listOf(response.password, response.password.filterNot(Char::isWhitespace))
 
             // the response QR with its password revealed
-            compose.onNodeWithContentDescription("Tap to show password").performClick()
-            compose.waitUntil(REVEAL_TIMEOUT_MILLIS) { compose.containsAnyOf(passwordSecrets) }
+            reveal(SENDER_PASSWORD_HINT, passwordSecrets)
             leaveAndReturnPastTheGracePeriod()
             assertPinCoverWithoutSecrets("the sender response", passwordSecrets)
             unlock()
             assertNoSecretsInTree("the sender response after unlocking", passwordSecrets)
+            reveal(SENDER_PASSWORD_HINT, passwordSecrets)
             compose.onNodeWithContentDescription("KeyTeleport QR").assertExists()
 
             receiver.manager.dispatch(KeyTeleportManagerAction.EndReceive)
@@ -196,6 +197,15 @@ class KeyTeleportBackgroundLockTest {
                 .takeIf { it }
         }
         compose.waitForIdle()
+    }
+
+    private fun reveal(
+        hint: String,
+        secrets: List<String>,
+        substring: Boolean = true,
+    ) {
+        compose.onNodeWithContentDescription(hint).performClick()
+        compose.waitUntil(REVEAL_TIMEOUT_MILLIS) { compose.containsAnyOf(secrets, substring) }
     }
 
     private fun assertPinCoverWithoutSecrets(
@@ -281,6 +291,9 @@ class KeyTeleportBackgroundLockTest {
         const val BACKGROUND_TIMEOUT_MILLIS = 10_000L
         const val STATE_TIMEOUT_MILLIS = 15_000L
         const val REVEAL_TIMEOUT_MILLIS = 5_000L
+        const val RECEIVER_CODE_HINT = "Tap to show receiver code"
+        const val SENDER_PASSWORD_HINT = "Tap to show password"
+        const val RECOVERY_WORDS_HINT = "Tap to reveal recovery words"
 
         // published BIP39 test vector, never used for funds; distinct from the vectors other tests import
         val TEST_WORDS =
@@ -288,5 +301,6 @@ class KeyTeleportBackgroundLockTest {
                 "letter", "advice", "cage", "absurd", "amount", "doctor",
                 "acoustic", "avoid", "letter", "advice", "cage", "above",
             )
+        val TEST_WALLET = TestWalletWords(TEST_WORDS, masterFingerprint = "28645006")
     }
 }

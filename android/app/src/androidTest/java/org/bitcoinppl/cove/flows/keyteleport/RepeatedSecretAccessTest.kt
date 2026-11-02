@@ -1,18 +1,20 @@
 package org.bitcoinppl.cove.flows.keyteleport
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.bitcoinppl.cove.ImportWalletManager
+import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.deleteTestWallet
 import org.bitcoinppl.cove.test.importTestWalletOrNull
 import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.ImportWalletException
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
 import org.bitcoinppl.cove_core.Mnemonic
 import org.bitcoinppl.cove_core.types.WalletId
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -36,7 +38,7 @@ class RepeatedSecretAccessTest {
         bootstrapRustRuntimeForUiTest()
 
         // the test deletes its wallet afterwards, so never run it over one it did not create
-        val imported = importTestWalletOrNull(TEST_WORDS)
+        val imported = importTestWalletOrNull(TEST_WALLET)
         assumeTrue("the test wallet already exists on this device", imported != null)
         walletId = requireNotNull(imported).id
     }
@@ -56,7 +58,7 @@ class RepeatedSecretAccessTest {
         }
 
         repeat(WRITE_ROUNDS) { round ->
-            assertNull("write $round imported the same words as a second wallet", importTestWalletOrNull(TEST_WORDS))
+            assertEquals("write $round did not find the existing wallet", walletId, writeWordsAgain())
         }
 
         repeat(SEND_ROUNDS) { round ->
@@ -104,6 +106,15 @@ class RepeatedSecretAccessTest {
         awaitOnMain(what) { peer.manager.state.takeIf(matches) }
     }
 
+    // a hot wallet that already holds these words reports itself instead of being written twice
+    private fun writeWordsAgain(): WalletId? =
+        try {
+            ImportWalletManager().use { manager -> manager.importWallet(listOf(TEST_WORDS)) }
+            null
+        } catch (error: ImportWalletException.WalletAlreadyExists) {
+            error.v1
+        }
+
     private fun readWords(): List<String> = Mnemonic(id = walletId).use { it.words() }
 
     private fun walletIds(): List<WalletId> = Database().wallets().all().map { it.id }
@@ -119,5 +130,6 @@ class RepeatedSecretAccessTest {
                 "zoo", "zoo", "zoo", "zoo", "zoo", "zoo",
                 "zoo", "zoo", "zoo", "zoo", "zoo", "wrong",
             )
+        val TEST_WALLET = TestWalletWords(TEST_WORDS, masterFingerprint = "3f635a63")
     }
 }
