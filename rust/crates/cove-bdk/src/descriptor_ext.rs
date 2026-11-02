@@ -183,7 +183,13 @@ impl DescriptorExt for Descriptor<DescriptorPublicKey> {
             DescriptorType::Pkh => ("pkh(", ")"),
             DescriptorType::Wpkh => ("wpkh(", ")"),
             DescriptorType::ShWpkh => ("sh(wpkh(", "))"),
-            DescriptorType::Tr => ("tr(", ")"),
+            // a script tree adds keys whose origins the abbreviated form would drop
+            DescriptorType::Tr => match self {
+                Descriptor::Tr(tr) if tr.tap_tree().is_some() => {
+                    return Err(Error::UnsupportedDescriptor("taproot script tree".to_string()));
+                }
+                _ => ("tr(", ")"),
+            },
             DescriptorType::Wsh
             | DescriptorType::ShWsh
             | DescriptorType::WshSortedMulti
@@ -292,6 +298,16 @@ mod tests {
 
             assert_eq!(desc.full_origin().unwrap(), expected, "origin of {descriptor}");
         }
+    }
+
+    // BIP-329 needs every key origin, and the abbreviated form only has room for the internal key
+    #[test]
+    fn full_origin_rejects_a_taproot_script_tree() {
+        let desc: ExtendedDescriptor = "tr([817e7be0/86h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM/0/*,pk([817e7be0/86h/0h/1h]xpub6CCKAvUTNursEnaJ8k1d27LfqEUzeAx2N9wFqYE3W1xh7nqgJEBEbLSSmohwDxzsSvcsYqiQqFzRvta65Njbe5o84bF5YXHFqfSH2Dkhonm/0/*))"
+            .parse()
+            .unwrap();
+
+        assert!(desc.full_origin().is_err());
     }
 
     #[test]

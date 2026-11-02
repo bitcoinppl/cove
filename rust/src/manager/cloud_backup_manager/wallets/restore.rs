@@ -709,4 +709,50 @@ mod tests {
         loaded.expect("the restored wallet loads");
         assert_eq!(stored.as_deref(), Some("sh(wpkh([73c5da0a/49'/0'/0']))"));
     }
+
+    // the abbreviated origin cannot carry a Taproot script tree's keys, so loading a restored
+    // script-tree wallet must keep the complete origin its backup carries
+    #[test]
+    fn restored_taproot_script_tree_wallet_keeps_its_origin_on_load() {
+        use cove_types::Network;
+
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::delete_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+        Database::global().global_config.set_selected_network(Network::Bitcoin).unwrap();
+        Database::global().global_config.set_main_mode().unwrap();
+
+        let complete_origin = "tr([817e7be0/86'/0'/0'],pk([817e7be0/86'/0'/1']))";
+        let mut metadata = public_metadata("Taproot script tree");
+        metadata.origin = Some(complete_origin.to_string());
+
+        let internal_key = "[817e7be0/86h/0h/0h]xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM";
+        let leaf_key = "[817e7be0/86h/0h/1h]xpub6CCKAvUTNursEnaJ8k1d27LfqEUzeAx2N9wFqYE3W1xh7nqgJEBEbLSSmohwDxzsSvcsYqiQqFzRvta65Njbe5o84bF5YXHFqfSH2Dkhonm";
+        let mut entry = test_wallet_entry(&metadata);
+        entry.descriptors = Some(cove_cspp::backup_data::DescriptorPair {
+            external: format!("tr({internal_key}/0/*,pk({leaf_key}/0/*))"),
+            internal: format!("tr({internal_key}/1/*,pk({leaf_key}/1/*))"),
+        });
+        let wallet = DownloadedWalletBackup { metadata: metadata.clone(), entry };
+        let mut session = WalletRestoreSession::new(ExistingWalletIdentitySet::default());
+
+        let outcome = session.restore_downloaded(&wallet).unwrap();
+        assert_eq!(outcome, WalletRestoreOutcome::Restored { labels_warning: None });
+
+        let loaded = crate::wallet::Wallet::try_load_persisted(metadata.id.clone())
+            .map(|_| ())
+            .map_err(|error| error.to_string());
+        let stored = Database::global()
+            .wallets
+            .get(&metadata.id, metadata.network, metadata.wallet_mode)
+            .unwrap()
+            .and_then(|stored| stored.origin);
+        crate::wallet::test_support::remove_wallet(&metadata.id);
+
+        loaded.expect("the restored wallet loads");
+        assert_eq!(stored.as_deref(), Some(complete_origin));
+    }
 }
