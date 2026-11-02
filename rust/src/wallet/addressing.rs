@@ -9,6 +9,8 @@ use cove_types::address::AddressInfoWithDerivation;
 use cove_util::result_ext::ResultExt as _;
 use tracing::{debug, warn};
 
+use crate::manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER;
+
 use crate::{
     bdk_store::{BdkStore, StoreReplacementActivation},
     keychain::Keychain,
@@ -51,6 +53,7 @@ pub(crate) fn healed_metadata_for_store(
         "wallet store does not match the metadata address type; healing metadata forward"
     );
 
+    let before = metadata.clone();
     metadata.address_type = store_address_type;
     metadata.discovery_state = DiscoveryState::ChoseAdressType;
     let descriptor = crate::keys::Descriptor::from(external_descriptor.clone());
@@ -59,10 +62,12 @@ pub(crate) fn healed_metadata_for_store(
     }
     metadata.internal.reset_local_scan_state();
 
-    if let Err(error) =
-        crate::database::Database::global().wallets.replace_wallet_metadata(metadata.clone())
-    {
-        warn!(%error, "unable to persist healed wallet metadata; the next load retries");
+    match crate::database::Database::global().wallets.replace_wallet_metadata(metadata.clone()) {
+        // the address type and origin are part of the Cloud Backup revision
+        Ok(_) => CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before, &metadata),
+        Err(error) => {
+            warn!(%error, "unable to persist healed wallet metadata; the next load retries")
+        }
     }
 
     metadata
