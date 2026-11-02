@@ -464,8 +464,16 @@ impl MockCloudStorage {
         self.state.lock().uploaded_wallet_backups.len()
     }
 
+    pub(crate) fn master_key_backup_bytes(&self, namespace: &str) -> Option<Vec<u8>> {
+        self.state.lock().master_key_backups.get(namespace).cloned()
+    }
+
     pub(crate) fn has_master_key_backup(&self, namespace: &str) -> bool {
         self.state.lock().master_key_backups.contains_key(namespace)
+    }
+
+    pub(crate) fn wallet_backup_bytes(&self, namespace: &str, record_id: &str) -> Option<Vec<u8>> {
+        self.state.lock().wallet_backups.get(&(namespace.to_owned(), record_id.to_owned())).cloned()
     }
 
     pub(crate) fn has_wallet_backup(&self, namespace: &str, record_id: &str) -> bool {

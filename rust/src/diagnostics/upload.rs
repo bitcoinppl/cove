@@ -575,6 +575,55 @@ mod tests {
         }
     }
 
+    /// Accepts one upload, answers it with a report id and hands back the request head and body
+    /// exactly as they crossed the wire
+    async fn capturing_upload_server()
+    -> (String, tokio::sync::oneshot::Receiver<(Vec<u8>, Vec<u8>)>) {
+        crate::test_support::ensure_tokio_runtime();
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("test server binds");
+        let addr = listener.local_addr().expect("test server has local addr");
+        let (captured_sender, captured) = tokio::sync::oneshot::channel();
+
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("test server accepts request");
+            let mut request = read_request_head(&mut socket).await;
+            let head_end = request
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+                .expect("request head ends")
+                + 4;
+            let mut body = request.split_off(head_end);
+            let head = request;
+
+            let content_length = String::from_utf8_lossy(&head)
+                .to_ascii_lowercase()
+                .split("\r\n")
+                .find_map(|line| line.strip_prefix("content-length: ").map(str::to_owned))
+                .expect("request has a content-length")
+                .parse::<usize>()
+                .expect("content-length is a number");
+
+            while body.len() < content_length {
+                let mut buffer = [0; 4096];
+                let bytes_read = socket.read(&mut buffer).await.expect("test server reads body");
+                assert_ne!(bytes_read, 0, "request ended before its body");
+                body.extend_from_slice(&buffer[..bytes_read]);
+            }
+
+            let response_body = r#"{"id":"report-1"}"#;
+            let http_response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{response_body}",
+                response_body.len(),
+            );
+
+            socket.write_all(http_response.as_bytes()).await.expect("test server writes response");
+            let _ = captured_sender.send((head, body));
+        });
+
+        (format!("http://{addr}/reports"), captured)
+    }
+
     // matches each expected header as a complete, case-insensitive header line so that a header
     // value can never satisfy a different header's assertion by substring overlap
     fn assert_request_has_wire_headers(request: &[u8]) {
@@ -884,5 +933,31 @@ mod tests {
 
         assert!(matches!(error, UploadError::ResponseTooLarge { .. }));
         assert!(error.user_message().contains("may have been received"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn submitted_request_carries_only_age_ciphertext_with_key_id() {
+        let _global_guard = crate::test_support::global_state_test_lock().lock().await;
+        let (upload_url, captured) = capturing_upload_server().await;
+        let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
+
+        let report_id = submit_report(report()).await.unwrap();
+        let (head, body) = captured.await.expect("server captured the request");
+
+        assert_eq!(report_id, "report-1");
+        assert!(head.starts_with(b"POST /reports HTTP/1.1\r\n"));
+        assert_request_has_wire_headers(&head);
+
+        // the body is an age file for one x25519 recipient, never gzip or JSON in the clear
+        assert!(body.starts_with(b"age-encryption.org/v1\n-> X25519 "));
+        assert!(!body.starts_with(&[0x1f, 0x8b]));
+
+        for plaintext in [&b"amount=5000 sats"[..], b"description", b"Rust logs", b"iPhone"] {
+            assert!(
+                !body.windows(plaintext.len()).any(|window| window == plaintext),
+                "request body contains report text {:?}",
+                String::from_utf8_lossy(plaintext)
+            );
+        }
     }
 }

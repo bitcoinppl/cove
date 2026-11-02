@@ -894,3 +894,29 @@ async fn integrity_refreshes_detail_after_auto_backup_failure() {
     assert_eq!(detail.needs_sync[0].record_id, record_id);
     assert_eq!(detail.needs_sync[0].sync_status, CloudBackupWalletStatus::Dirty);
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn sync_now_offline_uploads_nothing_then_uploads_after_reconnect() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let metadata = xpub_only_wallet_metadata();
+    let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+    persist_xpub_wallets(vec![metadata]);
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+
+    CONNECTIVITY_MANAGER.set_connection_state(false);
+    manager.do_sync_unsynced_wallets().await.unwrap_err();
+    assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
+
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    manager.do_sync_unsynced_wallets().await.unwrap();
+
+    assert!(globals.cloud.has_wallet_backup(&namespace, &record_id));
+    assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
+    assert_eq!(globals.passkey.create_count(), 0);
+    assert_eq!(globals.passkey.authenticate_count(), 0);
+    assert_eq!(globals.passkey.discover_count(), 0);
+}

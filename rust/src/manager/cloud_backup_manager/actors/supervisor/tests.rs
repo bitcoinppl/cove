@@ -3575,6 +3575,62 @@ async fn restore_all_cancellation_finishes_the_active_wallet_and_skips_the_next(
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn reentering_detail_keeps_the_running_restore_all_batch() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let first_wallet = xpub_only_wallet_metadata();
+    let mut second_wallet = xpub_only_wallet_metadata();
+    second_wallet.network = Network::Testnet;
+    let (namespace, items) = prepare_restore_all_queue_fixture(
+        &manager,
+        vec![
+            (first_wallet.clone(), wallet_entry_with_labels(&first_wallet, None)),
+            (second_wallet.clone(), wallet_entry_with_labels(&second_wallet, None)),
+        ],
+    );
+    let globals = test_globals();
+    let gate = globals.cloud.gate_wallet_backup_download_after_successes(
+        namespace.clone(),
+        items[0].record_id.clone(),
+        1,
+    );
+
+    call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
+    gate.wait_until_blocked()
+        .with_timeout(Duration::from_secs(2))
+        .await
+        .expect("first wallet restore should reach atomic download");
+
+    let claim = manager.projected_exclusive_operation().expect("Restore All should be running");
+
+    // leaving detail sends nothing to rust, so coming back is the only navigation it sees
+    call!(manager.supervisor.start_enter_detail()).await.unwrap();
+    assert_eq!(manager.projected_exclusive_operation(), Some(claim));
+    assert!(matches!(
+        manager.projected_restore_all_state(),
+        CloudBackupRestoreAllState::Running { cancellation_requested: false, .. }
+    ));
+
+    gate.release();
+    wait_for_test_condition(Duration::from_secs(5), "Restore All should settle", || {
+        manager.projected_exclusive_operation().is_none()
+    })
+    .await;
+
+    for wallet in [&first_wallet, &second_wallet] {
+        assert!(
+            Database::global()
+                .wallets()
+                .get(&wallet.id, wallet.network, wallet.wallet_mode)
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn restore_all_cancellation_during_preparation_clears_marker_after_completion() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();

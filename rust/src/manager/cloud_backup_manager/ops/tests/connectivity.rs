@@ -1,9 +1,10 @@
 use super::*;
+use crate::manager::cloud_backup_manager::CloudOnlyState;
 
 async fn configure_trusted_local_snapshot_with_two_cloud_only_wallets(
     manager: &RustCloudBackupManager,
     globals: &TestGlobals,
-) {
+) -> [String; 2] {
     configure_enabled_cloud_backup(manager, globals, 2);
 
     let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
@@ -42,6 +43,8 @@ async fn configure_trusted_local_snapshot_with_two_cloud_only_wallets(
     ];
     globals.cloud.set_wallet_files(namespace.clone(), wallet_files.clone());
     globals.cloud.set_wallet_files_snapshot(namespace, wallet_files, false);
+
+    [first_record_id, second_record_id]
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -124,6 +127,77 @@ async fn provider_confirmation_failure_marks_trusted_local_detail_incomplete() {
         },
     )
     .await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn reconnect_refresh_completes_inventory_once_per_wallet_without_passkey() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    let mut expected_record_ids =
+        configure_trusted_local_snapshot_with_two_cloud_only_wallets(&manager, globals).await;
+    expected_record_ids.sort();
+
+    // the provider cannot list wallets while the device is offline
+    CONNECTIVITY_MANAGER.set_connection_state(false);
+    globals.cloud.fail_list_wallet_files("offline");
+    call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+
+    wait_for_test_condition(Duration::from_secs(2), "expected offline detail to fail", || {
+        matches!(
+            manager.state().lifecycle,
+            CloudBackupLifecycle::Configured(ref configured)
+                if matches!(
+                    configured.detail,
+                    CloudBackupDetailState::Failed { retained: Some(_), .. }
+                )
+        )
+    })
+    .await;
+
+    globals.cloud.clear_list_wallet_files_error();
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    call!(manager.supervisor.start_refresh_detail()).await.unwrap();
+
+    // detail refreshes are spaced by DETAIL_REFRESH_MINIMUM_INTERVAL, so this one may wait for it
+    wait_for_test_condition(
+        Duration::from_secs(10),
+        "expected reconnect to complete detail",
+        || {
+            matches!(
+                manager.state().lifecycle,
+                CloudBackupLifecycle::Configured(ref configured)
+                    if matches!(
+                        configured.detail,
+                        CloudBackupDetailState::Complete { ref state }
+                            if state.inventory_authority
+                                == CloudBackupInventoryAuthority::ProviderConfirmed
+                    )
+                    && matches!(
+                        configured.restore_all,
+                        CloudBackupRestoreAllState::StartAvailable { wallet_count: 2 }
+                    )
+            )
+        },
+    )
+    .await;
+
+    // every cloud wallet is listed exactly once
+    wait_for_test_condition(Duration::from_secs(5), "expected loaded cloud-only rows", || {
+        let CloudOnlyState::Loaded { wallets, .. } = manager.state.read().cloud_only() else {
+            return false;
+        };
+
+        let mut record_ids: Vec<_> = wallets.into_iter().map(|wallet| wallet.record_id).collect();
+        record_ids.sort();
+        record_ids == expected_record_ids
+    })
+    .await;
+
+    // refreshing inventory never asks for a passkey, let alone creates a new one
+    assert_eq!(globals.passkey.create_count(), 0);
+    assert_eq!(globals.passkey.authenticate_count(), 0);
+    assert_eq!(globals.passkey.discover_count(), 0);
 }
 
 #[tokio::test(flavor = "current_thread")]

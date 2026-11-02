@@ -1127,10 +1127,8 @@ async fn existing_passkey_onboarding_recovery_completes_verification() {
     let encrypted_existing_master =
         cove_cspp::master_key_crypto::encrypt_master_key(&existing_master_key, &prf_key, &[9; 32])
             .unwrap();
-    globals.cloud.set_master_key_backup(
-        existing_namespace,
-        serde_json::to_vec(&encrypted_existing_master).unwrap(),
-    );
+    let existing_master_backup = serde_json::to_vec(&encrypted_existing_master).unwrap();
+    globals.cloud.set_master_key_backup(existing_namespace.clone(), existing_master_backup.clone());
     globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
         prf_output: prf_key.to_vec(),
         credential_id: vec![1, 2, 3],
@@ -1166,6 +1164,20 @@ async fn existing_passkey_onboarding_recovery_completes_verification() {
         manager.model_snapshot().pending_upload_verification,
         PendingUploadVerificationState::Idle
     );
+
+    // the existing passkey and backup are adopted, never replaced
+    assert_eq!(globals.passkey.create_count(), 0);
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), existing_namespace);
+    assert_eq!(
+        globals.cloud.master_key_backup_bytes(&existing_namespace),
+        Some(existing_master_backup)
+    );
+
+    let local_master_key = cove_cspp::Cspp::new(Keychain::global().clone())
+        .load_master_key_from_store()
+        .unwrap()
+        .unwrap();
+    assert_eq!(local_master_key.as_bytes(), existing_master_key.as_bytes());
 }
 
 #[tokio::test(flavor = "current_thread")]
