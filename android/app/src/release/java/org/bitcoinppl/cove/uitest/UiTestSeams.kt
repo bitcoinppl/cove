@@ -23,4 +23,6 @@ internal object UiTestSeams {
 
     suspend fun readTapSignerNdefUrl(): String =
         throw UnsupportedOperationException("Release builds have no TAPSIGNER bridge")
+
+    fun recordTapSignerSignError(error: Throwable) = Unit
 }

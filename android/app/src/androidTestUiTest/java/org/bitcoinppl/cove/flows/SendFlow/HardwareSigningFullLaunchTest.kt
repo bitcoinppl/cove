@@ -32,11 +32,13 @@ import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.test.parseSats
 import org.bitcoinppl.cove.test.scrollTo
 import org.bitcoinppl.cove.test.waitFor
+import org.bitcoinppl.cove.uitest.UiTestSeams
+import org.bitcoinppl.cove_core.TapSignerReaderException
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeFalse
+import org.junit.AssumptionViolatedException
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -256,10 +258,18 @@ class HardwareSigningFullLaunchTest {
             checkNotNull(device.wait(Until.findObject(By.text(Pattern.compile("Wrong PIN|$SIGNING_FAILED"))), 30_000L)) {
                 "the wrong CVC showed neither Wrong PIN nor a signing failure"
             }
-        assumeFalse(
-            "TAPSIGNER signing fails with Invalid path, see https://github.com/bitcoinppl/cove/issues/965",
-            outcome.text == SIGNING_FAILED,
-        )
+        if (outcome.text == SIGNING_FAILED) {
+            // every signing error shows the same message, so any other failure still fails the test
+            val error = UiTestSeams.lastTapSignerSignError
+            val invalidPath =
+                error is TapSignerReaderException.PsbtSignException && error.v1.startsWith("Invalid path at index")
+            assertTrue("the wrong CVC failed signing with an error other than #965: $error", invalidPath)
+
+            throw AssumptionViolatedException(
+                "TAPSIGNER signing fails with Invalid path, see https://github.com/bitcoinppl/cove/issues/965",
+            )
+        }
+
         tryAgainAfterWrongPin()
 
         signer.dropNextTapSignerSession(afterExchanges = 1)

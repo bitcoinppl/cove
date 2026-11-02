@@ -196,6 +196,14 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
         }
 
         if signingFailed.exists {
+            // every signing error shows the same alert, which under the bridge also names the
+            // underlying error, so any other failure still fails the test
+            let invalidPath = NSPredicate(format: "label CONTAINS %@", "PsbtSignError: Invalid path at index")
+            guard signingFailed.staticTexts.matching(invalidPath).firstMatch.exists else {
+                let shown = signingFailed.staticTexts.allElementsBoundByIndex.map(\.label)
+                return XCTFail("the wrong CVC failed signing with an error other than #965: \(shown)")
+            }
+
             XCTExpectFailure("TAPSIGNER signing fails with Invalid path, https://github.com/bitcoinppl/cove/issues/965") {
                 XCTFail("the wrong CVC ended in Signing Failed! instead of Wrong PIN")
             }

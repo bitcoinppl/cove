@@ -112,6 +112,20 @@ internal object UiTestSeams {
             cborUrl(response) ?: throw IOException("The card emulator returned no NFC URL")
         }
 
+    /**
+     * The error behind the last generic TAPSIGNER signing failure
+     *
+     * The app shows the same message for every such error, and an instrumented test runs in the
+     * app's process, so it reads this to tell a known signing bug from a new failure
+     */
+    @Volatile
+    var lastTapSignerSignError: Throwable? = null
+        private set
+
+    fun recordTapSignerSignError(error: Throwable) {
+        lastTapSignerSignError = error
+    }
+
     private fun takeFrames(script: File): List<String> {
         if (!script.exists()) return emptyList()
 
