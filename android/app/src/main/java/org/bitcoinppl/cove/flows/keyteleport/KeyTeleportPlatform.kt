@@ -11,6 +11,7 @@ import android.os.Looper
 import android.os.PersistableBundle
 import android.os.SystemClock
 import android.util.Log
+import org.bitcoinppl.cove.CoveApplication
 import org.bitcoinppl.cove_core.KeyTeleportAlert
 import org.bitcoinppl.cove_core.KeyTeleportInput
 import org.bitcoinppl.cove_core.MultiFormat
@@ -163,9 +164,10 @@ private object SensitiveClipboardExpiry {
         context: Context,
         token: String,
     ) {
+        val lifetimeMillis = lifetimeMillis(context)
         cancelPending()
         currentToken = token
-        deadlineElapsedRealtime = SystemClock.elapsedRealtime() + SENSITIVE_CLIPBOARD_LIFETIME_MILLIS
+        deadlineElapsedRealtime = SystemClock.elapsedRealtime() + lifetimeMillis
         retriesAfterDeadline = 0
 
         val persisted =
@@ -174,14 +176,14 @@ private object SensitiveClipboardExpiry {
                 .putString(TOKEN_KEY, token)
                 .putLong(
                     EXPIRES_AT_EPOCH_MILLIS_KEY,
-                    System.currentTimeMillis() + SENSITIVE_CLIPBOARD_LIFETIME_MILLIS,
+                    System.currentTimeMillis() + lifetimeMillis,
                 )
                 .commit()
         if (!persisted) {
             Log.w(LOG_TAG, "Unable to persist sensitive clipboard expiry")
         }
 
-        postClear(context, SENSITIVE_CLIPBOARD_LIFETIME_MILLIS)
+        postClear(context, lifetimeMillis)
     }
 
     fun clearIfExpired(context: Context) {
@@ -276,6 +278,10 @@ private object SensitiveClipboardExpiry {
 
     private fun preferences(context: Context) =
         context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    // the application owns the lifetime so the UI test build can shorten it
+    private fun lifetimeMillis(context: Context): Long =
+        (context as? CoveApplication)?.sensitiveClipboardLifetimeMillis ?: SENSITIVE_CLIPBOARD_LIFETIME_MILLIS
 }
 
 internal fun shareText(
