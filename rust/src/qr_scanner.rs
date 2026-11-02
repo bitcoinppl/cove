@@ -1594,6 +1594,106 @@ mod tests {
         assert!(completed, "Should complete after scanning all parts in reverse order");
     }
 
+    /// Splits a sender response into as many frames as `version` QR codes need
+    fn key_teleport_sender_bbqr_parts(
+        sender: &keyteleport::SenderPacket,
+        version: bbqr::qr::Version,
+    ) -> Vec<String> {
+        use bbqr::{
+            encode::Encoding,
+            file_type::FileType,
+            split::{Split, SplitOptions},
+        };
+
+        let options = SplitOptions {
+            encoding: Encoding::Base32,
+            min_split_number: 2,
+            max_split_number: 100,
+            min_version: version,
+            max_version: version,
+        };
+
+        Split::try_from_data(sender.as_bytes(), FileType::KeyTeleportSender, options)
+            .expect("should encode")
+            .parts
+    }
+
+    fn key_teleport_sender_packet(receiver_secret: u8) -> keyteleport::SenderPacket {
+        use keyteleport::{Payload, ReceiverSession, SenderSession};
+
+        let request = ReceiverSession::from_private_key_bytes([receiver_secret; 32])
+            .unwrap()
+            .request()
+            .unwrap();
+        let sender = SenderSession::new(&request.packet, &request.numeric_code).unwrap();
+        let mnemonic = bip39::Mnemonic::from_entropy(&[0x3c; 32]).unwrap();
+
+        sender.send(Payload::mnemonic(mnemonic).unwrap()).unwrap().packet
+    }
+
+    #[test]
+    fn key_teleport_sender_frames_survive_foreign_and_replayed_frames() {
+        let sender = key_teleport_sender_packet(1);
+        let parts = key_teleport_sender_bbqr_parts(&sender, bbqr::qr::Version::V01);
+        let total = parts.len() as u32;
+        let other_sender_parts =
+            key_teleport_sender_bbqr_parts(&key_teleport_sender_packet(2), bbqr::qr::Version::V02);
+        assert!(total > 3 && other_sender_parts.len() as u32 != total);
+        let receiver = keyteleport::ReceiverSession::from_private_key_bytes([1; 32]).unwrap();
+        let receiver_request = receiver.request().unwrap().packet.to_bbqr_part().unwrap();
+
+        // QRs a camera can catch next to the animated response: the receiver's own request,
+        // another response mid-animation, and something that is not BBQr at all
+        let foreign_frames =
+            [receiver_request, other_sender_parts[0].clone(), "bitcoin:not-a-bbqr-frame".into()];
+        let scanner = QrScannerFFI::new();
+        let retained_parts = || match &*scanner.0.lock() {
+            QrScanner::InProgress(MultiQr::Bbqr(bbqr)) => bbqr.accepted_parts.len(),
+            _ => panic!("scanner should still be in progress"),
+        };
+
+        scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
+        for frame in &foreign_frames {
+            let result = scanner.scan(StringOrData::String(frame.clone()));
+            assert!(matches!(result, Err(MultiQrError::RecoverableFrame(_))), "{result:?}");
+        }
+
+        let progress = scanner.scan(StringOrData::String(parts[1].clone())).unwrap();
+        assert!(matches!(
+            progress,
+            ScanResult::InProgress {
+                progress: ScanProgress::Bbqr { scanned: 2, total: progress_total },
+                haptic: HapticFeedback::Progress,
+            } if progress_total == total
+        ));
+
+        // a phone holding the animation in view replays every frame many times per second
+        for _ in 0..500 {
+            scanner.scan(StringOrData::String(parts[0].clone())).unwrap();
+            scanner.scan(StringOrData::String(parts[1].clone())).unwrap();
+            for frame in &foreign_frames {
+                scanner.scan(StringOrData::String(frame.clone())).unwrap_err();
+            }
+        }
+
+        assert_eq!(retained_parts(), 2);
+
+        let (last, middle) = parts[2..].split_last().unwrap();
+        for part in middle {
+            scanner.scan(StringOrData::String(part.clone())).unwrap();
+        }
+
+        let complete = scanner.scan(StringOrData::String(last.clone())).unwrap();
+        let ScanResult::Complete {
+            data: crate::multi_format::MultiFormat::KeyTeleportSender(scanned),
+            ..
+        } = complete
+        else {
+            panic!("expected a KeyTeleport sender response, got {complete:?}")
+        };
+        assert_eq!(scanned.as_bytes(), sender.as_bytes());
+    }
+
     #[test]
     fn test_qr_scanner_single_part_keyteleport_receiver() {
         let receiver = keyteleport::ReceiverSession::from_private_key_bytes([1; 32]).unwrap();

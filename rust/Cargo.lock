@@ -1297,6 +1297,7 @@ version = "1.4.0"
 dependencies = [
  "act-zero",
  "act-zero-ext",
+ "aes 0.9.1",
  "age",
  "ahash",
  "arc-swap",
@@ -1334,6 +1335,7 @@ dependencies = [
  "cove-util",
  "csv",
  "ctor",
+ "ctr 0.10.1",
  "data-encoding",
  "derive_more",
  "dirs",
@@ -1359,6 +1361,7 @@ dependencies = [
  "parking_lot",
  "paste",
  "payjoin",
+ "pbkdf2 0.13.0",
  "pretty_assertions",
  "pubport",
  "rand 0.10.1",

@@ -305,6 +305,12 @@ uniffi = { workspace = true, features = ["build"] }
 
 [dev-dependencies]
 bdk_wallet = { workspace = true, features = ["test-utils"] }
+
+# coldcard-compatible keyteleport sender for payloads the keyteleport crate cannot send
+aes = { workspace = true }
+ctr = { workspace = true }
+pbkdf2 = { workspace = true }
+
 ciborium = "0.2.2"
 tempfile = "3.27.0"
 pretty_assertions = "1.4.1"
