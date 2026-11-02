@@ -951,6 +951,17 @@ mod tests {
     const BIP49_ORIGIN: &str = "sh(wpkh([817e7be0/49'/0'/0']))";
 
     fn import_wrapped_segwit_cold_wallet() -> Wallet {
+        // cargo test shares one open database across tests, so wallets other tests left behind
+        // with this fingerprint would fail the import's duplicate check
+        let leftovers = Database::global()
+            .wallets
+            .get_all(Network::Bitcoin, metadata::WalletMode::Main)
+            .unwrap();
+
+        for leftover in leftovers {
+            crate::wallet::test_support::remove_wallet(&leftover.id);
+        }
+
         Database::global().global_config.set_selected_network(Network::Bitcoin).unwrap();
         Database::global().global_config.set_main_mode().unwrap();
 
