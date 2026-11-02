@@ -388,6 +388,7 @@ struct OnboardingInlineMessage: View {
 
     var body: some View {
         Text(text)
+            .accessibilityIdentifier("onboarding.inlineMessage")
             .font(.footnote)
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, alignment: .leading)

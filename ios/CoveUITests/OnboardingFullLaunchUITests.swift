@@ -58,7 +58,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         launchApp()
 
         reachStorageChoices()
-        tap(button(startingWith: "On an exchange"), until: backupWalletTitle(), timeout: 15)
+        tap(button(startingWith: "On an exchange"), until: backupWalletTitle(), timeout: 15, attempts: 1)
         assertBackupWallet(titlePrefix: "Back up your wallet before funding it")
 
         tap(button(startingWith: "Show Words"), until: app.staticTexts["Your Recovery Words"])
@@ -66,7 +66,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         tap(app.buttons["I Saved These Words"], until: button(startingWith: "Saved"))
         assertBackupWallet(titlePrefix: "Back up your wallet before funding it", recoveryWordsSaved: true)
 
-        tap(app.buttons["Continue"], until: app.staticTexts["Your wallet is ready to fund"], timeout: 15)
+        tap(app.buttons["Continue"], until: app.staticTexts["Your wallet is ready to fund"], timeout: 15, attempts: 1)
         XCTAssertTrue(app.staticTexts["Deposit address"].waitForExistence(timeout: 30))
 
         // the "Copied" label reverts after 2 seconds, which a slow accessibility snapshot can miss,
@@ -116,7 +116,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
         reachStorageChoices()
         openSoftwareWalletImport()
-        tap(app.buttons["Create a new wallet instead"], until: backupWalletTitle(), timeout: 15)
+        tap(app.buttons["Create a new wallet instead"], until: backupWalletTitle(), timeout: 15, attempts: 1)
 
         assertBackupWallet(titlePrefix: "Back up your wallet")
         viewRecoveryWords()
@@ -290,7 +290,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
 
     private func reachBackupWallet() {
         getStarted()
-        tap(button(startingWith: "No, I"), until: backupWalletTitle(), timeout: 15)
+        tap(button(startingWith: "No, I"), until: backupWalletTitle(), timeout: 15, attempts: 1)
 
         assertBackupWallet(titlePrefix: "Back up your wallet")
     }
@@ -336,7 +336,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
             element(identifier: identifier).tap()
         }
 
-        tap(app.buttons["onboarding.terms.agree"], until: app.staticTexts["Multiple wallets found, please choose one"], timeout: 30)
+        tap(app.buttons["onboarding.terms.agree"], until: app.staticTexts["Multiple wallets found, please choose one"], timeout: 30, attempts: 1)
     }
 
     /// Leaves the welcome screen, accepting the terms when they show
@@ -349,11 +349,14 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     ///
     /// On a slow CI simulator a tap can be sent before the app handles input and do nothing, so
     /// the tap repeats while the button is still hittable and no destination has shown; a
-    /// navigation that is only slow leaves the button unhittable, so it isn't tapped twice
+    /// navigation that is only slow leaves the button unhittable, so it isn't tapped twice.
+    /// Buttons that create a wallet, switch wallets or finish onboarding pass `attempts: 1`:
+    /// they stay hittable while their request runs, so a repeat would send a second request
     private func tap(
         _ button: XCUIElement,
         until destinations: XCUIElement...,
         timeout: TimeInterval = 10,
+        attempts: Int = 3,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
@@ -362,9 +365,17 @@ final class OnboardingFullLaunchUITests: XCTestCase {
             return
         }
 
-        for _ in 0 ..< 3 {
+        let inlineError = app.staticTexts["onboarding.inlineMessage"]
+        for _ in 0 ..< attempts {
             button.tap()
             if waitForAny(of: destinations, timeout: timeout) { return }
+
+            // a failed request shows its error, which another tap would clear and hide
+            if inlineError.exists {
+                XCTFail("Tapping \(button) showed \"\(inlineError.label)\"", file: file, line: line)
+                return
+            }
+
             guard button.exists, button.isHittable else { break }
         }
 
@@ -400,7 +411,7 @@ final class OnboardingFullLaunchUITests: XCTestCase {
             element(identifier: identifier).tap()
         }
 
-        tap(app.buttons["onboarding.terms.agree"], until: app.staticTexts["Do you already have Bitcoin?"])
+        tap(app.buttons["onboarding.terms.agree"], until: app.staticTexts["Do you already have Bitcoin?"], attempts: 1)
     }
 
     private func chooseNativeImportedWalletFromSelectionSheet() {
@@ -408,12 +419,12 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         XCTAssertTrue(button(startingWith: "Keep Current").exists)
         XCTAssertTrue(app.staticTexts["Wrapped Segwit"].exists || app.buttons["Wrapped Segwit"].exists)
         XCTAssertTrue(app.staticTexts["Legacy"].exists || app.buttons["Legacy"].exists)
-        tap(button(startingWith: "Keep Current"), until: app.staticTexts["Transactions"], timeout: 30)
+        tap(button(startingWith: "Keep Current"), until: app.staticTexts["Transactions"], timeout: 30, attempts: 1)
     }
 
     private func chooseLegacyImportedWalletFromSelectionSheet() {
         XCTAssertTrue(app.staticTexts["Multiple wallets found, please choose one"].waitForExistence(timeout: 30))
-        tap(button(startingWith: "Legacy"), until: app.staticTexts["Transactions"], timeout: 30)
+        tap(button(startingWith: "Legacy"), until: app.staticTexts["Transactions"], timeout: 30, attempts: 1)
     }
 
     private func importKnownEmptyMainnetWalletWords() {
