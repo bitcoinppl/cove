@@ -21,6 +21,7 @@ use bdk_wallet::bitcoin::{
 use cove_device::keychain::WalletXprv;
 use ctr::cipher::{KeyIvInit as _, StreamCipher as _};
 use keyteleport::{SenderPacket, TeleportPassword};
+use rand::RngExt as _;
 use sha2::{Digest as _, Sha256, Sha512};
 
 use crate::{
@@ -47,6 +48,12 @@ struct ColdcardSender {
 impl ColdcardSender {
     fn new(private_key: [u8; 32], password: [u8; 5]) -> Self {
         Self { private_key: SecretKey::from_slice(&private_key).unwrap(), password }
+    }
+
+    /// A sender with a fresh key and password, as COLDCARD picks them for each teleport
+    fn random() -> Self {
+        let mut rng = rand::rng();
+        Self::new(rng.random(), rng.random())
     }
 
     /// The Teleport Password as COLDCARD shows it to the sender
@@ -88,6 +95,8 @@ impl ColdcardSender {
 
 fn encrypt_checked(key: &[u8; 32], plaintext: &[u8]) -> Vec<u8> {
     let mut ciphertext = plaintext.to_vec();
+
+    // the protocol fixes an all-zero counter, which is safe because each key belongs to one session
     Aes256Ctr::new(key.into(), &[0_u8; 16].into()).apply_keystream(&mut ciphertext);
     ciphertext.extend_from_slice(&Sha256::digest(plaintext)[30..]);
 
@@ -120,7 +129,7 @@ fn receive_from_coldcard(
     cleartext: &[u8],
 ) -> (Arc<RustKeyTeleportManager>, Result<(), KeyTeleportAlert>) {
     let (receiver, request) = start_receiver();
-    let coldcard = ColdcardSender::new([0x4b; 32], [0x0c, 0x01, 0xdc, 0xa2, 0xd5]);
+    let coldcard = ColdcardSender::random();
     let response = coldcard.sender_response(&request, cleartext);
     let result = deliver_response(&receiver, &response, &coldcard.password_text());
 
@@ -326,7 +335,7 @@ fn coldcard_psbt_packet() -> Vec<u8> {
     // a 2-input, 2-output PSBT, the same one the QR scanner tests use
     let psbt = hex::decode("70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0427d0ec650a68aa46bb0b098aea4422c071b2ca78352a077959d07cea1d0100000000ffffffff0270aaf00800000000160014d85c2b71d0060b09c9886aeb815e50991dda124d00e1f5050000000016001400aea9a2e5f0f876a588df5546e8742d1d87008f000000000000000000").unwrap();
     let cosigner_key = SecretKey::from_slice(&[0x77; 32]).unwrap().public_key(&Secp256k1::new());
-    let coldcard = ColdcardSender::new([0x4b; 32], [0x0c, 0x01, 0xdc, 0xa2, 0xd5]);
+    let coldcard = ColdcardSender::random();
 
     let mut packet = 0x0123_4567_u32.to_be_bytes().to_vec();
     packet.extend(coldcard.encrypt(&cosigner_key, &[b"p".as_slice(), &psbt].concat()));
