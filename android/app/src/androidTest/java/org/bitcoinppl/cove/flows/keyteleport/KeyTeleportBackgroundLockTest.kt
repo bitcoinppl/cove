@@ -158,8 +158,10 @@ class KeyTeleportBackgroundLockTest {
             assertPinCoverWithoutSecrets("the sender response", passwordSecrets)
             unlock()
             assertNoSecretsInTree("the sender response after unlocking", passwordSecrets)
-            reveal(SENDER_PASSWORD_HINT, passwordSecrets)
             compose.onNodeWithContentDescription("KeyTeleport QR").assertExists()
+
+            // revealing the password replaces the QR, so the QR is checked first
+            reveal(SENDER_PASSWORD_HINT, passwordSecrets)
 
             receiver.manager.dispatch(KeyTeleportManagerAction.EndReceive)
         }
