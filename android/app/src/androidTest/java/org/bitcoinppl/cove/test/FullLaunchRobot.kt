@@ -96,7 +96,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun goBackToBitcoinChoice(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Back")).click()
+        device.clickWhenVisible(text("Back"))
         device.advanceUntilVisible(text("Do you already have Bitcoin?"))
         device.waitUntilVisible(tag("onboarding.bitcoinChoice.new"))
         device.waitUntilVisible(tag("onboarding.bitcoinChoice.existing"))
@@ -171,7 +171,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun viewRecoveryWords(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Show Words")).click()
+        device.clickWhenVisible(text("Show Words"))
         device.waitUntilVisible(text("Your Recovery Words"))
         device.waitUntilVisible(tag("onboarding.secretWords.saved"))
 
@@ -192,7 +192,7 @@ class FullLaunchOnboardingRobot(
 
     fun saveRecoveryWords(): FullLaunchOnboardingRobot {
         viewRecoveryWords()
-        device.waitUntilVisible(tag("onboarding.secretWords.saved")).click()
+        device.clickWhenVisible(tag("onboarding.secretWords.saved"))
         device.waitUntilVisible(textContains("Back up your wallet"))
         device.waitUntilVisible(text("Saved"))
 
@@ -200,7 +200,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun continueFromBackupWallet(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.continue")).click()
+        device.clickWhenVisible(tag("onboarding.continue"))
 
         return this
     }
@@ -254,14 +254,14 @@ class FullLaunchOnboardingRobot(
     }
 
     fun continueAfterLateCloudRestoreOffer(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Continue setup")).click()
+        device.clickWhenVisible(text("Continue setup"))
         device.wait(Until.gone(text("Cove backup found").value), 10_000)
 
         return this
     }
 
     fun restoreFromLateCloudRestoreOffer(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Restore from Cove backup")).click()
+        device.clickWhenVisible(text("Restore from Cove backup"))
         device.waitUntilVisible(text("Google Drive Backup Found"))
         device.waitUntilVisible(text("Restore with Passkey"))
 
@@ -311,7 +311,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun skipCloudBackupAfterImport(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(text("Not Now")).click()
+        device.clickWhenVisible(text("Not Now"))
 
         return this
     }
@@ -328,7 +328,7 @@ class FullLaunchOnboardingRobot(
         device.waitUntilVisible(text("Keep Current"))
         device.waitUntilVisible(text("Wrapped Segwit"))
         device.waitUntilVisible(text("Legacy"))
-        device.waitUntilVisible(text("Keep Current")).click()
+        device.clickWhenVisible(text("Keep Current"))
         device.waitUntilVisible(text("Send"), timeoutMillis = 30_000)
 
         return this
@@ -348,14 +348,14 @@ class FullLaunchOnboardingRobot(
 
     fun openCloudBackupFromBackupWallet(): FullLaunchOnboardingRobot {
         device.waitUntilVisible(tag("onboarding.cloudBackup.prompt"))
-        device.waitUntilVisible(text("Enable")).click()
+        device.clickWhenVisible(text("Enable"))
         device.waitUntilVisible(text("Cloud Backup"))
 
         return this
     }
 
     fun cancelCloudBackupDetails(): FullLaunchOnboardingRobot {
-        device.waitUntilVisible(tag("onboarding.cloudBackup.cancel")).click()
+        device.clickWhenVisible(tag("onboarding.cloudBackup.cancel"))
 
         return this
     }
@@ -712,14 +712,13 @@ private fun UiDevice.clickUntilVisible(
     while (System.currentTimeMillis() < deadline) {
         findObject(targetSelector.value)?.let { return }
 
-        // a recomposition can replace the node between finding and clicking it; the
-        // next pass finds the new one
-        try {
+        // a node that goes stale before the click is skipped, so the next pass checks the target
+        // screen before looking it up again
+        staleAsNull {
             val clickNode = tryScrollUntilSafelyClickable(clickSelector)
             if (clickNode?.isEnabled == true) {
                 clickNode.click()
             }
-        } catch (_: StaleObjectException) {
         }
 
         Thread.sleep(500)
@@ -775,7 +774,8 @@ private fun UiDevice.acceptTerms() {
         "onboarding.terms.check.recovery",
         "onboarding.terms.check.agreement",
     ).forEach { tag ->
-        clickLeadingEdge(scrollUntilVisible(tag(tag)))
+        // only the one checkbox is looked up again, so the ones already checked stay checked
+        retryingStale { clickLeadingEdge(scrollUntilVisible(tag(tag))) }
     }
 
     clickSafely(tag("onboarding.terms.agree"))
@@ -828,15 +828,17 @@ private fun UiDevice.clickCheckboxBesideLabel(label: String) {
     val selector = textContains(label)
 
     repeat(2) {
-        val checkbox = scrollUntilSafelyClickable(selector).checkableAncestor()
-        if (checkbox.isChecked) return
+        retryingStale {
+            val checkbox = scrollUntilSafelyClickable(selector).checkableAncestor()
+            if (checkbox.isChecked) return
 
-        waitForIdle()
-        clickCenter(checkbox)
+            waitForIdle()
+            clickCenter(checkbox)
+        }
 
         val deadline = System.currentTimeMillis() + 2_000
         while (System.currentTimeMillis() < deadline) {
-            if (findObject(selector.value)?.checkableAncestor()?.isChecked == true) return
+            if (staleAsNull { findObject(selector.value)?.checkableAncestor()?.isChecked } == true) return
 
             Thread.sleep(100)
         }
@@ -856,8 +858,39 @@ private fun UiObject2.checkableAncestor(): UiObject2 {
 }
 
 private fun UiDevice.clickSafely(selector: DescribedSelector) {
-    clickCenter(scrollUntilSafelyClickable(selector))
+    retryingStale { clickCenter(scrollUntilSafelyClickable(selector)) }
 }
+
+private fun UiDevice.clickWhenVisible(selector: DescribedSelector) {
+    retryingStale { waitUntilVisible(selector).click() }
+}
+
+/**
+ * Runs [block] again when a node it read has gone stale
+ *
+ * Compose can replace a node between UiAutomator's lookup and a later read or click of it, which
+ * throws [StaleObjectException] before any input is sent. [block] must look its node up itself,
+ * so running it again reads the replacement
+ */
+private inline fun <T> UiDevice.retryingStale(block: UiDevice.() -> T): T {
+    repeat(2) {
+        try {
+            return block()
+        } catch (_: StaleObjectException) {
+            waitForIdle()
+        }
+    }
+
+    return block()
+}
+
+/** Runs [block] once inside a polling loop, treating a stale node like one not found yet */
+private inline fun <T> staleAsNull(block: () -> T?): T? =
+    try {
+        block()
+    } catch (_: StaleObjectException) {
+        null
+    }
 
 private fun UiDevice.scrollUntilSafelyClickable(selector: DescribedSelector): UiObject2 {
     tryScrollUntilSafelyClickable(selector)?.let { return it }
@@ -867,23 +900,16 @@ private fun UiDevice.scrollUntilSafelyClickable(selector: DescribedSelector): Ui
 
 private fun UiDevice.tryScrollUntilSafelyClickable(selector: DescribedSelector): UiObject2? {
     repeat(12) {
-        findObject(selector.value)?.let { node ->
-            if (isSafelyClickable(node)) return node
-        }
+        // a stale node is looked up again before any swipe, which could scroll it out of view
+        retryingStale { findObject(selector.value)?.takeIf { isSafelyClickable(it) } }?.let { return it }
         swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
     }
 
-    return findObject(selector.value)?.takeIf { isSafelyClickable(it) }
+    return retryingStale { findObject(selector.value)?.takeIf { isSafelyClickable(it) } }
 }
 
 private fun UiDevice.isSafelyClickable(node: UiObject2): Boolean {
-    val bounds =
-        try {
-            node.visibleBounds
-        } catch (_: StaleObjectException) {
-            return false
-        }
-
+    val bounds = node.visibleBounds
     val safeBottom = displayHeight - 200
 
     return bounds.width() > 0 &&
@@ -898,15 +924,13 @@ private fun UiDevice.clickCenter(node: UiObject2) {
     click(bounds.centerX(), bounds.centerY())
 }
 
-private fun UiDevice.clickCenterIfVisible(selector: DescribedSelector): Boolean {
-    findObject(selector.value)?.let { node ->
+private fun UiDevice.clickCenterIfVisible(selector: DescribedSelector): Boolean =
+    retryingStale {
+        val node = findObject(selector.value) ?: return@retryingStale false
         clickCenter(node)
 
-        return true
+        true
     }
-
-    return false
-}
 
 // a recomposition can replace the field between finding and typing into it, so this
 // keeps setting the text on whichever node is current until the field holds it
