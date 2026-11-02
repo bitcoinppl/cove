@@ -52,6 +52,7 @@ paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_telep
 coverage = ["human"]
 # 1.4.0: ios HUMAN, android HUMAN
 # receiver response is camera-only and app links are disabled in this build
+# a ui test would need a scripted sender plus seams for the request export and the qr scan, so it stays manual
 
 [[row]]
 id = "s07-end-session-clears-receiver-request"
