@@ -509,6 +509,24 @@ coverage = [
 # 1.4.0: ios FAIL, android FAIL
 
 [[row]]
+id = "s14-saved-custom-node-survives-a-second-save"
+section = "14"
+title = "Saved custom node survives a second save"
+platforms = ["ios", "android"]
+target = "ui"
+paths = [
+    "rust/src/node_connect.rs",
+    "ios/Cove/Flows/SettingsFlow/SettingsScreen/NodeSelectionView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
+]
+coverage = [
+    "rust:rust/src/node_connect.rs::reparsing_a_saved_custom_node_keeps_it",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsCustomNodeResaveTest.kt::savingACustomEsploraNodeAgainKeepsIt",
+    "agent:ios",
+]
+# the screens pick the api a custom node saves as, rust parses the url for that api
+
+[[row]]
 id = "s14-beta-custom-node-preset-restored-after-rejection"
 section = "14"
 title = "Beta custom node preset restored after rejection"

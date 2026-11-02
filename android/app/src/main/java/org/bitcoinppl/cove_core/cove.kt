@@ -3041,7 +3041,7 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_nodeselector_node_list(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
-    external fun uniffi_cove_fn_method_nodeselector_parse_custom_node(`ptr`: Long,`url`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,`enteredName`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_nodeselector_parse_custom_node(`ptr`: Long,`url`: RustBuffer.ByValue,`apiType`: RustBuffer.ByValue,`enteredName`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_nodeselector_select_preset_node(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4968,7 +4968,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_nodeselector_node_list() != 26686.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 26788.toShort()) {
+    if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 28549.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_select_preset_node() != 55812.toShort()) {
@@ -17971,9 +17971,9 @@ public interface NodeSelectorInterface {
     fun `nodeList`(): List<NodeSelection>
 
     /**
-     * Use the url and name of the custom node to set it as the selected node
+     * Parse a custom node url for the given api, naming it after the host unless a name is entered
      */
-    fun `parseCustomNode`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String): Node
+    fun `parseCustomNode`(`url`: kotlin.String, `apiType`: ApiType, `enteredName`: kotlin.String): Node
 
     fun `selectPresetNode`(`name`: kotlin.String): Node
 
@@ -18155,9 +18155,9 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
 
 
     /**
-     * Use the url and name of the custom node to set it as the selected node
+     * Parse a custom node url for the given api, naming it after the host unless a name is entered
      */
-    @Throws(NodeSelectorException::class)override fun `parseCustomNode`(`url`: kotlin.String, `name`: kotlin.String, `enteredName`: kotlin.String): Node {
+    @Throws(NodeSelectorException::class)override fun `parseCustomNode`(`url`: kotlin.String, `apiType`: ApiType, `enteredName`: kotlin.String): Node {
             return FfiConverterTypeNode.lift(
     callWithHandle {
     uniffiRustCallWithError(NodeSelectorException) { _status ->
@@ -18165,7 +18165,7 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
         it,
 
         FfiConverterString.lower(`url`),
-        FfiConverterString.lower(`name`),
+        FfiConverterTypeApiType.lower(`apiType`),
         FfiConverterString.lower(`enteredName`),_status)
 }
     }

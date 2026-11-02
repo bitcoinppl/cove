@@ -94,10 +94,15 @@ fun NodeSettingsScreen(
     val errorUrlEmpty = stringResource(R.string.node_error_url_empty)
     val errorParseTitle = stringResource(R.string.node_error_parse_title)
 
-    val showCustomFields =
-        selectedNodeSelection is NodeSelection.Custom ||
-            selectedNodeName == customElectrum ||
-            selectedNodeName == customEsplora
+    // the api the custom form saves as: a custom row's own api, or the saved custom node's api, so
+    // re-saving a custom node never depends on its display name
+    val customApiType: ApiType? =
+        when (selectedNodeName) {
+            customElectrum -> ApiType.ELECTRUM
+            customEsplora -> ApiType.ESPLORA
+            else -> (selectedNodeSelection as? NodeSelection.Custom)?.toNode()?.apiType
+        }
+    val showCustomFields = customApiType != null
 
     // pull a fresh snapshot because NodeSelector mutates persisted node settings directly
     fun refreshNodeState() {
@@ -114,13 +119,7 @@ fun NodeSettingsScreen(
             val savedNode = selectedNodeSelection
             if (savedNode is NodeSelection.Custom) {
                 val node = savedNode.toNode()
-                val matchesType =
-                    when (selectedNodeName) {
-                        customElectrum -> node.apiType == ApiType.ELECTRUM
-                        customEsplora -> node.apiType == ApiType.ESPLORA
-                        else -> true
-                    }
-                if (matchesType) {
+                if (node.apiType == customApiType) {
                     customUrl = node.url
                     customNodeName = node.name
                 }
@@ -175,6 +174,8 @@ fun NodeSettingsScreen(
     }
 
     fun checkAndSaveCustomNode() {
+        val apiType = customApiType ?: return
+
         if (customUrl.isEmpty()) {
             errorTitle = errorTitleDefault
             errorMessage = errorUrlEmpty
@@ -187,7 +188,7 @@ fun NodeSettingsScreen(
             try {
                 val node =
                     withContext(Dispatchers.IO) {
-                        nodeSelector.parseCustomNode(customUrl, selectedNodeName, customNodeName)
+                        nodeSelector.parseCustomNode(customUrl, apiType, customNodeName)
                     }
 
                 // update fields with parsed values

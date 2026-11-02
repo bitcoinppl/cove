@@ -142,6 +142,7 @@ dependencies {
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
     androidTestImplementation(platform("androidx.compose:compose-bom:2025.12.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestUtil("androidx.test:orchestrator:1.6.1")
     screenshotTestImplementation(platform("androidx.compose:compose-bom:2025.12.01"))
     screenshotTestImplementation("androidx.compose.ui:ui-tooling")

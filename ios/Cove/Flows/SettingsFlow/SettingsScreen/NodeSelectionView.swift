@@ -28,8 +28,16 @@ struct NodeSelectionView: View {
         nodeList = nodeSelector.nodeList()
     }
 
+    /// The api the custom form saves as, only while one of the custom rows is selected
+    ///
+    /// A saved custom node is selected by its own name, which the person chose, so a name like
+    /// "Custom" must not open the form or pick the api it re-saves as
+    var customNodeApiType: ApiType? {
+        CustomNodeRow.apiType(for: selectedNodeName)
+    }
+
     var showCustomUrlField: Bool {
-        selectedNodeName.hasPrefix("Custom")
+        customNodeApiType != nil
     }
 
     func cancelCheckUrlTask() {
@@ -76,10 +84,11 @@ struct NodeSelectionView: View {
     }
 
     func checkAndSaveNode() {
+        guard let apiType = customNodeApiType else { return }
         var node: Node? = nil
 
         do {
-            node = try nodeSelector.parseCustomNode(url: customUrl, name: selectedNodeName, enteredName: customNodeName)
+            node = try nodeSelector.parseCustomNode(url: customUrl, apiType: apiType, enteredName: customNodeName)
             customUrl = node?.url ?? customUrl
             customNodeName = node?.name ?? customNodeName
         } catch {
@@ -143,8 +152,8 @@ struct NodeSelectionView: View {
     private func nodeSelectionChanged(to newSelectedNodeName: String) {
         guard nodeSelector.selectedNode().name != newSelectedNodeName else { return }
 
-        if newSelectedNodeName.hasPrefix("Custom") {
-            restoreCustomNodeFields(for: newSelectedNodeName)
+        if let apiType = CustomNodeRow.apiType(for: newSelectedNodeName) {
+            restoreCustomNodeFields(for: apiType)
             return
         }
 
@@ -162,13 +171,9 @@ struct NodeSelectionView: View {
         }
     }
 
-    private func restoreCustomNodeFields(for selectedNodeName: String) {
+    private func restoreCustomNodeFields(for apiType: ApiType) {
         guard case let .custom(savedSelectedNode) = nodeSelector.selectedNode() else { return }
-
-        let matchesApiType =
-            savedSelectedNode.apiType == .electrum && selectedNodeName.contains("Electrum")
-                || savedSelectedNode.apiType == .esplora && selectedNodeName.contains("Esplora")
-        guard matchesApiType else { return }
+        guard savedSelectedNode.apiType == apiType else { return }
 
         customUrl = savedSelectedNode.url
         customNodeName = savedSelectedNode.name
@@ -189,7 +194,7 @@ private struct NodeSelectionForm: View {
                 selectedNodeName: $selectedNodeName
             )
             NodeSelectionCustomFields(
-                selectedNodeName: selectedNodeName,
+                customRow: CustomNodeRow(rawValue: selectedNodeName),
                 customUrl: $customUrl,
                 customNodeName: $customNodeName,
                 save: saveCustomNode
@@ -211,17 +216,31 @@ private struct NodeSelectionPresetSection: View {
                     select: { selectedNodeName = node.name }
                 )
             }
-            NodeSelectionRow(
-                name: "Custom Electrum",
-                isSelected: selectedNodeName == "Custom Electrum",
-                select: { selectedNodeName = "Custom Electrum" }
-            )
-            NodeSelectionRow(
-                name: "Custom Esplora",
-                isSelected: selectedNodeName == "Custom Esplora",
-                select: { selectedNodeName = "Custom Esplora" }
-            )
+            ForEach(CustomNodeRow.allCases, id: \.self) { row in
+                NodeSelectionRow(
+                    name: row.rawValue,
+                    isSelected: selectedNodeName == row.rawValue,
+                    select: { selectedNodeName = row.rawValue }
+                )
+            }
         }
+    }
+}
+
+/// The rows that open the custom node form, each saving the node with its own api
+private enum CustomNodeRow: String, CaseIterable {
+    case electrum = "Custom Electrum"
+    case esplora = "Custom Esplora"
+
+    var apiType: ApiType {
+        switch self {
+        case .electrum: .electrum
+        case .esplora: .esplora
+        }
+    }
+
+    static func apiType(for name: String) -> ApiType? {
+        CustomNodeRow(rawValue: name)?.apiType
     }
 }
 
@@ -250,14 +269,14 @@ private struct NodeSelectionRow: View {
 }
 
 private struct NodeSelectionCustomFields: View {
-    let selectedNodeName: String
+    let customRow: CustomNodeRow?
     @Binding var customUrl: String
     @Binding var customNodeName: String
     let save: () -> Void
 
     var body: some View {
-        if selectedNodeName.hasPrefix("Custom") {
-            Section(selectedNodeName) {
+        if let customRow {
+            Section(customRow.rawValue) {
                 NodeSelectionTextField(
                     title: "URL",
                     placeholder: "Enter URL",
