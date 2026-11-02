@@ -660,4 +660,53 @@ mod tests {
             assert_eq!(stored.to_xpriv().chain_code, xpriv.chain_code);
         }
     }
+
+    // regression for #987: a wallet switched to wrapped segwit before that type had an origin
+    // format kept its native segwit origin, and its backup carries it. The restored wallet gets
+    // its BIP-49 origin when it first loads
+    #[test]
+    fn restored_wrapped_segwit_wallet_with_a_stale_origin_is_repaired_on_first_load() {
+        use cove_types::Network;
+
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::delete_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+        Database::global().global_config.set_selected_network(Network::Bitcoin).unwrap();
+        Database::global().global_config.set_main_mode().unwrap();
+
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.name = "Switched to wrapped segwit".to_string();
+        metadata.network = Network::Bitcoin;
+        metadata.wallet_type = crate::wallet::metadata::WalletType::Hot;
+        metadata.address_type = crate::wallet::WalletAddressType::WrappedSegwit;
+        metadata.origin = Some("wpkh([73c5da0a/84'/0'/0'])".to_string());
+        metadata.master_fingerprint = None;
+
+        let mut entry = test_wallet_entry(&metadata);
+        entry.secret = WalletSecret::Mnemonic(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+                .to_string(),
+        );
+        let wallet = DownloadedWalletBackup { metadata: metadata.clone(), entry };
+        let mut session = WalletRestoreSession::new(ExistingWalletIdentitySet::default());
+
+        let outcome = session.restore_downloaded(&wallet).unwrap();
+        assert_eq!(outcome, WalletRestoreOutcome::Restored { labels_warning: None });
+
+        let loaded = crate::wallet::Wallet::try_load_persisted(metadata.id.clone())
+            .map(|_| ())
+            .map_err(|error| error.to_string());
+        let stored = Database::global()
+            .wallets
+            .get(&metadata.id, metadata.network, metadata.wallet_mode)
+            .unwrap()
+            .and_then(|stored| stored.origin);
+        crate::wallet::test_support::remove_wallet(&metadata.id);
+
+        loaded.expect("the restored wallet loads");
+        assert_eq!(stored.as_deref(), Some("sh(wpkh([73c5da0a/49'/0'/0']))"));
+    }
 }
