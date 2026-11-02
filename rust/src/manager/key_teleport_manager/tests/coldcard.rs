@@ -222,7 +222,10 @@ fn coldcard_private_key_and_raw_master_secret_stashes_import_as_xprv_wallets() {
         assert!(matches!(receiver.state(), KeyTeleportManagerState::ReceiveXprvReview(_)));
         let wallet = import_new_wallet(&receiver);
         let stored = Keychain::global().get_wallet_secret(&wallet.id).unwrap().unwrap();
-        assert_eq!(stored.as_xprv().map(WalletXprv::to_xpriv), Some(expected_xprv));
+
+        // the keychain holds the signet wallet's network form, a tprv
+        let stored_form = Xpriv { network: NetworkKind::Test, ..expected_xprv };
+        assert_eq!(stored.as_xprv().map(WalletXprv::to_xpriv), Some(stored_form));
         expected.assert_imported(&wallet);
     }
 }
