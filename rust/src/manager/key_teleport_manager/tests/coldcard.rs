@@ -58,6 +58,7 @@ impl ColdcardSender {
     fn sender_packet(&self, request: &KeyTeleportReceiveState, cleartext: &[u8]) -> Vec<u8> {
         let receiver_key =
             decrypt_receiver_pubkey(&request.numeric_code, request.packet.as_bytes());
+
         let mut packet = self.private_key.public_key(&Secp256k1::new()).serialize().to_vec();
         packet.extend(self.encrypt(&receiver_key, cleartext));
 
@@ -68,6 +69,7 @@ impl ColdcardSender {
     fn encrypt(&self, receiver_key: &PublicKey, cleartext: &[u8]) -> Vec<u8> {
         let session_key: [u8; 32] =
             Sha256::digest(shared_secret_point(receiver_key, &self.private_key)).into();
+
         let mut password_key = [0_u8; 32];
         pbkdf2::pbkdf2_hmac::<Sha512>(&session_key, &self.password, 5000, &mut password_key);
 
@@ -139,6 +141,7 @@ fn coldcard_sender_matches_the_firmware_protocol_vector() {
         network: Network::Signet,
         wallet_mode: WalletMode::Main,
     };
+
     let coldcard = ColdcardSender::new([3; 32], [0x12, 0x34, 0x56, 0x78, 0x9a]);
 
     let packet = coldcard.sender_packet(&request, &stash_cleartext(0x80, &[0; 16]));
@@ -189,6 +192,7 @@ fn coldcard_private_key_and_raw_master_secret_stashes_import_as_xprv_wallets() {
         private_key: secp256k1::SecretKey::from_slice(&private_key).unwrap(),
         chain_code: ChainCode::from(chain_code),
     };
+
     let xprv_stash = stash_cleartext(0x01, &[chain_code, private_key].concat());
 
     // markers 0x10..=0x40 carry a raw BIP32 seed of that many bytes, sent by COLDCARD as
@@ -229,6 +233,7 @@ fn coldcard_note_is_shown_as_a_message_without_a_wallet_import() {
     let KeyTeleportManagerState::ReceiveMessageReview(review) = receiver.state() else {
         panic!("expected a message review, got {:?}", receiver.state())
     };
+
     assert_eq!(
         review.items,
         vec![
@@ -247,6 +252,7 @@ fn coldcard_note_is_shown_as_a_message_without_a_wallet_import() {
             },
         ]
     );
+
     assert!(receiver.reveal_mnemonic_words().is_empty());
     assert_eq!(receiver.reveal_xprv(), None);
 
@@ -254,6 +260,7 @@ fn coldcard_note_is_shown_as_a_message_without_a_wallet_import() {
         receiver.handle_action(Action::ImportReceivedWallet),
         Err(KeyTeleportAlert::NoPendingReceiveSecret)
     );
+
     assert!(matches!(receiver.state(), KeyTeleportManagerState::ReceiveMessageReview(_)));
     assert_eq!(all_wallet_ids(), wallets_before);
 
@@ -302,11 +309,13 @@ fn coldcard_vault_and_backup_payloads_are_rejected_without_importing_their_secre
             "{kind} left the receiver in {:?}",
             receiver.state()
         );
+
         assert_eq!(
             receiver.handle_action(Action::ImportReceivedWallet),
             Err(KeyTeleportAlert::NoPendingReceiveSecret),
             "{kind}"
         );
+
         assert_eq!(all_wallet_ids(), wallets_before, "{kind} created a wallet");
     }
 }
@@ -352,6 +361,7 @@ fn coldcard_psbt_teleport_is_rejected_by_the_scanner_and_the_receive_flow() {
         .iter()
         .map(|part| scanner.scan(StringOrData::String(part.clone())))
         .collect::<Vec<_>>();
+
     assert!(results[..2].iter().all(|result| matches!(result, Ok(ScanResult::InProgress { .. }))));
     assert!(
         matches!(&results[2], Err(MultiQrError::ParseError(message)) if message.contains("PSBT")),

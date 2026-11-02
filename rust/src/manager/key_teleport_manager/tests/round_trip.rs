@@ -26,6 +26,7 @@ fn assert_mnemonic_transfer_imports_the_sender_wallet(mnemonic: Mnemonic) {
     let KeyTeleportManagerState::ReceiveMnemonicReview(review) = receiver.state() else {
         panic!("expected mnemonic review, got {:?}", receiver.state())
     };
+
     assert_eq!(review.word_count as usize, word_count);
     assert_eq!(receiver.reveal_mnemonic_words().join(" "), mnemonic.to_string());
 
@@ -117,6 +118,7 @@ fn teleporting_the_same_wallet_twice_offers_the_existing_wallet() {
     let KeyTeleportManagerState::ReceiveAlreadyImportedWallet(existing) = receiver.state() else {
         panic!("expected the existing wallet, got {:?}", receiver.state())
     };
+
     assert_eq!(existing.id, imported.id);
     assert_eq!(existing.name, imported.name);
     assert_eq!(all_wallet_ids(), wallets_after_first_import);
