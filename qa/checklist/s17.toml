@@ -62,16 +62,18 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
     "rust/src/key_teleport.rs",
+    "rust/src/qr_scanner.rs",
     "rust/src/manager/key_teleport_manager.rs",
     "rust/src/manager/key_teleport_manager/**",
     "ios/Cove/Flows/KeyTeleportFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
 ]
 coverage = [
-    "human",
+    "rust:rust/src/manager/key_teleport_manager/tests/coldcard.rs::coldcard_vault_and_backup_payloads_are_rejected_without_importing_their_secrets",
+    "rust:rust/src/manager/key_teleport_manager/tests/coldcard.rs::coldcard_psbt_teleport_is_rejected_by_the_scanner_and_the_receive_flow",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# needs coldcard fixtures and a person; rust rejects the payload kinds
+# fixtures follow coldcard firmware shared/teleport.py; rust rejects each payload kind and imports nothing
 
 [[row]]
 id = "s17-psbt-rejection-names-the-wrong-expected-payload"

@@ -25,6 +25,10 @@ use super::{
     },
 };
 
+mod coldcard;
+mod round_trip;
+mod support;
+
 #[test]
 fn action_debug_redacts_receiver_code_and_sender_password() {
     assert_eq!(

@@ -70,8 +70,14 @@ title = "Old responses rejected after New Request; expired request rejected"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt"]
-coverage = ["human", "rust:rust/src/manager/key_teleport_manager/tests.rs::another_manager_restart_invalidates_the_displayed_receive_request", "rust:rust/src/manager/key_teleport_manager/tests.rs::expired_receive_session_is_deleted_and_not_resumed"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::response_for_a_replaced_request_is_rejected_and_the_new_request_still_works",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::response_for_an_expired_request_is_rejected_and_its_replacement_still_works",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::another_manager_restart_invalidates_the_displayed_receive_request",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::expired_receive_session_is_deleted_and_not_resumed",
+]
 # 1.4.0: ios HUMAN, android HUMAN
+# only the camera scan of the stale response is left, and the s20 rows exercise it
 
 [[row]]
 id = "s07-wrong-sender-password-invalid-password-alphabet-correct"
@@ -94,12 +100,12 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/qr_scanner.rs", "rust/src/key_teleport.rs", "ios/Cove/ScanManager+KeyTeleport.swift", "ios/Cove/ScanManager.swift", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt", "android/app/src/main/java/org/bitcoinppl/cove/ScanManager.kt"]
 coverage = [
-    "human",
+    "rust:rust/src/qr_scanner.rs::key_teleport_sender_frames_survive_foreign_and_replayed_frames",
     "rust:rust/src/qr_scanner.rs::replayed_and_bad_bbqr_frames_do_not_grow_retained_parts",
     "rust:rust/src/qr_scanner.rs::malformed_final_bbqr_frame_does_not_poison_progress",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# frame handling lives in the rust qr scanner, camera frames need a human
+# frame handling lives in the rust qr scanner; live camera frames are exercised by the s20 rows
 
 [[row]]
 id = "s07-wrong-direction-pasted-payload-gives-recoverable-error"
@@ -132,8 +138,15 @@ title = "Conflicting network/main-decoy receive scope"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt"]
-coverage = ["agent:ios", "human:android", "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_resume_and_ingest_refuse_a_changed_network", "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_ingest_refuses_a_changed_wallet_mode", "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_import_refuses_a_changed_network"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_resume_and_ingest_refuse_a_changed_network",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_ingest_refuses_a_changed_wallet_mode",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_import_refuses_a_changed_network",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::receive_import_refuses_a_changed_wallet_mode",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::received_wallet_lands_only_in_the_request_scope",
+]
 # 1.4.0: ios BLOCKED, android HUMAN
+# rust refuses every step outside the request scope; the apps only show its alert
 
 [[row]]
 id = "s07-no-eligible-ineligible-unreadable-duplicate-secret-alerts"

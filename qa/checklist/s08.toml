@@ -23,80 +23,104 @@ id = "s08-ios-android-12-word-mnemonic"
 section = "8"
 title = "iOS → Android 12-word mnemonic"
 platforms = ["ios", "android"]
-target = "manual"
+target = "rust"
 paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["human"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::twelve_word_mnemonic_transfer_imports_the_sender_wallet",
+]
 # 1.4.0: ios HUMAN, android HUMAN
+# rust decides the transfer end to end; the camera and second phone are exercised by the s20 two-phone migration rows
 
 [[row]]
 id = "s08-android-ios-18-word-mnemonic"
 section = "8"
 title = "Android → iOS 18-word mnemonic"
 platforms = ["ios", "android"]
-target = "manual"
+target = "rust"
 paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["human"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::eighteen_word_mnemonic_transfer_imports_the_sender_wallet",
+]
 # 1.4.0: ios HUMAN, android HUMAN
+# rust decides the transfer end to end; the camera and second phone are exercised by the s20 two-phone migration rows
 
 [[row]]
 id = "s08-ios-android-master-private-key"
 section = "8"
 title = "iOS → Android master private key"
 platforms = ["ios", "android"]
-target = "manual"
+target = "rust"
 paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["human"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::master_private_key_transfer_imports_an_xprv_wallet_with_the_same_first_address",
+]
 # 1.4.0: ios HUMAN, android HUMAN
+# rust decides the transfer end to end; the camera and second phone are exercised by the s20 two-phone migration rows
 
 [[row]]
 id = "s08-android-ios-master-private-key"
 section = "8"
 title = "Android → iOS master private key"
 platforms = ["ios", "android"]
-target = "manual"
+target = "rust"
 paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["human"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::master_private_key_transfer_imports_an_xprv_wallet_with_the_same_first_address",
+]
 # 1.4.0: ios HUMAN, android HUMAN
+# rust decides the transfer end to end; the camera and second phone are exercised by the s20 two-phone migration rows
 
 [[row]]
 id = "s08-same-platform-24-word-transfer"
 section = "8"
 title = "Same-platform 24-word transfer"
 platforms = ["ios", "android"]
-target = "manual"
+target = "rust"
 paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["human"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::twenty_four_word_mnemonic_transfer_imports_the_sender_wallet",
+]
 # 1.4.0: ios HUMAN, android HUMAN
+# rust decides the transfer end to end; the camera and second phone are exercised by the s20 two-phone migration rows
 
 [[row]]
 id = "s08-coldcard-mnemonic"
 section = "8"
 title = "COLDCARD mnemonic"
 platforms = ["ios", "android"]
-target = "manual"
+target = "rust"
 paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["human"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests/coldcard.rs::coldcard_mnemonic_stashes_import_with_the_expected_fingerprint_and_first_address",
+]
 # 1.4.0: ios HUMAN, android HUMAN
+# payloads are built by a port of coldcard's encode_payload checked against the firmware vector; the single-part BBQr camera scan is the path s08-bbqr-scans-and-opened-shared-response-links and the s20 rows exercise
 
 [[row]]
 id = "s08-coldcard-private-key-raw-master-secret"
 section = "8"
 title = "COLDCARD private key/raw master secret"
 platforms = ["ios", "android"]
-target = "manual"
+target = "rust"
 paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["human"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests/coldcard.rs::coldcard_private_key_and_raw_master_secret_stashes_import_as_xprv_wallets",
+]
 # 1.4.0: ios HUMAN, android HUMAN
+# payloads are built by a port of coldcard's encode_payload checked against the firmware vector; the single-part BBQr camera scan is the path s08-bbqr-scans-and-opened-shared-response-links and the s20 rows exercise
 
 [[row]]
 id = "s08-coldcard-plain-note-displays-without-wallet-import"
 section = "8"
 title = "COLDCARD plain note displays without wallet import"
 platforms = ["ios", "android"]
-target = "manual"
+target = "rust"
 paths = ["rust/src/key_teleport.rs", "rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/*.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/*.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["human"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests/coldcard.rs::coldcard_note_is_shown_as_a_message_without_a_wallet_import",
+]
 # 1.4.0: ios HUMAN, android HUMAN
+# payloads are built by a port of coldcard's encode_payload checked against the firmware vector; the single-part BBQr camera scan is the path s08-bbqr-scans-and-opened-shared-response-links and the s20 rows exercise
 
 [[row]]
 id = "s08-imported-default-name-and-duplicate-handling"
@@ -105,8 +129,13 @@ title = "Imported default name and duplicate handling"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReviewViews.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewViews.kt"]
-coverage = ["human", "rust:rust/src/manager/import_wallet_manager.rs::key_teleport_import_uses_fingerprint_as_default_name", "rust:rust/src/manager/key_teleport_manager/tests.rs::duplicate_receive_import_finishes_and_erases_the_receive_session"]
+coverage = [
+    "rust:rust/src/manager/import_wallet_manager.rs::key_teleport_import_uses_fingerprint_as_default_name",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::duplicate_receive_import_finishes_and_erases_the_receive_session",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::teleporting_the_same_wallet_twice_offers_the_existing_wallet",
+]
 # 1.4.0: ios HUMAN, android HUMAN
+# the review screen only shows the name rust assigns
 
 [[row]]
 id = "s08-receive-network-and-main-decoy-scope-isolation"
@@ -115,8 +144,15 @@ title = "Receive network and main/decoy scope isolation"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "rust/src/manager/import_wallet_manager.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt"]
-coverage = ["human"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::received_wallet_lands_only_in_the_request_scope",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_import_refuses_a_changed_network",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::receive_import_refuses_a_changed_wallet_mode",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_resume_and_ingest_refuse_a_changed_network",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_ingest_refuses_a_changed_wallet_mode",
+]
 # 1.4.0: ios HUMAN, android HUMAN
+# rust pins the import to the scope the request was made in and refuses any other
 
 [[row]]
 id = "s08-bbqr-scans-and-opened-shared-response-links"
