@@ -4788,7 +4788,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_dispatch() != 12354.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustwalletmanager_expose_xprv() != 36145.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustwalletmanager_expose_xprv() != 30847.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustwalletmanager_fee_rate_options() != 36497.toShort()) {
@@ -24029,6 +24029,8 @@ public interface RustWalletManagerInterface {
     /**
      * Returns the wallet's master extended private key string for export
      *
+     * The key is encoded for the wallet's network: xprv on mainnet, tprv on test networks
+     *
      * Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
      * zeroized; same limitation as displaying the mnemonic words
      */
@@ -24515,6 +24517,8 @@ open class RustWalletManager: Disposable, AutoCloseable, RustWalletManagerInterf
 
     /**
      * Returns the wallet's master extended private key string for export
+     *
+     * The key is encoded for the wallet's network: xprv on mainnet, tprv on test networks
      *
      * Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
      * zeroized; same limitation as displaying the mnemonic words
