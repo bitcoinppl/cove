@@ -136,6 +136,7 @@ async fn reconnect_refresh_completes_inventory_once_per_wallet_without_passkey()
     let manager = init_manager();
     let mut expected_record_ids =
         configure_trusted_local_snapshot_with_two_cloud_only_wallets(&manager, globals).await;
+
     expected_record_ids.sort();
 
     // the provider cannot list wallets while the device is offline

@@ -34,11 +34,13 @@ fn save_used_hot_wallet() -> WalletMetadata {
     // the source device has scanned this wallet, which a restore must not trust
     metadata.internal.address_index =
         Some(AddressIndex { last_seen_index: 12, address_list_hash: 7 });
+
     metadata.internal.last_scan_finished = Some(Duration::from_secs(1_700_000_000));
     metadata.internal.last_height_fetched = Some(BlockSizeLast {
         block_height: 900_000,
         last_seen: Duration::from_secs(1_700_000_000),
     });
+
     metadata.internal.performed_full_scan_at = Some(1_700_000_000);
 
     let keychain = Keychain::global();
@@ -50,6 +52,7 @@ fn save_used_hot_wallet() -> WalletMetadata {
             descriptors.internal.extended_descriptor,
         )
         .unwrap();
+
     keychain.save_wallet_secret(&metadata.id, secret).unwrap();
     Database::global()
         .wallets()
@@ -60,6 +63,7 @@ fn save_used_hot_wallet() -> WalletMetadata {
         "{}\n{{\"type\":\"output\",\"ref\":\"{LOCKED_OUTPUT_REF}\",\"spendable\":false}}",
         sample_labels_jsonl()
     );
+
     LabelManager::try_new(metadata.id.clone())
         .unwrap()
         .import_without_cloud_backup_dirty(&labels)
@@ -163,6 +167,7 @@ async fn cloud_round_trip_restores_labels_locks_and_seed_without_scan_state() {
         bdk.peek_address(KeychainKind::External, 0).address.to_string(),
         ABANDON_BIP84_FIRST_RECEIVE
     );
+
     assert_eq!(bdk.latest_checkpoint().height(), 0);
     assert_eq!(bdk.transactions().count(), 0);
 

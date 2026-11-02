@@ -3588,6 +3588,7 @@ async fn reentering_detail_keeps_the_running_restore_all_batch() {
             (second_wallet.clone(), wallet_entry_with_labels(&second_wallet, None)),
         ],
     );
+
     let globals = test_globals();
     let gate = globals.cloud.gate_wallet_backup_download_after_successes(
         namespace.clone(),

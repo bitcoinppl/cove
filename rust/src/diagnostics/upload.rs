@@ -593,6 +593,7 @@ mod tests {
                 .position(|window| window == b"\r\n\r\n")
                 .expect("request head ends")
                 + 4;
+
             let mut body = request.split_off(head_end);
             let head = request;
 
