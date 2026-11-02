@@ -1,8 +1,10 @@
 use std::{str::FromStr as _, sync::Arc};
 
 use crate::database::global_config::SelectedWalletTarget;
-use cove_device::keychain::{Keychain, WalletSecret};
+use bdk_wallet::bitcoin::NetworkKind;
+use cove_device::keychain::{Keychain, WalletSecret, WalletXprv};
 use keyteleport::{NumericCode, Payload, SenderSession};
+use zeroize::Zeroizing;
 
 use crate::{
     database::Database,
@@ -147,7 +149,7 @@ impl SendWorkflow<'_> {
 
         let payload = match secret {
             WalletSecret::Mnemonic(mnemonic) => Payload::mnemonic(mnemonic),
-            WalletSecret::Xpriv(xpriv) => Payload::xprv(xpriv.expose()),
+            WalletSecret::Xpriv(xpriv) => Payload::xprv(protocol_xprv(&xpriv)),
         }
         .map_err(|_| KeyTeleportAlert::InvalidPayload)?;
 
@@ -249,6 +251,18 @@ fn is_supported_send_secret(secret: &WalletSecret) -> bool {
         WalletSecret::Mnemonic(mnemonic) => matches!(mnemonic.word_count(), 12 | 18 | 24),
         WalletSecret::Xpriv(_) => true,
     }
+}
+
+/// Encodes a stored master key the way the KeyTeleport payload accepts it
+///
+/// The wire format carries only the chain code and private key, and the keyteleport crate
+/// accepts only mainnet-encoded keys. Stored keys can be tprv-encoded when a backup supplied
+/// them that way, and the wallet's network comes from its metadata, not this version prefix
+fn protocol_xprv(xprv: &WalletXprv) -> Zeroizing<String> {
+    let mut xpriv = xprv.to_xpriv();
+    xpriv.network = NetworkKind::Main;
+
+    Zeroizing::new(xpriv.to_string())
 }
 
 #[cfg(test)]
