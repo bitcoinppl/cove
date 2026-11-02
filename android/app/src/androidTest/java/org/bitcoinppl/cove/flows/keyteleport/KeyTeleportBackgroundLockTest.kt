@@ -125,6 +125,9 @@ class KeyTeleportBackgroundLockTest {
         unlock()
         assertNoSecretsInTree("the password entry after unlocking", passwordSecrets)
 
+        // leaving the app cleared the typed password, so it is entered again
+        compose.onNode(hasSetTextAction()).performTextInput(response.password)
+
         // the received recovery words, revealed
         compose.onNodeWithText("Continue").performClick()
         compose.waitUntil(STATE_TIMEOUT_MILLIS) { receiver.state is KeyTeleportManagerState.ReceiveMnemonicReview }
