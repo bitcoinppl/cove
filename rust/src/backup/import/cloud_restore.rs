@@ -129,9 +129,13 @@ impl VerifiedCloudRestorePlan<HotWalletWrites> {
             return Err(LocalWalletConflict::Mismatch.into());
         }
 
+        // a key restored before #988 can be stored in the backup's network form, which is the
+        // same key as the wallet-network form `prepared` carries, so adopt it unchanged
+        let local_secret =
+            local.secret.map(|secret| secret.into_network_kind(metadata.network.into()));
         let PreparedHotWallet { secret, xpub, descriptors } = prepared;
         let writes = HotWalletWrites {
-            secret: plan_entry(local.secret, Some(secret))?,
+            secret: plan_entry(local_secret, Some(secret))?,
             xpub: plan_entry(local.xpub, Some(xpub))?,
             descriptors: plan_entry(local.descriptors, Some(public_descriptor_pair(&descriptors)))?,
             bdk_descriptors: descriptors,
@@ -324,6 +328,33 @@ mod tests {
         restore_cloud_mnemonic_wallet(&metadata, mnemonic).expect("adopt matching keychain items");
 
         assert_eq!(raw_keychain_entries(&metadata.id), before);
+        assert!(restored_metadata_exists(&metadata));
+    }
+
+    // a wallet restored before #988 may hold its key in the backup's form, which is the same key
+    // as the wallet-network form a restore now writes
+    #[test]
+    fn cloud_restore_adopts_a_local_xpriv_stored_in_another_network_form() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_cloud_restore_test_state();
+
+        let metadata = cloud_restore_metadata("Legacy tprv wallet", WalletType::Hot);
+        let tprv = WalletXprv::try_from(
+            bdk_wallet::bitcoin::bip32::Xpriv::new_master(
+                bdk_wallet::bitcoin::NetworkKind::Test,
+                &[8; 32],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let (secret, _, _) = hot_wallet_items(&metadata, KeychainWalletSecret::Xpriv(tprv.clone()));
+        Keychain::global().save_wallet_secret(&metadata.id, secret).unwrap();
+        let before = raw_keychain_entries(&metadata.id);
+
+        restore_cloud_xpriv_wallet(&metadata, tprv).expect("adopt the same key in another form");
+
+        let after = raw_keychain_entries(&metadata.id);
+        assert_eq!(after.get(WALLET_MNEMONIC_KEY_SUFFIX), before.get(WALLET_MNEMONIC_KEY_SUFFIX));
         assert!(restored_metadata_exists(&metadata));
     }
 

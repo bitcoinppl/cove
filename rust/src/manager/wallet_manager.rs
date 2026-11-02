@@ -34,7 +34,7 @@ use crate::{
     discovery_scanner::{ScannerResponse, WalletDiscoveryScanner},
     fee_client::{FEE_CLIENT, FeeClientError, FeeResponse},
     fiat::client::PriceResponse,
-    keychain::{Keychain, KeychainError},
+    keychain::{Keychain, KeychainError, WalletSecret},
     label_manager::LabelManager,
     psbt::Psbt,
     router::Route,
@@ -1030,19 +1030,26 @@ impl RustWalletManager {
 
     /// Returns the wallet's master extended private key string for export
     ///
+    /// The key is encoded for the wallet's network: xprv on mainnet, tprv on test networks
+    ///
     /// Note: the returned String crosses FFI into a Swift/Kotlin string that cannot be
     /// zeroized; same limitation as displaying the mnemonic words
     #[uniffi::method]
     pub fn expose_xprv(&self) -> Result<String, Error> {
         self.ensure_active()?;
-        let secret = Keychain::global()
-            .get_wallet_secret(&self.metadata.read().id)?
-            .ok_or(Error::WalletDoesNotExist)?;
-        let xprv = secret
-            .as_xprv()
-            .ok_or(Error::SecretRetrievalError(KeychainError::WalletSecretTypeMismatch))?;
+        let (id, network) = {
+            let metadata = self.metadata.read();
+            (metadata.id.clone(), metadata.network)
+        };
 
-        Ok(xprv.expose().to_string())
+        let secret = Keychain::global().get_wallet_secret(&id)?.ok_or(Error::WalletDoesNotExist)?;
+        let WalletSecret::Xpriv(xprv) = secret else {
+            return Err(Error::SecretRetrievalError(KeychainError::WalletSecretTypeMismatch));
+        };
+
+        // wallets imported before #988 can hold the backup's form, so encode at read instead of
+        // rewriting the write-once keychain entry
+        Ok(xprv.into_network_kind(network.into()).expose().to_string())
     }
 
     pub fn fees(&self) -> Option<FeeResponse> {
@@ -1570,6 +1577,47 @@ mod tests {
         crate::wallet::test_support::restore_mainnet_after_network_switch(&stale_id);
 
         assert_eq!(result.err(), Some(Error::WalletDoesNotExist));
+    }
+
+    // regression for #988: a wallet imported before the fix can hold its key in the backup's
+    // form, and Export Private Key still shows the wallet's own form
+    #[test]
+    fn expose_xprv_returns_the_wallet_network_form() {
+        use std::str::FromStr as _;
+
+        use bdk_wallet::bitcoin::{NetworkKind, bip32::Xpriv};
+        use cove_device::keychain::{Keychain, WalletSecret, WalletXprv};
+        use cove_types::Network;
+
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+
+        let cases = [
+            (Network::Bitcoin, NetworkKind::Test, "xprv", 81),
+            (Network::Signet, NetworkKind::Main, "tprv", 82),
+        ];
+
+        for (network, key_network, expected_prefix, seed) in cases {
+            let xpriv = Xpriv::new_master(key_network, &[seed; 32]).unwrap();
+            let mut metadata = WalletMetadata::preview_new();
+            metadata.network = network;
+            Keychain::global()
+                .save_wallet_secret(
+                    &metadata.id,
+                    WalletSecret::Xpriv(WalletXprv::try_from(xpriv).unwrap()),
+                )
+                .unwrap();
+
+            let manager = RustWalletManager::preview_new_wallet_with_metadata(metadata.clone());
+            let exported = manager.expose_xprv();
+            Keychain::global().delete_wallet_secret(&metadata.id);
+
+            let exported = Xpriv::from_str(&exported.unwrap()).unwrap();
+            assert!(exported.to_string().starts_with(expected_prefix), "{network:?}");
+            assert_eq!(exported.private_key, xpriv.private_key);
+            assert_eq!(exported.chain_code, xpriv.chain_code);
+        }
     }
 
     fn confirmed_label(transaction: &Transaction) -> Option<String> {

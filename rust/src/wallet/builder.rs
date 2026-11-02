@@ -111,6 +111,7 @@ impl WalletBuilder {
     ) -> Result<Wallet, WalletError> {
         let keychain = Keychain::global();
         let database = Database::global();
+        let secret = secret.into_network_kind(metadata.network.into());
 
         let create_wallet = || -> Result<Wallet, WalletError> {
             let me = match secret.clone() {

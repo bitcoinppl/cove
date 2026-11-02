@@ -336,12 +336,10 @@ mod tests {
 
         assert_eq!(metadata.network, Network::Signet);
         assert_eq!(metadata.wallet_mode, WalletMode::Decoy);
-        assert!(
-            Keychain::global()
-                .get_wallet_secret(&metadata.id)
-                .unwrap()
-                .is_some_and(|secret| secret.as_xprv().is_some())
-        );
+
+        // an xprv for a Signet wallet is stored in the wallet's tprv form, as KeyTeleport receives
+        let stored = Keychain::global().get_wallet_secret(&metadata.id).unwrap().unwrap();
+        assert!(stored.as_xprv().unwrap().expose().starts_with("tprv"));
         assert!(
             Database::global()
                 .wallets
@@ -421,6 +419,10 @@ mod tests {
 
         assert_eq!(upgraded.wallet_type, WalletType::Hot);
         assert_eq!(upgraded.origin, expected_origin);
+
+        // the incoming xprv is stored in the Signet wallet's tprv form
+        let stored = Keychain::global().get_wallet_secret(&existing.id).unwrap().unwrap();
+        assert!(stored.as_xprv().unwrap().expose().starts_with("tprv"));
         assert_eq!(
             Keychain::global().get_public_descriptor(&existing.id).unwrap().unwrap(),
             expected_descriptors
@@ -515,7 +517,7 @@ mod tests {
         init_globals();
 
         let incoming = xpriv_secret(38);
-        let expected = incoming.clone();
+        let expected = incoming.clone().into_network_kind(Network::Signet.into());
         let fingerprint: Fingerprint = incoming.xpub(Network::Signet).fingerprint().into();
         let existing =
             save_watch_only_wallet(&incoming, fingerprint, Network::Signet, WalletMode::Main);
