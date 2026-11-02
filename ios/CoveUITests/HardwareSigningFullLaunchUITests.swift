@@ -242,9 +242,7 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
     /// Imports the test mnemonic's account as a watch-only hardware wallet by scanning its export
     private func importWatchOnlyWallet() {
         app.launch(expecting: app.staticTexts["Welcome to Cove"])
-        app.startImportingExistingWallet()
-        app.tapButton(startingWith: "Hardware wallet", until: app.button(startingWith: "Scan export QR"))
-        app.tapButton(startingWith: "Scan export QR")
+        app.openHardwareExportScanner()
 
         let descriptors: HardwareSignerControl.Descriptors
         do {
@@ -254,12 +252,7 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
             return XCTFail("couldn't show the wallet export: \(error)")
         }
 
-        let notNow = app.buttons["Not Now"]
-        XCTAssertTrue(app.staticTexts["Protect this hardware wallet with Cloud Backup?"].waitForExistence(timeout: 30))
-        notNow.tap()
-        app.acceptTermsIfNeeded()
-
-        XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
+        app.finishHardwareImport()
     }
 
     // MARK: - Hardware screen
@@ -406,27 +399,11 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
 
     /// Adds a wallet from an NFC tag read, which the seam answers from the emulated card
     private func startTapSignerImport() {
-        app.tapButton(named: "app.sidebar.open")
-        app.tapButton(named: "Add Wallet")
-        scanTapSigner()
-    }
-
-    /// Scans the card from Add Wallet, which the seam answers from the emulated card
-    private func scanTapSigner() {
-        app.tapButton(named: "More wallet import options")
-        app.tapButton(named: "NFC")
-
-        let alert = app.alerts["Import TAPSIGNER?"]
-        XCTAssertTrue(alert.waitForExistence(timeout: 15))
-        alert.buttons["Yes"].tap()
+        app.scanTapSignerFromAddWallet(expectingAlert: "Import TAPSIGNER?")
     }
 
     private func enterCvc(_ cvc: String) {
-        let field = app.secureTextFields["Enter CVC"]
-        XCTAssertTrue(field.waitForExistence(timeout: 10))
-        field.tap()
-        field.typeText(cvc)
-        app.tapButton(named: "Continue")
+        app.enterTapSignerCvc(cvc)
     }
 
     private func tryAgainAfterWrongPin() {
@@ -453,7 +430,7 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
 
         XCTAssertTrue(failed.exists, "a dropped session should offer a retry or report the failed import")
         failed.buttons["OK"].tap()
-        scanTapSigner()
+        app.scanTapSigner(expectingAlert: "Import TAPSIGNER?")
         enterCvc(HardwareSignerControl.tapSignerCvc)
     }
 
@@ -491,15 +468,6 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
     }
 
     private func receiveAddress() throws -> String {
-        app.tapButton(named: "Receive")
-
-        // Copy Address stays disabled until the address loads, and closes the sheet once tapped
-        let copy = app.buttons["Copy Address"]
-        XCTAssertTrue(copy.waitForExistence(timeout: 10))
-        waitUntil(copy, matches: NSPredicate(format: "enabled == true"), timeout: 15, "the receive address never loaded")
-        copy.tap()
-        waitUntil(copy, matches: NSPredicate(format: "exists == false"), timeout: 10, "copying the address should close Receive")
-
-        return try signer.simulatorPasteboard().trimmingCharacters(in: .whitespacesAndNewlines)
+        try app.copyReceiveAddress(using: signer)
     }
 }

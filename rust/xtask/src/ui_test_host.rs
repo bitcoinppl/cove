@@ -10,8 +10,11 @@
 //!   hardware wallet would and returns it as UR and BBQr frames for the QR
 //!   seam, `/unrelated-psbt` signs one that matches no draft, and
 //!   `/watch-only-descriptor` returns the account a hardware wallet exports.
-//!   `/simulator-pasteboard` reads an iOS simulator's pasteboard. The
-//!   `/tapsigner/...` routes start the card emulator and inject dropped sessions
+//!   `/public-key-export` returns an account's bare SLIP-132 public key, as a
+//!   plain QR and as a single-part BBQr, with the first receive address it
+//!   should import as. `/simulator-pasteboard` reads an iOS simulator's
+//!   pasteboard. The `/tapsigner/...` routes start the card emulator, set up or
+//!   factory fresh, and inject dropped sessions
 //! - [`BRIDGE_PORT`]: the TAPSIGNER bridge. Each APDU arrives as a frame with a
 //!   4-byte big-endian length, goes to Coinkite's `ecard.py` emulator, and the
 //!   card's response goes back the same way. Closing the connection is how a
@@ -34,8 +37,13 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use bdk_wallet::KeychainKind;
 use bip39::Mnemonic;
 use bitcoin::{
-    absolute::LockTime, hashes::Hash, transaction, Amount, FeeRate, OutPoint, Psbt, Transaction,
-    TxIn, TxOut, Txid,
+    absolute::LockTime,
+    base58,
+    bip32::{DerivationPath, Xpriv, Xpub},
+    hashes::Hash,
+    secp256k1::Secp256k1,
+    transaction, Address, Amount, CompressedPublicKey, FeeRate, Network, NetworkKind, OutPoint,
+    Psbt, Transaction, TxIn, TxOut, Txid,
 };
 use clap::Subcommand;
 use color_eyre::{
@@ -256,6 +264,60 @@ struct WalletRequest {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct PublicKeyRequest {
+    mnemonic: String,
+    #[serde(default = "default_network")]
+    network: String,
+    address_type: AddressType,
+}
+
+/// The single-signature account types a bare SLIP-132 key names
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum AddressType {
+    /// BIP84 P2WPKH, a zpub or vpub
+    NativeSegwit,
+    /// BIP49 P2SH-P2WPKH, a ypub or upub
+    WrappedSegwit,
+}
+
+impl AddressType {
+    const fn purpose(self) -> u32 {
+        match self {
+            Self::NativeSegwit => 84,
+            Self::WrappedSegwit => 49,
+        }
+    }
+
+    /// SLIP-132 version bytes of the account's extended public key
+    const fn slip132_version(self, network: NetworkKind) -> [u8; 4] {
+        match (self, network) {
+            (Self::NativeSegwit, NetworkKind::Main) => [0x04, 0xb2, 0x47, 0x46],
+            (Self::NativeSegwit, NetworkKind::Test) => [0x04, 0x5f, 0x1c, 0xf6],
+            (Self::WrappedSegwit, NetworkKind::Main) => [0x04, 0x9d, 0x7c, 0xb2],
+            (Self::WrappedSegwit, NetworkKind::Test) => [0x04, 0x4a, 0x52, 0x62],
+        }
+    }
+
+    fn address(self, key: CompressedPublicKey, network: Network) -> Address {
+        match self {
+            Self::NativeSegwit => Address::p2wpkh(&key, network),
+            Self::WrappedSegwit => Address::p2shwpkh(&key, network),
+        }
+    }
+}
+
+/// Starts the emulated TAPSIGNER; an empty body starts one that is set up
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct TapSignerStartRequest {
+    /// Start a factory-fresh card with no key yet, which the app sets up
+    #[serde(default)]
+    needs_setup: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PasteboardRequest {
     /// The simulator's UDID, which the XCUITest runner reads from `SIMULATOR_UDID`
     udid: String,
@@ -285,15 +347,22 @@ fn route(state: &SignerState, method: &str, path: &str, body: &[u8]) -> Result<V
         ("POST", "/sign-psbt") => sign_psbt(serde_json::from_slice(body)?),
         ("POST", "/unrelated-psbt") => unrelated_psbt(serde_json::from_slice(body)?),
         ("POST", "/watch-only-descriptor") => watch_only_descriptor(serde_json::from_slice(body)?),
+        ("POST", "/public-key-export") => public_key_export(serde_json::from_slice(body)?),
         ("POST", "/simulator-pasteboard") => simulator_pasteboard(serde_json::from_slice(body)?),
         ("POST", "/tapsigner/start") => {
+            let request: TapSignerStartRequest = if body.is_empty() {
+                TapSignerStartRequest::default()
+            } else {
+                serde_json::from_slice(body)?
+            };
+
             let mut emulator = state.emulator.lock();
             if let Some(mut old) = emulator.take() {
                 old.stop();
             }
 
             *state.drop_after.lock() = None;
-            *emulator = Some(CardEmulator::start()?);
+            *emulator = Some(CardEmulator::start(request.needs_setup)?);
             Ok(json!({ "ok": true }))
         }
         ("POST", "/tapsigner/drop") => {
@@ -369,6 +438,64 @@ fn watch_only_descriptor(request: WalletRequest) -> Result<Value> {
         "external": wallet.public_descriptor(KeychainKind::External).to_string(),
         "internal": wallet.public_descriptor(KeychainKind::Internal).to_string(),
     }))
+}
+
+/// An account's bare SLIP-132 public key, as a hardware wallet shows it in a
+/// plain QR and in a single-part BBQr, and the first receive address an import
+/// of it should show
+///
+/// The address comes straight from the mnemonic's key at `/0/0`, not from a
+/// descriptor, so it checks the address type the app infers from the key
+fn public_key_export(request: PublicKeyRequest) -> Result<Value> {
+    let network = util::parse_network(&request.network)?;
+    let mnemonic = Mnemonic::parse(&request.mnemonic).wrap_err("Invalid mnemonic")?;
+    let address_type = request.address_type;
+
+    let secp = Secp256k1::new();
+    let master = Xpriv::new_master(network, &mnemonic.to_seed(""))?;
+    let coin_type = if network == Network::Bitcoin { 0 } else { 1 };
+    let account_path: DerivationPath =
+        format!("m/{}'/{coin_type}'/0'", address_type.purpose()).parse()?;
+    let account = Xpub::from_priv(&secp, &master.derive_priv(&secp, &account_path)?);
+
+    let mut encoded = account.encode();
+    encoded[..4].copy_from_slice(&address_type.slip132_version(network.into()));
+    let key = base58::encode_check(&encoded);
+
+    let receive_path: DerivationPath = "m/0/0".parse()?;
+    let first = account.derive_pub(&secp, &receive_path)?.to_pub();
+
+    Ok(json!({
+        "key": key,
+        "bbqr": single_part_bbqr(&key)?,
+        "first_address": address_type.address(first, network).to_string(),
+        "first_derivation_path": format!("{account_path}/0/0"),
+    }))
+}
+
+/// A text payload as one BBQr frame, as a hardware wallet shows a short export
+fn single_part_bbqr(text: &str) -> Result<String> {
+    use bbqr::{
+        encode::Encoding,
+        file_type::FileType,
+        qr::Version,
+        split::{Split, SplitOptions},
+    };
+
+    let split = Split::try_from_data(
+        text.as_bytes(),
+        FileType::UnicodeText,
+        SplitOptions {
+            encoding: Encoding::Zlib,
+            min_split_number: 1,
+            max_split_number: 1,
+            min_version: Version::V01,
+            max_version: Version::V40,
+        },
+    )
+    .map_err(|error| eyre!("BBQr encoding failed: {error}"))?;
+
+    split.parts.into_iter().next().ok_or_else(|| eyre!("BBQr encoding produced no frame"))
 }
 
 /// Reads the simulator's pasteboard from the host, so the XCUITest runner
@@ -525,14 +652,15 @@ fn write_frame(stream: &mut TcpStream, frame: &[u8]) -> Result<()> {
 // Card emulator
 // ----------------------------------------------------------------------------
 
-/// A running `ecard.py` TAPSIGNER, already set up with factory CVC 123456
+/// A running `ecard.py` TAPSIGNER with factory CVC 123456, set up with a key
+/// unless it was started factory fresh
 struct CardEmulator {
     child: Child,
     socket: PathBuf,
 }
 
 impl CardEmulator {
-    fn start() -> Result<Self> {
+    fn start(needs_setup: bool) -> Result<Self> {
         let python = emulator_python()?;
         let script = ecard_script()?;
 
@@ -545,9 +673,15 @@ impl CardEmulator {
 
         let log_path = host_dir()?.join("ecard.log");
         let log = File::create(&log_path)?;
-        let child = Command::new(&python)
-            .arg(&script)
-            .args(["--rng-seed", EMULATOR_RNG_SEED, "emulate", "--tapsigner", "--pipe"])
+        // --no-init leaves the card's slot without a key, as a new card ships
+        let mut command = Command::new(&python);
+        command.arg(&script).args(["--rng-seed", EMULATOR_RNG_SEED, "emulate", "--tapsigner"]);
+        if needs_setup {
+            command.arg("--no-init");
+        }
+
+        let child = command
+            .arg("--pipe")
             .arg(&socket)
             .env("PYTHONUNBUFFERED", "1")
             .stdout(log.try_clone()?)

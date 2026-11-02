@@ -20,6 +20,25 @@ data class SignedFrames(
     val bbqr: List<String>,
 )
 
+/** An account's bare public key as a hardware wallet shows it, and where an import of it should start receiving */
+data class PublicKeyExport(
+    /** The SLIP-132 key, such as a vpub or upub, for a plain QR */
+    val key: String,
+    /** The key as one BBQr frame */
+    val bbqr: String,
+    val firstAddress: String,
+    /** The first address's path, as the Receive sheet shows it */
+    val firstDerivationPath: String,
+)
+
+/** The address types a bare SLIP-132 key names, as the signer host spells them */
+enum class PublicKeyAddressType(
+    val wireName: String,
+) {
+    NATIVE_SEGWIT("native_segwit"),
+    WRAPPED_SEGWIT("wrapped_segwit"),
+}
+
 /**
  * Client for the hardware signer host that `xtask ui-test-host` runs (`rust/xtask/src/ui_test_host.rs`)
  *
@@ -63,9 +82,28 @@ class HardwareSignerControl(
         return response.getString("external") to response.getString("internal")
     }
 
-    /** Starts a fresh emulated TAPSIGNER, set up with [TAPSIGNER_CVC] */
-    fun startTapSigner() {
-        http.request("POST", "/tapsigner/start", JSONObject())
+    /**
+     * The test mnemonic's Signet account of the address type as a bare public key, with the first
+     * receive address the host derives from the mnemonic itself
+     */
+    fun publicKeyExport(addressType: PublicKeyAddressType): PublicKeyExport {
+        val body = JSONObject().put("mnemonic", TEST_MNEMONIC).put("address_type", addressType.wireName)
+        val json = JSONObject(http.request("POST", "/public-key-export", body))
+
+        return PublicKeyExport(
+            key = json.getString("key"),
+            bbqr = json.getString("bbqr"),
+            firstAddress = json.getString("first_address"),
+            firstDerivationPath = json.getString("first_derivation_path"),
+        )
+    }
+
+    /**
+     * Starts a fresh emulated TAPSIGNER with [TAPSIGNER_CVC], set up with a key unless [needsSetup],
+     * in which case it is a new card the app sets up
+     */
+    fun startTapSigner(needsSetup: Boolean = false) {
+        http.request("POST", "/tapsigner/start", JSONObject().put("needs_setup", needsSetup))
     }
 
     /** Ends the next TAPSIGNER session after this many APDU exchanges, as a card pulled out of the NFC field would */

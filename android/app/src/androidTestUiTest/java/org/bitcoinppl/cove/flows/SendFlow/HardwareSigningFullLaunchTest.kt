@@ -21,10 +21,12 @@ import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchStartupRobot
 import org.bitcoinppl.cove.test.FullLaunchWalletRobot
 import org.bitcoinppl.cove.test.HardwareSignerControl
+import org.bitcoinppl.cove.test.HardwareWalletScreens
 import org.bitcoinppl.cove.test.QrScript
 import org.bitcoinppl.cove.test.SignedFrames
 import org.bitcoinppl.cove.test.TAPSIGNER_CVC
 import org.bitcoinppl.cove.test.TEST_MNEMONIC
+import org.bitcoinppl.cove.test.clipboardText
 import org.bitcoinppl.cove.test.findText
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.hierarchy
@@ -76,6 +78,7 @@ class HardwareSigningFullLaunchTest {
 
     private lateinit var device: UiDevice
     private lateinit var wallet: FullLaunchWalletRobot
+    private lateinit var screens: HardwareWalletScreens
     private lateinit var qr: QrScript
     private val node = FakeNodeControl()
     private val signer = HardwareSignerControl()
@@ -85,6 +88,7 @@ class HardwareSigningFullLaunchTest {
     fun prepareDevice() {
         device = fullLaunchDevice()
         wallet = FullLaunchWalletRobot(device)
+        screens = HardwareWalletScreens(device, wallet)
         qr = QrScript()
 
         // see UtxoLockFullLaunchTest: the onboarding robot must never see the soft keyboard
@@ -444,24 +448,11 @@ class HardwareSigningFullLaunchTest {
 
     /** Adds a wallet from an NFC tag read, which the seam answers from the emulated card */
     private fun startTapSignerImport() {
-        device.waitFor(By.desc("Menu")).click()
-        device.waitFor(By.text("Add Wallet")).click()
-        device.waitFor(By.desc("More wallet options")).click()
-        device.waitFor(By.text("NFC")).click()
-
-        device.waitFor(By.text("Import TAPSIGNER?"), timeoutMs = 15_000L)
-        device.waitFor(By.text("Yes")).click()
+        screens.scanTapSignerFromAddWallet("Import TAPSIGNER?")
     }
 
-    // the TAPSIGNER sheet is its own window, which doesn't expose test tags as resource ids
     private fun enterCvc(cvc: String) {
-        device.waitFor(By.text("Enter TAPSIGNER CVC"), timeoutMs = 15_000L)
-        // the field masks its text, so check the digit count beneath it
-        wallet.typeInto(By.clazz("android.widget.EditText"), cvc) {
-            device.hasObject(By.text("Digits: ${cvc.length}"))
-        }
-        wallet.dismissKeyboard()
-        device.waitFor(By.text("Submit").enabled(true)).click()
+        screens.enterTapSignerCvc(cvc)
     }
 
     private fun tryAgainAfterWrongPin() {
@@ -508,30 +499,9 @@ class HardwareSigningFullLaunchTest {
         wallet.waitForBalance(sats)
     }
 
-    private fun receiveAddress(): String {
-        device.waitFor(By.text("Receive")).click()
-
-        // Copy Address does nothing until the address loads, and closes the sheet once it copies
-        wallet.waitUntil("expected Copy Address to copy the receive address") {
-            device.findObject(By.text("Copy Address"))?.click()
-            device.wait(Until.gone(By.text("Copy Address")), 2_000L)
-        }
-
-        return clipboardText().trim()
-    }
+    private fun receiveAddress(): String = screens.copyReceiveAddress()
 
     // MARK: clipboard
-
-    private fun clipboardText(): String {
-        var text = ""
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        instrumentation.runOnMainSync {
-            val clipboard = instrumentation.targetContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            text = clipboard.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
-        }
-
-        return text
-    }
 
     private fun setClipboard(text: String) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()

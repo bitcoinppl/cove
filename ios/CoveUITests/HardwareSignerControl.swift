@@ -22,6 +22,31 @@ struct HardwareSignerControl {
         let `internal`: String
     }
 
+    /// An account's bare public key as a hardware wallet shows it, and where an import of it
+    /// should start receiving
+    struct PublicKeyExport: Decodable {
+        /// The SLIP-132 key, such as a vpub or upub, for a plain QR
+        let key: String
+        /// The key as one BBQr frame
+        let bbqr: String
+        let firstAddress: String
+        /// The first address's path, as the Receive screen shows it
+        let firstDerivationPath: String
+
+        enum CodingKeys: String, CodingKey {
+            case key
+            case bbqr
+            case firstAddress = "first_address"
+            case firstDerivationPath = "first_derivation_path"
+        }
+    }
+
+    /// The address types a bare SLIP-132 key names
+    enum AddressType: String {
+        case nativeSegwit = "native_segwit"
+        case wrappedSegwit = "wrapped_segwit"
+    }
+
     private struct Pasteboard: Decodable {
         let text: String
     }
@@ -62,6 +87,13 @@ struct HardwareSignerControl {
         return try decode(Descriptors.self, controlRequest(baseUrl, "POST", "watch-only-descriptor", body: body))
     }
 
+    /// The test mnemonic's Signet account of the address type as a bare public key, with the first
+    /// receive address the host derives from the mnemonic itself
+    func publicKeyExport(_ addressType: AddressType) throws -> PublicKeyExport {
+        let body: [String: Any] = ["mnemonic": XCUIApplication.testMnemonic, "address_type": addressType.rawValue]
+        return try decode(PublicKeyExport.self, controlRequest(baseUrl, "POST", "public-key-export", body: body))
+    }
+
     /// Reads the simulator's pasteboard from the host, since reading it here shows the paste prompt
     func simulatorPasteboard() throws -> String {
         guard let udid = ProcessInfo.processInfo.environment["SIMULATOR_UDID"] else {
@@ -72,9 +104,10 @@ struct HardwareSignerControl {
         return try decode(Pasteboard.self, controlRequest(baseUrl, "POST", "simulator-pasteboard", body: body)).text
     }
 
-    /// Starts a fresh emulated TAPSIGNER, set up with the default CVC
-    func startTapSigner() throws {
-        _ = try controlRequest(baseUrl, "POST", "tapsigner/start")
+    /// Starts a fresh emulated TAPSIGNER with the default CVC, set up with a key unless
+    /// `needsSetup`, in which case it is a new card the app sets up
+    func startTapSigner(needsSetup: Bool = false) throws {
+        _ = try controlRequest(baseUrl, "POST", "tapsigner/start", body: ["needs_setup": needsSetup])
     }
 
     /// Ends the next TAPSIGNER session after this many APDU exchanges, as a card pulled out of the
