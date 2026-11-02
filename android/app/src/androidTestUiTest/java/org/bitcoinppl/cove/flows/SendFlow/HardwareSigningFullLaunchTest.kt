@@ -284,10 +284,6 @@ class HardwareSigningFullLaunchTest {
         assertEquals(listOf(EXTERNAL_ADDRESS), broadcast.outputs.map { it.address })
     }
 
-    /**
-     * Runs steps a known bug breaks. It passes while they fail and fails once they pass, so the test
-     * is updated when the bug is fixed, like XCTExpectFailure on iOS
-     */
     // MARK: fixture
 
     /** Funds external indexes 0 and 1 of the test mnemonic, each its own UTXO */
