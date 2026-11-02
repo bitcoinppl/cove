@@ -958,8 +958,7 @@ fn receiver_code_sends_a_testnet_encoded_master_key() {
     let original_network = config.selected_network();
     config.set_selected_network(Network::Signet).unwrap();
 
-    // file backup import and cloud restore store the backup's key string as parsed, so a
-    // Signet wallet can hold its master key in tprv form
+    // Cove stores a master key in its wallet's network form, so a Signet wallet holds a tprv
     let tprv = bdk_wallet::bitcoin::bip32::Xpriv::new_master(
         bdk_wallet::bitcoin::Network::Signet,
         &[14; 32],
