@@ -111,6 +111,12 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         fixtureWalletRecordIds = listOf(ScriptedCloudBackupFixture.WALLET_RECORD_ID)
     }
 
+    /** Cloud holds only the private-key fixture wallet, so restore installs an xprv wallet */
+    fun configurePrivateKeyWalletRestore() {
+        configureProductionFixtureRestore()
+        fixtureWalletRecordIds = listOf(ScriptedCloudBackupFixture.XPRV_WALLET_RECORD_ID)
+    }
+
     fun exposeAllProductionFixtureWallets() {
         check(fixtureRestoreEnabled) { "production fixture restore is not configured" }
         fixtureWalletRecordIds = ScriptedCloudBackupFixture.WALLET_RECORD_IDS
@@ -422,7 +428,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
             check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
                 "unexpected fixture namespace $namespace"
             }
-            check(recordId in ScriptedCloudBackupFixture.WALLET_RECORD_IDS) {
+            check(recordId in fixtureWalletRecordIds || recordId in ScriptedCloudBackupFixture.WALLET_RECORD_IDS) {
                 "unexpected fixture wallet record id $recordId"
             }
 

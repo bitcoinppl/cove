@@ -444,5 +444,6 @@ mod pending_upload;
 mod restore;
 mod round_trip;
 mod sync_health;
+mod ui_fixture;
 mod undecryptable_wallets;
 mod upload;

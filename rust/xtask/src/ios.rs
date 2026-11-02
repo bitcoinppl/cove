@@ -65,6 +65,9 @@ const IOS_SIMULATOR_PRODUCTS_DIR: &str = "Debug-iphonesimulator";
 const IOS_DEVICE_PRODUCTS_DIR: &str = "Debug-iphoneos";
 const IOS_UI_SCHEME: &str = "CoveManualUITests";
 const IOS_UI_TEST_TARGET: &str = "CoveUITests";
+// these tests run against the host app with scripted cloud storage and passkeys
+const IOS_CLOUD_BACKUP_UI_TEST_TARGET: &str = "CoveCloudBackupUITests";
+const IOS_CLOUD_BACKUP_UI_SCHEME: &str = "CoveCloudBackupUITests";
 // each test starts on a freshly erased simulator, where Xcode's runner and the first app
 // launch both fail now and then, so retry those environment failures on a clean simulator
 const IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS: usize = 2;
@@ -1229,12 +1232,13 @@ fn run_ios_ui_test(
 
     let destination = format!("platform=iOS Simulator,id={udid}");
     let only_testing = format!("-only-testing:{test}");
+    let scheme = ios_ui_scheme(test);
 
     if verbose {
         let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, test, 0));
         let test_cmd = cmd!(
             sh,
-            "xcodebuild test -project {IOS_PROJECT} -scheme {IOS_UI_SCHEME} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
+            "xcodebuild test -project {IOS_PROJECT} -scheme {scheme} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
         )
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
 
@@ -1265,7 +1269,7 @@ fn run_ios_ui_test(
         let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, test, attempt));
         let test_cmd = cmd!(
             sh,
-            "xcodebuild test -project {IOS_PROJECT} -scheme {IOS_UI_SCHEME} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
+            "xcodebuild test -project {IOS_PROJECT} -scheme {scheme} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
         )
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
 
@@ -1460,6 +1464,15 @@ fn non_empty_output<'a>(output: &'a str, fallback: &'a str) -> &'a str {
         fallback
     } else {
         output
+    }
+}
+
+/// The scheme whose test target holds `test`, an `-only-testing` identifier such as
+/// `CoveCloudBackupUITests/PrivateKeyExportFullAppUITests`
+fn ios_ui_scheme(test: &str) -> &'static str {
+    match test.split('/').next() {
+        Some(IOS_CLOUD_BACKUP_UI_TEST_TARGET) => IOS_CLOUD_BACKUP_UI_SCHEME,
+        _ => IOS_UI_SCHEME,
     }
 }
 
