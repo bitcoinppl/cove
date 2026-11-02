@@ -222,7 +222,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun openHardwareQrScanner(): FullLaunchOnboardingRobot {
-        device.clickCenter(device.advanceUntilVisible(text("Scan export QR")))
+        device.retryingStale { clickCenter(advanceUntilVisible(text("Scan export QR"))) }
         device.waitUntilVisible(text("Scan Hardware QR"))
         assertQrScannerVisible()
 
@@ -230,7 +230,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun openHardwareNfcScanner(): FullLaunchOnboardingRobot {
-        device.clickCenter(device.advanceUntilVisible(text("Scan with NFC")))
+        device.retryingStale { clickCenter(advanceUntilVisible(text("Scan with NFC"))) }
         device.waitUntilVisible(text("Scan your hardware wallet with NFC"))
         device.waitUntilVisible(text("Start NFC Scan"))
 
@@ -269,7 +269,7 @@ class FullLaunchOnboardingRobot(
     }
 
     fun openSoftwareQrScanner(): FullLaunchOnboardingRobot {
-        device.clickCenter(device.advanceUntilVisible(text("Scan QR code")))
+        device.retryingStale { clickCenter(advanceUntilVisible(text("Scan QR code"))) }
         assertQrScannerVisible()
 
         return this
@@ -462,14 +462,10 @@ class FullLaunchOnboardingRobot(
             return
         }
 
-        val createButton =
-            device.findObject(text("Create New Backup").value)
-                ?: device.findObject(text("Create New Passkey").value)
-                ?: return
-
-        val bounds = createButton.visibleBounds
-        device.click(bounds.centerX(), bounds.centerY())
-        Thread.sleep(500)
+        val clicked =
+            device.clickCenterIfVisible(text("Create New Backup")) ||
+                device.clickCenterIfVisible(text("Create New Passkey"))
+        if (clicked) Thread.sleep(500)
     }
 
     private fun selectGoogleAuthorizationAccountIfNeeded() {
@@ -477,7 +473,7 @@ class FullLaunchOnboardingRobot(
             return
         }
 
-        device.findObject(textContains("@").value)?.click()
+        device.retryingStale { findObject(textContains("@").value)?.click() }
         Thread.sleep(500)
     }
 
@@ -661,16 +657,14 @@ private fun UiDevice.advanceUntilVisible(
 }
 
 private fun UiDevice.continuePastCloudRestorePromptIfShown(): Boolean {
-    listOf(
-        text("Continue setup"),
-        text("Set Up as New"),
-        text("Continue Without Backup"),
-        text("Continue Without Cloud Restore"),
-    ).firstNotNullOfOrNull { selector -> findObject(selector.value) }?.let { button ->
-        clickCenter(button)
-
-        return true
-    }
+    val continued =
+        listOf(
+            text("Continue setup"),
+            text("Set Up as New"),
+            text("Continue Without Backup"),
+            text("Continue Without Cloud Restore"),
+        ).any { selector -> clickCenterIfVisible(selector) }
+    if (continued) return true
 
     if (isCloudRestorePromptVisible()) {
         pressBack()
@@ -750,16 +744,29 @@ private fun UiDevice.clickObjectUntilGoneOrSystemSheet(selector: DescribedSelect
                 } else {
                     error("Timed out waiting for ${selector.description}\n${dumpWindowHierarchy()}")
                 }
-        if (!button.isEnabled) {
-            if (clicked) return
+        // a stale button sends nothing, so the next pass checks for the system sheet before
+        // looking it up again
+        when (staleAsNull { button.isEnabled }) {
+            null -> {
+                Thread.sleep(100)
+                continue
+            }
 
-            Thread.sleep(100)
-            continue
+            false -> {
+                if (clicked) return
+
+                Thread.sleep(100)
+                continue
+            }
+
+            true -> Unit
         }
 
         waitForIdle()
-        button.click()
-        clicked = true
+        if (staleAsNull { button.click() } != null) {
+            clicked = true
+        }
+
         Thread.sleep(500)
     }
 
