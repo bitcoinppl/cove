@@ -4,8 +4,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 
 /** Steps through the Receive and TAPSIGNER screens that several full-launch suites share */
@@ -61,11 +63,15 @@ class HardwareWalletScreens(
     /**
      * Types the CVC into the TAPSIGNER screen titled [title] and submits it. The TAPSIGNER sheet is
      * its own window, which doesn't expose test tags as resource ids
+     *
+     * [findSubmit] brings the enabled submit action on screen, so a layout test can check it fits
+     * before tapping it
      */
     fun enterTapSignerCvc(
         cvc: String,
         title: String = "Enter TAPSIGNER CVC",
         submit: String = "Submit",
+        findSubmit: (BySelector) -> UiObject2 = { device.scrollTo(it) },
     ) {
         device.waitFor(By.text(title), timeoutMs = 15_000L)
 
@@ -74,7 +80,7 @@ class HardwareWalletScreens(
             device.hasObject(By.text("Digits: ${cvc.length}"))
         }
         wallet.dismissKeyboard()
-        device.scrollTo(By.text(submit).enabled(true)).click()
+        findSubmit(By.text(submit).enabled(true)).click()
     }
 }
 

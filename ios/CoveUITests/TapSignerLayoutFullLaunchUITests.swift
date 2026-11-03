@@ -5,7 +5,8 @@ import XCTest
 /// TAPSIGNER seam and an emulated card (docs/testing.md)
 ///
 /// XCUITest reports a text's whole label even when it draws truncated, so the checks catch text and
-/// actions pushed off screen or out of reach, not an ellipsis inside a label. Needs the hardware
+/// actions pushed off screen, cut off by their scroll view or out of reach, not an ellipsis inside a
+/// label. Needs the hardware
 /// signer host, which `xtask ios-ui` (`just ios-ui-background`) starts for every run
 final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private static let esploraUrl = "http://127.0.0.1:39001"
@@ -175,10 +176,10 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         // scroll toward a match that scrolling could bring on screen; a downward swipe only
         // scrolls content back, since it runs only when that match sits above the top
         for _ in 0 ..< 8 where reachableMatch(query, needsHit: needsHit) == nil {
-            let window = app.windows.firstMatch.frame
-            let target = visibleScrollView() ?? app.windows.firstMatch
+            let candidate = scrollCandidate(query)
+            let target = scrollContainers(holding: candidate).last ?? visibleScrollView() ?? app.windows.firstMatch
 
-            if scrollCandidate(query).frame.minY < window.minY {
+            if candidate.frame.minY < visibleArea(of: candidate).minY {
                 target.swipeDown(velocity: .slow)
             } else {
                 target.swipeUp(velocity: .slow)
@@ -220,7 +221,37 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             return midX > window.minX && midX < window.maxX
         }
 
-        return across.first { !window.contains($0.frame) || isUnderKeyboard($0.frame) } ?? across.first ?? query.firstMatch
+        return across.first { !visibleArea(of: $0).contains($0.frame) || isUnderKeyboard($0.frame) } ?? across.first ?? query.firstMatch
+    }
+
+    /// The part of the window the element can show in: the window cut down to every scroll area
+    /// that holds it
+    ///
+    /// XCUITest reports an element's whole frame, not the part its scroll view clips, so a title
+    /// scrolled half under a sheet's edge still lies inside the window
+    private func visibleArea(of element: XCUIElement) -> CGRect {
+        scrollContainers(holding: element).reduce(app.windows.firstMatch.frame) { $0.intersection($1.frame) }
+    }
+
+    /// The scroll views, lists and tables that hold the element, outermost first
+    private func scrollContainers(holding element: XCUIElement) -> [XCUIElement] {
+        let frame = element.frame
+        let type = element.elementType
+        let label = element.label
+        let containers = [app.scrollViews, app.collectionViews, app.tables].flatMap(\.allElementsBoundByIndex)
+
+        return containers
+            .filter { container in
+                guard let snapshot = try? container.snapshot() else { return false }
+                return snapshot.children.contains { holds($0, type: type, label: label, frame: frame) }
+            }
+            .sorted { $0.frame.width * $0.frame.height > $1.frame.width * $1.frame.height }
+    }
+
+    private func holds(_ snapshot: XCUIElementSnapshot, type: XCUIElement.ElementType, label: String, frame: CGRect) -> Bool {
+        if snapshot.elementType == type, snapshot.label == label, snapshot.frame == frame { return true }
+
+        return snapshot.children.contains { holds($0, type: type, label: label, frame: frame) }
     }
 
     /// The smallest scroll view showing in the window, which is the sheet's rather than the
@@ -239,8 +270,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         guard element.exists else { return false }
 
         let frame = element.frame
-        let window = app.windows.firstMatch.frame
-        guard !frame.isEmpty, window.contains(frame), !isUnderKeyboard(frame) else { return false }
+        guard !frame.isEmpty, visibleArea(of: element).contains(frame), !isUnderKeyboard(frame) else { return false }
 
         return !needsHit || element.isHittable
     }

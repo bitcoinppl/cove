@@ -214,7 +214,7 @@ class TapSignerLayoutFullLaunchTest {
         assertScreenFits(title, back, title)
         reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
 
-        screens.enterTapSignerCvc(cvc, title, submit)
+        screens.enterTapSignerCvc(cvc, title, submit) { reachable(it, "$title: $submit") }
         assertTrue(
             "the $title screen didn't accept the CVC",
             device.wait(Until.gone(By.text(title)), 15_000L),
