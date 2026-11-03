@@ -3908,7 +3908,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_func_initialize_app() != 18498.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_func_bootstrap() != 30405.toShort()) {
+    if (lib.uniffi_cove_checksum_func_bootstrap() != 63544.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_func_bootstrap_progress() != 47242.toShort()) {
@@ -69402,7 +69402,8 @@ object UrExceptionExternalErrorHandler : UniffiRustCallStatusErrorHandler<UrExce
          * migration failed but the app can continue, or `Err` for critical failures
          *
          * Re-entrant safe: returns `Ok(None)` if already complete, or
-         * `Err(AlreadyCalled)` if another call is still in progress
+         * `Err(AlreadyCalled)` if another call is still in progress or an earlier call
+         * failed. After `Err(KeychainUnavailable)` the next call starts over
          */
     @Throws(AppInitException::class)
     @Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
