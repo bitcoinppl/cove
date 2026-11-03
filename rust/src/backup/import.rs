@@ -1373,4 +1373,79 @@ mod tests {
             assert_eq!(stored.to_xpriv().chain_code, xpriv.chain_code);
         }
     }
+
+    /// Loads an imported wallet and returns the origin its stored row then holds
+    fn origin_after_first_load(metadata: &WalletMetadata) -> Option<String> {
+        let loaded = crate::wallet::Wallet::try_load_persisted(metadata.id.clone());
+        let stored = Database::global()
+            .wallets
+            .get(&metadata.id, metadata.network, metadata.wallet_mode)
+            .unwrap()
+            .and_then(|stored| stored.origin);
+
+        let loaded = loaded.map(|_| ()).map_err(|error| error.to_string());
+        crate::wallet::test_support::remove_wallet(&metadata.id);
+        loaded.expect("the imported wallet loads");
+
+        stored
+    }
+
+    // regression for #987: a wrapped-segwit backup made before that type had an origin format has
+    // none, and the imported wallet gets its BIP-49 origin when it first loads
+    #[tokio::test(flavor = "current_thread")]
+    async fn imported_wrapped_segwit_wallet_gets_its_origin_on_first_load() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::delete_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::test_support::init_test_keychain();
+        crate::test_support::shared_mock_keychain().reset();
+        Database::global().global_config.set_selected_network(Network::Bitcoin).unwrap();
+        Database::global().global_config.set_main_mode().unwrap();
+
+        let mut metadata = hot_metadata("Wrapped segwit backup");
+        metadata.network = Network::Bitcoin;
+        metadata.address_type = crate::wallet::WalletAddressType::WrappedSegwit;
+        metadata.origin = None;
+        metadata.master_fingerprint =
+            Some(Arc::new(crate::wallet::fingerprint::Fingerprint::from(
+                bdk_wallet::bitcoin::bip32::Fingerprint::from_str("73c5da0a").unwrap(),
+            )));
+
+        let payload = BackupPayload {
+            version: crate::backup::model::PAYLOAD_VERSION,
+            created_at: 0,
+            wallets: vec![WalletBackup {
+                metadata: serde_json::to_value(&metadata).unwrap(),
+                secret: WalletSecret::Mnemonic(
+                    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+                        .to_string(),
+                ),
+                descriptors: None,
+                xpub: None,
+                labels_jsonl: None,
+            }],
+            settings: crate::backup::model::AppSettings {
+                selected_network: None,
+                selected_fiat_currency: None,
+                color_scheme: None,
+                selected_nodes: Vec::new(),
+                custom_block_explorers: BTreeMap::new(),
+            },
+        };
+        let wallets = preflight_wallets(&payload).unwrap();
+        let preparation = ImportPreparationState {
+            payload: Some(payload),
+            payload_digest: "wrapped-segwit-import".to_string(),
+            wallets,
+        };
+
+        let report = import_prepared(preparation, None).await.unwrap();
+        assert_eq!(report.wallets_imported, 1, "{:?}", report.failed_wallet_errors);
+
+        assert_eq!(
+            origin_after_first_load(&metadata).as_deref(),
+            Some("sh(wpkh([73c5da0a/49'/0'/0']))")
+        );
+    }
 }

@@ -3717,6 +3717,37 @@ mod tests {
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
     }
 
+    // regression for #987: wrapped segwit had no origin format, so a switch kept the origin of
+    // the previous address type
+    #[tokio::test(flavor = "current_thread")]
+    async fn switching_to_wrapped_segwit_stores_its_bip49_origin() {
+        let _guard = address_type_switch_test_lock().lock().await;
+
+        crate::database::test_support::init_test_database();
+        let server = set_test_bitcoin_esplora_node().await;
+
+        let metadata = WalletMetadata::preview_new();
+        let wallet = persisted_preview_wallet(metadata.clone());
+        test_keychain().save_wallet_key(&wallet.id, test_mnemonic()).expect("mnemonic is saved");
+
+        let (addr, receiver) = spawn_test_wallet_actor(wallet);
+        drain_reconcile_messages(&receiver);
+
+        call!(addr.switch_private_wallet_to_new_address_type(WalletAddressType::WrappedSegwit))
+            .await
+            .expect("address type switch actor responds")
+            .expect("address type switches");
+
+        let stored = persisted_wallet_metadata(&metadata);
+
+        restore_default_bitcoin_node();
+        server.abort();
+        let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
+
+        assert_eq!(stored.address_type, WalletAddressType::WrappedSegwit);
+        assert_eq!(stored.origin.as_deref(), Some("sh(wpkh([73c5da0a/49'/0'/0']))"));
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn published_reload_failure_moves_live_metadata_forward_and_reports_recovery() {
         let _guard = address_type_switch_test_lock().lock().await;
