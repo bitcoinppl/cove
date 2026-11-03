@@ -114,9 +114,10 @@ jobs:
   ios-ui:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
     runs-on: macos-26
-    # each test erases and reboots the simulator, about 6 minutes a test on the hosted runner;
-    # the full suite took about 205 minutes, so this leaves room for a slow runner
-    timeout-minutes: 260
+    # each test erases and reboots the simulator, about 6 to 8 minutes a test on the hosted
+    # runner; a slow runner reached the last two suites after 250 minutes, so this takes the
+    # hosted runner's 360 minute limit
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v6
 
