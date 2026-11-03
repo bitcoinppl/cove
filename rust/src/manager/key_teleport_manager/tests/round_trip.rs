@@ -76,12 +76,13 @@ fn master_private_key_transfer_imports_an_xprv_wallet_with_the_same_first_addres
     init_globals();
     let _target = WalletTargetGuard::new(Network::Signet, WalletMode::Main);
 
-    // Cove keeps master keys mainnet-encoded and applies the wallet's network when deriving, so a
-    // Signet xprv wallet holds the same string KeyTeleport transfers
-    let xprv = Xpriv::new_master(NetworkKind::Main, &[0x3d; 32]).unwrap();
-    let expected = ExpectedWallet::from_xprv(xprv, Network::Signet);
+    // a Signet wallet holds its key as a tprv, KeyTeleport carries it as an xprv because the
+    // `keyteleport` crate accepts only that form, and the receiver stores the tprv again
+    let tprv = Xpriv::new_master(NetworkKind::Test, &[0x3d; 32]).unwrap();
+    let xprv = Xpriv { network: NetworkKind::Main, ..tprv };
+    let expected = ExpectedWallet::from_xprv(tprv, Network::Signet);
     let (receiver, request) = start_receiver();
-    let secret = WalletSecret::Xpriv(WalletXprv::try_from(xprv).unwrap());
+    let secret = WalletSecret::Xpriv(WalletXprv::try_from(tprv).unwrap());
     let (packet, password) = send_from_cove(secret, &request);
 
     deliver_response(&receiver, &packet, &password).unwrap();
@@ -91,7 +92,7 @@ fn master_private_key_transfer_imports_an_xprv_wallet_with_the_same_first_addres
 
     let wallet = import_new_wallet(&receiver);
     let stored = Keychain::global().get_wallet_secret(&wallet.id).unwrap().unwrap();
-    assert_eq!(stored.as_xprv().map(WalletXprv::to_xpriv), Some(xprv));
+    assert_eq!(stored.as_xprv().map(WalletXprv::to_xpriv), Some(tprv));
     expected.assert_imported(&wallet);
 }
 
