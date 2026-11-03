@@ -65,6 +65,9 @@ class KeyTeleportBackgroundLockTest {
         // the test sets and removes its own PIN, so never run it over a credential someone relies on
         assumeTrue("an app lock is already set up on this device", Auth.type == AuthType.NONE)
 
+        // receiving deletes the stored receive session afterwards, so never run over someone's pending transfer
+        assumeTrue("a KeyTeleport receive session is already stored on this device", !hasStoredReceiveSession())
+
         // the test deletes its wallet afterwards, so never run it over one it did not create
         val imported = importTestWalletOrNull(TEST_WALLET)
         assumeTrue("the test wallet already exists on this device", imported != null)

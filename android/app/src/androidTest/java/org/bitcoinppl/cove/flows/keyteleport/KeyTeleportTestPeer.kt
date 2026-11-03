@@ -1,5 +1,7 @@
 package org.bitcoinppl.cove.flows.keyteleport
 
+import androidx.test.platform.app.InstrumentationRegistry
+import org.bitcoinppl.cove.KeychainAccessor
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
@@ -65,17 +67,40 @@ internal class KeyTeleportTestPeer : Closeable {
     }
 }
 
+// the keychain entries of SESSION_KEY and CRYPTOR_KEY in rust/crates/cove-device/src/keychain/key_teleport.rs
+private val RECEIVE_SESSION_KEYS =
+    listOf("key_teleport::v1::receive_session", "key_teleport::v1::receive_session_cryptor")
+
+/**
+ * Whether this device stores a KeyTeleport receive session, which may be someone's pending transfer
+ *
+ * Starting a receive resumes a stored session, and ending or importing it deletes its private key,
+ * after which the sender's response can never be decrypted. So a test that receives must skip
+ * while one exists. This only reads the keychain, and [awaitRequest] checks that a started receive
+ * shows up here, so a renamed entry fails the tests instead of silently disabling the guard
+ */
+internal fun hasStoredReceiveSession(): Boolean {
+    val keychain = KeychainAccessor(InstrumentationRegistry.getInstrumentation().targetContext)
+    return RECEIVE_SESSION_KEYS.any { keychain.get(it) != null }
+}
+
 /** Wait for [manager] to show a receiver request and copy it before a later state destroys it */
-internal fun awaitRequest(manager: KeyTeleportManager): KeyTeleportRequestCopy =
-    awaitOnMain("a receiver request") {
-        (manager.state as? KeyTeleportManagerState.ReceiveReady)?.v1?.let {
-            KeyTeleportRequestCopy(
-                packetText = it.packet.bbqrPart(),
-                numericCode = it.numericCode,
-                groupedNumericCode = it.groupedNumericCode,
-            )
+internal fun awaitRequest(manager: KeyTeleportManager): KeyTeleportRequestCopy {
+    val request =
+        awaitOnMain("a receiver request") {
+            (manager.state as? KeyTeleportManagerState.ReceiveReady)?.v1?.let {
+                KeyTeleportRequestCopy(
+                    packetText = it.packet.bbqrPart(),
+                    numericCode = it.numericCode,
+                    groupedNumericCode = it.groupedNumericCode,
+                )
+            }
         }
-    }
+
+    // the session is saved before the request shows, so a miss means the guard reads the wrong entry
+    assertTrue("the receive session is not stored where hasStoredReceiveSession looks", hasStoredReceiveSession())
+    return request
+}
 
 /** Wait for [manager] to show a sender response and copy it before a later state destroys it */
 internal fun awaitResponse(manager: KeyTeleportManager): KeyTeleportResponseCopy =
