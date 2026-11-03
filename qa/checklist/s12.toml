@@ -437,6 +437,7 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/OnboardingManager.kt",
 ]
 coverage = [
+  "human:ios",
   "rust:rust/src/manager/onboarding_manager.rs::backup_found_auto_switches_on_early_screens",
   "rust:rust/src/manager/onboarding_manager.rs::cloud_check_retries_pending_metadata_until_backup_is_readable",
   "rust:rust/src/manager/onboarding_manager/flow_state.rs::late_backup_found_offers_restore_from_choice_steps",
@@ -444,8 +445,11 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_refresh_finds_namespace_that_appears_late",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/onboarding/OnboardingRecoveryScenarioFullLaunchTest.kt::emptyThenEmptyThenBackupFoundAfterCheckAgain",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/onboarding/OnboardingLateOfferFullLaunchTest.kt::delayedDiscoveryOffersRestoreDuringSoftwareImport",
+  "ios-unit:ios/CoveTests/OnboardingPromptLayoutTests.swift::testSoftwareImportProjectsLateCloudRestoreOffer",
+  "ios-unit:ios/CoveTests/OnboardingPromptLayoutTests.swift::testHardwareImportProjectsLateCloudRestoreOffer",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
+# ios tests render the late offer alert from a bound flag; no ios test drives OnboardingManager reconciliation to show it, so ios stays human
 
 [[row]]
 id = "s12-icloud-local-eviction-and-delayed-discovery"

@@ -105,12 +105,13 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
+    "human",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/round_trip.rs::cloud_round_trip_restores_labels_locks_and_seed_without_scan_state",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_dirty",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_all_matches_individual_restore_for_the_same_record",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# round trip checks name, seed, first receive address, labels and locks; transactions come from the full scan every restored wallet starts with
+# round trip checks name, seed, first receive address, labels and locks without scanning; the restored wallet's transactions matching the original stays human
 
 [[row]]
 id = "s05-local-deletion-keeps-restorable-cloud-only-wallet"
