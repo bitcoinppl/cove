@@ -1,11 +1,14 @@
 package org.bitcoinppl.cove.flows.TapSignerFlow
 
+import android.graphics.Rect
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.test.AndroidDeviceStayAwakeRule
 import org.bitcoinppl.cove.test.FakeNodeControl
@@ -17,6 +20,7 @@ import org.bitcoinppl.cove.test.HardwareWalletScreens
 import org.bitcoinppl.cove.test.LARGEST_SYSTEM_FONT_SCALE
 import org.bitcoinppl.cove.test.TAPSIGNER_CVC
 import org.bitcoinppl.cove.test.fullLaunchDevice
+import org.bitcoinppl.cove.test.isTappable
 import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.test.scrollTo
 import org.bitcoinppl.cove.test.waitFor
@@ -35,7 +39,8 @@ import java.security.SecureRandom
  *
  * The TAPSIGNER sheet is its own window, which ignores a Compose test font scale, so this sets the
  * system font scale and restores it afterwards. UiAutomator sees a node's visible bounds, so the
- * checks catch text and actions pushed off screen or squeezed, not an ellipsis inside a label.
+ * checks catch text and actions pushed off screen, cut off by their scroll container or squeezed,
+ * not an ellipsis inside a label.
  * Runs in the uiTest flavour; needs the hardware signer host up and forwarded, which
  * `just android-instrumented-ci` does
  */
@@ -51,6 +56,10 @@ class TapSignerLayoutFullLaunchTest {
 
         // well under a line of text at 2x, so only a squeezed or clipped node falls below it
         const val MIN_NODE_HEIGHT_DP = 24
+
+        // how far one nudge drags a node clipped at its scroll container's edge, and how many it gets
+        const val NUDGE_DP = 96
+        const val MAX_NUDGES = 6
     }
 
     @get:Rule
@@ -223,24 +232,98 @@ class TapSignerLayoutFullLaunchTest {
     }
 
     /**
-     * Scrolls until the node lies above the gesture strip, then checks it sits wholly inside the
-     * display and isn't squeezed
+     * Scrolls until the node lies above the gesture strip and wholly inside its scroll container,
+     * then checks it sits inside the display and isn't squeezed
+     *
+     * UiAutomator reports bounds already clipped to the scroll container, so a node cut off at the
+     * container's edge looks whole. One whose visible bounds reach that edge is nudged inward until
+     * it clears the edge, or until the container stops scrolling, which leaves nothing beyond it
      */
     private fun reachable(
         selector: BySelector,
         name: String,
-    ) = device.scrollTo(selector, timeoutMs = 15_000L).also { node ->
-        val bounds = node.visibleBounds
+    ): UiObject2 {
         val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        var node = device.scrollTo(selector, timeoutMs = 15_000L)
+        var previous: Rect? = null
 
-        assertTrue(
-            "$name is $bounds, outside the ${device.displayWidth}x${device.displayHeight} display",
-            bounds.left >= 0 && bounds.top >= 0 && bounds.right <= device.displayWidth && bounds.bottom <= device.displayHeight,
-        )
-        assertTrue(
-            "$name is squeezed to $bounds, under ${MIN_NODE_HEIGHT_DP}dp tall",
-            bounds.height() >= MIN_NODE_HEIGHT_DP * density,
-        )
+        repeat(MAX_NUDGES) {
+            // a recomposition can replace the node or an ancestor between reads
+            val (bounds, viewport) =
+                try {
+                    node.visibleBounds to node.scrollViewport()
+                } catch (_: StaleObjectException) {
+                    node = device.waitFor(selector, timeoutMs = 5_000L)
+                    node.visibleBounds to node.scrollViewport()
+                }
+
+            val edge = viewport?.let { touchedEdge(bounds, it) }
+            val stuck = bounds == previous
+
+            assertTrue(
+                "$name is $bounds, taller than its scroll container $viewport",
+                viewport == null || bounds.top > viewport.top || bounds.bottom < viewport.bottom,
+            )
+
+            if ((edge == null || stuck) && device.isTappable(node)) {
+                assertTrue(
+                    "$name is $bounds, outside the ${device.displayWidth}x${device.displayHeight} display",
+                    bounds.left >= 0 && bounds.top >= 0 && bounds.right <= device.displayWidth && bounds.bottom <= device.displayHeight,
+                )
+                assertTrue(
+                    "$name is squeezed to $bounds, under ${MIN_NODE_HEIGHT_DP}dp tall",
+                    bounds.height() >= MIN_NODE_HEIGHT_DP * density,
+                )
+                return node
+            }
+
+            assertTrue("$name is stuck at $bounds, cut off by its scroll container $viewport or the gesture strip", !stuck)
+            previous = bounds
+
+            // below the gesture strip counts as the bottom edge, since the content must move up
+            nudge(viewport ?: Rect(0, 0, device.displayWidth, device.displayHeight), towardsTop = edge != Edge.TOP)
+            node = device.waitFor(selector, timeoutMs = 5_000L)
+        }
+
+        error("$name never cleared the edge of its scroll container after $MAX_NUDGES nudges")
+    }
+
+    private enum class Edge { TOP, BOTTOM }
+
+    // a partly scrolled-in node is clipped to the container, so its visible edge lands on the container's
+    private fun touchedEdge(
+        bounds: Rect,
+        viewport: Rect,
+    ): Edge? =
+        when {
+            bounds.top <= viewport.top -> Edge.TOP
+            bounds.bottom >= viewport.bottom -> Edge.BOTTOM
+            else -> null
+        }
+
+    // the nearest scrollable ancestor's visible bounds, which is the area the node can show in
+    private fun UiObject2.scrollViewport(): Rect? =
+        generateSequence(parent) { it.parent }
+            .firstOrNull { it.isScrollable }
+            ?.visibleBounds
+
+    // a short slow drag, which moves the content without a fling
+    private fun nudge(
+        viewport: Rect,
+        towardsTop: Boolean,
+    ) {
+        val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        val distance = minOf(viewport.height() / 4, (NUDGE_DP * density).toInt())
+        val (from, to) =
+            if (towardsTop) {
+                viewport.centerY() + distance / 2 to viewport.centerY() - distance / 2
+            } else {
+                viewport.centerY() - distance / 2 to viewport.centerY() + distance / 2
+            }
+
+        device.swipe(viewport.centerX(), from, viewport.centerX(), to, 40)
+        device.waitForIdle()
+        Thread.sleep(300)
     }
 
     private fun randomChainCode(): String = ByteArray(32).also(SecureRandom()::nextBytes).joinToString("") { "%02x".format(it) }
