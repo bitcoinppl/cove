@@ -405,6 +405,9 @@ impl WalletsTable {
             patch.apply_to(wallet);
             let after = wallet.clone();
 
+            #[cfg(test)]
+            test_support::fail_armed_origin_patch(&patch)?;
+
             table.insert(&*key, wallets).map_err_str(WalletTableError::SaveError)?;
 
             WalletMetadataPatchResult { before, after }
@@ -672,14 +675,38 @@ impl WalletsTable {
 
 #[cfg(test)]
 pub(crate) mod test_support {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     use cove_util::result_ext::ResultExt as _;
 
-    use super::{Error, TABLE, WalletKey, WalletTableError, WalletsTable};
+    use super::{Error, TABLE, WalletKey, WalletMetadataPatch, WalletTableError, WalletsTable};
     use crate::{
         app::reconcile::{AppStateReconcileMessage, Updater},
         network::Network,
         wallet::metadata::{WalletMetadata, WalletMode},
     };
+
+    static FAIL_NEXT_ORIGIN_PATCH: AtomicBool = AtomicBool::new(false);
+
+    /// Fails the next origin patch before it is written, leaving the stored row unchanged
+    pub(crate) fn fail_next_origin_patch() {
+        FAIL_NEXT_ORIGIN_PATCH.store(true, Ordering::SeqCst);
+    }
+
+    /// Disarms an origin patch failure that no patch consumed
+    pub(crate) fn reset_origin_patch_failure() {
+        FAIL_NEXT_ORIGIN_PATCH.store(false, Ordering::SeqCst);
+    }
+
+    pub(crate) fn fail_armed_origin_patch(patch: &WalletMetadataPatch) -> Result<(), Error> {
+        if matches!(patch, WalletMetadataPatch::Origin(_))
+            && FAIL_NEXT_ORIGIN_PATCH.swap(false, Ordering::SeqCst)
+        {
+            return Err(WalletTableError::SaveError("injected origin patch failure".into()).into());
+        }
+
+        Ok(())
+    }
 
     impl WalletsTable {
         /// Overwrites a wallet bucket for test setup

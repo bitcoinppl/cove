@@ -1620,7 +1620,9 @@ mod tests {
         }
     }
 
-    // a stored hot wallet row without an origin must still open, and the load repairs the row
+    // a stored hot wallet row without an origin must still open and the load repairs the row;
+    // a repair that cannot be saved keeps both copies unchanged so the wallet still opens, and
+    // the next load retries
     #[test]
     fn loading_a_wallet_whose_metadata_has_no_origin_repairs_the_stored_row() {
         use crate::{
@@ -1662,20 +1664,36 @@ mod tests {
         let id = wallet.id.clone();
         drop(wallet);
 
-        let result = RustWalletManager::try_new(id.clone());
-        let stored = database.wallets.get(&id, Network::Bitcoin, WalletMode::Main).unwrap();
-        let loaded_origin =
-            result.as_ref().ok().map(|manager| manager.metadata.read().origin.clone());
+        let stored_origin = || {
+            let stored = database.wallets.get(&id, Network::Bitcoin, WalletMode::Main).unwrap();
+            stored.and_then(|stored| stored.origin)
+        };
 
+        crate::database::wallet::test_support::fail_next_origin_patch();
+        let result = RustWalletManager::try_new(id.clone());
+        crate::database::wallet::test_support::reset_origin_patch_failure();
+
+        let failed_repair = (
+            result.as_ref().ok().map(|manager| manager.metadata.read().origin.clone()),
+            stored_origin(),
+        );
+
+        // the closed manager releases its wallet asynchronously, so the retry loads the store
+        // directly through the same repair
         drop(result);
+        let reloaded = crate::wallet::Wallet::try_load_persisted(id.clone());
+        let repaired =
+            (reloaded.as_ref().ok().map(|wallet| wallet.metadata.origin.clone()), stored_origin());
+
+        drop(reloaded);
         crate::wallet::test_support::remove_wallet(&id);
 
+        assert_eq!(failed_repair, (Some(None), None), "a failed repair still opens the wallet");
         assert_eq!(
-            loaded_origin,
-            Some(expected_origin.clone()),
-            "the wallet opens with its origin"
+            repaired,
+            (Some(expected_origin.clone()), expected_origin),
+            "the next load repairs the row"
         );
-        assert_eq!(stored.and_then(|stored| stored.origin), expected_origin);
     }
 
     fn confirmed_label(transaction: &Transaction) -> Option<String> {
