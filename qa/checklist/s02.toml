@@ -242,13 +242,17 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/SensitiveClipboardPolicy.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPlatform.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/BackupExportScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsXprvReveal.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/CoveApplication.kt",
+    "android/app/src/uiTest/java/org/bitcoinppl/cove/UiTestCoveApplication.kt",
 ]
 coverage = [
-    "human",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/SensitiveClipboardCopyTest.kt::copiedPrivateKeyIsMarkedSensitiveAndClearedWhenItsLifetimeEnds",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/SensitiveClipboardCopyTest.kt::textCopiedOverThePrivateKeySurvivesItsLifetime",
     "android-unit:android/app/src/test/java/org/bitcoinppl/cove/flows/keyteleport/SensitiveClipboardPolicyTest.kt::readableClipOwnedByAnotherAppIsLeftAlone",
 ]
 # 1.4.0: ios N/A, android HUMAN
-# unit test covers only the replacement-text half; the sensitive flag and expiry stay human
+# the instrumented tests copy through the real ClipboardManager with the UI test build's shortened clip lifetime
 
 [[row]]
 id = "s02-nfc-active-scan-privacy-cover"
@@ -278,13 +282,18 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
     "ios/Cove/CoverView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/MainActivityPrivacyCover.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/CoveApplication.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/LockView.kt",
 ]
 coverage = [
     "agent:ios",
     "human:android",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportBackgroundLockTest.kt::receiverStepsShowThePinCoverAndNoSecretAfterReturning",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportBackgroundLockTest.kt::senderResponseShowsThePinCoverAndNoPasswordAfterReturning",
 ]
 # 1.4.0: ios BLOCKED, android HUMAN
-# android secret-bearing states need the camera QR leg
+# android tests cover the receiver request, password entry, mnemonic review and sender response, with a second manager in place of the camera
+# android still needs a person for a received xprv review, which needs an xprv sender, and the recovery words screen until PR 969 merges
 
 [[row]]
 id = "s02-repeated-secret-reads-writes-across-supported-secret"
@@ -298,10 +307,14 @@ paths = [
     "rust/src/wallet_secret.rs",
     "ios/Cove/Security.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/Security.kt",
+    "rust/src/manager/import_wallet_manager.rs",
+    "rust/src/manager/key_teleport_manager.rs",
+    "rust/src/manager/key_teleport_manager/**",
 ]
 coverage = [
     "agent:ios",
     "human:android",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/RepeatedSecretAccessTest.kt::repeatedReadsWritesAndKeyTeleportSendsKeepOneReadableWallet",
 ]
 # 1.4.0: ios BLOCKED, android HUMAN
-# platform keystore stress; android secret types need the camera QR leg
+# the android test covers mnemonic wallets against the real keystore; xprv wallets still need a person, since only an xprv KeyTeleport sender can create one

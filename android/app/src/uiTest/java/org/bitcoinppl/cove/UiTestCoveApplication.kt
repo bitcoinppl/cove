@@ -17,6 +17,9 @@ class UiTestCoveApplication : CoveApplication() {
     override fun createConnectivityAccess(): LifecycleConnectivityAccess =
         AlwaysConnectedConnectivityAccess
 
+    // long enough to read the clip back, short enough that tests can wait for the clear
+    override val sensitiveClipboardLifetimeMillis: Long = 3_000L
+
     private object AlwaysConnectedConnectivityAccess : LifecycleConnectivityAccess {
         override fun isConnected(): Boolean = true
 

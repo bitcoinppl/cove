@@ -10,6 +10,7 @@ import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
 import org.bitcoinppl.cove.cloudbackup.AndroidPasskeyProvider
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
+import org.bitcoinppl.cove.flows.keyteleport.SENSITIVE_CLIPBOARD_LIFETIME_MILLIS
 import org.bitcoinppl.cove.flows.keyteleport.clearExpiredSensitiveClipboard
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.device.CloudStorage
@@ -94,6 +95,15 @@ open class CoveApplication : Application() {
 
     protected open fun createConnectivityAccess(): LifecycleConnectivityAccess =
         ConnectivityMonitor(this)
+
+    /**
+     * How long a clip Cove marks sensitive stays on the clipboard before Cove clears it
+     *
+     * The UI test build shortens it so instrumented tests can watch the real clear without
+     * waiting out the full minute
+     */
+    internal open val sensitiveClipboardLifetimeMillis: Long
+        get() = SENSITIVE_CLIPBOARD_LIFETIME_MILLIS
 
     // Called from MainActivity after bootstrap completes on the main thread
     fun onBootstrapComplete() {

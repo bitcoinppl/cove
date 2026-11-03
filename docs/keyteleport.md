@@ -16,6 +16,8 @@ Sensitive clipboard cleanup on Android is best effort. Cove uses:
 
 Cove cannot guarantee clipboard deletion at an exact time.
 
+The clip lifetime is one minute. The UI test build shortens it to a few seconds, so instrumented tests can check the real clear.
+
 ## Master key encoding
 
 Cove stores a wallet's master private key encoded for the wallet's network: xprv on mainnet, tprv on testnet, testnet4 and signet. File backup import, Cloud Backup restore, KeyTeleport receive and other key imports re-encode a key given in the other form. The version prefix does not change the key or its derivation, so Cove never refuses a backup over it.
