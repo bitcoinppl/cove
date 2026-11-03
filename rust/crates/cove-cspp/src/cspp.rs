@@ -19,6 +19,15 @@ const STAGED_MASTER_KEY_ENCRYPTION_KEY_AND_NONCE: &str =
 const MASTER_KEY_PROMOTION_JOURNAL: &str = "cspp::v1::master_key_promotion_journal";
 const MASTER_KEY_PROMOTION_JOURNAL_VERSION: u32 = 1;
 
+/// Every store entry CSPP owns, in deletion order
+const ALL_ENTRY_NAMES: [&str; 5] = [
+    MASTER_KEY_NAME,
+    MASTER_KEY_ENCRYPTION_KEY_AND_NONCE,
+    STAGED_MASTER_KEY_NAME,
+    STAGED_MASTER_KEY_ENCRYPTION_KEY_AND_NONCE,
+    MASTER_KEY_PROMOTION_JOURNAL,
+];
+
 static INIT_LOCK: Mutex<()> = Mutex::new(());
 static MASTER_KEY_CACHE: LazyLock<ArcSwapOption<Zeroizing<[u8; 32]>>> =
     LazyLock::new(|| ArcSwapOption::new(None));
@@ -534,19 +543,24 @@ impl<S: CsppStore> Cspp<S> {
     pub fn delete_master_key(&self) -> bool {
         let _guard = lock_init();
 
-        let master_key_deleted = self.delete_key_if_present(MASTER_KEY_NAME);
-        let encryption_key_deleted =
-            self.delete_key_if_present(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE);
-        let staged_master_key_deleted = self.delete_key_if_present(STAGED_MASTER_KEY_NAME);
-        let staged_encryption_key_deleted =
-            self.delete_key_if_present(STAGED_MASTER_KEY_ENCRYPTION_KEY_AND_NONCE);
-        let journal_deleted = self.delete_key_if_present(MASTER_KEY_PROMOTION_JOURNAL);
+        // read every entry before deleting any, so an unreadable entry never leaves its
+        // counterpart deleted and the key unusable
+        let mut present = Vec::with_capacity(ALL_ENTRY_NAMES.len());
+        for key in ALL_ENTRY_NAMES {
+            match self.read_entry(key) {
+                Ok(Some(_)) => present.push(key),
+                Ok(None) => {}
+                Err(_) => return false,
+            }
+        }
+
         Self::clear_cached_master_key();
-        master_key_deleted
-            && encryption_key_deleted
-            && staged_master_key_deleted
-            && staged_encryption_key_deleted
-            && journal_deleted
+
+        // attempt every delete even after a failure so retries have less left to remove
+        let failed_deletes =
+            present.into_iter().filter(|key| !self.0.delete((*key).to_owned())).count();
+
+        failed_deletes == 0
     }
 
     /// Checks whether both active master-key entries exist without decrypting them
@@ -620,9 +634,8 @@ impl<S: CsppStore> Cspp<S> {
 
         let installed = self.read_active_entries()?;
         if installed != replacement {
-            let rollback = self.restore_active_entries(&prior);
+            self.restore_active_entries(&prior)?;
             Self::refresh_cache_from_entries(&prior);
-            rollback?;
 
             return Err(CsppError::Save("active master key write could not be verified".into()));
         }
@@ -687,7 +700,13 @@ impl<S: CsppStore> Cspp<S> {
         self.0.get(key.to_owned()).map_err_prefix(key, CsppError::Read)
     }
 
+    /// Writes the active entries, clearing the cache first
+    ///
+    /// Callers repopulate the cache only after verifying the result, so any failure, including
+    /// an unreadable read-back after the write, leaves the cache empty instead of stale
     fn restore_active_entries(&self, entries: &StoredMasterKeyEntries) -> Result<(), CsppError> {
+        Self::clear_cached_master_key();
+
         self.restore_entries(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE, MASTER_KEY_NAME, entries)
     }
 
@@ -705,6 +724,10 @@ impl<S: CsppStore> Cspp<S> {
         master_key_name: &str,
         entries: &StoredMasterKeyEntries,
     ) -> Result<(), CsppError> {
+        // read both slots before changing either, so an unreadable slot never leaves its
+        // counterpart rewritten or deleted and the pair half-changed
+        self.read_entries(encryption_key_name, master_key_name)?;
+
         self.restore_entry(encryption_key_name, entries.encryption_key_and_nonce.as_deref())?;
         self.restore_entry(master_key_name, entries.encrypted_master_key.as_deref())?;
 
@@ -778,16 +801,6 @@ impl<S: CsppStore> Cspp<S> {
     fn update_cached_master_key(master_key: &MasterKey) {
         MASTER_KEY_CACHE.store(Some(Arc::new(Zeroizing::new(*master_key.as_bytes()))));
     }
-
-    /// Returns false when the entry could not be read, so an unreadable entry is never reported
-    /// as deleted
-    fn delete_key_if_present(&self, key: &str) -> bool {
-        match self.read_entry(key) {
-            Ok(None) => true,
-            Ok(Some(_)) => self.0.delete(key.to_owned()),
-            Err(_) => false,
-        }
-    }
 }
 
 fn lock_init() -> std::sync::MutexGuard<'static, ()> {
@@ -854,6 +867,7 @@ mod tests {
         mutation_count: usize,
         fail_at: Option<usize>,
         unreadable_keys: HashSet<String>,
+        unreadable_after_save: Option<String>,
     }
 
     impl FailNthStore {
@@ -877,7 +891,14 @@ mod tests {
         }
 
         fn clear_read_failures(&self) {
-            self.0.lock().unwrap().unreadable_keys.clear();
+            let mut state = self.0.lock().unwrap();
+            state.unreadable_keys.clear();
+            state.unreadable_after_save = None;
+        }
+
+        /// Makes `key` unreadable once the next save of any entry completes
+        fn fail_reads_after_next_save(&self, key: &str) {
+            self.0.lock().unwrap().unreadable_after_save = Some(key.to_owned());
         }
 
         fn snapshot(&self) -> HashMap<String, String> {
@@ -910,6 +931,9 @@ mod tests {
             }
 
             state.entries.insert(key, value);
+            if let Some(unreadable) = state.unreadable_after_save.take() {
+                state.unreadable_keys.insert(unreadable);
+            }
 
             Ok(())
         }
@@ -1498,14 +1522,6 @@ mod tests {
     const ACTIVE_AND_JOURNAL_SLOTS: [&str; 3] =
         [MASTER_KEY_NAME, MASTER_KEY_ENCRYPTION_KEY_AND_NONCE, MASTER_KEY_PROMOTION_JOURNAL];
 
-    const ALL_SLOTS: [&str; 5] = [
-        MASTER_KEY_NAME,
-        MASTER_KEY_ENCRYPTION_KEY_AND_NONCE,
-        STAGED_MASTER_KEY_NAME,
-        STAGED_MASTER_KEY_ENCRYPTION_KEY_AND_NONCE,
-        MASTER_KEY_PROMOTION_JOURNAL,
-    ];
-
     /// Store states that hold a master key the user depends on
     fn stores_with_existing_keys() -> Vec<(&'static str, FailNthStore, MasterKey)> {
         let active_only = FailNthStore::new();
@@ -1536,7 +1552,7 @@ mod tests {
         let _guard = CACHE_TEST_LOCK.lock().unwrap();
 
         for (scenario, store, active_key) in stores_with_existing_keys() {
-            for slot in ALL_SLOTS {
+            for slot in ALL_ENTRY_NAMES {
                 Cspp::<FailNthStore>::clear_cached_master_key();
                 let before = store.snapshot();
                 store.fail_reads_of(slot);
@@ -1685,16 +1701,78 @@ mod tests {
     }
 
     #[test]
-    fn delete_reports_failure_for_unreadable_slots() {
+    fn delete_with_any_unreadable_slot_deletes_nothing() {
         let _guard = CACHE_TEST_LOCK.lock().unwrap();
-        Cspp::<FailNthStore>::clear_cached_master_key();
 
-        let store = FailNthStore::new();
-        let cspp = Cspp::new(store.clone());
-        cspp.save_master_key(&deterministic_key(45)).unwrap();
-        store.fail_reads_of(MASTER_KEY_NAME);
+        for (scenario, store, _) in stores_with_existing_keys() {
+            for slot in ALL_ENTRY_NAMES {
+                let before = store.snapshot();
+                store.fail_reads_of(slot);
 
-        assert!(!cspp.delete_master_key());
-        assert!(store.snapshot().contains_key(MASTER_KEY_NAME));
+                assert!(!Cspp::new(store.clone()).delete_master_key(), "{scenario}: {slot}");
+                assert_eq!(store.snapshot(), before, "{scenario}: unreadable {slot} deleted");
+                store.clear_read_failures();
+            }
+        }
+    }
+
+    #[test]
+    fn staged_discard_with_an_unreadable_slot_leaves_the_pair_intact() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+
+        for slot in [STAGED_MASTER_KEY_ENCRYPTION_KEY_AND_NONCE, STAGED_MASTER_KEY_NAME] {
+            let store = FailNthStore::new();
+            let cspp = Cspp::new(store.clone());
+            cspp.save_staged_master_key(&deterministic_key(49)).unwrap();
+            let before = store.snapshot();
+            store.fail_reads_of(slot);
+
+            assert!(matches!(cspp.discard_staged_master_key(), Err(CsppError::Read(_))), "{slot}");
+            assert!(
+                matches!(cspp.rollback_master_key_promotion(), Err(CsppError::Read(_))),
+                "{slot}"
+            );
+            assert_eq!(store.snapshot(), before, "unreadable {slot} left a half-deleted pair");
+
+            store.clear_read_failures();
+            assert!(
+                cspp.load_staged_master_key().unwrap().unwrap().as_bytes()
+                    == deterministic_key(49).as_bytes()
+            );
+        }
+    }
+
+    #[test]
+    fn failed_read_back_after_active_write_leaves_cache_empty() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+
+        // each scenario writes the active slots and then reads them back
+        let scenarios: [(&str, fn(&Cspp<FailNthStore>) -> Result<(), CsppError>); 4] = [
+            ("save", |cspp| cspp.save_master_key(&deterministic_key(47))),
+            ("promote", Cspp::promote_staged_master_key),
+            ("retry restore", Cspp::restore_prior_master_key_for_retry),
+            ("rollback", Cspp::rollback_master_key_promotion),
+        ];
+
+        for (name, operation) in scenarios {
+            Cspp::<FailNthStore>::clear_cached_master_key();
+            let store = FailNthStore::new();
+            let cspp = Cspp::new(store.clone());
+            cspp.save_master_key(&deterministic_key(46)).unwrap();
+            if name != "save" {
+                cspp.save_staged_master_key(&deterministic_key(48)).unwrap();
+            }
+            if name == "retry restore" || name == "rollback" {
+                cspp.promote_staged_master_key().unwrap();
+            }
+            assert!(cspp.get_or_create_master_key().is_ok());
+            assert!(MASTER_KEY_CACHE.load().is_some());
+
+            // writes succeed, then the read-back of the active slot fails
+            store.fail_reads_after_next_save(MASTER_KEY_NAME);
+
+            assert!(operation(&cspp).is_err(), "{name} ignored the failed read-back");
+            assert!(MASTER_KEY_CACHE.load().is_none(), "{name} left a stale cached key");
+        }
     }
 }

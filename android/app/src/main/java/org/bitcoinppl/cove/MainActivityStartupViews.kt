@@ -201,9 +201,17 @@ internal fun BootstrapErrorView(
     }
 }
 
+/** The text of a startup screen that offers one action to continue bootstrap */
+internal data class BootstrapRecoveryCopy(
+    val message: String,
+    val title: String = "Restore in Progress",
+    val actionLabel: String = "Continue",
+    val footer: String = "If recovery does not finish, contact feedback@covebitcoinwallet.com for help",
+)
+
 @Composable
 internal fun BootstrapRecoveryView(
-    message: String,
+    copy: BootstrapRecoveryCopy,
     onContinue: () -> Unit,
     onCopyDiagnostics: () -> Unit,
     onShareDiagnostics: () -> Unit,
@@ -225,13 +233,13 @@ internal fun BootstrapRecoveryView(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                "Restore in Progress",
+                copy.title,
                 style = MaterialTheme.typography.headlineSmall,
                 color = Color.White,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                message,
+                copy.message,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
@@ -241,11 +249,11 @@ internal fun BootstrapRecoveryView(
                 onClick = onContinue,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Continue")
+                Text(copy.actionLabel)
             }
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                "If recovery does not finish, contact feedback@covebitcoinwallet.com for help",
+                copy.footer,
                 style = MaterialTheme.typography.bodySmall,
                 color = Color.White.copy(alpha = 0.5f),
                 textAlign = TextAlign.Center,

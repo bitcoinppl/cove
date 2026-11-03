@@ -36,6 +36,14 @@ impl BlobCheckResult {
         Self::Failed { error, retryable: false, issue: None }
     }
 
+    /// An unreadable keychain, such as a locked device, proves nothing about the key, so the
+    /// check stays pending and resumes on a later pass
+    fn master_key_load_failure(error: cove_cspp::CsppError) -> Self {
+        let retryable = matches!(error, cove_cspp::CsppError::Read(_));
+
+        Self::Failed { error: format!("load local master key: {error}"), retryable, issue: None }
+    }
+
     fn cloud_storage_failure(error: CloudStorageError) -> Self {
         if matches!(error, CloudStorageError::AuthorizationRequired(_)) {
             return Self::AuthorizationRequired { error: error.to_string() };
@@ -279,11 +287,7 @@ impl PendingUploadVerifier {
             Ok(None) => {
                 return BlobCheckResult::terminal_failure("no local master key available".into());
             }
-            Err(error) => {
-                return BlobCheckResult::terminal_failure(format!(
-                    "load local master key: {error}"
-                ));
-            }
+            Err(error) => return BlobCheckResult::master_key_load_failure(error),
         };
 
         let reader = WalletBackupReader::new(
@@ -704,6 +708,26 @@ mod tests {
             BlobCheckResult::cloud_storage_failure(CloudStorageError::Offline("offline".into()));
 
         assert!(matches!(result, BlobCheckResult::Failed { retryable: true, .. }));
+    }
+
+    #[test]
+    fn unreadable_master_key_keeps_the_upload_pending() {
+        let blob = wallet_pending_blob(0);
+        let PersistedCloudBlobState::UploadedPendingConfirmation(current) = blob.state.clone()
+        else {
+            panic!("expected uploaded pending confirmation state");
+        };
+
+        let unreadable = BlobCheckResult::master_key_load_failure(cove_cspp::CsppError::Read(
+            "keychain locked".into(),
+        ));
+        let blob = PendingUploadVerifier::apply_blob_result(&blob, &current, &unreadable);
+        assert!(matches!(blob.state, PersistedCloudBlobState::UploadedPendingConfirmation(_)));
+
+        let corrupt = BlobCheckResult::master_key_load_failure(cove_cspp::CsppError::InvalidData(
+            "bad entries".into(),
+        ));
+        assert!(matches!(corrupt, BlobCheckResult::Failed { retryable: false, .. }));
     }
 
     #[test]

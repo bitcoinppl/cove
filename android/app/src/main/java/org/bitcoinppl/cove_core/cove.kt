@@ -38225,6 +38225,13 @@ sealed class AppInitException(message: String): kotlin.Exception(message) {
 
         class KeyDerivation(message: String) : AppInitException(message)
 
+    /**
+     * The keychain could not be read, so it is unknown whether the database key exists
+     *
+     * This is retryable and must not lead to key replacement or data recovery
+     */
+        class KeychainUnavailable(message: String) : AppInitException(message)
+
         class MainDatabaseMigration(message: String) : AppInitException(message)
 
         class WalletDatabaseMigration(message: String) : AppInitException(message)
@@ -38256,13 +38263,14 @@ public object FfiConverterTypeAppInitError : FfiConverterRustBuffer<AppInitExcep
 
             return when(buf.getInt()) {
             1 -> AppInitException.KeyDerivation(FfiConverterString.read(buf))
-            2 -> AppInitException.MainDatabaseMigration(FfiConverterString.read(buf))
-            3 -> AppInitException.WalletDatabaseMigration(FfiConverterString.read(buf))
-            4 -> AppInitException.Cancelled(FfiConverterString.read(buf))
-            5 -> AppInitException.AlreadyCalled(FfiConverterString.read(buf))
-            6 -> AppInitException.DatabaseKeyMismatch(FfiConverterString.read(buf))
-            7 -> AppInitException.DatabaseVerificationFailed(FfiConverterString.read(buf))
-            8 -> AppInitException.RecoveryRequired(FfiConverterString.read(buf))
+            2 -> AppInitException.KeychainUnavailable(FfiConverterString.read(buf))
+            3 -> AppInitException.MainDatabaseMigration(FfiConverterString.read(buf))
+            4 -> AppInitException.WalletDatabaseMigration(FfiConverterString.read(buf))
+            5 -> AppInitException.Cancelled(FfiConverterString.read(buf))
+            6 -> AppInitException.AlreadyCalled(FfiConverterString.read(buf))
+            7 -> AppInitException.DatabaseKeyMismatch(FfiConverterString.read(buf))
+            8 -> AppInitException.DatabaseVerificationFailed(FfiConverterString.read(buf))
+            9 -> AppInitException.RecoveryRequired(FfiConverterString.read(buf))
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
 
@@ -38278,32 +38286,36 @@ public object FfiConverterTypeAppInitError : FfiConverterRustBuffer<AppInitExcep
                 buf.putInt(1)
                 Unit
             }
-            is AppInitException.MainDatabaseMigration -> {
+            is AppInitException.KeychainUnavailable -> {
                 buf.putInt(2)
                 Unit
             }
-            is AppInitException.WalletDatabaseMigration -> {
+            is AppInitException.MainDatabaseMigration -> {
                 buf.putInt(3)
                 Unit
             }
-            is AppInitException.Cancelled -> {
+            is AppInitException.WalletDatabaseMigration -> {
                 buf.putInt(4)
                 Unit
             }
-            is AppInitException.AlreadyCalled -> {
+            is AppInitException.Cancelled -> {
                 buf.putInt(5)
                 Unit
             }
-            is AppInitException.DatabaseKeyMismatch -> {
+            is AppInitException.AlreadyCalled -> {
                 buf.putInt(6)
                 Unit
             }
-            is AppInitException.DatabaseVerificationFailed -> {
+            is AppInitException.DatabaseKeyMismatch -> {
                 buf.putInt(7)
                 Unit
             }
-            is AppInitException.RecoveryRequired -> {
+            is AppInitException.DatabaseVerificationFailed -> {
                 buf.putInt(8)
+                Unit
+            }
+            is AppInitException.RecoveryRequired -> {
+                buf.putInt(9)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }

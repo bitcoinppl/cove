@@ -21441,6 +21441,13 @@ enum AppInitError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     case KeyDerivation(message: String)
 
+    /**
+     * The keychain could not be read, so it is unknown whether the database key exists
+     *
+     * This is retryable and must not lead to key replacement or data recovery
+     */
+    case KeychainUnavailable(message: String)
+
     case MainDatabaseMigration(message: String)
 
     case WalletDatabaseMigration(message: String)
@@ -21491,31 +21498,35 @@ public struct FfiConverterTypeAppInitError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
 
-        case 2: return .MainDatabaseMigration(
+        case 2: return .KeychainUnavailable(
             message: try FfiConverterString.read(from: &buf)
         )
 
-        case 3: return .WalletDatabaseMigration(
+        case 3: return .MainDatabaseMigration(
             message: try FfiConverterString.read(from: &buf)
         )
 
-        case 4: return .Cancelled(
+        case 4: return .WalletDatabaseMigration(
             message: try FfiConverterString.read(from: &buf)
         )
 
-        case 5: return .AlreadyCalled(
+        case 5: return .Cancelled(
             message: try FfiConverterString.read(from: &buf)
         )
 
-        case 6: return .DatabaseKeyMismatch(
+        case 6: return .AlreadyCalled(
             message: try FfiConverterString.read(from: &buf)
         )
 
-        case 7: return .DatabaseVerificationFailed(
+        case 7: return .DatabaseKeyMismatch(
             message: try FfiConverterString.read(from: &buf)
         )
 
-        case 8: return .RecoveryRequired(
+        case 8: return .DatabaseVerificationFailed(
+            message: try FfiConverterString.read(from: &buf)
+        )
+
+        case 9: return .RecoveryRequired(
             message: try FfiConverterString.read(from: &buf)
         )
 
@@ -21532,20 +21543,22 @@ public struct FfiConverterTypeAppInitError: FfiConverterRustBuffer {
 
         case .KeyDerivation(_ /* message is ignored*/):
             writeInt(&buf, Int32(1))
-        case .MainDatabaseMigration(_ /* message is ignored*/):
+        case .KeychainUnavailable(_ /* message is ignored*/):
             writeInt(&buf, Int32(2))
-        case .WalletDatabaseMigration(_ /* message is ignored*/):
+        case .MainDatabaseMigration(_ /* message is ignored*/):
             writeInt(&buf, Int32(3))
-        case .Cancelled(_ /* message is ignored*/):
+        case .WalletDatabaseMigration(_ /* message is ignored*/):
             writeInt(&buf, Int32(4))
-        case .AlreadyCalled(_ /* message is ignored*/):
+        case .Cancelled(_ /* message is ignored*/):
             writeInt(&buf, Int32(5))
-        case .DatabaseKeyMismatch(_ /* message is ignored*/):
+        case .AlreadyCalled(_ /* message is ignored*/):
             writeInt(&buf, Int32(6))
-        case .DatabaseVerificationFailed(_ /* message is ignored*/):
+        case .DatabaseKeyMismatch(_ /* message is ignored*/):
             writeInt(&buf, Int32(7))
-        case .RecoveryRequired(_ /* message is ignored*/):
+        case .DatabaseVerificationFailed(_ /* message is ignored*/):
             writeInt(&buf, Int32(8))
+        case .RecoveryRequired(_ /* message is ignored*/):
+            writeInt(&buf, Int32(9))
 
 
         }

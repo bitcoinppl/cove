@@ -465,27 +465,39 @@ mod tests {
         crate::database::test_support::init_test_database();
         crate::test_support::init_test_keychain();
 
+        let database = Database::global();
         let keychain = Keychain::global();
-        let id = WalletId::new();
-        let existing = xpriv_secret(40);
-        keychain.save_wallet_secret(&id, existing.clone()).unwrap();
+        let mut target = crate::test_support::hot_wallet_metadata("unreadable upgrade target");
+        target.wallet_type = WalletType::Cold;
+        let id = target.id.clone();
+        keychain.save_wallet_secret(&id, xpriv_secret(40)).unwrap();
         let before = crate::test_support::raw_wallet_keychain_entries(&id);
+
+        let incoming = xpriv_secret(41);
+        let upgrade = ExistingWalletSecretUpgrade {
+            fingerprint: incoming.xpub(Network::Bitcoin).fingerprint().into(),
+            secret: incoming,
+            network: Network::Bitcoin,
+            target,
+        };
 
         let cryptor_key =
             format!("{id}{}", crate::test_support::WALLET_MNEMONIC_CRYPTOR_KEY_SUFFIX);
         crate::test_support::shared_mock_keychain().fail_reads_for(cryptor_key);
 
-        // a read failure must not look like a lone orphaned half that save would repair
-        assert!(matches!(
-            keychain.save_wallet_secret(&id, xpriv_secret(41)),
-            Err(KeychainError::Read(_))
-        ));
-        assert!(matches!(keychain.get_wallet_secret(&id), Err(KeychainError::Read(_))));
+        // a read failure must not look like a missing secret that the upgrade may write
+        let result = upgrade.apply(database.as_ref(), keychain, SecretUpgradeSource::Import);
+        assert!(
+            matches!(result, Err(SecretUpgradeError::Keychain(KeychainError::Read(_)))),
+            "{result:?}"
+        );
+
+        // a read failure must not look like a lone orphaned half that save or delete would repair
         assert!(!keychain.delete_wallet_secret(&id));
         crate::test_support::shared_mock_keychain().clear_read_failures();
 
         assert_eq!(crate::test_support::raw_wallet_keychain_entries(&id), before);
-        assert_eq!(keychain.get_wallet_secret(&id).unwrap(), Some(existing));
+        assert_eq!(keychain.get_wallet_secret(&id).unwrap(), Some(xpriv_secret(40)));
         assert!(keychain.delete_wallet_items(&id));
     }
 }

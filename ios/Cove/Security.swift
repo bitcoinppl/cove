@@ -139,9 +139,9 @@ class KeychainAccessor: KeychainAccess {
     func get(key: String) throws -> String? {
         switch itemReader(key) {
         case let .value(value):
-            return value
+            value
         case .itemNotFound:
-            return nil
+            nil
         case let .failure(status):
             let message = SecCopyErrorMessageString(status, nil) as String? ?? "unknown error"
             Log.error("Unable to read keychain item, status=\(status): \(message)")

@@ -219,7 +219,7 @@ pub enum AppInitError {
     /// The keychain could not be read, so it is unknown whether the database key exists
     ///
     /// This is retryable and must not lead to key replacement or data recovery
-    #[error("Unable to read the secure keychain. Unlock your device and reopen Cove. ({0})")]
+    #[error("Unable to read the secure keychain. Unlock your device and try again. ({0})")]
     KeychainUnavailable(String),
 
     #[error("Main database migration failed: {0}")]

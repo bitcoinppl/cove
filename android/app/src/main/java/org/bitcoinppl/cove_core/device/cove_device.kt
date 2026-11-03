@@ -1230,7 +1230,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_device_checksum_method_keychainaccess_save() != 21295.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_device_checksum_method_keychainaccess_get() != 217.toShort()) {
+    if (lib.uniffi_cove_device_checksum_method_keychainaccess_get() != 33518.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_device_checksum_method_keychainaccess_delete() != 35329.toShort()) {
@@ -3703,6 +3703,20 @@ sealed class KeychainException: kotlin.Exception() {
     }
 
     /**
+     * The platform could not read a value, so whether it exists is unknown
+     *
+     * This is distinct from absence: callers must not treat it as a missing entry, because
+     * doing so could replace or delete secrets that are still stored
+     */
+    class Read(
+
+        val v1: kotlin.String
+        ) : KeychainException() {
+        override val message
+            get() = "v1=${ v1 }"
+    }
+
+    /**
      * A value could not be deleted
      */
     class Delete(
@@ -3791,18 +3805,21 @@ public object FfiConverterTypeKeychainError : FfiConverterRustBuffer<KeychainExc
 
         return when(buf.getInt()) {
             1 -> KeychainException.Save()
-            2 -> KeychainException.Delete()
-            3 -> KeychainException.ParseSavedValue(
+            2 -> KeychainException.Read(
                 FfiConverterString.read(buf),
                 )
-            4 -> KeychainException.Encrypt(
+            3 -> KeychainException.Delete()
+            4 -> KeychainException.ParseSavedValue(
                 FfiConverterString.read(buf),
                 )
-            5 -> KeychainException.Decrypt(
+            5 -> KeychainException.Encrypt(
                 FfiConverterString.read(buf),
                 )
-            6 -> KeychainException.WalletSecretTypeMismatch()
-            7 -> KeychainException.WalletSecretExists()
+            6 -> KeychainException.Decrypt(
+                FfiConverterString.read(buf),
+                )
+            7 -> KeychainException.WalletSecretTypeMismatch()
+            8 -> KeychainException.WalletSecretExists()
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
     }
@@ -3812,6 +3829,11 @@ public object FfiConverterTypeKeychainError : FfiConverterRustBuffer<KeychainExc
             is KeychainException.Save -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
+            )
+            is KeychainException.Read -> (
+                // Add the size for the Int that specifies the variant plus the size needed for all fields
+                4UL
+                + FfiConverterString.allocationSize(value.v1)
             )
             is KeychainException.Delete -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -3849,31 +3871,36 @@ public object FfiConverterTypeKeychainError : FfiConverterRustBuffer<KeychainExc
                 buf.putInt(1)
                 Unit
             }
-            is KeychainException.Delete -> {
+            is KeychainException.Read -> {
                 buf.putInt(2)
-                Unit
-            }
-            is KeychainException.ParseSavedValue -> {
-                buf.putInt(3)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is KeychainException.Encrypt -> {
+            is KeychainException.Delete -> {
+                buf.putInt(3)
+                Unit
+            }
+            is KeychainException.ParseSavedValue -> {
                 buf.putInt(4)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is KeychainException.Decrypt -> {
+            is KeychainException.Encrypt -> {
                 buf.putInt(5)
                 FfiConverterString.write(value.v1, buf)
                 Unit
             }
-            is KeychainException.WalletSecretTypeMismatch -> {
+            is KeychainException.Decrypt -> {
                 buf.putInt(6)
+                FfiConverterString.write(value.v1, buf)
+                Unit
+            }
+            is KeychainException.WalletSecretTypeMismatch -> {
+                buf.putInt(7)
                 Unit
             }
             is KeychainException.WalletSecretExists -> {
-                buf.putInt(7)
+                buf.putInt(8)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -4995,6 +5022,12 @@ public interface KeychainAccess {
 
     /**
      * Gets the value for a key, or `None` when the key does not exist
+     *
+     * # Errors
+     *
+     * Returns `KeychainError::Read` when the platform cannot determine whether the key exists,
+     * for example while the device is locked. Implementations must never report such a failure
+     * as `None`
      */
     fun `get`(`key`: kotlin.String): kotlin.String?
 
@@ -5048,7 +5081,12 @@ internal object uniffiCallbackInterfaceKeychainAccess {
                 )
             }
             val writeReturn = { value: kotlin.String? -> uniffiOutReturn.setValue(FfiConverterOptionalString.lower(value)) }
-            uniffiTraitInterfaceCall(uniffiCallStatus, makeCall, writeReturn)
+            uniffiTraitInterfaceCallWithError(
+                uniffiCallStatus,
+                makeCall,
+                writeReturn,
+                { e: KeychainException -> FfiConverterTypeKeychainError.lower(e) }
+            )
         }
     }
     internal object `delete`: UniffiCallbackInterfaceKeychainAccessMethod2 {

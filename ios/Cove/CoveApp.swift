@@ -71,11 +71,15 @@ struct CoveApplicationDependencies {
 enum StartupBootstrapFailure: Equatable {
     case catastrophicRecovery
     case recoveryRequired
+    case keychainUnavailable(String)
     case fatal(String)
 }
 
 let startupRecoveryContinuationMessage =
     "Cove saved your restore progress. Select Continue to finish the wallet restore."
+
+let startupKeychainUnavailableMessage =
+    "Cove couldn't read its keys from the keychain. Unlock your device, then select Try Again."
 
 func classifyBootstrapFailure(_ error: Error) -> StartupBootstrapFailure {
     if case AppInitError.DatabaseKeyMismatch = error {
@@ -84,6 +88,10 @@ func classifyBootstrapFailure(_ error: Error) -> StartupBootstrapFailure {
 
     if case AppInitError.RecoveryRequired = error {
         return .recoveryRequired
+    }
+
+    if case AppInitError.KeychainUnavailable = error {
+        return .keychainUnavailable(error.localizedDescription)
     }
 
     if case AppInitError.AlreadyCalled = error {
@@ -106,6 +114,7 @@ struct CoveApplicationRoot: View {
         case onboarding(AppManager, AuthManager, OnboardingManager)
         case catastrophicError
         case recoveryRequired
+        case keychainUnavailable(String)
         case fatalError(String)
     }
 
@@ -188,6 +197,24 @@ extension CoveApplicationRoot {
             )
         case .recoveryRequired:
             StartupRecoveryView(onContinue: continueBootstrapRecovery)
+        case let .keychainUnavailable(errorDescription):
+            StartupRecoveryView(
+                systemImage: "lock.fill",
+                title: "Keychain Locked",
+                message: startupKeychainUnavailableMessage,
+                actionTitle: "Try Again",
+                footer: "If this keeps happening, contact feedback@covebitcoinwallet.com for help",
+                diagnosticsMessage: errorDescription,
+                onContinue: retryBootstrapAfterKeychainUnavailable
+            )
+            // keychain items become readable once the device unlocks, so retry without a tap
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: UIApplication.protectedDataDidBecomeAvailableNotification
+                )
+            ) { _ in
+                retryBootstrapAfterKeychainUnavailable()
+            }
         case let .fatalError(message):
             CoverView(errorMessage: message)
         }
@@ -197,6 +224,14 @@ extension CoveApplicationRoot {
         startupState = .loading
 
         // preserve local data and markers so the next bootstrap can continue recovery
+        rebootstrap()
+    }
+
+    private func retryBootstrapAfterKeychainUnavailable() {
+        guard case .keychainUnavailable = startupState else { return }
+        startupState = .loading
+
+        // the keychain failed before storage was touched, so a clean bootstrap is safe to rerun
         rebootstrap()
     }
 
@@ -283,6 +318,9 @@ extension CoveApplicationRoot {
                 case .recoveryRequired:
                     Log.error("[STARTUP] wallet restore recovery required at step: \(step)")
                     startupState = .recoveryRequired
+                case let .keychainUnavailable(errorDescription):
+                    Log.error("[STARTUP] keychain unreadable at step: \(step), error: \(error)")
+                    startupState = .keychainUnavailable(errorDescription)
                 case let .fatal(message):
                     Log.error("[STARTUP] bootstrap failed at step: \(step), error: \(error)")
                     startupState = .fatalError(message)
