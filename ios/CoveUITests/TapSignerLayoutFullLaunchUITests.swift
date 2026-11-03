@@ -13,6 +13,12 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private static let largestContentSize = "UICTContentSizeCategoryAccessibilityXXXL"
     private static let newCvc = "246810"
 
+    /// Inside the screens' 16 to 20 point side padding, so a drag there lands on no field
+    private static let dragMargin: CGFloat = 8
+
+    /// Taller than the keyboard's suggestion bar and shorter than any screen's scroll area
+    private static let rowHeight: CGFloat = 100
+
     /// Drops the card's session once the operation has started on it, so the app offers to continue
     /// instead of failing outright
     private static let exchangesBeforeDrop = 3
@@ -180,17 +186,12 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         }
 
-        // scroll toward a match that scrolling could bring on screen; a downward swipe only
-        // scrolls content back, since it runs only when that match sits above the top
+        // scroll toward a match that scrolling could bring on screen; dragging content down only
+        // scrolls it back, since it runs only when that match sits above the top
         for _ in 0 ..< 8 where reachableMatch(query, needsHit: needsHit) == nil {
             let candidate = scrollCandidate(query)
             let target = scrollContainers(holding: candidate).last ?? visibleScrollView() ?? app.windows.firstMatch
-
-            if candidate.frame.minY < visibleArea(of: candidate).minY {
-                target.swipeDown(velocity: .slow)
-            } else {
-                target.swipeUp(velocity: .slow)
-            }
+            drag(target, revealingContentBelow: candidate.frame.minY >= visibleArea(of: candidate).minY)
         }
 
         if let element = reachableMatch(query, needsHit: needsHit) {
@@ -203,6 +204,34 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             "\(name) never fit on screen: matches \(matches) in window \(app.windows.firstMatch.frame), keyboard \(keyboard.exists ? "\(keyboard.frame)" : "none")"
         )
         return query.firstMatch
+    }
+
+    /// Drags the container's content along its leading margin, within the part of it showing
+    /// above the keyboard, as a user would
+    ///
+    /// `swipeUp` starts at the container's center, which on a sheet with the number pad up lands
+    /// on the keyboard's backdrop; that backdrop sits above the frame XCUITest reports for the
+    /// keyboard, takes the drag, and the content never moves. The margin keeps the drag off the
+    /// multi-line chain code field, which scrolls its own text instead of the screen
+    private func drag(_ container: XCUIElement, revealingContentBelow: Bool) {
+        let window = app.windows.firstMatch.frame
+        var area = container.frame.intersection(window)
+        if area.isNull { area = window }
+
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.exists, keyboard.frame.minY > area.minY {
+            area.size.height = min(area.height, keyboard.frame.minY - area.minY)
+        }
+
+        let point = { (fraction: CGFloat) in
+            container.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+                dx: area.minX + Self.dragMargin - container.frame.minX,
+                dy: area.minY + area.height * fraction - container.frame.minY
+            ))
+        }
+
+        let (start, end) = revealingContentBelow ? (point(0.7), point(0.3)) : (point(0.3), point(0.7))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
     }
 
     // MARK: - Queries
@@ -256,13 +285,23 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     }
 
     private func holds(_ snapshot: XCUIElementSnapshot, type: XCUIElement.ElementType, label: String, frame: CGRect) -> Bool {
-        if snapshot.elementType == type, snapshot.label == label, snapshot.frame == frame { return true }
+        if snapshot.elementType == type, snapshot.label == label, isSameFrame(snapshot.frame, frame) { return true }
 
         return snapshot.children.contains { holds($0, type: type, label: label, frame: frame) }
     }
 
+    /// The element and its snapshot report the same frame through separate reads, which can
+    /// differ in the last bits, as 850.9999999999997 against 851
+    private func isSameFrame(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        abs(lhs.minX - rhs.minX) < 0.5 && abs(lhs.minY - rhs.minY) < 0.5
+            && abs(lhs.width - rhs.width) < 0.5 && abs(lhs.height - rhs.height) < 0.5
+    }
+
     /// The smallest scroll view showing in the window, which is the sheet's rather than the
     /// full-screen wallet behind it
+    ///
+    /// Strips a row high are left out: the text keyboard's suggestion bar is a 44 point scroll
+    /// view above the keyboard, and dragging it scrolls only the suggestions
     private func visibleScrollView() -> XCUIElement? {
         let window = app.windows.firstMatch.frame
         let area = { (element: XCUIElement) -> CGFloat in
@@ -270,7 +309,9 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             return visible.isNull ? 0 : visible.width * visible.height
         }
 
-        return app.scrollViews.allElementsBoundByIndex.filter { area($0) > 0 }.min { area($0) < area($1) }
+        return app.scrollViews.allElementsBoundByIndex
+            .filter { area($0) > 0 && $0.frame.height > Self.rowHeight }
+            .min { area($0) < area($1) }
     }
 
     private func isOnScreen(_ element: XCUIElement, needsHit: Bool) -> Bool {
