@@ -130,6 +130,19 @@ final class KeyTeleportSecurityHelpersTests: XCTestCase {
         XCTAssertNil(try missing.get(key: "cspp::v1::master_key"))
     }
 
+    func testKeychainSaveReplacesAnExistingItemInPlace() throws {
+        let accessor = KeychainAccessor()
+        let key = "cove-tests::keychain_overwrite::\(UUID().uuidString)"
+        defer { _ = accessor.delete(key: key) }
+
+        try accessor.save(key: key, value: "first")
+        try accessor.save(key: key, value: "second")
+
+        XCTAssertEqual(try accessor.get(key: key), "second")
+        XCTAssertTrue(accessor.delete(key: key))
+        XCTAssertNil(try accessor.get(key: key))
+    }
+
     func testWalletKeyDeletionRejectsEnumerationFailure() {
         let accessor = KeychainAccessor(accountEnumerator: {
             .failure(errSecInteractionNotAllowed)

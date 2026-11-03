@@ -92,6 +92,30 @@ private func readGenericPassword(
     return classifyKeychainItemRead(status: status, result: result)
 }
 
+/// Replaces an existing item in place, adding it only when absent
+///
+/// `KeychainSwift.set` deletes the old item before adding the new one, so a failed add loses the
+/// value it was replacing. An update keeps the old value whenever the write fails
+private func writeGenericPassword(key: String, value: String, accessGroup: String?) -> OSStatus {
+    var query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrAccount as String: key,
+    ]
+    if let accessGroup {
+        query[kSecAttrAccessGroup as String] = accessGroup
+    }
+
+    let attributes: [String: Any] = [
+        kSecValueData as String: Data(value.utf8),
+        kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+    ]
+
+    let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+    guard updateStatus == errSecItemNotFound else { return updateStatus }
+
+    return SecItemAdd(query.merging(attributes) { _, new in new } as CFDictionary, nil)
+}
+
 private func enumerateGenericPasswordAccounts() -> KeychainAccountEnumerationResult {
     let query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
@@ -107,8 +131,7 @@ private func enumerateGenericPasswordAccounts() -> KeychainAccountEnumerationRes
 class KeychainAccessor: KeychainAccess {
     let keychain: KeychainSwift
 
-    /// `KeychainSwift.set` deletes the old item before adding the new one under its own private
-    /// lock, so direct reads take this lock with every write to never land between the two
+    /// Serializes direct reads and writes with deletes, which still go through `KeychainSwift`
     private let lock = NSLock()
     private let itemReader: @Sendable (String) -> KeychainItemReadResult
     private let accountEnumerator: @Sendable () -> KeychainAccountEnumerationResult
@@ -131,15 +154,14 @@ class KeychainAccessor: KeychainAccess {
     }
 
     func save(key: String, value: String) throws {
-        let saved = lock.withLock {
-            keychain.set(
-                value,
-                forKey: key,
-                withAccess: .accessibleWhenUnlockedThisDeviceOnly
-            )
+        let accessGroup = keychain.accessGroup
+        let status = lock.withLock {
+            writeGenericPassword(key: key, value: value, accessGroup: accessGroup)
         }
 
-        if !saved {
+        if status != errSecSuccess {
+            let message = SecCopyErrorMessageString(status, nil) as String? ?? "unknown error"
+            Log.error("Unable to save keychain item, status=\(status): \(message)")
             throw KeychainError.Save
         }
     }
