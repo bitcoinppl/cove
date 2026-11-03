@@ -51,11 +51,11 @@ paths = [
     "rust/src/diagnostics/upload.rs",
 ]
 coverage = [
-    "human",
+    "rust:rust/src/diagnostics/upload.rs::submitted_request_carries_only_age_ciphertext_with_key_id",
     "rust:rust/src/diagnostics/upload.rs::report_is_gzipped_before_age_encryption",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust test covers gzip then age and no readable text; wire headers are only asserted inside test servers
+# a local collector captures the request: application/age, the key-id header and an age body with no report text
 
 [[row]]
 id = "s04-preview-redacts-tested-secrets-and-known-paths"

@@ -220,11 +220,11 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
-    "human",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/round_trip.rs::cloud_round_trip_restores_labels_locks_and_seed_without_scan_state",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_dirty",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust test covers the restore half with a fake cloud; the real-account round trip stays human
+# labels and a locked output go into the encrypted blob and come back after restore
 
 [[row]]
 id = "s03-unavailable-locked-coin-state-fails-closed"

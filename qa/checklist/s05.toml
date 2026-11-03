@@ -33,9 +33,12 @@ paths = [
 ]
 coverage = [
     "human",
+    "rust:rust/src/manager/cloud_backup_manager/model.rs::provisional_detail_is_visible_without_becoming_complete",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::trusted_local_snapshot_is_confirmed_by_provider_in_background",
+    "rust:rust/src/manager/cloud_backup_manager/model.rs::retained_restore_all_count_stays_enabled_until_inventory_becomes_incomplete",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+# rust tests cover inventory staying incomplete until the provider confirms it; the per-row restore and delete buttons read isDetailInventoryComplete/Ready in each app and no ui test asserts they stay disabled
 
 [[row]]
 id = "s05-offline-inventory-keeps-existing-rows-and-disables"
@@ -55,9 +58,13 @@ paths = [
 coverage = [
     "human",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/sync_health.rs::authoritative_failure_retains_provisional_rows_in_failed_state",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::provider_confirmation_failure_marks_trusted_local_detail_incomplete",
+    "rust:rust/src/manager/cloud_backup_manager/model.rs::initial_detail_refresh_failure_never_projects_confirmed_zero",
+    "rust:rust/src/manager/cloud_backup_manager/model.rs::detail_refresh_failure_retains_last_known_rows",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRegressionHelpersTest.kt::failedInventoryShowsRetryStateInsteadOfLoadingOrZero",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust test covers retained rows in Failed state; disabled controls and the real offline run stay human
+# tests cover retained rows in Failed state, never an empty inventory, and Restore All disabled; the per-row restore and delete buttons read isDetailInventoryComplete/Ready in each app and no ui test asserts they stay disabled
 
 [[row]]
 id = "s05-reconnect-inventory-without-duplicate-new-passkey"
@@ -76,9 +83,11 @@ paths = [
 ]
 coverage = [
     "human",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_refresh_completes_inventory_once_per_wallet_without_passkey",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_retries_verification_after_offline_failure",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+# the test starts the detail refresh itself after reconnecting; reconnect alone restoring a complete inventory stays human
 
 [[row]]
 id = "s05-cloud-only-wallet-restore-data-matches"
@@ -97,9 +106,12 @@ paths = [
 ]
 coverage = [
     "human",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/round_trip.rs::cloud_round_trip_restores_labels_locks_and_seed_without_scan_state",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_dirty",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_all_matches_individual_restore_for_the_same_record",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+# round trip checks name, seed, first receive address, labels and locks without scanning; the restored wallet's transactions matching the original stays human
 
 [[row]]
 id = "s05-local-deletion-keeps-restorable-cloud-only-wallet"
@@ -118,9 +130,12 @@ paths = [
 ]
 coverage = [
     "human",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::deleting_the_matching_local_wallet_makes_its_cloud_duplicate_restorable",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_deleted",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/round_trip.rs::cloud_round_trip_restores_labels_locks_and_seed_without_scan_state",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+# tests remove wallet data directly and send the change notification themselves; the production delete path stays human
 
 [[row]]
 id = "s05-cloud-restored-wallet-performs-full-rescan"
@@ -139,9 +154,13 @@ paths = [
 ]
 coverage = [
     "human",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/round_trip.rs::cloud_round_trip_restores_labels_locks_and_seed_without_scan_state",
+    "rust:rust/src/backup/import.rs::restored_metadata_store_clears_local_scan_state",
+    "rust:rust/src/wallet/metadata.rs::backup_metadata_clone_clears_local_scan_state_without_mutating_original",
+    "rust:rust/src/manager/wallet_manager/actor.rs::incomplete_scan_routes_to_full_scan_even_with_last_scan_finished",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+# tests check cleared scan state and the scan routing helpers; a restored wallet's production full scan recovering its history stays human
 
 [[row]]
 id = "s05-passkey-cancel-leaves-active-state-intact"
@@ -159,10 +178,19 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
-    "human",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::fresh_start_new_passkey_cancellation_preserves_prior_active_exactly",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::cancelled_enable_create_new_rolls_back_new_local_master_key",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::cancelled_passkey_restore_does_not_fall_back_to_local_master_key",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::cancelled_saved_passkey_confirmation_preserves_pending_session",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::fresh_start_new_saved_passkey_cancellation_preserves_prior_active_exactly",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/deep_verify.rs::verification_retry_after_passkey_cancel_verifies_without_new_passkey",
+    "rust:rust/src/manager/cloud_backup_manager/verify/passkey_auth.rs::stored_authentication_cancellation_does_not_start_discovery",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProviderTest.kt::createCredentialExceptionsMapFromTypedAndroidxExceptions",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProviderTest.kt::getCredentialExceptionsMapFromTypedAndroidxExceptions",
+    "ios-unit:ios/CoveTests/PasskeyProviderImplTests.swift::testCancellationRemainsCancellation",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+# rust covers cancel at enable, confirmation, verification and restore with a scripted provider; platform tests map each os cancel to UserCancelled
 
 [[row]]
 id = "s05-disable-while-cloud-writes-pending"
@@ -181,9 +209,13 @@ paths = [
 ]
 coverage = [
     "human",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/upload.rs::backup_wallets_defers_remaining_writes_when_disable_starts_after_upload",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/upload.rs::upload_wallet_if_dirty_completes_inside_disable_transition_when_already_started",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::persisted_disabling_on_restart_resumes_to_disabled",
+    "rust:rust/src/manager/cloud_backup_manager/actors/write/supervisor.rs::block_until_drained_waits_for_in_flight_write",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+# tests set the disabling state directly and drain writes in isolation; disabling during a held upload through the production path stays human
 
 [[row]]
 id = "s05-delete-from-cloud-confirmation-and-selected-backup"
@@ -202,6 +234,7 @@ paths = [
 ]
 coverage = [
     "human",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# state machine is rust and testable with scripted cloud providers; the real-account run stays human
+# rust test deletes one record and keeps the other backup and the local wallet; the confirmation dialog has no ui test on either app

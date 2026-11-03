@@ -222,15 +222,16 @@ id = "s16-receive-layout-failure-physical-screenshot"
 section = "16"
 title = "Receive layout failure physical screenshot"
 platforms = ["android"]
-target = "manual"
+target = "ui"
 paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
 ]
 coverage = [
     "human",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/LargeFontScaleLayoutTest.kt::receiveSheetActionsCanBeReachedAtLargestFontScale",
 ]
 # 1.4.0: ios N/A, android HUMAN
-# the protected receive sheet returns no screencap over adb
+# the test renders the sheet content in a fixed s20-sized box at a test font scale; the real ModalBottomSheet window under the system font setting stays human
 
 [[row]]
 id = "s16-keyteleport-sender-code-and-password-layout-at"

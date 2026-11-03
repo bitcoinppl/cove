@@ -519,3 +519,45 @@ async fn deep_verify_awaits_upload_confirmation_when_remote_revision_is_stale() 
     ));
     assert!(manager.has_pending_cloud_upload_verification());
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn verification_retry_after_passkey_cancel_verifies_without_new_passkey() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    seed_verifiable_cloud_master_key(globals);
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let master_key_bytes = *cspp.load_master_key_from_store().unwrap().unwrap().as_bytes();
+    let passkey_metadata = CloudBackupKeychain::global().snapshot_passkey_metadata();
+    let master_key_backup = globals.cloud.master_key_backup_bytes(&namespace);
+    let discover_result =
+        DiscoveredPasskeyResult { prf_output: vec![7; 32], credential_id: vec![1, 2, 3] };
+
+    globals.passkey.set_discover_result(Err(PasskeyError::UserCancelled));
+    call!(manager.supervisor.start_verification(true)).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(2), "expected cancelled verification", || {
+        matches!(manager.model_snapshot().verification, VerificationState::Cancelled)
+    })
+    .await;
+
+    // cancelling leaves the backup it was verifying exactly as it was, checked before the retry
+    // can repair anything
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), namespace);
+    assert_eq!(cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(), &master_key_bytes);
+    assert_eq!(CloudBackupKeychain::global().snapshot_passkey_metadata(), passkey_metadata);
+    assert!(master_key_backup.is_some());
+    assert_eq!(globals.cloud.master_key_backup_bytes(&namespace), master_key_backup);
+
+    globals.passkey.set_discover_result(Ok(discover_result));
+    call!(manager.supervisor.start_verification(true)).await.unwrap();
+    wait_for_test_condition(Duration::from_secs(2), "expected retry to verify backup", || {
+        matches!(manager.model_snapshot().verification, VerificationState::Verified(_))
+    })
+    .await;
+
+    assert_eq!(globals.passkey.create_count(), 0);
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), namespace);
+}
