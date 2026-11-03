@@ -62,6 +62,9 @@ class KeyTeleportTypedInputBackgroundTest {
         // the test sets and removes its own PIN, so never run it over a credential someone relies on
         assumeTrue("an app lock is already set up on this device", Auth.type == AuthType.NONE)
 
+        // receiving deletes the stored receive session afterwards, so never run over someone's pending transfer
+        assumeTrue("a KeyTeleport receive session is already stored on this device", !hasStoredReceiveSession())
+
         // the test deletes its wallet afterwards, so never run it over one it did not create
         val imported = importTestWalletOrNull(TEST_WALLET)
         assumeTrue("the test wallet already exists on this device", imported != null)
@@ -76,13 +79,15 @@ class KeyTeleportTypedInputBackgroundTest {
         if (!::walletId.isInitialized) return
 
         val app = AppManager.getInstance()
-        instrumentation.runOnMainSync {
-            app.getKeyTeleportManager().dispatch(KeyTeleportManagerAction.EndReceive)
-            app.clearKeyTeleportManager()
+        try {
+            // setUp found no stored session, so one here is the receiver test's own, left by a failure
+            if (hasStoredReceiveSession()) endReceive(app.getKeyTeleportManager())
+        } finally {
+            instrumentation.runOnMainSync { app.clearKeyTeleportManager() }
+            Auth.dispatch(AuthManagerAction.DisablePin)
+            instrumentation.runOnMainSync { Auth.unlock() }
+            deleteTestWallet(walletId)
         }
-        Auth.dispatch(AuthManagerAction.DisablePin)
-        instrumentation.runOnMainSync { Auth.unlock() }
-        deleteTestWallet(walletId)
     }
 
     @Test
