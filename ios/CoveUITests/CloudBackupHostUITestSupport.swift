@@ -13,11 +13,47 @@ struct CloudBackupHostRobot {
         "UICTContentSizeCategoryAccessibilityXXXL",
     ]
 
+    /// Launches the host into onboarding, relaunching once if the bootstrap watchdog fires on a
+    /// cold simulator
     func launch(scenario: String, arguments: [String] = []) {
         app.launchEnvironment["COVE_CLOUD_BACKUP_UI_RESET"] = "1"
         app.launchEnvironment["COVE_CLOUD_BACKUP_UI_SCENARIO"] = scenario
         app.launchArguments += arguments
         app.launch()
+
+        guard waitForOnboardingOrStartupTimeout() == .startupTimedOut else { return }
+
+        app.terminate()
+        app.launch()
+
+        // xtask retries the test on a clean simulator when it sees this message
+        if waitForOnboardingOrStartupTimeout() == .startupTimedOut {
+            XCTFail("App startup timed out on relaunch")
+        }
+    }
+
+    private enum LaunchOutcome {
+        case onboarding
+        case startupTimedOut
+        case unknown
+    }
+
+    /// Waits for onboarding, which every launch lands on since each wipes local data first
+    private func waitForOnboardingOrStartupTimeout() -> LaunchOutcome {
+        let welcome = app.staticTexts["Welcome to Cove"]
+        let restore = app.buttons["Restore with Passkey"]
+        let startupTimedOut = staticText(containing: "App startup timed out")
+
+        // the watchdog allows up to 20 seconds while a migration runs
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline {
+            if welcome.exists || restore.exists { return .onboarding }
+            if startupTimedOut.exists { return .startupTimedOut }
+
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+
+        return .unknown
     }
 
     /// Restores the scenario's cloud wallets from onboarding and lands on the selected wallet

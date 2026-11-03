@@ -1430,7 +1430,7 @@ impl IosUiEnvironmentFailure {
         }
 
         // XCUIApplication.launch() timing out or losing the process, or the app's own
-        // bootstrap watchdog firing on both launches in OnboardingFullLaunchUITests.launchApp()
+        // bootstrap watchdog firing on both launches of a UI test's launch helper
         let app_launch_failed = output.contains("Timed out while launching application")
             || output.contains("does not have a process ID")
             || output.contains("App startup timed out on relaunch");
