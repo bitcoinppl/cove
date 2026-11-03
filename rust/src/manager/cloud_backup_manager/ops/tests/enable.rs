@@ -1297,8 +1297,10 @@ async fn cancelled_passkey_restore_does_not_fall_back_to_local_master_key() {
 
     let local_master_key = cove_cspp::master_key::MasterKey::generate();
     let local_namespace_id = local_master_key.namespace_id();
-    cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&local_master_key).unwrap();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    cspp.save_master_key(&local_master_key).unwrap();
     globals.cloud.set_wallet_files(local_namespace_id.clone(), vec!["wallet-test.json".into()]);
+    let passkey_metadata = CloudBackupKeychain::global().snapshot_passkey_metadata();
 
     let remote_master_key = cove_cspp::master_key::MasterKey::generate();
     let remote_namespace_id = remote_master_key.namespace_id();
@@ -1322,4 +1324,11 @@ async fn cancelled_passkey_restore_does_not_fall_back_to_local_master_key() {
 
     assert!(matches!(error, CloudBackupError::PasskeyDiscoveryCancelled));
     assert_eq!(CloudBackupKeychain::global().namespace_id(), None);
+
+    // the local master key and passkey metadata survive the cancelled restore untouched
+    assert_eq!(
+        cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
+        local_master_key.as_bytes()
+    );
+    assert_eq!(CloudBackupKeychain::global().snapshot_passkey_metadata(), passkey_metadata);
 }

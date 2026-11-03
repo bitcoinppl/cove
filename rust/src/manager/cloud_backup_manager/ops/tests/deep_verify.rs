@@ -529,6 +529,10 @@ async fn verification_retry_after_passkey_cancel_verifies_without_new_passkey() 
     CONNECTIVITY_MANAGER.set_connection_state(true);
     seed_verifiable_cloud_master_key(globals);
     let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let master_key_bytes = *cspp.load_master_key_from_store().unwrap().unwrap().as_bytes();
+    let passkey_metadata = CloudBackupKeychain::global().snapshot_passkey_metadata();
+    let master_key_backup = globals.cloud.master_key_backup_bytes(&namespace);
     let discover_result =
         DiscoveredPasskeyResult { prf_output: vec![7; 32], credential_id: vec![1, 2, 3] };
 
@@ -539,9 +543,13 @@ async fn verification_retry_after_passkey_cancel_verifies_without_new_passkey() 
     })
     .await;
 
-    // cancelling leaves the backup it was verifying exactly as it was
+    // cancelling leaves the backup it was verifying exactly as it was, checked before the retry
+    // can repair anything
     assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), namespace);
-    assert!(globals.cloud.has_master_key_backup(&namespace));
+    assert_eq!(cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(), &master_key_bytes);
+    assert_eq!(CloudBackupKeychain::global().snapshot_passkey_metadata(), passkey_metadata);
+    assert!(master_key_backup.is_some());
+    assert_eq!(globals.cloud.master_key_backup_bytes(&namespace), master_key_backup);
 
     globals.passkey.set_discover_result(Ok(discover_result));
     call!(manager.supervisor.start_verification(true)).await.unwrap();
