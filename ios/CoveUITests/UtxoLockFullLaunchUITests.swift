@@ -381,10 +381,17 @@ final class UtxoLockFullLaunchUITests: XCTestCase {
 
     // MARK: - Amounts
 
+    /// Waits for the balance, then for the initial scan to finish
+    ///
+    /// The scan can publish the full balance while it still checks unused addresses, and coin control
+    /// and Send refuse to open until it finishes. The wallet shows "Checking wallet history" until then
     private func assertBalance(sats: UInt64, timeout: TimeInterval) {
         let balance = element("selectedWallet.balance")
         XCTAssertTrue(balance.waitForExistence(timeout: 15))
         waitForAmount(balance, sats: sats, timeout: timeout)
+
+        let checkingHistory = app.staticTexts["Checking wallet history"]
+        XCTAssertTrue(checkingHistory.waitForNonExistence(timeout: timeout), "the initial scan didn't finish")
     }
 
     /// Waits for the element to show the amount, in whichever unit the wallet displays
