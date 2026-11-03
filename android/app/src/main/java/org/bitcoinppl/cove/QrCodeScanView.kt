@@ -36,6 +36,7 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import kotlinx.coroutines.flow.Flow
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.MultiFormat
 import org.bitcoinppl.cove_core.MultiQrException
@@ -44,6 +45,7 @@ import org.bitcoinppl.cove_core.ScanProgress
 import org.bitcoinppl.cove_core.ScanResult
 import org.bitcoinppl.cove_core.StringOrData
 import org.bitcoinppl.cove.ui.theme.caption
+import org.bitcoinppl.cove.uitest.UiTestSeams
 import java.util.concurrent.Executors
 
 @OptIn(ExperimentalPermissionsApi::class)
@@ -57,15 +59,19 @@ fun QrCodeScanView(
 ) {
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
 
+    // debug builds can take frames from a UI test instead of the camera
+    val scriptedFrames = remember { UiTestSeams.qrScriptFrames() }
+
     Box(
         modifier = modifier.fillMaxSize().background(Color.Black),
     ) {
         when {
-            cameraPermissionState.status.isGranted -> {
+            scriptedFrames != null || cameraPermissionState.status.isGranted -> {
                 QrScannerContent(
                     onScanned = onScanned,
                     onDismiss = onDismiss,
                     app = app,
+                    scriptedFrames = scriptedFrames,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -151,6 +157,7 @@ private fun QrScannerContent(
     onScanned: (MultiFormat) -> Unit,
     onDismiss: () -> Unit,
     app: AppManager,
+    scriptedFrames: Flow<String>?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -184,6 +191,44 @@ private fun QrScannerContent(
     var isFlashOn by remember { mutableStateOf(false) }
     var zoomLevel by remember { mutableStateOf(1.2f) } // 1.2 = "1x", 2.0 = 2x
 
+    // camera and scripted frames share one path into the Rust scanner
+    fun onQrData(qrData: StringOrData) {
+        if (scanComplete || isDisposed) return
+
+        handleQrCode(
+            context = context,
+            qrData = qrData,
+            scanner = scanner,
+            onProgress = { progress = it },
+            onComplete = { data ->
+                scanComplete = true
+                scannedData = data
+                if (!isDisposed) scanner.reset()
+            },
+            onError = { error ->
+                if (!isDisposed) scanner.reset()
+                onDismiss()
+                app.alertState =
+                    TaggedItem(
+                        AppAlertState.General(
+                            title = "QR Scan Error",
+                            message = error,
+                        ),
+                    )
+            },
+        )
+    }
+
+    LaunchedEffect(scriptedFrames) {
+        scriptedFrames?.collect { frame ->
+            onQrData(StringOrData.String(frame))
+
+            // ui tests read progress through accessibility, so log where the scan got to for when
+            // the screen they see disagrees
+            Log.d("QrCodeScanView", "Scanned a scripted frame, progress: ${progress?.displayText()}")
+        }
+    }
+
     // toggle flashlight
     fun toggleFlash() {
         cameraRef.value?.let { camera ->
@@ -203,111 +248,90 @@ private fun QrScannerContent(
     Box(modifier = modifier) {
         if (!scanComplete) {
             // camera preview
-            AndroidView(
-                factory = { ctx ->
-                    val previewView = PreviewView(ctx)
-                    val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+            if (scriptedFrames == null) {
+                AndroidView(
+                    factory = { ctx ->
+                        val previewView = PreviewView(ctx)
+                        val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
 
-                    cameraProviderFuture.addListener({
-                        val cameraProvider = cameraProviderFuture.get()
-                        cameraProviderRef.value = cameraProvider
+                        cameraProviderFuture.addListener({
+                            val cameraProvider = cameraProviderFuture.get()
+                            cameraProviderRef.value = cameraProvider
 
-                        val preview =
-                            Preview.Builder().build().also {
-                                it.setSurfaceProvider(previewView.surfaceProvider)
-                            }
-                        previewRef.value = preview
+                            val preview =
+                                Preview.Builder().build().also {
+                                    it.setSurfaceProvider(previewView.surfaceProvider)
+                                }
+                            previewRef.value = preview
 
-                        val imageAnalysis =
-                            ImageAnalysis
-                                .Builder()
-                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                .build()
-                                .also { analysis ->
-                                    analysis.setAnalyzer(executor) { imageProxy ->
-                                        val mediaImage = imageProxy.image
-                                        if (mediaImage != null) {
-                                            val image =
-                                                InputImage.fromMediaImage(
-                                                    mediaImage,
-                                                    imageProxy.imageInfo.rotationDegrees,
-                                                )
+                            val imageAnalysis =
+                                ImageAnalysis
+                                    .Builder()
+                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                    .build()
+                                    .also { analysis ->
+                                        analysis.setAnalyzer(executor) { imageProxy ->
+                                            val mediaImage = imageProxy.image
+                                            if (mediaImage != null) {
+                                                val image =
+                                                    InputImage.fromMediaImage(
+                                                        mediaImage,
+                                                        imageProxy.imageInfo.rotationDegrees,
+                                                    )
 
-                                            val mainExecutor = ContextCompat.getMainExecutor(ctx)
-                                            barcodeScanner
-                                                .process(image)
-                                                .addOnSuccessListener(mainExecutor) { barcodes ->
-                                                    if (scanComplete || isDisposed) return@addOnSuccessListener
+                                                val mainExecutor = ContextCompat.getMainExecutor(ctx)
+                                                barcodeScanner
+                                                    .process(image)
+                                                    .addOnSuccessListener(mainExecutor) { barcodes ->
+                                                        if (scanComplete || isDisposed) return@addOnSuccessListener
 
-                                                    for (barcode in barcodes) {
-                                                        if (barcode.format == Barcode.FORMAT_QR_CODE) {
-                                                            handleQrCode(
-                                                                context = ctx,
-                                                                barcode = barcode,
-                                                                scanner = scanner,
-                                                                onProgress = { progress = it },
-                                                                onComplete = { data ->
-                                                                    scanComplete = true
-                                                                    scannedData = data
-                                                                    if (!isDisposed) scanner.reset()
-                                                                },
-                                                                onError = { error ->
-                                                                    if (!isDisposed) scanner.reset()
-                                                                    onDismiss()
-                                                                    app.alertState =
-                                                                        TaggedItem(
-                                                                            AppAlertState.General(
-                                                                                title = "QR Scan Error",
-                                                                                message = error,
-                                                                            ),
-                                                                        )
-                                                                },
-                                                            )
-                                                            break
-                                                        }
+                                                        barcodes
+                                                            .firstOrNull { it.format == Barcode.FORMAT_QR_CODE }
+                                                            ?.let(::barcodeQrData)
+                                                            ?.let(::onQrData)
+                                                    }.addOnFailureListener(mainExecutor) { e ->
+                                                        Log.e("QrCodeScanView", "Barcode processing failed", e)
+                                                    }.addOnCompleteListener {
+                                                        imageProxy.close()
                                                     }
-                                                }.addOnFailureListener(mainExecutor) { e ->
-                                                    Log.e("QrCodeScanView", "Barcode processing failed", e)
-                                                }.addOnCompleteListener {
-                                                    imageProxy.close()
-                                                }
-                                        } else {
-                                            imageProxy.close()
+                                            } else {
+                                                imageProxy.close()
+                                            }
                                         }
                                     }
-                                }
-                        analysisRef.value = imageAnalysis
+                            analysisRef.value = imageAnalysis
 
-                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
-                        try {
-                            cameraProvider.unbindAll()
-                            val camera =
-                                cameraProvider.bindToLifecycle(
-                                    lifecycleOwner,
-                                    cameraSelector,
-                                    preview,
-                                    imageAnalysis,
-                                )
-                            cameraRef.value = camera
-                            camera.cameraControl.setZoomRatio(zoomLevel)
-                        } catch (e: Exception) {
-                            Log.e("QrCodeScanView", "Camera binding failed", e)
-                            onDismiss()
-                            app.alertState =
-                                TaggedItem(
-                                    AppAlertState.General(
-                                        title = "QR Scan Error",
-                                        message = "Failed to initialize camera: ${e.message ?: "Unknown error"}",
-                                    ),
-                                )
-                        }
-                    }, ContextCompat.getMainExecutor(ctx))
+                            try {
+                                cameraProvider.unbindAll()
+                                val camera =
+                                    cameraProvider.bindToLifecycle(
+                                        lifecycleOwner,
+                                        cameraSelector,
+                                        preview,
+                                        imageAnalysis,
+                                    )
+                                cameraRef.value = camera
+                                camera.cameraControl.setZoomRatio(zoomLevel)
+                            } catch (e: Exception) {
+                                Log.e("QrCodeScanView", "Camera binding failed", e)
+                                onDismiss()
+                                app.alertState =
+                                    TaggedItem(
+                                        AppAlertState.General(
+                                            title = "QR Scan Error",
+                                            message = "Failed to initialize camera: ${e.message ?: "Unknown error"}",
+                                        ),
+                                    )
+                            }
+                        }, ContextCompat.getMainExecutor(ctx))
 
-                    previewView
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
+                        previewView
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
 
             // flashlight and zoom controls - top of screen
             Row(
@@ -461,23 +485,20 @@ private fun QrScannerContent(
     }
 }
 
+// prioritize text, fall back to binary
+private fun barcodeQrData(barcode: Barcode): StringOrData? =
+    barcode.rawValue?.let { StringOrData.String(it) }
+        ?: barcode.rawBytes?.let { StringOrData.Data(it) }
+
 private fun handleQrCode(
     context: android.content.Context,
-    barcode: Barcode,
+    qrData: StringOrData,
     scanner: QrScanner,
     onProgress: (ScanProgress) -> Unit,
     onComplete: (MultiFormat) -> Unit,
     onError: (String) -> Unit,
 ) {
     try {
-        // convert barcode to StringOrData (prioritize text, fall back to binary)
-        val qrData =
-            when {
-                barcode.rawValue != null -> StringOrData.String(barcode.rawValue!!)
-                barcode.rawBytes != null -> StringOrData.Data(barcode.rawBytes!!)
-                else -> return // no data available
-            }
-
         // use Rust state machine to process the QR code
         when (val result = scanner.scan(qrData)) {
             is ScanResult.Complete -> {

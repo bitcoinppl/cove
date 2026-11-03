@@ -22,6 +22,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.uitest.UiTestSeams
 import org.bitcoinppl.cove_core.TapSignerCmd
 import org.bitcoinppl.cove_core.TapSignerReader
 import org.bitcoinppl.cove_core.TapSignerResponse
@@ -87,6 +88,10 @@ class TapCardNfcManager private constructor(
     ): TapSignerResponse =
         operationMutex.withLock {
             operationToken.ensureActive()
+
+            if (UiTestSeams.tapSignerBridgeConfigured) {
+                return@withLock performBridgeOperation(cmd, callbacks, mainHandler, logTag)
+            }
 
             val session =
                 kotlinx.coroutines.withContext(Dispatchers.Main.immediate) {
@@ -316,6 +321,31 @@ private fun Handler.runOnMain(block: () -> Unit) {
         block()
     } else {
         post(block)
+    }
+}
+
+/** Runs the command against the UI test card emulator instead of an NFC tag */
+// detekt cannot resolve the generated cove_core types it excludes, so it misses that
+// withTapSignerTransport suspends
+@Suppress("RedundantSuspendModifier")
+private suspend fun performBridgeOperation(
+    cmd: TapSignerCmd,
+    callbacks: TapCardNfcManager.OperationCallbacks,
+    mainHandler: Handler,
+    logTag: String,
+): TapSignerResponse {
+    Log.d(logTag, "Running TapSigner ${operationKind(cmd)} through the UI test bridge")
+    mainHandler.post { callbacks.onTagDetected?.invoke() }
+
+    return UiTestSeams.withTapSignerTransport(
+        onMessage = { message -> mainHandler.post { callbacks.onMessageUpdate?.invoke(message) } },
+    ) { transport ->
+        val reader = createTapSignerReader(transport, cmd)
+        try {
+            reader.run()
+        } finally {
+            reader.close()
+        }
     }
 }
 

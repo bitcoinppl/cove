@@ -223,3 +223,17 @@ tasks.withType<dev.detekt.gradle.DetektCreateBaselineTask>().configureEach {
 tasks.named("detekt") {
     dependsOn("detektDevDebug")
 }
+
+// release variants package src/main/jniLibs as they are, and a debug Rust build leaves the UI test
+// seams in them, see docs/testing.md
+val checkReleaseRustSeams by tasks.registering(Exec::class) {
+    description = "Fails when the Rust libraries a release would package have UI test seams"
+    commandLine(
+        rootProject.file("../tools/release-seams/check-packaged-rust.sh").path,
+        file("src/main/jniLibs").path,
+    )
+}
+
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("ReleaseNativeLibs") }.configureEach {
+    dependsOn(checkReleaseRustSeams)
+}

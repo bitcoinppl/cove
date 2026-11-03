@@ -3,8 +3,8 @@ use crate::common::{
     print_error, print_info, print_success, print_warning, resolve_readable_file,
     trim_generated_trailing_whitespace,
 };
-use crate::fake_node::{AndroidPorts, FakeNodeGuard};
 use crate::version::BuildNumberFile;
+use crate::{fake_node::AndroidPorts, ui_test_host::UiTestHost};
 use color_eyre::{
     eyre::{eyre, Context},
     Result,
@@ -612,9 +612,10 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
     let udid = SimctlDevices::load(&sh)?.resolve(&options.device)?;
     boot_simulator(&sh, &udid)?;
 
-    // tests that need a funded wallet reset and fund this node; the simulator shares
-    // this machine's loopback, so no forwarding is needed
-    let _fake_node = FakeNodeGuard::start(AndroidPorts::Skip)?;
+    // tests that need a funded wallet reset and fund the fake node, and hardware
+    // signing tests sign through the signer services; the simulator shares this
+    // machine's loopback, so no forwarding is needed
+    let _host = UiTestHost::start(AndroidPorts::Skip)?;
 
     // run every test before failing so one broken test doesn't hide the state of the rest
     let mut failures = Vec::new();

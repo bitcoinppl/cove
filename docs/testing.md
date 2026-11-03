@@ -8,6 +8,7 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 - [Hardware signer tests](#hardware-signer-tests)
 - [Planning a release pass](#planning-a-release-pass)
 - [Fixtures](#fixtures)
+- [Hardware signing UI tests](#hardware-signing-ui-tests)
 - [Driving devices](#driving-devices)
 - [Running an agent pass](#running-an-agent-pass)
 - [Recording results](#recording-results)
@@ -22,13 +23,13 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 | --- | --- | --- |
 | Rust tests | Core behavior shared by both apps: wallets, send flow, labels, KeyTeleport, cloud backup, diagnostics, node and explorer settings, and the hardware-signer QR loop | `just test` |
 | TAPSIGNER emulator tests | Cove's TAPSIGNER setup, PIN, derive, import and signing logic against Coinkite's card emulator | `just test-tapsigner-emulator` |
-| iOS UI tests | Full-launch flows in the simulator | `just ios-ui-background` runs `CoveUITests/OnboardingFullLaunchUITests`, the class CI runs; pass another class as the second argument, as in `just ios-ui-background "iPhone 17" CoveUITests/<Class>`. `just ios-ui-foreground` shows the simulator |
+| iOS UI tests | Full-launch flows in the simulator | `just ios-ui-background` runs `CoveUITests/OnboardingFullLaunchUITests` by default; CI also runs `UtxoLockFullLaunchUITests` and `HardwareSigningFullLaunchUITests`; pass another class as the second argument, as in `just ios-ui-background "iPhone 17" CoveUITests/<Class>`. `just ios-ui-foreground` shows the simulator |
 | Android instrumented tests | Compose screens and full-launch flows on an emulator or device | `just android-instrumented-ci`; staged process-death tests need `just android-ui-manual` |
 | Device scripts | Navigate-and-observe checks on a real phone, with JSON results per row | `python3 -I qa/device/run.py android --serial <serial> --package org.bitcoinppl.cove.dev` or `python3 -I qa/device/run.py ios --bundle-id org.bitcoinppl.cove`; see [qa/device/README.md](../qa/device/README.md) for setup, `--list` and running a subset of rows |
 | Agent pass | Checklist rows that need judgment, fixtures or multi-app flows, run by a coding agent driving a real phone | This document |
-| Person | Camera, NFC, biometrics, haptics, spoken screen-reader output, hardware signers | Batched into one sitting at the end |
+| Person | Camera, NFC, biometrics, haptics, spoken screen-reader output, hardware signers beyond the [hardware signing UI tests](#hardware-signing-ui-tests) | Batched into one sitting at the end |
 
-UI tests that need a funded wallet get it from the fake Esplora and Electrum node in [`rust/crates/cove-fake-node`](../rust/crates/cove-fake-node/README.md), so they need no Signet funds or network. `just ios-ui-background`, `just ios-ui-foreground`, `just android-ui-manual` and `just android-instrumented-ci` start it on ports 39000 (control API), 39001 (Esplora) and 39002 (Electrum) for the length of the run, and forward the ports to Android with `adb reverse`. With more than one Android device connected, set `ANDROID_SERIAL` to pick one, since tests on two devices would reset and fund the same node. To run another command with the node up, use `just fake-node-run <command>` or `cargo xtask fake-node run -- <command>` from `rust/`.
+UI tests that need a funded wallet get it from the fake Esplora and Electrum node in [`rust/crates/cove-fake-node`](../rust/crates/cove-fake-node/README.md), so they need no Signet funds or network. `just ios-ui-background`, `just ios-ui-foreground`, `just android-ui-manual` and `just android-instrumented-ci` start it on ports 39000 (control API), 39001 (Esplora) and 39002 (Electrum) for the length of the run, together with the hardware signer host on 39010 and 39011 (see [Hardware signing UI tests](#hardware-signing-ui-tests)), and forward the ports to Android with `adb reverse`. With more than one Android device connected, set `ANDROID_SERIAL` to pick one, since tests on two devices would reset and fund the same node. To run another command with the node up, use `just fake-node-run <command>` or `cargo xtask fake-node run -- <command>` from `rust/`.
 
 The CI workflow runs the TAPSIGNER emulator tests in their own job. The `UI tests` workflow runs the iOS UI tests and Android instrumented tests nightly, on pushes to master, and on pull requests labeled `ui-tests`. CI runs the manifest check behind `just qa-check` on pull requests, so the manifest stays consistent with the tests it names. Its workflow filters pull requests to those targeting master, so run `just qa-check` locally before pushing a checklist change on a stacked branch.
 
@@ -61,6 +62,38 @@ Automated UI tests don't use these fixtures. They reset the fake node, fund the 
 - **A LAN HTTP block explorer** on the test machine, so explorer templates can be checked against the request log
 - **The previous release** for in-place upgrade tests. On Android, the GitHub release APK and a locally signed build share the upload key, but a Play install is signed with Google's key and only updates through Play. iOS upgrades need the previous build from the App Store, since TestFlight only lists builds of the current version
 - **Approval for destructive rows** before the run: clean install, uninstall, Wipe Data PIN and cloud backup deletion each need a recovery path prepared first
+
+## Hardware signing UI tests
+
+`HardwareSigningFullLaunchUITests` (iOS) and `HardwareSigningFullLaunchTest` (Android, `androidTestUiTest`) sign sends from hardware wallets without a camera or a card. They cover:
+
+- **Animated QR signing:** a watch-only wallet imported from a scanned export sends Max, opens the unsigned PSBT's UR or BBQr export and takes the PSBT from its Copy button (the tests don't decode the displayed QR), imports the signature as animated frames fed in reverse order, checks the confirm screen and Advanced Details, and broadcasts to the fake node
+- **Partial frames:** two BBQr frames show `Scanned 2 of N` and the parts left, a repeated frame doesn't count twice, and the rest complete the scan
+- **Signatures that match no draft:** a signature for a deleted draft, one for an unrelated transaction and a mainnet one each show No Unsigned Transaction Found. On Android, a pasted signature for the deleted draft shows a Paste Error saying the transaction isn't pending. iOS doesn't test paste: under XCUITest the app reads an empty pasteboard, even after the host sets it with `simctl pbcopy`, and no paste prompt shows. Nothing checks a PSBT's network, so a mainnet signature is reported as an unknown transaction
+- **TAPSIGNER:** import and signing through an emulated card, each with a wrong CVC and then a session that drops partway through before the retry succeeds. Until [#965](https://github.com/bitcoinppl/cove/issues/965) is fixed, rust-cktap rejects every BIP84 PSBT before it contacts the card, so the wrong CVC ends in the generic signing failure instead of Wrong PIN. Every signing error shows the same message, so in UI test builds the app also exposes the underlying one: iOS adds it to the Signing Failed! alert when the TAPSIGNER bridge is configured, and Android records it in its debug-only `UiTestSeams`. When the error is #965's Invalid path, the signing test stops there, as an expected failure on iOS and a skipped test on Android. Any other signing error fails the test, and Wrong PIN runs the whole flow
+
+### Test seams
+
+Debug builds have two seams the tests drive. Both are off unless their environment variable is set, and neither is in release builds: iOS compiles them under `#if DEBUG`, which only the Debug configuration defines, Android keeps them in `src/debug`, with inert stubs in `src/release`, and the Rust part is under `cfg(debug_assertions)`, which no release profile enables. `cargo xtask check-release-seams` (from `rust/`; `--ios`, `--android` or `--rust` for one layer) builds the release Swift code, the shrunk release dex and the `release-speed` Rust library, and fails if a seam's environment variable name or the emulator's root key is in any of them, with a debug build of each as the control that the check would find them. Xcode and Gradle package whichever Rust library was built last, so device Release builds and archives in Xcode, and every Gradle release variant, also run `tools/release-seams/check-packaged-rust.sh` on the library they are about to package and fail if it has a seam, as a debug Rust build does. Rebuild Rust with `just build-ios-release` or `just build-android-release` first. The check's markers are in `tools/release-seams/rust-markers.txt`, which `check-release-seams` reads too.
+
+- **QR scanner** (`COVE_UI_TEST_QR_SCRIPT`): set to a file path. While a scanner is open it takes the file, deletes it, and scans each string of its `{"frames": [...]}` 150 ms apart through the same code the camera feeds, so progress, haptics, errors and completion behave as with a camera. Write the file atomically, since the scanner polls for it. iOS tests use a path under `/tmp`, which the simulator shares with the host, and pass it in the launch environment. Android tests use the app's `noBackupFilesDir` and set the variable in process with `Os.setenv`, which the app reads when a scanner opens
+- **TAPSIGNER transport** (`COVE_UI_TEST_TAPSIGNER_BRIDGE`): set to `host:port`. TAPSIGNER commands, and the NFC tag read that finds the card, go over TCP to that address instead of an NFC session, each APDU as a frame with a 4-byte big-endian length. The app's TAPSIGNER code above the transport is unchanged, except that Cove, which accepts only cards whose certificates chain to Coinkite's factory root, also accepts the emulator's root while the variable is set. The emulator's root private key is public, which is why that trust is compiled into debug builds only
+
+### Host services
+
+`cargo xtask ui-test-host run [--android] -- <command>` runs the command with the fake node and the hardware signer host up, forwarding all their ports to Android with `--android`. The xtask iOS and Android UI test runners start it themselves. The signer host serves:
+
+- **Control API on 39010:** `POST /sign-psbt` signs a PSBT with a mnemonic as a hardware wallet would and returns it as base64 and as UR and BBQr frames, `/unrelated-psbt` signs one that matches no draft, `/watch-only-descriptor` returns the account a hardware wallet exports, and `/simulator-pasteboard` reads an iOS simulator's pasteboard, so iOS tests read a copied PSBT without the paste prompt. `/tapsigner/start` starts a fresh emulated TAPSIGNER with CVC 123456, and `/tapsigner/drop` ends its next session after a number of exchanges, as a card pulled from the field would
+- **TAPSIGNER bridge on 39011:** passes APDUs to Coinkite's `ecard.py` emulator from the rust-cktap checkout `Cargo.lock` pins. The emulator runs in a Python 3.12 environment the host builds with `uv` on first use, or in the Python `COVE_ECARD_PYTHON` names
+
+To run the tests alone:
+
+```sh
+just ios-ui-background "iPhone 17" CoveUITests/HardwareSigningFullLaunchUITests
+cd android && ANDROID_SERIAL=<serial> cargo run -q --manifest-path ../rust/Cargo.toml -p xtask -- ui-test-host run --android -- ./gradlew connectedUiTestDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=org.bitcoinppl.cove.flows.SendFlow.HardwareSigningFullLaunchTest
+```
+
+Camera and NFC hardware themselves, and real signing devices, still need a person.
 
 ## Driving devices
 

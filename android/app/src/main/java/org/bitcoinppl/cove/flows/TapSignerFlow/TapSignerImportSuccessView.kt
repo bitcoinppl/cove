@@ -43,8 +43,9 @@ private suspend fun persistWallet(
     deriveInfo: org.bitcoinppl.cove_core.DeriveInfo,
 ): WalletId =
     withContext(Dispatchers.IO) {
-        val walletManager = WalletManager.fromTapSigner(tapSigner, deriveInfo)
-        walletManager.id
+        // the manager only persists the wallet; until it closes, it holds the wallet's lifecycle
+        // and the app can't load the wallet when Continue selects it
+        WalletManager.fromTapSigner(tapSigner, deriveInfo).use { it.id }
     }
 
 /**

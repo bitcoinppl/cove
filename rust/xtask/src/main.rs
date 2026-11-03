@@ -11,8 +11,10 @@ mod mobile;
 mod mobile_artifact;
 mod qa;
 mod rebase;
+mod release_seams;
 mod swift_tools;
 mod tapsigner_emulator;
+mod ui_test_host;
 mod util;
 mod version;
 
@@ -292,6 +294,14 @@ enum Commands {
     #[command(name = "fake-node", subcommand)]
     FakeNode(fake_node::FakeNodeCommand),
 
+    /// Run commands against the fake node and the hardware signer services the hardware signing UI tests use
+    #[command(name = "ui-test-host", subcommand)]
+    UiTestHost(ui_test_host::UiTestHostCommand),
+
+    /// Build the iOS, Android and Rust release code and fail if a UI test seam is in it
+    #[command(name = "check-release-seams")]
+    CheckReleaseSeams(release_seams::CheckReleaseSeams),
+
     /// Release checklist manifest: per-change plan, coverage, and consistency check
     #[command(subcommand)]
     Qa(qa::QaCommand),
@@ -460,6 +470,10 @@ fn main() -> Result<()> {
         Commands::Rebase { new_base } => rebase::rebase(&new_base),
 
         Commands::FakeNode(command) => fake_node::run(command),
+
+        Commands::UiTestHost(command) => ui_test_host::run(command),
+
+        Commands::CheckReleaseSeams(args) => release_seams::run(args),
 
         Commands::Qa(command) => qa::run(command),
 

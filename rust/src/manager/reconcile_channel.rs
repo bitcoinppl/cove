@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use flume::{Receiver, Sender};
-use tracing::{error, trace};
+use flume::Receiver;
+use tracing::trace;
 
 use crate::manager::deferred_sender::{DebugSend, DeferredSender, MessageSender, SingleOrMany};
 
@@ -69,12 +69,10 @@ impl<M: DebugSend> ReconcileChannel<M> {
         self.sender.send(message);
     }
 
-    /// Blocking send on the raw flume sender: preserves strict FIFO with no tokio
-    /// dependency, for managers that predate the async-fallback [`send`](Self::send)
+    /// Blocks for room in the channel instead of queueing the message, for managers that send
+    /// without a tokio runtime
     pub fn send_sync(&self, message: impl Into<SingleOrMany<M>>) {
-        if let Err(err) = self.sender.raw().send(message.into()) {
-            error!("unable to send reconcile message: {err}");
-        }
+        self.sender.send_blocking(message);
     }
 
     pub async fn send_async(&self, message: impl Into<SingleOrMany<M>>) {
@@ -87,12 +85,6 @@ impl<M: DebugSend> ReconcileChannel<M> {
 
     pub fn deferred_sender(&self) -> DeferredSender<M> {
         DeferredSender::new(self.sender.clone())
-    }
-
-    /// Clone the underlying flume sender to share with actors that hold a raw
-    /// `Sender<SingleOrMany<M>>` and feed the same channel
-    pub fn raw_sender(&self) -> Sender<SingleOrMany<M>> {
-        self.sender.raw()
     }
 
     #[cfg(test)]
@@ -157,12 +149,15 @@ mod tests {
     }
 
     #[test]
-    fn messages_keep_their_order_when_the_queue_overflows() {
+    fn messages_keep_their_order_across_senders_when_the_queue_overflows() {
         ensure_tokio_runtime();
 
         const COUNT: usize = 2_000;
         let channel = ReconcileChannel::new(1);
         let receiver = channel.receiver();
+
+        // the manager sends through the channel while its actor holds a clone of the sender
+        let actor_sender = channel.sender().clone();
 
         // drain slowly on another thread so the queue fills and frees up while sends continue,
         // the way the UI thread lags behind fast typing
@@ -176,8 +171,14 @@ mod tests {
                 .collect::<Vec<_>>()
         });
 
+        // every send path must queue behind the overflow, not overtake it
         for index in 0..COUNT {
-            channel.send(TestMessage::Numbered(index));
+            let message = TestMessage::Numbered(index);
+            match index % 3 {
+                0 => channel.send(message),
+                1 => actor_sender.send_checked(message).expect("receiver is alive"),
+                _ => channel.send_sync(message),
+            }
         }
 
         let received = drain.join().expect("drain thread");

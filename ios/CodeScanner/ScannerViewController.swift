@@ -22,6 +22,10 @@
             var lastTime = Date(timeIntervalSince1970: 0)
             private let showViewfinder: Bool
 
+            #if DEBUG
+                private var uiTestQrFeed: Task<Void, Never>?
+            #endif
+
             let fallbackVideoCaptureDevice = AVCaptureDevice.default(for: .video)
 
             private var isGalleryShowing: Bool = false {
@@ -37,7 +41,17 @@
                 self.parentView = parentView
                 self.showViewfinder = showViewfinder
                 super.init(nibName: nil, bundle: nil)
+
+                #if DEBUG
+                    uiTestQrFeed = startUITestQrFeed()
+                #endif
             }
+
+            #if DEBUG
+                deinit {
+                    uiTestQrFeed?.cancel()
+                }
+            #endif
 
             required init?(coder: NSCoder) {
                 showViewfinder = false
@@ -558,6 +572,42 @@
             }
         }
     }
+
+    // MARK: - UI test QR frames
+
+    #if DEBUG
+        @available(macCatalyst 14.0, *)
+        extension CodeScannerView.ScannerViewController {
+            /// Feeds the frames a UI test scripts through the same path as a camera detection
+            fileprivate func startUITestQrFeed() -> Task<Void, Never>? {
+                guard let path = UITestQrScript.path else { return nil }
+
+                return Task { @MainActor [weak self] in
+                    while !Task.isCancelled {
+                        for frame in UITestQrScript.takeFrames(at: path) ?? [] {
+                            guard let self, !Task.isCancelled else { return }
+                            injectUITestFrame(frame)
+
+                            // camera frames arrive spaced out, and the scan view updates its
+                            // progress between them
+                            try? await Task.sleep(for: UITestQrScript.frameInterval)
+                        }
+
+                        try? await Task.sleep(for: UITestQrScript.pollInterval)
+                    }
+                }
+            }
+
+            private func injectUITestFrame(_ frame: String) {
+                // the same gate a camera detection passes
+                guard !parentView.isPaused, !didFinishScanning, !isCapturing else { return }
+
+                let data = ScanResultData.string(frame)
+                let result = ScanResult(data: data, type: .qr, image: nil, corners: [])
+                handleScan(result, data: data)
+            }
+        }
+    #endif
 
     // MARK: - UIImagePickerControllerDelegate
 

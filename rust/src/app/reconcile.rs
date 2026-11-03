@@ -2,14 +2,13 @@
 
 use std::sync::Arc;
 
-use flume::Sender;
 use once_cell::sync::OnceCell;
 
 use crate::{
     color_scheme::ColorSchemeSelection,
     fee_client::FeeResponse,
     fiat::{FiatCurrency, client::PriceResponse},
-    manager::deferred_sender::SingleOrMany,
+    manager::deferred_sender::MessageSender,
     network::Network,
     node::Node,
     router::Route,
@@ -39,11 +38,11 @@ pub enum AppStateReconcileMessage {
 pub type Update = AppStateReconcileMessage;
 
 pub static UPDATER: OnceCell<Updater> = OnceCell::new();
-pub struct Updater(pub Sender<SingleOrMany<AppStateReconcileMessage>>);
+pub struct Updater(pub MessageSender<AppStateReconcileMessage>);
 
 impl Updater {
     /// Initialize global instance of the updater with a sender
-    pub fn init(sender: Sender<SingleOrMany<AppStateReconcileMessage>>) {
+    pub fn init(sender: MessageSender<AppStateReconcileMessage>) {
         UPDATER.get_or_init(|| Self(sender));
     }
 
@@ -55,7 +54,7 @@ impl Updater {
             return;
         };
 
-        if let Err(error) = updater.0.send(SingleOrMany::Single(message)) {
+        if let Err(error) = updater.0.send_checked(message) {
             tracing::error!("Failed to send update, frontend may be disconnected: {error}");
         }
     }
@@ -81,6 +80,6 @@ pub(crate) mod test_support {
             .name("noop-app-updater-drain".into())
             .spawn(move || while receiver.recv().is_ok() {})
             .expect("spawn noop app updater drain");
-        Updater::init(channel.raw_sender());
+        Updater::init(channel.sender().clone());
     }
 }

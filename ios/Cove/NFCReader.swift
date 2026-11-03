@@ -47,10 +47,33 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         isScanning = true
         scannedMessage = nil
 
+        #if DEBUG
+            if let bridge = UITestTapSignerBridge.configured {
+                scanBridge(bridge)
+                return
+            }
+        #endif
+
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
         session?.alertMessage = "Hold your iPhone near the NFC tag."
         session?.begin()
     }
+
+    #if DEBUG
+        /// Reads the UI test card emulator's NDEF URL instead of a tag in an NFC session
+        private func scanBridge(_ bridge: UITestTapSignerBridge) {
+            Task { @MainActor in
+                do {
+                    let url = try await bridge.readNdefUrl()
+                    isScanning = false
+                    scannedMessage = try NfcMessage.tryNew(string: url, data: nil)
+                } catch {
+                    Log.error("UI test NFC read failed: \(error)")
+                    isScanning = false
+                }
+            }
+        }
+    #endif
 
     func resetReader() {
         Log.debug("reset reader")

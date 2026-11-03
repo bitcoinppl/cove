@@ -18,7 +18,6 @@ use cove_device::keychain::{Keychain, KeychainError, WalletSecret};
 use cove_tokio::task::{self, spawn_actor};
 use cove_util::result_ext::ResultExt as _;
 use eyre::Context;
-use flume::Sender;
 use pubport::formats::Json;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -33,8 +32,9 @@ use crate::{
         global_config::GlobalConfigTable,
         wallet_data::{ScanState, ScanningInfo, WalletDataDb},
     },
-    manager::wallet_manager::{
-        SingleOrMany, WalletManagerError, WalletManagerReconcileMessage, actor::WalletActor,
+    manager::{
+        deferred_sender::MessageSender,
+        wallet_manager::{WalletManagerError, WalletManagerReconcileMessage, actor::WalletActor},
     },
     network::Network as CoveNetwork,
     node::{client::NodeClientOptions, client_builder::NodeClientBuilder},
@@ -101,7 +101,7 @@ pub(crate) struct WalletDiscoveryScanner {
     pub workers: Workers,
     pub started_at: Instant,
     pub scan_source: ScanSource,
-    pub responder: Sender<SingleOrMany>,
+    pub responder: MessageSender<WalletManagerReconcileMessage>,
     pub wallet_actor: Addr<WalletActor>,
     failure_reconciled: bool,
     /// Cancels every scan task, including its in-flight node connection attempt
@@ -203,7 +203,7 @@ impl Actor for WalletDiscoveryScanner {
             let message = WalletManagerReconcileMessage::WalletError(
                 WalletManagerError::WalletScanError(error.to_string()),
             );
-            self.responder.send(message.into())?;
+            self.responder.send_checked(message)?;
             self.failure_reconciled = true;
         }
 
@@ -223,7 +223,7 @@ impl WalletDiscoveryScanner {
     pub(crate) fn try_new(
         metadata: WalletMetadata,
         wallet_actor: Addr<WalletActor>,
-        reconciler: Sender<SingleOrMany>,
+        reconciler: MessageSender<WalletManagerReconcileMessage>,
     ) -> Result<Self, WalletScannerError> {
         debug!("starting wallet discovery scanner for {}, metadata: {metadata:?}", metadata.id);
 
@@ -278,7 +278,7 @@ impl WalletDiscoveryScanner {
         wallets: Wallets,
         scan_source: ScanSource,
         wallet_actor: Addr<WalletActor>,
-        reconciler: Sender<SingleOrMany>,
+        reconciler: MessageSender<WalletManagerReconcileMessage>,
     ) -> Result<Self, WalletScannerError> {
         let mut started_workers = 0;
         let mut workers = Workers::default();
@@ -440,7 +440,7 @@ impl WalletDiscoveryScanner {
             let message = WalletManagerReconcileMessage::WalletError(
                 WalletManagerError::WalletScanError(failure),
             );
-            self.responder.send(message.into())?;
+            self.responder.send_checked(message)?;
             self.failure_reconciled = true;
 
             return Produces::ok(());
@@ -461,14 +461,14 @@ impl WalletDiscoveryScanner {
             self.set_metadata(DiscoveryState::NoneFound).await?;
 
             let message = WalletManagerReconcileMessage::from(ScannerResponse::NoneFound);
-            self.responder.send(message.into())?;
+            self.responder.send_checked(message)?;
         } else {
             self.set_metadata_address_found().await?;
 
             let message = WalletManagerReconcileMessage::from(ScannerResponse::FoundAddresses(
                 found_addresses,
             ));
-            self.responder.send(message.into())?;
+            self.responder.send_checked(message)?;
         }
 
         Produces::ok(())
@@ -1062,6 +1062,7 @@ mod tests {
         let worker_addr = spawn_actor(worker);
         let worker_termination = worker_addr.termination();
         let (responder, _responses) = flume::bounded(1);
+        let responder = MessageSender::new(responder);
         let scanner = spawn_actor(WalletDiscoveryScanner {
             id: id.clone(),
             addr: WeakAddr::default(),

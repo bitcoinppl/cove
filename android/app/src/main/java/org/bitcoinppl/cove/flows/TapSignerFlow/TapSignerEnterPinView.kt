@@ -37,6 +37,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.runCatchingCancellable
+import org.bitcoinppl.cove.uitest.UiTestSeams
 import org.bitcoinppl.cove_core.AfterPinAction
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.TapSignerConfirmPinArgs
@@ -335,6 +336,7 @@ private suspend fun signAction(
                 )
         }
         error != null -> {
+            UiTestSeams.recordTapSignerSignError(error)
             manager.errorMessage = "Connection failed, please try again"
         }
     }

@@ -160,7 +160,7 @@ struct TapSignerEnterPin: View {
                     app.alertState = .init(
                         .general(
                             title: "Signing Failed!",
-                            message: "TapSigner signing failed. Please try again."
+                            message: signingFailedMessage(error)
                         )
                     )
                     app.sheetState = .none
@@ -172,6 +172,20 @@ struct TapSignerEnterPin: View {
                 }
             }
         }
+    }
+
+    private func signingFailedMessage(_ error: TapSignerReaderError) -> String {
+        let message = "TapSigner signing failed. Please try again."
+
+        #if DEBUG
+            // the message is the same for every error, so under the card emulator bridge UI tests
+            // also see the underlying one, to excuse only a known signing bug
+            if UITestTapSignerBridge.configured != nil {
+                return "\(message)\n\n\(error.description)"
+            }
+        #endif
+
+        return message
     }
 
     var body: some View {

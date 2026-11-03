@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, fmt::Debug, sync::Arc};
 
-use flume::{Sender, TrySendError};
+use flume::{SendError, Sender, TrySendError};
 use parking_lot::Mutex;
 use tracing::{error, trace, warn};
 
@@ -82,17 +82,32 @@ impl<T: DebugSend> MessageSender<T> {
     }
 
     pub fn send(&self, message: impl Into<SingleOrMany<T>>) {
+        if let Err(err) = self.send_checked(message) {
+            error!("unable to send reconcile message: {err}");
+        }
+    }
+
+    /// Sends like [`send`](Self::send), but hands the message back when the receiver is gone, so
+    /// a producer can stop work nobody will see
+    pub fn send_checked(
+        &self,
+        message: impl Into<SingleOrMany<T>>,
+    ) -> Result<(), SendError<SingleOrMany<T>>> {
         let message = message.into();
         trace!("send: {message:?}");
 
         let mut overflow = self.overflow.lock();
         if !overflow.is_idle() {
+            if self.sender.is_disconnected() {
+                return Err(SendError(message));
+            }
+
             overflow.queue.push_back(message);
-            return;
+            return Ok(());
         }
 
         match self.sender.try_send(message) {
-            Ok(()) => {}
+            Ok(()) => Ok(()),
             Err(TrySendError::Full(message)) => {
                 warn!("[WARN] unable to send, queue is full, sending async");
                 overflow.queue.push_back(message);
@@ -100,10 +115,30 @@ impl<T: DebugSend> MessageSender<T> {
 
                 let me = self.clone();
                 task::spawn(async move { me.drain_overflow().await });
+                Ok(())
             }
-            Err(e) => {
-                error!("unable to send message to send flow manager: {e:?}");
+            Err(TrySendError::Disconnected(message)) => Err(SendError(message)),
+        }
+    }
+
+    /// Blocks for room in the channel, unless earlier messages are already waiting, in which case
+    /// the message joins them and is sent after them
+    ///
+    /// Needs no tokio runtime unless [`send`](Self::send) already queued an overflow
+    pub fn send_blocking(&self, message: impl Into<SingleOrMany<T>>) {
+        let message = message.into();
+        trace!("send_blocking: {message:?}");
+
+        {
+            let mut overflow = self.overflow.lock();
+            if !overflow.is_idle() {
+                overflow.queue.push_back(message);
+                return;
             }
+        }
+
+        if let Err(err) = self.sender.send(message) {
+            error!("unable to send reconcile message: {err}");
         }
     }
 
@@ -122,7 +157,7 @@ impl<T: DebugSend> MessageSender<T> {
         }
 
         if let Err(err) = self.sender.send_async(message).await {
-            error!("unable to send message to send flow manager: {err}");
+            error!("unable to send reconcile message: {err}");
         }
     }
 
@@ -140,7 +175,7 @@ impl<T: DebugSend> MessageSender<T> {
             };
 
             if let Err(err) = self.sender.send_async(message).await {
-                error!("unable to send message to send flow manager: {err}");
+                error!("unable to send reconcile message: {err}");
 
                 // the receiver is gone, so nothing queued can be delivered either
                 let mut overflow = self.overflow.lock();
@@ -149,12 +184,6 @@ impl<T: DebugSend> MessageSender<T> {
                 return;
             }
         }
-    }
-
-    /// Clone the underlying flume sender to share with actors that hold a raw
-    /// `Sender<SingleOrMany<T>>` and feed the same channel
-    pub fn raw(&self) -> Sender<SingleOrMany<T>> {
-        self.sender.clone()
     }
 }
 

@@ -29,6 +29,7 @@ mod transaction_confirmation;
 mod transactions;
 
 use super::payjoin::{PayjoinActor, PayjoinSessionPersister, SessionResumption, resume_session};
+use crate::manager::deferred_sender::MessageSender;
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use act_zero_ext::into_actor_result;
 use ahash::HashMap;
@@ -42,7 +43,6 @@ use cove_bdk_progressive_scan::ScanUpdate;
 use cove_tokio::AbortableTask;
 use cove_util::result_ext::ResultExt as _;
 use eyre::Result;
-use flume::Sender;
 use parking_lot::RwLock;
 use rand::RngExt as _;
 use std::{
@@ -57,12 +57,12 @@ use self::scan::{
     RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, ScanRequestOrder, WalletScanActor,
     WalletScanEvent, WalletScanEventKind, should_update_full_scan_metadata,
 };
-use super::{SingleOrMany, WalletManagerReconcileMessage};
+use super::WalletManagerReconcileMessage;
 
 #[derive(Debug)]
 pub(crate) struct WalletActor {
     pub addr: WeakAddr<Self>,
-    pub reconciler: Sender<SingleOrMany>,
+    pub reconciler: MessageSender<WalletManagerReconcileMessage>,
     pub wallet: Wallet,
     node_client: Option<NodeClient>,
 
@@ -377,7 +377,7 @@ impl WalletActor {
 
     pub(crate) fn new_with_metadata(
         wallet: Wallet,
-        reconciler: Sender<SingleOrMany>,
+        reconciler: MessageSender<WalletManagerReconcileMessage>,
         scan_status: Arc<RwLock<WalletScanStatus>>,
         wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
         metadata: Arc<RwLock<WalletMetadata>>,
@@ -396,7 +396,7 @@ impl WalletActor {
 
     pub(crate) fn new_with_metadata_and_db(
         mut wallet: Wallet,
-        reconciler: Sender<SingleOrMany>,
+        reconciler: MessageSender<WalletManagerReconcileMessage>,
         scan_status: Arc<RwLock<WalletScanStatus>>,
         wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
         db: WalletDataDb,
@@ -1425,7 +1425,7 @@ impl WalletActor {
             _ => {}
         }
 
-        if self.reconciler.send(msg.into()).is_err() {
+        if self.reconciler.send_checked(msg).is_err() {
             warn!("wallet manager reconciler dropped");
         }
     }
@@ -1533,8 +1533,8 @@ impl WalletActor {
 
 impl Drop for WalletActor {
     fn drop(&mut self) {
-        let _ = self.reconciler.send(
-            WalletManagerReconcileMessage::WalletScanStatusChanged(WalletScanStatus::Idle).into(),
+        let _ = self.reconciler.send_checked(
+            WalletManagerReconcileMessage::WalletScanStatusChanged(WalletScanStatus::Idle),
         );
 
         debug!("[DROP] Wallet Actor for {}", self.wallet.id);
@@ -1655,21 +1655,23 @@ impl SpendPolicy {
 mod test_support {
     use std::sync::Arc;
 
-    use flume::Sender;
     use parking_lot::RwLock;
 
     use crate::{
         database::wallet_data::WalletDataDb,
-        manager::wallet_manager::{WalletScanStatus, WalletSnapshot},
+        manager::{
+            deferred_sender::MessageSender,
+            wallet_manager::{WalletManagerReconcileMessage, WalletScanStatus, WalletSnapshot},
+        },
         wallet::Wallet,
     };
 
-    use super::{SingleOrMany, WalletActor};
+    use super::WalletActor;
 
     impl WalletActor {
         pub(crate) fn new_with_db(
             wallet: Wallet,
-            reconciler: Sender<SingleOrMany>,
+            reconciler: MessageSender<WalletManagerReconcileMessage>,
             scan_status: Arc<RwLock<WalletScanStatus>>,
             wallet_snapshot: Arc<RwLock<WalletSnapshot>>,
             db: WalletDataDb,
@@ -1735,7 +1737,7 @@ mod tests {
 
     use super::{
         ActorState, EMPTY_WALLET_SCAN_PROGRESS_DELAY, FullScanType, InitialScanRoute,
-        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, SingleOrMany, address_type_patch,
+        RETURNING_WALLET_SCAN_PROGRESS_DELAY, ScanProgressStart, address_type_patch,
         full_scan_updates_initial_metadata, initial_scan_route, ledger_ready_for_spend,
         reset_scan_lifecycle_state_for_address_type_switch, should_accept_wallet_scan_generation,
         should_skip_recent_scan, trusted_spendable_output, wallet_scan_progress_start,
@@ -1745,8 +1747,12 @@ mod tests {
             WalletDataDb, label::test_support::wallet_data_db_with_mismatched_output_table,
             test_support::new_test_wallet_data_db,
         },
-        manager::wallet_manager::{
-            TransactionLockState, WalletManagerReconcileMessage, WalletScanStatus, WalletSnapshot,
+        manager::{
+            deferred_sender::MessageSender,
+            wallet_manager::{
+                TransactionLockState, WalletManagerReconcileMessage, WalletScanStatus,
+                WalletSnapshot,
+            },
         },
         node::Node,
         transaction_watcher::TransactionWatcherEvent,
@@ -1755,6 +1761,9 @@ mod tests {
             metadata::{WalletId, WalletType},
         },
     };
+
+    type SingleOrMany =
+        crate::manager::deferred_sender::SingleOrMany<WalletManagerReconcileMessage>;
 
     const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
@@ -1932,7 +1941,7 @@ mod tests {
 
         super::WalletActor::new_with_metadata(
             wallet,
-            sender,
+            MessageSender::new(sender),
             test_scan_status(),
             wallet_snapshot,
             metadata,

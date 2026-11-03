@@ -217,12 +217,13 @@ fake-node-run *command:
     just xtask fake-node run -- {{ command }}
 
 # Skips staged process-death tests, which need `android-ui-manual`, and tests marked @QuarantinedInCi
-# Runs with the fake node up and forwarded to the device, for tests that need a funded wallet
+# Runs with the fake node and the hardware signer host up and forwarded to the device, for tests
+# that need a funded wallet or a signer
 # [long, external] Run Android instrumented tests the way the UI tests workflow does; flavours: Dev, UiTest or both
 [group('test')]
 [working-directory('android')]
 android-instrumented-ci flavours="Dev UiTest":
-    cargo run --locked -q --manifest-path ../rust/Cargo.toml --package xtask -- fake-node run --android -- ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi" "-Pandroid.testInstrumentationRunnerArguments.listener=org.bitcoinppl.cove.test.DismissAnrDialogs"
+    cargo run --locked -q --manifest-path ../rust/Cargo.toml --package xtask -- ui-test-host run --android -- ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi" "-Pandroid.testInstrumentationRunnerArguments.listener=org.bitcoinppl.cove.test.DismissAnrDialogs"
 
 # [bounded] Update Android Compose preview screenshot references
 [group('test')]

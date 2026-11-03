@@ -11,10 +11,14 @@ import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.uitest.UiTestSeams
 import java.nio.charset.Charset
 
 enum class NfcReadingState {
@@ -42,16 +46,19 @@ class NfcReader(
         private set
 
     fun startScanning() {
-        if (nfcAdapter == null) {
-            _scanResults.trySend(NfcScanResult.Error("NFC is not supported on this device"))
-            return
+        when {
+            UiTestSeams.tapSignerBridgeConfigured -> scanBridge()
+            nfcAdapter == null -> scanFailed("NFC is not supported on this device")
+            !nfcAdapter.isEnabled -> scanFailed("NFC is disabled. Please enable it in Settings")
+            else -> scanTag(nfcAdapter)
         }
+    }
 
-        if (!nfcAdapter.isEnabled) {
-            _scanResults.trySend(NfcScanResult.Error("NFC is disabled. Please enable it in Settings"))
-            return
-        }
+    private fun scanFailed(message: String) {
+        _scanResults.trySend(NfcScanResult.Error(message))
+    }
 
+    private fun scanTag(nfcAdapter: NfcAdapter) {
         isScanning = true
         message = "Hold your phone near the NFC tag"
         readingState = NfcReadingState.WAITING
@@ -80,6 +87,30 @@ class NfcReader(
         // must be called on UI thread
         activity.runOnUiThread {
             nfcAdapter?.disableReaderMode(activity)
+        }
+    }
+
+    /** Reads the UI test card emulator as if a TAPSIGNER were held to the phone */
+    // debug-only test path, so it does not justify threading a dispatcher through the reader
+    @Suppress("InjectDispatcher")
+    private fun scanBridge() {
+        isScanning = true
+        message = "Hold your phone near the NFC tag"
+        readingState = NfcReadingState.WAITING
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val result =
+                runCatching { UiTestSeams.readTapSignerNdefUrl() }
+                    .map { NfcScanResult.Success(it, null) }
+                    .getOrElse {
+                        Log.e("NfcReader", "UI test bridge read failed", it)
+                        NfcScanResult.Error("Error reading tag: ${it.message}")
+                    }
+
+            mainHandler.post {
+                _scanResults.trySend(result)
+                stopScanning()
+            }
         }
     }
 
