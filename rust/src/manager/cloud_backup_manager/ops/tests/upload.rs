@@ -662,11 +662,12 @@ fn load_origin_less_wallet_with_confirmed_backup(
 }
 
 // an address-type switch interrupted before its metadata commit is healed on the next load, and
-// the healed address type and origin must reach a backup that was already confirmed
+// the healed address type and origin must reach a backup that was already confirmed. A hot
+// wallet whose key is missing locally keeps its confirmed backup, since opening it downgrades it
+// to watch-only and that upload would drop the key from the cloud
 #[tokio::test(flavor = "current_thread")]
 async fn healing_an_interrupted_wrapped_segwit_switch_marks_its_confirmed_backup_dirty() {
-    use crate::database::cloud_backup::CloudBlobConfirmedState;
-    use crate::wallet::{Wallet, WalletAddressType, metadata::WalletMetadata};
+    use crate::wallet::WalletAddressType;
 
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
@@ -681,6 +682,43 @@ async fn healing_an_interrupted_wrapped_segwit_switch_marks_its_confirmed_backup
     database.global_config.set_selected_network(crate::network::Network::Bitcoin).unwrap();
     database.global_config.set_main_mode().unwrap();
 
+    let with_key = heal_interrupted_wrapped_segwit_switch_with_confirmed_backup(true);
+    let without_key = heal_interrupted_wrapped_segwit_switch_with_confirmed_backup(false);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+
+    for (stored, _) in [&with_key, &without_key] {
+        assert_eq!(stored.address_type, WalletAddressType::WrappedSegwit);
+        assert_eq!(stored.origin.as_deref(), Some("sh(wpkh([73c5da0a/49'/0'/0']))"));
+    }
+
+    let (_, sync_state) = with_key;
+    assert!(
+        matches!(
+            sync_state,
+            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
+        ),
+        "{sync_state:?}"
+    );
+
+    let (_, sync_state) = without_key;
+    assert!(
+        matches!(
+            sync_state,
+            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Confirmed(_), .. })
+        ),
+        "{sync_state:?}"
+    );
+}
+
+/// Leaves a native segwit wallet with a confirmed backup mid-switch to wrapped segwit, then loads
+/// it, returning the healed row and the backup's sync state after the load
+fn heal_interrupted_wrapped_segwit_switch_with_confirmed_backup(
+    keep_secret: bool,
+) -> (crate::wallet::metadata::WalletMetadata, Option<PersistedCloudBlobSyncState>) {
+    use crate::database::cloud_backup::CloudBlobConfirmedState;
+    use crate::wallet::{Wallet, WalletAddressType, metadata::WalletMetadata};
+
+    let database = Database::global();
     let mnemonic = Mnemonic::parse_normalized(
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
     )
@@ -700,6 +738,10 @@ async fn healing_an_interrupted_wrapped_segwit_switch_marks_its_confirmed_backup
     // publishing the replacement store without the metadata commit is what an interruption leaves
     wallet.switch_private_wallet_to_new_address_type(WalletAddressType::WrappedSegwit).unwrap();
     drop(wallet);
+
+    if !keep_secret {
+        Keychain::global().delete_wallet_secret(&id);
+    }
 
     let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
     let record_id = wallet_record_id(id.as_ref());
@@ -722,17 +764,7 @@ async fn healing_an_interrupted_wrapped_segwit_switch_marks_its_confirmed_backup
     let sync_state = database.cloud_blob_sync_states.get(&record_id).unwrap();
 
     crate::wallet::test_support::remove_wallet(&id);
-    CONNECTIVITY_MANAGER.set_connection_state(true);
 
     loaded.expect("the wallet reloads from the replacement store");
-    let stored = stored.expect("the wallet row exists");
-    assert_eq!(stored.address_type, WalletAddressType::WrappedSegwit);
-    assert_eq!(stored.origin.as_deref(), Some("sh(wpkh([73c5da0a/49'/0'/0']))"));
-    assert!(
-        matches!(
-            sync_state,
-            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
-        ),
-        "{sync_state:?}"
-    );
+    (stored.expect("the wallet row exists"), sync_state)
 }

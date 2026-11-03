@@ -64,7 +64,7 @@ pub(crate) fn healed_metadata_for_store(
 
     match crate::database::Database::global().wallets.replace_wallet_metadata(metadata.clone()) {
         // the address type and origin are part of the Cloud Backup revision
-        Ok(_) => CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(&before, &metadata),
+        Ok(_) => CLOUD_BACKUP_MANAGER.handle_wallet_metadata_repair(&before, &metadata),
         Err(error) => {
             warn!(%error, "unable to persist healed wallet metadata; the next load retries")
         }
