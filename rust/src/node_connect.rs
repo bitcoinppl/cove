@@ -1,7 +1,11 @@
 use tracing::error;
 use url::{Host, Url};
 
-use crate::{database::Database, network::Network, node::Node};
+use crate::{
+    database::Database,
+    network::Network,
+    node::{ApiType, Node},
+};
 use cove_macros::impl_default_for;
 use cove_util::result_ext::ResultExt as _;
 use eyre::{Context, eyre};
@@ -37,7 +41,6 @@ pub const SIGNET_ESPLORA: [(&str, &str); 1] = [("mutinynet", "https://mutinynet.
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct NodeSelector {
     network: Network,
-    node_list: Vec<NodeSelection>,
 }
 
 #[derive(Debug, Clone, uniffi::Enum, PartialEq, Eq, Hash)]
@@ -69,26 +72,16 @@ impl NodeSelector {
     #[uniffi::constructor]
     pub fn new() -> Self {
         let network = Database::global().global_config.selected_network();
-        let selected_node = Database::global().global_config.selected_node();
-
-        let node_list = node_list(network);
-
-        let node_selection_list = if node_list.contains(&selected_node) {
-            node_list.into_iter().map(NodeSelection::Preset).collect()
-        } else {
-            let mut node_selection_list =
-                node_list.into_iter().map(NodeSelection::Preset).collect::<Vec<NodeSelection>>();
-
-            node_selection_list.push(NodeSelection::Custom(selected_node));
-            node_selection_list
-        };
-
-        Self { network, node_list: node_selection_list }
+        Self { network }
     }
 
+    /// The preset nodes for the network
+    ///
+    /// A saved custom node is not one of them: the screens show it in the custom form for its
+    /// api, so a custom node named like a preset can never be selected as that preset
     #[uniffi::method]
-    pub fn node_list(&self) -> Vec<NodeSelection> {
-        self.node_list.clone()
+    pub fn preset_nodes(&self) -> Vec<Node> {
+        node_list(self.network)
     }
 
     #[uniffi::method]
@@ -104,17 +97,12 @@ impl NodeSelector {
 
     #[uniffi::method]
     pub fn select_preset_node(&self, name: String) -> Result<Node, Error> {
-        let node = node_list(self.network)
-            .into_iter()
-            .find(|node| node.name == name)
-            .or_else(|| {
-                let selected_node = Database::global().global_config.selected_node();
-                if selected_node.name == name { Some(selected_node) } else { None }
-            })
-            .ok_or_else(|| {
+        let node = node_list(self.network).into_iter().find(|node| node.name == name).ok_or_else(
+            || {
                 error!("node with name {name} not found");
                 NodeSelectorError::NodeNotFound(name)
-            })?;
+            },
+        )?;
 
         Database::global()
             .global_config
@@ -132,21 +120,18 @@ impl NodeSelector {
     }
 
     #[uniffi::method]
-    /// Use the url and name of the custom node to set it as the selected node
+    /// Parse a custom node url for the given api, naming it after the host unless a name is entered
     pub fn parse_custom_node(
         &self,
         url: String,
-        name: String,
+        api_type: ApiType,
         entered_name: String,
     ) -> Result<Node, Error> {
-        let node_type = name.to_ascii_lowercase();
-
         // the url rules depend on the api: Electrum uses ssl/tcp with default ports, while an
         // Esplora url is an http(s) address that must keep its scheme and port as entered
-        let url = if node_type.contains("esplora") {
-            parse_esplora_url(&url)
-        } else {
-            parse_node_url(&url)
+        let url = match api_type {
+            ApiType::Esplora => parse_esplora_url(&url),
+            ApiType::Electrum => parse_node_url(&url),
         }
         .map_err_str(Error::ParseNodeUrlError)?;
 
@@ -170,13 +155,9 @@ impl NodeSelector {
             entered_name
         };
 
-        let node = if node_type.contains("electrum") {
-            Node::new_electrum(name, url_string, self.network)
-        } else if node_type.contains("esplora") {
-            Node::new_esplora(name, url_string, self.network)
-        } else {
-            error!("invalid node type: {node_type}");
-            Node::default(self.network)
+        let node = match api_type {
+            ApiType::Electrum => Node::new_electrum(name, url_string, self.network),
+            ApiType::Esplora => Node::new_esplora(name, url_string, self.network),
         };
 
         Ok(node)
@@ -319,13 +300,10 @@ mod tests {
     use bitcoin::Network as BitcoinNetwork;
 
     use super::*;
-    use crate::{
-        node::ApiType,
-        test_support::{ensure_tokio_runtime, fake_node::FakeNode, global_state_test_lock},
-    };
+    use crate::test_support::{ensure_tokio_runtime, fake_node::FakeNode, global_state_test_lock};
 
     fn selector(network: Network) -> NodeSelector {
-        NodeSelector { network, node_list: Vec::new() }
+        NodeSelector { network }
     }
 
     // regression for #928: the Electrum-only url rules turned an Esplora url into ssl://host:50002
@@ -334,7 +312,7 @@ mod tests {
         let node = selector(Network::Signet)
             .parse_custom_node(
                 "https://mutinynet.com/api".to_string(),
-                "Custom Esplora".to_string(),
+                ApiType::Esplora,
                 String::new(),
             )
             .unwrap();
@@ -349,7 +327,7 @@ mod tests {
         let node = selector(Network::Signet)
             .parse_custom_node(
                 "http://192.168.1.10:3002".to_string(),
-                "Custom Esplora".to_string(),
+                ApiType::Esplora,
                 String::new(),
             )
             .unwrap();
@@ -362,9 +340,7 @@ mod tests {
     fn parse_custom_node_maps_electrum_urls_to_electrum_schemes_and_ports() {
         let selector = selector(Network::Bitcoin);
         let parse = |url: &str| {
-            selector
-                .parse_custom_node(url.to_string(), "Custom Electrum".to_string(), String::new())
-                .unwrap()
+            selector.parse_custom_node(url.to_string(), ApiType::Electrum, String::new()).unwrap()
         };
 
         let node = parse("https://electrum.example.com");
@@ -374,6 +350,28 @@ mod tests {
         assert_eq!(parse("http://electrum.example.com").url, "tcp://electrum.example.com:50001");
         assert_eq!(parse("electrum.example.com:50002").url, "ssl://electrum.example.com:50002/");
         assert_eq!(parse("electrum.example.com").url, "tcp://electrum.example.com:50001/");
+    }
+
+    // the screens re-save the selected custom node by feeding its own values back in, so parsing
+    // a saved node must give back the same node instead of falling back to the default
+    #[test]
+    fn reparsing_a_saved_custom_node_keeps_it() {
+        let selector = selector(Network::Signet);
+
+        for (url, api_type) in [
+            ("https://mutinynet.com/api", ApiType::Esplora),
+            ("electrum.example.com:50002", ApiType::Electrum),
+        ] {
+            let saved = selector
+                .parse_custom_node(url.to_string(), api_type, "Home node".to_string())
+                .unwrap();
+
+            let reparsed = selector
+                .parse_custom_node(saved.url.clone(), saved.api_type, saved.name.clone())
+                .unwrap();
+
+            assert_eq!(reparsed, saved);
+        }
     }
 
     fn selected_node() -> Node {

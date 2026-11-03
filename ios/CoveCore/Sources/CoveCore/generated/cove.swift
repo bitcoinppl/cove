@@ -6878,12 +6878,18 @@ public protocol NodeSelectorProtocol: AnyObject, Sendable {
 
     func checkSelectedNode(node: Node) async throws
 
-    func nodeList()  -> [NodeSelection]
+    /**
+     * Parse a custom node url for the given api, naming it after the host unless a name is entered
+     */
+    func parseCustomNode(url: String, apiType: ApiType, enteredName: String) throws  -> Node
 
     /**
-     * Use the url and name of the custom node to set it as the selected node
+     * The preset nodes for the network
+     *
+     * A saved custom node is not one of them: the screens show it in the custom form for its
+     * api, so a custom node named like a preset can never be selected as that preset
      */
-    func parseCustomNode(url: String, name: String, enteredName: String) throws  -> Node
+    func presetNodes()  -> [Node]
 
     func selectPresetNode(name: String) throws  -> Node
 
@@ -6988,26 +6994,32 @@ open func checkSelectedNode(node: Node)async throws   {
         )
 }
 
-open func nodeList() -> [NodeSelection]  {
-    return try!  FfiConverterSequenceTypeNodeSelection.lift(try! rustCall() {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_nodeselector_node_list(
-            self.uniffiCloneHandle(),uniffiCallStatus
-    )
-})
-}
-
     /**
-     * Use the url and name of the custom node to set it as the selected node
+     * Parse a custom node url for the given api, naming it after the host unless a name is entered
      */
-open func parseCustomNode(url: String, name: String, enteredName: String)throws  -> Node  {
+open func parseCustomNode(url: String, apiType: ApiType, enteredName: String)throws  -> Node  {
     return try  FfiConverterTypeNode_lift(try rustCallWithError(FfiConverterTypeNodeSelectorError_lift) {
         uniffiCallStatus in
     uniffi_cove_fn_method_nodeselector_parse_custom_node(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(url),
-        FfiConverterString.lower(name),
+        FfiConverterTypeApiType_lower(apiType),
         FfiConverterString.lower(enteredName),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * The preset nodes for the network
+     *
+     * A saved custom node is not one of them: the screens show it in the custom form for its
+     * api, so a custom node named like a preset can never be selected as that preset
+     */
+open func presetNodes() -> [Node]  {
+    return try!  FfiConverterSequenceTypeNode.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_nodeselector_preset_nodes(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -45901,6 +45913,31 @@ fileprivate struct FfiConverterSequenceTypeGroupedWord: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeNode: FfiConverterRustBuffer {
+    typealias SwiftType = [Node]
+
+    public static func write(_ value: [Node], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeNode.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Node] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Node]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeNode.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeWalletMetadata: FfiConverterRustBuffer {
     typealias SwiftType = [WalletMetadata]
 
@@ -46093,31 +46130,6 @@ fileprivate struct FfiConverterSequenceTypeKeyTeleportMessageItem: FfiConverterR
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeKeyTeleportMessageItem.read(from: &buf))
-        }
-        return seq
-    }
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-fileprivate struct FfiConverterSequenceTypeNodeSelection: FfiConverterRustBuffer {
-    typealias SwiftType = [NodeSelection]
-
-    public static func write(_ value: [NodeSelection], into buf: inout [UInt8]) {
-        let len = Int32(value.count)
-        writeInt(&buf, len)
-        for item in value {
-            FfiConverterTypeNodeSelection.write(item, into: &buf)
-        }
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [NodeSelection] {
-        let len: Int32 = try readInt(&buf)
-        var seq = [NodeSelection]()
-        seq.reserveCapacity(Int(len))
-        for _ in 0 ..< len {
-            seq.append(try FfiConverterTypeNodeSelection.read(from: &buf))
         }
         return seq
     }
@@ -48288,10 +48300,10 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_nodeselector_check_selected_node() != 34244) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_nodeselector_node_list() != 26686) {
+    if (uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 28549) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 26788) {
+    if (uniffi_cove_checksum_method_nodeselector_preset_nodes() != 55854) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_nodeselector_select_preset_node() != 55812) {

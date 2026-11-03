@@ -67,11 +67,9 @@ fun NodeSettingsScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var nodeList by remember { mutableStateOf(nodeSelector.nodeList()) }
+    var presetNodes by remember { mutableStateOf(nodeSelector.presetNodes()) }
     var selectedNodeSelection by remember { mutableStateOf(nodeSelector.selectedNode()) }
-    var selectedNodeName by remember {
-        mutableStateOf(selectedNodeSelection.toNode().name)
-    }
+    var selectedRow by remember { mutableStateOf(NodeRowSelection.of(selectedNodeSelection)) }
 
     var customUrl by remember { mutableStateOf("") }
     var customNodeName by remember { mutableStateOf("") }
@@ -94,18 +92,20 @@ fun NodeSettingsScreen(
     val errorUrlEmpty = stringResource(R.string.node_error_url_empty)
     val errorParseTitle = stringResource(R.string.node_error_parse_title)
 
-    val showCustomFields =
-        selectedNodeSelection is NodeSelection.Custom ||
-            selectedNodeName == customElectrum ||
-            selectedNodeName == customEsplora
+    val customElectrumRow = NodeRowSelection.Custom(ApiType.ELECTRUM)
+    val customEsploraRow = NodeRowSelection.Custom(ApiType.ESPLORA)
+
+    // the api the custom form saves as, which only a custom row decides
+    val customApiType: ApiType? = (selectedRow as? NodeRowSelection.Custom)?.apiType
+    val showCustomFields = customApiType != null
 
     // pull a fresh snapshot because NodeSelector mutates persisted node settings directly
     fun refreshNodeState() {
         NodeSelector().use { refreshedNodeSelector ->
-            nodeList = refreshedNodeSelector.nodeList()
+            presetNodes = refreshedNodeSelector.presetNodes()
             selectedNodeSelection = refreshedNodeSelector.selectedNode()
         }
-        selectedNodeName = selectedNodeSelection.toNode().name
+        selectedRow = NodeRowSelection.of(selectedNodeSelection)
     }
 
     // pre-fill custom fields if a custom node was previously saved
@@ -114,13 +114,7 @@ fun NodeSettingsScreen(
             val savedNode = selectedNodeSelection
             if (savedNode is NodeSelection.Custom) {
                 val node = savedNode.toNode()
-                val matchesType =
-                    when (selectedNodeName) {
-                        customElectrum -> node.apiType == ApiType.ELECTRUM
-                        customEsplora -> node.apiType == ApiType.ESPLORA
-                        else -> true
-                    }
-                if (matchesType) {
+                if (node.apiType == customApiType) {
                     customUrl = node.url
                     customNodeName = node.name
                 }
@@ -129,11 +123,12 @@ fun NodeSettingsScreen(
     }
 
     fun selectPresetNode(nodeName: String) {
-        if (selectedNodeSelection is NodeSelection.Preset && selectedNodeName == nodeName) {
+        val row = NodeRowSelection.Preset(nodeName)
+        if (selectedRow == row && NodeRowSelection.of(selectedNodeSelection) == row) {
             return
         }
 
-        selectedNodeName = nodeName
+        selectedRow = row
         customUrl = ""
         customNodeName = ""
 
@@ -175,6 +170,8 @@ fun NodeSettingsScreen(
     }
 
     fun checkAndSaveCustomNode() {
+        val apiType = customApiType ?: return
+
         if (customUrl.isEmpty()) {
             errorTitle = errorTitleDefault
             errorMessage = errorUrlEmpty
@@ -187,7 +184,7 @@ fun NodeSettingsScreen(
             try {
                 val node =
                     withContext(Dispatchers.IO) {
-                        nodeSelector.parseCustomNode(customUrl, selectedNodeName, customNodeName)
+                        nodeSelector.parseCustomNode(customUrl, apiType, customNodeName)
                     }
 
                 // update fields with parsed values
@@ -258,31 +255,28 @@ fun NodeSettingsScreen(
                 MaterialSection {
                     Column {
                         // preset nodes
-                        nodeList.forEachIndexed { index, nodeSelection ->
-                            val node = nodeSelection.toNode()
+                        presetNodes.forEachIndexed { index, node ->
                             NodeRow(
                                 nodeName = node.name,
-                                isSelected = selectedNodeName == node.name,
+                                isSelected = selectedRow == NodeRowSelection.Preset(node.name),
                                 onClick = { selectPresetNode(node.name) },
                             )
 
-                            if (index < nodeList.size - 1) {
+                            if (index < presetNodes.size - 1) {
                                 MaterialDivider()
                             }
                         }
 
                         // add divider before custom options
-                        if (nodeList.isNotEmpty()) {
+                        if (presetNodes.isNotEmpty()) {
                             MaterialDivider()
                         }
 
                         // custom electrum
                         NodeRow(
                             nodeName = customElectrum,
-                            isSelected = selectedNodeName == customElectrum,
-                            onClick = {
-                                selectedNodeName = customElectrum
-                            },
+                            isSelected = selectedRow == customElectrumRow,
+                            onClick = { selectedRow = customElectrumRow },
                         )
 
                         MaterialDivider()
@@ -290,10 +284,8 @@ fun NodeSettingsScreen(
                         // custom esplora
                         NodeRow(
                             nodeName = customEsplora,
-                            isSelected = selectedNodeName == customEsplora,
-                            onClick = {
-                                selectedNodeName = customEsplora
-                            },
+                            isSelected = selectedRow == customEsploraRow,
+                            onClick = { selectedRow = customEsploraRow },
                         )
                     }
                 }
@@ -363,6 +355,31 @@ fun NodeSettingsScreen(
                 }
             },
         )
+    }
+}
+
+/**
+ * The row selected on the node screen
+ *
+ * Kept apart from the saved node's name, which the person chooses, so a custom node named like a
+ * preset or like a custom row still selects its own row and re-saves with its own api
+ */
+private sealed interface NodeRowSelection {
+    data class Preset(
+        val name: String,
+    ) : NodeRowSelection
+
+    data class Custom(
+        val apiType: ApiType,
+    ) : NodeRowSelection
+
+    companion object {
+        // a saved custom node selects the custom row for its api, which shows it in the form
+        fun of(selection: NodeSelection): NodeRowSelection =
+            when (selection) {
+                is NodeSelection.Preset -> Preset(selection.v1.name)
+                is NodeSelection.Custom -> Custom(selection.v1.apiType)
+            }
     }
 }
 
