@@ -22,6 +22,8 @@ import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.types.Network
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -30,9 +32,10 @@ import java.net.InetAddress
 /**
  * Saving the selected custom node a second time keeps it
  *
- * After the first save the screen selects the custom node by its own name, and the second save
- * used to pass that name to Rust as the node type, so a node named "Home node" was parsed as
- * neither Electrum nor Esplora and replaced with the network's default node
+ * After the first save the screen used to select the custom node by its own name and pass that
+ * name to Rust as the node type, so a node named "Home node" was parsed as neither Electrum nor
+ * Esplora and replaced with the network's default node, and an Esplora node named "Custom
+ * Electrum" was re-saved as Electrum
  */
 class NodeSettingsCustomNodeResaveTest {
     @get:Rule
@@ -74,37 +77,48 @@ class NodeSettingsCustomNodeResaveTest {
     }
 
     @Test
-    fun savingACustomEsploraNodeAgainKeepsIt() {
+    fun savingACustomEsploraNodeAgainKeepsIt() = saveTwiceAndAssertKept(name = "Home node")
+
+    // the node's name matches the other custom row's label, which used to pick that row's api
+    @Test
+    fun savingAnEsploraNodeNamedLikeTheElectrumRowKeepsItsApi() = saveTwiceAndAssertKept(name = "Custom Electrum")
+
+    private fun saveTwiceAndAssertKept(name: String) {
         val url = "http://$LOOPBACK:${esplora.port}/api"
 
         compose.onNodeWithText("Custom Esplora").performClick()
         compose.onNode(hasSetTextAction() and hasText("URL")).performTextReplacement(url)
-        compose.onNode(hasSetTextAction() and hasText("Name")).performTextReplacement(NODE_NAME)
+        compose.onNode(hasSetTextAction() and hasText("Name")).performTextReplacement(name)
         compose.onNodeWithText("Save Custom Node").performClick()
 
         compose.waitUntil(timeoutMillis = 30_000) { selectedNode().url == url }
         val saved = selectedNode()
         assertEquals(ApiType.ESPLORA, saved.apiType)
-        assertEquals(NODE_NAME, saved.name)
+        assertEquals(name, saved.name)
 
         compose.waitUntil(timeoutMillis = 10_000) { saveButtonIsEnabled() }
         val requestsBeforeResave = esplora.requestCount
         compose.onNodeWithText("Save Custom Node").performClick()
 
-        // done once the screen stops saving after checking our node, failing, or saving another
+        // done once the screen stops saving after checking our node, showing an error, or saving another
         // node, which hides the custom form and its save button
         compose.waitUntil(timeoutMillis = 30_000) {
             val settled =
-                esplora.requestCount > requestsBeforeResave ||
-                    compose.onAllNodes(hasText("Connection Failed")).fetchSemanticsNodes().isNotEmpty() ||
-                    selectedNode() != saved
+                esplora.requestCount > requestsBeforeResave || errorShown() || selectedNode() != saved
 
             settled && !isSaving()
         }
 
+        // a failed second save keeps the previous node, so it must also be seen to reach our node
+        assertFalse("the second save must not fail", errorShown())
+        assertTrue("the second save must check our node", esplora.requestCount > requestsBeforeResave)
         assertEquals("the saved custom node must survive a second save", saved, selectedNode())
         compose.onNode(hasSetTextAction() and hasText("URL")).assert(hasText(url))
     }
+
+    // the screen reports every failed save in a dialog with one of these titles
+    private fun errorShown() =
+        ERROR_TITLES.any { title -> compose.onAllNodes(hasText(title)).fetchSemanticsNodes().isNotEmpty() }
 
     private fun selectedNode() = NodeSelector().use { selector -> selector.selectedNode().toNode() }
 
@@ -122,7 +136,7 @@ class NodeSettingsCustomNodeResaveTest {
 
     private companion object {
         const val LOOPBACK = "127.0.0.1"
-        const val NODE_NAME = "Home node"
         const val SIGNET_DEFAULT_NODE = "mutinynet"
+        val ERROR_TITLES = listOf("Error", "Connection Failed", "Unable to parse URL")
     }
 }
