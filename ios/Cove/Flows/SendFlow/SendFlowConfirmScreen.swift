@@ -58,7 +58,12 @@ struct SendFlowConfirmScreen: View {
     private var resultAlertBinding: Binding<TaggedItem<SendFlowConfirmAlertState>?> {
         Binding(
             get: { auth.lockState == .unlocked ? presenter.confirmationAlertState : nil },
-            set: { presenter.confirmationAlertState = $0 }
+            set: { newValue in
+                // the user can't act on a hidden alert, so a write while locked is the lock
+                // hiding it and must keep the result for after unlock
+                guard auth.lockState == .unlocked else { return }
+                presenter.confirmationAlertState = newValue
+            }
         )
     }
 
