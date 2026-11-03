@@ -71,12 +71,19 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         )
         reachAndTap(button("Advanced Setup"), "choose chain code: Advanced Setup")
 
+        // the field grows vertically, which XCUITest can report as a text view rather than a text field
+        let chainCodeField = app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier == %@ AND (elementType == %lu OR elementType == %lu)",
+            "tapSigner.chainCode",
+            XCUIElement.ElementType.textField.rawValue,
+            XCUIElement.ElementType.textView.rawValue
+        ))
         assertScreenFits(
             "advanced setup",
             texts: ["Advanced Setup"],
-            buttons: [button("Back"), button("Generate new string for me"), button("Continue")]
+            buttons: [button("Back"), chainCodeField, button("Generate new string for me"), button("Continue")]
         )
-        reachAndTap(button("Generate new string for me"), "advanced setup: Generate")
+        reachAndTap(chainCodeField, "advanced setup: chain code field").typeText(Self.randomChainCode())
         reachAndTap(button("Continue"), "advanced setup: Continue")
 
         try enterCvc(HardwareSignerControl.tapSignerCvc, on: "factory CVC", title: "Enter Factory CVC", cancel: "Back")
@@ -278,5 +285,10 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private func isUnderKeyboard(_ frame: CGRect) -> Bool {
         let keyboard = app.keyboards.firstMatch
         return keyboard.exists && keyboard.frame.intersects(frame)
+    }
+
+    /// A random 32-byte chain code as hex, as a user typing their own would enter it
+    private static func randomChainCode() -> String {
+        (0 ..< 32).map { _ in String(format: "%02x", UInt8.random(in: 0 ... 255)) }.joined()
     }
 }

@@ -1,6 +1,14 @@
 package org.bitcoinppl.cove.flows.TapSignerFlow
 
 import android.graphics.Rect
+import android.view.View
+import android.view.ViewGroup
+import android.view.inspector.WindowInspector
+import androidx.compose.ui.geometry.Rect as ComposeRect
+import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.getAllSemanticsNodes
+import androidx.compose.ui.unit.toSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
@@ -31,6 +39,8 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.security.SecureRandom
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Walks every TAPSIGNER setup and import screen at the largest system font scale and checks that
@@ -38,9 +48,9 @@ import java.security.SecureRandom
  * and an emulated card (docs/testing.md)
  *
  * The TAPSIGNER sheet is its own window, which ignores a Compose test font scale, so this sets the
- * system font scale and restores it afterwards. UiAutomator sees a node's visible bounds, so the
- * checks catch text and actions pushed off screen, cut off by their scroll container or squeezed,
- * not an ellipsis inside a label.
+ * system font scale and restores it afterwards. Each node's full bounds come from the Compose
+ * semantics tree, so the checks catch text and actions pushed off screen, cut off by their
+ * container or squeezed, not an ellipsis inside a label.
  * Runs in the uiTest flavour; needs the hardware signer host up and forwarded, which
  * `just android-instrumented-ci` does
  */
@@ -57,9 +67,12 @@ class TapSignerLayoutFullLaunchTest {
         // well under a line of text at 2x, so only a squeezed or clipped node falls below it
         const val MIN_NODE_HEIGHT_DP = 24
 
-        // how far one nudge drags a node clipped at its scroll container's edge, and how many it gets
+        // how far one drag moves a node cut off at the top or bottom, and how many it gets
         const val NUDGE_DP = 96
         const val MAX_NUDGES = 6
+
+        // Compose positions are floats that the accessibility bounds round
+        const val CLIP_TOLERANCE_PX = 1
     }
 
     @get:Rule
@@ -232,12 +245,13 @@ class TapSignerLayoutFullLaunchTest {
     }
 
     /**
-     * Scrolls until the node lies above the gesture strip and wholly inside its scroll container,
-     * then checks it sits inside the display and isn't squeezed
+     * Scrolls until the node lies above the gesture strip and shows whole, then checks it isn't
+     * squeezed
      *
-     * UiAutomator reports bounds already clipped to the scroll container, so a node cut off at the
-     * container's edge looks whole. One whose visible bounds reach that edge is nudged inward until
-     * it clears the edge, or until the container stops scrolling, which leaves nothing beyond it
+     * UiAutomator reports bounds already clipped to the display, window and scroll container, so
+     * the node's full bounds come from the Compose semantics tree instead. A node cut off at the top
+     * or bottom is dragged inward until it shows whole; one cut off at the side, or that never shows
+     * whole, fails
      */
     private fun reachable(
         selector: BySelector,
@@ -245,63 +259,95 @@ class TapSignerLayoutFullLaunchTest {
     ): UiObject2 {
         val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
         var node = device.scrollTo(selector, timeoutMs = 15_000L)
-        var previous: Rect? = null
+        var visible = Rect()
+        var full: Rect? = null
 
         repeat(MAX_NUDGES) {
-            // a recomposition can replace the node or an ancestor between reads
-            val (bounds, viewport) =
+            // a recomposition can replace the node between reads
+            visible =
                 try {
-                    node.visibleBounds to node.scrollViewport()
+                    node.visibleBounds
                 } catch (_: StaleObjectException) {
                     node = device.waitFor(selector, timeoutMs = 5_000L)
-                    node.visibleBounds to node.scrollViewport()
+                    node.visibleBounds
                 }
 
-            val edge = viewport?.let { touchedEdge(bounds, it) }
-            val stuck = bounds == previous
+            val whole = fullBoundsOnScreen(visible) ?: error("$name at $visible matches no Compose semantics node")
+            full = whole
 
+            val cutTop = whole.top < visible.top - CLIP_TOLERANCE_PX
+            val cutBottom = whole.bottom > visible.bottom + CLIP_TOLERANCE_PX
             assertTrue(
-                "$name is $bounds, taller than its scroll container $viewport",
-                viewport == null || bounds.top > viewport.top || bounds.bottom < viewport.bottom,
+                "$name is cut off at the side: it spans $whole but shows only $visible",
+                whole.left >= visible.left - CLIP_TOLERANCE_PX && whole.right <= visible.right + CLIP_TOLERANCE_PX,
             )
+            assertTrue("$name spans $whole, taller than the $visible it can show in", !(cutTop && cutBottom))
 
-            if ((edge == null || stuck) && device.isTappable(node)) {
+            if (!cutTop && !cutBottom && device.isTappable(node)) {
                 assertTrue(
-                    "$name is $bounds, outside the ${device.displayWidth}x${device.displayHeight} display",
-                    bounds.left >= 0 && bounds.top >= 0 && bounds.right <= device.displayWidth && bounds.bottom <= device.displayHeight,
-                )
-                assertTrue(
-                    "$name is squeezed to $bounds, under ${MIN_NODE_HEIGHT_DP}dp tall",
-                    bounds.height() >= MIN_NODE_HEIGHT_DP * density,
+                    "$name is squeezed to $visible, under ${MIN_NODE_HEIGHT_DP}dp tall",
+                    visible.height() >= MIN_NODE_HEIGHT_DP * density,
                 )
                 return node
             }
 
-            assertTrue("$name is stuck at $bounds, cut off by its scroll container $viewport or the gesture strip", !stuck)
-            previous = bounds
-
-            // below the gesture strip counts as the bottom edge, since the content must move up
-            nudge(viewport ?: Rect(0, 0, device.displayWidth, device.displayHeight), towardsTop = edge != Edge.TOP)
+            // below the gesture strip counts as cut off at the bottom, since the content must move up
+            nudge(node.scrollViewport() ?: Rect(0, 0, device.displayWidth, device.displayHeight), towardsTop = !cutTop)
             node = device.waitFor(selector, timeoutMs = 5_000L)
         }
 
-        error("$name never cleared the edge of its scroll container after $MAX_NUDGES nudges")
+        error("$name never showed whole after $MAX_NUDGES drags: it spans $full but shows only $visible")
     }
 
-    private enum class Edge { TOP, BOTTOM }
+    /**
+     * The unclipped screen bounds of the Compose node that UiAutomator shows at [visible]
+     *
+     * Every node's clipped bounds are compared with [visible], and the closest one's full layout
+     * bounds are returned, so the same text elsewhere, such as behind the sheet, doesn't match
+     */
+    private fun fullBoundsOnScreen(visible: Rect): Rect? {
+        var best: Rect? = null
 
-    // a partly scrolled-in node is clipped to the container, so its visible edge lands on the container's
-    private fun touchedEdge(
-        bounds: Rect,
-        viewport: Rect,
-    ): Edge? =
-        when {
-            bounds.top <= viewport.top -> Edge.TOP
-            bounds.bottom >= viewport.bottom -> Edge.BOTTOM
-            else -> null
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            best =
+                WindowInspector
+                    .getGlobalWindowViews()
+                    .flatMap { it.composeRoots() }
+                    .flatMap { it.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false) }
+                    .map { it.clippedOnScreen() to it.fullOnScreen() }
+                    .filter { (clipped, _) -> Rect.intersects(clipped, visible) }
+                    .minByOrNull { (clipped, _) -> edgeDistance(clipped, visible) }
+                    ?.second
         }
 
-    // the nearest scrollable ancestor's visible bounds, which is the area the node can show in
+        return best
+    }
+
+    private fun View.composeRoots(): List<RootForTest> =
+        when (this) {
+            is RootForTest -> listOf(this)
+            is ViewGroup -> (0 until childCount).flatMap { getChildAt(it).composeRoots() }
+            else -> emptyList()
+        }
+
+    // boundsInWindow is clipped by every ancestor; shifting it by the window's screen offset puts
+    // it beside the unclipped position on screen
+    private fun SemanticsNode.clippedOnScreen(): Rect {
+        val offset = positionOnScreen - positionInWindow
+        return boundsInWindow.translate(offset).rounded()
+    }
+
+    private fun SemanticsNode.fullOnScreen(): Rect = ComposeRect(positionOnScreen, size.toSize()).rounded()
+
+    // rounds each edge to the nearest pixel, as the accessibility bounds do
+    private fun ComposeRect.rounded(): Rect = Rect(left.roundToInt(), top.roundToInt(), right.roundToInt(), bottom.roundToInt())
+
+    private fun edgeDistance(
+        a: Rect,
+        b: Rect,
+    ): Int = abs(a.left - b.left) + abs(a.top - b.top) + abs(a.right - b.right) + abs(a.bottom - b.bottom)
+
+    // the nearest scrollable ancestor's visible bounds, which is where a drag scrolls the node
     private fun UiObject2.scrollViewport(): Rect? =
         generateSequence(parent) { it.parent }
             .firstOrNull { it.isScrollable }
