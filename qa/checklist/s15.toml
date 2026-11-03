@@ -6,6 +6,7 @@ platforms = ["ios", "android"]
 target = "device"
 paths = [
     "rust/src/manager/auth_manager.rs",
+    "rust/src/manager/auth_manager/**",
     "rust/src/auth.rs",
     "ios/Cove/Views/LockView.swift",
     "ios/Cove/Views/NumberPadPinView.swift",
@@ -28,6 +29,7 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
     "rust/src/manager/auth_manager.rs",
+    "rust/src/manager/auth_manager/**",
     "rust/src/database/global_config.rs",
     "ios/Cove/Views/LockView.swift",
     "ios/Cove/Views/NumberPadPinView.swift",
@@ -53,6 +55,7 @@ platforms = ["ios", "android"]
 target = "manual"
 paths = [
     "rust/src/manager/auth_manager.rs",
+    "rust/src/manager/auth_manager/**",
     "ios/Cove/Views/LockView.swift",
     "ios/Cove/Views/NumberPadPinView.swift",
     "ios/Cove/AuthManager.swift",
@@ -270,6 +273,7 @@ platforms = ["ios", "android"]
 target = "device"
 paths = [
     "rust/src/manager/auth_manager.rs",
+    "rust/src/manager/auth_manager/**",
     "rust/src/app/full_wipe.rs",
     "ios/Cove/Flows/SettingsFlow/SettingsScreen/WipeDataPinView.swift",
     "ios/Cove/Flows/SettingsFlow/SettingsScreen/WipePin.swift",

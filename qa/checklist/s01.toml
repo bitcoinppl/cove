@@ -237,6 +237,7 @@ platforms = ["android"]
 target = "device"
 paths = [
     "rust/src/manager/auth_manager.rs",
+    "rust/src/manager/auth_manager/**",
     "rust/src/auth.rs",
     "rust/src/database/global_config.rs",
     "android/app/src/main/java/org/bitcoinppl/cove/AuthManager.kt",

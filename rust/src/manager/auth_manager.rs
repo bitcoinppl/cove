@@ -253,11 +253,24 @@ impl RustAuthManager {
     /// Skip authentication when the app returns to the foreground right after leaving it,
     /// returns whether the app is still locked
     pub fn release_background_lock_on_foreground(&self) -> bool {
-        let auth_type = self.auth_type();
-        let is_decoy_pin_enabled = self.is_decoy_pin_enabled();
+        let config = &Database::global().global_config;
+        let settings = config.auth_type().and_then(|auth_type| {
+            let decoy_pin = config.decoy_pin()?;
+            Ok((auth_type, !decoy_pin.is_empty()))
+        });
 
         let mut app_lock = self.app_lock.lock();
-        app_lock.release_background_on_foreground(auth_type, is_decoy_pin_enabled, BootTime::now());
+
+        // without readable settings there is no grace period to pick, so the lock stays
+        // until the user authenticates
+        match settings {
+            Ok((auth_type, is_decoy_pin_enabled)) => app_lock.release_background_on_foreground(
+                auth_type,
+                is_decoy_pin_enabled,
+                BootTime::now(),
+            ),
+            Err(error) => error!("unable to read auth settings, keeping app lock: {error:?}"),
+        }
 
         app_lock.is_locked()
     }
@@ -734,6 +747,7 @@ mod tests {
                 .expect("write raw auth type");
 
             assert!(manager.lock(AppLockReason::Background));
+            assert!(manager.release_background_lock_on_foreground());
             assert!(manager.lock_for_send_confirmation().is_some());
             assert!(manager.unlock_if_auth_disabled());
         });

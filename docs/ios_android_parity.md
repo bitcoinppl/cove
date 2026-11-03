@@ -299,7 +299,7 @@ Android may use the platform-supported `FLAG_SECURE` window flag for sensitive s
 
 `RustAuthManager` owns the app lock and records why each lock was taken. Both platforms mirror its answer in `AuthManager` (`lockState` on iOS, `isLocked` on Android) and never set the lock state themselves.
 
-- Leaving the foreground locks with `AppLockReason.Background`, even when the app is already locked. Screens that guard secrets lock with `AppLockReason.Reauthentication`. Only authentication clears these. The one exception is a quick return to the foreground, which can release the background lock but no other lock.
+- Leaving the foreground locks with `AppLockReason.Background`, even when the app is already locked. Screens that guard secrets lock with `AppLockReason.Reauthentication`. Only authentication clears these. The one exception is a quick return to the foreground, which can release the background lock but no other lock, and only when the auth settings can be read.
 - The send confirmation screen takes a `SendConfirmationLock` token and gives back only that token when it goes away. It never unlocks the app after a send.
 - Only a verified PIN, biometric check, or trick PIN unlocks every lock, through `AuthManager`'s private authenticated unlock path.
 

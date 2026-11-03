@@ -25,6 +25,7 @@ target = "ui"
 paths = [
     "rust/src/database/global_config.rs",
     "rust/src/manager/auth_manager.rs",
+    "rust/src/manager/auth_manager/**",
     "ios/Cove/Flows/SettingsFlow/MainSettingsScreen.swift",
     "ios/Cove/Flows/SettingsFlow/SendDiagnosticsSheet.swift",
     "ios/Cove/Flows/SettingsFlow/SubmittedDiagnosticsSheet.swift",
@@ -64,6 +65,7 @@ platforms = ["ios", "android"]
 target = "ui"
 paths = [
     "rust/src/manager/auth_manager.rs",
+    "rust/src/manager/auth_manager/**",
     "rust/src/auth.rs",
     "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsXprvReveal.swift",
     "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsPresentation.swift",
@@ -86,6 +88,7 @@ platforms = ["ios", "android"]
 target = "ui"
 paths = [
     "rust/src/manager/auth_manager.rs",
+    "rust/src/manager/auth_manager/**",
     "rust/src/auth.rs",
     "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsXprvReveal.swift",
     "ios/Cove/Flows/SettingsFlow/WalletSettings/WalletSettingsPresentation.swift",
@@ -124,6 +127,7 @@ platforms = ["ios", "android"]
 target = "ui"
 paths = [
     "rust/src/manager/auth_manager.rs",
+    "rust/src/manager/auth_manager/**",
     "rust/src/auth.rs",
     "rust/src/manager/key_teleport_manager/**",
     "rust/src/key_teleport.rs",
@@ -148,6 +152,7 @@ platforms = ["ios", "android"]
 target = "ui"
 paths = [
     "rust/src/manager/auth_manager.rs",
+    "rust/src/manager/auth_manager/**",
     "rust/src/auth.rs",
     "rust/src/manager/key_teleport_manager/**",
     "rust/src/key_teleport.rs",

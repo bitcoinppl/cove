@@ -130,6 +130,7 @@ platforms = ["ios", "android"]
 target = "device"
 paths = [
     "rust/src/manager/auth_manager.rs",
+    "rust/src/manager/auth_manager/**",
     "ios/Cove/Views/LockView.swift",
     "ios/Cove/Views/NumberPadPinView.swift",
     "ios/Cove/AuthManager.swift",
