@@ -27,16 +27,10 @@ private enum WipeCallResult: Sendable {
     private let logger = Log(id: "AuthManager")
     var rust: RustAuthManager
     var type = Database().globalConfig().authType()
-    var lockState: LockState = .locked
+    private(set) var lockState: LockState
     var isWipeDataPinEnabled: Bool
     var isDecoyPinEnabled: Bool
     var wipePresentationState = WipePresentationState.idle
-
-    @ObservationIgnored
-    var lockedAt: Date? {
-        guard let lockedAt = rust.lockedAt() else { return nil }
-        return Date(timeIntervalSince1970: Double(lockedAt))
-    }
 
     @MainActor
     var isUsingBiometrics: Bool = false
@@ -63,6 +57,7 @@ private enum WipeCallResult: Sendable {
         let rust = RustAuthManager()
         self.rust = rust
 
+        lockState = rust.isLocked() ? .locked : .unlocked
         isWipeDataPinEnabled = rust.isWipeDataPinEnabled()
         isDecoyPinEnabled = rust.isDecoyPinEnabled()
 
@@ -73,17 +68,47 @@ private enum WipeCallResult: Sendable {
         rust.isInDecoyMode()
     }
 
-    public func lock() {
-        guard isAuthEnabled else { return }
-        let now = UInt64(Date.now.timeIntervalSince1970)
-        Log.debug("[AUTH] locking at \(now)")
-        lockState = .locked
-        try? rust.setLockedAt(lockedAt: now)
+    /// Lock the app until the user authenticates
+    public func lock(reason: AppLockReason) {
+        Log.debug("[AUTH] locking for \(reason)")
+        setLocked(rust.lock(reason: reason))
     }
 
-    public func unlock() {
+    /// Lock the app for a send confirmation screen, the returned token releases only this lock
+    public func lockForSendConfirmation() -> SendConfirmationLock? {
+        guard let lock = rust.lockForSendConfirmation() else { return nil }
+        lockState = .locked
+        return lock
+    }
+
+    /// Release the lock a send confirmation screen took, other locks stay in place
+    public func releaseSendConfirmationLock(_ lock: SendConfirmationLock) {
+        setLocked(rust.releaseSendConfirmationLock(lock: lock))
+    }
+
+    /// Skip authentication when the app comes back right after leaving the foreground
+    public func releaseBackgroundLockOnForeground() {
+        setLocked(rust.releaseBackgroundLockOnForeground())
+    }
+
+    /// Unlock when no authentication is set up
+    public func unlockIfAuthDisabled() {
+        setLocked(rust.unlockIfAuthDisabled())
+    }
+
+    /// Unlock after the lock screen verified the user with biometrics
+    public func completeBiometricAuthentication() {
+        unlockAuthenticated()
+    }
+
+    /// Only called after the user authenticated with a PIN, biometrics, or a trick PIN
+    private func unlockAuthenticated() {
+        rust.unlockAuthenticated()
         lockState = .unlocked
-        try? rust.setLockedAt(lockedAt: 0)
+    }
+
+    private func setLocked(_ isLocked: Bool) {
+        lockState = isLocked ? .locked : .unlocked
     }
 
     public var isAuthEnabled: Bool {
@@ -99,7 +124,7 @@ private enum WipeCallResult: Sendable {
     public func handleAndReturnUnlockMode(_ pin: String) async -> UnlockMode {
         if AuthPin().check(pin: pin) {
             if Database().globalConfig().isInDecoyMode() { switchToMainMode() }
-            unlock()
+            unlockAuthenticated()
             return .main
         }
 
@@ -108,7 +133,7 @@ private enum WipeCallResult: Sendable {
             // enter decoy mode if not already in decoy mode and reset app and router
             if Database().globalConfig().isInMainMode() {
                 rust.switchToDecoyMode()
-                unlock()
+                unlockAuthenticated()
 
                 let app = AppManager.shared
                 app.reset()
@@ -195,7 +220,7 @@ private enum WipeCallResult: Sendable {
         case let .success(completion):
             await AppManager.shared.applyWipeCompletion(completion)
             apply(completion.auth)
-            unlock()
+            unlockAuthenticated()
             wipePresentationState = .idle
             return .wipe
 

@@ -199,7 +199,6 @@ fun LockView(
                                     UnlockMode.LOCKED -> false
                                 }
                             },
-                            onUnlock = { auth.unlock() },
                             backAction =
                                 if (auth.type == AuthType.BOTH && isBiometricAvailable) {
                                     { screen = Screen.BIOMETRIC }

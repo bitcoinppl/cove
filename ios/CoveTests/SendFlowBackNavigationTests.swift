@@ -159,7 +159,6 @@ private final class BackNavigationFixture {
     let manager: WalletManager
     let presenter: SendFlowPresenter
     let sendManager: SendFlowManager
-    private let previousLockState = AuthManager.shared.lockState
     private let previousSelection = Database().globalConfig().selectedWallet()
 
     init() {
@@ -172,7 +171,8 @@ private final class BackNavigationFixture {
 
         // a real backing handle is required because Balance equality runs in Rust
         manager.balance = LayoutBalance(unsafeFromHandle: Balance.zero().uniffiCloneHandle())
-        AuthManager.shared.lockState = .unlocked
+        // the test host sets up no authentication, so the app opens unlocked
+        AuthManager.shared.unlockIfAuthDisabled()
         presenter = SendFlowPresenter(app: app, manager: manager)
         sendManager = SendFlowManager(LayoutOnlySendManager(walletId: manager.id), presenter: presenter)
     }
@@ -180,7 +180,6 @@ private final class BackNavigationFixture {
     func close() {
         sendManager.close()
         manager.close()
-        AuthManager.shared.lockState = previousLockState
         if let previousSelection {
             try? Database().globalConfig().selectWallet(id: previousSelection)
         } else {

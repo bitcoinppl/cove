@@ -42,6 +42,7 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.SettingsFlow.SettingsTopAppBar
 import org.bitcoinppl.cove.ui.theme.MaterialSpacing
 import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.ShutdownAttemptId
 import org.bitcoinppl.cove_core.WalletLifecycleFailure
@@ -221,7 +222,7 @@ fun WalletSettingsScreen(
                 action = action,
                 credentialGeneration = auth.mainCredentialGeneration,
             )
-        auth.lock()
+        auth.lock(AppLockReason.REAUTHENTICATION)
     }
 
     LaunchedEffect(auth.mainCredentialGeneration) {

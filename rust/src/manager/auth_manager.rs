@@ -1,5 +1,11 @@
-use std::sync::{Arc, LazyLock};
+mod app_lock;
 
+use std::{
+    sync::{Arc, LazyLock},
+    time::Instant,
+};
+
+use parking_lot::Mutex;
 use tap::TapFallible as _;
 use tracing::{debug, error};
 
@@ -12,6 +18,10 @@ use crate::{
     manager::reconcile_channel::ReconcileChannel,
     wallet::metadata::WalletMode,
 };
+
+pub use app_lock::{AppLockReason, SendConfirmationLock};
+
+use app_lock::AppLock;
 
 type Message = AuthManagerReconcileMessage;
 
@@ -116,6 +126,7 @@ pub enum SecuritySettingsResult {
 #[derive(Clone, Debug, uniffi::Object)]
 pub struct RustAuthManager {
     pub reconciler: ReconcileChannel<AuthManagerReconcileMessage>,
+    app_lock: Arc<Mutex<AppLock>>,
 }
 
 type Action = AuthManagerAction;
@@ -157,7 +168,11 @@ pub enum TrickPinError {
 
 impl RustAuthManager {
     fn init() -> Arc<Self> {
-        Self { reconciler: ReconcileChannel::new(1000) }.into()
+        Self {
+            reconciler: ReconcileChannel::new(1000),
+            app_lock: Arc::new(Mutex::new(AppLock::locked_at_startup())),
+        }
+        .into()
     }
 
     /// Sends every setting in `settings` so frontends end on those values
@@ -198,27 +213,73 @@ impl RustAuthManager {
             .unwrap_or_default()
     }
 
-    pub fn set_locked_at(&self, locked_at: u64) -> Result<()> {
-        Database::global()
-            .global_config
-            .set_locked_at(locked_at)
-            .tap_err(|error| error!("unable to set locked at: {error:?}"))?;
+    // MARK: APP LOCK
 
-        Ok(())
+    /// Whether any lock is held on the app
+    pub fn is_locked(&self) -> bool {
+        self.app_lock.lock().is_locked()
     }
 
-    pub fn locked_at(&self) -> Option<u64> {
-        let locked_at = Database::global()
-            .global_config
-            .locked_at()
-            .tap_err(|error| error!("unable to get locked at: {error:?}"))
-            .ok()?;
+    /// Lock the app until the user authenticates, returns whether the app is locked
+    ///
+    /// Does nothing when no authentication is set up
+    pub fn lock(&self, reason: AppLockReason) -> bool {
+        let is_auth_enabled = self.auth_type() != AuthType::None;
+        let mut app_lock = self.app_lock.lock();
 
-        if locked_at == u64::default() {
+        if is_auth_enabled {
+            app_lock.lock(reason, Instant::now());
+        }
+
+        app_lock.is_locked()
+    }
+
+    /// Lock the app for a send confirmation screen, returns the token that releases only
+    /// this lock, or nothing when no authentication is set up
+    pub fn lock_for_send_confirmation(&self) -> Option<SendConfirmationLock> {
+        if self.auth_type() == AuthType::None {
             return None;
         }
 
-        Some(locked_at)
+        Some(self.app_lock.lock().lock_for_send_confirmation(Instant::now()))
+    }
+
+    /// Release the lock a send confirmation screen took, returns whether the app is still
+    /// locked for any other reason
+    pub fn release_send_confirmation_lock(&self, lock: SendConfirmationLock) -> bool {
+        let mut app_lock = self.app_lock.lock();
+        app_lock.release_send_confirmation(lock, Instant::now());
+
+        app_lock.is_locked()
+    }
+
+    /// Skip authentication when the app returns to the foreground right after leaving it,
+    /// returns whether the app is still locked
+    pub fn release_background_lock_on_foreground(&self) -> bool {
+        let auth_type = self.auth_type();
+        let is_decoy_pin_enabled = self.is_decoy_pin_enabled();
+
+        let mut app_lock = self.app_lock.lock();
+        app_lock.release_background_on_foreground(auth_type, is_decoy_pin_enabled, Instant::now());
+
+        app_lock.is_locked()
+    }
+
+    /// Clear every lock after the user authenticated with a PIN, biometrics, or a trick PIN
+    pub fn unlock_authenticated(&self) {
+        self.app_lock.lock().unlock_authenticated();
+    }
+
+    /// Clear every lock when no authentication is set up, returns whether the app is locked
+    pub fn unlock_if_auth_disabled(&self) -> bool {
+        let is_auth_enabled = self.auth_type() != AuthType::None;
+        let mut app_lock = self.app_lock.lock();
+
+        if !is_auth_enabled {
+            app_lock.unlock_authenticated();
+        }
+
+        app_lock.is_locked()
     }
 
     // MARK: DECOY PIN
@@ -568,3 +629,98 @@ crate::manager::reconcile_channel::impl_reconcile_sink!(
     dyn AuthManagerReconciler,
     AuthManagerReconcileMessage
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Sets the global auth type for one test and restores the previous one afterward
+    struct AuthTypeGuard(AuthType);
+
+    impl AuthTypeGuard {
+        fn set(auth_type: AuthType) -> Self {
+            let config = &Database::global().global_config;
+            let previous = config.auth_type().unwrap_or_default();
+            config.set_auth_type(auth_type).expect("set auth type");
+
+            Self(previous)
+        }
+    }
+
+    impl Drop for AuthTypeGuard {
+        fn drop(&mut self) {
+            let _ = Database::global().global_config.set_auth_type(self.0);
+        }
+    }
+
+    /// Runs `test` with a fresh auth manager whose app is unlocked under `auth_type`
+    fn with_unlocked_manager(auth_type: AuthType, test: impl FnOnce(Arc<RustAuthManager>)) {
+        let _lock = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::init_test_database();
+        let _auth_type = AuthTypeGuard::set(auth_type);
+
+        let manager = RustAuthManager::init();
+        manager.unlock_authenticated();
+        assert!(!manager.is_locked());
+
+        test(manager);
+    }
+
+    #[test]
+    fn send_confirmation_cannot_clear_a_lock_it_did_not_take() {
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            // the confirmation screen asks for authentication before sending
+            let send = manager.lock_for_send_confirmation().expect("auth is enabled");
+            assert!(manager.is_locked());
+            manager.unlock_authenticated();
+
+            // the app leaves the foreground while the send is still in flight
+            assert!(manager.lock(AppLockReason::Background));
+
+            // the confirmation screen finishes and gives back only its own lock
+            assert!(manager.release_send_confirmation_lock(send));
+            assert!(manager.is_locked());
+        });
+    }
+
+    #[test]
+    fn send_confirmation_cannot_clear_a_reauthentication_lock() {
+        with_unlocked_manager(AuthType::Biometric, |manager| {
+            let send = manager.lock_for_send_confirmation().expect("auth is enabled");
+            manager.lock(AppLockReason::Reauthentication);
+
+            assert!(manager.release_send_confirmation_lock(send));
+        });
+    }
+
+    #[test]
+    fn quick_foreground_keeps_send_confirmation_lock() {
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            let send = manager.lock_for_send_confirmation().expect("auth is enabled");
+            manager.lock(AppLockReason::Background);
+
+            // returning right away only clears the lock leaving the foreground took
+            assert!(manager.release_background_lock_on_foreground());
+
+            // leaving the confirmation screen right away clears the last lock
+            assert!(!manager.release_send_confirmation_lock(send));
+        });
+    }
+
+    #[test]
+    fn quick_foreground_releases_background_lock() {
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            manager.lock(AppLockReason::Background);
+
+            assert!(!manager.release_background_lock_on_foreground());
+        });
+    }
+
+    #[test]
+    fn no_lock_is_taken_without_authentication() {
+        with_unlocked_manager(AuthType::None, |manager| {
+            assert!(!manager.lock(AppLockReason::Background));
+            assert!(manager.lock_for_send_confirmation().is_none());
+        });
+    }
+}

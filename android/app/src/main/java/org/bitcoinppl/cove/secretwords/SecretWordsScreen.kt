@@ -51,6 +51,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
+import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.Mnemonic
 import org.bitcoinppl.cove_core.types.WalletId
 
@@ -92,7 +93,7 @@ fun SecretWordsScreen(
     // lock on appear and reload when walletId changes
     LaunchedEffect(walletId) {
         // lock authentication before showing seed words
-        auth.lock()
+        auth.lock(AppLockReason.REAUTHENTICATION)
 
         // close previous mnemonic before loading new one
         words?.close()

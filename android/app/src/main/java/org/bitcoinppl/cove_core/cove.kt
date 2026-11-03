@@ -1483,11 +1483,19 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_is_in_decoy_mode(
     ): Short
+    external fun uniffi_cove_checksum_method_rustauthmanager_is_locked(
+    ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_is_wipe_data_pin_enabled(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_listen_for_updates(
     ): Short
-    external fun uniffi_cove_checksum_method_rustauthmanager_locked_at(
+    external fun uniffi_cove_checksum_method_rustauthmanager_lock(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustauthmanager_lock_for_send_confirmation(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustauthmanager_release_background_lock_on_foreground(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustauthmanager_release_send_confirmation_lock(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_send(
     ): Short
@@ -1495,13 +1503,15 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_set_decoy_pin(
     ): Short
-    external fun uniffi_cove_checksum_method_rustauthmanager_set_locked_at(
-    ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_switch_to_decoy_mode(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustauthmanager_unlock_authenticated(
+    ): Short
+    external fun uniffi_cove_checksum_method_rustauthmanager_unlock_if_auth_disabled(
     ): Short
     external fun uniffi_cove_checksum_method_rustauthmanager_validate_new_pin(
     ): Short
@@ -2629,19 +2639,25 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_cove_fn_method_rustauthmanager_is_in_decoy_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
+    external fun uniffi_cove_fn_method_rustauthmanager_is_locked(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_fn_method_rustauthmanager_is_wipe_data_pin_enabled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Byte
     external fun uniffi_cove_fn_method_rustauthmanager_listen_for_updates(`ptr`: Long,`reconciler`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
-    external fun uniffi_cove_fn_method_rustauthmanager_locked_at(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    external fun uniffi_cove_fn_method_rustauthmanager_lock(`ptr`: Long,`reason`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_rustauthmanager_lock_for_send_confirmation(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_rustauthmanager_release_background_lock_on_foreground(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
+    external fun uniffi_cove_fn_method_rustauthmanager_release_send_confirmation_lock(`ptr`: Long,`lock`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_fn_method_rustauthmanager_send(`ptr`: Long,`message`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustauthmanager_set_auth_type(`ptr`: Long,`authType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustauthmanager_set_decoy_pin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
-    ): Unit
-    external fun uniffi_cove_fn_method_rustauthmanager_set_locked_at(`ptr`: Long,`lockedAt`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
     external fun uniffi_cove_fn_method_rustauthmanager_set_wipe_data_pin(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
@@ -2649,6 +2665,10 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_cove_fn_method_rustauthmanager_switch_to_main_mode(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): Unit
+    external fun uniffi_cove_fn_method_rustauthmanager_unlock_authenticated(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Unit
+    external fun uniffi_cove_fn_method_rustauthmanager_unlock_if_auth_disabled(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+    ): Byte
     external fun uniffi_cove_fn_method_rustauthmanager_validate_new_pin(`ptr`: Long,`newPin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_rustauthmanager_validate_pin_settings(`ptr`: Long,`pin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -4494,13 +4514,25 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_is_in_decoy_mode() != 2667.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_is_locked() != 47594.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_is_wipe_data_pin_enabled() != 9487.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_listen_for_updates() != 2817.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_locked_at() != 56936.toShort()) {
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_lock() != 50796.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_lock_for_send_confirmation() != 14355.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_release_background_lock_on_foreground() != 55799.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_release_send_confirmation_lock() != 16591.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_send() != 57691.toShort()) {
@@ -4512,9 +4544,6 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_rustauthmanager_set_decoy_pin() != 8681.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_rustauthmanager_set_locked_at() != 10095.toShort()) {
-        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
-    }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin() != 47802.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4522,6 +4551,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode() != 36755.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_unlock_authenticated() != 37105.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_cove_checksum_method_rustauthmanager_unlock_if_auth_disabled() != 13357.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_rustauthmanager_validate_new_pin() != 9789.toShort()) {
@@ -20067,13 +20102,41 @@ public interface RustAuthManagerInterface {
     fun `isInDecoyMode`(): kotlin.Boolean
 
     /**
+     * Whether any lock is held on the app
+     */
+    fun `isLocked`(): kotlin.Boolean
+
+    /**
      * Check if the wipe data pin is enabled
      */
     fun `isWipeDataPinEnabled`(): kotlin.Boolean
 
     fun `listenForUpdates`(`reconciler`: AuthManagerReconciler)
 
-    fun `lockedAt`(): kotlin.ULong?
+    /**
+     * Lock the app until the user authenticates, returns whether the app is locked
+     *
+     * Does nothing when no authentication is set up
+     */
+    fun `lock`(`reason`: AppLockReason): kotlin.Boolean
+
+    /**
+     * Lock the app for a send confirmation screen, returns the token that releases only
+     * this lock, or nothing when no authentication is set up
+     */
+    fun `lockForSendConfirmation`(): SendConfirmationLock?
+
+    /**
+     * Skip authentication when the app returns to the foreground right after leaving it,
+     * returns whether the app is still locked
+     */
+    fun `releaseBackgroundLockOnForeground`(): kotlin.Boolean
+
+    /**
+     * Release the lock a send confirmation screen took, returns whether the app is still
+     * locked for any other reason
+     */
+    fun `releaseSendConfirmationLock`(`lock`: SendConfirmationLock): kotlin.Boolean
 
     fun `send`(`message`: AuthManagerReconcileMessage)
 
@@ -20083,8 +20146,6 @@ public interface RustAuthManagerInterface {
      * Set the decoy pin
      */
     fun `setDecoyPin`(`pin`: kotlin.String)
-
-    fun `setLockedAt`(`lockedAt`: kotlin.ULong)
 
     /**
      * Set the wipe data pin
@@ -20100,6 +20161,16 @@ public interface RustAuthManagerInterface {
      * Switch from decoy mode to main mode
      */
     fun `switchToMainMode`()
+
+    /**
+     * Clear every lock after the user authenticated with a PIN, biometrics, or a trick PIN
+     */
+    fun `unlockAuthenticated`()
+
+    /**
+     * Clear every lock when no authentication is set up, returns whether the app is locked
+     */
+    fun `unlockIfAuthDisabled`(): kotlin.Boolean
 
     /**
      * Validate a new PIN doesn't conflict with existing PINs
@@ -20358,6 +20429,22 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
 
 
     /**
+     * Whether any lock is held on the app
+     */override fun `isLocked`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_is_locked(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
      * Check if the wipe data pin is enabled
      */override fun `isWipeDataPinEnabled`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
@@ -20385,13 +20472,71 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
 
 
 
-    override fun `lockedAt`(): kotlin.ULong? {
-            return FfiConverterOptionalULong.lift(
+
+    /**
+     * Lock the app until the user authenticates, returns whether the app is locked
+     *
+     * Does nothing when no authentication is set up
+     */override fun `lock`(`reason`: AppLockReason): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustauthmanager_locked_at(
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_lock(
+        it,
+
+        FfiConverterTypeAppLockReason.lower(`reason`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Lock the app for a send confirmation screen, returns the token that releases only
+     * this lock, or nothing when no authentication is set up
+     */override fun `lockForSendConfirmation`(): SendConfirmationLock? {
+            return FfiConverterOptionalTypeSendConfirmationLock.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_lock_for_send_confirmation(
         it,
         _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Skip authentication when the app returns to the foreground right after leaving it,
+     * returns whether the app is still locked
+     */override fun `releaseBackgroundLockOnForeground`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_release_background_lock_on_foreground(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * Release the lock a send confirmation screen took, returns whether the app is still
+     * locked for any other reason
+     */override fun `releaseSendConfirmationLock`(`lock`: SendConfirmationLock): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_release_send_confirmation_lock(
+        it,
+
+        FfiConverterTypeSendConfirmationLock.lower(`lock`),_status)
 }
     }
     )
@@ -20442,20 +20587,6 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
 
 
 
-    @Throws(AuthManagerException::class)override fun `setLockedAt`(`lockedAt`: kotlin.ULong)
-        =
-    callWithHandle {
-    uniffiRustCallWithError(AuthManagerException) { _status ->
-    UniffiLib.uniffi_cove_fn_method_rustauthmanager_set_locked_at(
-        it,
-
-        FfiConverterULong.lower(`lockedAt`),_status)
-}
-    }
-
-
-
-
     /**
      * Set the wipe data pin
      */
@@ -20500,6 +20631,37 @@ open class RustAuthManager: Disposable, AutoCloseable, RustAuthManagerInterface
 }
     }
 
+
+
+
+    /**
+     * Clear every lock after the user authenticated with a PIN, biometrics, or a trick PIN
+     */override fun `unlockAuthenticated`()
+        =
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_unlock_authenticated(
+        it,
+        _status)
+}
+    }
+
+
+
+
+    /**
+     * Clear every lock when no authentication is set up, returns whether the app is locked
+     */override fun `unlockIfAuthDisabled`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_rustauthmanager_unlock_if_auth_disabled(
+        it,
+        _status)
+}
+    }
+    )
+    }
 
 
 
@@ -35154,6 +35316,44 @@ public object FfiConverterTypeScanningInfo: FfiConverterRustBuffer<ScanningInfo>
 
 
 
+/**
+ * Proof that a send confirmation screen took a lock, needed to release that lock
+ *
+ * Frontends keep this opaque and hand it back when the screen goes away
+ */
+data class SendConfirmationLock (
+    var `id`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSendConfirmationLock: FfiConverterRustBuffer<SendConfirmationLock> {
+    override fun read(buf: ByteBuffer): SendConfirmationLock {
+        return SendConfirmationLock(
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: SendConfirmationLock) = (
+            FfiConverterULong.allocationSize(value.`id`)
+    )
+
+    override fun write(value: SendConfirmationLock, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`id`, buf)
+    }
+}
+
+
+
 data class SendFlowCoinControlMode (
     var `utxoList`: UtxoList
     ,
@@ -38110,6 +38310,49 @@ public object FfiConverterTypeAppInitError : FfiConverterRustBuffer<AppInitExcep
     }
 
 }
+
+
+
+/**
+ * Why the app is being locked until the user authenticates
+ */
+
+enum class AppLockReason {
+
+    /**
+     * The app left the foreground
+     */
+    BACKGROUND,
+    /**
+     * A screen needs the user to authenticate again before showing or using secrets
+     */
+    REAUTHENTICATION;
+
+
+
+
+    companion object
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAppLockReason: FfiConverterRustBuffer<AppLockReason> {
+    override fun read(buf: ByteBuffer) = try {
+        AppLockReason.values()[buf.getInt() - 1]
+    } catch (e: IndexOutOfBoundsException) {
+        throw RuntimeException("invalid enum value, something is very wrong!!", e)
+    }
+
+    override fun allocationSize(value: AppLockReason) = 4UL
+
+    override fun write(value: AppLockReason, buf: ByteBuffer) {
+        buf.putInt(value.ordinal + 1)
+    }
+}
+
+
 
 
 
@@ -47908,9 +48151,6 @@ sealed class GlobalConfigKey {
     object DecoySelectedWalletId : GlobalConfigKey()
 
 
-    object LockedAt : GlobalConfigKey()
-
-
     object OnboardingProgress : GlobalConfigKey()
 
 
@@ -47953,9 +48193,8 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
             10 -> GlobalConfigKey.InDecoyMode
             11 -> GlobalConfigKey.MainSelectedWalletId
             12 -> GlobalConfigKey.DecoySelectedWalletId
-            13 -> GlobalConfigKey.LockedAt
-            14 -> GlobalConfigKey.OnboardingProgress
-            15 -> GlobalConfigKey.CustomBlockExplorer(
+            13 -> GlobalConfigKey.OnboardingProgress
+            14 -> GlobalConfigKey.CustomBlockExplorer(
                 FfiConverterTypeNetwork.read(buf),
                 )
             else -> throw RuntimeException("invalid enum value, something is very wrong!!")
@@ -48036,12 +48275,6 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 4UL
             )
         }
-        is GlobalConfigKey.LockedAt -> {
-            // Add the size for the Int that specifies the variant plus the size needed for all fields
-            (
-                4UL
-            )
-        }
         is GlobalConfigKey.OnboardingProgress -> {
             // Add the size for the Int that specifies the variant plus the size needed for all fields
             (
@@ -48108,16 +48341,12 @@ public object FfiConverterTypeGlobalConfigKey : FfiConverterRustBuffer<GlobalCon
                 buf.putInt(12)
                 Unit
             }
-            is GlobalConfigKey.LockedAt -> {
+            is GlobalConfigKey.OnboardingProgress -> {
                 buf.putInt(13)
                 Unit
             }
-            is GlobalConfigKey.OnboardingProgress -> {
-                buf.putInt(14)
-                Unit
-            }
             is GlobalConfigKey.CustomBlockExplorer -> {
-                buf.putInt(15)
+                buf.putInt(14)
                 FfiConverterTypeNetwork.write(value.v1, buf)
                 Unit
             }
@@ -67568,6 +67797,38 @@ public object FfiConverterOptionalTypeLoadedCloudBackupDetail: FfiConverterRustB
         } else {
             buf.put(1)
             FfiConverterTypeLoadedCloudBackupDetail.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeSendConfirmationLock: FfiConverterRustBuffer<SendConfirmationLock?> {
+    override fun read(buf: ByteBuffer): SendConfirmationLock? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeSendConfirmationLock.read(buf)
+    }
+
+    override fun allocationSize(value: SendConfirmationLock?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeSendConfirmationLock.allocationSize(value)
+        }
+    }
+
+    override fun write(value: SendConfirmationLock?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeSendConfirmationLock.write(value, buf)
         }
     }
 }

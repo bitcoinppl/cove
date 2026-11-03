@@ -76,7 +76,7 @@ struct CoveMainView: View {
     private func unlockWhenAuthenticationIsDisabled() {
         guard !auth.isAuthEnabled else { return }
 
-        auth.unlock()
+        auth.unlockIfAuthDisabled()
     }
 
     private func handleActivePhase(_ newPhase: ScenePhase) -> Bool {
@@ -142,7 +142,10 @@ struct CoveMainView: View {
         }
 
         showCover = true
-        if auth.lockState != .locked { auth.lock() }
+
+        // lock even when already locked, so a lock another owner can release still
+        // leaves this one needing authentication
+        auth.lock(reason: .background)
 
         dismissPresentedViewControllers()
         UIApplication.shared.endEditing()
@@ -159,22 +162,12 @@ struct CoveMainView: View {
 
     private func handleReturningToActive(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
         guard auth.isAuthEnabled, oldPhase == .inactive, newPhase == .active else { return }
-        guard let lockedAt = auth.lockedAt else { return }
 
-        let sinceLocked = Date.now.timeIntervalSince(lockedAt)
-        Log.debug("[ROOT][AUTH] lockedAt \(lockedAt) == \(sinceLocked)")
+        // a quick return skips authentication, only for the lock leaving the foreground took
+        auth.releaseBackgroundLockOnForeground()
+        Log.debug("[ROOT][AUTH] foregrounded, lock state \(auth.lockState)")
 
-        // TODO: make this configurable and put in DB
-        if auth.type == .pin, !auth.isDecoyPinEnabled, sinceLocked < 2 {
-            showCover = false
-            auth.unlock()
-            return
-        }
-
-        if sinceLocked < 1 {
-            showCover = false
-            auth.unlock()
-        }
+        if auth.lockState == .unlocked { showCover = false }
     }
 
     private func leaveDecoyModeIfNeeded(_ newPhase: ScenePhase) {
@@ -257,7 +250,7 @@ private struct CoveLockedContent: View {
             lockType: auth.type,
             isPinCorrect: isPinCorrect,
             showPin: false,
-            lockState: $auth.lockState,
+            lockState: lockStateBinding,
             onUnlock: handleUnlock
         ) {
             CoveNavigationContent(app: app)
@@ -274,6 +267,18 @@ private struct CoveLockedContent: View {
         .modifier(CoveWipePresentationModifier(auth: auth))
         .environment(app)
         .environment(auth)
+    }
+
+    /// The lock screen only reports unlocked after verifying a PIN or biometrics, a PIN
+    /// has already unlocked through `handleAndReturnUnlockMode`
+    private var lockStateBinding: Binding<LockState> {
+        Binding(
+            get: { auth.lockState },
+            set: { newValue in
+                guard newValue == .unlocked, auth.lockState == .locked else { return }
+                auth.completeBiometricAuthentication()
+            }
+        )
     }
 
     private func isPinCorrect(_ pin: String) async -> Bool {

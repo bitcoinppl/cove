@@ -36,6 +36,9 @@ struct SendFlowConfirmScreen: View {
     /// locking task, cancel if its screen is leaving
     @State private var lockingTask: Task<Void, Never>? = nil
 
+    /// Lock this screen took to ask for authentication before sending
+    @State private var sendConfirmationLock: SendConfirmationLock? = nil
+
     var fiatAmount: String {
         guard let prices = prices ?? app.prices else {
             app.dispatch(action: .updateFiatPrices)
@@ -73,7 +76,7 @@ struct SendFlowConfirmScreen: View {
                 lockingTask: $lockingTask,
                 walletType: metadata.walletType,
                 confirmSend: confirmSend,
-                lockWallet: auth.lock
+                lockWallet: lockForSendConfirmation
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.coveBg)
@@ -93,12 +96,17 @@ struct SendFlowConfirmScreen: View {
         Task { await sendTransaction() }
     }
 
+    private func lockForSendConfirmation() {
+        sendConfirmationLock = auth.lockForSendConfirmation()
+    }
+
+    /// Gives back only this screen's lock, any other lock still needs authentication
     private func handleDisappear() {
         lockingTask?.cancel()
-        guard let lockedAt = auth.lockedAt else { return }
+        guard let sendConfirmationLock else { return }
 
-        let sinceLocked = Date.now.timeIntervalSince(lockedAt)
-        if sinceLocked < 5 { auth.lockState = .unlocked }
+        auth.releaseSendConfirmationLock(sendConfirmationLock)
+        self.sendConfirmationLock = nil
     }
 
     private func payjoinBroadcastChanged(_: UUID?, _ uuid: UUID?) {
@@ -107,7 +115,6 @@ struct SendFlowConfirmScreen: View {
 
         sendState = .sent
         presenter.confirmationAlertState = .init(.sent(id))
-        auth.unlock()
     }
 
     private func sendFlowErrorChanged(
@@ -148,13 +155,11 @@ struct SendFlowConfirmScreen: View {
                 if payjoinEndpoint == nil {
                     sendState = .sent
                     presenter.confirmationAlertState = .init(.sent(id))
-                    auth.unlock()
                 }
                 return
             }
             sendState = .sent
             presenter.confirmationAlertState = .init(.sent(id))
-            auth.unlock()
         } catch let error as WalletManagerError {
             sendState = .error(error.description)
             presenter.confirmationAlertState = .init(.broadcastError(error.description))
