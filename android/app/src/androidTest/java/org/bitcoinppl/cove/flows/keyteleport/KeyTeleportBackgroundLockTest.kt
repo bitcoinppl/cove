@@ -8,6 +8,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -124,6 +126,15 @@ class KeyTeleportBackgroundLockTest {
         assertPinCoverWithoutSecrets("the password entry", passwordSecrets)
         unlock()
         assertNoSecretsInTree("the password entry after unlocking", passwordSecrets)
+
+        // a masked field hides its value from the tree check, so the cleared value is checked directly
+        compose.onNode(hasSetTextAction()).assert(hasEditableText(""))
+
+        // leaving the app cleared the typed password, so it is entered again
+        compose.onNode(hasSetTextAction()).performTextInput(response.password)
+        compose.waitForIdle()
+        compose.onNode(hasSetTextAction()).assert(hasEditableTextLength(response.password.length))
+        compose.onNodeWithText("Continue").assertIsEnabled()
 
         // the received recovery words, revealed
         compose.onNodeWithText("Continue").performClick()
@@ -253,6 +264,17 @@ class KeyTeleportBackgroundLockTest {
             clipboard.setPrimaryClip(ClipData.newPlainText("test", text))
         }
     }
+
+    private fun hasEditableText(value: String): SemanticsMatcher =
+        SemanticsMatcher("has editable text of length ${value.length}") { node ->
+            node.config.getOrNull(SemanticsProperties.EditableText)?.text == value
+        }
+
+    // a masked field shows one mask character per typed character, so only the length is comparable
+    private fun hasEditableTextLength(length: Int): SemanticsMatcher =
+        SemanticsMatcher("has editable text of length $length") { node ->
+            node.config.getOrNull(SemanticsProperties.EditableText)?.text?.length == length
+        }
 
     private fun SemanticsNodeInteractionsProvider.containsAnyOf(
         values: List<String>,
