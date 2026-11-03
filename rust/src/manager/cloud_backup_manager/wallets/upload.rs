@@ -347,7 +347,16 @@ impl RustCloudBackupManager {
             ));
         }
 
-        let namespace = self.current_namespace_id()?;
+        let namespace = match self.current_namespace_id() {
+            Ok(namespace) => namespace,
+
+            // record a retryable failure so the upload worker waits before trying again
+            Err(error) if error.is_keychain_unreadable() => {
+                return self.handle_dirty_wallet_upload_error(&current_state, None, error);
+            }
+
+            Err(error) => return Err(error),
+        };
 
         let prepared_upload = match self.prepare_dirty_wallet_upload(&namespace, &metadata).await {
             Ok(prepared_upload) => prepared_upload,

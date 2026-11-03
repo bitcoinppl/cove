@@ -316,7 +316,13 @@ async fn upload_wallet_if_dirty_stays_retryable_when_a_keychain_read_fails() {
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     let xpub_key = format!("{}{}", metadata.id, crate::test_support::WALLET_XPUB_KEY_SUFFIX);
 
-    for key in [xpub_key.as_str(), "cspp::v1::master_key"] {
+    let unreadable_keys = [
+        crate::manager::cloud_backup_manager::keychain::CSPP_NAMESPACE_ID_KEY,
+        xpub_key.as_str(),
+        "cspp::v1::master_key",
+    ];
+
+    for key in unreadable_keys {
         Database::global()
             .cloud_blob_sync_states
             .set(&PersistedCloudBlobSyncState::wallet(

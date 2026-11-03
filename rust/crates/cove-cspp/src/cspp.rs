@@ -621,10 +621,18 @@ impl<S: CsppStore> Cspp<S> {
         if let Err(error) = self.restore_active_entries(&replacement) {
             if let Err(rollback_error) = self.restore_active_entries(&prior) {
                 Self::clear_cached_master_key();
+                let message =
+                    format!("{error}; unable to restore prior active entries: {rollback_error}");
 
-                return Err(CsppError::Save(format!(
-                    "{error}; unable to restore prior active entries: {rollback_error}"
-                )));
+                // an unreadable keychain leaves the outcome unknown until it can be read again,
+                // so keep that retryable instead of reporting a failed write
+                if matches!(error, CsppError::Read(_))
+                    || matches!(rollback_error, CsppError::Read(_))
+                {
+                    return Err(CsppError::Read(message));
+                }
+
+                return Err(CsppError::Save(message));
             }
 
             Self::refresh_cache_from_entries(&prior);
@@ -1747,7 +1755,9 @@ mod tests {
         let _guard = CACHE_TEST_LOCK.lock().unwrap();
 
         // each scenario writes the active slots and then reads them back
-        let scenarios: [(&str, fn(&Cspp<FailNthStore>) -> Result<(), CsppError>); 4] = [
+        type Operation = fn(&Cspp<FailNthStore>) -> Result<(), CsppError>;
+
+        let scenarios: [(&str, Operation); 4] = [
             ("save", |cspp| cspp.save_master_key(&deterministic_key(47))),
             ("promote", Cspp::promote_staged_master_key),
             ("retry restore", Cspp::restore_prior_master_key_for_retry),
@@ -1771,7 +1781,9 @@ mod tests {
             // writes succeed, then the read-back of the active slot fails
             store.fail_reads_after_next_save(MASTER_KEY_NAME);
 
-            assert!(operation(&cspp).is_err(), "{name} ignored the failed read-back");
+            let result = operation(&cspp);
+            assert!(matches!(result, Err(CsppError::Read(_))), "{name} lost the read error");
+
             assert!(MASTER_KEY_CACHE.load().is_none(), "{name} left a stale cached key");
         }
     }
