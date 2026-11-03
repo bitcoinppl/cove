@@ -561,3 +561,38 @@ async fn verification_retry_after_passkey_cancel_verifies_without_new_passkey() 
     assert_eq!(globals.passkey.create_count(), 0);
     assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap().unwrap(), namespace);
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn deep_verify_offers_a_retry_while_a_local_key_is_unreadable() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+
+    let unreadable_keys = [
+        crate::manager::cloud_backup_manager::keychain::CSPP_NAMESPACE_ID_KEY,
+        "cspp::v1::master_key",
+    ];
+
+    for key in unreadable_keys {
+        cove_cspp::Cspp::<Keychain>::clear_cached_master_key();
+        globals.keychain.fail_reads_for(key);
+        let step = manager.prepare_deep_verify_cloud_backup(false).await;
+        globals.keychain.clear_read_failures();
+
+        let CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::Failed(failure)) =
+            step
+        else {
+            panic!("unreadable {key} did not fail verification");
+        };
+
+        assert_eq!(
+            failure.connectivity_retry_action(),
+            Some(crate::manager::cloud_backup_manager::CloudBackupRetryAction::Verify),
+            "unreadable {key} left no retry"
+        );
+    }
+}
