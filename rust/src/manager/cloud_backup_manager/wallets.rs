@@ -93,7 +93,7 @@ pub(crate) use passkey::{
 pub(crate) use payload::test_support as payload_test_support;
 pub(crate) use payload::{
     decode_cloud_labels_jsonl, prepare_wallet_backup, restored_content_revision_hash,
-    wallet_metadata_change_requires_upload,
+    upload_may_drop_cloud_secret, wallet_metadata_change_requires_upload,
 };
 pub(crate) use restore::{
     CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,

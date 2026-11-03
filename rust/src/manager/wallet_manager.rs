@@ -1620,6 +1620,82 @@ mod tests {
         }
     }
 
+    // a stored hot wallet row without an origin must still open and the load repairs the row;
+    // a repair that cannot be saved keeps both copies unchanged so the wallet still opens, and
+    // the next load retries
+    #[test]
+    fn loading_a_wallet_whose_metadata_has_no_origin_repairs_the_stored_row() {
+        use crate::{
+            database::Database, keychain::Keychain, network::Network, wallet::metadata::WalletMode,
+        };
+
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::app::reconcile::test_support::init_noop_updater();
+        crate::database::test_support::delete_database();
+
+        let database = Database::global();
+        database.global_config.set_selected_network(Network::Bitcoin).unwrap();
+        database.global_config.set_main_mode().unwrap();
+
+        let mnemonic = bip39::Mnemonic::parse_normalized(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap();
+        let wallet = crate::wallet::Wallet::try_new_persisted_from_mnemonic_segwit(
+            WalletMetadata::preview_new(),
+            mnemonic.clone(),
+            None,
+        )
+        .unwrap();
+
+        // a hot wallet without its secret is downgraded on load, which rewrites the whole row
+        // and would hide the missing origin
+        Keychain::global()
+            .save_wallet_secret(&wallet.id, cove_device::keychain::WalletSecret::Mnemonic(mnemonic))
+            .unwrap();
+        let expected_origin = wallet.metadata.origin.clone();
+        assert!(expected_origin.is_some(), "a mnemonic wallet build derives an origin");
+
+        let mut origin_less = wallet.metadata.clone();
+        origin_less.origin = None;
+        database.wallets.save_new_wallet_metadata(origin_less).unwrap();
+        let id = wallet.id.clone();
+        drop(wallet);
+
+        let stored_origin = || {
+            let stored = database.wallets.get(&id, Network::Bitcoin, WalletMode::Main).unwrap();
+            stored.and_then(|stored| stored.origin)
+        };
+
+        crate::database::wallet::test_support::fail_next_origin_patch();
+        let result = RustWalletManager::try_new(id.clone());
+        crate::database::wallet::test_support::reset_origin_patch_failure();
+
+        let failed_repair = (
+            result.as_ref().ok().map(|manager| manager.metadata.read().origin.clone()),
+            stored_origin(),
+        );
+
+        // the closed manager releases its wallet asynchronously, so the retry loads the store
+        // directly through the same repair
+        drop(result);
+        let reloaded = crate::wallet::Wallet::try_load_persisted(id.clone());
+        let repaired =
+            (reloaded.as_ref().ok().map(|wallet| wallet.metadata.origin.clone()), stored_origin());
+
+        drop(reloaded);
+        crate::wallet::test_support::remove_wallet(&id);
+
+        assert_eq!(failed_repair, (Some(None), None), "a failed repair still opens the wallet");
+        assert_eq!(
+            repaired,
+            (Some(expected_origin.clone()), expected_origin),
+            "the next load repairs the row"
+        );
+    }
+
     fn confirmed_label(transaction: &Transaction) -> Option<String> {
         match transaction {
             Transaction::Confirmed(confirmed) => confirmed.label_opt(),

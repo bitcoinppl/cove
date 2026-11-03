@@ -189,18 +189,19 @@ fn create_new_wallet(
 
     metadata.wallet_mode = mode;
 
-    match secret {
+    // the build derives fields such as the origin and saves its own copy, so the metadata moves in
+    // and only the built copy comes back out
+    let wallet = match secret {
         WalletSecret::Mnemonic(mnemonic) => {
-            Wallet::try_new_persisted_and_selected(metadata.clone(), mnemonic, None)
+            Wallet::try_new_persisted_and_selected(metadata, mnemonic, None)
         }
-        WalletSecret::Xpriv(xpriv) => {
-            Wallet::try_new_persisted_xpriv_and_selected(metadata.clone(), xpriv)
-        }
+        WalletSecret::Xpriv(xpriv) => Wallet::try_new_persisted_xpriv_and_selected(metadata, xpriv),
     }
     .map_err_str(ImportWalletError::WalletImportError)?;
+
     CLOUD_BACKUP_MANAGER.handle_wallet_set_change();
 
-    Ok(metadata)
+    Ok(wallet.metadata)
 }
 
 #[cfg(test)]
@@ -347,6 +348,37 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+    }
+
+    // callers that save the returned copy back must not erase what the build derived
+    #[test]
+    fn import_returns_the_persisted_metadata_row() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        init_globals();
+
+        let mnemonic = Mnemonic::from_str(
+            "legal winner thank year wave sausage worth useful legal winner thank yellow",
+        )
+        .unwrap();
+        let xpriv = Xpriv::new_master(bdk_wallet::bitcoin::Network::Bitcoin, &[13; 32]).unwrap();
+        let secrets = [
+            WalletSecret::Mnemonic(mnemonic),
+            WalletSecret::Xpriv(WalletXprv::try_from(xpriv).unwrap()),
+        ];
+
+        for secret in secrets {
+            let metadata =
+                import_wallet_secret_with_target(secret, Network::Signet, WalletMode::Main)
+                    .unwrap();
+            let stored = Database::global()
+                .wallets
+                .get(&metadata.id, Network::Signet, WalletMode::Main)
+                .unwrap()
+                .expect("the imported row exists");
+
+            assert!(stored.origin.is_some(), "the build derives an origin");
+            assert_eq!(metadata, stored);
+        }
     }
 
     #[test]

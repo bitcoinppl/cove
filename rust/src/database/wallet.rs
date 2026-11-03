@@ -75,6 +75,8 @@ pub(crate) enum WalletMetadataPatch {
     WalletType(WalletType),
     DiscoveryState(DiscoveryState),
     AddressType(WalletAddressTypePatch),
+    /// Fills an origin derived from the wallet store into a row that lacks one
+    Origin(String),
     Internal(WalletInternalMetadataPatch),
 }
 
@@ -156,6 +158,7 @@ impl WalletMetadataPatch {
                 metadata.master_fingerprint = patch.master_fingerprint.clone();
                 metadata.internal.reset_scan_state_for_address_type_switch();
             }
+            Self::Origin(origin) => metadata.origin = Some(origin.clone()),
             Self::Internal(patch) => {
                 if let Some(address_index) = &patch.address_index {
                     metadata.internal.address_index = Some(address_index.clone());
@@ -401,6 +404,9 @@ impl WalletsTable {
             let before = wallet.clone();
             patch.apply_to(wallet);
             let after = wallet.clone();
+
+            #[cfg(test)]
+            test_support::fail_armed_origin_patch(&patch)?;
 
             table.insert(&*key, wallets).map_err_str(WalletTableError::SaveError)?;
 
@@ -669,14 +675,38 @@ impl WalletsTable {
 
 #[cfg(test)]
 pub(crate) mod test_support {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     use cove_util::result_ext::ResultExt as _;
 
-    use super::{Error, TABLE, WalletKey, WalletTableError, WalletsTable};
+    use super::{Error, TABLE, WalletKey, WalletMetadataPatch, WalletTableError, WalletsTable};
     use crate::{
         app::reconcile::{AppStateReconcileMessage, Updater},
         network::Network,
         wallet::metadata::{WalletMetadata, WalletMode},
     };
+
+    static FAIL_NEXT_ORIGIN_PATCH: AtomicBool = AtomicBool::new(false);
+
+    /// Fails the next origin patch before it is written, leaving the stored row unchanged
+    pub(crate) fn fail_next_origin_patch() {
+        FAIL_NEXT_ORIGIN_PATCH.store(true, Ordering::SeqCst);
+    }
+
+    /// Disarms an origin patch failure that no patch consumed
+    pub(crate) fn reset_origin_patch_failure() {
+        FAIL_NEXT_ORIGIN_PATCH.store(false, Ordering::SeqCst);
+    }
+
+    pub(crate) fn fail_armed_origin_patch(patch: &WalletMetadataPatch) -> Result<(), Error> {
+        if matches!(patch, WalletMetadataPatch::Origin(_))
+            && FAIL_NEXT_ORIGIN_PATCH.swap(false, Ordering::SeqCst)
+        {
+            return Err(WalletTableError::SaveError("injected origin patch failure".into()).into());
+        }
+
+        Ok(())
+    }
 
     impl WalletsTable {
         /// Overwrites a wallet bucket for test setup

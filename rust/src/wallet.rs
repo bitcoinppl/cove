@@ -8,7 +8,10 @@ pub mod fingerprint;
 pub mod metadata;
 pub(crate) mod secret_upgrade;
 
-use crate::database::{global_config::SelectedWalletTarget, wallet_data::WalletDataDb};
+use crate::database::{
+    global_config::SelectedWalletTarget, wallet::WalletMetadataPatch, wallet_data::WalletDataDb,
+};
+use crate::manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER;
 use std::{str::FromStr as _, sync::Arc};
 
 use crate::{
@@ -238,23 +241,7 @@ impl Wallet {
         // the same publication can fail before its keychain mirror is updated
         addressing::heal_public_descriptors_for_store(&id, &wallet);
 
-        // set and save the origin if not set
-        // we should be able to remove this because we should always have the origin
-        // unless its a xpub only wallet
-        if metadata.origin.is_none() && metadata.wallet_type != WalletType::XpubOnly {
-            warn!("no origin found, setting using descriptor");
-            let extended_descriptor = wallet.public_descriptor(KeychainKind::External);
-            let descriptor = Descriptor::from(extended_descriptor.clone());
-            let origin = descriptor.full_origin().ok();
-
-            metadata.origin = origin;
-
-            if let Err(error) =
-                Database::global().wallets.save_new_wallet_metadata(metadata.clone())
-            {
-                warn!("failed to save wallet origin into metadata: {error}");
-            }
-        }
+        metadata = metadata_with_repaired_origin(metadata, &wallet);
 
         Ok(Self {
             id,
@@ -386,6 +373,50 @@ impl Wallet {
         let export = Arc::unwrap_or_clone(export);
         Self::try_new_persisted_from_pubport(export.into_format())
     }
+}
+
+/// Fills a missing origin from the wallet store into the existing metadata row
+///
+/// Rows written before origins were recorded, and backups restored from them, have none. The
+/// in-memory copy only takes the origin once the row holds it, because wallet managers refuse to
+/// open when the loaded metadata differs from the stored row. A failed repair keeps the stored
+/// metadata so the wallet still opens and the next load retries
+fn metadata_with_repaired_origin(
+    mut metadata: WalletMetadata,
+    wallet: &bdk_wallet::Wallet,
+) -> WalletMetadata {
+    if metadata.origin.is_some() || metadata.wallet_type == WalletType::XpubOnly {
+        return metadata;
+    }
+
+    // wrapped segwit and multisig descriptors have no supported origin format
+    let extended_descriptor = wallet.public_descriptor(KeychainKind::External);
+    let Ok(origin) = Descriptor::from(extended_descriptor.clone()).full_origin() else {
+        return metadata;
+    };
+
+    warn!(id = %metadata.id, "wallet metadata has no origin; repairing it from the wallet store");
+    let patch = WalletMetadataPatch::Origin(origin.clone());
+    let repaired = Database::global().wallets.patch_wallet_metadata(
+        &metadata.id,
+        metadata.network,
+        metadata.wallet_mode,
+        patch,
+    );
+
+    match repaired {
+        Ok(result) => {
+            metadata.origin = Some(origin);
+
+            // the origin is part of the Cloud Backup revision, so a confirmed backup uploads again
+            CLOUD_BACKUP_MANAGER.handle_wallet_metadata_repair(&result.before, &result.after);
+        }
+        Err(error) => {
+            warn!(%error, "unable to persist the repaired wallet origin; the next load retries")
+        }
+    }
+
+    metadata
 }
 
 #[cfg(test)]
