@@ -36,7 +36,7 @@ final class UtxoLockFullLaunchUITests: XCTestCase {
 
         // 3: lock B from coin control; it can't be selected and Select All skips it
         openManageUtxos()
-        XCTAssertEqual(utxoRows.count, 3)
+        assertRows([coinA, coinB, coinC])
         assertLockState(coinB, "unlocked")
         setLockFromContextMenu(coinB, menuItem: "Lock UTXO")
         assertLockState(coinB, "locked")
@@ -84,7 +84,7 @@ final class UtxoLockFullLaunchUITests: XCTestCase {
 
         // 7: unlock B from coin control and C from its transaction details
         openManageUtxos()
-        XCTAssertEqual(utxoRows.count, 2)
+        assertRows([coinB, coinC])
         setLockFromContextMenu(coinB, menuItem: "Unlock UTXO")
         assertLockState(coinB, "unlocked")
         setLockFromTransactionDetails(coinC, from: "Unlock", to: "Lock")
@@ -131,6 +131,19 @@ final class UtxoLockFullLaunchUITests: XCTestCase {
 
     private func row(_ coin: FakeNodeControl.FundedOutput) -> XCUIElement {
         app.element("coinControl.utxo.\(coin.outpoint)")
+    }
+
+    /// Checks coin control lists exactly these coins
+    ///
+    /// The list can still be adding rows when the first one appears, so a count taken then can
+    /// come up short on a slow runner; waiting for each expected row first also names the coin
+    /// that is missing when one is
+    private func assertRows(_ coins: [FakeNodeControl.FundedOutput]) {
+        for coin in coins {
+            XCTAssertTrue(row(coin).waitForExistence(timeout: 10), "coin control is missing \(coin.outpoint)")
+        }
+
+        XCTAssertEqual(utxoRows.count, coins.count)
     }
 
     private func openManageUtxos() {
