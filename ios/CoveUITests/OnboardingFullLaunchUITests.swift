@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 final class OnboardingFullLaunchUITests: XCTestCase {
@@ -75,8 +76,15 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Your wallet is ready to fund"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["Deposit address"].waitForExistence(timeout: 30))
 
+        // the "Copied" label reverts after 2 seconds, which a slow accessibility snapshot can miss,
+        // so check the pasteboard write itself; reading changeCount does not trigger the paste prompt
+        let pasteboardChangeCount = UIPasteboard.general.changeCount
         app.buttons["Copy Address"].tap()
-        XCTAssertTrue(app.buttons["Copied"].waitForExistence(timeout: 2))
+
+        let copied = expectation(for: NSPredicate { _, _ in
+            UIPasteboard.general.changeCount != pasteboardChangeCount
+        }, evaluatedWith: nil)
+        wait(for: [copied], timeout: 10)
     }
 
     func testHardwareWalletUserCanReachImportChoices() {
@@ -323,11 +331,6 @@ final class OnboardingFullLaunchUITests: XCTestCase {
         tapButton(named: "Get Started")
         acceptTermsIfNeeded()
         tapButton(startingWith: "Yes, I have Bitcoin")
-
-        let useAnotherWallet = button(startingWith: "Use another wallet")
-        if useAnotherWallet.waitForExistence(timeout: 2) {
-            useAnotherWallet.tap()
-        }
 
         XCTAssertTrue(app.staticTexts["How do you store your Bitcoin?"].waitForExistence(timeout: 10))
     }
