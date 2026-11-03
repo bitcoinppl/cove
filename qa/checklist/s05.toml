@@ -182,6 +182,7 @@ coverage = [
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::cancelled_enable_create_new_rolls_back_new_local_master_key",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::cancelled_passkey_restore_does_not_fall_back_to_local_master_key",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::cancelled_saved_passkey_confirmation_preserves_pending_session",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::fresh_start_new_saved_passkey_cancellation_preserves_prior_active_exactly",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/deep_verify.rs::verification_retry_after_passkey_cancel_verifies_without_new_passkey",
     "rust:rust/src/manager/cloud_backup_manager/verify/passkey_auth.rs::stored_authentication_cancellation_does_not_start_discovery",
     "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProviderTest.kt::createCredentialExceptionsMapFromTypedAndroidxExceptions",

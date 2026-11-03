@@ -104,6 +104,7 @@ paths = [
 coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::fresh_start_new_keeps_prior_active_until_durable_success",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::fresh_start_new_upload_failure_preserves_prior_active_exactly",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::fresh_start_new_wallet_upload_failure_after_wrapper_preserves_prior_active",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::fresh_start_new_passkey_cancellation_preserves_prior_active_exactly",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::discard_pending_enable_staged_preserves_prior_master_and_metadata",
 ]
@@ -205,6 +206,8 @@ paths = [
 ]
 coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::discard_pending_enable_staged_preserves_prior_master_and_metadata",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::discard_pending_enable_started_promotion_rolls_back_prior_state",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::discard_pending_enable_fresh_owned_remote_writes_delete_entire_namespace",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::discard_pending_enable_recovered_existing_never_deletes_remote_namespace",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::discard_pending_enable_unjournaled_session_never_deletes_or_clears_material",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_local_cleanup_preserves_prior_state_and_never_deletes_remote_data",

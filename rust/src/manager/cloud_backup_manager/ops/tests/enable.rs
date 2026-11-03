@@ -1023,6 +1023,64 @@ async fn fresh_start_new_upload_failure_preserves_prior_active_exactly() {
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn fresh_start_new_saved_passkey_cancellation_preserves_prior_active_exactly() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    let (prior_master_key, prior_metadata) = seed_retained_active_master();
+    let prior_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    globals.cloud.set_master_key_backup(prior_namespace.clone(), vec![1, 2, 3]);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+    globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
+
+    enable_cloud_backup_force_new(&manager).await.unwrap();
+    confirm_saved_passkey_session(&manager).await;
+
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let staged_namespace = cspp.load_staged_master_key().unwrap().unwrap().namespace_id();
+    assert_retained_active_master(&prior_master_key, &prior_metadata);
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), prior_namespace);
+    assert_eq!(globals.cloud.master_key_backup_bytes(&prior_namespace), Some(vec![1, 2, 3]));
+    assert!(!globals.cloud.has_master_key_backup(&staged_namespace));
+    assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::Staged);
+    assert!(take_pending_enable_session_for_test(&manager).await.is_some());
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn fresh_start_new_wallet_upload_failure_after_wrapper_preserves_prior_active() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    let (prior_master_key, prior_metadata) = seed_retained_active_master();
+    persist_xpub_wallets(vec![xpub_only_wallet_metadata()]);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+    globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
+    globals.cloud.fail_wallet_backup_upload("upload failed");
+
+    enable_cloud_backup_force_new(&manager).await.unwrap();
+    confirm_saved_passkey_session(&manager).await;
+
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let staged_namespace = cspp.load_staged_master_key().unwrap().unwrap().namespace_id();
+
+    // the new wrapper reached the cloud and only the wallet upload failed, so the prior backup
+    // must still be the active one
+    assert!(globals.cloud.has_master_key_backup(&staged_namespace));
+    assert!(globals.cloud.wallet_backup_upload_attempt_count() > 0);
+    assert!(matches!(manager.current_status(), CloudBackupStatus::Error(_)));
+    assert_retained_active_master(&prior_master_key, &prior_metadata);
+    assert_ne!(CloudBackupKeychain::global().namespace_id().unwrap(), staged_namespace);
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
+}
+
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn force_new_after_existing_backup_prompt_registers_without_discovery() {
     let _guard = async_test_lock().lock().await;
