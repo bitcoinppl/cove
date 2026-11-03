@@ -4,7 +4,7 @@ use act_zero::send;
 use tracing::{error, warn};
 
 use super::RustCloudBackupManager;
-use super::wallets::wallet_metadata_change_requires_upload;
+use super::wallets::{backup_secret_missing_locally, wallet_metadata_change_requires_upload};
 use crate::database::Database;
 use crate::database::cloud_backup::{
     CloudBlobDirtyState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
@@ -59,6 +59,25 @@ impl RustCloudBackupManager {
         if wallet_metadata_change_requires_upload(before, after) {
             self.mark_wallet_blob_dirty(after.id.clone());
         }
+    }
+
+    /// Reports a metadata change that loading a wallet made on its own
+    ///
+    /// When the wallet's key or TAPSIGNER backup is missing locally, the upload would replace a
+    /// cloud record still holding it with a watch-only one, which may be the only copy left, so
+    /// the backup is left as is. A hot wallet missing its key is also downgraded to watch-only
+    /// once it opens, after which nothing would stop that upload
+    pub(crate) fn handle_wallet_metadata_repair(
+        &self,
+        before: &WalletMetadata,
+        after: &WalletMetadata,
+    ) {
+        if backup_secret_missing_locally(cove_device::keychain::Keychain::global(), after) {
+            warn!(id = %after.id, "wallet key material is missing locally; leaving its backup as is");
+            return;
+        }
+
+        self.handle_wallet_metadata_update(before, after);
     }
 
     pub(crate) fn handle_wallet_backup_change(&self, wallet_id: WalletId) {

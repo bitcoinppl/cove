@@ -409,7 +409,7 @@ fn metadata_with_repaired_origin(
             metadata.origin = Some(origin);
 
             // the origin is part of the Cloud Backup revision, so a confirmed backup uploads again
-            report_load_repair_to_cloud_backup(&result.before, &result.after);
+            CLOUD_BACKUP_MANAGER.handle_wallet_metadata_repair(&result.before, &result.after);
         }
         Err(error) => {
             warn!(%error, "unable to persist the repaired wallet origin; the next load retries")
@@ -417,24 +417,6 @@ fn metadata_with_repaired_origin(
     }
 
     metadata
-}
-
-/// Reports a metadata change made while loading a wallet to Cloud Backup
-///
-/// A hot wallet whose key is missing locally is downgraded to watch-only once it opens. A backup
-/// uploaded after that would replace the cloud copy of its key with a watch-only record, which
-/// may be the only copy left, so its backup is left as is, as it is when the keychain cannot be
-/// read
-pub(crate) fn report_load_repair_to_cloud_backup(before: &WalletMetadata, after: &WalletMetadata) {
-    let key_missing = after.wallet_type == WalletType::Hot
-        && !matches!(crate::keychain::Keychain::global().get_wallet_secret(&after.id), Ok(Some(_)));
-
-    if key_missing {
-        warn!(id = %after.id, "hot wallet key is missing; leaving its Cloud Backup unchanged");
-        return;
-    }
-
-    CLOUD_BACKUP_MANAGER.handle_wallet_metadata_update(before, after);
 }
 
 #[cfg(test)]
