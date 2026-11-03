@@ -1797,9 +1797,9 @@ internal object IntegrityCheckingUniffiLib {
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_check_selected_node(
     ): Short
-    external fun uniffi_cove_checksum_method_nodeselector_node_list(
-    ): Short
     external fun uniffi_cove_checksum_method_nodeselector_parse_custom_node(
+    ): Short
+    external fun uniffi_cove_checksum_method_nodeselector_preset_nodes(
     ): Short
     external fun uniffi_cove_checksum_method_nodeselector_select_preset_node(
     ): Short
@@ -3039,9 +3039,9 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_cove_fn_method_nodeselector_check_selected_node(`ptr`: Long,`node`: RustBuffer.ByValue,
     ): Long
-    external fun uniffi_cove_fn_method_nodeselector_node_list(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
-    ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_nodeselector_parse_custom_node(`ptr`: Long,`url`: RustBuffer.ByValue,`apiType`: RustBuffer.ByValue,`enteredName`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+    ): RustBuffer.ByValue
+    external fun uniffi_cove_fn_method_nodeselector_preset_nodes(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
     external fun uniffi_cove_fn_method_nodeselector_select_preset_node(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
     ): RustBuffer.ByValue
@@ -4965,10 +4965,10 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_cove_checksum_method_nodeselector_check_selected_node() != 34244.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_nodeselector_node_list() != 26686.toShort()) {
+    if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 28549.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_cove_checksum_method_nodeselector_parse_custom_node() != 28549.toShort()) {
+    if (lib.uniffi_cove_checksum_method_nodeselector_preset_nodes() != 55854.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_cove_checksum_method_nodeselector_select_preset_node() != 55812.toShort()) {
@@ -17968,12 +17968,18 @@ public interface NodeSelectorInterface {
 
     suspend fun `checkSelectedNode`(`node`: Node)
 
-    fun `nodeList`(): List<NodeSelection>
-
     /**
      * Parse a custom node url for the given api, naming it after the host unless a name is entered
      */
     fun `parseCustomNode`(`url`: kotlin.String, `apiType`: ApiType, `enteredName`: kotlin.String): Node
+
+    /**
+     * The preset nodes for the network
+     *
+     * A saved custom node is not one of them: the screens show it in the custom form for its
+     * api, so a custom node named like a preset can never be selected as that preset
+     */
+    fun `presetNodes`(): List<Node>
 
     fun `selectPresetNode`(`name`: kotlin.String): Node
 
@@ -18140,19 +18146,6 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
     )
     }
 
-    override fun `nodeList`(): List<NodeSelection> {
-            return FfiConverterSequenceTypeNodeSelection.lift(
-    callWithHandle {
-    uniffiRustCall() { _status ->
-    UniffiLib.uniffi_cove_fn_method_nodeselector_node_list(
-        it,
-        _status)
-}
-    }
-    )
-    }
-
-
 
     /**
      * Parse a custom node url for the given api, naming it after the host unless a name is entered
@@ -18167,6 +18160,25 @@ open class NodeSelector: Disposable, AutoCloseable, NodeSelectorInterface
         FfiConverterString.lower(`url`),
         FfiConverterTypeApiType.lower(`apiType`),
         FfiConverterString.lower(`enteredName`),_status)
+}
+    }
+    )
+    }
+
+
+
+    /**
+     * The preset nodes for the network
+     *
+     * A saved custom node is not one of them: the screens show it in the custom form for its
+     * api, so a custom node named like a preset can never be selected as that preset
+     */override fun `presetNodes`(): List<Node> {
+            return FfiConverterSequenceTypeNode.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_cove_fn_method_nodeselector_preset_nodes(
+        it,
+        _status)
 }
     }
     )
@@ -68446,6 +68458,34 @@ public object FfiConverterSequenceTypeGroupedWord: FfiConverterRustBuffer<List<G
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeNode: FfiConverterRustBuffer<List<Node>> {
+    override fun read(buf: ByteBuffer): List<Node> {
+        val len = buf.getInt()
+        return List<Node>(len) {
+            FfiConverterTypeNode.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<Node>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeNode.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<Node>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeNode.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeWalletMetadata: FfiConverterRustBuffer<List<WalletMetadata>> {
     override fun read(buf: ByteBuffer): List<WalletMetadata> {
         val len = buf.getInt()
@@ -68660,34 +68700,6 @@ public object FfiConverterSequenceTypeKeyTeleportMessageItem: FfiConverterRustBu
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeKeyTeleportMessageItem.write(it, buf)
-        }
-    }
-}
-
-
-
-
-/**
- * @suppress
- */
-public object FfiConverterSequenceTypeNodeSelection: FfiConverterRustBuffer<List<NodeSelection>> {
-    override fun read(buf: ByteBuffer): List<NodeSelection> {
-        val len = buf.getInt()
-        return List<NodeSelection>(len) {
-            FfiConverterTypeNodeSelection.read(buf)
-        }
-    }
-
-    override fun allocationSize(value: List<NodeSelection>): ULong {
-        val sizeForLength = 4UL
-        val sizeForItems = value.map { FfiConverterTypeNodeSelection.allocationSize(it) }.sum()
-        return sizeForLength + sizeForItems
-    }
-
-    override fun write(value: List<NodeSelection>, buf: ByteBuffer) {
-        buf.putInt(value.size)
-        value.iterator().forEach {
-            FfiConverterTypeNodeSelection.write(it, buf)
         }
     }
 }

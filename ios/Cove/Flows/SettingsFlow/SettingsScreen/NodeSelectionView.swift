@@ -13,7 +13,7 @@ struct NodeSelectionView: View {
     private let nodeSelector = NodeSelector()
 
     @State private var selectedRow: NodeRowSelection
-    @State private var nodeList: [NodeSelection]
+    @State private var presetNodes: [Node]
 
     @State private var customNodeName: String = ""
     @State private var customUrl: String = ""
@@ -26,7 +26,7 @@ struct NodeSelectionView: View {
     init() {
         let savedNode = nodeSelector.selectedNode()
         selectedRow = NodeRowSelection(savedNode)
-        nodeList = nodeSelector.nodeList()
+        presetNodes = nodeSelector.presetNodes()
 
         // a saved custom node opens in the form for its api
         if case let .custom(node) = savedNode {
@@ -62,7 +62,7 @@ struct NodeSelectionView: View {
     @MainActor
     private func refreshNodeState() {
         let refreshedNodeSelector = NodeSelector()
-        nodeList = refreshedNodeSelector.nodeList()
+        presetNodes = refreshedNodeSelector.presetNodes()
         selectedRow = NodeRowSelection(refreshedNodeSelector.selectedNode())
     }
 
@@ -135,7 +135,7 @@ struct NodeSelectionView: View {
 
     var body: some View {
         NodeSelectionForm(
-            nodeList: nodeList,
+            presetNodes: presetNodes,
             selectedRow: $selectedRow,
             customUrl: $customUrl,
             customNodeName: $customNodeName,
@@ -163,10 +163,9 @@ struct NodeSelectionView: View {
     }
 
     private func nodeSelectionChanged(to newSelectedRow: NodeRowSelection) {
-        guard NodeRowSelection(nodeSelector.selectedNode()) != newSelectedRow else { return }
-
         let presetName: String
         switch newSelectedRow {
+        // runs even for the saved node's row, whose fields may have been cleared by the other row
         case let .custom(apiType):
             restoreCustomNodeFields(for: apiType)
             return
@@ -174,6 +173,7 @@ struct NodeSelectionView: View {
             presetName = name
         }
 
+        guard NodeRowSelection(nodeSelector.selectedNode()) != newSelectedRow else { return }
         guard let node = try? nodeSelector.selectPresetNode(name: presetName) else { return }
 
         showLoadingPopup()
@@ -207,7 +207,7 @@ struct NodeSelectionView: View {
 }
 
 private struct NodeSelectionForm: View {
-    let nodeList: [NodeSelection]
+    let presetNodes: [Node]
     @Binding var selectedRow: NodeRowSelection
     @Binding var customUrl: String
     @Binding var customNodeName: String
@@ -216,7 +216,7 @@ private struct NodeSelectionForm: View {
     var body: some View {
         Form {
             NodeSelectionPresetSection(
-                nodeList: nodeList,
+                presetNodes: presetNodes,
                 selectedRow: $selectedRow
             )
             NodeSelectionCustomFields(
@@ -230,12 +230,12 @@ private struct NodeSelectionForm: View {
 }
 
 private struct NodeSelectionPresetSection: View {
-    let nodeList: [NodeSelection]
+    let presetNodes: [Node]
     @Binding var selectedRow: NodeRowSelection
 
     var body: some View {
         Section {
-            ForEach(nodeList, id: \.name) { node in
+            ForEach(presetNodes, id: \.name) { node in
                 NodeSelectionRow(
                     name: node.name,
                     isSelected: selectedRow == .preset(node.name),

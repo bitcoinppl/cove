@@ -41,7 +41,6 @@ pub const SIGNET_ESPLORA: [(&str, &str); 1] = [("mutinynet", "https://mutinynet.
 #[derive(Debug, Clone, uniffi::Object)]
 pub struct NodeSelector {
     network: Network,
-    node_list: Vec<NodeSelection>,
 }
 
 #[derive(Debug, Clone, uniffi::Enum, PartialEq, Eq, Hash)]
@@ -73,26 +72,16 @@ impl NodeSelector {
     #[uniffi::constructor]
     pub fn new() -> Self {
         let network = Database::global().global_config.selected_network();
-        let selected_node = Database::global().global_config.selected_node();
-
-        let node_list = node_list(network);
-
-        let node_selection_list = if node_list.contains(&selected_node) {
-            node_list.into_iter().map(NodeSelection::Preset).collect()
-        } else {
-            let mut node_selection_list =
-                node_list.into_iter().map(NodeSelection::Preset).collect::<Vec<NodeSelection>>();
-
-            node_selection_list.push(NodeSelection::Custom(selected_node));
-            node_selection_list
-        };
-
-        Self { network, node_list: node_selection_list }
+        Self { network }
     }
 
+    /// The preset nodes for the network
+    ///
+    /// A saved custom node is not one of them: the screens show it in the custom form for its
+    /// api, so a custom node named like a preset can never be selected as that preset
     #[uniffi::method]
-    pub fn node_list(&self) -> Vec<NodeSelection> {
-        self.node_list.clone()
+    pub fn preset_nodes(&self) -> Vec<Node> {
+        node_list(self.network)
     }
 
     #[uniffi::method]
@@ -108,17 +97,12 @@ impl NodeSelector {
 
     #[uniffi::method]
     pub fn select_preset_node(&self, name: String) -> Result<Node, Error> {
-        let node = node_list(self.network)
-            .into_iter()
-            .find(|node| node.name == name)
-            .or_else(|| {
-                let selected_node = Database::global().global_config.selected_node();
-                if selected_node.name == name { Some(selected_node) } else { None }
-            })
-            .ok_or_else(|| {
+        let node = node_list(self.network).into_iter().find(|node| node.name == name).ok_or_else(
+            || {
                 error!("node with name {name} not found");
                 NodeSelectorError::NodeNotFound(name)
-            })?;
+            },
+        )?;
 
         Database::global()
             .global_config
@@ -319,7 +303,7 @@ mod tests {
     use crate::test_support::{ensure_tokio_runtime, fake_node::FakeNode, global_state_test_lock};
 
     fn selector(network: Network) -> NodeSelector {
-        NodeSelector { network, node_list: Vec::new() }
+        NodeSelector { network }
     }
 
     // regression for #928: the Electrum-only url rules turned an Esplora url into ssl://host:50002

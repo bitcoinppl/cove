@@ -67,7 +67,7 @@ fun NodeSettingsScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var nodeList by remember { mutableStateOf(nodeSelector.nodeList()) }
+    var presetNodes by remember { mutableStateOf(nodeSelector.presetNodes()) }
     var selectedNodeSelection by remember { mutableStateOf(nodeSelector.selectedNode()) }
     var selectedRow by remember { mutableStateOf(NodeRowSelection.of(selectedNodeSelection)) }
 
@@ -102,7 +102,7 @@ fun NodeSettingsScreen(
     // pull a fresh snapshot because NodeSelector mutates persisted node settings directly
     fun refreshNodeState() {
         NodeSelector().use { refreshedNodeSelector ->
-            nodeList = refreshedNodeSelector.nodeList()
+            presetNodes = refreshedNodeSelector.presetNodes()
             selectedNodeSelection = refreshedNodeSelector.selectedNode()
         }
         selectedRow = NodeRowSelection.of(selectedNodeSelection)
@@ -255,21 +255,20 @@ fun NodeSettingsScreen(
                 MaterialSection {
                     Column {
                         // preset nodes
-                        nodeList.forEachIndexed { index, nodeSelection ->
-                            val node = nodeSelection.toNode()
+                        presetNodes.forEachIndexed { index, node ->
                             NodeRow(
                                 nodeName = node.name,
                                 isSelected = selectedRow == NodeRowSelection.Preset(node.name),
                                 onClick = { selectPresetNode(node.name) },
                             )
 
-                            if (index < nodeList.size - 1) {
+                            if (index < presetNodes.size - 1) {
                                 MaterialDivider()
                             }
                         }
 
                         // add divider before custom options
-                        if (nodeList.isNotEmpty()) {
+                        if (presetNodes.isNotEmpty()) {
                             MaterialDivider()
                         }
 

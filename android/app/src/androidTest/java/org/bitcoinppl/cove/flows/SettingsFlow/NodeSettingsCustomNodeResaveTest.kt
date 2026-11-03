@@ -1,5 +1,6 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.isNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -89,7 +91,7 @@ class NodeSettingsCustomNodeResaveTest {
         compose.onNodeWithText("Custom Esplora").performClick()
         compose.onNode(hasSetTextAction() and hasText("URL")).performTextReplacement(url)
         compose.onNode(hasSetTextAction() and hasText("Name")).performTextReplacement(name)
-        compose.onNodeWithText("Save Custom Node").performClick()
+        clickSave()
 
         compose.waitUntil(timeoutMillis = 30_000) { selectedNode().url == url }
         val saved = selectedNode()
@@ -98,7 +100,7 @@ class NodeSettingsCustomNodeResaveTest {
 
         compose.waitUntil(timeoutMillis = 10_000) { saveButtonIsEnabled() }
         val requestsBeforeResave = esplora.requestCount
-        compose.onNodeWithText("Save Custom Node").performClick()
+        clickSave()
 
         // done once the screen stops saving after checking our node, showing an error, or saving another
         // node, which hides the custom form and its save button
@@ -114,6 +116,12 @@ class NodeSettingsCustomNodeResaveTest {
         assertTrue("the second save must check our node", esplora.requestCount > requestsBeforeResave)
         assertEquals("the saved custom node must survive a second save", saved, selectedNode())
         compose.onNode(hasSetTextAction() and hasText("URL")).assert(hasText(url))
+    }
+
+    // a touch can miss the button, which the open keyboard can scroll out of view and the first
+    // save's snackbar covers for as long as accessibility timeouts keep it shown
+    private fun clickSave() {
+        compose.onNodeWithText("Save Custom Node").performSemanticsAction(SemanticsActions.OnClick)
     }
 
     // the screen reports every failed save in a dialog with one of these titles
