@@ -1793,6 +1793,37 @@ async fn restore_fails_when_all_listed_wallet_backups_are_missing() {
     );
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn unreadable_hot_wallet_keychain_items_stop_identity_collection() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let wallet = hot_wallet_with_surviving_keychain_items();
+    Database::global()
+        .wallets()
+        .save_all_wallets(wallet.network, wallet.wallet_mode, vec![wallet.clone()])
+        .unwrap();
+    let mnemonic_key = format!("{}{}", wallet.id, crate::test_support::WALLET_MNEMONIC_KEY_SUFFIX);
+    let descriptor_key = format!("{}::wallet_public_descriptor", wallet.id);
+
+    // an unreadable secret must not turn the wallet into one that cannot sign
+    globals.keychain.fail_reads_for(mnemonic_key.as_str());
+    let unreadable_secret = crate::wallet_identity::collect_existing_wallet_identities();
+    globals.keychain.clear_read_failures();
+    assert!(unreadable_secret.is_err(), "unreadable secret was treated as missing");
+
+    // without a secret, unreadable descriptors must not narrow the match to the wallet ID
+    assert!(Keychain::global().delete_wallet_secret(&wallet.id));
+    globals.keychain.fail_reads_for(descriptor_key.as_str());
+    let unreadable_descriptors = crate::wallet_identity::collect_existing_wallet_identities();
+    globals.keychain.clear_read_failures();
+    assert!(unreadable_descriptors.is_err(), "unreadable descriptors fell back to the wallet ID");
+
+    assert!(crate::wallet_identity::collect_existing_wallet_identities().is_ok());
+}
+
 /// A hot wallet whose keychain items survived an app reinstall that removed the database
 fn hot_wallet_with_surviving_keychain_items() -> WalletMetadata {
     use crate::wallet_secret::WalletSecretExt as _;

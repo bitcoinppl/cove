@@ -1,4 +1,4 @@
-use cove_device::keychain::Keychain;
+use cove_device::keychain::{Keychain, KeychainError};
 use strum::IntoEnumIterator as _;
 use tracing::warn;
 
@@ -9,7 +9,10 @@ use crate::wallet::metadata::{WalletMetadata, WalletMode, WalletType};
 
 use super::WalletIdentityKey;
 use super::backup::no_fingerprint_wallet_id;
-use super::{ExistingWalletIdentitySet, PublicWalletIdentity, WalletIdentityError};
+
+use super::{
+    ExistingWalletIdentitySet, PublicWalletIdentity, PublicWalletIdentityError, WalletIdentityError,
+};
 
 pub(crate) fn collect_existing_wallet_identities()
 -> Result<ExistingWalletIdentitySet, WalletIdentityError> {
@@ -57,7 +60,7 @@ fn existing_wallet_identity_key(
 
     if let Some(fingerprint) = metadata.master_fingerprint.as_deref().copied() {
         if metadata.wallet_type == WalletType::Hot {
-            if hot_wallet_secret_is_readable(&metadata, keychain) {
+            if hot_wallet_has_usable_secret(&metadata, keychain)? {
                 return Ok(WalletIdentityKey::HotFingerprint {
                     fingerprint,
                     network: metadata.network,
@@ -65,7 +68,7 @@ fn existing_wallet_identity_key(
                 });
             }
 
-            return Ok(unsigned_hot_wallet_identity_key(metadata, keychain, fingerprint));
+            return unsigned_hot_wallet_identity_key(metadata, keychain, fingerprint);
         }
 
         return Ok(WalletIdentityKey::Fingerprint {
@@ -82,51 +85,70 @@ fn existing_wallet_identity_key(
     })
 }
 
-/// Identity of a hot wallet whose secret is missing or unreadable
+/// Identity of a hot wallet whose secret is missing or cannot be decrypted
 ///
 /// It cannot cover a seed backup, and a fingerprint match would also cover every other public
 /// wallet under that fingerprint, such as another address type of the same seed, so it matches
-/// only its own public descriptors, or only its wallet ID when those cannot be read either
+/// only its own public descriptors, or only its wallet ID when those are invalid
 fn unsigned_hot_wallet_identity_key(
     metadata: WalletMetadata,
     keychain: &Keychain,
     fingerprint: Fingerprint,
-) -> WalletIdentityKey {
+) -> Result<WalletIdentityKey, WalletIdentityError> {
     match PublicWalletIdentity::from_existing_wallet(&metadata, keychain) {
         Ok(Some(identity)) => {
-            return WalletIdentityKey::PublicIdentity {
+            return Ok(WalletIdentityKey::PublicIdentity {
                 identity,
                 fingerprint: Some(fingerprint),
                 wallet_id: None,
                 network: metadata.network,
                 mode: metadata.wallet_mode,
-            };
+            });
         }
         Ok(None) => {}
+
+        // a wallet ID match is narrower than its descriptors, so falling back while they cannot
+        // be read would let a restore add a second copy of this wallet
+        Err(source @ PublicWalletIdentityError::Keychain(KeychainError::Read(_))) => {
+            return Err(WalletIdentityError::ExistingWalletPublicIdentity {
+                wallet_id: metadata.id,
+                source,
+            });
+        }
         Err(error) => {
-            warn!("hot wallet {} public identity could not be read: {error}", metadata.id);
+            warn!("hot wallet {} public identity is invalid: {error}", metadata.id);
         }
     }
 
-    WalletIdentityKey::WalletId {
+    Ok(WalletIdentityKey::WalletId {
         id: metadata.id,
         network: metadata.network,
         mode: metadata.wallet_mode,
-    }
+    })
 }
 
-fn hot_wallet_secret_is_readable(metadata: &WalletMetadata, keychain: &Keychain) -> bool {
+/// Whether a hot wallet's secret is stored and decrypts
+///
+/// A read failure is returned as an error instead of false, since the secret may still be there
+/// and a wallet that can sign would otherwise be treated as one that cannot
+fn hot_wallet_has_usable_secret(
+    metadata: &WalletMetadata,
+    keychain: &Keychain,
+) -> Result<bool, WalletIdentityError> {
     let id = &metadata.id;
 
     match keychain.get_wallet_secret(id) {
-        Ok(Some(_)) => true,
+        Ok(Some(_)) => Ok(true),
         Ok(None) => {
             warn!("hot wallet {id} has no stored secret");
-            false
+            Ok(false)
+        }
+        Err(source @ KeychainError::Read(_)) => {
+            Err(WalletIdentityError::ExistingWalletSecret { wallet_id: id.clone(), source })
         }
         Err(error) => {
-            warn!("hot wallet {id} secret could not be read: {error}");
-            false
+            warn!("hot wallet {id} secret is invalid: {error}");
+            Ok(false)
         }
     }
 }
