@@ -407,6 +407,41 @@ async fn pending_upload_verification_expires_stale_completion() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn pending_verification_stays_pending_while_the_master_key_is_unreadable() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    manager
+        .replace_pending_verification_completion(PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallet_issues: Default::default(),
+                detail: None,
+            },
+            namespace_id,
+            Vec::new(),
+        ))
+        .unwrap();
+    let verification_before = manager.model_snapshot().verification;
+
+    globals.keychain.fail_reads_for("cspp::v1::master_key");
+    manager.finalize_pending_verification_if_ready().await;
+    globals.keychain.clear_read_failures();
+
+    assert!(manager.pending_verification_completion().is_some());
+    assert_eq!(manager.model_snapshot().verification, verification_before);
+
+    manager.finalize_pending_verification_if_ready().await;
+    assert!(manager.pending_verification_completion().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();

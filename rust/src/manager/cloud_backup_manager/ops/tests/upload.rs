@@ -301,6 +301,55 @@ async fn upload_wallet_if_dirty_does_not_create_master_key_for_existing_namespac
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn upload_wallet_if_dirty_stays_retryable_when_a_keychain_read_fails() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let metadata = xpub_only_wallet_metadata();
+    let xpub = sample_xpub(&metadata);
+    Keychain::global().save_wallet_xpub(&metadata.id, xpub.parse().unwrap()).unwrap();
+    persist_xpub_wallets(vec![metadata.clone()]);
+
+    let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+    let xpub_key = format!("{}{}", metadata.id, crate::test_support::WALLET_XPUB_KEY_SUFFIX);
+
+    for key in [xpub_key.as_str(), "cspp::v1::master_key"] {
+        Database::global()
+            .cloud_blob_sync_states
+            .set(&PersistedCloudBlobSyncState::wallet(
+                namespace.clone(),
+                metadata.id.clone(),
+                record_id.clone(),
+                PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at: 1 }),
+            ))
+            .unwrap();
+
+        globals.keychain.fail_reads_for(key);
+        let result = manager.do_upload_wallet_if_dirty(&metadata.id).await;
+        globals.keychain.clear_read_failures();
+
+        assert!(result.is_err(), "unreadable {key} still uploaded");
+        assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0, "{key}");
+        assert!(
+            matches!(
+                Database::global().cloud_blob_sync_states.get(&record_id).unwrap(),
+                Some(PersistedCloudBlobSyncState {
+                    state: PersistedCloudBlobState::Failed(CloudBlobFailedState {
+                        retryable: true,
+                        ..
+                    }),
+                    ..
+                })
+            ),
+            "unreadable {key} was recorded as a terminal upload failure"
+        );
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn deferred_live_wallet_upload_retries_without_restart() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();

@@ -451,10 +451,15 @@ impl RustCloudBackupManager {
             ));
         }
 
+        // an unreadable keychain, for example while the device is locked, says nothing about the
+        // wallet, so the upload stays retryable instead of becoming a terminal failure
+        let retryable =
+            error.is_keychain_unreadable() || Self::is_upload_preparation_failure_retryable(&error);
+
         self.mark_blob_failed_if_current(
             current_state,
             revision_hash,
-            Self::is_upload_preparation_failure_retryable(&error),
+            retryable,
             Self::persistable_cloud_storage_issue(issue),
             error.to_string(),
         )?;
