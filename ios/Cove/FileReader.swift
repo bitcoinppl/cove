@@ -19,6 +19,15 @@ public struct FileReader {
     }
 
     func read() throws -> String {
+        try withAccess { try String(contentsOf: url, encoding: .utf8) }
+    }
+
+    /// Read the raw bytes, for files that may be binary such as signed PSBTs
+    func readData() throws -> Data {
+        try withAccess { try Data(contentsOf: url) }
+    }
+
+    private func withAccess<T>(_ body: () throws -> T) throws -> T {
         guard url.startAccessingSecurityScopedResource() else {
             throw FileReadError(
                 message: "Failed to access the file at \(url.path)"
@@ -26,6 +35,6 @@ public struct FileReader {
         }
 
         defer { url.stopAccessingSecurityScopedResource() }
-        return try String(contentsOf: url, encoding: .utf8)
+        return try body()
     }
 }

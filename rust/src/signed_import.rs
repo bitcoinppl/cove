@@ -24,6 +24,9 @@ const PSBT_BASE64_PREFIX: &str = "cHNidP";
 /// Hex encoding of PSBT magic prefix
 const PSBT_HEX_PREFIX: &str = "70736274ff";
 
+/// UTF-8 byte order mark that some editors write at the start of text files
+const UTF8_BOM: &[u8] = &[0xef, 0xbb, 0xbf];
+
 /// Result of parsing a signed transaction import
 ///
 /// Hardware wallets may return either a signed PSBT or a finalized transaction.
@@ -105,7 +108,8 @@ impl SignedTransactionOrPsbt {
         }
 
         // maybe the bytes are actually string encoded (UTF-8 base64/hex)
-        if let Ok(utf8_str) = std::str::from_utf8(data) {
+        let text = data.strip_prefix(UTF8_BOM).unwrap_or(data);
+        if let Ok(utf8_str) = std::str::from_utf8(text) {
             return Self::try_parse(utf8_str);
         }
 
@@ -292,6 +296,63 @@ mod tests {
     fn test_unsigned_psbt_bytes_returns_not_signed() {
         let bytes = hex::decode(TEST_PSBT_HEX).unwrap();
         let result = SignedTransactionOrPsbt::try_from_bytes(&bytes);
+        assert!(matches!(result, Err(SignedImportError::NotSigned)), "{result:?}");
+    }
+
+    // Signer Lab output for Cove signet hardware-wallet drafts made on iOS and Android: signed and
+    // finalized binary PSBTs, each with the txid it was broadcast as
+    const SIGNED_FIXTURES: [(&str, &[u8], &str); 2] = [
+        (
+            "ios draft",
+            include_bytes!("../test/data/signet_ios_draft_signed.psbt"),
+            "c3f4d4131161cebf766953a3597b1918dbbd9e5a09cf6052a2a144301fe111f5",
+        ),
+        (
+            "android draft",
+            include_bytes!("../test/data/signet_android_draft_signed.psbt"),
+            "dc5ec07343f66445b4e02edb525f1c9edf7fcf5e474711c61bf3bc29855935db",
+        ),
+    ];
+
+    #[test]
+    fn signed_import_file_bytes_accept_binary_and_text_forms() {
+        for (draft, signed_psbt, txid) in SIGNED_FIXTURES {
+            let finalized_tx =
+                Psbt::try_new(signed_psbt.to_vec()).unwrap().0.extract_tx_unchecked_fee_rate();
+
+            let binary_tx = bitcoin::consensus::serialize(&finalized_tx);
+
+            // apps pass the picked file's raw bytes, so text files arrive here with trailing newlines
+            let files = [
+                ("binary psbt", signed_psbt.to_vec()),
+                ("binary transaction", binary_tx.clone()),
+                ("base64 psbt", format!("{}\n", BASE64_STANDARD.encode(signed_psbt)).into()),
+                ("hex psbt", format!("{}\n", hex::encode(signed_psbt)).into()),
+                ("hex transaction", format!("{}\n", hex::encode(&binary_tx)).into()),
+                (
+                    "bom base64 psbt",
+                    [UTF8_BOM, BASE64_STANDARD.encode(signed_psbt).as_bytes()].concat(),
+                ),
+            ];
+
+            for (form, bytes) in files {
+                let parsed = SignedTransactionOrPsbt::try_from_bytes(&bytes)
+                    .unwrap_or_else(|error| panic!("{draft} {form}: {error}"));
+
+                let is_psbt = matches!(parsed, SignedTransactionOrPsbt::SignedPsbt(_));
+                assert_eq!(is_psbt, form.ends_with("psbt"), "{draft} {form}: {parsed:?}");
+                assert_eq!(parsed.unsigned_tx_id().to_string(), txid, "{draft} {form}");
+            }
+        }
+
+        // the base64 file Signer Lab wrote for the android draft, byte for byte
+        let base64_file = include_bytes!("../test/data/signet_android_draft_signed.b64");
+        let parsed = SignedTransactionOrPsbt::try_from_bytes(base64_file).unwrap();
+        assert_eq!(parsed.psbt().unwrap().0.serialize(), SIGNED_FIXTURES[1].1);
+
+        // the unsigned export of the same draft is rejected with the sign-first error
+        let unsigned_file = include_bytes!("../test/data/signet_android_draft_unsigned.psbt");
+        let result = SignedTransactionOrPsbt::try_from_bytes(unsigned_file);
         assert!(matches!(result, Err(SignedImportError::NotSigned)), "{result:?}");
     }
 
