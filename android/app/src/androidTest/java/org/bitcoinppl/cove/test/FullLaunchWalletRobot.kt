@@ -14,6 +14,7 @@ import androidx.test.uiautomator.Until
 import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.initialScanComplete
+import org.bitcoinppl.cove_core.ApiType
 import org.bitcoinppl.cove_core.AppAction
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.NodeSelector
@@ -49,7 +50,7 @@ class FullLaunchWalletRobot(
 
         runBlocking {
             NodeSelector().use { selector ->
-                val node = selector.parseCustomNode(FAKE_NODE_ESPLORA_URL, "Custom Esplora", "Fake node")
+                val node = selector.parseCustomNode(FAKE_NODE_ESPLORA_URL, ApiType.ESPLORA, "Fake node")
                 selector.checkAndSaveNode(node)
             }
         }

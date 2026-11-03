@@ -337,7 +337,7 @@ extension CoveApplicationRoot {
                 try Database().globalConfig().setSelectedNetwork(network: .signet)
 
                 // the selector reads the selected network when created, so make it after switching
-                let node = try NodeSelector().parseCustomNode(url: url, name: "Custom Esplora", enteredName: "")
+                let node = try NodeSelector().parseCustomNode(url: url, apiType: .esplora, enteredName: "")
                 try Database().globalConfig().setSelectedNode(node: node)
                 Log.info("[STARTUP] UI test selected Signet and custom Esplora node \(node.url)")
             } catch {
