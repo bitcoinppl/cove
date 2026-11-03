@@ -106,6 +106,10 @@ private func enumerateGenericPasswordAccounts() -> KeychainAccountEnumerationRes
 
 class KeychainAccessor: KeychainAccess {
     let keychain: KeychainSwift
+
+    /// `KeychainSwift.set` deletes the old item before adding the new one under its own private
+    /// lock, so direct reads take this lock with every write to never land between the two
+    private let lock = NSLock()
     private let itemReader: @Sendable (String) -> KeychainItemReadResult
     private let accountEnumerator: @Sendable () -> KeychainAccountEnumerationResult
 
@@ -127,17 +131,21 @@ class KeychainAccessor: KeychainAccess {
     }
 
     func save(key: String, value: String) throws {
-        if !keychain.set(
-            value,
-            forKey: key,
-            withAccess: .accessibleWhenUnlockedThisDeviceOnly
-        ) {
+        let saved = lock.withLock {
+            keychain.set(
+                value,
+                forKey: key,
+                withAccess: .accessibleWhenUnlockedThisDeviceOnly
+            )
+        }
+
+        if !saved {
             throw KeychainError.Save
         }
     }
 
     func get(key: String) throws -> String? {
-        switch itemReader(key) {
+        switch lock.withLock({ itemReader(key) }) {
         case let .value(value):
             value
         case .itemNotFound:
@@ -150,7 +158,7 @@ class KeychainAccessor: KeychainAccess {
     }
 
     func delete(key: String) -> Bool {
-        keychain.delete(key)
+        lock.withLock { keychain.delete(key) }
     }
 
     func deleteAllWalletItems() throws {
@@ -178,7 +186,7 @@ class KeychainAccessor: KeychainAccess {
             suffixes.contains { key.hasSuffix($0) }
         }
         var failed = false
-        for key in walletKeys where !keychain.delete(key) {
+        for key in walletKeys where !delete(key: key) {
             failed = true
         }
 
