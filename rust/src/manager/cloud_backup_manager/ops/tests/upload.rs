@@ -559,12 +559,11 @@ async fn backup_wallets_preserves_newer_dirty_state() {
 }
 
 // the load-time origin repair changes a field of the backup revision, so a wallet whose backup is
-// already confirmed must be uploaded again with the repaired origin
+// already confirmed must be uploaded again with the repaired origin. A hot wallet whose key is
+// missing locally keeps its confirmed backup, since opening it downgrades it to watch-only and
+// that upload would drop the key from the cloud
 #[tokio::test(flavor = "current_thread")]
 async fn repairing_a_wallet_origin_on_load_marks_its_confirmed_backup_dirty() {
-    use crate::database::cloud_backup::CloudBlobConfirmedState;
-    use crate::wallet::{Wallet, metadata::WalletMetadata};
-
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
     let manager = init_manager();
@@ -578,6 +577,40 @@ async fn repairing_a_wallet_origin_on_load_marks_its_confirmed_backup_dirty() {
     database.global_config.set_selected_network(crate::network::Network::Bitcoin).unwrap();
     database.global_config.set_main_mode().unwrap();
 
+    let with_key = load_origin_less_wallet_with_confirmed_backup(true);
+    let without_key = load_origin_less_wallet_with_confirmed_backup(false);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+
+    let (loaded_origin, expected_origin, sync_state) = with_key;
+    assert_eq!(loaded_origin, expected_origin);
+    assert!(
+        matches!(
+            sync_state,
+            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
+        ),
+        "{sync_state:?}"
+    );
+
+    let (loaded_origin, expected_origin, sync_state) = without_key;
+    assert_eq!(loaded_origin, expected_origin);
+    assert!(
+        matches!(
+            sync_state,
+            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Confirmed(_), .. })
+        ),
+        "{sync_state:?}"
+    );
+}
+
+/// Loads a hot wallet whose stored row lacks an origin and whose backup is confirmed, returning
+/// the loaded origin, the origin its build derived, and the backup's sync state after the load
+fn load_origin_less_wallet_with_confirmed_backup(
+    keep_secret: bool,
+) -> (Option<String>, Option<String>, Option<PersistedCloudBlobSyncState>) {
+    use crate::database::cloud_backup::CloudBlobConfirmedState;
+    use crate::wallet::{Wallet, metadata::WalletMetadata};
+
+    let database = Database::global();
     let mnemonic = Mnemonic::parse_normalized(
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
     )
@@ -592,10 +625,13 @@ async fn repairing_a_wallet_origin_on_load_marks_its_confirmed_backup_dirty() {
     let expected_origin = wallet.metadata.origin.clone();
     assert!(expected_origin.is_some(), "a mnemonic wallet build derives an origin");
 
-    // a hot wallet without its secret is downgraded on load, which rewrites the whole row
-    Keychain::global()
-        .save_wallet_secret(&id, cove_device::keychain::WalletSecret::Mnemonic(mnemonic))
-        .unwrap();
+    if keep_secret {
+        Keychain::global()
+            .save_wallet_secret(&id, cove_device::keychain::WalletSecret::Mnemonic(mnemonic))
+            .unwrap();
+    } else {
+        Keychain::global().delete_wallet_secret(&id);
+    }
 
     let mut origin_less = wallet.metadata.clone();
     origin_less.origin = None;
@@ -621,14 +657,6 @@ async fn repairing_a_wallet_origin_on_load_marks_its_confirmed_backup_dirty() {
 
     drop(loaded);
     crate::wallet::test_support::remove_wallet(&id);
-    CONNECTIVITY_MANAGER.set_connection_state(true);
 
-    assert_eq!(loaded_origin, expected_origin);
-    assert!(
-        matches!(
-            sync_state,
-            Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
-        ),
-        "{sync_state:?}"
-    );
+    (loaded_origin, expected_origin, sync_state)
 }
