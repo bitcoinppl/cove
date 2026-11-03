@@ -406,6 +406,27 @@ async fn integrity_warns_when_background_wallet_list_fails() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn integrity_skips_without_downgrade_when_a_local_key_is_unreadable() {
+    use crate::manager::cloud_backup_manager::keychain::{
+        CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY,
+    };
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    for key in [CSPP_NAMESPACE_ID_KEY, CSPP_CREDENTIAL_ID_KEY] {
+        globals.keychain.fail_reads_for(key);
+        let warning = manager.verify_backup_integrity_impl().await;
+        globals.keychain.clear_read_failures();
+
+        assert_eq!(warning, None, "unreadable {key} was reported as missing");
+        assert_eq!(manager.state.read().status(), CloudBackupStatus::Enabled, "{key}");
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn refresh_cloud_backup_detail_uses_interactive_wallet_listing() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();

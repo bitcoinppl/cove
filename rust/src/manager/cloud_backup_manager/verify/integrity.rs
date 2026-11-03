@@ -60,8 +60,8 @@ impl RustCloudBackupManager {
 
         // an unreadable keychain, for example while the device is locked, proves nothing is
         // missing, so skip the check instead of reporting issues or persisting a downgrade
-        let (has_master_key, has_prf_salt, stored_credential_id) =
-            match read_local_backup_keys(&cspp, &cloud_keychain) {
+        let LocalBackupKeys { has_master_key, has_prf_salt, stored_credential_id, namespace } =
+            match LocalBackupKeys::read(&cspp, &cloud_keychain) {
                 Ok(local_keys) => local_keys,
                 Err(error) => {
                     warn!("Skipping backup integrity check, keychain is unreadable: {error}");
@@ -86,12 +86,9 @@ impl RustCloudBackupManager {
             downgrade = Some(IntegrityDowngrade::Unverified);
         }
 
-        let namespace = match self.current_namespace_id() {
-            Ok(namespace) => namespace,
-            Err(_) => {
-                issues.push(BackupIntegrityIssue::NamespaceMissing);
-                return self.finish_backup_integrity_check(&issues, downgrade);
-            }
+        let Some(namespace) = namespace else {
+            issues.push(BackupIntegrityIssue::NamespaceMissing);
+            return self.finish_backup_integrity_check(&issues, downgrade);
         };
 
         if !issues.is_empty() {
@@ -261,14 +258,26 @@ impl RustCloudBackupManager {
     }
 }
 
-/// Reads the local keys the integrity check needs, failing if any cannot be read
-fn read_local_backup_keys(
-    cspp: &cove_cspp::Cspp<Keychain>,
-    cloud_keychain: &CloudBackupKeychain,
-) -> Result<(bool, bool, Option<Vec<u8>>), CloudBackupKeychainError> {
-    Ok((
-        cspp.has_master_key()?,
-        cloud_keychain.has_prf_salt()?,
-        cloud_keychain.load_credential_id()?,
-    ))
+/// The local keychain entries the integrity check needs
+struct LocalBackupKeys {
+    has_master_key: bool,
+    has_prf_salt: bool,
+    stored_credential_id: Option<Vec<u8>>,
+    namespace: Option<String>,
+}
+
+impl LocalBackupKeys {
+    /// Reads every entry, failing if any cannot be read so the check never mistakes an
+    /// unreadable entry for a missing one
+    fn read(
+        cspp: &cove_cspp::Cspp<Keychain>,
+        cloud_keychain: &CloudBackupKeychain,
+    ) -> Result<Self, CloudBackupKeychainError> {
+        Ok(Self {
+            has_master_key: cspp.has_master_key()?,
+            has_prf_salt: cloud_keychain.has_prf_salt()?,
+            stored_credential_id: cloud_keychain.load_credential_id()?,
+            namespace: cloud_keychain.namespace_id()?,
+        })
+    }
 }
