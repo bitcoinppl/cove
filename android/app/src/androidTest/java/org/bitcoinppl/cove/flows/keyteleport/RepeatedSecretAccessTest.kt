@@ -15,6 +15,7 @@ import org.bitcoinppl.cove_core.Mnemonic
 import org.bitcoinppl.cove_core.types.WalletId
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -22,12 +23,15 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Reading a hot wallet's recovery words over and over, writing the same wallet again, and running
- * several KeyTeleport sends of it must keep exactly one wallet whose words read back unchanged
+ * Reading a hot wallet's recovery words over and over, writing them to the keystore again, and
+ * running several KeyTeleport sends of the wallet must keep exactly one wallet whose words read back
+ * unchanged
  *
- * Runs against the real Android keystore through the Rust keychain, so a read that fails, hangs or
- * returns different words fails here. Each send is received on this device too, where the received
- * words must match and importing them must find the existing wallet instead of adding a copy
+ * Runs against the real Android keystore through the Rust keychain, so a read or write that fails,
+ * hangs or returns different words fails here. A write deletes the wallet and imports its words
+ * again, since importing words a hot wallet already holds writes nothing. Each send is received on
+ * this device too, where the received words must match and importing them must find the existing
+ * wallet instead of adding a copy
  */
 @RunWith(AndroidJUnit4::class)
 class RepeatedSecretAccessTest {
@@ -53,23 +57,37 @@ class RepeatedSecretAccessTest {
 
     @Test
     fun repeatedReadsWritesAndKeyTeleportSendsKeepOneReadableWallet() {
-        val walletsBefore = walletIds()
-        assertEquals("the test wallet is not listed exactly once", 1, walletsBefore.count { it == walletId })
+        assertEquals("the test wallet is not listed exactly once", 1, walletIds().count { it == walletId })
+        val otherWallets = walletIds() - walletId
 
         repeat(READ_ROUNDS) { round ->
             assertEquals("read $round returned different recovery words", TEST_WORDS, readWords())
         }
 
         repeat(WRITE_ROUNDS) { round ->
-            assertEquals("write $round did not find the existing wallet", walletId, writeWordsAgain())
+            writeWordsAgain(round)
         }
+
+        assertEquals("a duplicate import did not find the existing wallet", walletId, importDuplicate())
 
         repeat(SEND_ROUNDS) { round ->
             sendToThisDeviceAndImport(round)
         }
 
-        assertEquals("the wallet list changed", walletsBefore, walletIds())
+        assertEquals("the test wallet is not listed exactly once", 1, walletIds().count { it == walletId })
+        assertEquals("the other wallets changed", otherWallets, walletIds() - walletId)
         assertEquals("the recovery words changed after the sends", TEST_WORDS, readWords())
+    }
+
+    // a hot wallet that already holds the words skips the keystore write, so the wallet is deleted
+    // first and its words are written to the keystore again by a fresh import
+    private fun writeWordsAgain(round: Int) {
+        deleteTestWallet(walletId)
+        val reimported = importTestWalletOrNull(TEST_WALLET)
+        assertNotNull("write $round found the deleted wallet still listed", reimported)
+        walletId = requireNotNull(reimported).id
+
+        assertEquals("write $round read back different recovery words", TEST_WORDS, readWords())
     }
 
     private fun sendToThisDeviceAndImport(round: Int) {
@@ -110,7 +128,7 @@ class RepeatedSecretAccessTest {
     }
 
     // a hot wallet that already holds these words reports itself instead of being written twice
-    private fun writeWordsAgain(): WalletId? =
+    private fun importDuplicate(): WalletId? =
         try {
             ImportWalletManager().use { manager -> manager.importWallet(listOf(TEST_WORDS)) }
             null
