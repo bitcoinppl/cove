@@ -338,14 +338,12 @@ fn prepare_cloud_labels(labels_jsonl: &str) -> Result<PreparedCloudLabels, Cloud
     })
 }
 
-/// Whether key material a backup of this wallet carries is missing from the local keychain
+/// Whether uploading this wallet could replace key material its cloud copy still holds
 ///
-/// An upload then falls back to a watch-only record, replacing any key or TAPSIGNER backup the
-/// cloud copy still holds. A keychain read error counts as missing
-pub(crate) fn backup_secret_missing_locally(
-    keychain: &Keychain,
-    metadata: &WalletMetadata,
-) -> bool {
+/// An upload carries a watch-only record when the wallet's key or TAPSIGNER backup is missing
+/// from the local keychain, and always for a watch-only wallet, which may be a hot wallet
+/// downgraded after its key was lost locally. A keychain read error counts as missing
+pub(crate) fn upload_may_drop_cloud_secret(keychain: &Keychain, metadata: &WalletMetadata) -> bool {
     let id = &metadata.id;
     let present = match metadata.wallet_type {
         WalletType::Hot => keychain.get_wallet_secret(id).map(|secret| secret.is_some()),
@@ -357,7 +355,8 @@ pub(crate) fn backup_secret_missing_locally(
         {
             keychain.get_tap_signer_backup(id).map(|backup| backup.is_some())
         }
-        WalletType::Cold | WalletType::XpubOnly | WalletType::WatchOnly => return false,
+        WalletType::WatchOnly => return true,
+        WalletType::Cold | WalletType::XpubOnly => return false,
     };
 
     !matches!(present, Ok(true))
@@ -487,7 +486,7 @@ mod tests {
 
     // an upload without the local key material would replace the cloud copy with a watch-only one
     #[test]
-    fn backup_secret_is_missing_only_when_the_backup_carries_one() {
+    fn upload_may_drop_cloud_secret_only_without_local_key_material() {
         use std::sync::Arc;
 
         use bitcoin::secp256k1::PublicKey;
@@ -503,14 +502,14 @@ mod tests {
         let mut hot = WalletMetadata::preview_new();
         hot.wallet_type = WalletType::Hot;
         keychain.delete_wallet_secret(&hot.id);
-        let hot_missing_before = backup_secret_missing_locally(keychain, &hot);
+        let hot_missing_before = upload_may_drop_cloud_secret(keychain, &hot);
 
         let mnemonic = bip39::Mnemonic::parse_normalized(
             "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
         )
         .unwrap();
         keychain.save_wallet_secret(&hot.id, KeychainWalletSecret::Mnemonic(mnemonic)).unwrap();
-        let hot_missing_after = backup_secret_missing_locally(keychain, &hot);
+        let hot_missing_after = upload_may_drop_cloud_secret(keychain, &hot);
         keychain.delete_wallet_secret(&hot.id);
 
         // secp256k1 generator point G, a valid compressed public key
@@ -532,10 +531,10 @@ mod tests {
         tap_signer_wallet.wallet_type = WalletType::Cold;
         tap_signer_wallet.hardware_metadata = Some(HardwareWalletMetadata::TapSigner(tap_signer));
         keychain.delete_tap_signer_backup(&tap_signer_wallet.id);
-        let tap_signer_missing_before = backup_secret_missing_locally(keychain, &tap_signer_wallet);
+        let tap_signer_missing_before = upload_may_drop_cloud_secret(keychain, &tap_signer_wallet);
 
         keychain.save_tap_signer_backup(&tap_signer_wallet.id, &[7; 32]).unwrap();
-        let tap_signer_missing_after = backup_secret_missing_locally(keychain, &tap_signer_wallet);
+        let tap_signer_missing_after = upload_may_drop_cloud_secret(keychain, &tap_signer_wallet);
         keychain.delete_tap_signer_backup(&tap_signer_wallet.id);
 
         let mut other_cold = WalletMetadata::preview_new();
@@ -547,8 +546,8 @@ mod tests {
         assert!(!hot_missing_after, "a hot wallet with its key");
         assert!(tap_signer_missing_before, "a TAPSIGNER wallet without its backup");
         assert!(!tap_signer_missing_after, "a TAPSIGNER wallet with its backup");
-        assert!(!backup_secret_missing_locally(keychain, &other_cold), "other cold wallets");
-        assert!(!backup_secret_missing_locally(keychain, &watch_only), "watch-only wallets");
+        assert!(!upload_may_drop_cloud_secret(keychain, &other_cold), "other cold wallets");
+        assert!(upload_may_drop_cloud_secret(keychain, &watch_only), "watch-only wallets");
     }
 
     #[test]

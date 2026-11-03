@@ -92,8 +92,8 @@ pub(crate) use passkey::{
 #[cfg(test)]
 pub(crate) use payload::test_support as payload_test_support;
 pub(crate) use payload::{
-    backup_secret_missing_locally, decode_cloud_labels_jsonl, prepare_wallet_backup,
-    restored_content_revision_hash, wallet_metadata_change_requires_upload,
+    decode_cloud_labels_jsonl, prepare_wallet_backup, restored_content_revision_hash,
+    upload_may_drop_cloud_secret, wallet_metadata_change_requires_upload,
 };
 pub(crate) use restore::{
     CloudOnlyRestoreOutcome, WalletBackupLookup, WalletBackupReader, WalletRestoreOutcome,
