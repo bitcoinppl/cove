@@ -34,6 +34,8 @@ Decrypted TapSigner backup bytes use zeroizing storage inside the Rust keychain 
 
 ## Leaving the app
 
-When Cove leaves the foreground, KeyTeleport hides any revealed receiver code, QR code, password, recovery words, or private key. It also clears a receiver code or sender password that was typed but not yet submitted. After unlocking, the user enters it again. Both platforms follow this rule.
+When Cove leaves the foreground, KeyTeleport hides any revealed receiver code, password, recovery words, or private key. It also clears a receiver code or sender password that was typed but not yet submitted. After unlocking, the user enters it again. Both platforms follow this rule.
+
+The QR code shown next to a receiver code or password differs. iOS hides it too, so both are hidden after unlocking. Android goes back to showing the QR code, which is no use without the code or password beside it, and that stays hidden until the user reveals it again.
 
 The receiver code only decrypts the receiver's one-time public key from the request QR, so it cannot decrypt a transfer on its own. Cove still clears it to keep both platforms consistent and to keep typed values off a locked screen.
