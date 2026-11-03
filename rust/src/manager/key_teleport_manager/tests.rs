@@ -401,7 +401,10 @@ fn unreadable_receive_session_is_kept_for_retry() {
     let unreadable = manager.handle_action(Action::StartReceive);
     keychain.clear_read_failures();
 
-    assert!(matches!(unreadable, Err(KeyTeleportAlert::Keychain(_))), "{unreadable:?}");
+    assert!(
+        matches!(unreadable, Err(KeyTeleportAlert::Keychain(_))),
+        "an unreadable session must report a keychain error"
+    );
     assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveError));
     let kept = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
     assert_eq!(*kept, *stored);
