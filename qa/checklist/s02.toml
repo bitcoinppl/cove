@@ -61,7 +61,7 @@ id = "s02-fresh-main-credential-for-xprv-cancel-fail"
 section = "2"
 title = "Fresh main credential for xprv; cancel/fail hides it"
 platforms = ["ios", "android"]
-target = "manual"
+target = "ui"
 paths = [
     "rust/src/manager/auth_manager.rs",
     "rust/src/auth.rs",
@@ -71,18 +71,19 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSections.kt",
 ]
 coverage = [
-    "human",
+    "ios-ui:ios/CoveUITests/PrivateKeyExportFullAppUITests.swift::testOnlyAFreshMainPinRevealsThePrivateKey",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::onlyAFreshMainPinRevealsThePrivateKey",
     "android-unit:android/app/src/test/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSecurityHelpersTest.kt::exportRequiresCredentialSuccessAfterTheRequest",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# android unit test only covers the fresh-credential generation check
+# the ui tests restore an xprv-only wallet from the scripted cloud backup, then cancel, enter a wrong pin and the decoy pin before the main pin
 
 [[row]]
 id = "s02-no-pin-private-key-export-safe-failure"
 section = "2"
 title = "No-PIN private-key export safe failure"
 platforms = ["ios", "android"]
-target = "manual"
+target = "ui"
 paths = [
     "rust/src/manager/auth_manager.rs",
     "rust/src/auth.rs",
@@ -92,10 +93,11 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/settings/WalletSettingsSections.kt",
 ]
 coverage = [
-    "human",
+    "ios-ui:ios/CoveUITests/PrivateKeyExportFullAppUITests.swift::testExportWithoutAppPinIsRefused",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::exportWithoutAppPinIsRefused",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# needs a private-key wallet from a two-phone KeyTeleport receive
+# the ui tests restore an xprv-only wallet from the scripted cloud backup instead of a two-phone KeyTeleport receive
 
 [[row]]
 id = "s02-android-keyteleport-screenshot-capture-blocked"

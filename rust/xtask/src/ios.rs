@@ -65,6 +65,8 @@ const IOS_SIMULATOR_PRODUCTS_DIR: &str = "Debug-iphonesimulator";
 const IOS_DEVICE_PRODUCTS_DIR: &str = "Debug-iphoneos";
 const IOS_UI_SCHEME: &str = "CoveManualUITests";
 const IOS_UI_TEST_TARGET: &str = "CoveUITests";
+// these tests run against the host app with scripted cloud storage and passkeys
+const IOS_CLOUD_BACKUP_UI_TEST_TARGET: &str = "CoveCloudBackupUITests";
 // each test starts on a freshly erased simulator, where Xcode's runner and the first app
 // launch both fail now and then, so retry those environment failures on a clean simulator
 const IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS: usize = 2;
@@ -1229,18 +1231,20 @@ fn run_ios_ui_test(
 
     let destination = format!("platform=iOS Simulator,id={udid}");
     let only_testing = format!("-only-testing:{test}");
+    let suite = IosUiSuite::for_test(test);
+    let scheme = suite.scheme();
 
     if verbose {
         let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, test, 0));
         let test_cmd = cmd!(
             sh,
-            "xcodebuild test -project {IOS_PROJECT} -scheme {IOS_UI_SCHEME} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
+            "xcodebuild test -project {IOS_PROJECT} -scheme {scheme} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
         )
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
 
         if let Err(error) = test_cmd.run() {
             if let Some(artifacts) = &artifacts {
-                artifacts.collect_app_logs(sh, udid);
+                artifacts.collect_app_logs(sh, udid, suite);
             }
 
             return Err(error).wrap_err_with(|| format!("Failed to run iOS UI test {test}"));
@@ -1265,7 +1269,7 @@ fn run_ios_ui_test(
         let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, test, attempt));
         let test_cmd = cmd!(
             sh,
-            "xcodebuild test -project {IOS_PROJECT} -scheme {IOS_UI_SCHEME} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
+            "xcodebuild test -project {IOS_PROJECT} -scheme {scheme} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
         )
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
 
@@ -1286,7 +1290,7 @@ fn run_ios_ui_test(
 
         // collected before a retry or the next test erases the simulator
         if let Some(artifacts) = &artifacts {
-            artifacts.collect_app_logs(sh, udid);
+            artifacts.collect_app_logs(sh, udid, suite);
         }
 
         let failure = XcodebuildFailure::from_output(output)?;
@@ -1340,12 +1344,12 @@ impl IosUiAttemptArtifacts {
     /// Copies the app's diagnostics log and the simulator's unified log for the app and runner
     ///
     /// Collection is best effort: a missing log must not hide the test failure itself
-    fn collect_app_logs(&self, sh: &Shell, udid: &str) {
+    fn collect_app_logs(&self, sh: &Shell, udid: &str, suite: IosUiSuite) {
         if let Err(error) = self.copy_app_diagnostics_log(sh, udid) {
             print_warning(&format!("Failed to copy the app diagnostics log: {error:?}"));
         }
 
-        if let Err(error) = self.write_unified_log(sh, udid) {
+        if let Err(error) = self.write_unified_log(sh, udid, suite) {
             print_warning(&format!("Failed to write the simulator unified log: {error:?}"));
         }
     }
@@ -1370,9 +1374,10 @@ impl IosUiAttemptArtifacts {
         Ok(())
     }
 
-    fn write_unified_log(&self, sh: &Shell, udid: &str) -> Result<()> {
+    fn write_unified_log(&self, sh: &Shell, udid: &str, suite: IosUiSuite) -> Result<()> {
         // one erased simulator per test, so the window only needs to cover this attempt
-        let predicate = r#"process == "Cove" OR process == "CoveUITests-Runner""#;
+        let (app, runner) = suite.processes();
+        let predicate = format!(r#"process == "{app}" OR process == "{runner}""#);
         let log = cmd!(
             sh,
             "xcrun simctl spawn {udid} log show --last 20m --style compact --info --debug --predicate {predicate}"
@@ -1425,7 +1430,7 @@ impl IosUiEnvironmentFailure {
         }
 
         // XCUIApplication.launch() timing out or losing the process, or the app's own
-        // bootstrap watchdog firing on both launches in OnboardingFullLaunchUITests.launchApp()
+        // bootstrap watchdog firing on both launches of a UI test's launch helper
         let app_launch_failed = output.contains("Timed out while launching application")
             || output.contains("does not have a process ID")
             || output.contains("App startup timed out on relaunch");
@@ -1460,6 +1465,42 @@ fn non_empty_output<'a>(output: &'a str, fallback: &'a str) -> &'a str {
         fallback
     } else {
         output
+    }
+}
+
+/// The UI test target a test belongs to, which decides the scheme it runs under and the app and
+/// runner processes whose logs belong to it
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IosUiSuite {
+    /// `CoveUITests`, which drives the Cove app
+    Main,
+    /// `CoveCloudBackupUITests`, which drives the host app with scripted cloud storage and passkeys
+    CloudBackup,
+}
+
+impl IosUiSuite {
+    /// The suite for an `-only-testing` identifier such as
+    /// `CoveCloudBackupUITests/PrivateKeyExportFullAppUITests`
+    fn for_test(test: &str) -> Self {
+        match test.split('/').next() {
+            Some(IOS_CLOUD_BACKUP_UI_TEST_TARGET) => Self::CloudBackup,
+            _ => Self::Main,
+        }
+    }
+
+    fn scheme(self) -> &'static str {
+        match self {
+            Self::Main => IOS_UI_SCHEME,
+            Self::CloudBackup => "CoveCloudBackupUITests",
+        }
+    }
+
+    /// The app and test runner process names, which the unified log is filtered to
+    fn processes(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Main => ("Cove", "CoveUITests-Runner"),
+            Self::CloudBackup => ("CoveCloudBackupUITestHost", "CoveCloudBackupUITests-Runner"),
+        }
     }
 }
 

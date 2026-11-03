@@ -61,6 +61,9 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
         if let uploaded = lock.withLock({ uploadedWallets[recordId] }) {
             return uploaded
         }
+        if scenario == .privateKeyWallet, recordId == fixture.xprvWallet.recordId {
+            return fixture.xprvWallet.data
+        }
         guard let wallet = fixture.walletsByRecordId[recordId] else {
             throw CloudStorageError.NotFound("cloud backup is not available")
         }
@@ -102,6 +105,10 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
             return lock.withLock { uploadedWallets.keys.sorted() }
         }
 
+        if scenario == .privateKeyWallet {
+            return [fixture.xprvWallet.filename]
+        }
+
         let detailAttempt = lock.withLock { () -> (attempt: Int, delay: TimeInterval)? in
             guard detailSnapshotAttempts > 0 else { return nil }
 
@@ -134,6 +141,10 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
                 names: lock.withLock { uploadedWallets.keys.sorted() },
                 isComplete: true
             )
+        }
+
+        if scenario == .privateKeyWallet {
+            return CloudStorageInventorySnapshot(names: [fixture.xprvWallet.filename], isComplete: true)
         }
 
         lock.withLock {
@@ -218,6 +229,8 @@ private struct CloudBackupFixture: Decodable {
     let masterBase64: String
     let namespace: String
     let wallets: [Wallet]
+    /// Hot wallet holding only an extended private key, from the Rust fixture generator
+    let xprvWallet: Wallet
 
     var masterData: Data {
         guard let data = Data(base64Encoded: masterBase64) else {
@@ -250,5 +263,6 @@ private struct CloudBackupFixture: Decodable {
         case masterBase64 = "master_base64"
         case namespace
         case wallets
+        case xprvWallet = "xprv_wallet"
     }
 }

@@ -114,9 +114,10 @@ jobs:
   ios-ui:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
     runs-on: macos-26
-    # each test erases and reboots the simulator, about 6 minutes a test on the hosted runner;
-    # the full suite took about 205 minutes, so this leaves room for a slow runner
-    timeout-minutes: 260
+    # each test erases and reboots the simulator, about 6 to 8 minutes a test on the hosted
+    # runner; a slow runner reached the last two suites after 250 minutes, so this takes the
+    # hosted runner's 360 minute limit
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v6
 
@@ -155,23 +156,32 @@ jobs:
       # runs even when an onboarding test failed, so one broken suite doesn't hide the other
       - name: Run UTXO lock UI tests
         if: ${{ !cancelled() }}
-        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/UtxoLockFullLaunchUITests
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/UtxoLockFullLaunchUITests --results-dir "$RUNNER_TEMP/ios-ui-results"
 
       - name: Run hardware signing UI tests
         if: ${{ !cancelled() }}
-        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/HardwareSigningFullLaunchUITests
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/HardwareSigningFullLaunchUITests --results-dir "$RUNNER_TEMP/ios-ui-results"
 
       - name: Run public key import UI tests
         if: ${{ !cancelled() }}
-        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/PublicKeyImportFullLaunchUITests
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/PublicKeyImportFullLaunchUITests --results-dir "$RUNNER_TEMP/ios-ui-results"
 
       - name: Run TAPSIGNER layout UI tests
         if: ${{ !cancelled() }}
-        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/TapSignerLayoutFullLaunchUITests
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/TapSignerLayoutFullLaunchUITests --results-dir "$RUNNER_TEMP/ios-ui-results"
 
-      # CoveCloudBackupUITests stays out until its inventory scenarios pass on master; see #947
+      # the rest of CoveCloudBackupUITests stays out until its inventory scenarios pass on master; see #947
+      # these classes use the scripted cloud host only to restore a fixture wallet or reach a screen
+      - name: Run private key export UI tests
+        if: ${{ !cancelled() }}
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveCloudBackupUITests/PrivateKeyExportFullAppUITests --results-dir "$RUNNER_TEMP/ios-ui-results"
 
-      # xtask keeps each failed attempt's result bundle and app logs; DerivedData keeps only the newest bundles
+      - name: Run large text cloud backup UI tests
+        if: ${{ !cancelled() }}
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests --results-dir "$RUNNER_TEMP/ios-ui-results"
+
+      # every step writes there, each attempt's bundle and logs named for its test, so failures from
+      # any suite get uploaded; DerivedData keeps only the newest bundles
       - name: Upload iOS test results
         if: failure()
         uses: actions/upload-artifact@v7

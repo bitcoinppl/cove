@@ -552,15 +552,15 @@ id = "s14-custom-esplora-error-physical-screenshot"
 section = "14"
 title = "Custom Esplora error physical screenshot"
 platforms = ["android"]
-target = "manual"
+target = "ui"
 paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsScreen.kt",
 ]
 coverage = [
-    "human",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SettingsFlow/NodeSettingsCustomEsploraErrorTest.kt::unreachableCustomEsploraErrorShowsTheEnteredUrl",
 ]
 # 1.4.0: ios N/A, android HUMAN
-# the protected alert returns no screencap over adb
+# the test reads the alert text, so it needs no screenshot
 
 [[row]]
 id = "s14-beta-successful-custom-electrum-scan"

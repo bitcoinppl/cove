@@ -26,21 +26,32 @@ struct TermsAndConditionsView: View {
                 openURL: openURL,
                 onAgree: onAgree
             )
-            TermsContent(
-                checks: $checks,
-                errorMessage: errorMessage,
-                cardSpacing: 8,
-                cardPadding: 14,
-                footerTopSpacing: 12,
-                openURL: openURL,
-                onAgree: onAgree
-            )
+            compactContent
+
+            // accessibility text sizes overflow even the compact layout, so the last choice
+            // scrolls instead of clipping the checkboxes and the agree button off screen
+            ScrollView {
+                compactContent
+            }
+            .scrollIndicators(.hidden)
         }
         .padding(.horizontal, 26)
         .padding(.top, 22)
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onboardingRecoveryBackground()
+    }
+
+    private var compactContent: some View {
+        TermsContent(
+            checks: $checks,
+            errorMessage: errorMessage,
+            cardSpacing: 8,
+            cardPadding: 14,
+            footerTopSpacing: 12,
+            openURL: openURL,
+            onAgree: onAgree
+        )
     }
 }
 
