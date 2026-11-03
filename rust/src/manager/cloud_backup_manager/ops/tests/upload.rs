@@ -356,6 +356,46 @@ async fn upload_wallet_if_dirty_stays_retryable_when_a_keychain_read_fails() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn wallet_change_is_recorded_while_the_namespace_is_unreadable() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let metadata = xpub_only_wallet_metadata();
+    persist_xpub_wallets(vec![metadata.clone()]);
+
+    let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
+    let failed = PersistedCloudBlobState::Failed(CloudBlobFailedState {
+        revision_hash: None,
+        retryable: false,
+        issue: None,
+        error: "earlier failure".into(),
+        failed_at: 1,
+    });
+    Database::global()
+        .cloud_blob_sync_states
+        .set(&PersistedCloudBlobSyncState::wallet(
+            namespace.clone(),
+            metadata.id.clone(),
+            record_id.clone(),
+            failed,
+        ))
+        .unwrap();
+
+    globals
+        .keychain
+        .fail_reads_for(crate::manager::cloud_backup_manager::keychain::CSPP_NAMESPACE_ID_KEY);
+    manager.mark_wallet_blob_dirty(metadata.id);
+    globals.keychain.clear_read_failures();
+
+    let sync_state = Database::global().cloud_blob_sync_states.get(&record_id).unwrap().unwrap();
+    assert_eq!(sync_state.namespace_id, namespace);
+    assert!(matches!(sync_state.state, PersistedCloudBlobState::Dirty(_)), "{sync_state:?}");
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn deferred_live_wallet_upload_retries_without_restart() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
