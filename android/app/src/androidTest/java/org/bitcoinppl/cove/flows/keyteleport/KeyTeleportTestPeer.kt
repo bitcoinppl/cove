@@ -32,8 +32,10 @@ internal data class KeyTeleportResponseCopy(
  */
 internal class KeyTeleportTestPeer : Closeable {
     val manager = KeyTeleportManager(RustKeyTeleportManager())
+    private var receiving = false
 
     fun startReceive(): KeyTeleportRequestCopy {
+        receiving = true
         manager.dispatch(KeyTeleportManagerAction.StartReceive)
         return awaitRequest(manager)
     }
@@ -61,9 +63,14 @@ internal class KeyTeleportTestPeer : Closeable {
         return awaitResponse(manager)
     }
 
+    // Clear keeps the stored receive session, which after a failed test would make every later
+    // receiving test skip, so a receiving peer ends its session instead
     override fun close() {
-        manager.dispatch(KeyTeleportManagerAction.Clear)
-        manager.close()
+        try {
+            if (receiving) endReceive(manager) else manager.dispatch(KeyTeleportManagerAction.Clear)
+        } finally {
+            manager.close()
+        }
     }
 }
 
@@ -82,6 +89,17 @@ private val RECEIVE_SESSION_KEYS =
 internal fun hasStoredReceiveSession(): Boolean {
     val keychain = KeychainAccessor(InstrumentationRegistry.getInstrumentation().targetContext)
     return RECEIVE_SESSION_KEYS.any { keychain.get(it) != null }
+}
+
+/**
+ * End [manager]'s receive and wait until no receive session is stored
+ *
+ * Only for a receive the test started, since ending deletes the stored session whichever
+ * manager created it
+ */
+internal fun endReceive(manager: KeyTeleportManager) {
+    manager.dispatch(KeyTeleportManagerAction.EndReceive)
+    awaitOnMain("the receive session to be deleted") { (!hasStoredReceiveSession()).takeIf { it } }
 }
 
 /** Wait for [manager] to show a receiver request and copy it before a later state destroys it */

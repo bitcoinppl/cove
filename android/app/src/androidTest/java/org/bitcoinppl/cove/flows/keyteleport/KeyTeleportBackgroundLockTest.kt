@@ -82,13 +82,15 @@ class KeyTeleportBackgroundLockTest {
         if (!::walletId.isInitialized) return
 
         val app = AppManager.getInstance()
-        instrumentation.runOnMainSync {
-            app.getKeyTeleportManager().dispatch(KeyTeleportManagerAction.EndReceive)
-            app.clearKeyTeleportManager()
+        try {
+            // setUp found no stored session, so one here is the receiver test's own, left by a failure
+            if (hasStoredReceiveSession()) endReceive(app.getKeyTeleportManager())
+        } finally {
+            instrumentation.runOnMainSync { app.clearKeyTeleportManager() }
+            Auth.dispatch(AuthManagerAction.DisablePin)
+            instrumentation.runOnMainSync { Auth.unlock() }
+            deleteTestWallet(walletId)
         }
-        Auth.dispatch(AuthManagerAction.DisablePin)
-        instrumentation.runOnMainSync { Auth.unlock() }
-        deleteTestWallet(walletId)
     }
 
     @Test
