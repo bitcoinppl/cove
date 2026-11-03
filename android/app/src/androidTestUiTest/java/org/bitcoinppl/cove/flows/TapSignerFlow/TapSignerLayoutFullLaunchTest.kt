@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import android.view.inspector.WindowInspector
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.unit.toSize
@@ -28,7 +29,6 @@ import org.bitcoinppl.cove.test.HardwareWalletScreens
 import org.bitcoinppl.cove.test.LARGEST_SYSTEM_FONT_SCALE
 import org.bitcoinppl.cove.test.TAPSIGNER_CVC
 import org.bitcoinppl.cove.test.fullLaunchDevice
-import org.bitcoinppl.cove.test.isTappable
 import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.test.scrollTo
 import org.bitcoinppl.cove.test.waitFor
@@ -73,6 +73,9 @@ class TapSignerLayoutFullLaunchTest {
 
         // Compose positions are floats that the accessibility bounds round
         const val CLIP_TOLERANCE_PX = 1
+
+        // taps in gesture navigation's bottom strip go to the system, not the app
+        const val GESTURE_STRIP_DP = 48
     }
 
     @get:Rule
@@ -245,26 +248,27 @@ class TapSignerLayoutFullLaunchTest {
     }
 
     /**
-     * Scrolls until the node lies above the gesture strip and shows whole, then checks it isn't
-     * squeezed
+     * Scrolls until the node's control lies above the gesture strip and shows whole, then checks the
+     * node isn't squeezed
      *
-     * UiAutomator reports bounds already clipped to the display, window and scroll container, so
-     * the node's full bounds come from the Compose semantics tree instead. A node cut off at the top
-     * or bottom is dragged inward until it shows whole; one cut off at the side, or that never shows
-     * whole, fails
+     * The control is the clickable that merges the node, such as a card holding a title and a
+     * description, or the node itself when nothing does. UiAutomator reports bounds already clipped
+     * to the display, window and scroll container, so the control's full and shown bounds come from
+     * the Compose semantics tree instead. A control cut off at the top or bottom is dragged inward
+     * until it shows whole; one cut off at the side, or that never shows whole, fails
      */
     private fun reachable(
         selector: BySelector,
         name: String,
     ): UiObject2 {
         val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        val gestureStripTop = device.displayHeight - (GESTURE_STRIP_DP * density).toInt()
         var node = device.scrollTo(selector, timeoutMs = 15_000L)
-        var visible = Rect()
-        var full: Rect? = null
+        var control: ControlBounds? = null
 
         repeat(MAX_NUDGES) {
             // a recomposition can replace the node between reads
-            visible =
+            val visible =
                 try {
                     node.visibleBounds
                 } catch (_: StaleObjectException) {
@@ -272,18 +276,18 @@ class TapSignerLayoutFullLaunchTest {
                     node.visibleBounds
                 }
 
-            val whole = fullBoundsOnScreen(visible) ?: error("$name at $visible matches no Compose semantics node")
-            full = whole
+            val (shown, whole) =
+                controlBounds(visible)?.also { control = it } ?: error("$name at $visible matches no Compose semantics node")
 
-            val cutTop = whole.top < visible.top - CLIP_TOLERANCE_PX
-            val cutBottom = whole.bottom > visible.bottom + CLIP_TOLERANCE_PX
+            val cutTop = whole.top < shown.top - CLIP_TOLERANCE_PX
+            val cutBottom = whole.bottom > shown.bottom + CLIP_TOLERANCE_PX
             assertTrue(
-                "$name is cut off at the side: it spans $whole but shows only $visible",
-                whole.left >= visible.left - CLIP_TOLERANCE_PX && whole.right <= visible.right + CLIP_TOLERANCE_PX,
+                "$name is cut off at the side: its control spans $whole but shows only $shown",
+                whole.left >= shown.left - CLIP_TOLERANCE_PX && whole.right <= shown.right + CLIP_TOLERANCE_PX,
             )
-            assertTrue("$name spans $whole, taller than the $visible it can show in", !(cutTop && cutBottom))
+            assertTrue("$name's control spans $whole, taller than the $shown it can show in", !(cutTop && cutBottom))
 
-            if (!cutTop && !cutBottom && device.isTappable(node)) {
+            if (!cutTop && !cutBottom && shown.bottom <= gestureStripTop) {
                 assertTrue(
                     "$name is squeezed to $visible, under ${MIN_NODE_HEIGHT_DP}dp tall",
                     visible.height() >= MIN_NODE_HEIGHT_DP * density,
@@ -296,32 +300,50 @@ class TapSignerLayoutFullLaunchTest {
             node = device.waitFor(selector, timeoutMs = 5_000L)
         }
 
-        error("$name never showed whole after $MAX_NUDGES drags: it spans $full but shows only $visible")
+        error("$name never showed whole after $MAX_NUDGES drags: ${control ?: "no control found"}")
     }
 
+    /** Where a control shows on screen after every clip, and where it would lie unclipped */
+    private data class ControlBounds(
+        val shown: Rect,
+        val whole: Rect,
+    )
+
     /**
-     * The unclipped screen bounds of the Compose node that UiAutomator shows at [visible]
+     * The bounds of the control holding the Compose node that UiAutomator shows at [visible]
      *
-     * Every node's clipped bounds are compared with [visible], and the closest one's full layout
-     * bounds are returned, so the same text elsewhere, such as behind the sheet, doesn't match
+     * Every node's clipped bounds are compared with [visible], and the closest one is taken, so the
+     * same text elsewhere, such as behind the sheet, doesn't match
      */
-    private fun fullBoundsOnScreen(visible: Rect): Rect? {
-        var best: Rect? = null
+    private fun controlBounds(visible: Rect): ControlBounds? {
+        var bounds: ControlBounds? = null
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            best =
+            val node =
                 WindowInspector
                     .getGlobalWindowViews()
                     .flatMap { it.composeRoots() }
                     .flatMap { it.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false) }
-                    .map { it.clippedOnScreen() to it.fullOnScreen() }
-                    .filter { (clipped, _) -> Rect.intersects(clipped, visible) }
-                    .minByOrNull { (clipped, _) -> edgeDistance(clipped, visible) }
-                    ?.second
+                    .filter { Rect.intersects(it.clippedOnScreen(), visible) }
+                    .minByOrNull { edgeDistance(it.clippedOnScreen(), visible) }
+                    ?: return@runOnMainSync
+
+            val control = node.controlOrSelf()
+            val shown = control.clippedOnScreen()
+
+            // boundsInWindow isn't clipped to the display, which a window can extend past
+            if (!shown.intersect(0, 0, device.displayWidth, device.displayHeight)) shown.setEmpty()
+            bounds = ControlBounds(shown, control.fullOnScreen())
         }
 
-        return best
+        return bounds
     }
+
+    // a clickable that merges its children is one control, such as a card with a title and a description
+    private fun SemanticsNode.controlOrSelf(): SemanticsNode =
+        generateSequence(this) { it.parent }
+            .firstOrNull { it.config.isMergingSemanticsOfDescendants && SemanticsActions.OnClick in it.config }
+            ?: this
 
     private fun View.composeRoots(): List<RootForTest> =
         when (this) {
