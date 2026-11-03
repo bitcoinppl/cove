@@ -99,6 +99,7 @@ private struct TapSignerAdvancedChainCodeContent: View {
                     .lineLimit(4)
                     .font(.subheadline)
                     .frame(height: 100)
+                    .accessibilityIdentifier("tapSigner.chainCode")
 
                 Spacer()
             }

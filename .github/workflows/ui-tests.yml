@@ -161,6 +161,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/HardwareSigningFullLaunchUITests
 
+      - name: Run public key import UI tests
+        if: ${{ !cancelled() }}
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/PublicKeyImportFullLaunchUITests
+
+      - name: Run TAPSIGNER layout UI tests
+        if: ${{ !cancelled() }}
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/TapSignerLayoutFullLaunchUITests
+
       # CoveCloudBackupUITests stays out until its inventory scenarios pass on master; see #947
 
       # xtask keeps each failed attempt's result bundle and app logs; DerivedData keeps only the newest bundles

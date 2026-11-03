@@ -18,6 +18,9 @@
 		C0A000122EF0000000000001 /* FakeNodeControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000112EF0000000000001 /* FakeNodeControl.swift */; };
 		C0A000142EF0000000000001 /* HardwareSignerControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000132EF0000000000001 /* HardwareSignerControl.swift */; };
 		C0A000162EF0000000000001 /* HardwareSigningFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000152EF0000000000001 /* HardwareSigningFullLaunchUITests.swift */; };
+		C0A000182EF0000000000001 /* HardwareWalletScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000172EF0000000000001 /* HardwareWalletScreens.swift */; };
+		C0A0001A2EF0000000000001 /* PublicKeyImportFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000192EF0000000000001 /* PublicKeyImportFullLaunchUITests.swift */; };
+		C0A0001C2EF0000000000001 /* TapSignerLayoutFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0001B2EF0000000000001 /* TapSignerLayoutFullLaunchUITests.swift */; };
 		C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */; };
 		C0B000022F00000000000001 /* Fixtures/wallet_2_descriptors.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */; };
 		C0B000102F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */; };
@@ -96,6 +99,9 @@
 		C0A000112EF0000000000001 /* FakeNodeControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeNodeControl.swift; sourceTree = "<group>"; };
 		C0A000132EF0000000000001 /* HardwareSignerControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareSignerControl.swift; sourceTree = "<group>"; };
 		C0A000152EF0000000000001 /* HardwareSigningFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareSigningFullLaunchUITests.swift; sourceTree = "<group>"; };
+		C0A000172EF0000000000001 /* HardwareWalletScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareWalletScreens.swift; sourceTree = "<group>"; };
+		C0A000192EF0000000000001 /* PublicKeyImportFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublicKeyImportFullLaunchUITests.swift; sourceTree = "<group>"; };
+		C0A0001B2EF0000000000001 /* TapSignerLayoutFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TapSignerLayoutFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0A000022EF0000000000001 /* CoveUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPromptLayoutTests.swift; sourceTree = "<group>"; };
 		C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Fixtures/wallet_2_descriptors.txt; sourceTree = "<group>"; };
@@ -209,6 +215,9 @@
 				C0A000112EF0000000000001 /* FakeNodeControl.swift */,
 				C0A000132EF0000000000001 /* HardwareSignerControl.swift */,
 				C0A000152EF0000000000001 /* HardwareSigningFullLaunchUITests.swift */,
+				C0A000172EF0000000000001 /* HardwareWalletScreens.swift */,
+				C0A000192EF0000000000001 /* PublicKeyImportFullLaunchUITests.swift */,
+				C0A0001B2EF0000000000001 /* TapSignerLayoutFullLaunchUITests.swift */,
 			);
 			path = CoveUITests;
 			sourceTree = "<group>";
@@ -516,6 +525,9 @@
 				C0A000122EF0000000000001 /* FakeNodeControl.swift in Sources */,
 				C0A000142EF0000000000001 /* HardwareSignerControl.swift in Sources */,
 				C0A000162EF0000000000001 /* HardwareSigningFullLaunchUITests.swift in Sources */,
+				C0A000182EF0000000000001 /* HardwareWalletScreens.swift in Sources */,
+				C0A0001A2EF0000000000001 /* PublicKeyImportFullLaunchUITests.swift in Sources */,
+				C0A0001C2EF0000000000001 /* TapSignerLayoutFullLaunchUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -175,11 +175,20 @@ id = "s09-plain-qr-and-single-part-bbqr-public"
 section = "9"
 title = "Plain QR and single-part BBQr public-key import"
 platforms = ["ios", "android"]
-target = "manual"
+target = "ui"
 paths = ["rust/src/qr_scanner.rs", "rust/src/multi_format.rs", "ios/Cove/Flows/NewWalletFlow/ColdWallet/QrCodeImportScreen.swift", "ios/Cove/ScanManager.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/ScanManager.kt"]
-coverage = ["human", "rust:rust/src/qr_scanner.rs::test_qr_scanner_plain_zpub", "rust:rust/src/qr_scanner.rs::test_qr_scanner_single_part_bbqr_zpub"]
+coverage = [
+  "rust:rust/src/qr_scanner.rs::test_qr_scanner_plain_zpub",
+  "rust:rust/src/qr_scanner.rs::test_qr_scanner_single_part_bbqr_zpub",
+  "ios-ui:ios/CoveUITests/PublicKeyImportFullLaunchUITests.swift::testPlainVpubQrImportsNativeSegwitWithItsFirstAddress",
+  "ios-ui:ios/CoveUITests/PublicKeyImportFullLaunchUITests.swift::testSingleBbqrUpubImportsWrappedSegwitWithItsFirstAddress",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/NewWalletFlow/PublicKeyImportFullLaunchTest.kt::plainVpubQrImportsNativeSegwitWithItsFirstAddress",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/NewWalletFlow/PublicKeyImportFullLaunchTest.kt::singleBbqrUpubImportsWrappedSegwitWithItsFirstAddress",
+]
 # 1.4.0: ios HUMAN, android HUMAN
-# camera scans need a person
+# the ui tests scan a plain vpub and a single-part bbqr upub through the qr seam and check the
+# address type and the first receive address the signer host derives from the test mnemonic; a
+# static qr leaves the camera only the platform decoder's job
 
 [[row]]
 id = "s09-alternate-address-history-without-duplicate-unrelated-scans"

@@ -1,0 +1,398 @@
+package org.bitcoinppl.cove.flows.TapSignerFlow
+
+import android.graphics.Rect
+import android.view.View
+import android.view.ViewGroup
+import android.view.inspector.WindowInspector
+import androidx.compose.ui.geometry.Rect as ComposeRect
+import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.getAllSemanticsNodes
+import androidx.compose.ui.unit.toSize
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.LargeTest
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.StaleObjectException
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.UiObject2
+import androidx.test.uiautomator.Until
+import org.bitcoinppl.cove.test.AndroidDeviceStayAwakeRule
+import org.bitcoinppl.cove.test.FakeNodeControl
+import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
+import org.bitcoinppl.cove.test.FullLaunchStartupRobot
+import org.bitcoinppl.cove.test.FullLaunchWalletRobot
+import org.bitcoinppl.cove.test.HardwareSignerControl
+import org.bitcoinppl.cove.test.HardwareWalletScreens
+import org.bitcoinppl.cove.test.LARGEST_SYSTEM_FONT_SCALE
+import org.bitcoinppl.cove.test.TAPSIGNER_CVC
+import org.bitcoinppl.cove.test.fullLaunchDevice
+import org.bitcoinppl.cove.test.launchFullApp
+import org.bitcoinppl.cove.test.scrollTo
+import org.bitcoinppl.cove.test.waitFor
+import org.junit.After
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.security.SecureRandom
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+/**
+ * Walks every TAPSIGNER setup and import screen at the largest system font scale and checks that
+ * each screen's text and actions fit the display or scroll into it, through the debug TAPSIGNER seam
+ * and an emulated card (docs/testing.md)
+ *
+ * The TAPSIGNER sheet is its own window, which ignores a Compose test font scale, so this sets the
+ * system font scale and restores it afterwards. Each node's full bounds come from the Compose
+ * semantics tree, so the checks catch text and actions pushed off screen, cut off by their
+ * container or squeezed, not an ellipsis inside a label.
+ * Runs in the uiTest flavour; needs the hardware signer host up and forwarded, which
+ * `just android-instrumented-ci` does
+ */
+@LargeTest
+@RunWith(AndroidJUnit4::class)
+class TapSignerLayoutFullLaunchTest {
+    private companion object {
+        const val NEW_CVC = "246810"
+
+        // drops the card's session once the operation has started on it, so the app offers to
+        // continue instead of failing outright
+        const val EXCHANGES_BEFORE_DROP = 3
+
+        // well under a line of text at 2x, so only a squeezed or clipped node falls below it
+        const val MIN_NODE_HEIGHT_DP = 24
+
+        // how far one drag moves a node cut off at the top or bottom, and how many it gets
+        const val NUDGE_DP = 96
+        const val MAX_NUDGES = 6
+
+        // Compose positions are floats that the accessibility bounds round
+        const val CLIP_TOLERANCE_PX = 1
+
+        // taps in gesture navigation's bottom strip go to the system, not the app
+        const val GESTURE_STRIP_DP = 48
+    }
+
+    @get:Rule
+    val stayAwake = AndroidDeviceStayAwakeRule()
+
+    private lateinit var device: UiDevice
+    private lateinit var wallet: FullLaunchWalletRobot
+    private lateinit var screens: HardwareWalletScreens
+    private val node = FakeNodeControl()
+    private val signer = HardwareSignerControl()
+    private var previousShowImeWithHardKeyboard: String? = null
+    private var previousFontScale: String? = null
+
+    @Before
+    fun prepareDevice() {
+        device = fullLaunchDevice()
+        wallet = FullLaunchWalletRobot(device)
+        screens = HardwareWalletScreens(device, wallet)
+
+        // see UtxoLockFullLaunchTest: the onboarding robot must never see the soft keyboard
+        previousShowImeWithHardKeyboard = device.executeShellCommand("settings get secure show_ime_with_hard_keyboard").trim()
+        device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 0")
+        previousFontScale = device.executeShellCommand("settings get system font_scale").trim()
+    }
+
+    @After
+    fun restoreDevice() {
+        when (val previous = previousFontScale) {
+            null, "null" -> device.executeShellCommand("settings delete system font_scale")
+            else -> device.executeShellCommand("settings put system font_scale $previous")
+        }
+
+        when (val previous = previousShowImeWithHardKeyboard) {
+            null, "null" -> device.executeShellCommand("settings delete secure show_ime_with_hard_keyboard")
+            else -> device.executeShellCommand("settings put secure show_ime_with_hard_keyboard $previous")
+        }
+    }
+
+    /** A new card walks choose, advanced, the three PIN screens, setup retry and setup success */
+    @Test
+    fun tapSignerSetupScreensFitAtLargestFontScale() {
+        openTapSignerAtLargestFontScale(needsSetup = true, alert = "Setup TAPSIGNER?")
+        setUpCardThroughEveryScreen()
+    }
+
+    /**
+     * A card that already has a key walks the CVC screen, import retry and import success
+     *
+     * The emulator's seed fixes both its card identity and the root certificate the debug build
+     * trusts, so a set-up card is the same card the setup test made and would open its wallet; each
+     * test starts from reset app data instead
+     */
+    @Test
+    fun tapSignerImportScreensFitAtLargestFontScale() {
+        openTapSignerAtLargestFontScale(needsSetup = false, alert = "Import TAPSIGNER?")
+        importCardThroughEveryScreen()
+    }
+
+    /**
+     * Finishes onboarding at the default scale, since Add Wallet needs a wallet and only the
+     * TAPSIGNER screens are under test, then sets the largest scale and scans the card
+     */
+    private fun openTapSignerAtLargestFontScale(
+        needsSetup: Boolean,
+        alert: String,
+    ) {
+        node.reset()
+        signer.startTapSigner(needsSetup)
+        HardwareSignerControl.useTapSignerBridge()
+
+        launchFullApp()
+        FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
+        wallet.selectSignetFakeNode()
+        FullLaunchOnboardingRobot(device)
+            .tapGetStarted()
+            .chooseExistingUser()
+            .useAnotherWallet()
+            .chooseSoftwareWallet()
+            .importKnownEmptyMainnetWalletWords()
+            .skipCloudBackupAfterImport()
+            .acceptTermsAfterImport()
+        device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
+
+        device.executeShellCommand("settings put system font_scale $LARGEST_SYSTEM_FONT_SCALE")
+        device.waitForIdle()
+        screens.scanTapSignerFromAddWallet(alert)
+    }
+
+    // MARK: setup
+
+    private fun setUpCardThroughEveryScreen() {
+        assertScreenFits("choose chain code", "Cancel", "Setup Chain Code", "Automatic Setup", "Advanced Setup")
+        device.findObject(By.text("Advanced Setup")).click()
+
+        // the advanced screen is the one with Back where the choose screen has Cancel
+        device.waitFor(By.text("Back"))
+        assertScreenFits("advanced setup", "Back", "Advanced Setup")
+        reachable(By.clazz("android.widget.EditText"), "advanced setup: chain code field")
+        wallet.typeInto(By.clazz("android.widget.EditText"), randomChainCode())
+        wallet.dismissKeyboard()
+        reachable(By.text("Continue").enabled(true), "advanced setup: Continue").click()
+
+        enterCvc(TAPSIGNER_CVC, "Enter Factory CVC", "Back", "Continue")
+        enterCvc(NEW_CVC, "Create New CVC", "Back", "Continue")
+
+        // the card leaves the field once setup has started on it
+        signer.dropNextTapSignerSession(afterExchanges = EXCHANGES_BEFORE_DROP)
+        enterCvc(NEW_CVC, "Confirm New CVC", "Back", "Confirm and continue")
+
+        device.waitFor(By.text("Continue Setup"), timeoutMs = 30_000L)
+        assertScreenFits("setup retry", "Cancel", "Setup in Progress", "Continue Setup")
+
+        // each scan can stop at another stage, which offers to continue again
+        repeat(3) {
+            if (device.hasObject(By.text("Setup Complete"))) return@repeat
+
+            reachable(By.text("Continue Setup").enabled(true), "Continue Setup").click()
+            device.wait(Until.hasObject(By.text("Setup Complete")), 30_000L)
+        }
+
+        assertScreenFits("setup success", "Cancel", "Setup Complete", "Download Backup", "Continue")
+        reachable(By.text("Continue"), "setup success: Continue").click()
+        device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
+    }
+
+    // MARK: import
+
+    private fun importCardThroughEveryScreen() {
+        signer.dropNextTapSignerSession(afterExchanges = EXCHANGES_BEFORE_DROP)
+        enterCvc(TAPSIGNER_CVC, "Enter TAPSIGNER CVC", "Cancel", "Submit")
+
+        device.waitFor(By.text("Continue Import"), timeoutMs = 30_000L)
+        assertScreenFits("import retry", "Cancel", "Import needs to continue", "Continue Import")
+        reachable(By.text("Continue Import"), "Continue Import").click()
+
+        device.waitFor(By.text("Import Complete"), timeoutMs = 30_000L)
+        assertScreenFits("import success", "Cancel", "Import Complete", "Continue")
+        reachable(By.text("Continue"), "import success: Continue").click()
+        device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
+    }
+
+    // MARK: CVC screens
+
+    /** Checks the CVC screen fits, then enters the CVC and submits it */
+    private fun enterCvc(
+        cvc: String,
+        title: String,
+        back: String,
+        submit: String,
+    ) {
+        device.waitFor(By.text(title), timeoutMs = 15_000L)
+        assertScreenFits(title, back, title)
+        reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
+
+        screens.enterTapSignerCvc(cvc, title, submit) { reachable(it, "$title: $submit") }
+        assertTrue(
+            "the $title screen didn't accept the CVC",
+            device.wait(Until.gone(By.text(title)), 15_000L),
+        )
+    }
+
+    // MARK: layout checks
+
+    /** Checks each text in order from the top, scrolling down to reach the later ones */
+    private fun assertScreenFits(
+        screen: String,
+        vararg texts: String,
+    ) {
+        texts.forEach { reachable(By.text(it), "$screen: \"$it\"") }
+    }
+
+    /**
+     * Scrolls until the node's control lies above the gesture strip and shows whole, then checks the
+     * node isn't squeezed
+     *
+     * The control is the clickable that merges the node, such as a card holding a title and a
+     * description, or the node itself when nothing does. UiAutomator reports bounds already clipped
+     * to the display, window and scroll container, so the control's full and shown bounds come from
+     * the Compose semantics tree instead. A control cut off at the top or bottom is dragged inward
+     * until it shows whole; one cut off at the side, or that never shows whole, fails
+     */
+    private fun reachable(
+        selector: BySelector,
+        name: String,
+    ): UiObject2 {
+        val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        val gestureStripTop = device.displayHeight - (GESTURE_STRIP_DP * density).toInt()
+        var node = device.scrollTo(selector, timeoutMs = 15_000L)
+        var control: ControlBounds? = null
+
+        repeat(MAX_NUDGES) {
+            // a recomposition can replace the node between reads
+            val visible =
+                try {
+                    node.visibleBounds
+                } catch (_: StaleObjectException) {
+                    node = device.waitFor(selector, timeoutMs = 5_000L)
+                    node.visibleBounds
+                }
+
+            val (shown, whole) =
+                controlBounds(visible)?.also { control = it } ?: error("$name at $visible matches no Compose semantics node")
+
+            val cutTop = whole.top < shown.top - CLIP_TOLERANCE_PX
+            val cutBottom = whole.bottom > shown.bottom + CLIP_TOLERANCE_PX
+            assertTrue(
+                "$name is cut off at the side: its control spans $whole but shows only $shown",
+                whole.left >= shown.left - CLIP_TOLERANCE_PX && whole.right <= shown.right + CLIP_TOLERANCE_PX,
+            )
+            assertTrue("$name's control spans $whole, taller than the $shown it can show in", !(cutTop && cutBottom))
+
+            if (!cutTop && !cutBottom && shown.bottom <= gestureStripTop) {
+                assertTrue(
+                    "$name is squeezed to $visible, under ${MIN_NODE_HEIGHT_DP}dp tall",
+                    visible.height() >= MIN_NODE_HEIGHT_DP * density,
+                )
+                return node
+            }
+
+            // below the gesture strip counts as cut off at the bottom, since the content must move up
+            nudge(node.scrollViewport() ?: Rect(0, 0, device.displayWidth, device.displayHeight), towardsTop = !cutTop)
+            node = device.waitFor(selector, timeoutMs = 5_000L)
+        }
+
+        error("$name never showed whole after $MAX_NUDGES drags: ${control ?: "no control found"}")
+    }
+
+    /** Where a control shows on screen after every clip, and where it would lie unclipped */
+    private data class ControlBounds(
+        val shown: Rect,
+        val whole: Rect,
+    )
+
+    /**
+     * The bounds of the control holding the Compose node that UiAutomator shows at [visible]
+     *
+     * Every node's clipped bounds are compared with [visible], and the closest one is taken, so the
+     * same text elsewhere, such as behind the sheet, doesn't match
+     */
+    private fun controlBounds(visible: Rect): ControlBounds? {
+        var bounds: ControlBounds? = null
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val node =
+                WindowInspector
+                    .getGlobalWindowViews()
+                    .flatMap { it.composeRoots() }
+                    .flatMap { it.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false) }
+                    .filter { Rect.intersects(it.clippedOnScreen(), visible) }
+                    .minByOrNull { edgeDistance(it.clippedOnScreen(), visible) }
+                    ?: return@runOnMainSync
+
+            val control = node.controlOrSelf()
+            val shown = control.clippedOnScreen()
+
+            // boundsInWindow isn't clipped to the display, which a window can extend past
+            if (!shown.intersect(0, 0, device.displayWidth, device.displayHeight)) shown.setEmpty()
+            bounds = ControlBounds(shown, control.fullOnScreen())
+        }
+
+        return bounds
+    }
+
+    // a clickable that merges its children is one control, such as a card with a title and a description
+    private fun SemanticsNode.controlOrSelf(): SemanticsNode =
+        generateSequence(this) { it.parent }
+            .firstOrNull { it.config.isMergingSemanticsOfDescendants && SemanticsActions.OnClick in it.config }
+            ?: this
+
+    private fun View.composeRoots(): List<RootForTest> =
+        when (this) {
+            is RootForTest -> listOf(this)
+            is ViewGroup -> (0 until childCount).flatMap { getChildAt(it).composeRoots() }
+            else -> emptyList()
+        }
+
+    // boundsInWindow is clipped by every ancestor; shifting it by the window's screen offset puts
+    // it beside the unclipped position on screen
+    private fun SemanticsNode.clippedOnScreen(): Rect {
+        val offset = positionOnScreen - positionInWindow
+        return boundsInWindow.translate(offset).rounded()
+    }
+
+    private fun SemanticsNode.fullOnScreen(): Rect = ComposeRect(positionOnScreen, size.toSize()).rounded()
+
+    // rounds each edge to the nearest pixel, as the accessibility bounds do
+    private fun ComposeRect.rounded(): Rect = Rect(left.roundToInt(), top.roundToInt(), right.roundToInt(), bottom.roundToInt())
+
+    private fun edgeDistance(
+        a: Rect,
+        b: Rect,
+    ): Int = abs(a.left - b.left) + abs(a.top - b.top) + abs(a.right - b.right) + abs(a.bottom - b.bottom)
+
+    // the nearest scrollable ancestor's visible bounds, which is where a drag scrolls the node
+    private fun UiObject2.scrollViewport(): Rect? =
+        generateSequence(parent) { it.parent }
+            .firstOrNull { it.isScrollable }
+            ?.visibleBounds
+
+    // a short slow drag, which moves the content without a fling
+    private fun nudge(
+        viewport: Rect,
+        towardsTop: Boolean,
+    ) {
+        val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
+        val distance = minOf(viewport.height() / 4, (NUDGE_DP * density).toInt())
+        val (from, to) =
+            if (towardsTop) {
+                viewport.centerY() + distance / 2 to viewport.centerY() - distance / 2
+            } else {
+                viewport.centerY() - distance / 2 to viewport.centerY() + distance / 2
+            }
+
+        device.swipe(viewport.centerX(), from, viewport.centerX(), to, 40)
+        device.waitForIdle()
+        Thread.sleep(300)
+    }
+
+    private fun randomChainCode(): String = ByteArray(32).also(SecureRandom()::nextBytes).joinToString("") { "%02x".format(it) }
+}
