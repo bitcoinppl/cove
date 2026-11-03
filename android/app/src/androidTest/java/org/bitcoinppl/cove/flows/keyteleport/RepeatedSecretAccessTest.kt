@@ -25,17 +25,19 @@ import org.junit.runner.RunWith
 /**
  * Reading a hot wallet's recovery words over and over, writing them to the keystore again, and
  * running several KeyTeleport sends of the wallet must keep exactly one wallet whose words read back
- * unchanged
+ * unchanged, and must leave another hot wallet's words alone
  *
  * Runs against the real Android keystore through the Rust keychain, so a read or write that fails,
  * hangs or returns different words fails here. A write deletes the wallet and imports its words
  * again, since importing words a hot wallet already holds writes nothing. Each send is received on
  * this device too, where the received words must match and importing them must find the existing
- * wallet instead of adding a copy
+ * wallet instead of adding a copy. A second test wallet stands in for the user's other wallets, so
+ * a keystore write that clobbers another wallet's entry fails here too
  */
 @RunWith(AndroidJUnit4::class)
 class RepeatedSecretAccessTest {
     private lateinit var walletId: WalletId
+    private lateinit var bystanderId: WalletId
 
     @Before
     fun setUp() {
@@ -48,17 +50,26 @@ class RepeatedSecretAccessTest {
         val imported = importTestWalletOrNull(TEST_WALLET)
         assumeTrue("the test wallet already exists on this device", imported != null)
         walletId = requireNotNull(imported).id
+
+        val bystander = importTestWalletOrNull(BYSTANDER_WALLET)
+        assumeTrue("the bystander test wallet already exists on this device", bystander != null)
+        bystanderId = requireNotNull(bystander).id
     }
 
     @After
     fun tearDown() {
-        if (::walletId.isInitialized) deleteTestWallet(walletId)
+        try {
+            if (::walletId.isInitialized) deleteTestWallet(walletId)
+        } finally {
+            if (::bystanderId.isInitialized) deleteTestWallet(bystanderId)
+        }
     }
 
     @Test
     fun repeatedReadsWritesAndKeyTeleportSendsKeepOneReadableWallet() {
         assertEquals("the test wallet is not listed exactly once", 1, walletIds().count { it == walletId })
         val otherWallets = walletIds() - walletId
+        assertEquals("the bystander wallet read different recovery words", BYSTANDER_WORDS, readWords(bystanderId))
 
         repeat(READ_ROUNDS) { round ->
             assertEquals("read $round returned different recovery words", TEST_WORDS, readWords())
@@ -77,6 +88,7 @@ class RepeatedSecretAccessTest {
         assertEquals("the test wallet is not listed exactly once", 1, walletIds().count { it == walletId })
         assertEquals("the other wallets changed", otherWallets, walletIds() - walletId)
         assertEquals("the recovery words changed after the sends", TEST_WORDS, readWords())
+        assertEquals("the bystander wallet's recovery words changed", BYSTANDER_WORDS, readWords(bystanderId))
     }
 
     // a hot wallet that already holds the words skips the keystore write, so the wallet is deleted
@@ -136,7 +148,7 @@ class RepeatedSecretAccessTest {
             error.v1
         }
 
-    private fun readWords(): List<String> = Mnemonic(id = walletId).use { it.words() }
+    private fun readWords(id: WalletId = walletId): List<String> = Mnemonic(id = id).use { it.words() }
 
     private fun walletIds(): List<WalletId> = Database().wallets().all().map { it.id }
 
@@ -152,5 +164,13 @@ class RepeatedSecretAccessTest {
                 "zoo", "zoo", "zoo", "zoo", "zoo", "wrong",
             )
         val TEST_WALLET = TestWalletWords(TEST_WORDS, masterFingerprint = "3f635a63")
+
+        // published BIP39 test vector, never used for funds; distinct from the vectors other tests import
+        val BYSTANDER_WORDS =
+            listOf(
+                "scheme", "spot", "photo", "card", "baby", "mountain",
+                "device", "kick", "cradle", "pact", "join", "borrow",
+            )
+        val BYSTANDER_WALLET = TestWalletWords(BYSTANDER_WORDS, masterFingerprint = "b760aecd")
     }
 }
