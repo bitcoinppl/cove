@@ -23,6 +23,19 @@ pub enum CsppError {
     WalletBackupVersionMismatch { version: u32 },
 }
 
+impl CsppError {
+    /// Combines a failed write with the failed attempt to undo it
+    ///
+    /// A read failure in either leaves the stored outcome unknown until the keychain can be read
+    /// again, so the combined error stays a retryable read error instead of a failed write
+    pub(crate) fn with_failed_rollback(self, rollback: Self, context: &str) -> Self {
+        let read_failed = matches!(self, Self::Read(_)) || matches!(rollback, Self::Read(_));
+        let message = format!("{self}; {context}: {rollback}");
+
+        if read_failed { Self::Read(message) } else { Self::Save(message) }
+    }
+}
+
 impl From<crate::backup_data::UnsupportedWalletBackupVersion> for CsppError {
     fn from(unsupported: crate::backup_data::UnsupportedWalletBackupVersion) -> Self {
         Self::UnsupportedWalletBackupVersion(unsupported.0)

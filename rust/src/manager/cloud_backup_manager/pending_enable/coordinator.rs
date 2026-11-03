@@ -474,29 +474,22 @@ impl PendingEnableCoordinator {
     }
 
     fn rollback_owned_stage(&self, original: CloudBackupError) -> CloudBackupError {
-        let staged_rollback = self.cspp().discard_staged_master_key().map_err(|source| {
-            CloudBackupError::internal_context("discard failed pending enable stage", source)
-        });
-        let journal_rollback =
-            self.cloud_keychain().delete_pending_enable_journal().map_err(|source| {
-                CloudBackupError::internal_context("clear failed pending enable ownership", source)
-            });
-        let cleanup_errors = [staged_rollback.err(), journal_rollback.err()]
-            .into_iter()
-            .flatten()
-            .map(|error| error.to_string())
-            .collect::<Vec<_>>();
-        if cleanup_errors.is_empty() {
-            return original;
+        // the journal is what lets restart recovery find and discard this stage, so it is kept
+        // until the stage is gone, leaving the same state as a crash before the rollback
+        if let Err(source) = self.cspp().discard_staged_master_key() {
+            return CloudBackupError::internal_context(
+                format!("{original}; discard failed pending enable stage"),
+                source,
+            );
         }
 
-        CloudBackupError::Internal(
-            format!(
-                "{original}; pending enable stage rollback also failed: {}",
-                cleanup_errors.join("; ")
-            )
-            .into(),
-        )
+        match self.cloud_keychain().delete_pending_enable_journal() {
+            Ok(()) => original,
+            Err(source) => CloudBackupError::internal_context(
+                format!("{original}; clear failed pending enable ownership"),
+                source,
+            ),
+        }
     }
 
     pub(crate) fn restore_pending_enable_local_promotion_for_retry(

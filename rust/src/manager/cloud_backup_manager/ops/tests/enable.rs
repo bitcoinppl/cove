@@ -60,6 +60,37 @@ async fn fresh_enable_retains_unowned_staged_master_key() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn fresh_enable_keeps_stage_ownership_when_the_stage_cannot_be_discarded() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    // the staged key becomes unreadable once written, so neither its read-back nor the
+    // rollback discard can finish
+    const STAGED_MASTER_KEY: &str = "cspp::v1::staged_master_key";
+    globals.keychain.set_after_save(|key| {
+        if key == STAGED_MASTER_KEY {
+            crate::test_support::shared_mock_keychain().fail_reads_for(STAGED_MASTER_KEY);
+        }
+    });
+
+    let Err(error) = manager
+        .pending_enable
+        .stage_fresh_enable_master(CloudBackupEnableContext::settings_manual())
+    else {
+        panic!("expected the unreadable stage to fail the enable");
+    };
+
+    globals.keychain.set_after_save(|_| {});
+    globals.keychain.clear_read_failures();
+
+    assert!(error.is_keychain_unreadable(), "{error}");
+    assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_some());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();

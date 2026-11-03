@@ -259,11 +259,11 @@ impl<S: CsppStore> Cspp<S> {
 
         let staged = Self::encrypt_master_key(master_key)?;
         if let Err(error) = self.restore_staged_entries(&staged) {
-            let rollback = self.restore_staged_entries(&existing);
-            if let Err(rollback_error) = rollback {
-                return Err(CsppError::Save(format!(
-                    "{error}; unable to restore prior staged entries: {rollback_error}"
-                )));
+            if let Err(rollback_error) = self.restore_staged_entries(&existing) {
+                return Err(error.with_failed_rollback(
+                    rollback_error,
+                    "unable to restore prior staged entries",
+                ));
             }
 
             return Err(error);
@@ -621,18 +621,11 @@ impl<S: CsppStore> Cspp<S> {
         if let Err(error) = self.restore_active_entries(&replacement) {
             if let Err(rollback_error) = self.restore_active_entries(&prior) {
                 Self::clear_cached_master_key();
-                let message =
-                    format!("{error}; unable to restore prior active entries: {rollback_error}");
 
-                // an unreadable keychain leaves the outcome unknown until it can be read again,
-                // so keep that retryable instead of reporting a failed write
-                if matches!(error, CsppError::Read(_))
-                    || matches!(rollback_error, CsppError::Read(_))
-                {
-                    return Err(CsppError::Read(message));
-                }
-
-                return Err(CsppError::Save(message));
+                return Err(error.with_failed_rollback(
+                    rollback_error,
+                    "unable to restore prior active entries",
+                ));
             }
 
             Self::refresh_cache_from_entries(&prior);
@@ -1748,6 +1741,18 @@ mod tests {
                     == deterministic_key(49).as_bytes()
             );
         }
+    }
+
+    #[test]
+    fn failed_staged_write_rollback_keeps_the_read_error() {
+        let store = FailNthStore::new();
+        let cspp = Cspp::new(store.clone());
+
+        // the staged write and its rollback both find the staged slot unreadable
+        store.fail_reads_after_next_save(STAGED_MASTER_KEY_NAME);
+
+        let result = cspp.save_staged_master_key(&deterministic_key(51));
+        assert!(matches!(result, Err(CsppError::Read(_))), "{result:?}");
     }
 
     #[test]
