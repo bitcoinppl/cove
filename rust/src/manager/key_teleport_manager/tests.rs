@@ -110,6 +110,7 @@ fn init_globals() {
     });
 
     crate::test_support::set_fail_keychain_deletes(false);
+    crate::test_support::shared_mock_keychain().clear_read_failures();
     Keychain::global().delete_key_teleport_receive_session();
 }
 
@@ -354,6 +355,32 @@ fn corrupt_receive_session_is_replaced_with_a_usable_request() {
     let replacement = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
     assert_ne!(*replacement, *corrupt);
     assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveReady(_)));
+}
+
+#[test]
+fn unreadable_receive_session_is_kept_for_retry() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let original_manager = RustKeyTeleportManager::new();
+    original_manager.handle_action(Action::StartReceive).unwrap();
+    let request = receive_request(&original_manager);
+    let stored = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
+
+    let keychain = crate::test_support::shared_mock_keychain();
+    keychain.fail_reads_for("key_teleport::v1::receive_session");
+    let manager = RustKeyTeleportManager::new();
+    let unreadable = manager.handle_action(Action::StartReceive);
+    keychain.clear_read_failures();
+
+    assert!(matches!(unreadable, Err(KeyTeleportAlert::Keychain(_))), "{unreadable:?}");
+    assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveError));
+    let kept = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
+    assert_eq!(*kept, *stored);
+
+    manager.handle_action(Action::StartReceive).unwrap();
+    let resumed = receive_request(&manager);
+    assert_eq!(resumed.numeric_code, request.numeric_code);
+    assert_eq!(&**resumed.packet, &**request.packet);
 }
 
 #[test]

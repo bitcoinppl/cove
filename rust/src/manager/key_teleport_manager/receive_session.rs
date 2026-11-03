@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use cove_device::keychain::Keychain;
+use cove_device::keychain::{Keychain, KeychainError};
 use keyteleport::ReceiverSession;
 use parking_lot::{Mutex, MutexGuard};
 use rand::RngExt as _;
@@ -41,6 +41,17 @@ pub(crate) struct ReceiveSessionStore(u64);
 #[must_use = "dropping the reset without commit reopens receive sessions for existing managers"]
 #[derive(Debug)]
 pub(crate) struct ReceiveSessionReset(());
+
+/// Why the stored receive session could not be loaded
+#[derive(Debug)]
+pub(crate) enum ReceiveSessionLoadError {
+    /// The session could not be read or upgraded right now, for example while the device is
+    /// locked, so the stored session may still be valid and must be kept for a later retry
+    Unavailable(KeyTeleportAlert),
+
+    /// The stored session is incomplete or cannot be decoded, so it can never be used
+    Invalid(KeyTeleportAlert),
+}
 
 #[derive(Debug)]
 pub(crate) enum LoadedReceiveSession {
@@ -113,18 +124,21 @@ impl ReceiveSessionStore {
         Ok(session)
     }
 
-    pub(crate) fn load(&self) -> Result<Option<LoadedReceiveSession>, KeyTeleportAlert> {
-        let _storage_guard = self.lock_current()?;
+    pub(crate) fn load(&self) -> Result<Option<LoadedReceiveSession>, ReceiveSessionLoadError> {
+        let _storage_guard = self.lock_current().map_err(ReceiveSessionLoadError::Unavailable)?;
         let Some(persisted) = load_receive_session_unlocked()? else {
             return Ok(None);
         };
 
-        let session_id = persisted.session_id()?;
+        let session_id = persisted.session_id().map_err(ReceiveSessionLoadError::Invalid)?;
         if persisted.is_expired() {
             return Ok(Some(LoadedReceiveSession::Expired(session_id)));
         }
 
-        ActiveReceiveSession::restore(&persisted).map(LoadedReceiveSession::Active).map(Some)
+        ActiveReceiveSession::restore(&persisted)
+            .map(LoadedReceiveSession::Active)
+            .map(Some)
+            .map_err(ReceiveSessionLoadError::Invalid)
     }
 
     fn save_unlocked(session: &ActiveReceiveSession) -> Result<(), KeyTeleportAlert> {
@@ -167,6 +181,26 @@ impl ReceiveSessionStore {
         let _storage_guard = self.lock_current()?;
 
         delete_receive_session_if_matches_unlocked(session_id)
+    }
+}
+
+impl From<ReceiveSessionLoadError> for KeyTeleportAlert {
+    fn from(error: ReceiveSessionLoadError) -> Self {
+        match error {
+            ReceiveSessionLoadError::Unavailable(alert)
+            | ReceiveSessionLoadError::Invalid(alert) => alert,
+        }
+    }
+}
+
+impl From<KeychainError> for ReceiveSessionLoadError {
+    // only a failed decrypt, which also covers a half-written pair, proves the stored session is
+    // unusable; any other keychain failure leaves it possibly valid
+    fn from(error: KeychainError) -> Self {
+        match error {
+            KeychainError::Decrypt(_) => Self::Invalid(error.into()),
+            _ => Self::Unavailable(error.into()),
+        }
     }
 }
 
@@ -382,23 +416,24 @@ impl PersistedReceiveSession {
     }
 }
 
-fn load_receive_session_unlocked() -> Result<Option<PersistedReceiveSession>, KeyTeleportAlert> {
-    let Some(value) = Keychain::global()
-        .get_key_teleport_receive_session()
-        .map_err_str(KeyTeleportAlert::Keychain)?
-    else {
+fn load_receive_session_unlocked()
+-> Result<Option<PersistedReceiveSession>, ReceiveSessionLoadError> {
+    let Some(value) = Keychain::global().get_key_teleport_receive_session()? else {
         return Ok(None);
     };
 
     let mut session: PersistedReceiveSession = serde_json::from_str(&value).map_err(|error| {
-        KeyTeleportAlert::Keychain(format!("unable to parse receive session: {error}"))
+        ReceiveSessionLoadError::Invalid(KeyTeleportAlert::Keychain(format!(
+            "unable to parse receive session: {error}"
+        )))
     })?;
 
     if session.session_id.is_none() {
+        // a failed upgrade save leaves the readable legacy session in place, so it is retryable
         session.session_id = Some(ReceiveSessionId::new().0);
-        session.save_unlocked()?;
+        session.save_unlocked().map_err(ReceiveSessionLoadError::Unavailable)?;
     } else {
-        session.session_id()?;
+        session.session_id().map_err(ReceiveSessionLoadError::Invalid)?;
     }
 
     Ok(Some(session))
