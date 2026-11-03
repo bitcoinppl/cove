@@ -1,9 +1,6 @@
 mod app_lock;
 
-use std::{
-    sync::{Arc, LazyLock},
-    time::Instant,
-};
+use std::sync::{Arc, LazyLock};
 
 use parking_lot::Mutex;
 use tap::TapFallible as _;
@@ -21,7 +18,7 @@ use crate::{
 
 pub use app_lock::{AppLockReason, SendConfirmationLock};
 
-use app_lock::AppLock;
+use app_lock::{AppLock, BootTime};
 
 type Message = AuthManagerReconcileMessage;
 
@@ -224,11 +221,11 @@ impl RustAuthManager {
     ///
     /// Does nothing when no authentication is set up
     pub fn lock(&self, reason: AppLockReason) -> bool {
-        let is_auth_enabled = self.auth_type() != AuthType::None;
+        let is_auth_enabled = !self.is_auth_known_disabled();
         let mut app_lock = self.app_lock.lock();
 
         if is_auth_enabled {
-            app_lock.lock(reason, Instant::now());
+            app_lock.lock(reason, BootTime::now());
         }
 
         app_lock.is_locked()
@@ -237,18 +234,18 @@ impl RustAuthManager {
     /// Lock the app for a send confirmation screen, returns the token that releases only
     /// this lock, or nothing when no authentication is set up
     pub fn lock_for_send_confirmation(&self) -> Option<SendConfirmationLock> {
-        if self.auth_type() == AuthType::None {
+        if self.is_auth_known_disabled() {
             return None;
         }
 
-        Some(self.app_lock.lock().lock_for_send_confirmation(Instant::now()))
+        Some(self.app_lock.lock().lock_for_send_confirmation(BootTime::now()))
     }
 
     /// Release the lock a send confirmation screen took, returns whether the app is still
     /// locked for any other reason
     pub fn release_send_confirmation_lock(&self, lock: SendConfirmationLock) -> bool {
         let mut app_lock = self.app_lock.lock();
-        app_lock.release_send_confirmation(lock, Instant::now());
+        app_lock.release_send_confirmation(lock, BootTime::now());
 
         app_lock.is_locked()
     }
@@ -260,7 +257,7 @@ impl RustAuthManager {
         let is_decoy_pin_enabled = self.is_decoy_pin_enabled();
 
         let mut app_lock = self.app_lock.lock();
-        app_lock.release_background_on_foreground(auth_type, is_decoy_pin_enabled, Instant::now());
+        app_lock.release_background_on_foreground(auth_type, is_decoy_pin_enabled, BootTime::now());
 
         app_lock.is_locked()
     }
@@ -272,10 +269,10 @@ impl RustAuthManager {
 
     /// Clear every lock when no authentication is set up, returns whether the app is locked
     pub fn unlock_if_auth_disabled(&self) -> bool {
-        let is_auth_enabled = self.auth_type() != AuthType::None;
+        let is_auth_disabled = self.is_auth_known_disabled();
         let mut app_lock = self.app_lock.lock();
 
-        if !is_auth_enabled {
+        if is_auth_disabled {
             app_lock.unlock_authenticated();
         }
 
@@ -598,6 +595,18 @@ impl RustAuthManager {
 }
 
 impl RustAuthManager {
+    /// Whether the saved settings say no authentication is set up
+    ///
+    /// Lock decisions fail closed, so a settings read error counts as authentication
+    /// being set up instead of the `AuthType::None` default `auth_type` falls back to
+    fn is_auth_known_disabled(&self) -> bool {
+        Database::global()
+            .global_config
+            .auth_type()
+            .tap_err(|error| error!("unable to read auth type for app lock: {error:?}"))
+            .is_ok_and(|auth_type| auth_type == AuthType::None)
+    }
+
     fn check_wipe_data_pin(&self, pin: &str) -> bool {
         if pin.is_empty() {
             return false;
@@ -713,6 +722,20 @@ mod tests {
             manager.lock(AppLockReason::Background);
 
             assert!(!manager.release_background_lock_on_foreground());
+        });
+    }
+
+    #[test]
+    fn unreadable_auth_settings_still_lock() {
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            let config = &Database::global().global_config;
+            config
+                .set(database::global_config::GlobalConfigKey::AuthType, "unreadable".into())
+                .expect("write raw auth type");
+
+            assert!(manager.lock(AppLockReason::Background));
+            assert!(manager.lock_for_send_confirmation().is_some());
+            assert!(manager.unlock_if_auth_disabled());
         });
     }
 
