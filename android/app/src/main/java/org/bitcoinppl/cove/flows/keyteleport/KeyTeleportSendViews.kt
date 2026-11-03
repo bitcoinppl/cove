@@ -8,6 +8,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -84,15 +85,19 @@ internal fun SendEnterCodeView(
         title = "Enter receiver code",
         body = "Use the numeric receiver code shown on the receiving device for ${send.selectedWallet.name}.",
     )
-    OutlinedTextField(
-        value = code,
-        onValueChange = { code = it.filter(Char::isDigit).take(RECEIVER_CODE_LENGTH) },
-        label = { Text("Receiver code") },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        colors = keyTeleportTextFieldColors(),
-        modifier = Modifier.fillMaxWidth(),
-    )
+    // a new field each concealment, since the field keeps its own copy of the typed value, and
+    // re-typing that value after a clear it never drew would be dropped as unchanged
+    key(manager.concealmentGeneration) {
+        OutlinedTextField(
+            value = code,
+            onValueChange = { code = it.filter(Char::isDigit).take(RECEIVER_CODE_LENGTH) },
+            label = { Text("Receiver code") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            colors = keyTeleportTextFieldColors(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
     Button(
         enabled = code.length == RECEIVER_CODE_LENGTH,
         onClick = { manager.dispatch(KeyTeleportManagerAction.EnterReceiverCode(code)) },

@@ -13,6 +13,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -108,16 +109,20 @@ internal fun ReceivePasswordView(manager: KeyTeleportManager) {
         title = "Enter sender password",
         body = "Type the password shown by the sending device.",
     )
-    OutlinedTextField(
-        value = password,
-        onValueChange = { password = it },
-        label = { Text("Password") },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        visualTransformation = PasswordVisualTransformation(),
-        colors = keyTeleportTextFieldColors(),
-        modifier = Modifier.fillMaxWidth(),
-    )
+    // a new field each concealment, since the field keeps its own copy of the typed value, and
+    // re-typing that value after a clear it never drew would be dropped as unchanged
+    key(manager.concealmentGeneration) {
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("Password") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            visualTransformation = PasswordVisualTransformation(),
+            colors = keyTeleportTextFieldColors(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
     Button(
         enabled = password.isNotBlank(),
         onClick = { manager.dispatch(KeyTeleportManagerAction.EnterSenderPassword(password.trim())) },
