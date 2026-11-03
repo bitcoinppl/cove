@@ -23,15 +23,29 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 | --- | --- | --- |
 | Rust tests | Core behavior shared by both apps: wallets, send flow, labels, KeyTeleport, cloud backup, diagnostics, node and explorer settings, and the hardware-signer QR loop | `just test` |
 | TAPSIGNER emulator tests | Cove's TAPSIGNER setup, PIN, derive, import and signing logic against Coinkite's card emulator | `just test-tapsigner-emulator` |
-| iOS UI tests | Full-launch flows in the simulator | `just ios-ui-background` runs `CoveUITests/OnboardingFullLaunchUITests` by default; CI also runs `UtxoLockFullLaunchUITests`, `HardwareSigningFullLaunchUITests`, `PublicKeyImportFullLaunchUITests` and `TapSignerLayoutFullLaunchUITests`, plus `CoveCloudBackupUITests/PrivateKeyExportFullAppUITests` and `CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests`; pass another class as the second argument, as in `just ios-ui-background "iPhone 17" CoveUITests/<Class>`. Classes that need scripted cloud storage and passkeys run in the Cloud Backup host app: name them under `CoveCloudBackupUITests/<Class>` and the scheme of that name is picked for you. `just ios-ui-foreground` shows the simulator |
-| Android instrumented tests | Compose screens and full-launch flows on an emulator or device | `just android-instrumented-ci`; staged process-death tests need `just android-ui-manual` |
+| iOS UI tests | Full-launch flows in the simulator | `just ios-ui-background` runs `CoveUITests/OnboardingFullLaunchUITests` by default; CI runs every class in the workflow's `IOS_UI_SUITES`. Pass other classes or methods, comma-separated, as the second argument, as in `just ios-ui-background "iPhone 17" CoveUITests/<Class>,CoveUITests/<Class>/<method>`. Classes that need scripted cloud storage and passkeys run in the Cloud Backup host app: name them under `CoveCloudBackupUITests/<Class>` and the scheme of that name is picked for you. `just ios-ui-foreground` shows the simulator |
+| Android instrumented tests | Compose screens and full-launch flows on an emulator or device | `just android-instrumented-ci`, or `just android-instrumented-ci UiTest <package>.<Class>#<method>` for some tests in one flavour; staged process-death tests need `just android-ui-manual` |
 | Device scripts | Navigate-and-observe checks on a real phone, with JSON results per row | `python3 -I qa/device/run.py android --serial <serial> --package org.bitcoinppl.cove.dev` or `python3 -I qa/device/run.py ios --bundle-id org.bitcoinppl.cove`; see [qa/device/README.md](../qa/device/README.md) for setup, `--list` and running a subset of rows |
 | Agent pass | Checklist rows that need judgment, fixtures or multi-app flows, run by a coding agent driving a real phone | This document |
 | Person | Camera, NFC, biometrics, haptics, spoken screen-reader output, hardware signers beyond the [hardware signing UI tests](#hardware-signing-ui-tests) | Batched into one sitting at the end |
 
 UI tests that need a funded wallet get it from the fake Esplora and Electrum node in [`rust/crates/cove-fake-node`](../rust/crates/cove-fake-node/README.md), so they need no Signet funds or network. `just ios-ui-background`, `just ios-ui-foreground`, `just android-ui-manual` and `just android-instrumented-ci` start it on ports 39000 (control API), 39001 (Esplora) and 39002 (Electrum) for the length of the run, together with the hardware signer host on 39010 and 39011 (see [Hardware signing UI tests](#hardware-signing-ui-tests)), and forward the ports to Android with `adb reverse`. With more than one Android device connected, set `ANDROID_SERIAL` to pick one, since tests on two devices would reset and fund the same node. To run another command with the node up, use `just fake-node-run <command>` or `cargo xtask fake-node run -- <command>` from `rust/`.
 
-The CI workflow runs the TAPSIGNER emulator tests in their own job. The `UI tests` workflow runs the iOS UI tests and Android instrumented tests nightly, on pushes to master, and on pull requests labeled `ui-tests`. CI runs the manifest check behind `just qa-check` on pull requests, so the manifest stays consistent with the tests it names. Its workflow filters pull requests to those targeting master, so run `just qa-check` locally before pushing a checklist change on a stacked branch.
+The CI workflow runs the TAPSIGNER emulator tests in their own job. The `UI tests` workflow runs the iOS UI tests and Android instrumented tests nightly, on pushes to master, and on pull requests labeled `ui-tests`. It splits the iOS suites listed in its `IOS_UI_SUITES` across three macOS runners, `ios-ui (1/3)` through `ios-ui (3/3)`, because each iOS test starts on a freshly erased simulator; add a new suite class to that list. Android runs one job per flavour.
+
+To check a fix without rerunning every suite, start the workflow on the branch with only the failed tests:
+
+```sh
+gh workflow run ui-tests.yml --ref <branch> \
+  -f ios_tests=<Target>/<Class>/<method> \
+  -f android_tests=<package>.<Class>#<method>
+```
+
+Both inputs take comma-separated lists, and a class runs all its tests. An iOS entry must be `<Target>/<Class>`, with `<Target>` `CoveUITests` or `CoveCloudBackupUITests` and a class that target builds, optionally followed by one of its test methods without `()`; anything else, such as a bare target or a module-qualified class, fails the run instead of running tests unexpanded. The iOS shards split the listed tests as they split a full run, each Android entry runs in every flavour whose test sources hold its class, and jobs with nothing listed finish without running tests. A manual run with both inputs empty runs everything.
+
+A manual run shows under Actions but not in a pull request's checks, so it confirms a fix without clearing a failed check. To clear one, use GitHub's "Re-run failed jobs" on the pull request's run, which reruns only the failed shard or flavour, or push the fix.
+
+CI runs the manifest check behind `just qa-check` on pull requests, so the manifest stays consistent with the tests it names. Its workflow filters pull requests to those targeting master, so run `just qa-check` locally before pushing a checklist change on a stacked branch.
 
 ## Hardware signer tests
 

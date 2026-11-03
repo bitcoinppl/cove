@@ -67,6 +67,9 @@ const IOS_UI_SCHEME: &str = "CoveManualUITests";
 const IOS_UI_TEST_TARGET: &str = "CoveUITests";
 // these tests run against the host app with scripted cloud storage and passkeys
 const IOS_CLOUD_BACKUP_UI_TEST_TARGET: &str = "CoveCloudBackupUITests";
+// both UI test targets keep their sources here, and the project file says which target builds each
+const IOS_UI_TEST_SOURCE_DIR: &str = "CoveUITests";
+const IOS_PROJECT_FILE: &str = "Cove.xcodeproj/project.pbxproj";
 // each test starts on a freshly erased simulator, where Xcode's runner and the first app
 // launch both fail now and then, so retry those environment failures on a clean simulator
 const IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS: usize = 2;
@@ -158,19 +161,64 @@ impl IosRunOptions {
 #[derive(Debug, Clone)]
 pub struct IosUiOptions {
     device: String,
-    test: String,
+    tests: String,
+    shard: IosUiShard,
     foreground: bool,
     results_dir: Option<PathBuf>,
+    list: bool,
 }
 
 impl IosUiOptions {
+    /// `tests` is a comma-separated list of test targets, classes, or methods; with `list`, the
+    /// shard's tests are printed one per line instead of run
     pub fn new(
         device: String,
-        test: String,
+        tests: String,
+        shard: IosUiShard,
         foreground: bool,
         results_dir: Option<PathBuf>,
+        list: bool,
     ) -> Self {
-        Self { device, test, foreground, results_dir }
+        Self { device, tests, shard, foreground, results_dir, list }
+    }
+}
+
+/// One of `count` equal slices of the expanded UI test list, so CI can split a run across
+/// runners; `index` is 1-based to match how it is written, as in `2/3`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IosUiShard {
+    index: usize,
+    count: usize,
+}
+
+impl IosUiShard {
+    // round-robin keeps each suite spread across shards, so no shard gets a whole slow suite
+    fn includes(&self, position: usize) -> bool {
+        position % self.count == self.index - 1
+    }
+}
+
+impl std::str::FromStr for IosUiShard {
+    type Err = String;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        let invalid = || format!("expected a shard like 2/3, got {value:?}");
+
+        let (index, count) = value.split_once('/').ok_or_else(invalid)?;
+        let index = index.trim().parse::<usize>().map_err(|_| invalid())?;
+        let count = count.trim().parse::<usize>().map_err(|_| invalid())?;
+
+        if count == 0 || index == 0 || index > count {
+            return Err(invalid());
+        }
+
+        Ok(Self { index, count })
+    }
+}
+
+impl std::fmt::Display for IosUiShard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.index, self.count)
     }
 }
 
@@ -589,6 +637,21 @@ fn run_ios_targets(sh: &Shell, run_targets: IosRunTargets, verbose: bool) -> Res
 pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
 
+    // resolved before changing into ../ios so a relative path means the caller's directory
+    let results_dir = options.results_dir.map(std::path::absolute).transpose()?;
+    sh.change_dir("../ios");
+
+    let tests = ios_ui_shard_tests(&sh, &options.tests, options.shard)?;
+
+    // CI lists a shard's tests before building, so a shard with none skips the build
+    if options.list {
+        for test in &tests {
+            println!("{test}");
+        }
+
+        return Ok(());
+    }
+
     if !command_exists("xcodebuild") {
         print_error("xcodebuild not found. Please install Xcode");
         color_eyre::eyre::bail!("xcodebuild command not found");
@@ -599,13 +662,16 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
         color_eyre::eyre::bail!("xcrun command not found");
     }
 
-    // resolved before changing into ../ios so a relative path means the caller's directory
-    let results_dir = options.results_dir.map(std::path::absolute).transpose()?;
     if let Some(dir) = &results_dir {
         fs::create_dir_all(dir).wrap_err_with(|| format!("Failed to create {}", dir.display()))?;
     }
 
-    sh.change_dir("../ios");
+    if tests.is_empty() {
+        print_warning(&format!("Shard {} has no iOS UI tests to run", options.shard));
+        return Ok(());
+    }
+
+    print_info(&format!("Shard {} runs {} iOS UI test(s)", options.shard, tests.len()));
 
     if options.foreground {
         cmd!(sh, "open -a Simulator").run().wrap_err("Failed to open Simulator")?;
@@ -621,7 +687,7 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
 
     // run every test before failing so one broken test doesn't hide the state of the rest
     let mut failures = Vec::new();
-    for test in ios_ui_tests_to_run(&sh, &options.test)? {
+    for test in tests {
         reset_simulator_state(&sh, &udid)?;
         boot_simulator(&sh, &udid)?;
 
@@ -1470,7 +1536,7 @@ fn non_empty_output<'a>(output: &'a str, fallback: &'a str) -> &'a str {
 
 /// The UI test target a test belongs to, which decides the scheme it runs under and the app and
 /// runner processes whose logs belong to it
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum IosUiSuite {
     /// `CoveUITests`, which drives the Cove app
     Main,
@@ -1485,6 +1551,21 @@ impl IosUiSuite {
         match test.split('/').next() {
             Some(IOS_CLOUD_BACKUP_UI_TEST_TARGET) => Self::CloudBackup,
             _ => Self::Main,
+        }
+    }
+
+    fn from_target(target: &str) -> Option<Self> {
+        match target {
+            IOS_UI_TEST_TARGET => Some(Self::Main),
+            IOS_CLOUD_BACKUP_UI_TEST_TARGET => Some(Self::CloudBackup),
+            _ => None,
+        }
+    }
+
+    fn target(self) -> &'static str {
+        match self {
+            Self::Main => IOS_UI_TEST_TARGET,
+            Self::CloudBackup => IOS_CLOUD_BACKUP_UI_TEST_TARGET,
         }
     }
 
@@ -1504,33 +1585,131 @@ impl IosUiSuite {
     }
 }
 
-/// Expands a `CoveUITests/<Class>` with a matching source file into one test per method, so each
-/// method starts on a freshly erased simulator; anything else runs as given
-fn ios_ui_tests_to_run(sh: &Shell, test: &str) -> Result<Vec<String>> {
-    let Some(file) = ios_ui_test_class_file(test).filter(|file| sh.path_exists(file)) else {
-        return Ok(vec![test.to_string()]);
-    };
+/// Expands a comma-separated list of tests, then keeps the shard's slice of the result
+fn ios_ui_shard_tests(sh: &Shell, tests: &str, shard: IosUiShard) -> Result<Vec<String>> {
+    let project = sh
+        .read_file(IOS_PROJECT_FILE)
+        .wrap_err_with(|| format!("Failed to read {IOS_PROJECT_FILE}"))?;
 
-    let contents = sh.read_file(&file).wrap_err_with(|| format!("Failed to read {file}"))?;
-
-    let tests = contents
-        .lines()
-        .filter_map(test_method_name)
-        .map(|method| format!("{test}/{method}"))
-        .collect::<Vec<_>>();
-
-    if tests.is_empty() {
-        color_eyre::eyre::bail!("No test methods found in {file}");
+    let mut expanded = Vec::new();
+    for test in tests.split(',').map(str::trim).filter(|test| !test.is_empty()) {
+        expanded.extend(ios_ui_tests_to_run(sh, &project, test)?);
     }
 
-    Ok(tests)
+    if expanded.is_empty() {
+        color_eyre::eyre::bail!("No iOS UI tests given");
+    }
+
+    // a class and one of its methods can both be listed, and running a test twice only costs time
+    let mut seen = HashSet::new();
+    expanded.retain(|test| seen.insert(test.clone()));
+
+    Ok(expanded
+        .into_iter()
+        .enumerate()
+        .filter(|(position, _)| shard.includes(*position))
+        .map(|(_, test)| test)
+        .collect())
 }
 
-fn ios_ui_test_class_file(test: &str) -> Option<String> {
-    let class = test.strip_prefix(IOS_UI_TEST_TARGET)?.strip_prefix('/')?;
-    let is_class = !class.is_empty() && !class.contains('/');
+/// Expands a `<Target>/<Class>` into one test per method, so each method starts on a fresh
+/// simulator, and checks that a `<Target>/<Class>/<method>` names one of its methods
+///
+/// Xcode also accepts a bare target, a module-qualified class, a method with `()` or a class the
+/// target doesn't build, which this can't expand or tell apart from the plain form: those would run
+/// tests in one simulator session, twice, or not at all while passing, so only plain names of a
+/// class the named target builds are accepted
+fn ios_ui_tests_to_run(sh: &Shell, project: &str, test: &str) -> Result<Vec<String>> {
+    let usage = || {
+        eyre!(
+            "{test} isn't a <Target>/<Class> or <Target>/<Class>/<method> test, with <Target> \
+             {IOS_UI_TEST_TARGET} or {IOS_CLOUD_BACKUP_UI_TEST_TARGET}"
+        )
+    };
 
-    is_class.then(|| format!("{IOS_UI_TEST_TARGET}/{class}.swift"))
+    let is_name = |part: &str| {
+        !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    };
+
+    let parts = test.split('/').collect::<Vec<_>>();
+    let (target, class, method) = match parts.as_slice() {
+        [target, class] => (*target, *class, None),
+        [target, class, method] => (*target, *class, Some(*method)),
+        _ => return Err(usage()),
+    };
+
+    let Some(suite) = IosUiSuite::from_target(target) else {
+        return Err(usage());
+    };
+
+    if !is_name(class) || !method.is_none_or(is_name) {
+        return Err(usage());
+    }
+
+    let file_name = format!("{class}.swift");
+    if !target_source_files(project, suite.target()).contains(&file_name.as_str()) {
+        color_eyre::eyre::bail!("{test} names no test class: {target} doesn't build {file_name}");
+    }
+
+    let file = format!("{IOS_UI_TEST_SOURCE_DIR}/{file_name}");
+    let contents = sh.read_file(&file).wrap_err_with(|| format!("Failed to read {file}"))?;
+    let methods = contents.lines().filter_map(test_method_name).collect::<Vec<_>>();
+
+    match method {
+        Some(method) if methods.contains(&method) => Ok(vec![test.to_string()]),
+        Some(_) => Err(eyre!("{test} names no test method in {file}")),
+        None if methods.is_empty() => Err(eyre!("No test methods found in {file}")),
+        None => Ok(methods.into_iter().map(|method| format!("{test}/{method}")).collect()),
+    }
+}
+
+/// The Swift files in a native target's Sources build phase, read from the project file
+///
+/// `OnboardingFullLaunchUITests.swift` is built by both UI test targets and the cloud backup
+/// classes keep their sources beside the main ones, so a file's directory doesn't say which
+/// target a class belongs to
+fn target_source_files<'a>(project: &'a str, target: &str) -> Vec<&'a str> {
+    let target_name = format!("name = {target};");
+    let is_target = |body: &[&str]| {
+        body.iter().any(|line| line.trim() == "isa = PBXNativeTarget;")
+            && body.iter().any(|line| line.trim() == target_name)
+    };
+
+    let Some(phase_id) =
+        pbxproj_objects(project).find(|(_, body)| is_target(body)).and_then(|(_, body)| {
+            body.into_iter().find_map(|line| line.trim().strip_suffix(" /* Sources */,"))
+        })
+    else {
+        return Vec::new();
+    };
+
+    pbxproj_objects(project)
+        .find(|(id, _)| *id == phase_id)
+        .map(|(_, body)| {
+            body.into_iter()
+                .filter_map(|line| line.split_once("/* ")?.1.strip_suffix(" in Sources */,"))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Each multi-line object in a project file's `objects` section, as its ID and body lines
+///
+/// Objects open on a line indented two tabs that ends with `= {` and close on a line that is
+/// exactly two tabs and `};`; deeper lines are nested values and one-line objects have no body
+fn pbxproj_objects(project: &str) -> impl Iterator<Item = (&str, Vec<&str>)> {
+    let mut lines = project.lines();
+
+    std::iter::from_fn(move || {
+        let id = lines.by_ref().find_map(|line| {
+            let header = line.strip_prefix("\t\t")?;
+            let is_open = !header.starts_with('\t') && header.ends_with("= {");
+            is_open.then(|| header.split_whitespace().next()).flatten()
+        })?;
+
+        let body = lines.by_ref().take_while(|line| *line != "\t\t};").collect();
+        Some((id, body))
+    })
 }
 
 fn test_method_name(line: &str) -> Option<&str> {
@@ -1982,9 +2161,12 @@ fn available_device_context(devices: &[ResolvedDevice]) -> String {
 
 #[cfg(test)]
 mod tests {
-    mod ui_test_expansion {
-        use crate::ios::ios_ui_tests_to_run;
+    mod ui_test_plan {
+        use crate::ios::{ios_ui_shard_tests, IosUiShard, IosUiSuite};
+        use std::collections::HashSet;
         use xshell::Shell;
+
+        const ONBOARDING: &str = "CoveUITests/OnboardingFullLaunchUITests";
 
         fn ios_shell() -> Shell {
             let sh = Shell::new().unwrap();
@@ -1992,42 +2174,98 @@ mod tests {
             sh
         }
 
-        #[test]
-        fn expands_a_class_with_a_source_file_into_its_test_methods() {
-            let tests =
-                ios_ui_tests_to_run(&ios_shell(), "CoveUITests/UtxoLockFullLaunchUITests").unwrap();
-
-            assert_eq!(
-                tests,
-                ["CoveUITests/UtxoLockFullLaunchUITests/testLockedUtxosAreExcludedFromCoinControlAndSends"]
-            );
+        fn shard(value: &str) -> IosUiShard {
+            value.parse().unwrap()
         }
 
         #[test]
-        fn expanded_onboarding_class_lists_only_test_methods() {
-            let tests =
-                ios_ui_tests_to_run(&ios_shell(), "CoveUITests/OnboardingFullLaunchUITests")
-                    .unwrap();
-
-            assert!(tests.contains(
-                &"CoveUITests/OnboardingFullLaunchUITests/testWelcomeScreenShowsFirstLaunchEntryPoint"
-                    .to_string()
-            ));
-            assert!(tests.iter().all(|test| {
-                test.strip_prefix("CoveUITests/OnboardingFullLaunchUITests/test").is_some()
-            }));
-        }
-
-        #[test]
-        fn runs_methods_targets_and_unknown_classes_as_given() {
+        fn shards_split_a_class_into_disjoint_slices_that_cover_it() {
             let sh = ios_shell();
+            let all = ios_ui_shard_tests(&sh, ONBOARDING, shard("1/1")).unwrap();
+            assert!(all.len() > 3, "the onboarding class should have enough tests to shard");
+            assert!(all.iter().all(|test| test.starts_with(&format!("{ONBOARDING}/test"))));
 
-            for test in [
-                "CoveUITests/UtxoLockFullLaunchUITests/testLockedUtxosAreExcludedFromCoinControlAndSends",
-                "CoveUITests",
-                "CoveUITests/NoSuchClass",
-            ] {
-                assert_eq!(ios_ui_tests_to_run(&sh, test).unwrap(), [test]);
+            let slices = ["1/3", "2/3", "3/3"]
+                .map(|value| ios_ui_shard_tests(&sh, ONBOARDING, shard(value)).unwrap());
+
+            let mut covered = HashSet::new();
+            for slice in &slices {
+                assert!(!slice.is_empty());
+                assert!(slice.len().abs_diff(all.len() / 3) <= 1, "shards stay balanced");
+
+                for test in slice {
+                    assert!(covered.insert(test.clone()), "{test} ran in two shards");
+                }
+            }
+
+            assert_eq!(covered, all.into_iter().collect::<HashSet<_>>());
+        }
+
+        #[test]
+        fn lists_expand_each_entry_once_and_keep_methods_as_given() {
+            let sh = ios_shell();
+            let method = format!("{ONBOARDING}/testWelcomeScreenShowsFirstLaunchEntryPoint");
+            let class = ios_ui_shard_tests(&sh, ONBOARDING, shard("1/1")).unwrap();
+
+            let listed = format!(" {method} ,{ONBOARDING},, ");
+            let tests = ios_ui_shard_tests(&sh, &listed, shard("1/1")).unwrap();
+
+            assert_eq!(tests[0], method);
+            assert_eq!(tests.len(), class.len(), "the listed method isn't repeated");
+        }
+
+        #[test]
+        fn an_empty_list_is_an_error() {
+            assert!(ios_ui_shard_tests(&ios_shell(), " , ", shard("1/1")).is_err());
+        }
+
+        // each form selects tests xcodebuild would run unexpanded or under a second name
+        #[test]
+        fn entries_other_than_plain_class_and_method_names_are_errors() {
+            let method = "testWelcomeScreenShowsFirstLaunchEntryPoint";
+            let rejected = [
+                "CoveUITests".to_string(),
+                "CoveUITests/".to_string(),
+                "CoveUITests//testA".to_string(),
+                "/Class".to_string(),
+                "OtherUITests/OnboardingFullLaunchUITests".to_string(),
+                // the cloud backup classes keep their sources beside the main target's
+                "CoveUITests/PrivateKeyExportFullAppUITests".to_string(),
+                "CoveCloudBackupUITests/UtxoLockFullLaunchUITests".to_string(),
+                "CoveUITests/CoveUITests.OnboardingFullLaunchUITests".to_string(),
+                "CoveUITests/NotAClass".to_string(),
+                format!("{ONBOARDING}/{method}()"),
+                format!("{ONBOARDING}/{method}/"),
+                format!("{ONBOARDING}/testNotAMethod"),
+            ];
+
+            for entry in rejected {
+                let listed = format!("{entry},{ONBOARDING}");
+                assert!(
+                    ios_ui_shard_tests(&ios_shell(), &listed, shard("1/1")).is_err(),
+                    "{entry:?} was accepted"
+                );
+            }
+        }
+
+        // a class runs under the scheme its target belongs to, which the project file decides
+        #[test]
+        fn cloud_backup_classes_expand_under_their_own_target() {
+            let sh = ios_shell();
+            let class = "CoveCloudBackupUITests/PrivateKeyExportFullAppUITests";
+            let tests = ios_ui_shard_tests(&sh, class, shard("1/1")).unwrap();
+
+            assert!(!tests.is_empty());
+            assert!(tests.iter().all(|test| test.starts_with(&format!("{class}/test"))));
+            assert!(tests.iter().all(|test| IosUiSuite::for_test(test) == IosUiSuite::CloudBackup));
+        }
+
+        #[test]
+        fn shards_parse_only_in_range_slices() {
+            assert_eq!(shard("2/3").to_string(), "2/3");
+
+            for invalid in ["0/3", "4/3", "1/0", "3", "a/b", ""] {
+                assert!(invalid.parse::<IosUiShard>().is_err(), "{invalid:?} parsed");
             }
         }
     }

@@ -219,11 +219,12 @@ fake-node-run *command:
 # Skips staged process-death tests, which need `android-ui-manual`, and tests marked @QuarantinedInCi
 # Runs with the fake node and the hardware signer host up and forwarded to the device, for tests
 # that need a funded wallet or a signer
+# tests: optional comma-separated `package.Class` or `package.Class#method` entries to run instead of all
 # [long, external] Run Android instrumented tests the way the UI tests workflow does; flavours: Dev, UiTest or both
 [group('test')]
 [working-directory('android')]
-android-instrumented-ci flavours="Dev UiTest":
-    cargo run --locked -q --manifest-path ../rust/Cargo.toml --package xtask -- ui-test-host run --android -- ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi" "-Pandroid.testInstrumentationRunnerArguments.listener=org.bitcoinppl.cove.test.DismissAnrDialogs"
+android-instrumented-ci flavours="Dev UiTest" tests="":
+    cargo run --locked -q --manifest-path ../rust/Cargo.toml --package xtask -- ui-test-host run --android -- ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi" "-Pandroid.testInstrumentationRunnerArguments.listener=org.bitcoinppl.cove.test.DismissAnrDialogs" {{ if tests == "" { "" } else { quote("-Pandroid.testInstrumentationRunnerArguments.class=" + replace(tests, " ", "")) } }}
 
 # [bounded] Update Android Compose preview screenshot references
 [group('test')]
