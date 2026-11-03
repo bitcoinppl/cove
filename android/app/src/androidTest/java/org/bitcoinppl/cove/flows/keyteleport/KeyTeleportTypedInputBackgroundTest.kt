@@ -114,6 +114,11 @@ class KeyTeleportTypedInputBackgroundTest {
             assertFieldEmpty("the receiver code field after unlocking")
             compose.onNodeWithText("Continue").assertIsNotEnabled()
 
+            // leaving the app cleared the typed code, so it is entered again and must reach the sender
+            compose.onNode(hasSetTextAction()).performTextInput(request.numericCode)
+            compose.onNodeWithText("Continue").performClick()
+            compose.waitUntil(STATE_TIMEOUT_MILLIS) { sender.state is KeyTeleportManagerState.SendReady }
+
             receiver.manager.dispatch(KeyTeleportManagerAction.EndReceive)
         }
     }
