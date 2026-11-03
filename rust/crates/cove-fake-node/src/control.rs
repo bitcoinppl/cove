@@ -11,7 +11,7 @@ use tokio::sync::watch;
 
 /// Which wire protocol a request arrived on
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) enum Protocol {
+pub enum Protocol {
     Esplora,
     Electrum,
 }
@@ -22,10 +22,10 @@ pub(crate) enum Protocol {
 /// is empty. For Electrum `name` is the JSON-RPC method and `detail` is the
 /// serialized params
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct LoggedRequest {
-    pub(crate) protocol: Protocol,
-    pub(crate) name: String,
-    pub(crate) detail: String,
+pub struct LoggedRequest {
+    pub protocol: Protocol,
+    pub name: String,
+    pub detail: String,
 }
 
 /// A latch that holds matching requests until the test opens it
@@ -34,7 +34,7 @@ pub(crate) struct LoggedRequest {
 /// is not answered, which lets a test observe the state of the app while a
 /// scan is mid-flight
 #[derive(Debug, Clone)]
-pub(crate) struct Gate {
+pub struct Gate {
     open: Arc<watch::Sender<bool>>,
     waiting: Arc<AtomicUsize>,
 }
@@ -45,12 +45,12 @@ impl Gate {
     }
 
     /// Releases every held request and lets later ones through unimpeded
-    pub(crate) fn open(&self) {
+    pub fn open(&self) {
         self.open.send_replace(true);
     }
 
     /// How many requests are currently held at the gate
-    pub(crate) fn waiting(&self) -> usize {
+    pub fn waiting(&self) -> usize {
         self.waiting.load(Ordering::SeqCst)
     }
 
@@ -91,12 +91,13 @@ struct Rule {
 
 /// Counts how many requests a rule has intercepted
 #[derive(Debug, Clone)]
-pub(crate) struct RuleHandle {
+pub struct RuleHandle {
     hits: Arc<AtomicUsize>,
 }
 
 impl RuleHandle {
-    pub(crate) fn hits(&self) -> usize {
+    /// How many requests the rule has intercepted so far
+    pub fn hits(&self) -> usize {
         self.hits.load(Ordering::SeqCst)
     }
 }
@@ -176,7 +177,7 @@ impl Control {
 ///
 /// The first rule that matches wins. An empty pattern matches every request.
 /// Esplora names are request paths and Electrum names are method names
-pub(crate) struct RuleBuilder<'a> {
+pub struct RuleBuilder<'a> {
     pub(crate) control: &'a Control,
     pub(crate) pattern: String,
 }
@@ -184,22 +185,22 @@ pub(crate) struct RuleBuilder<'a> {
 impl RuleBuilder<'_> {
     /// Answers with an error: the HTTP status for Esplora, a JSON-RPC error
     /// carrying `message` for Electrum
-    pub(crate) fn fail(self, status: u16, message: &str) -> RuleHandle {
+    pub fn fail(self, status: u16, message: &str) -> RuleHandle {
         self.control.add_rule(&self.pattern, Behavior::Fail { status, message: message.into() })
     }
 
     /// Accepts the request and never answers it
-    pub(crate) fn stall(self) -> RuleHandle {
+    pub fn stall(self) -> RuleHandle {
         self.control.add_rule(&self.pattern, Behavior::Stall)
     }
 
     /// Answers normally after waiting `delay`
-    pub(crate) fn delay(self, delay: Duration) -> RuleHandle {
+    pub fn delay(self, delay: Duration) -> RuleHandle {
         self.control.add_rule(&self.pattern, Behavior::Delay(delay))
     }
 
     /// Holds the request until the returned gate opens
-    pub(crate) fn hold(self) -> (Gate, RuleHandle) {
+    pub fn hold(self) -> (Gate, RuleHandle) {
         let gate = Gate::new();
         let handle = self.control.add_rule(&self.pattern, Behavior::Hold(gate.clone()));
 

@@ -68,6 +68,17 @@ impl AndroidDevice {
         Self::select(None)
     }
 
+    /// Every ready device, narrowed to `ANDROID_SERIAL` when it is set, matching
+    /// the devices Gradle's connected tasks and plain `adb` calls would use
+    pub(crate) fn list_targeted() -> Result<Vec<Self>> {
+        let devices = list_connected()?;
+
+        Ok(match env_device_serial("ANDROID_SERIAL") {
+            Some(serial) => devices.into_iter().filter(|device| device.serial == serial).collect(),
+            None => devices,
+        })
+    }
+
     pub(crate) fn ensure_ready(&self) -> Result<()> {
         let output =
             self.adb_command().arg("get-state").output().wrap_err("Failed to run adb get-state")?;
@@ -120,6 +131,43 @@ impl AndroidDevice {
 
         if !status.success() {
             color_eyre::eyre::bail!("Failed to pull Android screenshot {remote_path}: {status}");
+        }
+
+        Ok(())
+    }
+
+    /// Makes `port` on the device reach `port` on this machine
+    pub(crate) fn reverse_port(&self, port: u16) -> Result<()> {
+        let output = self
+            .adb_command()
+            .args(["reverse", &format!("tcp:{port}"), &format!("tcp:{port}")])
+            .output()
+            .wrap_err("Failed to run adb reverse")?;
+
+        if !output.status.success() {
+            color_eyre::eyre::bail!(
+                "Failed to forward port {port} to Android device {}: {}",
+                self.serial,
+                command_error(&output)
+            );
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn remove_reverse_port(&self, port: u16) -> Result<()> {
+        let output = self
+            .adb_command()
+            .args(["reverse", "--remove", &format!("tcp:{port}")])
+            .output()
+            .wrap_err("Failed to run adb reverse --remove")?;
+
+        if !output.status.success() {
+            color_eyre::eyre::bail!(
+                "Failed to remove port {port} forward from Android device {}: {}",
+                self.serial,
+                command_error(&output)
+            );
         }
 
         Ok(())

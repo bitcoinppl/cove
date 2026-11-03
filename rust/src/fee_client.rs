@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     sync::{
         Arc, LazyLock,
         atomic::{AtomicBool, Ordering},
@@ -45,7 +46,8 @@ pub static FEES: LazyLock<ArcSwap<Option<CachedFeeResponse>>> =
     LazyLock::new(|| ArcSwap::from_pointee(None));
 
 pub struct FeeClient {
-    url: String,
+    /// Fixed fee endpoint; `None` uses mempool.space, or `COVE_FEE_URL` in debug builds
+    url: Option<String>,
     client: OnceCell<reqwest::Client>,
 }
 
@@ -116,11 +118,24 @@ struct ValidatedFeeResponse(FeeResponse);
 
 impl FeeClient {
     pub fn new() -> Self {
-        Self::new_with_url(FEE_URL.to_string())
+        Self { url: None, client: OnceCell::new() }
     }
 
-    pub fn new_with_url(url: String) -> Self {
-        Self { url, client: OnceCell::new() }
+    fn fee_url(&self) -> Cow<'_, str> {
+        if let Some(url) = &self.url {
+            return Cow::Borrowed(url);
+        }
+
+        // read on every fetch, not once, so an Android instrumentation test can set it in the
+        // app process after the global client exists
+        #[cfg(debug_assertions)]
+        if let Ok(url) = std::env::var("COVE_FEE_URL")
+            && !url.trim().is_empty()
+        {
+            return Cow::Owned(url);
+        }
+
+        Cow::Borrowed(FEE_URL)
     }
 
     /// Get cached fees, will trigger background refresh if stale
@@ -178,7 +193,8 @@ impl FeeClient {
 
     /// Always gets new fees from the server
     async fn get_new_fees(&self) -> Result<ValidatedFeeResponse, FeeClientError> {
-        let response = self.client()?.get(&self.url).send().await?.error_for_status()?;
+        let url = self.fee_url();
+        let response = self.client()?.get(url.as_ref()).send().await?.error_for_status()?;
         let fees: FeeResponse = response.json().await?;
         Ok(fees.try_into()?)
     }
@@ -567,11 +583,32 @@ mod tests {
                 .expect("response writes");
         });
 
-        let client = FeeClient::new_with_url(format!("http://{address}"));
+        let client = FeeClient { url: Some(format!("http://{address}")), client: OnceCell::new() };
         let error = client.get_new_fees().await.expect_err("HTTP errors are rejected");
 
         assert!(matches!(error, FeeClientError::Request(_)));
         server.await.expect("server exits");
+    }
+
+    // the override is compiled out of release builds, so `cargo test --release` has nothing to test
+    #[cfg(debug_assertions)]
+    #[tokio::test]
+    async fn default_fee_client_fetches_from_cove_fee_url_override() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let _global_guard = crate::test_support::global_state_test_lock().lock().await;
+        let node = crate::test_support::fake_node::FakeNode::start(bitcoin::Network::Signet);
+        let url = format!("{}/api/v1/fees/recommended", node.esplora_url());
+
+        // tests hold global_state_test_lock while mutating process environment
+        unsafe { std::env::set_var("COVE_FEE_URL", &url) };
+        let fees = FeeClient::new().get_new_fees().await;
+        unsafe { std::env::remove_var("COVE_FEE_URL") };
+
+        let fees = fees.expect("fees come from the override").0;
+
+        // fractional rates mempool.space doesn't return, so a passing test can't be a real fetch
+        assert_eq!(fees.fastest_fee, 7.5);
+        assert_eq!(fees.economy_fee, 1.25);
     }
 
     #[test]

@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -128,6 +129,7 @@ fun EnterAddressView(
                 modifier =
                     Modifier
                         .fillMaxWidth()
+                        .testTag("sendFlow.address")
                         .focusRequester(focusRequester)
                         .onFocusChanged { focusState ->
                             isFocused = focusState.isFocused

@@ -8,52 +8,21 @@ use bitcoin::{
 };
 use serde_json::{Value, json};
 use tokio::{
-    io::{AsyncBufReadExt as _, AsyncReadExt as _, AsyncWriteExt as _, BufReader},
+    io::BufReader,
     net::{TcpListener, TcpStream},
     sync::watch,
 };
 
-use super::{
-    FakeChain, Shared,
-    chain::{AlreadyConfirmed, ChainTx, HistoryEntry, TxLocation},
+use crate::{
+    Shared,
+    chain::{AlreadyConfirmed, ChainTx, FakeChain, HistoryEntry, TxLocation},
     control::{Protocol, Verdict},
+    http::{Request, Response, read_request, write_response},
 };
 
 /// Esplora pages confirmed history in chunks of this size
 const CONFIRMED_PAGE_SIZE: usize = 25;
 const BLOCKS_PAGE_SIZE: u32 = 10;
-
-struct Response {
-    status: u16,
-    content_type: &'static str,
-    body: Vec<u8>,
-}
-
-impl Response {
-    fn json(value: &Value) -> Self {
-        Self {
-            status: 200,
-            content_type: "application/json",
-            body: serde_json::to_vec(value).expect("json serializes"),
-        }
-    }
-
-    fn text(text: impl Into<String>) -> Self {
-        Self { status: 200, content_type: "text/plain", body: text.into().into_bytes() }
-    }
-
-    fn bytes(body: Vec<u8>) -> Self {
-        Self { status: 200, content_type: "application/octet-stream", body }
-    }
-
-    fn error(status: u16, message: &str) -> Self {
-        Self { status, content_type: "text/plain", body: message.as_bytes().to_vec() }
-    }
-
-    fn not_found(message: &str) -> Self {
-        Self::error(404, message)
-    }
-}
 
 /// Accepts connections until `shutdown` flips, then drops the listener
 pub(crate) async fn serve(
@@ -77,7 +46,7 @@ async fn serve_connection(stream: TcpStream, shared: Arc<Shared>) {
     let mut reader = BufReader::new(stream);
 
     // keep-alive: reqwest reuses the connection for many requests
-    while let Some((method, path, body)) = read_request(&mut reader).await {
+    while let Some(Request { method, path, body }) = read_request(&mut reader).await {
         let verdict = shared.control.intercept(Protocol::Esplora, &path, "").await;
         let response = match verdict {
             Verdict::Fail { status, message } => Response::error(status, &message),
@@ -87,62 +56,6 @@ async fn serve_connection(stream: TcpStream, shared: Arc<Shared>) {
         if write_response(reader.get_mut(), &response).await.is_err() {
             return;
         }
-    }
-}
-
-async fn read_request(reader: &mut BufReader<TcpStream>) -> Option<(String, String, Vec<u8>)> {
-    let mut request_line = String::new();
-    if reader.read_line(&mut request_line).await.ok()? == 0 {
-        return None;
-    }
-
-    let mut parts = request_line.split_whitespace();
-    let method = parts.next()?.to_string();
-    let path = parts.next()?.to_string();
-
-    let mut content_length = 0usize;
-    loop {
-        let mut header = String::new();
-        reader.read_line(&mut header).await.ok()?;
-
-        let header = header.trim();
-        if header.is_empty() {
-            break;
-        }
-
-        if let Some((name, value)) = header.split_once(':')
-            && name.eq_ignore_ascii_case("content-length")
-        {
-            content_length = value.trim().parse().ok()?;
-        }
-    }
-
-    let mut body = vec![0u8; content_length];
-    reader.read_exact(&mut body).await.ok()?;
-
-    Some((method, path, body))
-}
-
-async fn write_response(stream: &mut TcpStream, response: &Response) -> std::io::Result<()> {
-    let head = format!(
-        "HTTP/1.1 {} {}\r\ncontent-type: {}\r\ncontent-length: {}\r\n\r\n",
-        response.status,
-        reason(response.status),
-        response.content_type,
-        response.body.len(),
-    );
-
-    stream.write_all(head.as_bytes()).await?;
-    stream.write_all(&response.body).await?;
-    stream.flush().await
-}
-
-const fn reason(status: u16) -> &'static str {
-    match status {
-        200 => "OK",
-        400 => "Bad Request",
-        404 => "Not Found",
-        _ => "Error",
     }
 }
 
@@ -210,6 +123,16 @@ fn route(chain: &FakeChain, method: &str, path: &str, body: &[u8]) -> Response {
 
         ("GET", ["address", address]) => address_stats(chain, address),
         ("GET", ["fee-estimates"]) => Response::json(&json!({ "1": 2.0, "3": 2.0, "6": 1.0 })),
+
+        // mempool.space's recommended fees shape, so the app's fee client can point here
+        // through COVE_FEE_URL instead of reaching the internet
+        ("GET", ["api", "v1", "fees", "recommended"]) => Response::json(&json!({
+            "fastestFee": 7.5,
+            "halfHourFee": 5.5,
+            "hourFee": 3.5,
+            "economyFee": 1.25,
+            "minimumFee": 1.0,
+        })),
 
         _ => Response::not_found("Not found"),
     }

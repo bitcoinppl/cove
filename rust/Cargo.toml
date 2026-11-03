@@ -304,6 +304,7 @@ libc = "0.2.186"
 uniffi = { workspace = true, features = ["build"] }
 
 [dev-dependencies]
+cove-fake-node = { path = "./crates/cove-fake-node", default-features = false }
 bdk_wallet = { workspace = true, features = ["test-utils"] }
 
 # coldcard-compatible keyteleport sender for payloads the keyteleport crate cannot send

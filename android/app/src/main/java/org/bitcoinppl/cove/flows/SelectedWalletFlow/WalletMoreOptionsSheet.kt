@@ -27,6 +27,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
@@ -77,10 +80,12 @@ fun WalletMoreOptionsSheet(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
+        // the sheet is its own window, so the app root's resource id mapping doesn't reach it
         Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
+                    .semantics { testTagsAsResourceId = true }
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 32.dp),
         ) {
@@ -229,6 +234,7 @@ fun WalletMoreOptionsSheet(
                 MenuOption(
                     icon = { Icon(Icons.Outlined.Circle, contentDescription = null) },
                     label = "Manage UTXOs",
+                    modifier = Modifier.testTag("selectedWallet.manageUtxos"),
                     onClick = {
                         app.pushRoute(
                             Route.CoinControl(
@@ -267,10 +273,11 @@ private fun MenuOption(
     icon: @Composable () -> Unit,
     label: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .clickable(onClick = onClick)
                 .padding(vertical = 16.dp, horizontal = 8.dp),

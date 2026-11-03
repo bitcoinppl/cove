@@ -31,6 +31,7 @@ struct AddressTextEditor: View {
         ZStack(alignment: .topLeading) {
             TextEditor(text: textBinding)
                 .focused($focusField, equals: .address)
+                .accessibilityIdentifier("sendFlow.address")
                 .offset(x: -4)
                 .font(.footnote)
                 .fontDesign(.monospaced)

@@ -294,6 +294,11 @@ extension CoveApplicationRoot {
     private func completeBootstrap(warning: String? = nil) {
         Log.info("[STARTUP] completeBootstrap called")
 
+        #if DEBUG
+            // before AppManager reads the selected network and node from the database
+            Self.applyUiTestNodeOverrideIfRequested()
+        #endif
+
         // unconditional initialization — everything ready before any user interaction
         initializeApp()
         Self.excludeDataDirFromBackup(logFailure: true)
@@ -318,6 +323,28 @@ extension CoveApplicationRoot {
             startBackupIntegrityCheck()
         }
     }
+
+    #if DEBUG
+        /// Selects Signet and a custom Esplora node when a UI test passes `COVE_UI_TEST_ESPLORA_URL`
+        ///
+        /// Onboarding can't reach Settings before a wallet exists, so the UTXO lock UI tests use this
+        /// to point a fresh install at the fake node before importing their funded wallet. A URL that
+        /// can't be applied crashes the app so the test fails here instead of scanning mainnet
+        private static func applyUiTestNodeOverrideIfRequested() {
+            guard let url = ProcessInfo.processInfo.environment["COVE_UI_TEST_ESPLORA_URL"] else { return }
+
+            do {
+                try Database().globalConfig().setSelectedNetwork(network: .signet)
+
+                // the selector reads the selected network when created, so make it after switching
+                let node = try NodeSelector().parseCustomNode(url: url, name: "Custom Esplora", enteredName: "")
+                try Database().globalConfig().setSelectedNode(node: node)
+                Log.info("[STARTUP] UI test selected Signet and custom Esplora node \(node.url)")
+            } catch {
+                fatalError("COVE_UI_TEST_ESPLORA_URL '\(url)' could not be applied: \(error)")
+            }
+        }
+    #endif
 
     /// Re-bootstrap after recovery (Start Fresh / Wipe / Cloud Restore)
     private func rebootstrap() {

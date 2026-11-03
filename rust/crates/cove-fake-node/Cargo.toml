@@ -1,0 +1,44 @@
+[package]
+name = "cove-fake-node"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "cove-fake-node"
+path = "src/main.rs"
+required-features = ["cli"]
+
+# drives the binary, so it needs the feature that builds it
+[[test]]
+name = "control_api"
+path = "tests/control_api.rs"
+required-features = ["cli"]
+
+[features]
+default = ["cli"]
+# the binary's argument parsing, error reports and signal handling, which the
+# app crate's tests leave out by taking the library without default features
+cli = ["dep:clap", "dep:color-eyre", "tokio/signal"]
+
+[dependencies]
+bitcoin = { workspace = true, features = ["serde"] }
+bip39 = { workspace = true }
+tokio = { workspace = true, features = ["rt", "net", "io-util", "sync", "time", "macros"] }
+parking_lot = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+hex = { workspace = true }
+
+clap = { version = "4.6.1", features = ["derive"], optional = true }
+color-eyre = { version = "0.6.5", optional = true }
+
+[dev-dependencies]
+bdk_esplora = { workspace = true }
+bdk_electrum = { workspace = true }
+reqwest = { workspace = true }
+rustls = { version = "0.23.40", features = ["ring"], default-features = false }
+tokio = { workspace = true, features = ["rt", "macros"] }
+
+[lints]
+workspace = true

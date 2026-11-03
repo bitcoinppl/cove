@@ -62,8 +62,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -333,9 +336,11 @@ private fun UtxoListScreenContent(
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 modifier =
-                                    Modifier.clickable {
-                                        onToggleSelectAll()
-                                    },
+                                    Modifier
+                                        .testTag("coinControl.selectAll")
+                                        .clickable {
+                                            onToggleSelectAll()
+                                        },
                             )
                         }
                     }
@@ -377,7 +382,8 @@ private fun UtxoListScreenContent(
                             totalSelectedAmount,
                             modifier =
                                 Modifier
-                                    .fillMaxWidth(),
+                                    .fillMaxWidth()
+                                    .testTag("coinControl.selectedTotal"),
                             color = secondaryText,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
@@ -448,7 +454,10 @@ private fun UtxoListScreenContent(
                                 contentColor = if (anySelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                             ),
                         fontSize = 17.sp,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .testTag("coinControl.continue"),
                     )
                 }
 
@@ -476,6 +485,9 @@ private fun UtxoItemRow(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 16.dp)
                     .graphicsLayer(alpha = if (utxo.spendable) 1f else 0.58f)
+                    // keyed by outpoint so UI tests can find a known coin and read its lock state
+                    .testTag("coinControl.utxo.${utxo.outpoint.txidStr()}:${utxo.outpoint.vout()}")
+                    .semantics { stateDescription = if (utxo.spendable) "unlocked" else "locked" }
                     .combinedClickable(
                         onClick = onToggle,
                         onLongClick = { spendabilityMenuExpanded = true },

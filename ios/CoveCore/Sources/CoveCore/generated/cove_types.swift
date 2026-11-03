@@ -3134,6 +3134,8 @@ public protocol OutPointProtocol: AnyObject, Sendable {
 
     func txnLink()  -> String
 
+    func vout()  -> UInt32
+
 }
 open class OutPoint: OutPointProtocol, @unchecked Sendable {
     fileprivate let handle: UInt64
@@ -3246,6 +3248,15 @@ open func txnLink() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
         uniffiCallStatus in
     uniffi_cove_types_fn_method_outpoint_txn_link(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+open func vout() -> UInt32  {
+    return try!  FfiConverterUInt32.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_types_fn_method_outpoint_vout(
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
@@ -6754,6 +6765,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_outpoint_txn_link() != 14032) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_types_checksum_method_outpoint_vout() != 62893) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_types_checksum_method_sentandreceived_amount() != 64130) {

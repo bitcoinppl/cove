@@ -433,6 +433,7 @@ struct TransactionDetailsLockControl: View {
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)
+        .accessibilityIdentifier("transactionDetails.lockToggle")
         .transaction { transaction in
             transaction.animation = nil
         }
