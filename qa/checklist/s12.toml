@@ -236,13 +236,15 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/passkey.rs::passkey_match_treats_missing_credential_as_no_match",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::post_presentation_saved_passkey_failure_attempts_confirmation_once",
   "rust:rust/src/manager/cloud_backup_manager/wallets/passkey/authorization_retry.rs::does_not_retry_cancellation_or_post_presentation_failure",
+  "rust:rust/src/manager/cloud_backup_manager/wallets/passkey/authorization_retry.rs::ios_retries_platform_authorization_failures_for_every_interactive_operation",
+  "rust:rust/src/manager/cloud_backup_manager/wallets/passkey/authorization_retry.rs::ios_retry_recovers_without_retrying_non_transient_failures",
   "rust:rust/src/manager/cloud_backup_manager/verify/passkey_auth.rs::stored_authentication_failure_is_not_treated_as_missing",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupPasskeyScenarioFullLaunchTest.kt::prePresentationDiscoveryFailureRetriesOnceThenSucceeds",
   "ios-unit:ios/CoveTests/PasskeyProviderImplTests.swift::testFailedBeforePresentationIsRetryablePlatformFailure",
   "ios-unit:ios/CoveTests/PasskeyProviderImplTests.swift::testFailedAfterPresentationPreservesPlatformFailureSemantics",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust owns the retry policy; platform tests classify failures before and after presentation
+# rust owns the retry policy, including the ios interactive retries that recover after a pre-presentation failure; platform tests classify failures before and after presentation
 
 [[row]]
 id = "s12-verification-waits-for-cloud-visibility"
@@ -445,6 +447,7 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_refresh_finds_namespace_that_appears_late",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/onboarding/OnboardingRecoveryScenarioFullLaunchTest.kt::emptyThenEmptyThenBackupFoundAfterCheckAgain",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/onboarding/OnboardingLateOfferFullLaunchTest.kt::delayedDiscoveryOffersRestoreDuringSoftwareImport",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/onboarding/OnboardingLateOfferFullLaunchTest.kt::delayedDiscoveryOffersRestoreDuringHardwareImport",
   "ios-unit:ios/CoveTests/OnboardingPromptLayoutTests.swift::testSoftwareImportProjectsLateCloudRestoreOffer",
   "ios-unit:ios/CoveTests/OnboardingPromptLayoutTests.swift::testHardwareImportProjectsLateCloudRestoreOffer",
 ]
