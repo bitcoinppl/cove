@@ -53,6 +53,15 @@ struct SendFlowConfirmScreen: View {
         manager.walletMetadata
     }
 
+    /// The send result waits for any app lock to clear, so a send that finishes while the app
+    /// is away never shows its result above the lock screen
+    private var resultAlertBinding: Binding<TaggedItem<SendFlowConfirmAlertState>?> {
+        Binding(
+            get: { auth.lockState == .unlocked ? presenter.confirmationAlertState : nil },
+            set: { presenter.confirmationAlertState = $0 }
+        )
+    }
+
     private var confirmationAlertContext: SendFlowConfirmAlertContext {
         SendFlowConfirmAlertContext(presenter: presenter, sendState: $sendState)
     }
@@ -84,7 +93,7 @@ struct SendFlowConfirmScreen: View {
             .onChange(of: manager.payjoinTxBroadcast, payjoinBroadcastChanged)
             .onChange(of: manager.sendFlowErrorAlert, sendFlowErrorChanged)
             .presentingAlert(
-                presenter.confirmationAlertStateBinding,
+                resultAlertBinding,
                 context: confirmationAlertContext,
                 defaultTitle: "Error Broadcasting!"
             )

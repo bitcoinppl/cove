@@ -571,8 +571,9 @@ private fun SendFlowRouteToScreen(
                 },
             )
 
-            // success alert dialog
-            if (showSuccessAlert) {
+            // send results wait for any app lock to clear, so a send that finishes while the
+            // app is away never shows its result above the lock screen
+            if (showSuccessAlert && !Auth.isLocked) {
                 AlertDialog(
                     onDismissRequest = {
                         showSuccessAlert = false
@@ -593,8 +594,7 @@ private fun SendFlowRouteToScreen(
                 )
             }
 
-            // error alert dialog
-            if (showErrorAlert) {
+            if (showErrorAlert && !Auth.isLocked) {
                 AlertDialog(
                     onDismissRequest = {
                         showErrorAlert = false
