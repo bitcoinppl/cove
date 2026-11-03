@@ -256,11 +256,10 @@ open class CoveApplication : Application() {
             }
 
             // lock even when already locked, so a lock another owner can release still
-            // leaves this one needing authentication
-            if (auth.isAuthEnabled) {
-                Log.d(TAG, "[LIFECYCLE] App going to background, locking")
-                auth.lock(AppLockReason.BACKGROUND)
-            }
+            // leaves this one needing authentication. Rust skips the lock only when it can
+            // read that no authentication is set up, so a stale cached auth type never skips it
+            Log.d(TAG, "[LIFECYCLE] App going to background, locking")
+            auth.lock(AppLockReason.BACKGROUND)
         } catch (e: Exception) {
             Log.e(TAG, "Error handling background", e)
         }

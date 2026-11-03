@@ -131,7 +131,13 @@ struct CoveMainView: View {
 
         app.isSidebarVisible = false
         app.beginInitialScanBackgroundTaskIfNeeded()
-        guard auth.isAuthEnabled else { return }
+
+        // the cached auth type can lag behind or misread the saved one, and Rust skips the
+        // lock only when it can read that no authentication is set up
+        guard auth.isAuthEnabled else {
+            auth.lock(reason: .background)
+            return
+        }
 
         Log.debug("[scene] app going into background")
         coverClearTask?.cancel()
