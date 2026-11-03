@@ -79,9 +79,13 @@ impl WalletPublicDataStore {
         delete_if_present(&self.0, descriptor_key_name(id))
     }
 
+    /// Reads both entries even when the first exists, so a caller can rely on a successful
+    /// result meaning neither entry is unreadable
     pub(crate) fn has_any(&self, id: &WalletId) -> Result<bool, KeychainError> {
-        Ok(self.0.get(xpub_key_name(id))?.is_some()
-            || self.0.get(descriptor_key_name(id))?.is_some())
+        let xpub = self.0.get(xpub_key_name(id))?;
+        let descriptors = self.0.get(descriptor_key_name(id))?;
+
+        Ok(xpub.is_some() || descriptors.is_some())
     }
 }
 

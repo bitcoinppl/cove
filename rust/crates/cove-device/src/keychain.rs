@@ -338,7 +338,18 @@ impl Keychain {
     }
 
     /// Deletes all keychain entries for a wallet
+    ///
+    /// Every entry is read before any is deleted. If a read fails nothing is deleted and false is
+    /// returned, so the wallet is never left with only some of its entries
     pub fn delete_wallet_items(&self, id: &WalletId) -> bool {
+        let readable = self.wallet_secrets.has_any(id).is_ok()
+            && self.wallet_public.has_any(id).is_ok()
+            && self.tap_signer_backups.has_any(id).is_ok();
+
+        if !readable {
+            return false;
+        }
+
         let key_ok = self.wallet_secrets.delete(id);
         let xpub_ok = self.wallet_public.delete_xpub(id);
         let descriptor_ok = self.wallet_public.delete_descriptors(id);

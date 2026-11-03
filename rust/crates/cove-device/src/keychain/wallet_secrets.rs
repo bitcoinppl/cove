@@ -543,4 +543,33 @@ mod tests {
         assert!(keychain.delete_wallet_items(&id));
         assert!(keychain.get_wallet_secret(&id).unwrap().is_none());
     }
+
+    #[test]
+    fn delete_wallet_items_deletes_nothing_when_an_entry_is_unreadable() {
+        let id = wallet_id();
+        let unreadable_entries = [
+            format!("{id}::wallet_xpub"),
+            format!("{id}::wallet_public_descriptor"),
+            format!("{id}::tap_signer_backup"),
+        ];
+
+        for unreadable in unreadable_entries {
+            let access = MockKeychain::default();
+            let keychain = keychain(access.clone());
+            keychain.save_wallet_key(&id, mnemonic()).unwrap();
+            keychain.save_tap_signer_backup(&id, &[1, 2, 3]).unwrap();
+            let mut stored = access.keys();
+            stored.sort();
+            access.fail_read_for(unreadable);
+
+            assert!(!keychain.delete_wallet_items(&id));
+            let mut remaining = access.keys();
+            remaining.sort();
+            assert_eq!(remaining, stored);
+
+            access.clear_read_failures();
+            assert!(keychain.delete_wallet_items(&id));
+            assert!(keychain.get_wallet_secret(&id).unwrap().is_none());
+        }
+    }
 }
