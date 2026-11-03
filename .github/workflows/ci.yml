@@ -229,6 +229,36 @@ jobs:
       - name: Run tests
         run: cd rust && cargo test --locked --workspace
 
+  # the TAPSIGNER tests are ignored in the plain test run because they need Coinkite's card
+  # emulator; this job installs it and fails when the emulator is missing or a test fails
+  tapsigner-emulator:
+    runs-on: ubuntu-24.04
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          cache-bin: false
+          prefix-key: v1-rust
+
+      - name: Set up just and cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,cargo-nextest
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.3.3
+
+      - name: Run TAPSIGNER emulator tests
+        run: just test-tapsigner-emulator
+
   clippy:
     runs-on: ubuntu-24.04
     env:

@@ -70,13 +70,18 @@ paths = [
   "ios/Cove/Views/QrExportContentViews.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/views/QrExportView.kt",
   "rust/crates/cove-ur/src/crypto_psbt.rs",
+  "rust/crates/cove-types/src/confirm.rs",
+  "rust/src/qr_scanner.rs",
+  "rust/src/multi_format.rs",
 ]
 coverage = [
   "human",
   "rust:rust/crates/cove-ur/src/crypto_psbt.rs::test_crypto_psbt_cbor_is_untagged_bytes",
+  "rust:rust/src/hardware_signing_tests.rs::signed_animated_ur_and_bbqr_from_an_external_signer_finalize_the_saved_draft",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# encoding is asserted in rust; a strict signer scanning animated qr needs a person
+# the export, scan and finalize loop with an independent signer is asserted in rust; a strict
+# physical signer scanning the animated qr with a camera needs a person
 
 [[row]]
 id = "s13-bbqr-unsigned-and-signed-scan-path"
@@ -93,10 +98,17 @@ paths = [
   "ios/Cove/Views/QrExportView.swift",
   "ios/Cove/Views/QrExportContentViews.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/views/QrExportView.kt",
+  "rust/crates/cove-types/src/confirm.rs",
+  "rust/src/qr_scanner.rs",
 ]
-coverage = ["human"]
+coverage = [
+  "human",
+  "rust:rust/src/hardware_signing_tests.rs::signed_animated_ur_and_bbqr_from_an_external_signer_finalize_the_saved_draft",
+  "rust:rust/src/hardware_signing_tests.rs::signed_psbts_that_match_no_saved_draft_are_rejected",
+]
 # 1.4.0: ios HUMAN, android HUMAN
-# needs camera exchange between two devices
+# bbqr export, out-of-order and truncated scans and finalize are asserted in rust; the camera
+# exchange between two devices needs a person
 
 [[row]]
 id = "s13-nfc-and-tapsigner-setup-retry-and-signing"
@@ -109,11 +121,19 @@ paths = [
   "ios/Cove/TapSignerNFC.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/flows/TapSignerFlow/*.kt",
   "rust/src/tap_card/tap_signer_reader.rs",
+  "rust/src/tap_card/tap_signer_reader/**",
   "rust/crates/cove-device/src/keychain/tap_signer.rs",
+  "rust/src/tap_card.rs",
 ]
-coverage = ["human"]
+coverage = [
+  "human",
+  "rust:rust/src/tap_card/tap_signer_reader/emulator_tests.rs::setup_with_default_and_advanced_chain_codes_imports_the_card_account",
+  "rust:rust/src/tap_card/tap_signer_reader/emulator_tests.rs::a_wrong_pin_changes_nothing_and_the_retry_succeeds",
+  "rust:rust/src/tap_card/tap_signer_reader/emulator_tests.rs::signs_a_hardware_draft_that_then_finalizes",
+]
 # 1.4.0: ios HUMAN, android HUMAN
-# needs a physical tapsigner and nfc
+# cove's card logic runs against coinkite's emulator in `just test-tapsigner-emulator`; a
+# physical tapsigner, the nfc session and the rate limit need a person
 
 [[row]]
 id = "s13-watch-only-badge-and-secret-action-isolation"
@@ -152,6 +172,8 @@ paths = [
 coverage = [
   "agent",
   "rust:rust/src/database/unsigned_transactions.rs::delete_tx_removes_the_record_and_its_wallet_index_entry",
+  "rust:rust/src/hardware_signing_tests.rs::signed_psbts_that_match_no_saved_draft_are_rejected",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# draft deletion is asserted; reservation release and unrelated signature rejection are not
+# draft deletion and unrelated or deleted-draft signature rejection are asserted; reservation
+# release and the error text the apps show are not

@@ -4626,7 +4626,7 @@ dependencies = [
 [[package]]
 name = "rust-cktap"
 version = "0.2.2"
-source = "git+https://github.com/bitcoinppl/rust-cktap?rev=3d74272692278f31e2e230b0963a12ebe9b8745b#3d74272692278f31e2e230b0963a12ebe9b8745b"
+source = "git+https://github.com/bitcoinppl/rust-cktap?rev=8248eab8f5914abd35de95dc6a677e8b3b747f30#8248eab8f5914abd35de95dc6a677e8b3b747f30"
 dependencies = [
  "async-trait",
  "bitcoin",

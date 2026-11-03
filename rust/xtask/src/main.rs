@@ -11,6 +11,7 @@ mod mobile_artifact;
 mod qa;
 mod rebase;
 mod swift_tools;
+mod tapsigner_emulator;
 mod util;
 mod version;
 
@@ -294,6 +295,10 @@ enum Commands {
     #[command(name = "swift-tools", subcommand)]
     SwiftTools(swift_tools::SwiftToolsCommand),
 
+    /// Install Coinkite's card emulator and run the TAPSIGNER tests against it
+    #[command(name = "test-tapsigner-emulator")]
+    TestTapsignerEmulator,
+
     /// Utility commands for development and testing
     #[command(subcommand)]
     Util(UtilCommands),
@@ -452,6 +457,8 @@ fn main() -> Result<()> {
         Commands::Qa(command) => qa::run(command),
 
         Commands::SwiftTools(command) => swift_tools::run(command),
+
+        Commands::TestTapsignerEmulator => tapsigner_emulator::run(),
 
         Commands::Util(util_cmd) => match util_cmd {
             UtilCommands::SignPsbt { mnemonic, psbt, network, format, output } => {

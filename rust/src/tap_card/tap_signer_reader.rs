@@ -946,6 +946,16 @@ impl TapSignerReader {
 
         debug!("TapSigner card authenticated");
 
+        Self::with_card(card, transport, cmd).await
+    }
+
+    // split from `new` so emulator tests, whose card chains to no Coinkite root, can build a
+    // reader exactly as production does after the certificate check
+    async fn with_card(
+        card: VerifiedTapSigner,
+        transport: TapcardTransport,
+        cmd: Option<TapSignerOperation>,
+    ) -> Result<Self> {
         let id: Nanoid = Nanoid::new();
         let network = Database::global().global_config.selected_network();
         let card_identity = card.card_ident();
@@ -1866,6 +1876,9 @@ impl TapSignerReaderError {
         matches!(self, Self::TapSignerError(TransportError::CkTap(CkTapError::UnluckyNumber)))
     }
 }
+
+#[cfg(test)]
+mod emulator_tests;
 
 #[cfg(test)]
 mod tests {

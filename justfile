@@ -271,6 +271,12 @@ qa-check:
 test test="" flags="":
     cargo nextest run --locked {{ test }} --workspace {{ flags }}
 
+# Needs uv, which installs Python 3.12 for the emulator when it is missing, and cargo-nextest
+# [bounded] Run the TAPSIGNER tests against Coinkite's card emulator
+[group('test')]
+test-tapsigner-emulator:
+    just xtask test-tapsigner-emulator
+
 # [bounded] Run tests the same way as GitHub Actions
 [group('test')]
 [working-directory('rust')]

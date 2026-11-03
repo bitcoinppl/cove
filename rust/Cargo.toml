@@ -162,7 +162,7 @@ bip329 = { workspace = true }
 payjoin = { workspace = true }
 
 # tapsigner / satscard
-rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap", rev = "3d74272692278f31e2e230b0963a12ebe9b8745b" }
+rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap", rev = "8248eab8f5914abd35de95dc6a677e8b3b747f30" }
 
 # actors
 act-zero = { version = "0.4.0", features = ["default-tokio"] }
@@ -322,6 +322,8 @@ uniffi = { workspace = true, features = ["bindgen-tests"] }
 ctor = "1.0.13"
 dtor = "1.0.6"
 
+# test builds talk to Coinkite's card emulator; keep the rev in step with the dependency above
+rust-cktap = { git = "https://github.com/bitcoinppl/rust-cktap", rev = "8248eab8f5914abd35de95dc6a677e8b3b747f30", features = ["emulator"] }
 
 [profile.dev]
 debug = "line-tables-only"
