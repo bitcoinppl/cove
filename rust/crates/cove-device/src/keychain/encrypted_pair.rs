@@ -17,13 +17,6 @@ pub(crate) enum State {
     CryptorOnly { serialized_cryptor: Zeroizing<String> },
 }
 
-enum FailedValueSave {
-    /// Put back the cryptor that was stored before the save, or delete the new one if there
-    /// was none
-    RestoreCryptor(Option<Zeroizing<String>>),
-    KeepCryptor,
-}
-
 impl EncryptedPair {
     pub(crate) fn new(
         access: SharedAccess,
@@ -95,21 +88,6 @@ impl EncryptedPair {
     pub(crate) fn save_atomically(&self, plaintext: &str) -> Result<(), KeychainError> {
         let prior_cryptor = self.access.get(self.cryptor_key.clone())?.map(Zeroizing::new);
 
-        self.save(plaintext, FailedValueSave::RestoreCryptor(prior_cryptor))
-    }
-
-    pub(crate) fn save_preserving_cryptor_on_failure(
-        &self,
-        plaintext: &str,
-    ) -> Result<(), KeychainError> {
-        self.save(plaintext, FailedValueSave::KeepCryptor)
-    }
-
-    fn save(
-        &self,
-        plaintext: &str,
-        failed_value_save: FailedValueSave,
-    ) -> Result<(), KeychainError> {
         let mut cryptor = Cryptor::new();
         let encrypted = cryptor.encrypt_to_string(plaintext).map_err_str(KeychainError::Encrypt)?;
 
@@ -119,14 +97,13 @@ impl EncryptedPair {
 
         if let Err(error) = self.access.save(self.value_key.clone(), encrypted) {
             // cleanup is best effort, the value save error is what the caller needs
-            match failed_value_save {
-                FailedValueSave::RestoreCryptor(Some(prior_cryptor)) => {
+            match prior_cryptor {
+                Some(prior_cryptor) => {
                     let _ = self.access.save(self.cryptor_key.clone(), prior_cryptor.to_string());
                 }
-                FailedValueSave::RestoreCryptor(None) => {
+                None => {
                     self.delete_cryptor();
                 }
-                FailedValueSave::KeepCryptor => {}
             }
 
             return Err(error);

@@ -18,7 +18,7 @@ impl TapSignerBackupStore {
 
     pub(crate) fn save(&self, id: &WalletId, backup: &[u8]) -> Result<(), KeychainError> {
         let encoded = Zeroizing::new(hex::encode(backup));
-        self.pair(id).save_preserving_cryptor_on_failure(&encoded)
+        self.pair(id).save_atomically(&encoded)
     }
 
     pub(crate) fn get(&self, id: &WalletId) -> Result<Option<Zeroizing<Vec<u8>>>, KeychainError> {
@@ -55,6 +55,10 @@ impl TapSignerBackupStore {
         Ok(Some(backup))
     }
 
+    pub(crate) fn has_any(&self, id: &WalletId) -> Result<bool, KeychainError> {
+        Ok(!matches!(self.pair(id).state()?, State::Empty))
+    }
+
     pub(crate) fn delete(&self, id: &WalletId) -> bool {
         // delete data first so a partial failure does not leave data without its key
         self.pair(id).delete_existing_value_then_cryptor()
@@ -83,5 +87,17 @@ mod tests {
         assert_eq!(keychain.get_tap_signer_backup(&id).unwrap().unwrap().as_slice(), expected);
         assert!(keychain.delete_tap_signer_backup(&id));
         assert!(keychain.get_tap_signer_backup(&id).unwrap().is_none());
+    }
+
+    #[test]
+    fn failed_overwrite_keeps_the_prior_backup_readable() {
+        let access = MockKeychain::default();
+        let keychain = keychain(access.clone());
+        let id = wallet_id();
+        keychain.save_tap_signer_backup(&id, &[1, 2, 3]).unwrap();
+        access.fail_save_for(format!("{id}::tap_signer_backup"));
+
+        assert!(keychain.save_tap_signer_backup(&id, &[4, 5, 6]).is_err());
+        assert_eq!(keychain.get_tap_signer_backup(&id).unwrap().unwrap().as_slice(), [1, 2, 3]);
     }
 }
