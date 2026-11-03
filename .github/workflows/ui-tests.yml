@@ -163,8 +163,9 @@ jobs:
   ios-ui:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
     runs-on: macos-26
-    # each shard runs about 11 tests at about 7 minutes a test, after about 15 minutes building
-    # the Rust library and the fake node
+    # each shard runs about 11 tests, after about 25 minutes building the Rust library, the fake
+    # node and the test bundles; a test took 6 to 8 minutes when each erased the simulator and
+    # rebuilt, and the slowest hosted runners need headroom beyond the faster path's estimate
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -224,10 +225,10 @@ jobs:
         if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         uses: astral-sh/setup-uv@v10.3.3
 
-      # xtask expands each class into its test methods and keeps this shard's slice, resets the
-      # simulator before each test so every one starts at first launch, and keeps cove-fake-node
-      # up on ports 39000-39002 for the tests that fund a wallet from it and the hardware signer
-      # host on 39010-39011 for the hardware signing tests
+      # xtask expands each class into its test methods and keeps this shard's slice, builds each
+      # scheme once, runs every test on a fresh clone of a once-booted simulator so each starts at
+      # first launch, and keeps cove-fake-node up on ports 39000-39002 for the tests that fund a
+      # wallet from it and the hardware signer host on 39010-39011 for the hardware signing tests
       # xcodebuild passes TEST_RUNNER_-prefixed variables to the test process without the prefix
       - name: Run iOS UI tests
         if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
