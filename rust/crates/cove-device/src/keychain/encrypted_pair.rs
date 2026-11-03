@@ -18,7 +18,9 @@ pub(crate) enum State {
 }
 
 enum FailedValueSave {
-    DeleteCryptor,
+    /// Put back the cryptor that was stored before the save, or delete the new one if there
+    /// was none
+    RestoreCryptor(Option<Zeroizing<String>>),
     KeepCryptor,
 }
 
@@ -85,8 +87,15 @@ impl EncryptedPair {
         }
     }
 
+    /// Saves the value under a new cryptor, leaving any prior pair usable if the value save fails
+    ///
+    /// The prior cryptor is read first, so an unreadable pair stops the save before anything is
+    /// written. A failed value save puts the prior cryptor back, so the value that is still
+    /// stored stays decryptable
     pub(crate) fn save_atomically(&self, plaintext: &str) -> Result<(), KeychainError> {
-        self.save(plaintext, FailedValueSave::DeleteCryptor)
+        let prior_cryptor = self.access.get(self.cryptor_key.clone())?.map(Zeroizing::new);
+
+        self.save(plaintext, FailedValueSave::RestoreCryptor(prior_cryptor))
     }
 
     pub(crate) fn save_preserving_cryptor_on_failure(
@@ -109,8 +118,15 @@ impl EncryptedPair {
         self.access.save(self.cryptor_key.clone(), serialized.as_str().to_owned())?;
 
         if let Err(error) = self.access.save(self.value_key.clone(), encrypted) {
-            if matches!(failed_value_save, FailedValueSave::DeleteCryptor) {
-                self.delete_cryptor();
+            // cleanup is best effort, the value save error is what the caller needs
+            match failed_value_save {
+                FailedValueSave::RestoreCryptor(Some(prior_cryptor)) => {
+                    let _ = self.access.save(self.cryptor_key.clone(), prior_cryptor.to_string());
+                }
+                FailedValueSave::RestoreCryptor(None) => {
+                    self.delete_cryptor();
+                }
+                FailedValueSave::KeepCryptor => {}
             }
 
             return Err(error);

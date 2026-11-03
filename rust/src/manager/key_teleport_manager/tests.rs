@@ -246,6 +246,35 @@ fn legacy_receive_session_json_is_migrated_without_changing_the_request() {
 }
 
 #[test]
+fn failed_legacy_receive_session_upgrade_keeps_the_request() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let receiver = ReceiverSession::from_private_key_bytes([22; 32]).unwrap();
+    let scope = ReceiveScope::current();
+    let legacy = serde_json::json!({
+        "private_key_hex": hex::encode(receiver.private_key_bytes()),
+        "created_at_secs": now_secs(),
+        "network": scope.network,
+        "wallet_mode": scope.wallet_mode,
+    });
+
+    Keychain::global().save_key_teleport_receive_session(&legacy.to_string()).unwrap();
+    let expected_packet = receiver.request().unwrap().packet;
+    let manager = RustKeyTeleportManager::new();
+
+    // the upgrade saves a new cryptor first, then fails to save the re-encrypted session
+    crate::test_support::shared_mock_keychain().fail_save_at(2);
+    let failed = manager.handle_action(Action::StartReceive);
+
+    assert!(failed.is_err(), "the failed upgrade still started a receive");
+    assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveError));
+
+    manager.handle_action(Action::StartReceive).unwrap();
+    let request = receive_request(&manager);
+    assert_eq!(&**request.packet, &expected_packet);
+}
+
+#[test]
 fn receive_start_queued_across_a_full_wipe_cannot_save_a_session() {
     let _guard = crate::test_support::global_state_test_lock().blocking_lock();
     init_globals();
