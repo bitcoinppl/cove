@@ -99,7 +99,7 @@ async fn backup_wallets_defers_remaining_writes_when_disable_starts_after_upload
     let xpub = sample_xpub(&metadata);
     Keychain::global().save_wallet_xpub(&metadata.id, xpub.parse().unwrap()).unwrap();
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let PersistedCloudBackupState::Configured(previous_configured) =
         Database::global().cloud_backup_state.get().unwrap()
     else {
@@ -211,7 +211,7 @@ async fn reupload_all_wallets_persists_full_cloud_wallet_count() {
     let metadata = xpub_only_wallet_metadata();
     persist_xpub_wallets(vec![metadata]);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
     globals
         .cloud
@@ -358,7 +358,7 @@ async fn upload_wallet_if_dirty_removes_deleted_wallet_sync_state() {
     configure_enabled_cloud_backup(&manager, globals, 0);
 
     let metadata = WalletMetadata::preview_new();
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     Database::global()
         .cloud_blob_sync_states
@@ -374,7 +374,7 @@ async fn upload_wallet_if_dirty_removes_deleted_wallet_sync_state() {
 
     assert!(Database::global().cloud_blob_sync_states.get(&record_id).unwrap().is_none());
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 0);
-    assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(namespace));
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), Some(namespace));
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -391,7 +391,7 @@ async fn upload_wallet_if_dirty_preserves_newer_dirty_state() {
         .save_all_wallets(metadata.network, metadata.wallet_mode, vec![metadata.clone()])
         .unwrap();
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     Database::global()
         .cloud_blob_sync_states
@@ -424,7 +424,7 @@ async fn upload_wallet_if_dirty_completes_inside_disable_transition_when_already
     persist_xpub_wallets(vec![metadata.clone()]);
     persist_dirty_blob_state(metadata.id.clone());
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = wallet_record_id(metadata.id.as_ref());
     let PersistedCloudBackupState::Configured(previous_configured) =
         Database::global().cloud_backup_state.get().unwrap()
@@ -638,7 +638,7 @@ fn load_origin_less_wallet_with_confirmed_backup(
     database.wallets.save_new_wallet_metadata(origin_less).unwrap();
     drop(wallet);
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = wallet_record_id(id.as_ref());
     let confirmed = PersistedCloudBlobSyncState::wallet(
         namespace_id,
@@ -743,7 +743,7 @@ fn heal_interrupted_wrapped_segwit_switch_with_confirmed_backup(
         Keychain::global().delete_wallet_secret(&id);
     }
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = wallet_record_id(id.as_ref());
     let confirmed = PersistedCloudBlobSyncState::wallet(
         namespace_id,

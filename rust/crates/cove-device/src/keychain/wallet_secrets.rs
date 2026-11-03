@@ -216,7 +216,7 @@ impl WalletSecretStore {
         let _guard = self.1.lock();
         let pair = self.pair(id);
 
-        match pair.state() {
+        match pair.state()? {
             State::Complete { .. } => return Err(KeychainError::WalletSecretExists),
             State::ValueOnly => {
                 if !pair.delete_value() {
@@ -237,7 +237,7 @@ impl WalletSecretStore {
     pub(crate) fn get(&self, id: &WalletId) -> Result<Option<WalletSecret>, KeychainError> {
         // serialize against writers so a read never observes a half-written pair
         let _guard = self.1.lock();
-        let (encrypted_secret, encryption_key) = match self.pair(id).state() {
+        let (encrypted_secret, encryption_key) = match self.pair(id).state()? {
             State::Empty => return Ok(None),
             State::Complete { encrypted_value, serialized_cryptor } => {
                 (encrypted_value, serialized_cryptor)
@@ -268,9 +268,9 @@ impl WalletSecretStore {
         self.pair(id).delete_existing_value_then_cryptor()
     }
 
-    pub(crate) fn has_any(&self, id: &WalletId) -> bool {
+    pub(crate) fn has_any(&self, id: &WalletId) -> Result<bool, KeychainError> {
         let _guard = self.1.lock();
-        !matches!(self.pair(id).state(), State::Empty)
+        Ok(!matches!(self.pair(id).state()?, State::Empty))
     }
 
     fn pair(&self, id: &WalletId) -> EncryptedPair {

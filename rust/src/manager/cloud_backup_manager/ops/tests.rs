@@ -149,7 +149,7 @@ async fn deep_verify_for_test(
 }
 
 async fn hold_wallet_upload_confirmation(globals: &TestGlobals, metadata: &WalletMetadata) {
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = wallet_record_id(metadata.id.as_ref());
     let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
         .load_master_key_from_store()
@@ -388,7 +388,7 @@ fn operation_write_client_for_test(
 fn seed_verifiable_cloud_master_key(globals: &TestGlobals) -> String {
     let prf_key = [7u8; 32];
     let prf_salt = [9u8; 32];
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
         .load_master_key_from_store()
         .unwrap()

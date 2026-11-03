@@ -9,7 +9,7 @@ async fn fetch_cloud_only_wallets_surfaces_unsupported_versions() {
 
     let metadata = xpub_only_wallet_metadata();
     let keychain = Keychain::global();
-    let namespace = CloudBackupKeychain::new(keychain.clone()).namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::new(keychain.clone()).namespace_id().unwrap().unwrap();
     let master_key =
         cove_cspp::Cspp::new(keychain.clone()).load_master_key_from_store().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
@@ -40,7 +40,7 @@ async fn detail_reports_other_backup_namespaces() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(current_namespace.clone(), vec![1, 2, 3]);
     globals.cloud.set_wallet_files(
         current_namespace,
@@ -102,7 +102,7 @@ async fn other_backup_summary_counts_only_wallets_missing_from_local_wallets() {
     let local_record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     persist_xpub_wallets(vec![metadata]);
 
-    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_wallet_files(current_namespace.clone(), Vec::new());
 
     let other_master_key = cove_cspp::master_key::MasterKey::generate();
@@ -186,7 +186,7 @@ async fn detail_refresh_keeps_current_detail_when_other_namespace_inspection_fai
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_wallet_files(current_namespace, Vec::new());
 
     let other_master_key = cove_cspp::master_key::MasterKey::generate();
@@ -221,7 +221,7 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
     configure_enabled_cloud_backup(&manager, globals, 0);
     globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
 
-    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     CloudBackupKeychain::global()
         .save_passkey_and_namespace(&[9, 8, 7], [6; 32], &current_namespace)
         .unwrap();
@@ -260,12 +260,15 @@ async fn recover_other_backups_keeps_current_passkey_metadata() {
     assert_eq!(report.wallets_failed, 0);
     assert_eq!(globals.cloud.uploaded_wallet_backup_count(), 1);
     assert!(!globals.cloud.has_namespace(&other_namespace));
-    assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(current_namespace.clone()));
+    assert_eq!(
+        CloudBackupKeychain::global().namespace_id().unwrap(),
+        Some(current_namespace.clone())
+    );
     assert_eq!(
         globals.keychain.get_entry(CSPP_NAMESPACE_ID_KEY).as_deref(),
         Some(current_namespace.as_str())
     );
-    assert_eq!(CloudBackupKeychain::global().load_credential_id(), Some(vec![9, 8, 7]));
+    assert_eq!(CloudBackupKeychain::global().load_credential_id().unwrap(), Some(vec![9, 8, 7]));
     assert!(globals.keychain.get_entry(CSPP_PRF_SALT_KEY).is_some());
 
     let summary =
@@ -281,7 +284,7 @@ async fn recover_other_backups_current_namespace_not_found_fails_closed_without_
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.fail_list_wallet_files_for_namespace(
         current_namespace,
         CloudStorageError::NotFound("current wallet files missing".into()),
@@ -522,7 +525,7 @@ async fn delete_other_backups_removes_only_non_current_namespaces() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(current_namespace.clone(), vec![1, 2, 3]);
     globals.cloud.set_wallet_files(
         current_namespace.clone(),
@@ -557,7 +560,7 @@ async fn delete_other_backups_returns_offline_when_namespace_inspection_is_offli
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let current_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(current_namespace.clone(), vec![1, 2, 3]);
 
     let other_master_key = cove_cspp::master_key::MasterKey::generate();

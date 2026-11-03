@@ -867,6 +867,7 @@ impl RustCloudBackupManager {
     fn current_namespace_id(&self) -> Result<String, CloudBackupError> {
         CloudBackupKeychain::global()
             .namespace_id()
+            .map_err(|error| CloudBackupError::internal_context("read namespace_id", error))?
             .ok_or_else(|| CloudBackupError::Internal("namespace_id not found in keychain".into()))
     }
 

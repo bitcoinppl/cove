@@ -7,6 +7,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+use cove_device::keychain::{Keychain, KeychainError};
 use cove_util::ResultExt;
 use parking_lot::Mutex;
 use tracing::{error, info, warn};
@@ -215,6 +216,12 @@ pub enum AppInitError {
     #[error("Failed to derive encryption key: {0}")]
     KeyDerivation(String),
 
+    /// The keychain could not be read, so it is unknown whether the database key exists
+    ///
+    /// This is retryable and must not lead to key replacement or data recovery
+    #[error("Unable to read the secure keychain. Unlock your device and reopen Cove. ({0})")]
+    KeychainUnavailable(String),
+
     #[error("Main database migration failed: {0}")]
     MainDatabaseMigration(String),
 
@@ -272,6 +279,13 @@ fn ensure_storage_bootstrapped_internal(track_progress: bool) -> Result<u32, App
     Ok(bdk_count)
 }
 
+fn create_local_encryption_key(keychain: &Keychain) -> Result<[u8; 32], AppInitError> {
+    keychain.create_local_encryption_key().map_err(|error| match error {
+        KeychainError::Read(error) => AppInitError::KeychainUnavailable(error),
+        error => AppInitError::KeyDerivation(error.to_string()),
+    })
+}
+
 /// Returns the pre-recovery BDK database count for use by attempt_bdk_migration
 fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
     crate::logging::init();
@@ -283,17 +297,20 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
     info!("Starting storage bootstrap");
 
     // load or create local DB encryption key from keychain
-    let keychain = cove_device::keychain::Keychain::global();
+    let keychain = Keychain::global();
     let encrypted_db = cove_common::consts::ROOT_DATA_DIR.join("cove.encrypted.db");
     let key = match keychain.get_local_encryption_key() {
         Ok(Some(key)) => key,
+
+        // a failed read proves nothing about the key, so neither recreate it nor offer recovery
+        Err(KeychainError::Read(error)) => return Err(AppInitError::KeychainUnavailable(error)),
         Ok(None) => {
             if encrypted_db.exists() {
                 return Err(AppInitError::DatabaseKeyMismatch(
                     "local encryption key not found but encrypted databases exist".into(),
                 ));
             }
-            keychain.create_local_encryption_key().map_err_str(AppInitError::KeyDerivation)?
+            create_local_encryption_key(keychain)?
         }
         Err(e) => {
             // partial keychain state: one entry exists but the other is missing
@@ -305,7 +322,7 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
             // no DB exists, safe to purge partial entries and create fresh
             warn!("Purging partial local encryption key entries: {e}");
             keychain.purge_local_encryption_key();
-            keychain.create_local_encryption_key().map_err_str(AppInitError::KeyDerivation)?
+            create_local_encryption_key(keychain)?
         }
     };
     crate::database::encrypted_backend::set_encryption_key(key);

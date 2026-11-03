@@ -36,6 +36,9 @@ pub(crate) enum CloudBackupKeychainError {
     #[error("{0}")]
     Keychain(#[from] KeychainError),
 
+    #[error("{0}")]
+    MasterKey(#[from] cove_cspp::CsppError),
+
     #[error(
         "failed to roll back cloud backup keychain save after original error: {original}; rollback error: {rollback}"
     )]
@@ -75,7 +78,7 @@ impl CloudBackupKeychain {
         Self(keychain)
     }
 
-    pub(crate) fn namespace_id(&self) -> Option<String> {
+    pub(crate) fn namespace_id(&self) -> Result<Option<String>, KeychainError> {
         self.0.get(CSPP_NAMESPACE_ID_KEY.into())
     }
 
@@ -87,8 +90,8 @@ impl CloudBackupKeychain {
         Ok(())
     }
 
-    pub(crate) fn has_prf_salt(&self) -> bool {
-        self.0.get(CSPP_PRF_SALT_KEY.into()).is_some()
+    pub(crate) fn has_prf_salt(&self) -> Result<bool, KeychainError> {
+        Ok(self.0.get(CSPP_PRF_SALT_KEY.into())?.is_some())
     }
 
     pub(crate) fn save_passkey(
@@ -115,11 +118,16 @@ impl CloudBackupKeychain {
         ])
     }
 
-    pub(crate) fn capture_restore_activation_snapshot(&self) -> RestoreActivationKeychainSnapshot {
-        RestoreActivationKeychainSnapshot {
-            metadata: self.snapshot_passkey_metadata(),
-            master_key: Cspp::new(self.0.clone()).capture_active_master_key_snapshot(),
-        }
+    /// Captures the entries a failed restore activation must put back
+    ///
+    /// Fails when any entry cannot be read, since restoring an unread entry would delete it
+    pub(crate) fn capture_restore_activation_snapshot(
+        &self,
+    ) -> Result<RestoreActivationKeychainSnapshot, CloudBackupKeychainError> {
+        Ok(RestoreActivationKeychainSnapshot {
+            metadata: self.snapshot_passkey_metadata()?,
+            master_key: Cspp::new(self.0.clone()).capture_active_master_key_snapshot()?,
+        })
     }
 
     pub(crate) fn restore_activation_snapshot(
@@ -140,12 +148,17 @@ impl CloudBackupKeychain {
         })
     }
 
-    pub(crate) fn snapshot_passkey_metadata(&self) -> PendingEnableLocalMetadataSnapshot {
-        PendingEnableLocalMetadataSnapshot {
-            credential_id: self.0.get(CSPP_CREDENTIAL_ID_KEY.into()),
-            prf_salt: self.0.get(CSPP_PRF_SALT_KEY.into()),
-            namespace_id: self.0.get(CSPP_NAMESPACE_ID_KEY.into()),
-        }
+    /// Captures passkey metadata for a later exact restore
+    ///
+    /// Fails when any entry cannot be read, since restoring an unread entry would delete it
+    pub(crate) fn snapshot_passkey_metadata(
+        &self,
+    ) -> Result<PendingEnableLocalMetadataSnapshot, KeychainError> {
+        Ok(PendingEnableLocalMetadataSnapshot {
+            credential_id: self.0.get(CSPP_CREDENTIAL_ID_KEY.into())?,
+            prf_salt: self.0.get(CSPP_PRF_SALT_KEY.into())?,
+            namespace_id: self.0.get(CSPP_NAMESPACE_ID_KEY.into())?,
+        })
     }
 
     pub(crate) fn restore_passkey_metadata(
@@ -169,7 +182,7 @@ impl CloudBackupKeychain {
     pub(crate) fn load_pending_enable_journal(
         &self,
     ) -> Result<Option<PendingEnableJournal>, CloudBackupKeychainError> {
-        let Some(encoded) = self.0.get(CSPP_PENDING_ENABLE_JOURNAL_KEY.into()) else {
+        let Some(encoded) = self.0.get(CSPP_PENDING_ENABLE_JOURNAL_KEY.into())? else {
             return Ok(None);
         };
 
@@ -189,18 +202,28 @@ impl CloudBackupKeychain {
         Ok(())
     }
 
-    pub(crate) fn load_credential_id(&self) -> Option<Vec<u8>> {
-        self.0.get(CSPP_CREDENTIAL_ID_KEY.into()).and_then(|hex_str| {
+    /// Loads the stored passkey credential ID, or `None` when it is absent or malformed
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the keychain cannot be read
+    pub(crate) fn load_credential_id(&self) -> Result<Option<Vec<u8>>, KeychainError> {
+        Ok(self.0.get(CSPP_CREDENTIAL_ID_KEY.into())?.and_then(|hex_str| {
             hex::decode(hex_str)
                 .inspect_err(|error| {
                     warn!("Failed to decode stored cloud backup passkey metadata: {error}")
                 })
                 .ok()
-        })
+        }))
     }
 
-    pub(crate) fn load_prf_salt(&self) -> Option<[u8; 32]> {
-        self.0.get(CSPP_PRF_SALT_KEY.into()).and_then(|hex_str| {
+    /// Loads the stored PRF salt, or `None` when it is absent or malformed
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the keychain cannot be read
+    pub(crate) fn load_prf_salt(&self) -> Result<Option<[u8; 32]>, KeychainError> {
+        Ok(self.0.get(CSPP_PRF_SALT_KEY.into())?.and_then(|hex_str| {
             hex::decode(hex_str)
                 .inspect_err(|error| {
                     warn!("Failed to decode stored cloud backup passkey metadata: {error}")
@@ -214,7 +237,7 @@ impl CloudBackupKeychain {
                         })
                         .ok()
                 })
-        })
+        }))
     }
 
     pub(crate) fn delete_master_key(&self) -> Result<(), CloudBackupKeychainError> {
@@ -276,8 +299,11 @@ impl CloudBackupKeychain {
         &self,
         entries: &[(&str, String)],
     ) -> Result<(), CloudBackupKeychainError> {
-        let previous_values: Vec<_> =
-            entries.iter().map(|(key, _)| ((*key).to_owned(), self.0.get((*key).into()))).collect();
+        // rollback restores these exact values, so an unread value must stop the save
+        let previous_values = entries
+            .iter()
+            .map(|(key, _)| Ok(((*key).to_owned(), self.0.get((*key).into())?)))
+            .collect::<Result<Vec<_>, KeychainError>>()?;
 
         for (key, value) in entries {
             if let Err(error) = self.0.save((*key).to_owned(), value.clone()) {
@@ -328,7 +354,7 @@ impl CloudBackupKeychain {
     }
 
     fn delete_keychain_item_if_present(&self, key: &str) -> Result<(), KeychainError> {
-        if self.0.get(key.to_owned()).is_some() && !self.0.delete(key.to_owned()) {
+        if self.0.get(key.to_owned())?.is_some() && !self.0.delete(key.to_owned()) {
             warn!("Failed to delete cloud backup keychain item");
             return Err(KeychainError::Delete);
         }

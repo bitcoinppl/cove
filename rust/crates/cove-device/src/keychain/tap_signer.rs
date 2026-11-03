@@ -22,7 +22,7 @@ impl TapSignerBackupStore {
     }
 
     pub(crate) fn get(&self, id: &WalletId) -> Result<Option<Zeroizing<Vec<u8>>>, KeychainError> {
-        let (encrypted_backup, encryption_secret_key) = match self.pair(id).state() {
+        let (encrypted_backup, encryption_secret_key) = match self.pair(id).state()? {
             State::Empty => return Ok(None),
             State::Complete { encrypted_value, serialized_cryptor } => {
                 (encrypted_value, serialized_cryptor)

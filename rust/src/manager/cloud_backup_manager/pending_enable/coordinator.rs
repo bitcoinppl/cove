@@ -78,11 +78,16 @@ impl PendingEnableCoordinator {
             }
         }
 
+        // rollback restores this snapshot, so an unread entry must stop the enable
+        let metadata = cloud_keychain.snapshot_passkey_metadata().map_err(|source| {
+            CloudBackupError::internal_context("snapshot Cloud Backup passkey metadata", source)
+        })?;
+
         let mut journal = PendingEnableJournal::staging(
             context,
             namespace_id.to_owned(),
             PendingEnableNamespaceOwnership::RecoveredExisting,
-            cloud_keychain.snapshot_passkey_metadata(),
+            metadata,
         );
         cloud_keychain.save_pending_enable_journal(&journal).map_err(|source| {
             CloudBackupError::internal_context("claim recovered pending enable ownership", source)
@@ -247,12 +252,17 @@ impl PendingEnableCoordinator {
             }
         }
 
+        // rollback restores this snapshot, so an unread entry must stop the enable
+        let metadata = cloud_keychain.snapshot_passkey_metadata().map_err(|source| {
+            CloudBackupError::internal_context("snapshot Cloud Backup passkey metadata", source)
+        })?;
+
         let master_key = MasterKey::generate();
         let mut journal = PendingEnableJournal::staging(
             context,
             master_key.namespace_id(),
             PendingEnableNamespaceOwnership::FreshOwned,
-            cloud_keychain.snapshot_passkey_metadata(),
+            metadata,
         );
         cloud_keychain.save_pending_enable_journal(&journal).map_err(|source| {
             CloudBackupError::internal_context("claim pending enable ownership", source)
@@ -688,12 +698,17 @@ impl PendingEnableCoordinator {
             })?
             .map(|master_key| master_key.namespace_id());
         let cloud_keychain = self.cloud_keychain();
+        let read_error =
+            |source| CloudBackupError::internal_context("inspect committed passkey", source);
+
+        let namespace_id = cloud_keychain.namespace_id().map_err(read_error)?;
+        let credential_id = cloud_keychain.load_credential_id().map_err(read_error)?;
+        let prf_salt = cloud_keychain.load_prf_salt().map_err(read_error)?;
 
         Ok(active_namespace.as_deref() == Some(journal.namespace_id())
-            && cloud_keychain.namespace_id().as_deref() == Some(journal.namespace_id())
-            && cloud_keychain.load_credential_id().as_deref()
-                == Some(passkey.credential_id.as_slice())
-            && cloud_keychain.load_prf_salt() == Some(passkey.prf_salt))
+            && namespace_id.as_deref() == Some(journal.namespace_id())
+            && credential_id.as_deref() == Some(passkey.credential_id.as_slice())
+            && prf_salt == Some(passkey.prf_salt))
     }
 
     fn promotion_status(&self) -> Result<MasterKeyPromotionStatus, CloudBackupError> {

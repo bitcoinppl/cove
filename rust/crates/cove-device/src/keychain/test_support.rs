@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 
@@ -13,6 +13,7 @@ struct MockKeychainState {
     failing_save_key: Option<String>,
     failing_save_attempt: Option<u8>,
     save_attempts: u8,
+    unreadable_keys: HashSet<String>,
 }
 
 /// In-memory keychain whose state is shared between clones so tests can inspect it after use
@@ -36,6 +37,15 @@ impl MockKeychain {
 
     pub(crate) fn fail_save_for(&self, key: String) {
         self.0.lock().unwrap().failing_save_key = Some(key);
+    }
+
+    /// Makes reads of `key` fail the way a locked platform keychain does
+    pub(crate) fn fail_read_for(&self, key: impl Into<String>) {
+        self.0.lock().unwrap().unreadable_keys.insert(key.into());
+    }
+
+    pub(crate) fn clear_read_failures(&self) {
+        self.0.lock().unwrap().unreadable_keys.clear();
     }
 
     pub(crate) fn entry(&self, key: &str) -> Option<String> {
@@ -62,8 +72,13 @@ impl KeychainAccess for MockKeychain {
         Ok(())
     }
 
-    fn get(&self, key: String) -> Option<String> {
-        self.0.lock().unwrap().entries.get(&key).cloned()
+    fn get(&self, key: String) -> Result<Option<String>, KeychainError> {
+        let state = self.0.lock().unwrap();
+        if state.unreadable_keys.contains(&key) {
+            return Err(KeychainError::Read(format!("{key} is unreadable")));
+        }
+
+        Ok(state.entries.get(&key).cloned())
     }
 
     fn delete(&self, key: String) -> bool {

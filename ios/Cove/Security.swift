@@ -40,6 +40,58 @@ func classifyKeychainAccountEnumeration(
     }
 }
 
+enum KeychainItemReadResult: Sendable {
+    case value(String)
+    case itemNotFound
+    case failure(OSStatus)
+}
+
+/// Separates a missing item from a read failure such as a locked device
+///
+/// Only `errSecItemNotFound` proves absence. Every other failure must reach Rust as an error so
+/// it never replaces or deletes secrets that are still stored
+func classifyKeychainItemRead(status: OSStatus, result: CFTypeRef?) -> KeychainItemReadResult {
+    switch status {
+    case errSecSuccess:
+        guard let data = result as? Data, let value = String(data: data, encoding: .utf8) else {
+            return .failure(errSecDecode)
+        }
+
+        return .value(value)
+
+    case errSecItemNotFound:
+        return .itemNotFound
+
+    default:
+        return .failure(status)
+    }
+}
+
+/// Reads one item with the same query `KeychainSwift.get` uses, keeping the `OSStatus`
+private func readGenericPassword(
+    key: String,
+    accessGroup: String?,
+    synchronizable: Bool
+) -> KeychainItemReadResult {
+    var query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrAccount as String: key,
+        kSecMatchLimit as String: kSecMatchLimitOne,
+        kSecReturnData as String: true,
+    ]
+    if let accessGroup {
+        query[kSecAttrAccessGroup as String] = accessGroup
+    }
+    if synchronizable {
+        query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
+    }
+
+    var result: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+    return classifyKeychainItemRead(status: status, result: result)
+}
+
 private func enumerateGenericPasswordAccounts() -> KeychainAccountEnumerationResult {
     let query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
@@ -54,16 +106,23 @@ private func enumerateGenericPasswordAccounts() -> KeychainAccountEnumerationRes
 
 class KeychainAccessor: KeychainAccess {
     let keychain: KeychainSwift
+    private let itemReader: @Sendable (String) -> KeychainItemReadResult
     private let accountEnumerator: @Sendable () -> KeychainAccountEnumerationResult
 
     init(
         keychain: KeychainSwift = KeychainSwift(),
+        itemReader: (@Sendable (String) -> KeychainItemReadResult)? = nil,
         accountEnumerator: @escaping @Sendable () -> KeychainAccountEnumerationResult =
             { enumerateGenericPasswordAccounts() }
     ) {
         keychain.synchronizable = false
 
+        // `KeychainSwift.get` drops the OSStatus, so reads query the keychain directly
+        let accessGroup = keychain.accessGroup
         self.keychain = keychain
+        self.itemReader = itemReader ?? { key in
+            readGenericPassword(key: key, accessGroup: accessGroup, synchronizable: false)
+        }
         self.accountEnumerator = accountEnumerator
     }
 
@@ -77,8 +136,17 @@ class KeychainAccessor: KeychainAccess {
         }
     }
 
-    func get(key: String) -> String? {
-        keychain.get(key)
+    func get(key: String) throws -> String? {
+        switch itemReader(key) {
+        case let .value(value):
+            return value
+        case .itemNotFound:
+            return nil
+        case let .failure(status):
+            let message = SecCopyErrorMessageString(status, nil) as String? ?? "unknown error"
+            Log.error("Unable to read keychain item, status=\(status): \(message)")
+            throw KeychainError.Read("status=\(status): \(message)")
+        }
     }
 
     func delete(key: String) -> Bool {

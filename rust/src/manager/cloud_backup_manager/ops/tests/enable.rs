@@ -15,7 +15,7 @@ fn seed_retained_active_master() -> ([u8; 32], PendingEnableLocalMetadataSnapsho
         .save_passkey_and_namespace(&[4, 5, 6], [8; 32], &master_key.namespace_id())
         .unwrap();
 
-    (master_key_bytes, cloud_keychain.snapshot_passkey_metadata())
+    (master_key_bytes, cloud_keychain.snapshot_passkey_metadata().unwrap())
 }
 
 fn assert_retained_active_master(
@@ -28,7 +28,10 @@ fn assert_retained_active_master(
         .unwrap();
 
     assert_eq!(active_master_key.as_bytes(), expected_master_key);
-    assert_eq!(CloudBackupKeychain::global().snapshot_passkey_metadata(), *expected_metadata);
+    assert_eq!(
+        CloudBackupKeychain::global().snapshot_passkey_metadata().unwrap(),
+        *expected_metadata
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -161,7 +164,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
     cspp.save_master_key(&prior_master_key).unwrap();
     let cloud_keychain = CloudBackupKeychain::global();
     cloud_keychain.save_passkey_and_namespace(&[7, 8, 9], [8; 32], "prior-namespace").unwrap();
-    let prior_metadata = cloud_keychain.snapshot_passkey_metadata();
+    let prior_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
 
     let master_key = cove_cspp::master_key::MasterKey::generate();
     let matched = NamespaceMatch {
@@ -189,7 +192,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
         &prior_master_key_bytes
     );
     assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::Staged);
-    assert_eq!(cloud_keychain.snapshot_passkey_metadata(), prior_metadata);
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), prior_metadata);
     let staged_journal = cloud_keychain.load_pending_enable_journal().unwrap().unwrap();
     assert_eq!(
         staged_journal.namespace_ownership(),
@@ -216,7 +219,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         &prior_master_key_bytes
     );
-    assert_eq!(cloud_keychain.snapshot_passkey_metadata(), prior_metadata);
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), prior_metadata);
     assert_eq!(
         cspp.master_key_promotion_status().unwrap(),
         MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Prior)
@@ -227,7 +230,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
 
     manager.pending_enable.rollback_enable_recovery_master_key().unwrap();
-    assert_eq!(cloud_keychain.snapshot_passkey_metadata(), prior_metadata);
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), prior_metadata);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -251,9 +254,9 @@ async fn failed_create_new_enable_does_not_persist_passkey_metadata() {
     ));
 
     let keychain = Keychain::global();
-    assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_none());
-    assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).is_none());
-    assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_none());
+    assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).unwrap().is_none());
+    assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).unwrap().is_none());
+    assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).unwrap().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -280,9 +283,9 @@ async fn failed_no_discovery_confirmation_preserves_only_staged_material() {
     let journal = CloudBackupKeychain::global().load_pending_enable_journal().unwrap().unwrap();
     assert_eq!(journal.namespace_ownership(), PendingEnableNamespaceOwnership::FreshOwned);
     assert!(matches!(journal.phase(), PendingEnableJournalPhase::PasskeyRegistered(_)));
-    assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_none());
-    assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).is_none());
-    assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_none());
+    assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).unwrap().is_none());
+    assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).unwrap().is_none());
+    assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).unwrap().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -547,7 +550,10 @@ async fn enable_with_multiple_matching_namespaces_merges_into_largest_namespace(
     enable_cloud_backup_create_new(&manager).await.unwrap();
 
     assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-    assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(second_namespace.clone()));
+    assert_eq!(
+        CloudBackupKeychain::global().namespace_id().unwrap(),
+        Some(second_namespace.clone())
+    );
     assert_eq!(Database::global().cloud_backup_state.get().unwrap().wallet_count(), Some(3));
     assert!(globals.cloud.has_namespace(&second_namespace));
     wait_for_test_condition(
@@ -694,7 +700,10 @@ async fn enable_merge_cleans_up_a_namespace_holding_a_master_key_in_another_netw
     enable_cloud_backup_create_new(&manager).await.unwrap();
 
     assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-    assert_eq!(CloudBackupKeychain::global().namespace_id(), Some(active_namespace.clone()));
+    assert_eq!(
+        CloudBackupKeychain::global().namespace_id().unwrap(),
+        Some(active_namespace.clone())
+    );
 
     let restored = Keychain::global().get_wallet_secret(&legacy_wallet.id).unwrap().unwrap();
     assert_eq!(restored.as_xprv().unwrap().expose(), tprv.to_string());
@@ -779,7 +788,7 @@ async fn enable_recovery_fails_closed_when_matched_wallet_listing_is_missing() {
         crate::manager::cloud_backup_manager::error::GENERIC_CLOUD_BACKUP_ERROR_MESSAGE
     );
     assert!(!error.to_string().contains("wallet files missing"), "{error}");
-    assert_eq!(CloudBackupKeychain::global().namespace_id(), None);
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), None);
     assert_eq!(
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Disabled
@@ -909,7 +918,7 @@ async fn fresh_start_new_keeps_prior_active_until_durable_success() {
     assert!(cspp.load_staged_master_key().unwrap().is_none());
     assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
     assert_eq!(
-        CloudBackupKeychain::global().namespace_id().as_deref(),
+        CloudBackupKeychain::global().namespace_id().unwrap().as_deref(),
         Some(staged_namespace.as_str())
     );
 
@@ -943,7 +952,7 @@ async fn onboarding_relaunch_readiness_fails_closed_during_pending_enable_recove
         },
         staged_master_key.namespace_id(),
         PendingEnableNamespaceOwnership::FreshOwned,
-        cloud_keychain.snapshot_passkey_metadata(),
+        cloud_keychain.snapshot_passkey_metadata().unwrap(),
     );
     cloud_keychain.save_pending_enable_journal(&journal).unwrap();
 
@@ -1032,7 +1041,7 @@ async fn fresh_start_new_saved_passkey_cancellation_preserves_prior_active_exact
     reset_cloud_backup_test_state(&manager, globals);
     CONNECTIVITY_MANAGER.set_connection_state(true);
     let (prior_master_key, prior_metadata) = seed_retained_active_master();
-    let prior_namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let prior_namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(prior_namespace.clone(), vec![1, 2, 3]);
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
     globals.passkey.set_authenticate_result(Err(PasskeyError::UserCancelled));
@@ -1043,7 +1052,7 @@ async fn fresh_start_new_saved_passkey_cancellation_preserves_prior_active_exact
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     let staged_namespace = cspp.load_staged_master_key().unwrap().unwrap().namespace_id();
     assert_retained_active_master(&prior_master_key, &prior_metadata);
-    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), prior_namespace);
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap().unwrap(), prior_namespace);
     assert_eq!(globals.cloud.master_key_backup_bytes(&prior_namespace), Some(vec![1, 2, 3]));
     assert!(!globals.cloud.has_master_key_backup(&staged_namespace));
     assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::Staged);
@@ -1077,7 +1086,7 @@ async fn fresh_start_new_wallet_upload_failure_after_wrapper_preserves_prior_act
     assert!(globals.cloud.wallet_backup_upload_attempt_count() > 0);
     assert!(matches!(manager.current_status(), CloudBackupStatus::Error(_)));
     assert_retained_active_master(&prior_master_key, &prior_metadata);
-    assert_ne!(CloudBackupKeychain::global().namespace_id().unwrap(), staged_namespace);
+    assert_ne!(CloudBackupKeychain::global().namespace_id().unwrap().unwrap(), staged_namespace);
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
 }
 
@@ -1225,7 +1234,7 @@ async fn existing_passkey_onboarding_recovery_completes_verification() {
 
     // the existing passkey and backup are adopted, never replaced
     assert_eq!(globals.passkey.create_count(), 0);
-    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), existing_namespace);
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap().unwrap(), existing_namespace);
     assert_eq!(
         globals.cloud.master_key_backup_bytes(&existing_namespace),
         Some(existing_master_backup)
@@ -1358,7 +1367,7 @@ async fn cancelled_passkey_restore_does_not_fall_back_to_local_master_key() {
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_master_key(&local_master_key).unwrap();
     globals.cloud.set_wallet_files(local_namespace_id.clone(), vec!["wallet-test.json".into()]);
-    let passkey_metadata = CloudBackupKeychain::global().snapshot_passkey_metadata();
+    let passkey_metadata = CloudBackupKeychain::global().snapshot_passkey_metadata().unwrap();
 
     let remote_master_key = cove_cspp::master_key::MasterKey::generate();
     let remote_namespace_id = remote_master_key.namespace_id();
@@ -1381,12 +1390,15 @@ async fn cancelled_passkey_restore_does_not_fall_back_to_local_master_key() {
     let error = operation.restore_from_cloud_backup(&manager).await.unwrap_err();
 
     assert!(matches!(error, CloudBackupError::PasskeyDiscoveryCancelled));
-    assert_eq!(CloudBackupKeychain::global().namespace_id(), None);
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), None);
 
     // the local master key and passkey metadata survive the cancelled restore untouched
     assert_eq!(
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         local_master_key.as_bytes()
     );
-    assert_eq!(CloudBackupKeychain::global().snapshot_passkey_metadata(), passkey_metadata);
+    assert_eq!(
+        CloudBackupKeychain::global().snapshot_passkey_metadata().unwrap(),
+        passkey_metadata
+    );
 }

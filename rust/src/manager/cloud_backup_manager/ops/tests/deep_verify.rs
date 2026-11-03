@@ -186,7 +186,7 @@ async fn manual_verification_repairs_missing_master_key_wrapper_through_supervis
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
     globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
 
@@ -222,7 +222,7 @@ async fn manual_verification_loads_wallet_inventory_before_wrapper_repair() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.fail_list_wallet_files("list failed");
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
 
@@ -314,7 +314,7 @@ async fn deep_verify_reads_each_wallet_backup_once() {
     configure_enabled_cloud_backup(&manager, globals, 1);
     seed_verifiable_cloud_master_key(globals);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
         .load_master_key_from_store()
         .unwrap()
@@ -386,7 +386,7 @@ async fn deep_verify_preserves_unsupported_remote_wallet_backups() {
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
     let keychain = Keychain::global();
-    let namespace = CloudBackupKeychain::new(keychain.clone()).namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::new(keychain.clone()).namespace_id().unwrap().unwrap();
     let master_key =
         cove_cspp::Cspp::new(keychain.clone()).load_master_key_from_store().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
@@ -417,7 +417,7 @@ async fn deep_verify_retries_when_remote_wallet_truth_is_unknown() {
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     globals
         .cloud
@@ -484,7 +484,7 @@ async fn deep_verify_awaits_upload_confirmation_when_remote_revision_is_stale() 
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
         .load_master_key_from_store()
@@ -528,7 +528,7 @@ async fn verification_retry_after_passkey_cancel_verifies_without_new_passkey() 
     configure_enabled_cloud_backup(&manager, globals, 0);
     CONNECTIVITY_MANAGER.set_connection_state(true);
     seed_verifiable_cloud_master_key(globals);
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     let master_key_bytes = *cspp.load_master_key_from_store().unwrap().unwrap().as_bytes();
     let passkey_metadata = CloudBackupKeychain::global().snapshot_passkey_metadata();
@@ -545,7 +545,7 @@ async fn verification_retry_after_passkey_cancel_verifies_without_new_passkey() 
 
     // cancelling leaves the backup it was verifying exactly as it was, checked before the retry
     // can repair anything
-    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), namespace);
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap().unwrap(), namespace);
     assert_eq!(cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(), &master_key_bytes);
     assert_eq!(CloudBackupKeychain::global().snapshot_passkey_metadata(), passkey_metadata);
     assert!(master_key_backup.is_some());
@@ -559,5 +559,5 @@ async fn verification_retry_after_passkey_cancel_verifies_without_new_passkey() 
     .await;
 
     assert_eq!(globals.passkey.create_count(), 0);
-    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap(), namespace);
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap().unwrap(), namespace);
 }

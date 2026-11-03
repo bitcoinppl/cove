@@ -8,7 +8,7 @@ async fn disable_cloud_backup_deletes_active_namespace_and_clears_local_cloud_st
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     Database::global()
         .cloud_blob_sync_states
@@ -26,7 +26,7 @@ async fn disable_cloud_backup_deletes_active_namespace_and_clears_local_cloud_st
         PersistedCloudBackupStatus::Disabled
     );
     assert!(Database::global().cloud_blob_sync_states.list().unwrap().is_empty());
-    assert!(CloudBackupKeychain::global().namespace_id().is_none());
+    assert!(CloudBackupKeychain::global().namespace_id().unwrap().is_none());
     assert!(
         globals.cloud.deleted_namespace_policies().contains(&CloudAccessPolicy::ConsentAllowed)
     );
@@ -39,7 +39,7 @@ async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals.keychain.fail_delete_at(1);
 
@@ -69,7 +69,7 @@ async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespa
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals
         .cloud
@@ -92,7 +92,7 @@ async fn disable_cloud_backup_uses_unique_generation_for_each_attempt() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals
         .cloud
@@ -115,7 +115,7 @@ async fn keep_cloud_backup_enabled_clears_rolled_back_disable_failure() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals
         .cloud
@@ -154,7 +154,7 @@ async fn keep_cloud_backup_enabled_resumes_dirty_wallet_marked_during_disable_fe
 
     let metadata = xpub_only_wallet_metadata();
     persist_xpub_wallets(vec![metadata.clone()]);
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = wallet_record_id(metadata.id.as_ref());
     let PersistedCloudBackupState::Configured(previous_configured) =
         Database::global().cloud_backup_state.get().unwrap()
@@ -243,7 +243,7 @@ async fn keep_cloud_backup_enabled_ignores_stale_disabling_generation() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let PersistedCloudBackupState::Configured(previous_configured) =
         Database::global().cloud_backup_state.get().unwrap()
     else {
@@ -279,7 +279,7 @@ async fn disable_cloud_backup_blocks_other_namespaces_without_deleting_them() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let other_namespace = cove_cspp::master_key::MasterKey::generate().namespace_id();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals.cloud.set_master_key_backup(other_namespace.clone(), vec![4, 5, 6]);
@@ -303,7 +303,7 @@ async fn disable_cloud_backup_blocks_active_exclusive_operation_without_persisti
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     let claim =
         CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::RecreateManifest, 1);
@@ -364,7 +364,7 @@ async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain(
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals.cloud.fail_delete_namespace("delete failed");
 
@@ -375,7 +375,10 @@ async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain(
     let disabling = persisted_disabling();
     assert!(disabling.delete_started_at.is_some());
     assert_eq!(disabling.last_error.as_deref(), Some(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE));
-    assert_eq!(CloudBackupKeychain::global().namespace_id().as_deref(), Some(namespace.as_str()));
+    assert_eq!(
+        CloudBackupKeychain::global().namespace_id().unwrap().as_deref(),
+        Some(namespace.as_str())
+    );
     assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
 }
 
@@ -386,7 +389,7 @@ async fn disable_cloud_backup_not_found_listing_retries_then_fails_closed() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals.cloud.fail_list_wallet_files_for_namespace(
         namespace.clone(),
@@ -403,7 +406,10 @@ async fn disable_cloud_backup_not_found_listing_retries_then_fails_closed() {
     assert_eq!(globals.cloud.list_wallet_files_attempt_count_for_namespace(&namespace), 4);
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), 0);
     assert!(globals.cloud.has_namespace(&namespace));
-    assert_eq!(CloudBackupKeychain::global().namespace_id().as_deref(), Some(namespace.as_str()));
+    assert_eq!(
+        CloudBackupKeychain::global().namespace_id().unwrap().as_deref(),
+        Some(namespace.as_str())
+    );
     let disabling = persisted_disabling();
     assert!(disabling.delete_started_at.is_none());
     assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
@@ -416,7 +422,7 @@ async fn disable_cloud_backup_delete_not_found_finishes_cleanup() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals.cloud.fail_delete_namespace_not_found("already deleted");
 
@@ -426,7 +432,7 @@ async fn disable_cloud_backup_delete_not_found_finishes_cleanup() {
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Disabled
     );
-    assert!(CloudBackupKeychain::global().namespace_id().is_none());
+    assert!(CloudBackupKeychain::global().namespace_id().unwrap().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -436,7 +442,7 @@ async fn persisted_disabling_on_restart_resumes_to_disabled() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     let PersistedCloudBackupState::Configured(previous_configured) =
         Database::global().cloud_backup_state.get().unwrap()
@@ -462,7 +468,7 @@ async fn persisted_disabling_on_restart_resumes_to_disabled() {
         !globals.cloud.has_namespace(&namespace)
             && Database::global().cloud_backup_state.get().unwrap().status()
                 == PersistedCloudBackupStatus::Disabled
-            && CloudBackupKeychain::global().namespace_id().is_none()
+            && CloudBackupKeychain::global().namespace_id().unwrap().is_none()
             && restarted_manager.model_snapshot().status == CloudBackupStatus::Disabled
     })
     .await;
@@ -472,7 +478,7 @@ async fn persisted_disabling_on_restart_resumes_to_disabled() {
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Disabled
     );
-    assert!(CloudBackupKeychain::global().namespace_id().is_none());
+    assert!(CloudBackupKeychain::global().namespace_id().unwrap().is_none());
     assert_eq!(restarted_manager.model_snapshot().status, CloudBackupStatus::Disabled);
 }
 
@@ -483,7 +489,7 @@ async fn keep_cloud_backup_enabled_after_delete_failure_requires_existing_namesp
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
     globals.cloud.fail_delete_namespace("delete failed");
 
@@ -497,6 +503,9 @@ async fn keep_cloud_backup_enabled_after_delete_failure_requires_existing_namesp
         Database::global().cloud_backup_state.get().unwrap().status(),
         PersistedCloudBackupStatus::Enabled
     );
-    assert_eq!(CloudBackupKeychain::global().namespace_id().as_deref(), Some(namespace.as_str()));
+    assert_eq!(
+        CloudBackupKeychain::global().namespace_id().unwrap().as_deref(),
+        Some(namespace.as_str())
+    );
     assert!(current_disable_generation().is_none());
 }

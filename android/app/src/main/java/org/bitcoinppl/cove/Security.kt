@@ -41,7 +41,15 @@ class KeychainAccessor(
         }
     }
 
-    override fun get(key: String): String? = sharedPreferences.getString(key, null)
+    // EncryptedSharedPreferences returns null only for a missing key and throws when a stored
+    // value cannot be read, so every failure must reach Rust as a read error, never as absence
+    override fun get(key: String): String? =
+        try {
+            sharedPreferences.getString(key, null)
+        } catch (e: Exception) {
+            Log.e("KeychainAccessor", "Unable to read keychain item", e)
+            throw KeychainException.Read(e.message ?: e.javaClass.simpleName)
+        }
 
     override fun delete(key: String): Boolean =
         sharedPreferences

@@ -20,7 +20,7 @@ impl LocalEncryptionKeyStore {
     }
 
     pub(crate) fn get(&self) -> Result<Option<[u8; 32]>, KeychainError> {
-        let (encrypted, cryptor_str) = match self.pair().state() {
+        let (encrypted, cryptor_str) = match self.pair().state()? {
             State::Empty => return Ok(None),
             State::Complete { encrypted_value, serialized_cryptor } => {
                 (encrypted_value, serialized_cryptor)
@@ -51,7 +51,9 @@ impl LocalEncryptionKeyStore {
 
     pub(crate) fn create(&self) -> Result<[u8; 32], KeychainError> {
         let pair = self.pair();
-        if pair.value_exists() {
+
+        // a failed read must stop creation, since an existing key may still protect the database
+        if !matches!(pair.state()?, State::Empty) {
             return Err(KeychainError::Save);
         }
 
@@ -115,8 +117,8 @@ mod tests {
         keychain.create_local_encryption_key().unwrap();
         keychain.purge_local_encryption_key();
 
-        assert!(access.get(KEY_NAME.into()).is_none());
-        assert!(access.get(CRYPTOR_NAME.into()).is_none());
+        assert!(access.get(KEY_NAME.into()).unwrap().is_none());
+        assert!(access.get(CRYPTOR_NAME.into()).unwrap().is_none());
     }
 
     #[test]
@@ -125,5 +127,23 @@ mod tests {
 
         assert_eq!(keychain.create_local_encryption_key(), Err(KeychainError::Save));
         assert!(keychain.get_local_encryption_key().unwrap().is_none());
+    }
+
+    #[test]
+    fn unreadable_key_is_neither_reported_missing_nor_replaced() {
+        for unreadable in [KEY_NAME, CRYPTOR_NAME] {
+            let access = MockKeychain::default();
+            let keychain = keychain(access.clone());
+            let original = keychain.create_local_encryption_key().unwrap();
+            let stored = (access.entry(KEY_NAME), access.entry(CRYPTOR_NAME));
+            access.fail_read_for(unreadable);
+
+            assert!(matches!(keychain.get_local_encryption_key(), Err(KeychainError::Read(_))));
+            assert!(matches!(keychain.create_local_encryption_key(), Err(KeychainError::Read(_))));
+            assert_eq!((access.entry(KEY_NAME), access.entry(CRYPTOR_NAME)), stored);
+
+            access.clear_read_failures();
+            assert_eq!(keychain.get_local_encryption_key().unwrap(), Some(original));
+        }
     }
 }

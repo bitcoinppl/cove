@@ -133,7 +133,7 @@ async fn sync_health_reports_uploading_for_fresh_pending_master_key_confirmation
     clear_wallet_upload_runtime_for_test_async(&manager).await;
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let master_json = vec![1, 2, 3];
     let master_revision = master_key_wrapper_revision_hash(&master_json);
     persist_pending_master_key_confirmation(namespace_id.clone(), master_revision);
@@ -164,7 +164,7 @@ async fn sync_health_reports_uploading_for_fresh_pending_master_key_with_local_w
 
     let metadata = xpub_only_wallet_metadata();
     persist_xpub_wallets(vec![metadata]);
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     persist_pending_master_key_confirmation(namespace_id, "pending");
 
     assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::Uploading,);
@@ -193,7 +193,7 @@ async fn force_new_reports_uploading_while_master_key_confirmation_is_pending() 
     enable_cloud_backup_force_new(&manager).await.unwrap();
     confirm_saved_passkey_session(&manager).await;
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     CloudStorage::global_silent_client()
         .delete_wallet_backup(namespace_id.clone(), cspp_master_key_record_id())
         .await
@@ -254,7 +254,7 @@ async fn sync_health_respects_master_key_upload_confirmation_grace() {
 
     let metadata = xpub_only_wallet_metadata();
     persist_xpub_wallets(vec![metadata]);
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
 
     assert_eq!(
         manager.compute_sync_health_with_master_key_grace(Some(&namespace_id)).await,
@@ -329,7 +329,7 @@ async fn sync_and_integrity_skip_pending_upload_candidates() {
         .save_all_wallets(metadata.network, metadata.wallet_mode, vec![metadata.clone()])
         .unwrap();
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     Database::global()
         .cloud_blob_sync_states
@@ -367,7 +367,7 @@ async fn integrity_does_not_retry_sync_after_auto_backup_failure() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 1);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     CloudBackupKeychain::global()
         .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
         .unwrap();
@@ -393,7 +393,7 @@ async fn integrity_warns_when_background_wallet_list_fails() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     CloudBackupKeychain::global()
         .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
         .unwrap();
@@ -416,7 +416,7 @@ async fn refresh_cloud_backup_detail_uses_interactive_wallet_listing() {
     persist_xpub_wallets(vec![metadata.clone()]);
 
     let keychain = Keychain::global();
-    let namespace = CloudBackupKeychain::new(keychain.clone()).namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::new(keychain.clone()).namespace_id().unwrap().unwrap();
     CloudBackupKeychain::new(keychain.clone())
         .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
         .unwrap();
@@ -456,7 +456,7 @@ async fn refresh_cloud_backup_detail_returns_access_error_when_wallet_listing_is
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 1);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.fail_list_wallet_files_for_namespace(
         namespace,
         CloudStorageError::NotFound("wallet files missing".into()),
@@ -482,7 +482,7 @@ async fn incomplete_inventory_snapshot_is_provisional_and_final_failure_remains_
     let record_id = wallet_record_id(metadata.id.as_ref());
     persist_xpub_wallets(vec![metadata]);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_wallet_files_snapshot(namespace.clone(), Vec::new(), false);
     let initial_download_attempts = globals.cloud.wallet_backup_download_attempt_count();
 
@@ -521,7 +521,7 @@ async fn complete_inventory_snapshot_avoids_relisting_current_namespace() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 1);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_wallet_files_snapshot(namespace, Vec::new(), true);
     let initial_list_attempts = globals.cloud.list_wallet_files_attempt_count();
     let initial_snapshot_attempts = globals.cloud.list_wallet_files_snapshot_attempt_count();
@@ -563,7 +563,7 @@ async fn complete_local_snapshot_matching_known_count_avoids_metadata_relisting(
     persist_xpub_wallets(vec![metadata.clone()]);
 
     let keychain = Keychain::global();
-    let namespace = CloudBackupKeychain::new(keychain.clone()).namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::new(keychain.clone()).namespace_id().unwrap().unwrap();
     CloudBackupKeychain::new(keychain.clone())
         .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
         .unwrap();
@@ -651,7 +651,7 @@ async fn authoritative_failure_retains_provisional_rows_in_failed_state() {
     let record_id = wallet_record_id(metadata.id.as_ref());
     persist_xpub_wallets(vec![metadata]);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_wallet_files_snapshot(namespace, Vec::new(), false);
     globals.cloud.fail_list_wallet_files("metadata timed out");
 
@@ -699,7 +699,7 @@ async fn integrity_preserves_unsupported_remote_wallet_backups() {
     persist_xpub_wallets(vec![metadata.clone()]);
 
     let keychain = Keychain::global();
-    let namespace = CloudBackupKeychain::new(keychain.clone()).namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::new(keychain.clone()).namespace_id().unwrap().unwrap();
     CloudBackupKeychain::new(keychain.clone())
         .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
         .unwrap();
@@ -783,7 +783,7 @@ async fn sync_skips_wallets_with_unknown_remote_truth() {
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     persist_xpub_wallets(vec![metadata]);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals
         .cloud
         .set_wallet_files(namespace.clone(), vec![wallet_filename_from_record_id(&record_id)]);
@@ -805,7 +805,7 @@ async fn integrity_refreshes_detail_after_auto_backup_success() {
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     persist_xpub_wallets(vec![metadata]);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     CloudBackupKeychain::global()
         .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
         .unwrap();
@@ -832,7 +832,7 @@ async fn integrity_auto_backup_does_not_query_other_backup_namespaces() {
     let metadata = xpub_only_wallet_metadata();
     persist_xpub_wallets(vec![metadata]);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     CloudBackupKeychain::global()
         .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
         .unwrap();
@@ -858,7 +858,7 @@ async fn integrity_does_not_retry_sync_after_auto_backup_success_when_listing_st
     let metadata = xpub_only_wallet_metadata();
     persist_xpub_wallets(vec![metadata]);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     CloudBackupKeychain::global()
         .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
         .unwrap();
@@ -880,7 +880,7 @@ async fn integrity_refreshes_detail_after_auto_backup_failure() {
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     persist_xpub_wallets(vec![metadata]);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     CloudBackupKeychain::global()
         .save_passkey_and_namespace(&[1, 2, 3, 4], [9; 32], &namespace)
         .unwrap();
@@ -905,7 +905,7 @@ async fn sync_now_offline_uploads_nothing_then_uploads_after_reconnect() {
     let metadata = xpub_only_wallet_metadata();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     persist_xpub_wallets(vec![metadata]);
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
 
     CONNECTIVITY_MANAGER.set_connection_state(false);
     manager.do_sync_unsynced_wallets().await.unwrap_err();

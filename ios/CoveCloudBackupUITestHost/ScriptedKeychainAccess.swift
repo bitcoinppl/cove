@@ -9,7 +9,7 @@ final class ScriptedKeychainAccess: KeychainAccess, @unchecked Sendable {
         lock.withLock { values[key] = value }
     }
 
-    func get(key: String) -> String? {
+    func get(key: String) throws -> String? {
         lock.withLock { values[key] }
     }
 

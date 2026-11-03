@@ -2,6 +2,9 @@
 pub enum CsppError {
     #[error("unable to save: {0}")]
     Save(String),
+    /// The store could not read an entry, so whether it exists is unknown
+    #[error("unable to read: {0}")]
+    Read(String),
     #[error("unable to encrypt: {0}")]
     Encrypt(String),
     #[error("unable to decrypt: {0}")]

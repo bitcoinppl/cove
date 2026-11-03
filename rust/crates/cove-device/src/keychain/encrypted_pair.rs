@@ -31,11 +31,15 @@ impl EncryptedPair {
         Self { access, value_key: value_key.into(), cryptor_key: cryptor_key.into() }
     }
 
-    pub(crate) fn state(&self) -> State {
-        let encrypted_value = self.access.get(self.value_key.clone());
-        let serialized_cryptor = self.access.get(self.cryptor_key.clone());
+    /// Reads both halves of the pair
+    ///
+    /// A read failure of either half is returned as an error instead of being classified as a
+    /// missing half, so callers never repair or replace entries that may still exist
+    pub(crate) fn state(&self) -> Result<State, KeychainError> {
+        let encrypted_value = self.access.get(self.value_key.clone())?;
+        let serialized_cryptor = self.access.get(self.cryptor_key.clone())?;
 
-        match (encrypted_value, serialized_cryptor) {
+        let state = match (encrypted_value, serialized_cryptor) {
             (None, None) => State::Empty,
             (Some(encrypted_value), Some(serialized_cryptor)) => State::Complete {
                 encrypted_value,
@@ -45,7 +49,9 @@ impl EncryptedPair {
             (None, Some(serialized_cryptor)) => {
                 State::CryptorOnly { serialized_cryptor: Zeroizing::new(serialized_cryptor) }
             }
-        }
+        };
+
+        Ok(state)
     }
 
     pub(crate) fn delete_value(&self) -> bool {
@@ -56,19 +62,27 @@ impl EncryptedPair {
         self.access.delete(self.cryptor_key.clone())
     }
 
-    pub(crate) fn value_exists(&self) -> bool {
-        self.access.get(self.value_key.clone()).is_some()
-    }
-
-    pub(crate) fn cryptor_exists(&self) -> bool {
-        self.access.get(self.cryptor_key.clone()).is_some()
-    }
-
+    /// Deletes whichever halves exist, value first
+    ///
+    /// Both halves are read before anything is deleted. If either read fails nothing is
+    /// deleted and false is returned, so an unreadable half is never orphaned or reported as
+    /// removed
     pub(crate) fn delete_existing_value_then_cryptor(&self) -> bool {
-        let value_ok = if self.value_exists() { self.delete_value() } else { true };
-        let cryptor_ok = if self.cryptor_exists() { self.delete_cryptor() } else { true };
+        let Ok(state) = self.state() else {
+            return false;
+        };
 
-        value_ok && cryptor_ok
+        match state {
+            State::Empty => true,
+            State::ValueOnly => self.delete_value(),
+            State::CryptorOnly { .. } => self.delete_cryptor(),
+            State::Complete { .. } => {
+                let value_ok = self.delete_value();
+                let cryptor_ok = self.delete_cryptor();
+
+                value_ok && cryptor_ok
+            }
+        }
     }
 
     pub(crate) fn save_atomically(&self, plaintext: &str) -> Result<(), KeychainError> {

@@ -84,6 +84,24 @@ struct MasterKeyPromotionJournal {
     staged: StoredMasterKeyEntries,
 }
 
+/// Persisted master-key state, read under `INIT_LOCK` so one decision sees one snapshot
+///
+/// Every variant comes from successful store reads. A read failure is returned as an error
+/// instead, so it can never be mistaken for `Absent` and trigger key creation
+enum MasterKeyState {
+    /// Neither active entry nor a promotion journal exists
+    Absent,
+
+    /// The active entries decrypt to a master key
+    Active(MasterKey),
+
+    /// Only one of the active entries exists and no promotion journal can repair it
+    Incomplete,
+
+    /// A promotion journal exists and the active entries are not complete
+    PromotionPending,
+}
+
 impl<S: CsppStore> Cspp<S> {
     pub fn new(store: S) -> Self {
         Self(store)
@@ -98,10 +116,15 @@ impl<S: CsppStore> Cspp<S> {
     }
 
     /// Captures the active master-key entries for a later rollback
-    pub fn capture_active_master_key_snapshot(&self) -> ActiveMasterKeySnapshot {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the active entries cannot be read, since restoring an unread
+    /// snapshot would delete entries that still exist
+    pub fn capture_active_master_key_snapshot(&self) -> Result<ActiveMasterKeySnapshot, CsppError> {
+        let _guard = lock_init();
 
-        ActiveMasterKeySnapshot(self.read_active_entries())
+        self.read_active_entries().map(ActiveMasterKeySnapshot)
     }
 
     /// Restores active master-key entries captured before a failed operation
@@ -109,7 +132,7 @@ impl<S: CsppStore> Cspp<S> {
         &self,
         snapshot: &ActiveMasterKeySnapshot,
     ) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = lock_init();
 
         if let Err(error) = self.restore_active_entries(&snapshot.0) {
             Self::clear_cached_master_key();
@@ -124,6 +147,10 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Loads the master key from the store, or generates and saves a new one
     ///
+    /// A new key is generated only when the store positively reports that no active entry and
+    /// no promotion journal exist. Read failures, incomplete entries, and pending promotions
+    /// return errors so an existing key is never replaced
+    ///
     /// Uses double-checked locking to prevent a TOCTOU race where two threads
     /// could both observe no key and generate different master keys
     pub fn get_or_create_master_key(&self) -> Result<MasterKey, CsppError> {
@@ -133,32 +160,34 @@ impl<S: CsppStore> Cspp<S> {
         }
 
         // slow path: acquire init lock for double-checked initialization
-        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = lock_init();
 
         // re-check cache after acquiring lock
         if let Some(bytes) = MASTER_KEY_CACHE.load().as_deref() {
             return Ok(MasterKey::from_bytes(**bytes));
         }
 
-        // try loading from store
-        if let Some(key) = self.get_master_key()? {
-            info!("Master key loaded from keychain");
-            Self::update_cached_master_key(&key);
-            return Ok(key);
-        }
+        match self.load_master_key_state()? {
+            MasterKeyState::Active(key) => {
+                info!("Master key loaded from keychain");
+                Self::update_cached_master_key(&key);
 
-        if self.load_promotion_journal()?.is_some() {
-            return Err(CsppError::InvalidData(
+                Ok(key)
+            }
+            MasterKeyState::PromotionPending => Err(CsppError::InvalidData(
                 "master key promotion must be resolved before creating an active key".into(),
-            ));
+            )),
+            MasterKeyState::Incomplete => {
+                Err(CsppError::InvalidData("active master key entries are incomplete".into()))
+            }
+            MasterKeyState::Absent => {
+                warn!("Master key not found in keychain, generating new key");
+                let key = MasterKey::generate();
+                self.save_master_key_locked(&key)?;
+
+                Ok(key)
+            }
         }
-
-        // generate and save new key
-        warn!("Master key not found in keychain, generating new key");
-        let key = MasterKey::generate();
-        self.save_master_key_locked(&key)?;
-
-        Ok(key)
     }
 
     /// Saves the master key encrypted via the underlying store
@@ -168,7 +197,7 @@ impl<S: CsppStore> Cspp<S> {
     /// the plaintext key from being accidentally exposed if other code enumerates
     /// keychain entries — it must be explicitly decrypted to be read
     pub fn save_master_key(&self, master_key: &MasterKey) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = lock_init();
 
         if self.load_promotion_journal()?.is_some() {
             return Err(CsppError::InvalidData(
@@ -181,7 +210,7 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Saves a fresh master key in an isolated slot without changing active storage or cache
     pub fn save_staged_master_key(&self, master_key: &MasterKey) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = lock_init();
 
         if self.load_promotion_journal()?.is_some() {
             return Err(CsppError::InvalidData(
@@ -189,7 +218,7 @@ impl<S: CsppStore> Cspp<S> {
             ));
         }
 
-        let existing = self.read_staged_entries();
+        let existing = self.read_staged_entries()?;
         if existing.is_complete() {
             let existing_key = match Self::decrypt_entries(&existing) {
                 Ok(existing_key) => existing_key,
@@ -239,9 +268,15 @@ impl<S: CsppStore> Cspp<S> {
     /// While a promotion is pending, the durable promotion journal is authoritative
     /// and the isolated staging slot is only a repairable copy
     pub fn load_staged_master_key(&self) -> Result<Option<MasterKey>, CsppError> {
+        let _guard = lock_init();
+
+        self.load_staged_master_key_locked()
+    }
+
+    fn load_staged_master_key_locked(&self) -> Result<Option<MasterKey>, CsppError> {
         let entries = match self.load_promotion_journal()? {
             Some(journal) => journal.staged,
-            None => self.read_staged_entries(),
+            None => self.read_staged_entries()?,
         };
 
         if entries.is_absent() {
@@ -257,7 +292,7 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Discards an unpromoted staged master key
     pub fn discard_staged_master_key(&self) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = lock_init();
 
         if self.load_promotion_journal()?.is_some() {
             return Err(CsppError::InvalidData(
@@ -273,12 +308,12 @@ impl<S: CsppStore> Cspp<S> {
     /// This operation is idempotent. A caller must separately commit or roll back
     /// the promotion after its own durable state has been finalized
     pub fn promote_staged_master_key(&self) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = lock_init();
 
         let journal = match self.load_promotion_journal()? {
             Some(journal) => journal,
             None => {
-                let staged = self.read_staged_entries();
+                let staged = self.read_staged_entries()?;
                 if !staged.is_complete() {
                     return Err(CsppError::InvalidData(
                         "no complete staged master key is available for promotion".into(),
@@ -286,9 +321,11 @@ impl<S: CsppStore> Cspp<S> {
                 }
                 Self::decrypt_entries(&staged)?;
 
+                // the journal's prior entries are what rollback restores, so they must come
+                // from a successful read rather than an assumed-absent slot
                 let journal = MasterKeyPromotionJournal {
                     version: MASTER_KEY_PROMOTION_JOURNAL_VERSION,
-                    prior: self.read_active_entries(),
+                    prior: self.read_active_entries()?,
                     staged,
                 };
 
@@ -305,7 +342,7 @@ impl<S: CsppStore> Cspp<S> {
             return Err(error);
         }
 
-        let installed = self.read_active_entries();
+        let installed = self.read_active_entries()?;
         if installed != journal.staged {
             Self::clear_cached_master_key();
 
@@ -322,10 +359,10 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Commits an installed promotion and removes its staged and rollback material
     pub fn commit_master_key_promotion(&self) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = lock_init();
 
         let Some(journal) = self.load_promotion_journal()? else {
-            if self.read_staged_entries().is_absent() {
+            if self.read_staged_entries()?.is_absent() {
                 return Ok(());
             }
 
@@ -334,7 +371,7 @@ impl<S: CsppStore> Cspp<S> {
             ));
         };
 
-        let active = self.read_active_entries();
+        let active = self.read_active_entries()?;
         if active != journal.staged {
             Self::clear_cached_master_key();
 
@@ -353,10 +390,13 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Reactivates the prior master key while retaining staged promotion material for retry
     pub fn restore_prior_master_key_for_retry(&self) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = lock_init();
 
         let Some(journal) = self.load_promotion_journal()? else {
-            if matches!(self.master_key_promotion_status()?, MasterKeyPromotionStatus::Staged) {
+            if matches!(
+                self.master_key_promotion_status_locked()?,
+                MasterKeyPromotionStatus::Staged
+            ) {
                 return Ok(());
             }
 
@@ -371,7 +411,7 @@ impl<S: CsppStore> Cspp<S> {
             return Err(error);
         }
 
-        if self.read_active_entries() != journal.prior {
+        if self.read_active_entries()? != journal.prior {
             Self::clear_cached_master_key();
 
             return Err(CsppError::Save(
@@ -386,7 +426,7 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Restores the exact active entries captured before promotion
     pub fn rollback_master_key_promotion(&self) -> Result<(), CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let _guard = lock_init();
 
         let Some(journal) = self.load_promotion_journal()? else {
             return self.restore_staged_entries(&StoredMasterKeyEntries::default());
@@ -398,7 +438,7 @@ impl<S: CsppStore> Cspp<S> {
             return Err(error);
         }
 
-        if self.read_active_entries() != journal.prior {
+        if self.read_active_entries()? != journal.prior {
             Self::clear_cached_master_key();
 
             return Err(CsppError::Save(
@@ -415,8 +455,14 @@ impl<S: CsppStore> Cspp<S> {
 
     /// Reports durable staging and promotion state without mutating it
     pub fn master_key_promotion_status(&self) -> Result<MasterKeyPromotionStatus, CsppError> {
+        let _guard = lock_init();
+
+        self.master_key_promotion_status_locked()
+    }
+
+    fn master_key_promotion_status_locked(&self) -> Result<MasterKeyPromotionStatus, CsppError> {
         let Some(journal) = self.load_promotion_journal()? else {
-            let staged = self.read_staged_entries();
+            let staged = self.read_staged_entries()?;
             if staged.is_absent() {
                 return Ok(MasterKeyPromotionStatus::None);
             }
@@ -431,7 +477,7 @@ impl<S: CsppStore> Cspp<S> {
         };
 
         Self::decrypt_entries(&journal.staged)?;
-        let active = self.read_active_entries();
+        let active = self.read_active_entries()?;
         let active_state = if active == journal.staged {
             MasterKeyPromotionActiveState::Staged
         } else if active == journal.prior {
@@ -449,14 +495,14 @@ impl<S: CsppStore> Cspp<S> {
         expected_staged_namespace: &str,
         expected_prior_namespace: Option<&str>,
     ) -> Result<MasterKeyPromotionEvidence, CsppError> {
-        let _guard = INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let status = self.master_key_promotion_status()?;
+        let _guard = lock_init();
+        let status = self.master_key_promotion_status_locked()?;
         let staged_matches_expected = self
-            .load_staged_master_key()?
+            .load_staged_master_key_locked()?
             .is_some_and(|key| key.namespace_id() == expected_staged_namespace);
         let prior_entries = match self.load_promotion_journal()? {
             Some(journal) => journal.prior,
-            None => self.read_active_entries(),
+            None => self.read_active_entries()?,
         };
 
         let prior_matches_expected = match expected_prior_namespace {
@@ -473,15 +519,21 @@ impl<S: CsppStore> Cspp<S> {
     /// Loads the master key directly from the store, bypassing the in-memory cache
     ///
     /// Used by verification to detect keychain corruption even if the cache
-    /// was populated earlier in the session
+    /// was populated earlier in the session. Returns `None` only when the store reports the
+    /// active entries as absent or incomplete; a read failure is an error
     pub fn load_master_key_from_store(&self) -> Result<Option<MasterKey>, CsppError> {
+        let _guard = lock_init();
+
         self.get_master_key()
     }
 
     /// Deletes the master key and its encryption key from the store
     ///
-    /// Used by debug reset to fully clear CSPP state
+    /// Used by debug reset to fully clear CSPP state. Returns false when any entry could not be
+    /// read or deleted
     pub fn delete_master_key(&self) -> bool {
+        let _guard = lock_init();
+
         let master_key_deleted = self.delete_key_if_present(MASTER_KEY_NAME);
         let encryption_key_deleted =
             self.delete_key_if_present(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE);
@@ -497,15 +549,38 @@ impl<S: CsppStore> Cspp<S> {
             && journal_deleted
     }
 
-    /// Checks whether the master key exists in the store without decrypting it
-    pub fn has_master_key(&self) -> bool {
-        self.0.get(MASTER_KEY_NAME.into()).is_some()
-            && self.0.get(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into()).is_some()
+    /// Checks whether both active master-key entries exist without decrypting them
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when either entry cannot be read
+    pub fn has_master_key(&self) -> Result<bool, CsppError> {
+        let _guard = lock_init();
+
+        Ok(self.read_active_entries()?.is_complete())
     }
 
-    /// Loads the master key, returns None if not found
+    /// Reads active, journal, and decrypted key state as one typed snapshot
+    fn load_master_key_state(&self) -> Result<MasterKeyState, CsppError> {
+        let active = self.read_active_entries()?;
+        if active.is_complete() {
+            return Self::decrypt_entries(&active).map(MasterKeyState::Active);
+        }
+
+        if self.load_promotion_journal()?.is_some() {
+            return Ok(MasterKeyState::PromotionPending);
+        }
+
+        if active.is_absent() {
+            return Ok(MasterKeyState::Absent);
+        }
+
+        Ok(MasterKeyState::Incomplete)
+    }
+
+    /// Loads the master key, returning `None` when the active entries are absent or incomplete
     fn get_master_key(&self) -> Result<Option<MasterKey>, CsppError> {
-        let entries = self.read_active_entries();
+        let entries = self.read_active_entries()?;
 
         info!(
             encryption_key_found = entries.encryption_key_and_nonce.is_some(),
@@ -525,7 +600,8 @@ impl<S: CsppStore> Cspp<S> {
     }
 
     fn save_master_key_locked(&self, master_key: &MasterKey) -> Result<(), CsppError> {
-        let prior = self.read_active_entries();
+        // rollback restores these exact entries, so an unread prior must stop the write
+        let prior = self.read_active_entries()?;
         let replacement = Self::encrypt_master_key(master_key)?;
 
         if let Err(error) = self.restore_active_entries(&replacement) {
@@ -542,7 +618,7 @@ impl<S: CsppStore> Cspp<S> {
             return Err(error);
         }
 
-        let installed = self.read_active_entries();
+        let installed = self.read_active_entries()?;
         if installed != replacement {
             let rollback = self.restore_active_entries(&prior);
             Self::refresh_cache_from_entries(&prior);
@@ -588,19 +664,27 @@ impl<S: CsppStore> Cspp<S> {
         Ok(MasterKey::from_bytes(bytes))
     }
 
-    fn read_active_entries(&self) -> StoredMasterKeyEntries {
+    fn read_active_entries(&self) -> Result<StoredMasterKeyEntries, CsppError> {
         self.read_entries(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE, MASTER_KEY_NAME)
     }
 
-    fn read_staged_entries(&self) -> StoredMasterKeyEntries {
+    fn read_staged_entries(&self) -> Result<StoredMasterKeyEntries, CsppError> {
         self.read_entries(STAGED_MASTER_KEY_ENCRYPTION_KEY_AND_NONCE, STAGED_MASTER_KEY_NAME)
     }
 
-    fn read_entries(&self, encryption_key: &str, master_key: &str) -> StoredMasterKeyEntries {
-        StoredMasterKeyEntries {
-            encryption_key_and_nonce: self.0.get(encryption_key.to_owned()),
-            encrypted_master_key: self.0.get(master_key.to_owned()),
-        }
+    fn read_entries(
+        &self,
+        encryption_key: &str,
+        master_key: &str,
+    ) -> Result<StoredMasterKeyEntries, CsppError> {
+        Ok(StoredMasterKeyEntries {
+            encryption_key_and_nonce: self.read_entry(encryption_key)?,
+            encrypted_master_key: self.read_entry(master_key)?,
+        })
+    }
+
+    fn read_entry(&self, key: &str) -> Result<Option<String>, CsppError> {
+        self.0.get(key.to_owned()).map_err_prefix(key, CsppError::Read)
     }
 
     fn restore_active_entries(&self, entries: &StoredMasterKeyEntries) -> Result<(), CsppError> {
@@ -624,7 +708,7 @@ impl<S: CsppStore> Cspp<S> {
         self.restore_entry(encryption_key_name, entries.encryption_key_and_nonce.as_deref())?;
         self.restore_entry(master_key_name, entries.encrypted_master_key.as_deref())?;
 
-        let restored = self.read_entries(encryption_key_name, master_key_name);
+        let restored = self.read_entries(encryption_key_name, master_key_name)?;
         if &restored != entries {
             return Err(CsppError::Save(format!(
                 "unable to verify restored master key entries for {master_key_name}"
@@ -644,12 +728,12 @@ impl<S: CsppStore> Cspp<S> {
     }
 
     fn delete_entry_exact(&self, key: &str) -> Result<(), CsppError> {
-        if self.0.get(key.to_owned()).is_none() {
+        if self.read_entry(key)?.is_none() {
             return Ok(());
         }
 
         self.0.delete(key.to_owned());
-        if self.0.get(key.to_owned()).is_some() {
+        if self.read_entry(key)?.is_some() {
             return Err(CsppError::Save(format!("unable to delete {key}")));
         }
 
@@ -663,7 +747,7 @@ impl<S: CsppStore> Cspp<S> {
     }
 
     fn load_promotion_journal(&self) -> Result<Option<MasterKeyPromotionJournal>, CsppError> {
-        let Some(serialized) = self.0.get(MASTER_KEY_PROMOTION_JOURNAL.into()) else {
+        let Some(serialized) = self.read_entry(MASTER_KEY_PROMOTION_JOURNAL)? else {
             return Ok(None);
         };
 
@@ -695,14 +779,24 @@ impl<S: CsppStore> Cspp<S> {
         MASTER_KEY_CACHE.store(Some(Arc::new(Zeroizing::new(*master_key.as_bytes()))));
     }
 
+    /// Returns false when the entry could not be read, so an unreadable entry is never reported
+    /// as deleted
     fn delete_key_if_present(&self, key: &str) -> bool {
-        self.0.get(key.to_owned()).is_none() || self.0.delete(key.to_owned())
+        match self.read_entry(key) {
+            Ok(None) => true,
+            Ok(Some(_)) => self.0.delete(key.to_owned()),
+            Err(_) => false,
+        }
     }
+}
+
+fn lock_init() -> std::sync::MutexGuard<'static, ()> {
+    INIT_LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::sync::{Arc, Mutex};
 
     use super::*;
@@ -742,8 +836,8 @@ mod tests {
             Ok(())
         }
 
-        fn get(&self, key: String) -> Option<String> {
-            self.0.lock().unwrap().get(&key).cloned()
+        fn get(&self, key: String) -> Result<Option<String>, String> {
+            Ok(self.0.lock().unwrap().get(&key).cloned())
         }
 
         fn delete(&self, key: String) -> bool {
@@ -759,6 +853,7 @@ mod tests {
         entries: HashMap<String, String>,
         mutation_count: usize,
         fail_at: Option<usize>,
+        unreadable_keys: HashSet<String>,
     }
 
     impl FailNthStore {
@@ -774,6 +869,19 @@ mod tests {
                     .collect(),
                 ..Default::default()
             })))
+        }
+
+        /// Makes reads of `key` fail like a locked platform keychain until cleared
+        fn fail_reads_of(&self, key: &str) {
+            self.0.lock().unwrap().unreadable_keys.insert(key.to_owned());
+        }
+
+        fn clear_read_failures(&self) {
+            self.0.lock().unwrap().unreadable_keys.clear();
+        }
+
+        fn snapshot(&self) -> HashMap<String, String> {
+            self.0.lock().unwrap().entries.clone()
         }
 
         fn fail_nth_mutation(&self, nth: usize) {
@@ -806,8 +914,13 @@ mod tests {
             Ok(())
         }
 
-        fn get(&self, key: String) -> Option<String> {
-            self.0.lock().unwrap().entries.get(&key).cloned()
+        fn get(&self, key: String) -> Result<Option<String>, Self::Error> {
+            let state = self.0.lock().unwrap();
+            if state.unreadable_keys.contains(&key) {
+                return Err(format!("{key} is unreadable"));
+            }
+
+            Ok(state.entries.get(&key).cloned())
         }
 
         fn delete(&self, key: String) -> bool {
@@ -928,7 +1041,7 @@ mod tests {
         let original = MasterKey::generate();
         let replacement = MasterKey::generate();
         cspp.save_master_key(&original).unwrap();
-        let snapshot = cspp.capture_active_master_key_snapshot();
+        let snapshot = cspp.capture_active_master_key_snapshot().unwrap();
 
         cspp.save_master_key(&replacement).unwrap();
         assert_eq!(cspp.get_or_create_master_key().unwrap().as_bytes(), replacement.as_bytes());
@@ -949,7 +1062,7 @@ mod tests {
         let store = FailNthStore::new();
         let cspp = Cspp::new(store.clone());
         cspp.save_master_key(&MasterKey::generate()).unwrap();
-        let snapshot = cspp.capture_active_master_key_snapshot();
+        let snapshot = cspp.capture_active_master_key_snapshot().unwrap();
         cspp.save_master_key(&MasterKey::generate()).unwrap();
         assert!(MASTER_KEY_CACHE.load().is_some());
         store.fail_nth_mutation(1);
@@ -991,7 +1104,7 @@ mod tests {
         let cspp = Cspp::new(MockStore::with_entries(vec![(MASTER_KEY_NAME, "encrypted")]));
 
         assert!(cspp.delete_master_key());
-        assert!(cspp.0.get(MASTER_KEY_NAME.into()).is_none());
+        assert!(cspp.0.get(MASTER_KEY_NAME.into()).unwrap().is_none());
     }
 
     #[test]
@@ -1005,7 +1118,7 @@ mod tests {
         )]));
 
         assert!(cspp.delete_master_key());
-        assert!(cspp.0.get(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into()).is_none());
+        assert!(cspp.0.get(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE.into()).unwrap().is_none());
     }
 
     #[test]
@@ -1017,14 +1130,14 @@ mod tests {
         let active = deterministic_key(1);
         let staged = deterministic_key(2);
         cspp.save_master_key(&active).unwrap();
-        let active_entries = cspp.read_active_entries();
+        let active_entries = cspp.read_active_entries().unwrap();
 
         cspp.save_staged_master_key(&staged).unwrap();
-        let staged_entries = cspp.read_staged_entries();
+        let staged_entries = cspp.read_staged_entries().unwrap();
         cspp.save_staged_master_key(&staged).unwrap();
 
-        assert_eq!(cspp.read_active_entries(), active_entries);
-        assert_eq!(cspp.read_staged_entries(), staged_entries);
+        assert_eq!(cspp.read_active_entries().unwrap(), active_entries);
+        assert_eq!(cspp.read_staged_entries().unwrap(), staged_entries);
         assert_eq!(cspp.load_staged_master_key().unwrap().unwrap().as_bytes(), staged.as_bytes());
         assert_eq!(cspp.get_or_create_master_key().unwrap().as_bytes(), active.as_bytes());
         assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::Staged);
@@ -1035,16 +1148,16 @@ mod tests {
         let cspp = Cspp::new(FailNthStore::new());
         let staged = deterministic_key(3);
         cspp.save_staged_master_key(&staged).unwrap();
-        let staged_entries = cspp.read_staged_entries();
+        let staged_entries = cspp.read_staged_entries().unwrap();
 
         assert!(cspp.save_staged_master_key(&deterministic_key(4)).is_err());
-        assert_eq!(cspp.read_staged_entries(), staged_entries);
+        assert_eq!(cspp.read_staged_entries().unwrap(), staged_entries);
 
         cspp.discard_staged_master_key().unwrap();
         cspp.0.save(STAGED_MASTER_KEY_NAME.into(), "partial".into()).unwrap();
 
         assert!(cspp.save_staged_master_key(&staged).is_err());
-        assert!(cspp.read_staged_entries().is_absent());
+        assert!(cspp.read_staged_entries().unwrap().is_absent());
     }
 
     #[test]
@@ -1056,16 +1169,16 @@ mod tests {
         let cspp = Cspp::new(store.clone());
         let prior = deterministic_key(5);
         cspp.save_master_key(&prior).unwrap();
-        let prior_entries = cspp.read_active_entries();
+        let prior_entries = cspp.read_active_entries().unwrap();
 
         store.fail_nth_mutation(2);
         assert!(cspp.save_master_key(&deterministic_key(6)).is_err());
-        assert_eq!(cspp.read_active_entries(), prior_entries);
+        assert_eq!(cspp.read_active_entries().unwrap(), prior_entries);
         assert_eq!(cspp.get_or_create_master_key().unwrap().as_bytes(), prior.as_bytes());
 
         store.fail_nth_mutation(2);
         assert!(cspp.save_staged_master_key(&deterministic_key(7)).is_err());
-        assert!(cspp.read_staged_entries().is_absent());
+        assert!(cspp.read_staged_entries().unwrap().is_absent());
     }
 
     #[test]
@@ -1078,14 +1191,14 @@ mod tests {
         let prior = deterministic_key(8);
         let staged = deterministic_key(9);
         cspp.save_master_key(&prior).unwrap();
-        let prior_entries = cspp.read_active_entries();
+        let prior_entries = cspp.read_active_entries().unwrap();
         cspp.save_staged_master_key(&staged).unwrap();
 
         cspp.promote_staged_master_key().unwrap();
-        let promoted_entries = cspp.read_active_entries();
+        let promoted_entries = cspp.read_active_entries().unwrap();
         cspp.promote_staged_master_key().unwrap();
 
-        assert_eq!(cspp.read_active_entries(), promoted_entries);
+        assert_eq!(cspp.read_active_entries().unwrap(), promoted_entries);
         assert_eq!(
             cspp.master_key_promotion_status().unwrap(),
             MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Staged)
@@ -1097,8 +1210,8 @@ mod tests {
 
         recreated.rollback_master_key_promotion().unwrap();
         recreated.rollback_master_key_promotion().unwrap();
-        assert_eq!(recreated.read_active_entries(), prior_entries);
-        assert!(recreated.read_staged_entries().is_absent());
+        assert_eq!(recreated.read_active_entries().unwrap(), prior_entries);
+        assert!(recreated.read_staged_entries().unwrap().is_absent());
         assert_eq!(
             recreated.master_key_promotion_status().unwrap(),
             MasterKeyPromotionStatus::None
@@ -1187,17 +1300,17 @@ mod tests {
         empty_cspp.promote_staged_master_key().unwrap();
         empty_cspp.rollback_master_key_promotion().unwrap();
 
-        assert!(empty_cspp.read_active_entries().is_absent());
+        assert!(empty_cspp.read_active_entries().unwrap().is_absent());
         assert!(MASTER_KEY_CACHE.load().is_none());
 
         let partial_store = FailNthStore::with_entries(vec![(MASTER_KEY_NAME, "prior-raw")]);
         let partial_cspp = Cspp::new(partial_store);
-        let partial_prior = partial_cspp.read_active_entries();
+        let partial_prior = partial_cspp.read_active_entries().unwrap();
         partial_cspp.save_staged_master_key(&deterministic_key(11)).unwrap();
         partial_cspp.promote_staged_master_key().unwrap();
         partial_cspp.rollback_master_key_promotion().unwrap();
 
-        assert_eq!(partial_cspp.read_active_entries(), partial_prior);
+        assert_eq!(partial_cspp.read_active_entries().unwrap(), partial_prior);
         assert!(MASTER_KEY_CACHE.load().is_none());
     }
 
@@ -1248,7 +1361,7 @@ mod tests {
         let cspp = Cspp::new(store.clone());
         let prior = deterministic_key(14);
         cspp.save_master_key(&prior).unwrap();
-        let prior_entries = cspp.read_active_entries();
+        let prior_entries = cspp.read_active_entries().unwrap();
         cspp.save_staged_master_key(&deterministic_key(15)).unwrap();
         cspp.promote_staged_master_key().unwrap();
 
@@ -1264,7 +1377,7 @@ mod tests {
         let recreated = Cspp::new(store);
         recreated.rollback_master_key_promotion().unwrap();
 
-        assert_eq!(recreated.read_active_entries(), prior_entries);
+        assert_eq!(recreated.read_active_entries().unwrap(), prior_entries);
         assert_eq!(
             recreated.master_key_promotion_status().unwrap(),
             MasterKeyPromotionStatus::None
@@ -1299,7 +1412,7 @@ mod tests {
             recreated.master_key_promotion_status().unwrap(),
             MasterKeyPromotionStatus::None
         );
-        assert!(recreated.read_staged_entries().is_absent());
+        assert!(recreated.read_staged_entries().unwrap().is_absent());
         assert_eq!(recreated.get_or_create_master_key().unwrap().as_bytes(), staged.as_bytes());
     }
 
@@ -1320,7 +1433,7 @@ mod tests {
 
         store.fail_nth_mutation(3);
         assert!(cspp.commit_master_key_promotion().is_err());
-        assert!(cspp.read_staged_entries().is_absent());
+        assert!(cspp.read_staged_entries().unwrap().is_absent());
         assert_eq!(
             cspp.master_key_promotion_status().unwrap(),
             MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Staged)
@@ -1340,7 +1453,7 @@ mod tests {
         );
 
         recreated.promote_staged_master_key().unwrap();
-        assert!(!recreated.read_staged_entries().is_absent());
+        assert!(!recreated.read_staged_entries().unwrap().is_absent());
         recreated.commit_master_key_promotion().unwrap();
 
         assert_eq!(
@@ -1359,10 +1472,10 @@ mod tests {
         let staged = deterministic_key(17);
         cspp.save_staged_master_key(&staged).unwrap();
         cspp.promote_staged_master_key().unwrap();
-        let promoted = cspp.read_active_entries();
+        let promoted = cspp.read_active_entries().unwrap();
 
         assert!(cspp.save_master_key(&deterministic_key(18)).is_err());
-        assert_eq!(cspp.read_active_entries(), promoted);
+        assert_eq!(cspp.read_active_entries().unwrap(), promoted);
     }
 
     #[test]
@@ -1376,9 +1489,212 @@ mod tests {
         cspp.promote_staged_master_key().unwrap();
 
         assert!(cspp.delete_master_key());
-        assert!(cspp.read_active_entries().is_absent());
-        assert!(cspp.read_staged_entries().is_absent());
+        assert!(cspp.read_active_entries().unwrap().is_absent());
+        assert!(cspp.read_staged_entries().unwrap().is_absent());
         assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
         assert!(MASTER_KEY_CACHE.load().is_none());
+    }
+
+    const ACTIVE_AND_JOURNAL_SLOTS: [&str; 3] =
+        [MASTER_KEY_NAME, MASTER_KEY_ENCRYPTION_KEY_AND_NONCE, MASTER_KEY_PROMOTION_JOURNAL];
+
+    const ALL_SLOTS: [&str; 5] = [
+        MASTER_KEY_NAME,
+        MASTER_KEY_ENCRYPTION_KEY_AND_NONCE,
+        STAGED_MASTER_KEY_NAME,
+        STAGED_MASTER_KEY_ENCRYPTION_KEY_AND_NONCE,
+        MASTER_KEY_PROMOTION_JOURNAL,
+    ];
+
+    /// Store states that hold a master key the user depends on
+    fn stores_with_existing_keys() -> Vec<(&'static str, FailNthStore, MasterKey)> {
+        let active_only = FailNthStore::new();
+        Cspp::new(active_only.clone()).save_master_key(&deterministic_key(30)).unwrap();
+
+        let promoted = FailNthStore::new();
+        let cspp = Cspp::new(promoted.clone());
+        cspp.save_master_key(&deterministic_key(31)).unwrap();
+        cspp.save_staged_master_key(&deterministic_key(32)).unwrap();
+        cspp.promote_staged_master_key().unwrap();
+
+        let retrying = FailNthStore::new();
+        let cspp = Cspp::new(retrying.clone());
+        cspp.save_master_key(&deterministic_key(33)).unwrap();
+        cspp.save_staged_master_key(&deterministic_key(34)).unwrap();
+        cspp.promote_staged_master_key().unwrap();
+        cspp.restore_prior_master_key_for_retry().unwrap();
+
+        vec![
+            ("active key", active_only, deterministic_key(30)),
+            ("promoted key", promoted, deterministic_key(32)),
+            ("prior key restored for retry", retrying, deterministic_key(33)),
+        ]
+    }
+
+    #[test]
+    fn unreadable_slot_never_replaces_an_existing_master_key() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+
+        for (scenario, store, active_key) in stores_with_existing_keys() {
+            for slot in ALL_SLOTS {
+                Cspp::<FailNthStore>::clear_cached_master_key();
+                let before = store.snapshot();
+                store.fail_reads_of(slot);
+
+                let cspp = Cspp::new(store.clone());
+                match cspp.get_or_create_master_key() {
+                    Ok(key) => assert_eq!(
+                        key.as_bytes(),
+                        active_key.as_bytes(),
+                        "{scenario}: unreadable {slot} returned a different key"
+                    ),
+                    Err(error) => assert!(
+                        matches!(error, CsppError::Read(_)),
+                        "{scenario}: unreadable {slot} returned {error}"
+                    ),
+                }
+
+                assert_eq!(store.snapshot(), before, "{scenario}: unreadable {slot} wrote");
+
+                store.clear_read_failures();
+                Cspp::<FailNthStore>::clear_cached_master_key();
+                assert_eq!(
+                    cspp.get_or_create_master_key().unwrap().as_bytes(),
+                    active_key.as_bytes(),
+                    "{scenario}: key changed after unreadable {slot}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unreadable_slot_on_empty_store_does_not_create_a_master_key() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+
+        for slot in ACTIVE_AND_JOURNAL_SLOTS {
+            Cspp::<FailNthStore>::clear_cached_master_key();
+            let store = FailNthStore::new();
+            store.fail_reads_of(slot);
+            let cspp = Cspp::new(store.clone());
+
+            assert!(matches!(cspp.get_or_create_master_key(), Err(CsppError::Read(_))));
+            assert!(store.snapshot().is_empty(), "unreadable {slot} created a key");
+            assert!(MASTER_KEY_CACHE.load().is_none());
+        }
+    }
+
+    #[test]
+    fn unreadable_slot_reports_errors_instead_of_absence() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<FailNthStore>::clear_cached_master_key();
+
+        for slot in [MASTER_KEY_NAME, MASTER_KEY_ENCRYPTION_KEY_AND_NONCE] {
+            let store = FailNthStore::new();
+            let cspp = Cspp::new(store.clone());
+            cspp.save_master_key(&deterministic_key(35)).unwrap();
+            store.fail_reads_of(slot);
+
+            assert!(matches!(cspp.load_master_key_from_store(), Err(CsppError::Read(_))));
+            assert!(matches!(cspp.has_master_key(), Err(CsppError::Read(_))));
+            assert!(matches!(cspp.capture_active_master_key_snapshot(), Err(CsppError::Read(_))));
+        }
+
+        let store = FailNthStore::new();
+        let cspp = Cspp::new(store.clone());
+        cspp.save_staged_master_key(&deterministic_key(36)).unwrap();
+        cspp.promote_staged_master_key().unwrap();
+        store.fail_reads_of(MASTER_KEY_PROMOTION_JOURNAL);
+
+        assert!(matches!(cspp.master_key_promotion_status(), Err(CsppError::Read(_))));
+        assert!(matches!(cspp.load_staged_master_key(), Err(CsppError::Read(_))));
+    }
+
+    #[test]
+    fn promotion_with_unreadable_active_slot_keeps_prior_key_recoverable() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<FailNthStore>::clear_cached_master_key();
+
+        let store = FailNthStore::new();
+        let cspp = Cspp::new(store.clone());
+        let prior = deterministic_key(37);
+        cspp.save_master_key(&prior).unwrap();
+        cspp.save_staged_master_key(&deterministic_key(38)).unwrap();
+        let before = store.snapshot();
+
+        // a journal recorded with an unread prior would make rollback delete the prior key
+        store.fail_reads_of(MASTER_KEY_NAME);
+        assert!(matches!(cspp.promote_staged_master_key(), Err(CsppError::Read(_))));
+        assert_eq!(store.snapshot(), before);
+
+        store.clear_read_failures();
+        cspp.promote_staged_master_key().unwrap();
+        cspp.rollback_master_key_promotion().unwrap();
+        assert_eq!(
+            cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
+            prior.as_bytes()
+        );
+    }
+
+    #[test]
+    fn unreadable_promotion_journal_is_never_overwritten_or_discarded() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<FailNthStore>::clear_cached_master_key();
+
+        let store = FailNthStore::new();
+        let cspp = Cspp::new(store.clone());
+        let prior = deterministic_key(39);
+        cspp.save_master_key(&prior).unwrap();
+        cspp.save_staged_master_key(&deterministic_key(40)).unwrap();
+        cspp.promote_staged_master_key().unwrap();
+        let before = store.snapshot();
+        store.fail_reads_of(MASTER_KEY_PROMOTION_JOURNAL);
+
+        assert!(matches!(cspp.promote_staged_master_key(), Err(CsppError::Read(_))));
+        assert!(matches!(cspp.rollback_master_key_promotion(), Err(CsppError::Read(_))));
+        assert!(matches!(cspp.commit_master_key_promotion(), Err(CsppError::Read(_))));
+        assert!(matches!(cspp.restore_prior_master_key_for_retry(), Err(CsppError::Read(_))));
+        assert!(matches!(cspp.discard_staged_master_key(), Err(CsppError::Read(_))));
+        assert!(matches!(cspp.save_master_key(&deterministic_key(41)), Err(CsppError::Read(_))));
+        assert!(matches!(
+            cspp.save_staged_master_key(&deterministic_key(42)),
+            Err(CsppError::Read(_))
+        ));
+        assert_eq!(store.snapshot(), before);
+
+        store.clear_read_failures();
+        cspp.rollback_master_key_promotion().unwrap();
+        assert_eq!(
+            cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
+            prior.as_bytes()
+        );
+    }
+
+    #[test]
+    fn save_with_unreadable_active_slot_leaves_entries_untouched() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<FailNthStore>::clear_cached_master_key();
+
+        let store = FailNthStore::new();
+        let cspp = Cspp::new(store.clone());
+        cspp.save_master_key(&deterministic_key(43)).unwrap();
+        let before = store.snapshot();
+        store.fail_reads_of(MASTER_KEY_ENCRYPTION_KEY_AND_NONCE);
+
+        assert!(matches!(cspp.save_master_key(&deterministic_key(44)), Err(CsppError::Read(_))));
+        assert_eq!(store.snapshot(), before);
+    }
+
+    #[test]
+    fn delete_reports_failure_for_unreadable_slots() {
+        let _guard = CACHE_TEST_LOCK.lock().unwrap();
+        Cspp::<FailNthStore>::clear_cached_master_key();
+
+        let store = FailNthStore::new();
+        let cspp = Cspp::new(store.clone());
+        cspp.save_master_key(&deterministic_key(45)).unwrap();
+        store.fail_reads_of(MASTER_KEY_NAME);
+
+        assert!(!cspp.delete_master_key());
+        assert!(store.snapshot().contains_key(MASTER_KEY_NAME));
     }
 }
