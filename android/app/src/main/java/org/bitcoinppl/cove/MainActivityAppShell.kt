@@ -91,20 +91,22 @@ internal fun MainActivityAppShell(
                                         }
                                     }
                             }
-                        }
 
-                        app.sheetState?.let { taggedState ->
-                            SheetContent(
-                                state = taggedState,
+                            // sheets and alerts are windows, so they stay inside the lock's content
+                            // to open before the lock window when the activity is recreated
+                            app.sheetState?.let { taggedState ->
+                                SheetContent(
+                                    state = taggedState,
+                                    app = app,
+                                    onDismiss = { app.sheetState = null },
+                                )
+                            }
+
+                            GlobalAlertHandler(
                                 app = app,
-                                onDismiss = { app.sheetState = null },
+                                snackbarHostState = snackbarHostState,
                             )
                         }
-
-                        GlobalAlertHandler(
-                            app = app,
-                            snackbarHostState = snackbarHostState,
-                        )
                     }
                 }
             }

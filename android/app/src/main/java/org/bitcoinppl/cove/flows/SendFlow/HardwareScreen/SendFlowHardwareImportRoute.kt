@@ -5,7 +5,6 @@ package org.bitcoinppl.cove.flows.SendFlow.HardwareScreen
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.ManagedActivityResultLauncher
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -13,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
@@ -37,7 +37,7 @@ internal fun rememberSignedImportFilePicker(
 ): ManagedActivityResultLauncher<String, Uri?> {
     val scope = rememberCoroutineScope()
 
-    return rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    return rememberLockAwareLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             scope.launch {
                 try {

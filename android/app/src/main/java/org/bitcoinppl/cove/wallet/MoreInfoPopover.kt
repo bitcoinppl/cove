@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.wallet
 
-import androidx.activity.compose.rememberLauncherForActivityResult
+import android.net.Uri
+import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -14,8 +15,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
+import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 
-// export type for tracking what is being exported
+// what a wallet file export writes
 sealed class ExportType {
     data object Labels : ExportType()
 
@@ -23,7 +25,6 @@ sealed class ExportType {
 }
 
 class WalletExportState {
-    var exportType by mutableStateOf<ExportType?>(null)
     var isExporting by mutableStateOf(false)
     var isImporting by mutableStateOf(false)
 }
@@ -41,7 +42,7 @@ fun rememberWalletExportLaunchers(
 
     // file import launcher (for labels) - accepts plain text and JSON files
     val importLabelLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        rememberLockAwareLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let {
                 scope.launch {
                     // capture manager at coroutine start to avoid null during suspension
@@ -84,84 +85,72 @@ fun rememberWalletExportLaunchers(
             }
         }
 
-    // file export launcher (for labels and transactions)
-    val exportFileLauncher =
-        rememberLauncherForActivityResult(
-            ActivityResultContracts.CreateDocument("text/plain"),
-        ) { uri ->
-            uri?.let {
-                scope.launch {
-                    val currentManager = manager
-                    exportState.isExporting = true
-                    val currentExportType = exportState.exportType
-
-                    try {
-                        // fetch content using new async methods that handle loading popup
-                        val content =
-                            when (currentExportType) {
-                                is ExportType.Transactions -> {
-                                    currentManager?.exportTransactionsCsv()?.content
-                                }
-                                is ExportType.Labels -> {
-                                    currentManager?.exportLabelsForShare()?.content
-                                }
-                                null -> null
-                            }
-
-                        content?.let { data ->
-                            withContext(Dispatchers.IO) {
-                                context.contentResolver.openOutputStream(uri)?.use { output ->
-                                    output.bufferedWriter().use { it.write(data) }
-                                }
-                            }
-
-                            val message =
-                                when (currentExportType) {
-                                    is ExportType.Transactions -> "Transactions exported successfully"
-                                    is ExportType.Labels -> "Labels exported successfully"
-                                    null -> "Export completed"
-                                }
-                            snackbarHostState.showSnackbar(message)
-                        } ?: run {
-                            val errorType =
-                                when (currentExportType) {
-                                    is ExportType.Transactions -> "transactions"
-                                    is ExportType.Labels -> "labels"
-                                    null -> "export"
-                                }
-                            snackbarHostState.showSnackbar("Unable to generate $errorType export data")
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e(tag, "error exporting file", e)
-                        val errorType =
-                            when (currentExportType) {
-                                is ExportType.Transactions -> "transactions"
-                                is ExportType.Labels -> "labels"
-                                null -> "export"
-                            }
-                        snackbarHostState.showSnackbar("Unable to export $errorType: ${e.localizedMessage ?: e.message}")
-                    } finally {
-                        exportState.isExporting = false
-                        exportState.exportType = null
-                    }
-                }
-            } ?: run {
-                // reset state if user cancelled the document picker
-                exportState.exportType = null
-            }
-        }
+    // one launcher per export kind, so a destination held until unlock still knows what to write
+    // after the activity is recreated
+    val exportLabelsLauncher =
+        rememberExportFileLauncher(ExportType.Labels, manager, snackbarHostState, exportState, tag)
+    val exportTransactionsLauncher =
+        rememberExportFileLauncher(ExportType.Transactions, manager, snackbarHostState, exportState, tag)
 
     return WalletExportLaunchers(
         importLabels = { importLabelLauncher.launch(arrayOf("text/plain", "application/json", "application/x-jsonlines")) },
-        exportLabels = { fileName ->
-            exportState.exportType = ExportType.Labels
-            exportFileLauncher.launch(fileName)
-        },
-        exportTransactions = { fileName ->
-            exportState.exportType = ExportType.Transactions
-            exportFileLauncher.launch(fileName)
-        },
+        exportLabels = { fileName -> exportLabelsLauncher.launch(fileName) },
+        exportTransactions = { fileName -> exportTransactionsLauncher.launch(fileName) },
     )
+}
+
+@Composable
+private fun rememberExportFileLauncher(
+    exportType: ExportType,
+    manager: WalletManager?,
+    snackbarHostState: SnackbarHostState,
+    exportState: WalletExportState,
+    tag: String,
+): ManagedActivityResultLauncher<String, Uri?> {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val (exportName, successMessage) =
+        when (exportType) {
+            is ExportType.Transactions -> "transactions" to "Transactions exported successfully"
+            is ExportType.Labels -> "labels" to "Labels exported successfully"
+        }
+
+    return rememberLockAwareLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain"),
+    ) { uri ->
+        if (uri == null) return@rememberLockAwareLauncherForActivityResult
+
+        scope.launch {
+            exportState.isExporting = true
+
+            try {
+                // fetch content using new async methods that handle loading popup
+                val content =
+                    when (exportType) {
+                        is ExportType.Transactions -> manager?.exportTransactionsCsv()?.content
+                        is ExportType.Labels -> manager?.exportLabelsForShare()?.content
+                    }
+
+                if (content == null) {
+                    snackbarHostState.showSnackbar("Unable to generate $exportName export data")
+                    return@launch
+                }
+
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        output.bufferedWriter().use { it.write(content) }
+                    }
+                }
+
+                snackbarHostState.showSnackbar(successMessage)
+            } catch (e: Exception) {
+                android.util.Log.e(tag, "error exporting file", e)
+                snackbarHostState.showSnackbar("Unable to export $exportName: ${e.localizedMessage ?: e.message}")
+            } finally {
+                exportState.isExporting = false
+            }
+        }
+    }
 }
 
 data class WalletExportLaunchers(

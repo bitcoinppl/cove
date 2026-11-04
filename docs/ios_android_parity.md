@@ -16,6 +16,7 @@ This document covers platform-specific gotchas and patterns for achieving visual
 - [Cloud Backup Recovery](#cloud-backup-recovery)
 - [Lifecycle and Effect Modifiers](#lifecycle-and-effect-modifiers)
   - [View Lifecycle](#view-lifecycle)
+  - [System Picker Results and the App Lock](#system-picker-results-and-the-app-lock)
   - [Reactive Value Changes](#reactive-value-changes)
   - [State and Observation](#state-and-observation)
   - [Threading and Dispatch](#threading-and-dispatch)
@@ -313,6 +314,14 @@ Both app lock overlays draw over the screen beneath them, but that screen stays 
 - Check that access still holds when rendering, not only in the effect or `onChange` that drops the secret. Those run on the next UI update after access ends, which can wait until the app returns to the foreground, so a secret rendered from stored state would sit in the locked tree for at least one frame
 
 Flows that need the main credential specifically, such as private key export and KeyTeleport send, use the main-only paths instead. These are iOS's separate `MainCredentialVerificationView` and Android's `mainCredentialGeneration`.
+
+### System Picker Results and the App Lock
+
+iOS document pickers run inside Cove's scene, so opening one doesn't background the app and doesn't lock it. On Android, file pickers and document creators are separate activities. Opening one stops Cove, which locks it the same way real backgrounding does, and Android delivers the result before the PIN is entered. Leaving the lock in place keeps the recents screen and app switching from becoming a way around the PIN.
+
+Compose launchers for external activities must use `rememberLockAwareLauncherForActivityResult` (`android/app/src/main/java/org/bitcoinppl/cove/views/LockAwareActivityResult.kt`) instead of `rememberLauncherForActivityResult`. It holds a result that arrives while the app is locked and handles it after unlock. Without it, alerts appear over the lock screen, where the first PIN tap dismisses them, and routes get pushed where the user can't see them. A held result survives activity recreation and is dropped if the unlock switches between main and decoy mode. detekt's `ForbiddenImport` rule enforces this.
+
+Android dialogs and bottom sheets are separate windows, so `LockView` draws the lock screen in its own full-screen dialog window. That window opens when the app locks, after any dialog or sheet that was already up, so it covers them, and a result held inside a modal such as Backup Export can still reach the PIN. Back on the lock screen sends the app to the background instead of navigating underneath it. Accessibility services can still read the activity window under the lock window, so `LockView` also clears its content from the semantics tree while locked. When the activity is recreated, every window opens again in composition order, so `MainActivityAppShell` keeps the app-wide sheets and alerts inside `LockView`'s content, where they open before the lock window. A dialog or sheet that opens while the app is already locked still appears above the lock.
 
 ### Reactive Value Changes
 

@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.flows.SettingsFlow
 
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -69,6 +68,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.runCatchingCancellable
+import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove_core.BackupException
 import org.bitcoinppl.cove_core.BackupManager
 import org.bitcoinppl.cove_core.BackupResult
@@ -111,17 +111,17 @@ fun BackupExportScreen(
 
     val isPasswordValid = backupManager.isPasswordValid(password)
 
-    val exportLauncher = rememberLauncherForActivityResult(
+    val exportLauncher = rememberLockAwareLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri ->
         val result = pendingResult ?: run {
             isExporting = false
-            return@rememberLauncherForActivityResult
+            return@rememberLockAwareLauncherForActivityResult
         }
         if (uri == null) {
             isExporting = false
             pendingResult = null
-            return@rememberLauncherForActivityResult
+            return@rememberLockAwareLauncherForActivityResult
         }
         scope.launch {
             try {

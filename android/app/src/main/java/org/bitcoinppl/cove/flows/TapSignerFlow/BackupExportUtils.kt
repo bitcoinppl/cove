@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.flows.TapSignerFlow
 
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -11,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.util.hexEncode
 
@@ -29,7 +29,7 @@ fun rememberBackupExportLauncher(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    return rememberLauncherForActivityResult(
+    return rememberLockAwareLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain"),
     ) { uri ->
         uri?.let {

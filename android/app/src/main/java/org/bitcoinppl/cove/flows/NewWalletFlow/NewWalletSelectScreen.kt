@@ -2,7 +2,6 @@ package org.bitcoinppl.cove.flows.NewWalletFlow
 
 import android.content.ClipboardManager
 import android.content.Context
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -70,6 +69,7 @@ import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.DotMenuView
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.Wallet
@@ -155,7 +155,7 @@ fun NewWalletSelectScreen(
     }
 
     val filePickerLauncher =
-        rememberLauncherForActivityResult(
+        rememberLockAwareLauncherForActivityResult(
             contract = ActivityResultContracts.GetContent(),
         ) { uri ->
             uri?.let {

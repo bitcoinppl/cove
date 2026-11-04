@@ -3,7 +3,6 @@ package org.bitcoinppl.cove.flows.OnboardingFlow
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +56,7 @@ import org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet.HotWalletImportScreen
 import org.bitcoinppl.cove.nfc.NfcReader
 import org.bitcoinppl.cove.nfc.NfcReadingState
 import org.bitcoinppl.cove.nfc.NfcScanResult
+import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove_core.FileHandler
 import org.bitcoinppl.cove_core.HardwareExport
 import org.bitcoinppl.cove_core.ImportType
@@ -445,8 +445,8 @@ private fun OnboardingHardwareFileImportView(
     }
 
     val filePickerLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
+        rememberLockAwareLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri == null) return@rememberLockAwareLauncherForActivityResult
             scope.launch {
                 isImporting = true
                 errorMessage = null
