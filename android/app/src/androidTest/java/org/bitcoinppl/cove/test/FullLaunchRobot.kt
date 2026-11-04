@@ -738,12 +738,21 @@ private fun UiDevice.clickObjectUntilGoneOrSystemSheet(selector: DescribedSelect
         }
 
         val button =
-            tryScrollUntilSafelyClickable(selector)
-                ?: if (clicked) {
-                    return
-                } else {
-                    error("Timed out waiting for ${selector.description}\n${dumpWindowHierarchy()}")
-                }
+            try {
+                tryScrollUntilSafelyClickable(selector)
+            } catch (_: StaleObjectException) {
+                // a lookup still stale after its retries sends nothing, so the next pass checks
+                // for the system sheet before looking it up again
+                Thread.sleep(100)
+                continue
+            }
+
+        if (button == null) {
+            if (clicked) return
+
+            error("Timed out waiting for ${selector.description}\n${dumpWindowHierarchy()}")
+        }
+
         // a stale button sends nothing, so the next pass checks for the system sheet before
         // looking it up again
         when (staleAsNull { button.isEnabled }) {
