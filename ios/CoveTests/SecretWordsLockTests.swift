@@ -13,11 +13,15 @@ final class SecretWordsLockTests: XCTestCase {
     private static let testPin = "246813"
     private static let wrongPin = "135792"
 
-    /// Published BIP39 test vector, never used for funds; distinct from the vector other tests import
+    /// Published BIP39 test vector, never used for funds; distinct from the vectors other tests import
     private static let testWords = [
-        "legal", "winner", "thank", "year", "wave", "sausage",
-        "worth", "useful", "legal", "winner", "thank", "yellow",
+        "vessel", "ladder", "alter", "error", "federal", "sibling",
+        "chat", "ability", "sun", "glass", "valve", "picture",
     ]
+
+    /// No Swift or FFI call derives a fingerprint from words without importing them, so it is pinned
+    /// here and checked against the import that creates the wallet
+    private static let testMasterFingerprint = "bc2b7c36"
 
     override class func setUp() {
         super.setUp()
@@ -35,7 +39,7 @@ final class SecretWordsLockTests: XCTestCase {
 
         // the test deletes its wallet afterwards, so never run it over one it did not create
         guard let walletId = try importTestWallet() else {
-            throw XCTSkip("the test wallet already exists on this simulator")
+            throw XCTSkip("a wallet for the test words already exists on this simulator")
         }
 
         addTeardownBlock { await self.deleteTestWallet(walletId) }
@@ -172,13 +176,34 @@ final class SecretWordsLockTests: XCTestCase {
         return tokens
     }
 
-    /// Nil when the wallet already exists, since the test cannot know who else relies on it
+    /// Nil when a wallet for the test words already exists, since the test cannot know who else relies on it
+    ///
+    /// Importing words that match a watch-only or cold wallet upgrades that wallet to hot in place,
+    /// so the existing wallet is looked for without writing anything
     private func importTestWallet() throws -> WalletId? {
-        do {
-            return try ImportWalletManager().rust.importWallet(enteredWords: [Self.testWords]).id
-        } catch ImportWalletError.WalletAlreadyExists {
+        // import matches existing wallets by master fingerprint within the selected network and mode,
+        // which is the list all() returns
+        let existing = try Database().wallets().all()
+        if existing.contains(where: { $0.masterFingerprint?.asLowercase() == Self.testMasterFingerprint }) {
             return nil
         }
+
+        let imported: WalletMetadata
+        do {
+            imported = try ImportWalletManager().rust.importWallet(enteredWords: [Self.testWords])
+        } catch let ImportWalletError.WalletAlreadyExists(id) {
+            throw TestWalletError("import reported existing wallet \(id) that the read-only lookup did not find")
+        }
+
+        // the test deletes the wallet it gets back, so one that already existed must never reach it
+        guard !existing.contains(where: { $0.id == imported.id }) else {
+            throw TestWalletError("import returned a wallet that already existed")
+        }
+
+        // a wrong pinned fingerprint would let the lookup above miss a wallet the import then upgrades
+        XCTAssertEqual(imported.masterFingerprint?.asLowercase(), Self.testMasterFingerprint)
+
+        return imported.id
     }
 
     private func deleteTestWallet(_ id: WalletId) async {
@@ -265,5 +290,13 @@ private final class HostedWindow {
         window.isHidden = true
         window.rootViewController = nil
         previousKeyWindow?.makeKey()
+    }
+}
+
+private struct TestWalletError: Error, CustomStringConvertible {
+    let description: String
+
+    init(_ description: String) {
+        self.description = description
     }
 }

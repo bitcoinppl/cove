@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.secretwords
 
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.hasText
@@ -9,17 +8,17 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
-import org.bitcoinppl.cove.ImportWalletManager
+import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.deleteTestWallet
+import org.bitcoinppl.cove.test.importTestWalletOrNull
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.AuthType
-import org.bitcoinppl.cove_core.ImportWalletException
 import org.bitcoinppl.cove_core.types.WalletId
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -49,9 +48,9 @@ class SecretWordsLockTest {
         assumeTrue("an app lock is already set up on this device", Auth.type == AuthType.NONE)
 
         // the test deletes its wallet afterwards, so never run it over one it did not create
-        val importedWalletId = importTestWallet()
-        assumeTrue("the test wallet already exists on this device", importedWalletId != null)
-        walletId = requireNotNull(importedWalletId)
+        val imported = importTestWalletOrNull(TEST_WALLET)
+        assumeTrue("a wallet for the test words already exists on this device", imported != null)
+        walletId = requireNotNull(imported).id
 
         Auth.dispatch(AuthManagerAction.SetPin(TEST_PIN))
         compose.waitUntil(timeoutMillis = 10_000) { Auth.type == AuthType.PIN }
@@ -73,7 +72,7 @@ class SecretWordsLockTest {
         // rust writes the auth type before dispatch returns, so the lock can be cleared right away
         Auth.dispatch(AuthManagerAction.DisablePin)
         compose.runOnUiThread { Auth.unlockIfAuthDisabled() }
-        deleteTestWallet()
+        deleteTestWallet(walletId)
     }
 
     @Test
@@ -160,31 +159,7 @@ class SecretWordsLockTest {
             .fetchSemanticsNodes()
             .isNotEmpty()
 
-    // null when the wallet already exists, since the test cannot know who else relies on it
-    private fun importTestWallet(): WalletId? =
-        ImportWalletManager().use { manager ->
-            try {
-                manager.importWallet(listOf(TEST_WORDS)).id
-            } catch (_: ImportWalletException.WalletAlreadyExists) {
-                null
-            }
-        }
-
-    private fun deleteTestWallet() {
-        // cleanup only, so a failure is logged instead of hiding the test result
-        runCatching {
-            runBlocking {
-                withTimeout(30_000) {
-                    val app = AppManager.getInstance()
-                    val manager = app.getWalletManagerLoaded(walletId)
-                    app.deleteWalletInOwnerScope(manager).await().getOrThrow()
-                }
-            }
-        }.onFailure { Log.w(TAG, "failed to delete the test wallet", it) }
-    }
-
     private companion object {
-        const val TAG = "SecretWordsLockTest"
         const val TEST_PIN = "246813"
         const val WRONG_PIN = "135792"
         const val PIN_SUBMIT_SETTLE_MILLIS = 1_000L
@@ -192,8 +167,9 @@ class SecretWordsLockTest {
         // published BIP39 test vector, never used for funds; distinct from the vector other tests import
         val TEST_WORDS =
             listOf(
-                "legal", "winner", "thank", "year", "wave", "sausage",
-                "worth", "useful", "legal", "winner", "thank", "yellow",
+                "vessel", "ladder", "alter", "error", "federal", "sibling",
+                "chat", "ability", "sun", "glass", "valve", "picture",
             )
+        val TEST_WALLET = TestWalletWords(TEST_WORDS, masterFingerprint = "bc2b7c36")
     }
 }
