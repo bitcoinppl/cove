@@ -2,13 +2,13 @@
 
 package org.bitcoinppl.cove.flows.SettingsFlow
 
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.Log
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.SecurityAlertState
 import org.bitcoinppl.cove_core.SecuritySheetState

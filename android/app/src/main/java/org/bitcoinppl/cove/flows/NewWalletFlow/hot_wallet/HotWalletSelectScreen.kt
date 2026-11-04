@@ -20,7 +20,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -54,6 +53,7 @@ import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.utils.intoRoute
 import org.bitcoinppl.cove.views.DotMenuView
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 

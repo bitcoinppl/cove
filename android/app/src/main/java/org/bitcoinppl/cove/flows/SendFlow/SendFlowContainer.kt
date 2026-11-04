@@ -2,10 +2,8 @@ package org.bitcoinppl.cove.flows.SendFlow
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -33,6 +31,8 @@ import org.bitcoinppl.cove.flows.SendFlow.HardwareScreen.SendFlowHardwareScreen
 import org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen.CoinControlSetAmountScreen
 import org.bitcoinppl.cove.flows.SendFlow.SetAmountScreen.SendFlowSetAmountScreen
 import org.bitcoinppl.cove.sheets.FeeRateSelectorSheet
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.types.*

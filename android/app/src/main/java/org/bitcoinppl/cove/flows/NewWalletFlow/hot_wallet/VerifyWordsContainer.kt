@@ -1,6 +1,5 @@
 package org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet
 
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -18,6 +17,7 @@ import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.ScreenSecurity
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.components.FullPageLoadingView
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.WordVerifyStateMachine
 import org.bitcoinppl.cove_core.types.WalletId

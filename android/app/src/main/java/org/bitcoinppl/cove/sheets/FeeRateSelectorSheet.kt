@@ -22,6 +22,7 @@ import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.utils.toColor
 import org.bitcoinppl.cove.views.AsyncText
+import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.types.FeeRateOptionWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeRateOptionsWithTotalFee
 import org.bitcoinppl.cove_core.types.FeeSpeed

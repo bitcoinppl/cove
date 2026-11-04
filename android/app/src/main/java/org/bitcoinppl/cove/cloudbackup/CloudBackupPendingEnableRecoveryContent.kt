@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -49,6 +48,7 @@ import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardBorder
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingCardFill
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingStatusHero
 import org.bitcoinppl.cove.flows.OnboardingFlow.OnboardingTextSecondary
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.CloudBackupPendingEnableCleanupState
 import org.bitcoinppl.cove_core.CloudBackupPendingEnableRecovery
 

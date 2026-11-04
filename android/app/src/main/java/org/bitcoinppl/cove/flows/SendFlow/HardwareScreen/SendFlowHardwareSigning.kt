@@ -15,7 +15,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,6 +33,7 @@ import org.bitcoinppl.cove.QrCodeScanView
 import org.bitcoinppl.cove.Scanner
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.nfc.NfcWriteSheet
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 import java.io.File
 

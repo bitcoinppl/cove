@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.views.AddressText
+import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 
 data class UtxoItem(
     val label: String,

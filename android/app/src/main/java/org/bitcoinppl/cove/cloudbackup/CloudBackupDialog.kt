@@ -1,9 +1,9 @@
 package org.bitcoinppl.cove.cloudbackup
 
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 
 internal sealed interface CloudBackupDialog {

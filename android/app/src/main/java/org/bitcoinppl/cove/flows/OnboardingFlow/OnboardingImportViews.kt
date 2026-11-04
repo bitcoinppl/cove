@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Nfc
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,6 +55,7 @@ import org.bitcoinppl.cove.flows.NewWalletFlow.hot_wallet.HotWalletImportScreen
 import org.bitcoinppl.cove.nfc.NfcReader
 import org.bitcoinppl.cove.nfc.NfcReadingState
 import org.bitcoinppl.cove.nfc.NfcScanResult
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove_core.FileHandler
 import org.bitcoinppl.cove_core.HardwareExport

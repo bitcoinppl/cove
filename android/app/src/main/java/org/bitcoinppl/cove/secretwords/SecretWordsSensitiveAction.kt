@@ -16,8 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.QrCode
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,6 +48,8 @@ import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.flows.settings.hasFreshMainCredential
 import org.bitcoinppl.cove.views.ColumnMajorGrid
 import org.bitcoinppl.cove.views.RecoveryWordChip
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove.views.lockaware.DropdownMenu
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.types.WalletId

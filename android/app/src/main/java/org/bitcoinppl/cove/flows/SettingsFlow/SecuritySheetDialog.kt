@@ -8,10 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.views.NumberPadPinView
+import org.bitcoinppl.cove.views.lockaware.Dialog
 import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.SecurityAlertState
 import org.bitcoinppl.cove_core.SecuritySheetState

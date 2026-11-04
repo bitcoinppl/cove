@@ -21,13 +21,30 @@ potential-bugs:
     active: true
 
 style:
+  # app code uses lock-aware wrappers in place of these: a picker result arrives before the PIN is
+  # entered, so it must wait for unlock, and Compose dialogs, sheets, and menus open windows above
+  # the lock screen, so the wrappers in org.bitcoinppl.cove.views.lockaware hide or close them
   ForbiddenImport:
     active: true
-    # a picker result arrives before the PIN is entered, so it must wait for unlock
+    excludes:
+      - '**/test/**'
+      - '**/androidTest/**'
+      - '**/screenshotTest/**'
+      - '**/views/LockAwareActivityResult.kt'
     forbiddenImports:
       - value: 'androidx.activity.compose.rememberLauncherForActivityResult'
         reason: 'Use rememberLockAwareLauncherForActivityResult so results wait for unlock'
-    excludes:
-      - '**/views/LockAwareActivityResult.kt'
+      - value: 'androidx.compose.material3.AlertDialog'
+        reason: 'Use org.bitcoinppl.cove.views.lockaware.AlertDialog, which hides while the app is locked'
+      - value: 'androidx.compose.material3.BasicAlertDialog'
+        reason: 'Use org.bitcoinppl.cove.views.lockaware.AlertDialog, which hides while the app is locked'
+      - value: 'androidx.compose.material3.ModalBottomSheet'
+        reason: 'Use org.bitcoinppl.cove.views.lockaware.ModalBottomSheet, which hides while the app is locked'
+      - value: 'androidx.compose.material3.DropdownMenu'
+        reason: 'Use org.bitcoinppl.cove.views.lockaware.DropdownMenu, which closes while the app is locked'
+      - value: 'androidx.compose.ui.window.Dialog'
+        reason: 'Use org.bitcoinppl.cove.views.lockaware.Dialog, which hides while the app is locked'
+      - value: 'androidx.compose.ui.window.Popup'
+        reason: 'Add a wrapper in org.bitcoinppl.cove.views.lockaware so it hides or closes while the app is locked'
   UnusedPrivateFunction:
     allowedNames: '.*Preview.*'
