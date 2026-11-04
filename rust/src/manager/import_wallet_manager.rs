@@ -585,8 +585,11 @@ mod tests {
         let result = import_wallet_secret_with_target(incoming, Network::Signet, WalletMode::Main);
 
         assert!(matches!(result, Err(ImportWalletError::WalletAlreadyExists(_))));
-        assert_eq!(Keychain::global().get(secret_key), Some("garbage-secret".to_string()));
-        assert_eq!(Keychain::global().get(cryptor_key), Some("garbage-cryptor".to_string()));
+        assert_eq!(Keychain::global().get(secret_key).unwrap(), Some("garbage-secret".to_string()));
+        assert_eq!(
+            Keychain::global().get(cryptor_key).unwrap(),
+            Some("garbage-cryptor".to_string())
+        );
 
         assert!(Keychain::global().delete_wallet_items(&existing.id));
     }

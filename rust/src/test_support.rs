@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -59,6 +59,7 @@ pub(crate) struct MockKeychain {
     save_count: Arc<Mutex<usize>>,
     delete_count: Arc<Mutex<usize>>,
     after_save: Arc<Mutex<Option<AfterSaveHook>>>,
+    unreadable_keys: Arc<Mutex<HashSet<String>>>,
 }
 
 // the after-save hook is a closure, which has no Debug impl
@@ -70,6 +71,7 @@ impl std::fmt::Debug for MockKeychain {
             .field("fail_delete_at", &self.fail_delete_at)
             .field("save_count", &self.save_count)
             .field("delete_count", &self.delete_count)
+            .field("unreadable_keys", &self.unreadable_keys)
             .finish_non_exhaustive()
     }
 }
@@ -82,6 +84,16 @@ impl MockKeychain {
         *self.save_count.lock() = 0;
         *self.delete_count.lock() = 0;
         *self.after_save.lock() = None;
+        self.unreadable_keys.lock().clear();
+    }
+
+    /// Makes reads of `key` fail the way a locked platform keychain does
+    pub(crate) fn fail_reads_for(&self, key: impl Into<String>) {
+        self.unreadable_keys.lock().insert(key.into());
+    }
+
+    pub(crate) fn clear_read_failures(&self) {
+        self.unreadable_keys.lock().clear();
     }
 
     pub(crate) fn set_entries(&self, entries: Vec<(&str, &str)>) {
@@ -128,8 +140,12 @@ impl KeychainAccess for MockKeychain {
         Ok(())
     }
 
-    fn get(&self, key: String) -> Option<String> {
-        self.entries.lock().get(&key).cloned()
+    fn get(&self, key: String) -> Result<Option<String>, KeychainError> {
+        if self.unreadable_keys.lock().contains(&key) {
+            return Err(KeychainError::Read(format!("{key} is unreadable")));
+        }
+
+        Ok(self.entries.lock().get(&key).cloned())
     }
 
     fn delete(&self, key: String) -> bool {

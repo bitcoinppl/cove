@@ -7,6 +7,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+use cove_device::keychain::{Keychain, KeychainError};
 use cove_util::ResultExt;
 use parking_lot::Mutex;
 use tracing::{error, info, warn};
@@ -60,7 +61,8 @@ static BOOTSTRAP_CANCELLED: LazyLock<Arc<AtomicBool>> =
 /// migration failed but the app can continue, or `Err` for critical failures
 ///
 /// Re-entrant safe: returns `Ok(None)` if already complete, or
-/// `Err(AlreadyCalled)` if another call is still in progress
+/// `Err(AlreadyCalled)` if another call is still in progress or an earlier call
+/// failed. After `Err(KeychainUnavailable)` the next call starts over
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
     let already_called = {
@@ -135,11 +137,22 @@ pub async fn bootstrap() -> Result<Option<String>, AppInitError> {
     .await;
 
     if let Err(error) = &result {
-        diagnostics::record_bootstrap_failure(error);
-        migration::set_active_migration(None);
+        finish_failed_bootstrap(error);
     }
 
     result
+}
+
+fn finish_failed_bootstrap(error: &AppInitError) {
+    diagnostics::record_bootstrap_failure(error);
+    migration::set_active_migration(None);
+
+    // nothing is set up before the keychain read that failed, so a later call can run the
+    // whole bootstrap again, including one from an Android activity recreated on the error
+    // screen, which would otherwise get AlreadyCalled
+    if matches!(error, AppInitError::KeychainUnavailable(_)) {
+        *BOOTSTRAP_STEP.lock() = BootstrapStep::NotStarted;
+    }
 }
 
 /// Signal the bootstrap to stop at the next cancellation check point,
@@ -215,6 +228,12 @@ pub enum AppInitError {
     #[error("Failed to derive encryption key: {0}")]
     KeyDerivation(String),
 
+    /// The keychain could not be read, so it is unknown whether the database key exists
+    ///
+    /// This is retryable and must not lead to key replacement or data recovery
+    #[error("Unable to read the secure keychain. Unlock your device and try again. ({0})")]
+    KeychainUnavailable(String),
+
     #[error("Main database migration failed: {0}")]
     MainDatabaseMigration(String),
 
@@ -272,6 +291,13 @@ fn ensure_storage_bootstrapped_internal(track_progress: bool) -> Result<u32, App
     Ok(bdk_count)
 }
 
+fn create_local_encryption_key(keychain: &Keychain) -> Result<[u8; 32], AppInitError> {
+    keychain.create_local_encryption_key().map_err(|error| match error {
+        KeychainError::Read(error) => AppInitError::KeychainUnavailable(error),
+        error => AppInitError::KeyDerivation(error.to_string()),
+    })
+}
+
 /// Returns the pre-recovery BDK database count for use by attempt_bdk_migration
 fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
     crate::logging::init();
@@ -283,17 +309,20 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
     info!("Starting storage bootstrap");
 
     // load or create local DB encryption key from keychain
-    let keychain = cove_device::keychain::Keychain::global();
+    let keychain = Keychain::global();
     let encrypted_db = cove_common::consts::ROOT_DATA_DIR.join("cove.encrypted.db");
     let key = match keychain.get_local_encryption_key() {
         Ok(Some(key)) => key,
+
+        // a failed read proves nothing about the key, so neither recreate it nor offer recovery
+        Err(KeychainError::Read(error)) => return Err(AppInitError::KeychainUnavailable(error)),
         Ok(None) => {
             if encrypted_db.exists() {
                 return Err(AppInitError::DatabaseKeyMismatch(
                     "local encryption key not found but encrypted databases exist".into(),
                 ));
             }
-            keychain.create_local_encryption_key().map_err_str(AppInitError::KeyDerivation)?
+            create_local_encryption_key(keychain)?
         }
         Err(e) => {
             // partial keychain state: one entry exists but the other is missing
@@ -305,7 +334,7 @@ fn do_bootstrap(track_progress: bool) -> Result<u32, AppInitError> {
             // no DB exists, safe to purge partial entries and create fresh
             warn!("Purging partial local encryption key entries: {e}");
             keychain.purge_local_encryption_key();
-            keychain.create_local_encryption_key().map_err_str(AppInitError::KeyDerivation)?
+            create_local_encryption_key(keychain)?
         }
     };
     crate::database::encrypted_backend::set_encryption_key(key);
@@ -470,6 +499,19 @@ pub(crate) mod tests {
             AppInitError::DatabaseVerificationFailed(message)
                 if message == "failed to open encrypted backend at /tmp/cove.db: permission denied"
         ));
+    }
+
+    #[test]
+    fn only_an_unreadable_keychain_lets_a_later_call_start_bootstrap_again() {
+        *BOOTSTRAP_STEP.lock() = BootstrapStep::Initializing;
+        finish_failed_bootstrap(&AppInitError::KeychainUnavailable("locked".into()));
+        assert_eq!(bootstrap_progress(), BootstrapStep::NotStarted);
+
+        *BOOTSTRAP_STEP.lock() = BootstrapStep::Initializing;
+        finish_failed_bootstrap(&AppInitError::DatabaseKeyMismatch("wrong key".into()));
+        assert_eq!(bootstrap_progress(), BootstrapStep::Initializing);
+
+        *BOOTSTRAP_STEP.lock() = BootstrapStep::NotStarted;
     }
 
     #[test]

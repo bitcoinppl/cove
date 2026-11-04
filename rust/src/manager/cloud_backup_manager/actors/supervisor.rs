@@ -369,7 +369,12 @@ impl CloudBackupSupervisor {
     ) -> Result<(), CloudBackupError> {
         let RestoredNamespaceCommit { master_key, passkey, namespace_id, state, wallet_ids } =
             commit;
-        let snapshot = CloudBackupKeychain::global().capture_restore_activation_snapshot();
+        let snapshot = CloudBackupKeychain::global()
+            .capture_restore_activation_snapshot()
+            .map_err(|error| {
+                CloudBackupError::internal_context("capture restore activation keychain", error)
+            })?;
+
         let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
         let dirty_states = wallet_ids
             .into_iter()

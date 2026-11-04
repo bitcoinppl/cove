@@ -13,7 +13,7 @@ use crate::manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER;
 
 use crate::{
     bdk_store::{BdkStore, StoreReplacementActivation},
-    keychain::Keychain,
+    keychain::{Keychain, KeychainError},
     keys::Descriptors,
     wallet_lifecycle::{WalletLifecycleCoordinator, WalletPersistenceOperation},
     wallet_secret::WalletSecretExt as _,
@@ -133,9 +133,17 @@ pub(crate) fn heal_public_descriptors_for_store(
 ) {
     let published = public_descriptors(wallet);
     let keychain = Keychain::global();
-    if matches!(keychain.get_public_descriptor(wallet_id), Ok(Some(current)) if current == published)
-    {
-        return;
+    match keychain.get_public_descriptor(wallet_id) {
+        Ok(Some(current)) if current == published => return,
+
+        // an unreadable mirror may already be correct, so leave it for the next load to check
+        Err(error @ KeychainError::Read(_)) => {
+            warn!(id = %wallet_id, %error, "unable to read wallet descriptors; the next load retries");
+            return;
+        }
+
+        // a missing, different, or undecodable mirror is rewritten from the store
+        Ok(_) | Err(_) => {}
     }
 
     if let Err(error) = keychain.save_public_descriptor(wallet_id, published.0, published.1) {
@@ -566,6 +574,27 @@ mod tests {
             .network(Network::Regtest)
             .create_wallet_no_persist()
             .expect("wallet is created")
+    }
+
+    #[test]
+    fn unreadable_descriptor_mirror_is_never_rewritten() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::init_test_keychain();
+
+        let id = crate::wallet::metadata::WalletId::new();
+        let wallet = test_bdk_wallet();
+        let descriptor_key = format!("{id}::wallet_public_descriptor");
+        let before = crate::test_support::raw_wallet_keychain_entries(&id);
+
+        crate::test_support::shared_mock_keychain().fail_reads_for(descriptor_key);
+        heal_public_descriptors_for_store(&id, &wallet);
+        crate::test_support::shared_mock_keychain().clear_read_failures();
+        assert_eq!(crate::test_support::raw_wallet_keychain_entries(&id), before);
+
+        // once readable, the missing mirror is healed from the store
+        heal_public_descriptors_for_store(&id, &wallet);
+        assert!(Keychain::global().get_public_descriptor(&id).unwrap().is_some());
+        assert!(Keychain::global().delete_wallet_items(&id));
     }
 
     #[test]

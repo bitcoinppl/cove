@@ -110,6 +110,7 @@ fn init_globals() {
     });
 
     crate::test_support::set_fail_keychain_deletes(false);
+    crate::test_support::shared_mock_keychain().clear_read_failures();
     Keychain::global().delete_key_teleport_receive_session();
 }
 
@@ -245,6 +246,35 @@ fn legacy_receive_session_json_is_migrated_without_changing_the_request() {
 }
 
 #[test]
+fn failed_legacy_receive_session_upgrade_keeps_the_request() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let receiver = ReceiverSession::from_private_key_bytes([22; 32]).unwrap();
+    let scope = ReceiveScope::current();
+    let legacy = serde_json::json!({
+        "private_key_hex": hex::encode(receiver.private_key_bytes()),
+        "created_at_secs": now_secs(),
+        "network": scope.network,
+        "wallet_mode": scope.wallet_mode,
+    });
+
+    Keychain::global().save_key_teleport_receive_session(&legacy.to_string()).unwrap();
+    let expected_packet = receiver.request().unwrap().packet;
+    let manager = RustKeyTeleportManager::new();
+
+    // the upgrade saves a new cryptor first, then fails to save the re-encrypted session
+    crate::test_support::shared_mock_keychain().fail_save_at(2);
+    let failed = manager.handle_action(Action::StartReceive);
+
+    assert!(failed.is_err(), "the failed upgrade still started a receive");
+    assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveError));
+
+    manager.handle_action(Action::StartReceive).unwrap();
+    let request = receive_request(&manager);
+    assert_eq!(&**request.packet, &expected_packet);
+}
+
+#[test]
 fn receive_start_queued_across_a_full_wipe_cannot_save_a_session() {
     let _guard = crate::test_support::global_state_test_lock().blocking_lock();
     init_globals();
@@ -354,6 +384,35 @@ fn corrupt_receive_session_is_replaced_with_a_usable_request() {
     let replacement = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
     assert_ne!(*replacement, *corrupt);
     assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveReady(_)));
+}
+
+#[test]
+fn unreadable_receive_session_is_kept_for_retry() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let original_manager = RustKeyTeleportManager::new();
+    original_manager.handle_action(Action::StartReceive).unwrap();
+    let request = receive_request(&original_manager);
+    let stored = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
+
+    let keychain = crate::test_support::shared_mock_keychain();
+    keychain.fail_reads_for("key_teleport::v1::receive_session");
+    let manager = RustKeyTeleportManager::new();
+    let unreadable = manager.handle_action(Action::StartReceive);
+    keychain.clear_read_failures();
+
+    assert!(
+        matches!(unreadable, Err(KeyTeleportAlert::Keychain(_))),
+        "an unreadable session must report a keychain error"
+    );
+    assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveError));
+    let kept = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
+    assert_eq!(*kept, *stored);
+
+    manager.handle_action(Action::StartReceive).unwrap();
+    let resumed = receive_request(&manager);
+    assert_eq!(resumed.numeric_code, request.numeric_code);
+    assert_eq!(&**resumed.packet, &**request.packet);
 }
 
 #[test]

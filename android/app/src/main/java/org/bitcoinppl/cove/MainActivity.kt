@@ -448,6 +448,10 @@ class MainActivity : FragmentActivity() {
                                     bootstrapFailure = failure
                                 }
 
+                                is BootstrapFailure.KeychainUnavailable -> {
+                                    bootstrapFailure = failure
+                                }
+
                                 is BootstrapFailure.Fatal -> {
                                     bootstrapFailure = failure
                                 }
@@ -467,7 +471,7 @@ class MainActivity : FragmentActivity() {
 
                         BootstrapFailure.RecoveryRequired -> {
                             BootstrapRecoveryView(
-                                message = BootstrapFailure.RecoveryRequired.message,
+                                copy = BootstrapRecoveryCopy(BootstrapFailure.RecoveryRequired.message),
                                 onContinue = { continueBootstrapRecovery() },
                                 onCopyDiagnostics = {
                                     copyStartupDiagnostics(BootstrapFailure.RecoveryRequired.message)
@@ -475,6 +479,23 @@ class MainActivity : FragmentActivity() {
                                 onShareDiagnostics = {
                                     shareStartupDiagnostics(BootstrapFailure.RecoveryRequired.message)
                                 },
+                                onContactSupport = { contactStartupSupport() },
+                            )
+                        }
+
+                        is BootstrapFailure.KeychainUnavailable -> {
+                            // the keychain failed before storage was touched, so a clean bootstrap is safe to rerun
+                            BootstrapRecoveryView(
+                                copy =
+                                    BootstrapRecoveryCopy(
+                                        message = failure.message,
+                                        title = "Secure Storage Locked",
+                                        actionLabel = "Try Again",
+                                        footer = KEYCHAIN_UNAVAILABLE_FOOTER,
+                                    ),
+                                onContinue = { continueBootstrapRecovery() },
+                                onCopyDiagnostics = { copyStartupDiagnostics(failure.diagnosticsMessage) },
+                                onShareDiagnostics = { shareStartupDiagnostics(failure.diagnosticsMessage) },
                                 onContactSupport = { contactStartupSupport() },
                             )
                         }

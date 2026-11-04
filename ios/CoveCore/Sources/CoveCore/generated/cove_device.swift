@@ -1938,6 +1938,14 @@ enum KeychainError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
      */
     case Save
     /**
+     * The platform could not read a value, so whether it exists is unknown
+     *
+     * This is distinct from absence: callers must not treat it as a missing entry, because
+     * doing so could replace or delete secrets that are still stored
+     */
+    case Read(String
+    )
+    /**
      * A value could not be deleted
      */
     case Delete
@@ -2005,18 +2013,21 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
 
 
         case 1: return .Save
-        case 2: return .Delete
-        case 3: return .ParseSavedValue(
+        case 2: return .Read(
             try FfiConverterString.read(from: &buf)
             )
-        case 4: return .Encrypt(
+        case 3: return .Delete
+        case 4: return .ParseSavedValue(
             try FfiConverterString.read(from: &buf)
             )
-        case 5: return .Decrypt(
+        case 5: return .Encrypt(
             try FfiConverterString.read(from: &buf)
             )
-        case 6: return .WalletSecretTypeMismatch
-        case 7: return .WalletSecretExists
+        case 6: return .Decrypt(
+            try FfiConverterString.read(from: &buf)
+            )
+        case 7: return .WalletSecretTypeMismatch
+        case 8: return .WalletSecretExists
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
@@ -2033,31 +2044,36 @@ public struct FfiConverterTypeKeychainError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(1))
 
 
-        case .Delete:
+        case let .Read(v1):
             writeInt(&buf, Int32(2))
-
-
-        case let .ParseSavedValue(v1):
-            writeInt(&buf, Int32(3))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Encrypt(v1):
+        case .Delete:
+            writeInt(&buf, Int32(3))
+
+
+        case let .ParseSavedValue(v1):
             writeInt(&buf, Int32(4))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case let .Decrypt(v1):
+        case let .Encrypt(v1):
             writeInt(&buf, Int32(5))
             FfiConverterString.write(v1, into: &buf)
 
 
-        case .WalletSecretTypeMismatch:
+        case let .Decrypt(v1):
             writeInt(&buf, Int32(6))
+            FfiConverterString.write(v1, into: &buf)
+
+
+        case .WalletSecretTypeMismatch:
+            writeInt(&buf, Int32(7))
 
 
         case .WalletSecretExists:
-            writeInt(&buf, Int32(7))
+            writeInt(&buf, Int32(8))
 
         }
     }
@@ -3496,8 +3512,14 @@ public protocol KeychainAccess: AnyObject, Sendable {
 
     /**
      * Gets the value for a key, or `None` when the key does not exist
+     *
+     * # Errors
+     *
+     * Returns `KeychainError::Read` when the platform cannot determine whether the key exists,
+     * for example while the device is locked. Implementations must never report such a failure
+     * as `None`
      */
-    func get(key: String)  -> String?
+    func get(key: String) throws  -> String?
 
     /**
      * Deletes the value for a key
@@ -3578,17 +3600,18 @@ fileprivate struct UniffiCallbackInterfaceKeychainAccess {
                 guard let uniffiObj = try? FfiConverterCallbackInterfaceKeychainAccess.handleMap.get(handle: uniffiHandle) else {
                     throw UniffiInternalError.unexpectedStaleHandle
                 }
-                return uniffiObj.get(
+                return try uniffiObj.get(
                      key: try FfiConverterString.lift(key)
                 )
             }
 
 
             let writeReturn = { uniffiOutReturn.pointee = FfiConverterOptionString.lower($0) }
-            uniffiTraitInterfaceCall(
+            uniffiTraitInterfaceCallWithError(
                 callStatus: uniffiCallStatus,
                 makeCall: makeCall,
-                writeReturn: writeReturn
+                writeReturn: writeReturn,
+                lowerError: FfiConverterTypeKeychainError_lower
             )
         },
         delete: { (
@@ -4325,7 +4348,7 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_device_checksum_method_keychainaccess_save() != 21295) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_device_checksum_method_keychainaccess_get() != 217) {
+    if (uniffi_cove_device_checksum_method_keychainaccess_get() != 33518) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_device_checksum_method_keychainaccess_delete() != 35329) {

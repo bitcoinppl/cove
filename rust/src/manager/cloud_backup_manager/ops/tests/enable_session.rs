@@ -15,7 +15,7 @@ async fn registered_passkey_stages_confirmation_without_automatic_auth() {
 
     assert_eq!(globals.passkey.create_count(), 1);
     assert_eq!(globals.passkey.authenticate_count(), 0);
-    assert_eq!(CloudBackupKeychain::global().load_credential_id(), None);
+    assert_eq!(CloudBackupKeychain::global().load_credential_id().unwrap(), None);
     assert_eq!(
         manager.model_snapshot().enable_state,
         CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
@@ -270,7 +270,7 @@ async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming
         CloudBackupEnableContext::settings_manual(),
         master_key.namespace_id(),
         PendingEnableNamespaceOwnership::FreshOwned,
-        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+        CloudBackupKeychain::global().snapshot_passkey_metadata().unwrap(),
     );
     assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
         credential_id: vec![1, 2, 3],
@@ -400,7 +400,7 @@ fn prepare_pending_enable_discard_fixture(
     cloud_keychain
         .save_passkey_and_namespace(&[4, 5, 6], [8; 32], &prior_master_key.namespace_id())
         .unwrap();
-    let previous_metadata = cloud_keychain.snapshot_passkey_metadata();
+    let previous_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
 
     let staged_master_key = cove_cspp::master_key::MasterKey::generate();
     let staged_master_key_bytes = *staged_master_key.as_bytes();
@@ -475,7 +475,7 @@ async fn discard_pending_enable_staged_preserves_prior_master_and_metadata() {
     assert_active_master_key(&fixture.prior_master_key);
     assert!(cspp.load_staged_master_key().unwrap().is_none());
     assert_eq!(
-        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+        CloudBackupKeychain::global().snapshot_passkey_metadata().unwrap(),
         fixture.previous_metadata
     );
     assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
@@ -508,7 +508,7 @@ async fn discard_pending_enable_fresh_owned_remote_writes_delete_entire_namespac
     assert_active_master_key(&fixture.prior_master_key);
     assert!(cspp.load_staged_master_key().unwrap().is_none());
     assert_eq!(
-        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+        CloudBackupKeychain::global().snapshot_passkey_metadata().unwrap(),
         fixture.previous_metadata
     );
     assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
@@ -595,7 +595,7 @@ async fn discard_pending_enable_recovered_existing_never_deletes_remote_namespac
     assert_active_master_key(&fixture.prior_master_key);
     assert!(cspp.load_staged_master_key().unwrap().is_none());
     assert_eq!(
-        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+        CloudBackupKeychain::global().snapshot_passkey_metadata().unwrap(),
         fixture.previous_metadata
     );
     assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
@@ -626,7 +626,7 @@ async fn discard_pending_enable_unjournaled_session_never_deletes_or_clears_mate
         &fixture.staged_master_key
     );
     assert_eq!(
-        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+        CloudBackupKeychain::global().snapshot_passkey_metadata().unwrap(),
         fixture.previous_metadata
     );
 }
@@ -661,7 +661,7 @@ async fn discard_pending_enable_started_promotion_rolls_back_prior_state() {
         cove_cspp::MasterKeyPromotionStatus::None
     );
     assert_eq!(
-        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+        CloudBackupKeychain::global().snapshot_passkey_metadata().unwrap(),
         fixture.previous_metadata
     );
     assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
@@ -714,7 +714,7 @@ async fn discard_pending_enable_durable_completion_commits_without_remote_delete
         cove_cspp::MasterKeyPromotionStatus::None
     );
     assert_eq!(
-        CloudBackupKeychain::global().namespace_id().as_deref(),
+        CloudBackupKeychain::global().namespace_id().unwrap().as_deref(),
         Some(fixture.namespace.as_str())
     );
     assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());

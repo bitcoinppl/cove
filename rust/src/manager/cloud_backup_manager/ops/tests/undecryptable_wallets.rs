@@ -24,7 +24,7 @@ async fn undecryptable_deletion_rechecks_and_deletes_only_cloud_only_crypto_fail
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let current_master_key = cove_cspp::Cspp::new(Keychain::global().clone())
         .load_master_key_from_store()
         .unwrap()

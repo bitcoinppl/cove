@@ -78,11 +78,16 @@ impl PendingEnableCoordinator {
             }
         }
 
+        // rollback restores this snapshot, so an unread entry must stop the enable
+        let metadata = cloud_keychain.snapshot_passkey_metadata().map_err(|source| {
+            CloudBackupError::internal_context("snapshot Cloud Backup passkey metadata", source)
+        })?;
+
         let mut journal = PendingEnableJournal::staging(
             context,
             namespace_id.to_owned(),
             PendingEnableNamespaceOwnership::RecoveredExisting,
-            cloud_keychain.snapshot_passkey_metadata(),
+            metadata,
         );
         cloud_keychain.save_pending_enable_journal(&journal).map_err(|source| {
             CloudBackupError::internal_context("claim recovered pending enable ownership", source)
@@ -247,12 +252,17 @@ impl PendingEnableCoordinator {
             }
         }
 
+        // rollback restores this snapshot, so an unread entry must stop the enable
+        let metadata = cloud_keychain.snapshot_passkey_metadata().map_err(|source| {
+            CloudBackupError::internal_context("snapshot Cloud Backup passkey metadata", source)
+        })?;
+
         let master_key = MasterKey::generate();
         let mut journal = PendingEnableJournal::staging(
             context,
             master_key.namespace_id(),
             PendingEnableNamespaceOwnership::FreshOwned,
-            cloud_keychain.snapshot_passkey_metadata(),
+            metadata,
         );
         cloud_keychain.save_pending_enable_journal(&journal).map_err(|source| {
             CloudBackupError::internal_context("claim pending enable ownership", source)
@@ -464,29 +474,22 @@ impl PendingEnableCoordinator {
     }
 
     fn rollback_owned_stage(&self, original: CloudBackupError) -> CloudBackupError {
-        let staged_rollback = self.cspp().discard_staged_master_key().map_err(|source| {
-            CloudBackupError::internal_context("discard failed pending enable stage", source)
-        });
-        let journal_rollback =
-            self.cloud_keychain().delete_pending_enable_journal().map_err(|source| {
-                CloudBackupError::internal_context("clear failed pending enable ownership", source)
-            });
-        let cleanup_errors = [staged_rollback.err(), journal_rollback.err()]
-            .into_iter()
-            .flatten()
-            .map(|error| error.to_string())
-            .collect::<Vec<_>>();
-        if cleanup_errors.is_empty() {
-            return original;
+        // the journal is what lets restart recovery find and discard this stage, so it is kept
+        // until the stage is gone, leaving the same state as a crash before the rollback
+        if let Err(source) = self.cspp().discard_staged_master_key() {
+            return CloudBackupError::internal_context(
+                format!("{original}; discard failed pending enable stage"),
+                source,
+            );
         }
 
-        CloudBackupError::Internal(
-            format!(
-                "{original}; pending enable stage rollback also failed: {}",
-                cleanup_errors.join("; ")
-            )
-            .into(),
-        )
+        match self.cloud_keychain().delete_pending_enable_journal() {
+            Ok(()) => original,
+            Err(source) => CloudBackupError::internal_context(
+                format!("{original}; clear failed pending enable ownership"),
+                source,
+            ),
+        }
     }
 
     pub(crate) fn restore_pending_enable_local_promotion_for_retry(
@@ -688,12 +691,17 @@ impl PendingEnableCoordinator {
             })?
             .map(|master_key| master_key.namespace_id());
         let cloud_keychain = self.cloud_keychain();
+        let read_error =
+            |source| CloudBackupError::internal_context("inspect committed passkey", source);
+
+        let namespace_id = cloud_keychain.namespace_id().map_err(read_error)?;
+        let credential_id = cloud_keychain.load_credential_id().map_err(read_error)?;
+        let prf_salt = cloud_keychain.load_prf_salt().map_err(read_error)?;
 
         Ok(active_namespace.as_deref() == Some(journal.namespace_id())
-            && cloud_keychain.namespace_id().as_deref() == Some(journal.namespace_id())
-            && cloud_keychain.load_credential_id().as_deref()
-                == Some(passkey.credential_id.as_slice())
-            && cloud_keychain.load_prf_salt() == Some(passkey.prf_salt))
+            && namespace_id.as_deref() == Some(journal.namespace_id())
+            && credential_id.as_deref() == Some(passkey.credential_id.as_slice())
+            && prf_salt == Some(passkey.prf_salt))
     }
 
     fn promotion_status(&self) -> Result<MasterKeyPromotionStatus, CloudBackupError> {

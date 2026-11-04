@@ -498,7 +498,7 @@ mod tests {
         let manager = RustCloudBackupManager::init();
         configure_enabled_cloud_backup(&manager, globals, 0);
 
-        let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+        let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
         let configured = PersistedConfiguredCloudBackup {
             passkey: PersistedPasskeyState::Available,
             verification: PersistedBackupVerificationState::NotVerified {

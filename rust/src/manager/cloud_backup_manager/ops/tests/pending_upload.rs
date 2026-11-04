@@ -91,7 +91,7 @@ async fn start_verification_with_pending_upload_consumes_prompt_decision() {
     configure_enabled_cloud_backup(&manager, globals, 3);
 
     let metadata = xpub_only_wallet_metadata();
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = wallet_record_id(metadata.id.as_ref());
     manager.backup_new_wallet(metadata.clone());
     manager
@@ -129,7 +129,7 @@ async fn pending_upload_verification_blocks_on_cloud_authorization() {
     clear_wallet_upload_runtime_for_test_async(&manager).await;
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     persist_pending_master_key_confirmation(namespace_id.clone(), "pending");
     globals.cloud.set_master_key_backup(namespace_id.clone(), vec![1, 2, 3]);
     globals
@@ -155,7 +155,7 @@ async fn pending_upload_verification_preserves_newer_dirty_state() {
     configure_enabled_cloud_backup(&manager, globals, 0);
 
     let metadata = WalletMetadata::preview_new();
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     Database::global()
         .cloud_blob_sync_states
@@ -192,7 +192,7 @@ async fn start_verification_dispatch_resumes_pending_upload_verification() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     persist_pending_master_key_confirmation(namespace_id.clone(), "pending");
     manager
         .replace_pending_verification_completion(PendingVerificationCompletion::new(
@@ -240,7 +240,7 @@ async fn pending_upload_verification_finalizes_awaiting_deep_verify() {
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
     hold_wallet_upload_confirmation(globals, &metadata).await;
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
 
     let result = deep_verify_for_test(&manager, true).await;
@@ -284,7 +284,7 @@ async fn pending_upload_verification_keeps_master_key_wrapper_hash_mismatch_pend
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let expected_master_json = vec![1, 2, 3];
     let expected_revision = master_key_wrapper_revision_hash(&expected_master_json);
     persist_pending_master_key_confirmation(namespace_id.clone(), expected_revision);
@@ -322,7 +322,7 @@ async fn pending_upload_verification_does_not_read_locally_staged_master_key_as_
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let expected_master_json = vec![1, 2, 3];
     let expected_revision = master_key_wrapper_revision_hash(&expected_master_json);
     persist_pending_master_key_confirmation(namespace_id.clone(), expected_revision.clone());
@@ -359,7 +359,7 @@ async fn pending_upload_verification_expires_stale_completion() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     manager
         .replace_pending_verification_completion(PendingVerificationCompletion::new(
             DeepVerificationReport {
@@ -407,6 +407,41 @@ async fn pending_upload_verification_expires_stale_completion() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn pending_verification_stays_pending_while_the_master_key_is_unreadable() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    manager
+        .replace_pending_verification_completion(PendingVerificationCompletion::new(
+            DeepVerificationReport {
+                master_key_wrapper_repaired: false,
+                local_master_key_repaired: false,
+                credential_recovered: false,
+                wallets_verified: 0,
+                wallet_issues: Default::default(),
+                detail: None,
+            },
+            namespace_id,
+            Vec::new(),
+        ))
+        .unwrap();
+    let verification_before = manager.model_snapshot().verification;
+
+    globals.keychain.fail_reads_for("cspp::v1::master_key");
+    manager.finalize_pending_verification_if_ready().await;
+    globals.keychain.clear_read_failures();
+
+    assert!(manager.pending_verification_completion().is_some());
+    assert_eq!(manager.model_snapshot().verification, verification_before);
+
+    manager.finalize_pending_verification_if_ready().await;
+    assert!(manager.pending_verification_completion().is_none());
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
@@ -414,7 +449,7 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
     configure_enabled_cloud_backup(&manager, globals, 1);
     let master_revision = seed_verifiable_cloud_master_key(globals);
 
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let metadata = xpub_only_wallet_metadata();
     let record_id = wallet_record_id(metadata.id.as_ref());
     persist_xpub_wallets(vec![metadata.clone()]);
@@ -490,7 +525,7 @@ async fn pending_upload_verification_survives_restart() {
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
     hold_wallet_upload_confirmation(globals, &metadata).await;
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
 
     let result = deep_verify_for_test(&manager, true).await;
@@ -530,7 +565,7 @@ async fn pending_upload_verification_retries_until_expected_revision_is_readable
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
         .load_master_key_from_store()
@@ -649,7 +684,7 @@ async fn pending_upload_verification_marks_invalid_wallet_json_failed() {
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
 
     hold_wallet_upload_confirmation(globals, &metadata).await;
@@ -686,7 +721,7 @@ async fn pending_upload_verification_marks_terminal_live_upload_failures_failed(
     configure_enabled_cloud_backup(&manager, globals, 0);
 
     let metadata = xpub_only_wallet_metadata();
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
     persist_xpub_wallets(vec![metadata.clone()]);
     Database::global()
@@ -726,7 +761,7 @@ async fn terminally_failed_pending_upload_finishes_verification_without_waiting_
     let globals = test_globals();
     let manager = init_manager();
     let metadata = prepare_deep_verify_with_unsynced_wallet(&manager, globals);
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(metadata.id.as_ref());
 
     hold_wallet_upload_confirmation(globals, &metadata).await;

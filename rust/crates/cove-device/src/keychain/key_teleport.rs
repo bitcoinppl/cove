@@ -23,7 +23,7 @@ impl KeyTeleportSessionStore {
     }
 
     pub(crate) fn get_receive_session(&self) -> Result<Option<Zeroizing<String>>, KeychainError> {
-        let (encrypted, cryptor_str) = match self.pair().state() {
+        let (encrypted, cryptor_str) = match self.pair().state()? {
             State::Empty => return Ok(None),
             State::Complete { encrypted_value, serialized_cryptor } => {
                 (encrypted_value, serialized_cryptor)

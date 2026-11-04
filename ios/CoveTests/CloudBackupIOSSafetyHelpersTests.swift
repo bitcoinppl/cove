@@ -13,6 +13,15 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
         XCTAssertFalse(startupRecoveryContinuationMessage.contains("wallet path"))
     }
 
+    func testStartupRecoveryOffersRetryWhenKeychainIsUnreadable() {
+        let error = AppInitError.KeychainUnavailable(message: "status=-25308")
+        let failure = classifyBootstrapFailure(error)
+
+        XCTAssertEqual(failure, .keychainUnavailable(error.localizedDescription))
+        XCTAssertNotEqual(failure, .catastrophicRecovery)
+        XCTAssertTrue(startupKeychainUnavailableMessage.contains("Try Again"))
+    }
+
     func testStartupRecoveryLeavesOtherFatalErrorsWithoutRetryState() {
         let error = AppInitError.DatabaseVerificationFailed(message: "verification failed")
         let failure = classifyBootstrapFailure(error)

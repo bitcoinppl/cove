@@ -216,7 +216,7 @@ impl WalletSecretStore {
         let _guard = self.1.lock();
         let pair = self.pair(id);
 
-        match pair.state() {
+        match pair.state()? {
             State::Complete { .. } => return Err(KeychainError::WalletSecretExists),
             State::ValueOnly => {
                 if !pair.delete_value() {
@@ -237,7 +237,7 @@ impl WalletSecretStore {
     pub(crate) fn get(&self, id: &WalletId) -> Result<Option<WalletSecret>, KeychainError> {
         // serialize against writers so a read never observes a half-written pair
         let _guard = self.1.lock();
-        let (encrypted_secret, encryption_key) = match self.pair(id).state() {
+        let (encrypted_secret, encryption_key) = match self.pair(id).state()? {
             State::Empty => return Ok(None),
             State::Complete { encrypted_value, serialized_cryptor } => {
                 (encrypted_value, serialized_cryptor)
@@ -268,9 +268,9 @@ impl WalletSecretStore {
         self.pair(id).delete_existing_value_then_cryptor()
     }
 
-    pub(crate) fn has_any(&self, id: &WalletId) -> bool {
+    pub(crate) fn has_any(&self, id: &WalletId) -> Result<bool, KeychainError> {
         let _guard = self.1.lock();
-        !matches!(self.pair(id).state(), State::Empty)
+        Ok(!matches!(self.pair(id).state()?, State::Empty))
     }
 
     fn pair(&self, id: &WalletId) -> EncryptedPair {
@@ -542,5 +542,34 @@ mod tests {
 
         assert!(keychain.delete_wallet_items(&id));
         assert!(keychain.get_wallet_secret(&id).unwrap().is_none());
+    }
+
+    #[test]
+    fn delete_wallet_items_deletes_nothing_when_an_entry_is_unreadable() {
+        let id = wallet_id();
+        let unreadable_entries = [
+            format!("{id}::wallet_xpub"),
+            format!("{id}::wallet_public_descriptor"),
+            format!("{id}::tap_signer_backup"),
+        ];
+
+        for unreadable in unreadable_entries {
+            let access = MockKeychain::default();
+            let keychain = keychain(access.clone());
+            keychain.save_wallet_key(&id, mnemonic()).unwrap();
+            keychain.save_tap_signer_backup(&id, &[1, 2, 3]).unwrap();
+            let mut stored = access.keys();
+            stored.sort();
+            access.fail_read_for(unreadable);
+
+            assert!(!keychain.delete_wallet_items(&id));
+            let mut remaining = access.keys();
+            remaining.sort();
+            assert_eq!(remaining, stored);
+
+            access.clear_read_failures();
+            assert!(keychain.delete_wallet_items(&id));
+            assert!(keychain.get_wallet_secret(&id).unwrap().is_none());
+        }
     }
 }

@@ -1065,13 +1065,13 @@ fn load_credential_id_returns_none_for_invalid_hex_and_decodes_valid_hex() {
     globals.reset();
     globals.keychain.set_entries(vec![(CSPP_CREDENTIAL_ID_KEY, "not-hex")]);
 
-    assert!(CloudBackupKeychain::global().load_credential_id().is_none());
+    assert!(CloudBackupKeychain::global().load_credential_id().unwrap().is_none());
 
     let credential_id = vec![1, 2, 3, 254, 255];
     let credential_hex = hex::encode(&credential_id);
     globals.keychain.set_entries(vec![(CSPP_CREDENTIAL_ID_KEY, &credential_hex)]);
 
-    assert_eq!(CloudBackupKeychain::global().load_credential_id(), Some(credential_id));
+    assert_eq!(CloudBackupKeychain::global().load_credential_id().unwrap(), Some(credential_id));
 }
 
 #[test]
@@ -1090,7 +1090,7 @@ fn pending_enable_journal_roundtrips_without_prf_output() {
         CloudBackupEnableContext::settings_manual(),
         "fresh-namespace".into(),
         PendingEnableNamespaceOwnership::FreshOwned,
-        cloud_keychain.snapshot_passkey_metadata(),
+        cloud_keychain.snapshot_passkey_metadata().unwrap(),
     );
     assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
         credential_id: vec![1, 2, 3],
@@ -1117,7 +1117,7 @@ fn pending_enable_journal_rejects_unknown_version() {
         CloudBackupEnableContext::settings_manual(),
         "fresh-namespace".into(),
         PendingEnableNamespaceOwnership::FreshOwned,
-        cloud_keychain.snapshot_passkey_metadata(),
+        cloud_keychain.snapshot_passkey_metadata().unwrap(),
     );
     let mut value = serde_json::to_value(journal).unwrap();
     value["version"] = serde_json::json!(99);
@@ -1142,7 +1142,7 @@ fn pending_enable_journal_rejects_out_of_order_or_conflicting_transitions() {
         CloudBackupEnableContext::settings_manual(),
         "fresh-namespace".into(),
         PendingEnableNamespaceOwnership::FreshOwned,
-        CloudBackupKeychain::global().snapshot_passkey_metadata(),
+        CloudBackupKeychain::global().snapshot_passkey_metadata().unwrap(),
     );
     let passkey = PendingEnablePasskeyMetadata {
         credential_id: vec![1, 2, 3],
@@ -1176,7 +1176,7 @@ fn pending_enable_metadata_snapshot_restores_exact_prior_values() {
     ]);
 
     let cloud_keychain = CloudBackupKeychain::global();
-    let snapshot = cloud_keychain.snapshot_passkey_metadata();
+    let snapshot = cloud_keychain.snapshot_passkey_metadata().unwrap();
     cloud_keychain.save_passkey_and_namespace(&[1, 2, 3], [9; 32], "fresh-namespace").unwrap();
 
     cloud_keychain.restore_passkey_metadata(&snapshot).unwrap();
@@ -1199,7 +1199,7 @@ fn clear_local_state_treats_empty_keychain_as_success() {
     globals.reset();
 
     CloudBackupKeychain::global().clear_local_state().unwrap();
-    assert!(CloudBackupKeychain::global().namespace_id().is_none());
+    assert!(CloudBackupKeychain::global().namespace_id().unwrap().is_none());
 }
 
 #[test]
@@ -1219,23 +1219,23 @@ fn clear_local_state_removes_master_key_and_passkey_metadata() {
             CloudBackupEnableContext::settings_manual(),
             "pending-namespace".into(),
             PendingEnableNamespaceOwnership::FreshOwned,
-            cloud_keychain.snapshot_passkey_metadata(),
+            cloud_keychain.snapshot_passkey_metadata().unwrap(),
         ))
         .unwrap();
 
     assert!(cspp.load_master_key_from_store().unwrap().is_some());
-    assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_some());
-    assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).is_some());
-    assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_some());
-    assert!(keychain.get(CSPP_PENDING_ENABLE_JOURNAL_KEY.into()).is_some());
+    assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).unwrap().is_some());
+    assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).unwrap().is_some());
+    assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).unwrap().is_some());
+    assert!(keychain.get(CSPP_PENDING_ENABLE_JOURNAL_KEY.into()).unwrap().is_some());
 
     cloud_keychain.clear_local_state().unwrap();
 
     assert!(cspp.load_master_key_from_store().unwrap().is_none());
-    assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_none());
-    assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).is_none());
-    assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_none());
-    assert!(keychain.get(CSPP_PENDING_ENABLE_JOURNAL_KEY.into()).is_none());
+    assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).unwrap().is_none());
+    assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).unwrap().is_none());
+    assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).unwrap().is_none());
+    assert!(keychain.get(CSPP_PENDING_ENABLE_JOURNAL_KEY.into()).unwrap().is_none());
 }
 
 #[test]
@@ -1259,9 +1259,9 @@ fn clear_local_state_attempts_passkey_metadata_after_master_key_delete_failure()
         error,
         CloudBackupKeychainError::Keychain(cove_device::keychain::KeychainError::Delete)
     ));
-    assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).is_none());
-    assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).is_none());
-    assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).is_none());
+    assert!(keychain.get(CSPP_CREDENTIAL_ID_KEY.into()).unwrap().is_none());
+    assert!(keychain.get(CSPP_PRF_SALT_KEY.into()).unwrap().is_none());
+    assert!(keychain.get(CSPP_NAMESPACE_ID_KEY.into()).unwrap().is_none());
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1299,7 +1299,7 @@ async fn passkey_repair_finalization_keeps_existing_count_when_wallet_listing_is
         .set(&persisted_passkey_missing_cloud_backup_state(Some(7)))
         .unwrap();
     manager.sync_persisted_state();
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.fail_list_wallet_files_for_namespace(
         namespace,
         CloudStorageError::NotFound("wallet files missing".into()),
@@ -1351,7 +1351,7 @@ async fn wrapper_repair_fails_closed_when_wallet_listing_is_missing() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 1);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.fail_list_wallet_files_for_namespace(
         namespace,
         CloudStorageError::NotFound("wallet files missing".into()),
@@ -1369,7 +1369,7 @@ async fn wrapper_repair_reports_failure_after_upload_when_passkey_persistence_fa
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
     globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
     globals.keychain.fail_save_at(1);
@@ -1377,6 +1377,6 @@ async fn wrapper_repair_reports_failure_after_upload_when_passkey_persistence_fa
     run_repair_passkey_operation(&manager, true).await;
 
     assert!(globals.cloud.has_master_key_backup(&namespace));
-    assert_eq!(CloudBackupKeychain::global().load_credential_id(), None);
-    assert_eq!(CloudBackupKeychain::global().load_prf_salt(), None);
+    assert_eq!(CloudBackupKeychain::global().load_credential_id().unwrap(), None);
+    assert_eq!(CloudBackupKeychain::global().load_prf_salt().unwrap(), None);
 }

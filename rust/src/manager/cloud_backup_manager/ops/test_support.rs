@@ -117,8 +117,8 @@ impl cove_cspp::CsppStore for MockStoreHandle {
         Ok(())
     }
 
-    fn get(&self, key: String) -> Option<String> {
-        self.0.entries.lock().get(&key).cloned()
+    fn get(&self, key: String) -> Result<Option<String>, Self::Error> {
+        Ok(self.0.entries.lock().get(&key).cloned())
     }
 
     fn delete(&self, key: String) -> bool {
@@ -1192,7 +1192,7 @@ fn clear_local_wallets() {
 }
 
 pub(crate) fn persist_dirty_blob_state(wallet_id: WalletId) {
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
     let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
 
@@ -1231,7 +1231,7 @@ pub(crate) fn persist_failed_blob_state_with_issue(
     retryable: bool,
     issue: Option<CloudStorageIssue>,
 ) {
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
     let failed_at = cove_util::time::unix_timestamp_secs_or_zero();
 
@@ -1253,7 +1253,7 @@ pub(crate) fn persist_failed_blob_state_with_issue(
 }
 
 pub(crate) fn persist_uploading_blob_state(wallet_id: WalletId, started_at: u64) {
-    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
 
     Database::global()

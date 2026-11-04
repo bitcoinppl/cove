@@ -20,7 +20,7 @@ impl WalletPublicDataStore {
     }
 
     pub(crate) fn get_xpub(&self, id: &WalletId) -> Result<Option<Xpub>, KeychainError> {
-        let Some(value) = self.0.get(xpub_key_name(id)) else {
+        let Some(value) = self.0.get(xpub_key_name(id))? else {
             return Ok(None);
         };
 
@@ -51,7 +51,7 @@ impl WalletPublicDataStore {
         &self,
         id: &WalletId,
     ) -> Result<Option<(ExtendedDescriptor, ExtendedDescriptor)>, KeychainError> {
-        let Some(value) = self.0.get(descriptor_key_name(id)) else {
+        let Some(value) = self.0.get(descriptor_key_name(id))? else {
             return Ok(None);
         };
 
@@ -79,17 +79,24 @@ impl WalletPublicDataStore {
         delete_if_present(&self.0, descriptor_key_name(id))
     }
 
-    pub(crate) fn has_any(&self, id: &WalletId) -> bool {
-        self.0.get(xpub_key_name(id)).is_some() || self.0.get(descriptor_key_name(id)).is_some()
+    /// Reads both entries even when the first exists, so a caller can rely on a successful
+    /// result meaning neither entry is unreadable
+    pub(crate) fn has_any(&self, id: &WalletId) -> Result<bool, KeychainError> {
+        let xpub = self.0.get(xpub_key_name(id))?;
+        let descriptors = self.0.get(descriptor_key_name(id))?;
+
+        Ok(xpub.is_some() || descriptors.is_some())
     }
 }
 
+/// Returns false when the entry could not be read, so an unreadable entry is never reported as
+/// deleted
 fn delete_if_present(access: &SharedAccess, key: String) -> bool {
-    if access.get(key.clone()).is_none() {
-        return true;
+    match access.get(key.clone()) {
+        Ok(None) => true,
+        Ok(Some(_)) => access.delete(key),
+        Err(_) => false,
     }
-
-    access.delete(key)
 }
 
 fn xpub_key_name(id: &WalletId) -> String {

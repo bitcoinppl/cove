@@ -97,7 +97,7 @@ async fn cloud_round_trip_restores_labels_locks_and_seed_without_scan_state() {
 
     let wallet = save_used_hot_wallet();
     let record_id = wallet_record_id(wallet.id.as_ref());
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
 
     manager.do_backup_wallets(std::slice::from_ref(&wallet)).await.unwrap();
     assert!(globals.cloud.has_wallet_backup(&namespace, &record_id));

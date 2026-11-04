@@ -36,6 +36,7 @@ struct LastBootstrapFailure {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ErrorCategory {
     KeyDerivation,
+    KeychainUnavailable,
     MainDatabaseMigration,
     WalletDatabaseMigration,
     Cancelled,
@@ -49,6 +50,7 @@ impl ErrorCategory {
     fn as_str(self) -> &'static str {
         match self {
             Self::KeyDerivation => "key_derivation",
+            Self::KeychainUnavailable => "keychain_unavailable",
             Self::MainDatabaseMigration => "main_database_migration",
             Self::WalletDatabaseMigration => "wallet_database_migration",
             Self::Cancelled => "cancelled",
@@ -64,6 +66,7 @@ impl From<&AppInitError> for ErrorCategory {
     fn from(error: &AppInitError) -> Self {
         match error {
             AppInitError::KeyDerivation(_) => Self::KeyDerivation,
+            AppInitError::KeychainUnavailable(_) => Self::KeychainUnavailable,
             AppInitError::MainDatabaseMigration(_) => Self::MainDatabaseMigration,
             AppInitError::WalletDatabaseMigration(_) => Self::WalletDatabaseMigration,
             AppInitError::Cancelled(_) => Self::Cancelled,

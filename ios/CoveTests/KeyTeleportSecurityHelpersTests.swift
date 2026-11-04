@@ -88,10 +88,65 @@ final class KeyTeleportSecurityHelpersTests: XCTestCase {
         XCTAssertEqual(status, errSecInteractionNotAllowed)
     }
 
-    func testWalletKeyDeletionRejectsEnumerationFailure() {
-        let accessor = KeychainAccessor {
-            .failure(errSecInteractionNotAllowed)
+    func testKeychainItemReadTreatsOnlyItemNotFoundAsAbsent() {
+        let data = Data("stored".utf8) as CFData
+
+        guard case let .value(value) = classifyKeychainItemRead(status: errSecSuccess, result: data)
+        else {
+            return XCTFail("success status must return the stored value")
         }
+        XCTAssertEqual(value, "stored")
+
+        guard case .itemNotFound = classifyKeychainItemRead(status: errSecItemNotFound, result: nil)
+        else {
+            return XCTFail("item-not-found must be the only absent result")
+        }
+
+        guard case let .failure(status) = classifyKeychainItemRead(
+            status: errSecInteractionNotAllowed,
+            result: nil
+        ) else {
+            return XCTFail("a locked keychain must fail closed")
+        }
+        XCTAssertEqual(status, errSecInteractionNotAllowed)
+
+        guard case .failure(errSecDecode) = classifyKeychainItemRead(
+            status: errSecSuccess,
+            result: Data([0xFF]) as CFData
+        ) else {
+            return XCTFail("undecodable data must fail closed")
+        }
+    }
+
+    func testKeychainGetThrowsOnReadFailureAndReturnsNilOnlyWhenMissing() throws {
+        let locked = KeychainAccessor(itemReader: { _ in .failure(errSecInteractionNotAllowed) })
+        XCTAssertThrowsError(try locked.get(key: "cspp::v1::master_key")) { error in
+            guard case .Read = error as? KeychainError else {
+                return XCTFail("expected KeychainError.Read, got \(error)")
+            }
+        }
+
+        let missing = KeychainAccessor(itemReader: { _ in .itemNotFound })
+        XCTAssertNil(try missing.get(key: "cspp::v1::master_key"))
+    }
+
+    func testKeychainSaveReplacesAnExistingItemInPlace() throws {
+        let accessor = KeychainAccessor()
+        let key = "cove-tests::keychain_overwrite::\(UUID().uuidString)"
+        defer { _ = accessor.delete(key: key) }
+
+        try accessor.save(key: key, value: "first")
+        try accessor.save(key: key, value: "second")
+
+        XCTAssertEqual(try accessor.get(key: key), "second")
+        XCTAssertTrue(accessor.delete(key: key))
+        XCTAssertNil(try accessor.get(key: key))
+    }
+
+    func testWalletKeyDeletionRejectsEnumerationFailure() {
+        let accessor = KeychainAccessor(accountEnumerator: {
+            .failure(errSecInteractionNotAllowed)
+        })
 
         XCTAssertThrowsError(try accessor.deleteAllWalletItems()) { error in
             XCTAssertEqual(error as? KeychainError, .Delete)

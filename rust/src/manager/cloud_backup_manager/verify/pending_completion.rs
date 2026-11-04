@@ -165,17 +165,29 @@ impl RustCloudBackupManager {
         completion: PendingVerificationCompletion,
     ) -> Result<FinalizePendingVerificationResult, Box<DeepVerificationFailure>> {
         let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-        let master_key = cspp
-            .load_master_key_from_store()
-            .map_err(|source| CloudBackupError::internal_context("load local master key", source))
-            .map_err(|error| {
-                Box::new(self.pending_verification_failure(&completion, error.reader_message()))
-            })?
-            .ok_or_else(|| {
-                Box::new(
-                    self.pending_verification_failure(&completion, "no local master key available"),
-                )
-            })?;
+        let master_key = match cspp.load_master_key_from_store() {
+            Ok(master_key) => master_key,
+
+            // an unreadable keychain, for example while the device is locked, proves nothing
+            // about the backup, so keep the completion pending for the next check
+            Err(error @ cove_cspp::CsppError::Read(_)) => {
+                warn!("Pending verification: local master key is unreadable: {error}");
+                return Ok(FinalizePendingVerificationResult::Pending);
+            }
+
+            Err(error) => {
+                let error = CloudBackupError::internal_context("load local master key", error);
+                return Err(Box::new(
+                    self.pending_verification_failure(&completion, error.reader_message()),
+                ));
+            }
+        };
+
+        let master_key = master_key.ok_or_else(|| {
+            Box::new(
+                self.pending_verification_failure(&completion, "no local master key available"),
+            )
+        })?;
 
         let critical_key = Zeroizing::new(master_key.critical_data_key());
         let mut report = completion.report();

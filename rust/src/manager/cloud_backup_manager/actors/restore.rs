@@ -1022,7 +1022,7 @@ mod tests {
         globals.keychain.fail_save_at(4);
 
         let result = save_restore_keychain_entries(
-            &CloudBackupKeychain::global().capture_restore_activation_snapshot(),
+            &CloudBackupKeychain::global().capture_restore_activation_snapshot().unwrap(),
             cove_cspp::master_key::MasterKey::generate(),
             Some(RestoredPasskeyMaterial { credential_id: vec![1, 2, 3], prf_salt: [4; 32] }),
             "namespace-id".into(),
@@ -1048,7 +1048,7 @@ mod tests {
         globals.keychain.fail_save_at(1);
 
         let result = save_restore_keychain_entries(
-            &CloudBackupKeychain::global().capture_restore_activation_snapshot(),
+            &CloudBackupKeychain::global().capture_restore_activation_snapshot().unwrap(),
             cove_cspp::master_key::MasterKey::generate(),
             Some(RestoredPasskeyMaterial { credential_id: vec![1, 2, 3], prf_salt: [4; 32] }),
             "namespace-id".into(),
@@ -1081,7 +1081,7 @@ mod tests {
         globals.keychain.fail_save_at(1);
 
         let result = save_restore_keychain_entries(
-            &CloudBackupKeychain::global().capture_restore_activation_snapshot(),
+            &CloudBackupKeychain::global().capture_restore_activation_snapshot().unwrap(),
             cove_cspp::master_key::MasterKey::generate(),
             None,
             "namespace-id".into(),

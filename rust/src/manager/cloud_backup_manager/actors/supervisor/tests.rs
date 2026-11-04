@@ -527,7 +527,7 @@ fn prepare_test_enable_local_promotion(
         finalization.context,
         finalization.namespace_id.clone(),
         PendingEnableNamespaceOwnership::FreshOwned,
-        cloud_keychain.snapshot_passkey_metadata(),
+        cloud_keychain.snapshot_passkey_metadata().unwrap(),
     );
     assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
         credential_id: finalization.passkey.credential_id.clone(),
@@ -572,7 +572,7 @@ fn prepare_test_enable_recovery_local_promotion(
         finalization.context,
         finalization.namespace_id.clone(),
         PendingEnableNamespaceOwnership::RecoveredExisting,
-        cloud_keychain.snapshot_passkey_metadata(),
+        cloud_keychain.snapshot_passkey_metadata().unwrap(),
     );
     assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
         credential_id: finalization.credential_id.clone(),
@@ -2011,7 +2011,7 @@ async fn enable_recovery_finalization_failure_restores_prior_and_retains_retry_e
     cspp.save_master_key(&prior_master_key).unwrap();
     let cloud_keychain = CloudBackupKeychain::global();
     cloud_keychain.save_passkey_and_namespace(&[7, 8, 9], [8; 32], "prior-namespace").unwrap();
-    let prior_metadata = cloud_keychain.snapshot_passkey_metadata();
+    let prior_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
 
     let recovered_master_key = cove_cspp::master_key::MasterKey::generate();
     let finalization =
@@ -2048,7 +2048,7 @@ async fn enable_recovery_finalization_failure_restores_prior_and_retains_retry_e
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         &prior_master_key_bytes
     );
-    assert_eq!(cloud_keychain.snapshot_passkey_metadata(), prior_metadata);
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), prior_metadata);
     assert_eq!(
         cspp.master_key_promotion_status().unwrap(),
         MasterKeyPromotionStatus::Pending(MasterKeyPromotionActiveState::Prior)
@@ -2093,7 +2093,7 @@ async fn enable_recovery_finalization_projects_success_after_durable_pending_com
     assert!(emitted_enable_completed(&manager));
     assert_eq!(supervisor.active_operation, None);
     assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
-    assert_eq!(CloudBackupKeychain::global().namespace_id().as_deref(), Some(namespace_id.as_str()));
+    assert_eq!(CloudBackupKeychain::global().namespace_id().unwrap().as_deref(), Some(namespace_id.as_str()));
     assert_eq!(
         cove_cspp::Cspp::new(Keychain::global().clone())
             .load_master_key_from_store()
@@ -2251,7 +2251,7 @@ async fn pending_enable_restart_discards_stage_interrupted_after_ownership_claim
             CloudBackupEnableContext::settings_manual(),
             staged_master_key.namespace_id(),
             PendingEnableNamespaceOwnership::RecoveredExisting,
-            cloud_keychain.snapshot_passkey_metadata(),
+            cloud_keychain.snapshot_passkey_metadata().unwrap(),
         ))
         .unwrap();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
@@ -2278,7 +2278,7 @@ async fn pending_enable_restart_discards_only_unregistered_staged_material() {
     cloud_keychain
         .save_passkey_and_namespace(&[4, 5, 6], [8; 32], &prior_master_key.namespace_id())
         .unwrap();
-    let previous_metadata = cloud_keychain.snapshot_passkey_metadata();
+    let previous_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
     cspp.save_staged_master_key(&staged_master_key).unwrap();
     cloud_keychain
         .save_pending_enable_journal(&staged_pending_enable_journal(
@@ -2300,7 +2300,7 @@ async fn pending_enable_restart_discards_only_unregistered_staged_material() {
         prior_master_key.as_bytes()
     );
     assert_eq!(cspp.master_key_promotion_status().unwrap(), cove_cspp::MasterKeyPromotionStatus::None);
-    assert_eq!(cloud_keychain.snapshot_passkey_metadata(), previous_metadata);
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), previous_metadata);
     assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
 }
 
@@ -2318,7 +2318,7 @@ async fn pending_enable_restart_hydrates_registered_passkey_for_manual_confirmat
         CloudBackupEnableContext::settings_manual(),
         expected_namespace.clone(),
         PendingEnableNamespaceOwnership::FreshOwned,
-        cloud_keychain.snapshot_passkey_metadata(),
+        cloud_keychain.snapshot_passkey_metadata().unwrap(),
     );
     assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
         credential_id: passkey.credential_id.clone(),
@@ -2357,7 +2357,7 @@ async fn pending_enable_restart_rolls_back_recovered_existing_instead_of_hydrati
     cloud_keychain
         .save_passkey_and_namespace(&[4, 5, 6], [8; 32], &prior_master_key.namespace_id())
         .unwrap();
-    let previous_metadata = cloud_keychain.snapshot_passkey_metadata();
+    let previous_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
     cspp.save_staged_master_key(&recovered_master_key).unwrap();
     let passkey = test_staged_passkey(vec![1, 2, 3]);
     let mut journal = staged_pending_enable_journal(
@@ -2389,7 +2389,7 @@ async fn pending_enable_restart_rolls_back_recovered_existing_instead_of_hydrati
         cspp.master_key_promotion_status().unwrap(),
         cove_cspp::MasterKeyPromotionStatus::None
     );
-    assert_eq!(cloud_keychain.snapshot_passkey_metadata(), previous_metadata);
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), previous_metadata);
     assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
 
     cspp.save_staged_master_key(&recovered_master_key).unwrap();
@@ -2427,7 +2427,7 @@ async fn pending_enable_restart_rolls_back_recovered_existing_instead_of_hydrati
         cspp.master_key_promotion_status().unwrap(),
         cove_cspp::MasterKeyPromotionStatus::None
     );
-    assert_eq!(cloud_keychain.snapshot_passkey_metadata(), previous_metadata);
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), previous_metadata);
     assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
 }
 
@@ -2456,8 +2456,8 @@ async fn pending_enable_restart_finishes_promoted_state_with_matching_completion
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         master_key.as_bytes()
     );
-    assert_eq!(cloud_keychain.namespace_id().as_deref(), Some(finalization.namespace_id.as_str()));
-    assert_eq!(cloud_keychain.load_credential_id().as_deref(), Some(finalization.passkey.credential_id.as_slice()));
+    assert_eq!(cloud_keychain.namespace_id().unwrap().as_deref(), Some(finalization.namespace_id.as_str()));
+    assert_eq!(cloud_keychain.load_credential_id().unwrap().as_deref(), Some(finalization.passkey.credential_id.as_slice()));
     assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
 }
 
@@ -2501,7 +2501,7 @@ async fn pending_enable_restart_finishes_after_commit_cleared_staging_slot() {
         master_key.as_bytes()
     );
     assert_eq!(
-        CloudBackupKeychain::global().namespace_id().as_deref(),
+        CloudBackupKeychain::global().namespace_id().unwrap().as_deref(),
         Some(finalization.namespace_id.as_str())
     );
     assert!(CloudBackupKeychain::global()
@@ -2522,7 +2522,7 @@ async fn pending_enable_restart_restores_prior_state_and_hydrates_when_completio
     cloud_keychain
         .save_passkey_and_namespace(&[4, 5, 6], [8; 32], &prior_master_key.namespace_id())
         .unwrap();
-    let previous_metadata = cloud_keychain.snapshot_passkey_metadata();
+    let previous_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
     let (finalization, staged_master_key) = test_enable_upload_finalization();
     prepare_test_enable_local_promotion(&manager, &finalization, &staged_master_key);
     let mut supervisor = CloudBackupSupervisor::new(
@@ -2542,7 +2542,7 @@ async fn pending_enable_restart_restores_prior_state_and_hydrates_when_completio
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         prior_master_key.as_bytes()
     );
-    assert_eq!(cloud_keychain.snapshot_passkey_metadata(), previous_metadata);
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), previous_metadata);
     assert!(supervisor
         .pending_enable_session
         .as_ref()
@@ -2657,7 +2657,7 @@ async fn no_journal_staged_cleanup_preserves_active_key_and_metadata_without_rem
     cloud_keychain
         .save_passkey_and_namespace(&[4, 5, 6], [8; 32], &active_master_key.namespace_id())
         .unwrap();
-    let previous_metadata = cloud_keychain.snapshot_passkey_metadata();
+    let previous_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
     Database::global()
         .cloud_backup_state
         .set(&persisted_enabled_cloud_backup_state(Some(0)))
@@ -2684,7 +2684,7 @@ async fn no_journal_staged_cleanup_preserves_active_key_and_metadata_without_rem
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         active_master_key.as_bytes()
     );
-    assert_eq!(cloud_keychain.snapshot_passkey_metadata(), previous_metadata);
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), previous_metadata);
     assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
     assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), remote_deletes_before);
@@ -2739,7 +2739,7 @@ async fn pending_enable_restart_projects_promotion_mismatch_as_support_only() {
         CloudBackupEnableContext::settings_manual(),
         staged_master_key.namespace_id(),
         PendingEnableNamespaceOwnership::FreshOwned,
-        cloud_keychain.snapshot_passkey_metadata(),
+        cloud_keychain.snapshot_passkey_metadata().unwrap(),
     );
     assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
         credential_id: vec![1, 2, 3],
@@ -2800,7 +2800,7 @@ async fn pending_enable_local_cleanup_preserves_prior_state_and_never_deletes_re
     cloud_keychain
         .save_passkey_and_namespace(&[4, 5, 6], [8; 32], &prior_master_key.namespace_id())
         .unwrap();
-    let previous_metadata = cloud_keychain.snapshot_passkey_metadata();
+    let previous_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
     Database::global()
         .cloud_backup_state
         .set(&persisted_enabled_cloud_backup_state(Some(0)))
@@ -2826,7 +2826,7 @@ async fn pending_enable_local_cleanup_preserves_prior_state_and_never_deletes_re
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         prior_master_key.as_bytes()
     );
-    assert_eq!(cloud_keychain.snapshot_passkey_metadata(), previous_metadata);
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), previous_metadata);
     assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
     assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
     assert_eq!(globals.cloud.delete_namespace_attempt_count(), remote_deletes_before);
@@ -2846,7 +2846,7 @@ async fn pending_enable_cleanup_revalidates_stale_evidence_before_mutating() {
             CloudBackupEnableContext::settings_manual(),
             "ffffffffffffffffffffffffffffffff".into(),
             PendingEnableNamespaceOwnership::FreshOwned,
-            cloud_keychain.snapshot_passkey_metadata(),
+            cloud_keychain.snapshot_passkey_metadata().unwrap(),
         ))
         .unwrap();
     let mut supervisor = CloudBackupSupervisor::new(
@@ -2880,7 +2880,7 @@ async fn pending_enable_cleanup_failure_recomputes_retry_availability() {
             CloudBackupEnableContext::settings_manual(),
             staged_master_key.namespace_id(),
             PendingEnableNamespaceOwnership::FreshOwned,
-            cloud_keychain.snapshot_passkey_metadata(),
+            cloud_keychain.snapshot_passkey_metadata().unwrap(),
         ))
         .unwrap();
     globals.keychain.fail_delete_at(3);
@@ -4431,8 +4431,8 @@ async fn seed_backup_stays_restorable_when_the_local_secret_cannot_be_read() {
         vec![(seed_record_id, CloudBackupWalletStatus::DeletedFromDevice)]
     );
     assert!(wallets[0].restore_failure.is_some());
-    assert_eq!(Keychain::global().get(secret_key), Some("garbage-secret".to_string()));
-    assert_eq!(Keychain::global().get(cryptor_key), Some("garbage-cryptor".to_string()));
+    assert_eq!(Keychain::global().get(secret_key).unwrap(), Some("garbage-secret".to_string()));
+    assert_eq!(Keychain::global().get(cryptor_key).unwrap(), Some("garbage-cryptor".to_string()));
     assert_eq!(local_wallets_like(&local_wallet).len(), 1);
 }
 

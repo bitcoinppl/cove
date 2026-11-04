@@ -54,6 +54,15 @@ class OnboardingHelpersTest {
     }
 
     @Test
+    fun keychainUnavailableOffersRetryInsteadOfRecovery() {
+        val failure = classifyBootstrapFailure(AppInitException.KeychainUnavailable("decrypt failed"))
+
+        assertEquals(BootstrapFailure.KeychainUnavailable("decrypt failed"), failure)
+        val unavailable = failure as BootstrapFailure.KeychainUnavailable
+        assertTrue(unavailable.message.contains("Try Again"))
+    }
+
+    @Test
     fun nonCatastrophicBootstrapErrorsRemainFatal() {
         val failure = classifyBootstrapFailure(AppInitException.AlreadyCalled("already called"))
 

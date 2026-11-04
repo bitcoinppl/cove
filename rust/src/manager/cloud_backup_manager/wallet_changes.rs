@@ -7,7 +7,7 @@ use super::RustCloudBackupManager;
 use super::wallets::{upload_may_drop_cloud_secret, wallet_metadata_change_requires_upload};
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    CloudBlobDirtyState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
+    CloudBackupRecordKey, CloudBlobDirtyState, PersistedCloudBlobState, PersistedCloudBlobSyncState,
 };
 use crate::wallet::metadata::{WalletId, WalletMetadata};
 
@@ -30,9 +30,21 @@ impl RustCloudBackupManager {
             return;
         }
 
-        let Ok(namespace_id) = self.current_namespace_id() else {
-            warn!("Cloud backup dirty mark skipped, namespace is unavailable");
-            return;
+        let namespace_id = match self.current_namespace_id() {
+            Ok(namespace_id) => namespace_id,
+
+            // the change still needs a durable dirty record while the keychain is unreadable,
+            // since the upload worker only picks up changes it finds recorded
+            Err(error) => match Self::recorded_namespace_id(&wallet_id) {
+                Some(namespace_id) => {
+                    warn!("Cloud backup namespace is unavailable, using the recorded one: {error}");
+                    namespace_id
+                }
+                None => {
+                    warn!("Cloud backup dirty mark skipped, namespace is unavailable: {error}");
+                    return;
+                }
+            },
         };
 
         let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
@@ -49,6 +61,18 @@ impl RustCloudBackupManager {
         }
 
         self.schedule_wallet_upload(wallet_id, false);
+    }
+
+    /// The namespace recorded with this wallet's last sync state, or with the master key
+    /// wrapper's when the wallet has none yet
+    fn recorded_namespace_id(wallet_id: &WalletId) -> Option<String> {
+        let sync_states = &Database::global().cloud_blob_sync_states;
+        let wallet_record_id = cove_cspp::backup_data::wallet_record_id(wallet_id.as_ref());
+
+        [wallet_record_id.as_str(), CloudBackupRecordKey::master_key_record_id()]
+            .into_iter()
+            .find_map(|record_id| sync_states.get(record_id).ok().flatten())
+            .map(|sync_state| sync_state.namespace_id)
     }
 
     pub(crate) fn handle_wallet_metadata_update(

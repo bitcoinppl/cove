@@ -18,6 +18,8 @@ pub(crate) mod test_support {
     pub(crate) use super::identity_set::test_support::*;
 }
 
+use cove_device::keychain::KeychainError;
+
 use crate::{database, wallet::metadata::WalletId};
 
 #[derive(Debug, thiserror::Error)]
@@ -27,6 +29,10 @@ pub(crate) enum WalletIdentityError {
 
     #[error("public identity for existing wallet {wallet_id}: {source}")]
     ExistingWalletPublicIdentity { wallet_id: WalletId, source: PublicWalletIdentityError },
+
+    /// The keychain could not read a hot wallet's secret, so whether it can sign is unknown
+    #[error("secret for existing hot wallet {wallet_id}: {source}")]
+    ExistingWalletSecret { wallet_id: WalletId, source: KeychainError },
 
     #[error("same-fingerprint wallet {wallet_id} is missing public identity")]
     MissingExistingWalletPublicIdentity { wallet_id: WalletId },

@@ -267,8 +267,8 @@ impl DetailWorkflow {
         };
 
         let cloud_keychain = CloudBackupKeychain::global();
-        let credential_id = cloud_keychain.load_credential_id()?;
-        let prf_salt = cloud_keychain.load_prf_salt()?;
+        let credential_id = cloud_keychain.load_credential_id().ok().flatten()?;
+        let prf_salt = cloud_keychain.load_prf_salt().ok().flatten()?;
 
         (authorization.namespace_id == namespace_id
             && authorization.credential_id == credential_id

@@ -97,7 +97,12 @@ impl PasskeyAuthenticator {
         prf_salt: &[u8; 32],
         retrier: &PlatformAuthorizationRetrier,
     ) -> Result<PasskeyAuthOutcome, CloudBackupError> {
-        let Some(credential_id) = self.keychain.load_credential_id() else {
+        let credential_id = self
+            .keychain
+            .load_credential_id()
+            .map_err(|error| CloudBackupError::internal_context("read stored passkey", error))?;
+
+        let Some(credential_id) = credential_id else {
             return Ok(PasskeyAuthOutcome::NoCredentialFound);
         };
 

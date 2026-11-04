@@ -116,9 +116,7 @@ async fn build_wallet_entry(
     let secret = match metadata.wallet_type {
         WalletType::Hot => {
             let secret = keychain.get_wallet_secret(id).map_err(|error| {
-                CloudBackupError::Internal(
-                    format!("failed to get wallet private key: {error}").into(),
-                )
+                CloudBackupError::internal_context("failed to get wallet private key", error)
             })?;
 
             let Some(secret) = secret else {
@@ -145,7 +143,7 @@ async fn build_wallet_entry(
         Ok(Some(xpub)) => Some(xpub.to_string()),
         Ok(None) => None,
         Err(error) => {
-            return Err(CloudBackupError::Internal(format!("failed to read xpub: {error}").into()));
+            return Err(CloudBackupError::internal_context("failed to read xpub", error));
         }
     };
 
@@ -190,7 +188,7 @@ fn backup_descriptors(
     secret: &CloudWalletSecret,
 ) -> Result<Option<DescriptorPair>, CloudBackupError> {
     let authoritative = authoritative_public_descriptor_mirror(metadata).map_err(|error| {
-        CloudBackupError::Internal(format!("failed to load wallet descriptors: {error}").into())
+        CloudBackupError::internal_context("failed to load wallet descriptors", error)
     })?;
 
     if let Some((external, internal)) = authoritative {
@@ -256,9 +254,9 @@ fn build_cold_wallet_secret(
             warn!("Tap signer wallet has no backup, exporting without it");
             Ok(CloudWalletSecret::WatchOnly)
         }
-        Err(error) => Err(CloudBackupError::Internal(
-            format!("failed to read tap signer backup: {error}").into(),
-        )),
+        Err(error) => {
+            Err(CloudBackupError::internal_context("failed to read tap signer backup", error))
+        }
     }
 }
 

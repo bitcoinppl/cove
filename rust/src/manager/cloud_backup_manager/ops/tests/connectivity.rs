@@ -7,7 +7,7 @@ async fn configure_trusted_local_snapshot_with_two_cloud_only_wallets(
 ) -> [String; 2] {
     configure_enabled_cloud_backup(manager, globals, 2);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
         .load_master_key_from_store()
         .unwrap()
@@ -214,7 +214,7 @@ async fn connectivity_reconnect_preserves_failed_wallet_upload_health() {
     Database::global()
         .cloud_blob_sync_states
         .set(&PersistedCloudBlobSyncState::wallet(
-            CloudBackupKeychain::global().namespace_id().unwrap(),
+            CloudBackupKeychain::global().namespace_id().unwrap().unwrap(),
             metadata.id,
             record_id,
             PersistedCloudBlobState::Failed(CloudBlobFailedState {
@@ -301,7 +301,7 @@ async fn manual_detail_refresh_recovers_after_automatic_retry_fails() {
     configure_enabled_cloud_backup(&manager, globals, 0);
     CONNECTIVITY_MANAGER.set_connection_state(true);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_wallet_files_snapshot(namespace, Vec::new(), false);
     globals.cloud.fail_list_wallet_files("metadata timed out");
 
@@ -332,7 +332,7 @@ async fn provider_signal_reopens_only_incomplete_ready_detail_inventory() {
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 1);
 
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap();
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     globals.cloud.set_wallet_files_snapshot(namespace, Vec::new(), true);
 
     call!(manager.supervisor.start_refresh_detail()).await.unwrap();
@@ -461,7 +461,7 @@ fn reset_cloud_backup_test_state_clears_state_before_reconnect() {
     Database::global()
         .cloud_blob_sync_states
         .set(&PersistedCloudBlobSyncState::wallet(
-            CloudBackupKeychain::global().namespace_id().unwrap(),
+            CloudBackupKeychain::global().namespace_id().unwrap().unwrap(),
             wallet_id,
             record_id,
             PersistedCloudBlobState::Failed(CloudBlobFailedState {

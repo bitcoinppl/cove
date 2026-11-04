@@ -5,6 +5,7 @@ use tracing::{error, info, warn};
 use super::{CloudBackupStatus, IntegrityDowngrade, RustCloudBackupManager};
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::cloud_inventory::CloudWalletInventory;
+use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychainError;
 use crate::manager::cloud_backup_manager::{
     CloudBackupDetailOutcome, CloudBackupKeychain, CloudBackupStore,
 };
@@ -56,13 +57,23 @@ impl RustCloudBackupManager {
         let keychain = Keychain::global();
         let cloud_keychain = CloudBackupKeychain::new(keychain.clone());
         let cspp = cove_cspp::Cspp::new(keychain.clone());
-        if !cspp.has_master_key() {
+
+        // an unreadable keychain, for example while the device is locked, proves nothing is
+        // missing, so skip the check instead of reporting issues or persisting a downgrade
+        let LocalBackupKeys { has_master_key, has_prf_salt, stored_credential_id, namespace } =
+            match LocalBackupKeys::read(&cspp, &cloud_keychain) {
+                Ok(local_keys) => local_keys,
+                Err(error) => {
+                    warn!("Skipping backup integrity check, keychain is unreadable: {error}");
+                    return None;
+                }
+            };
+
+        if !has_master_key {
             issues.push(BackupIntegrityIssue::MasterKeyMissing);
         }
 
         let mut downgrade = None;
-        let has_prf_salt = cloud_keychain.has_prf_salt();
-        let stored_credential_id = cloud_keychain.load_credential_id();
 
         // keep launch integrity checks non-interactive so app startup never presents passkey UI
         if stored_credential_id.is_none() {
@@ -75,12 +86,9 @@ impl RustCloudBackupManager {
             downgrade = Some(IntegrityDowngrade::Unverified);
         }
 
-        let namespace = match self.current_namespace_id() {
-            Ok(namespace) => namespace,
-            Err(_) => {
-                issues.push(BackupIntegrityIssue::NamespaceMissing);
-                return self.finish_backup_integrity_check(&issues, downgrade);
-            }
+        let Some(namespace) = namespace else {
+            issues.push(BackupIntegrityIssue::NamespaceMissing);
+            return self.finish_backup_integrity_check(&issues, downgrade);
         };
 
         if !issues.is_empty() {
@@ -247,5 +255,29 @@ impl RustCloudBackupManager {
         if let Err(error) = persisted {
             error!("Failed to persist backup integrity state: {error}");
         };
+    }
+}
+
+/// The local keychain entries the integrity check needs
+struct LocalBackupKeys {
+    has_master_key: bool,
+    has_prf_salt: bool,
+    stored_credential_id: Option<Vec<u8>>,
+    namespace: Option<String>,
+}
+
+impl LocalBackupKeys {
+    /// Reads every entry, failing if any cannot be read so the check never mistakes an
+    /// unreadable entry for a missing one
+    fn read(
+        cspp: &cove_cspp::Cspp<Keychain>,
+        cloud_keychain: &CloudBackupKeychain,
+    ) -> Result<Self, CloudBackupKeychainError> {
+        Ok(Self {
+            has_master_key: cspp.has_master_key()?,
+            has_prf_salt: cloud_keychain.has_prf_salt()?,
+            stored_credential_id: cloud_keychain.load_credential_id()?,
+            namespace: cloud_keychain.namespace_id()?,
+        })
     }
 }

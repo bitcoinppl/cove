@@ -3,7 +3,7 @@ use std::{str::FromStr as _, sync::Arc};
 use bip39::Mnemonic;
 use cove_device::keychain::{WalletSecret, WalletXprv};
 use keyteleport::{DecodedPayload, TeleportPassword, XprvPayload};
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::{
     database::Database,
@@ -16,7 +16,9 @@ use crate::{
 use super::{
     KeyTeleportAlert, Message, RustKeyTeleportManager,
     model::{Phase, PhaseGeneration, ReceivePhase, StateMachine},
-    receive_session::{ActiveReceiveSession, LoadedReceiveSession, ReceiveSessionId},
+    receive_session::{
+        ActiveReceiveSession, LoadedReceiveSession, ReceiveSessionId, ReceiveSessionLoadError,
+    },
 };
 
 pub(crate) struct ReceiveWorkflow<'a>(&'a RustKeyTeleportManager);
@@ -78,10 +80,18 @@ impl ReceiveWorkflow<'_> {
 
             Ok(None) => {}
 
-            Err(error) => {
-                error!("unable to load KeyTeleport receive session: {error}");
+            Err(ReceiveSessionLoadError::Invalid(error)) => {
+                error!("stored KeyTeleport receive session is invalid, replacing it: {error}");
                 self.replace_session(KeyTeleportAlert::ReceiveSessionReset)?;
                 return Ok(());
+            }
+
+            // a sender may already hold this session's request, so a session that cannot be
+            // read right now is kept and Try Again loads it once the keychain is readable
+            Err(ReceiveSessionLoadError::Unavailable(error)) => {
+                warn!("unable to load KeyTeleport receive session, keeping it: {error}");
+                self.state_machine().set_phase(Phase::Receive(ReceivePhase::Error));
+                return Err(error);
             }
         }
 

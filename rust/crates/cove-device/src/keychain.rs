@@ -39,6 +39,13 @@ pub enum KeychainError {
     #[error("unable to save")]
     Save,
 
+    /// The platform could not read a value, so whether it exists is unknown
+    ///
+    /// This is distinct from absence: callers must not treat it as a missing entry, because
+    /// doing so could replace or delete secrets that are still stored
+    #[error("unable to read: {0}")]
+    Read(String),
+
     /// A value could not be deleted
     #[error("unable to delete")]
     Delete,
@@ -75,7 +82,13 @@ pub trait KeychainAccess: Send + Sync + std::fmt::Debug + 'static {
     fn save(&self, key: String, value: String) -> Result<(), KeychainError>;
 
     /// Gets the value for a key, or `None` when the key does not exist
-    fn get(&self, key: String) -> Option<String>;
+    ///
+    /// # Errors
+    ///
+    /// Returns `KeychainError::Read` when the platform cannot determine whether the key exists,
+    /// for example while the device is locked. Implementations must never report such a failure
+    /// as `None`
+    fn get(&self, key: String) -> Result<Option<String>, KeychainError>;
 
     /// Deletes the value for a key
     ///
@@ -325,7 +338,18 @@ impl Keychain {
     }
 
     /// Deletes all keychain entries for a wallet
+    ///
+    /// Every entry is read before any is deleted. If a read fails nothing is deleted and false is
+    /// returned, so the wallet is never left with only some of its entries
     pub fn delete_wallet_items(&self, id: &WalletId) -> bool {
+        let readable = self.wallet_secrets.has_any(id).is_ok()
+            && self.wallet_public.has_any(id).is_ok()
+            && self.tap_signer_backups.has_any(id).is_ok();
+
+        if !readable {
+            return false;
+        }
+
         let key_ok = self.wallet_secrets.delete(id);
         let xpub_ok = self.wallet_public.delete_xpub(id);
         let descriptor_ok = self.wallet_public.delete_descriptors(id);
@@ -344,9 +368,12 @@ impl Keychain {
     }
 
     /// Checks whether any wallet-specific keychain entry exists
+    ///
+    /// An entry that cannot be read counts as existing, so cleanup never concludes that
+    /// unreadable secrets are gone
     pub fn wallet_items_exist(&self, id: &WalletId) -> bool {
-        self.wallet_secrets.has_any(id)
-            || self.wallet_public.has_any(id)
+        self.wallet_secrets.has_any(id).unwrap_or(true)
+            || self.wallet_public.has_any(id).unwrap_or(true)
             || matches!(self.get_tap_signer_backup(id), Ok(Some(_)) | Err(_))
     }
 
@@ -369,7 +396,7 @@ impl CsppStore for Keychain {
         self.access.save(key, value)
     }
 
-    fn get(&self, key: String) -> Option<String> {
+    fn get(&self, key: String) -> Result<Option<String>, KeychainError> {
         self.access.get(key)
     }
 

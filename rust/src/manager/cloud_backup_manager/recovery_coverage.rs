@@ -38,8 +38,9 @@ impl CloudBackupRecoveryCoverage {
             return Self::default();
         };
 
-        let Some(namespace) =
-            CloudBackupKeychain::global().namespace_id().filter(|namespace| !namespace.is_empty())
+        let Ok(Some(namespace)) = CloudBackupKeychain::global()
+            .namespace_id()
+            .map(|namespace| namespace.filter(|namespace| !namespace.is_empty()))
         else {
             return Self::default();
         };

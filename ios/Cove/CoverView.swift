@@ -55,6 +55,12 @@ private struct StorageErrorView: View {
 }
 
 struct StartupRecoveryView: View {
+    var systemImage = "arrow.forward.circle.fill"
+    var title = "Restore in Progress"
+    var message = startupRecoveryContinuationMessage
+    var actionTitle = "Continue"
+    var footer = "If recovery does not finish, contact feedback@covebitcoinwallet.com for help"
+    var diagnosticsMessage = startupRecoveryContinuationMessage
     let onContinue: () -> Void
 
     var body: some View {
@@ -62,32 +68,32 @@ struct StartupRecoveryView: View {
             Color.black.edgesIgnoringSafeArea(.all)
 
             VStack(spacing: 16) {
-                Image(systemName: "arrow.forward.circle.fill")
+                Image(systemName: systemImage)
                     .font(.system(size: 72))
                     .foregroundStyle(.blue)
 
-                Text("Restore in Progress")
+                Text(title)
                     .font(.headline)
                     .foregroundColor(.white)
 
-                Text(startupRecoveryContinuationMessage)
+                Text(message)
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 16)
 
-                Button("Continue", action: onContinue)
+                Button(actionTitle, action: onContinue)
                     .buttonStyle(.borderedProminent)
                     .tint(.white)
                     .padding(.top, 8)
 
-                Text("If recovery does not finish, contact feedback@covebitcoinwallet.com for help")
+                Text(footer)
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.5))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 16)
 
-                StartupDiagnosticsActions(errorMessage: startupRecoveryContinuationMessage)
+                StartupDiagnosticsActions(errorMessage: diagnosticsMessage)
 
                 Link(
                     "Contact Support",

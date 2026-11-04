@@ -867,6 +867,7 @@ impl RustCloudBackupManager {
     fn current_namespace_id(&self) -> Result<String, CloudBackupError> {
         CloudBackupKeychain::global()
             .namespace_id()
+            .map_err(|error| CloudBackupError::internal_context("read namespace_id", error))?
             .ok_or_else(|| CloudBackupError::Internal("namespace_id not found in keychain".into()))
     }
 
@@ -1247,7 +1248,17 @@ impl RustCloudBackupManager {
             return;
         };
 
-        if self.current_namespace_id().ok().as_deref() == Some(marker.namespace_id.as_str()) {
+        let current_namespace = match CloudBackupKeychain::global().namespace_id() {
+            Ok(current_namespace) => current_namespace,
+
+            // an unreadable namespace proves nothing about the marker, so keep it for the next sync
+            Err(error) => {
+                warn!("Keeping Restore All marker, namespace_id is unreadable: {error}");
+                return;
+            }
+        };
+
+        if current_namespace.as_deref() == Some(marker.namespace_id.as_str()) {
             self.apply_model_event(CloudBackupStateReducerEvent::RestoreAllRetryRequired);
             return;
         }
@@ -1878,6 +1889,21 @@ mod tests {
         );
         assert_eq!(manager.projected_exclusive_operation(), None);
         assert_eq!(globals.passkey.authenticate_count(), authenticate_count);
+    }
+
+    #[test]
+    fn sync_persisted_restore_all_keeps_marker_when_namespace_is_unreadable() {
+        let _guard = test_lock().lock();
+        let globals = test_globals();
+        let manager = init_manager();
+        configure_enabled_cloud_backup(&manager, globals, 0);
+        CloudBackupStore::global().persist_restore_all_marker("inactive-namespace".into()).unwrap();
+
+        globals.keychain.fail_reads_for(keychain::CSPP_NAMESPACE_ID_KEY);
+        manager.sync_persisted_state();
+        globals.keychain.clear_read_failures();
+
+        assert!(RustCloudBackupManager::load_persisted_state().pending_restore_all().is_some());
     }
 
     #[test]

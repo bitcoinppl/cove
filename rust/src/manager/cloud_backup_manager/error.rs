@@ -1,7 +1,9 @@
 use std::{error::Error as StdError, fmt, ops::Deref};
 
 use cove_device::passkey::{PasskeyFailureReason, PasskeyOperation};
-use cove_device::{cloud_storage::CloudStorageError, passkey::PasskeyError};
+use cove_device::{
+    cloud_storage::CloudStorageError, keychain::KeychainError, passkey::PasskeyError,
+};
 
 use crate::backup::import::LocalWalletConflict;
 use crate::database::cloud_backup::CloudStorageIssue;
@@ -439,6 +441,22 @@ impl CloudBackupError {
         source: impl StdError + Send + Sync + 'static,
     ) -> Self {
         Self::Internal(CloudBackupInternalError::context(context, source))
+    }
+
+    /// Whether a keychain read failed somewhere in this error's source chain
+    ///
+    /// The keychain cannot be read while the device is locked, so the same operation can succeed
+    /// later without any change, and callers must not record it as a permanent failure
+    pub(crate) fn is_keychain_unreadable(&self) -> bool {
+        let Self::Internal(error) = self else {
+            return false;
+        };
+
+        let first: &(dyn StdError + 'static) = error;
+        std::iter::successors(Some(first), |&error| error.source()).any(|error| {
+            matches!(error.downcast_ref(), Some(KeychainError::Read(_)))
+                || matches!(error.downcast_ref(), Some(cove_cspp::CsppError::Read(_)))
+        })
     }
 
     pub(crate) fn cloud_storage_context(

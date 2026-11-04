@@ -1382,6 +1382,50 @@ mod tests {
     use crate::transaction::{SentAndReceived, Transaction, TxId, UnconfirmedTransaction};
     use crate::wallet::metadata::WalletMetadata;
 
+    #[test]
+    fn unreadable_hot_wallet_secret_does_not_downgrade_to_watch_only() {
+        use std::str::FromStr as _;
+
+        use cove_device::keychain::Keychain;
+
+        use crate::database::Database;
+        use crate::manager::deferred_sender::{DeferredSender, MessageSender};
+        use crate::test_support::{WALLET_MNEMONIC_KEY_SUFFIX, shared_mock_keychain};
+        use crate::wallet::metadata::WalletType;
+
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::init_test_database();
+        crate::test_support::init_test_keychain();
+
+        let metadata = crate::test_support::hot_wallet_metadata("locked keychain");
+        let id = metadata.id.clone();
+        let mnemonic = bip39::Mnemonic::from_str(
+            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        )
+        .unwrap();
+        Database::global().wallets.save_new_wallet_metadata(metadata.clone()).unwrap();
+        Keychain::global().save_wallet_key(&id, mnemonic).unwrap();
+
+        // one half of the secret pair is unreadable, as with a locked iOS keychain
+        shared_mock_keychain().fail_reads_for(format!("{id}{WALLET_MNEMONIC_KEY_SUFFIX}"));
+        let mut deferred = DeferredSender::new(MessageSender::new(flume::bounded(16).0));
+        let result = super::downgrade_and_notify_if_needed(metadata.clone(), &mut deferred);
+        shared_mock_keychain().clear_read_failures();
+
+        assert!(result.is_err());
+        let stored = Database::global()
+            .wallets
+            .get(&id, metadata.network, metadata.wallet_mode)
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.wallet_type, WalletType::Hot);
+        assert!(Keychain::global().get_wallet_secret(&id).unwrap().is_some());
+
+        Database::global().wallets.delete(&id).unwrap();
+        assert!(Keychain::global().delete_wallet_items(&id));
+    }
+
     fn progress() -> WalletScanProgress {
         WalletScanProgress {
             phase: WalletScanPhase::Full,

@@ -103,7 +103,10 @@ impl RustCloudBackupManager {
         error: CloudBackupError,
     ) -> DeepVerificationResult {
         error!("Deep verification unexpected error: {error}");
-        let retry_action = is_connectivity_related_issue(&error).then_some({
+        // an unreadable keychain says nothing about the backup and usually clears once the
+        // device unlocks, so it gets the same retry as a dropped connection
+        let retryable = is_connectivity_related_issue(&error) || error.is_keychain_unreadable();
+        let retry_action = retryable.then_some({
             if force_discoverable {
                 CloudBackupRetryAction::VerifyDiscoverable
             } else {
