@@ -685,6 +685,7 @@ impl CardEmulator {
             "emulate",
             "--tapsigner",
         ]);
+
         if needs_setup {
             command.arg("--no-init");
         }
