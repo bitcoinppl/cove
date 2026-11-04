@@ -1,9 +1,12 @@
 package org.bitcoinppl.cove.flows.settings
 
+import android.graphics.Rect
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
@@ -12,8 +15,10 @@ import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchTestRule
 import org.bitcoinppl.cove.test.ManualFullLaunchTest
+import org.bitcoinppl.cove.test.dumpWindowHierarchy
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.launchFullApp
+import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
@@ -22,6 +27,8 @@ import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletSettingsRoute
+import org.bitcoinppl.cove_core.types.WalletId
+import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -42,6 +49,9 @@ import org.junit.runner.RunWith
 class PrivateKeyExportFullLaunchTest {
     private lateinit var device: UiDevice
 
+    // leaving decoy mode reloads the wallet list, so the id is kept from the restore
+    private lateinit var walletId: WalletId
+
     @get:Rule
     val fullLaunch = FullLaunchTestRule()
 
@@ -49,6 +59,12 @@ class PrivateKeyExportFullLaunchTest {
     fun prepareDevice() {
         ScriptedPasskeyProvider.reset()
         device = fullLaunchDevice()
+    }
+
+    // the next test may host LockView without relaunching, and refuses to run over a leftover PIN
+    @After
+    fun removeAppLock() {
+        restoreNoAppLock()
     }
 
     @Test
@@ -76,6 +92,7 @@ class PrivateKeyExportFullLaunchTest {
         device.waitForLockScreen()
         device.enterPin(MAIN_PIN)
         waitUntil("main PIN should leave decoy mode") { !AuthManager.getInstance().isInDecoyMode() }
+        waitForAppOnWallet()
         device.assertPrivateKeyHiddenFor(REVEAL_SETTLE_MS)
 
         // a wrong PIN keeps the prompt up, then the main PIN entered after the request reveals
@@ -98,7 +115,7 @@ class PrivateKeyExportFullLaunchTest {
         assertFalse(AuthManager.getInstance().isAuthEnabled)
 
         openWalletSettings()
-        device.scrollUntilText(EXPORT_ITEM).click()
+        device.clickClickableAncestor(device.scrollUntilText(EXPORT_ITEM))
         device.clickText("Continue")
         device.clickText("Reveal")
 
@@ -119,6 +136,17 @@ class PrivateKeyExportFullLaunchTest {
         device.clickClickableAncestor(device.waitForText("Done"))
         FullLaunchOnboardingRobot(device).acceptTermsAfterImport()
         waitUntil("the private-key wallet should be restored") { walletIdOrNull() != null }
+        walletId = requireNotNull(walletIdOrNull())
+        waitForAppOnWallet()
+    }
+
+    // finishing onboarding and leaving decoy mode each reset the app's route a moment later, which
+    // would replace any route the test opened before it
+    private fun waitForAppOnWallet() {
+        waitUntil("the app should open the private-key wallet") {
+            val router = AppManager.getInstance().router
+            router.default == Route.SelectedWallet(walletId) && router.routes.isEmpty()
+        }
     }
 
     private fun setPins() {
@@ -130,7 +158,6 @@ class PrivateKeyExportFullLaunchTest {
     }
 
     private fun openWalletSettings() {
-        val walletId = requireNotNull(walletIdOrNull()) { "the private-key wallet is missing" }
         onMain { AppManager.getInstance().resetRoute(Route.Settings(SettingsRoute.Main)) }
         device.waitForText("Security")
 
@@ -140,11 +167,12 @@ class PrivateKeyExportFullLaunchTest {
                 Route.Settings(SettingsRoute.Wallet(id = walletId, route = WalletSettingsRoute.MAIN)),
             )
         }
-        device.waitForText(ScriptedCloudBackupFixture.XPRV_WALLET_NAME)
+        // the wallet's name is also on the Settings list, so wait for a section only its own settings have
+        device.waitForText(WALLET_SETTINGS_SECTION)
     }
 
     private fun requestReveal() {
-        device.scrollUntilText(EXPORT_ITEM).click()
+        device.clickClickableAncestor(device.scrollUntilText(EXPORT_ITEM))
         device.waitForText("Are you sure?")
         device.clickText("Continue")
         device.waitForText("Export Private Key")
@@ -182,13 +210,50 @@ class PrivateKeyExportFullLaunchTest {
 
     private fun UiDevice.waitForLockScreen() {
         waitForText(LOCK_TITLE)
+        waitForSettledNumberPad()
+    }
+
+    // the lock cover slides up from the bottom, so a key found mid-slide has moved by the time the
+    // tap lands and the tap enters its neighbour; the bottom row stops moving once the cover is in place
+    private fun UiDevice.waitForSettledNumberPad() {
+        waitForSettled(By.res("numberPadPin.digit.0"), "the number pad")
+    }
+
+    /**
+     * Waits until [selector] matches a node whose bounds held still between two looks, so a tap on
+     * it lands where it was found rather than where a sliding screen or a scroll fling has moved it
+     */
+    private fun UiDevice.waitForSettled(
+        selector: BySelector,
+        description: String,
+        timeoutMs: Long = 20_000L,
+    ): UiObject2 {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var previous: Rect? = null
+
+        while (System.currentTimeMillis() < deadline) {
+            val node = findObject(selector)
+            val bounds =
+                try {
+                    node?.visibleBounds
+                } catch (_: StaleObjectException) {
+                    null
+                }
+
+            if (node != null && bounds != null && bounds == previous) return node
+
+            previous = bounds
+            Thread.sleep(SETTLE_POLL_MS)
+        }
+
+        error("$description never held still, last bounds $previous\n${dumpWindowHierarchy()}")
     }
 
     private fun UiDevice.enterPin(pin: String) {
         pin.forEach { digit ->
             val key =
                 wait(Until.findObject(By.res("numberPadPin.digit.$digit")), 5_000L)
-                    ?: error("number pad key $digit is missing")
+                    ?: error("number pad key $digit is missing\n${dumpWindowHierarchy()}")
             key.click()
         }
         waitForIdle()
@@ -213,7 +278,8 @@ class PrivateKeyExportFullLaunchTest {
     private fun UiDevice.visibleTexts(): List<String> = findObjects(By.textStartsWith("")).mapNotNull { it.text }
 
     private fun UiDevice.clickText(value: String) {
-        clickClickableAncestor(waitForText(value))
+        waitForText(value)
+        clickClickableAncestor(waitForSettled(By.text(value), "text \"$value\""))
     }
 
     private fun UiDevice.scrollUntilText(
@@ -223,7 +289,8 @@ class PrivateKeyExportFullLaunchTest {
         val deadline = System.currentTimeMillis() + timeoutMs
 
         while (System.currentTimeMillis() < deadline) {
-            findObject(By.text(value))?.let { return it }
+            if (hasObject(By.text(value))) return waitForSettled(By.text(value), "text \"$value\"")
+
             swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
             Thread.sleep(250)
         }
@@ -252,5 +319,7 @@ class PrivateKeyExportFullLaunchTest {
         const val LOCK_TITLE = "Enter Cove PIN"
         const val REVEAL_TITLE = "Extended Private Key"
         const val REVEAL_SETTLE_MS = 3_000L
+        const val SETTLE_POLL_MS = 200L
+        const val WALLET_SETTINGS_SECTION = "Wallet information"
     }
 }
