@@ -12,7 +12,7 @@ use color_eyre::{
 use colored::Colorize;
 use reqwest::StatusCode;
 use serde::Deserialize;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{
     fs,
@@ -61,14 +61,19 @@ const XCODE_DERIVED_DATA_PATH: &str = "Library/Developer/Xcode/DerivedData";
 const COVE_BUILD_SLOT_ENV: &str = "COVE_BUILD_SLOT";
 const IOS_SIMULATOR_DERIVED_DATA_SUFFIX: &str = "simulator-run";
 const IOS_DEVICE_DERIVED_DATA_SUFFIX: &str = "device-run";
+const IOS_UI_DERIVED_DATA_SUFFIX: &str = "ui-tests";
 const IOS_SIMULATOR_PRODUCTS_DIR: &str = "Debug-iphonesimulator";
 const IOS_DEVICE_PRODUCTS_DIR: &str = "Debug-iphoneos";
 const IOS_UI_SCHEME: &str = "CoveManualUITests";
 const IOS_UI_TEST_TARGET: &str = "CoveUITests";
 // these tests run against the host app with scripted cloud storage and passkeys
 const IOS_CLOUD_BACKUP_UI_TEST_TARGET: &str = "CoveCloudBackupUITests";
-// each test starts on a freshly erased simulator, where Xcode's runner and the first app
-// launch both fail now and then, so retry those environment failures on a clean simulator
+// both UI test targets keep their sources here, and the project file says which target builds each
+const IOS_UI_TEST_SOURCE_DIR: &str = "CoveUITests";
+const IOS_PROJECT_FILE: &str = "Cove.xcodeproj/project.pbxproj";
+// each test starts on a fresh simulator, where Xcode's runner, the first app launch and Xcode
+// finding the simulator all fail now and then, so retry those environment failures on another
+// fresh simulator
 const IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS: usize = 2;
 const IOS_DEVICE_CONNECTION_RETRY_ATTEMPTS: usize = 2;
 const IOS_DEVICE_LOCKED_LAUNCH_RETRY_DURATION_SECS: u64 = 30;
@@ -158,19 +163,66 @@ impl IosRunOptions {
 #[derive(Debug, Clone)]
 pub struct IosUiOptions {
     device: String,
-    test: String,
+    tests: String,
+    shard: IosUiShard,
     foreground: bool,
     results_dir: Option<PathBuf>,
+    list: bool,
 }
 
 impl IosUiOptions {
+    /// Options for one `ios-ui` run
+    ///
+    /// `tests` is a comma-separated list of `<Target>/<Class>[/<method>]` entries; with `list`, the
+    /// shard's tests are printed one per line instead of run
     pub fn new(
         device: String,
-        test: String,
+        tests: String,
+        shard: IosUiShard,
         foreground: bool,
         results_dir: Option<PathBuf>,
+        list: bool,
     ) -> Self {
-        Self { device, test, foreground, results_dir }
+        Self { device, tests, shard, foreground, results_dir, list }
+    }
+}
+
+/// One of `count` equal slices of the expanded UI test list, so CI can split a run across
+/// runners; `index` is 1-based to match how it is written, as in `2/3`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IosUiShard {
+    index: usize,
+    count: usize,
+}
+
+impl IosUiShard {
+    // round-robin keeps each suite spread across shards, so no shard gets a whole slow suite
+    fn includes(&self, position: usize) -> bool {
+        position % self.count == self.index - 1
+    }
+}
+
+impl std::str::FromStr for IosUiShard {
+    type Err = String;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        let invalid = || format!("expected a shard like 2/3, got {value:?}");
+
+        let (index, count) = value.split_once('/').ok_or_else(invalid)?;
+        let index = index.trim().parse::<usize>().map_err(|_| invalid())?;
+        let count = count.trim().parse::<usize>().map_err(|_| invalid())?;
+
+        if count == 0 || index == 0 || index > count {
+            return Err(invalid());
+        }
+
+        Ok(Self { index, count })
+    }
+}
+
+impl std::fmt::Display for IosUiShard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.index, self.count)
     }
 }
 
@@ -589,6 +641,21 @@ fn run_ios_targets(sh: &Shell, run_targets: IosRunTargets, verbose: bool) -> Res
 pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
     let sh = Shell::new()?;
 
+    // resolved before changing into ../ios so a relative path means the caller's directory
+    let results_dir = options.results_dir.map(std::path::absolute).transpose()?;
+    sh.change_dir("../ios");
+
+    let tests = ios_ui_shard_tests(&sh, &options.tests, options.shard)?;
+
+    // CI lists a shard's tests before building, so a shard with none skips the build
+    if options.list {
+        for test in &tests {
+            println!("{test}");
+        }
+
+        return Ok(());
+    }
+
     if !command_exists("xcodebuild") {
         print_error("xcodebuild not found. Please install Xcode");
         color_eyre::eyre::bail!("xcodebuild command not found");
@@ -599,33 +666,41 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
         color_eyre::eyre::bail!("xcrun command not found");
     }
 
-    // resolved before changing into ../ios so a relative path means the caller's directory
-    let results_dir = options.results_dir.map(std::path::absolute).transpose()?;
     if let Some(dir) = &results_dir {
         fs::create_dir_all(dir).wrap_err_with(|| format!("Failed to create {}", dir.display()))?;
     }
 
-    sh.change_dir("../ios");
+    if tests.is_empty() {
+        print_warning(&format!("Shard {} has no iOS UI tests to run", options.shard));
+        return Ok(());
+    }
+
+    print_info(&format!("Shard {} runs {} iOS UI test(s)", options.shard, tests.len()));
 
     if options.foreground {
         cmd!(sh, "open -a Simulator").run().wrap_err("Failed to open Simulator")?;
     }
 
     let udid = SimctlDevices::load(&sh)?.resolve(&options.device)?;
-    boot_simulator(&sh, &udid)?;
 
     // tests that need a funded wallet reset and fund the fake node, and hardware
     // signing tests sign through the signer services; the simulator shares this
-    // machine's loopback, so no forwarding is needed
+    // machine's loopback, so no forwarding is needed. Its fixed ports also make a second run
+    // fail here, before its build replaces the test bundles the first run is still using
     let _host = UiTestHost::start(AndroidPorts::Skip)?;
+
+    // `xcodebuild test` rebuilds before every test even when nothing changed, about a minute a
+    // test on a hosted runner, so each scheme is built once and every test runs the built bundles
+    let suites = tests.iter().map(|test| IosUiSuite::for_test(test));
+    let build = IosUiBuild::build(&sh, &udid, suites, verbose)?;
+    let mut simulators = IosUiSimulators::create(&sh, &udid)?;
 
     // run every test before failing so one broken test doesn't hide the state of the rest
     let mut failures = Vec::new();
-    for test in ios_ui_tests_to_run(&sh, &options.test)? {
-        reset_simulator_state(&sh, &udid)?;
-        boot_simulator(&sh, &udid)?;
-
-        if let Err(error) = run_ios_ui_test(&sh, &udid, &test, results_dir.as_deref(), verbose) {
+    for test in tests {
+        if let Err(error) =
+            run_ios_ui_test(&sh, &build, &mut simulators, &test, results_dir.as_deref(), verbose)
+        {
             print_error(&format!("{error:?}"));
             failures.push(test);
         }
@@ -1105,6 +1180,8 @@ struct SimctlDevice {
     state: String,
     #[serde(rename = "isAvailable", default)]
     is_available: bool,
+    #[serde(rename = "deviceTypeIdentifier", default)]
+    device_type: String,
 }
 
 impl SimctlDevices {
@@ -1132,6 +1209,34 @@ impl SimctlDevices {
             .ok_or_else(|| eyre!("No available simulator named '{device}'"))
     }
 
+    /// The runtime identifier and details of the simulator with this UDID
+    fn find(&self, udid: &str) -> Result<(&str, &SimctlDevice)> {
+        self.devices
+            .iter()
+            .find_map(|(runtime, devices)| {
+                devices.iter().find(|sim| sim.udid == udid).map(|sim| (runtime.as_str(), sim))
+            })
+            .ok_or_else(|| eyre!("No simulator with UDID '{udid}'"))
+    }
+
+    /// Deletes UI test simulators whose run ended without deleting them, such as one stopped
+    /// with Ctrl-C, leaving those of runs still going
+    fn delete_abandoned_ui_test_simulators(&self, sh: &Shell) {
+        for sim in self.devices.values().flatten() {
+            let Some(pid) = ui_test_simulator_pid(&sim.name) else {
+                continue;
+            };
+
+            let pid = pid.to_string();
+            let running =
+                cmd!(sh, "kill -0 {pid}").quiet().ignore_stdout().ignore_stderr().run().is_ok();
+
+            if !running {
+                delete_simulator(sh, &sim.udid);
+            }
+        }
+    }
+
     fn state(&self, udid: &str) -> Option<&str> {
         self.devices.values().flatten().find(|sim| sim.udid == udid).map(|sim| sim.state.as_str())
     }
@@ -1145,18 +1250,95 @@ fn ios_runtime_version(runtime: &str) -> Vec<u32> {
         .unwrap_or_default()
 }
 
-fn reset_simulator_state(sh: &Shell, device: &str) -> Result<()> {
-    shutdown_simulator_for_erase(sh, device)?;
+const IOS_UI_SIMULATOR_NAME: &str = "Cove UI Test";
 
-    cmd!(sh, "xcrun simctl erase {device}")
-        .quiet()
-        .run()
-        .wrap_err_with(|| format!("Failed to erase simulator '{device}'"))?;
-
-    Ok(())
+/// The simulators one UI test run uses: a golden simulator, and a clone of it for each attempt
+///
+/// The golden simulator is created from the requested simulator's device type and runtime and
+/// booted once, so it has finished first-boot setup but has never had an app installed. A clone
+/// starts each test the way an erased simulator does after booting, with no app, app data,
+/// keychain items or privacy grants, without the first boot after an erase, which took one to two
+/// minutes a test on a hosted runner. The requested simulator itself is left as it is
+struct IosUiSimulators<'a> {
+    sh: &'a Shell,
+    golden: String,
+    clone: Option<String>,
 }
 
-fn shutdown_simulator_for_erase(sh: &Shell, device: &str) -> Result<()> {
+impl<'a> IosUiSimulators<'a> {
+    fn create(sh: &'a Shell, device: &str) -> Result<Self> {
+        let devices = SimctlDevices::load(sh)?;
+        devices.delete_abandoned_ui_test_simulators(sh);
+
+        let (runtime, device) = devices.find(device)?;
+        let device_type = &device.device_type;
+        let name = format!("{IOS_UI_SIMULATOR_NAME} golden (pid {})", std::process::id());
+        let golden = cmd!(sh, "xcrun simctl create {name} {device_type} {runtime}")
+            .quiet()
+            .read()
+            .wrap_err("Failed to create the golden UI test simulator")?;
+
+        // owned before booting, so a failed boot still deletes it
+        let simulators = Self { sh, golden: golden.trim().to_string(), clone: None };
+        boot_simulator(sh, &simulators.golden)?;
+        shutdown_simulator(sh, &simulators.golden)?;
+
+        Ok(simulators)
+    }
+
+    /// Deletes the previous attempt's simulator and boots a new clone of the golden one
+    fn fresh(&mut self) -> Result<String> {
+        self.delete_clone();
+
+        let golden = &self.golden;
+        let name = format!("{IOS_UI_SIMULATOR_NAME} (pid {})", std::process::id());
+        let clone = cmd!(self.sh, "xcrun simctl clone {golden} {name}")
+            .quiet()
+            .read()
+            .wrap_err("Failed to clone the golden UI test simulator")?;
+
+        let clone = self.clone.insert(clone.trim().to_string()).clone();
+        boot_simulator(self.sh, &clone)?;
+
+        Ok(clone)
+    }
+
+    fn delete_clone(&mut self) {
+        if let Some(clone) = self.clone.take() {
+            delete_simulator(self.sh, &clone);
+        }
+    }
+}
+
+impl Drop for IosUiSimulators<'_> {
+    fn drop(&mut self) {
+        self.delete_clone();
+        delete_simulator(self.sh, &self.golden);
+    }
+}
+
+/// Shuts down and deletes a simulator; best effort, since a leftover simulator costs disk space
+/// rather than a test result
+fn delete_simulator(sh: &Shell, udid: &str) {
+    let deleted = shutdown_simulator(sh, udid).and_then(|()| {
+        cmd!(sh, "xcrun simctl delete {udid}")
+            .quiet()
+            .run()
+            .wrap_err_with(|| format!("Failed to delete simulator '{udid}'"))
+    });
+
+    if let Err(error) = deleted {
+        print_warning(&format!("{error:?}"));
+    }
+}
+
+/// The pid in a UI test simulator's name, such as `Cove UI Test (pid 123)`
+fn ui_test_simulator_pid(name: &str) -> Option<u32> {
+    let rest = name.strip_prefix(IOS_UI_SIMULATOR_NAME)?;
+    rest.rsplit_once("(pid ")?.1.strip_suffix(')')?.parse().ok()
+}
+
+fn shutdown_simulator(sh: &Shell, device: &str) -> Result<()> {
     if simulator_state(sh, device)?.as_deref() == Some("Shutdown") {
         return Ok(());
     }
@@ -1220,31 +1402,34 @@ fn simctl_shutdown_already_shutdown(stdout: &str, stderr: &str) -> bool {
         || stderr.contains("Unable to shutdown device in current state: Shutdown")
 }
 
+/// Runs one test on a fresh simulator, and again on another after a simulator failure
 fn run_ios_ui_test(
     sh: &Shell,
-    udid: &str,
+    build: &IosUiBuild,
+    simulators: &mut IosUiSimulators,
     test: &str,
     results_dir: Option<&Path>,
     verbose: bool,
 ) -> Result<()> {
     print_info(&format!("Running iOS UI test {test}"));
 
-    let destination = format!("platform=iOS Simulator,id={udid}");
     let only_testing = format!("-only-testing:{test}");
     let suite = IosUiSuite::for_test(test);
-    let scheme = suite.scheme();
+    let xctestrun = build.xctestrun(suite)?;
 
     if verbose {
+        let udid = simulators.fresh()?;
+        let destination = format!("platform=iOS Simulator,id={udid}");
         let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, test, 0));
         let test_cmd = cmd!(
             sh,
-            "xcodebuild test -project {IOS_PROJECT} -scheme {scheme} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
+            "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO {only_testing}"
         )
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
 
         if let Err(error) = test_cmd.run() {
             if let Some(artifacts) = &artifacts {
-                artifacts.collect_app_logs(sh, udid, suite);
+                artifacts.collect_app_logs(sh, &udid, suite);
             }
 
             return Err(error).wrap_err_with(|| format!("Failed to run iOS UI test {test}"));
@@ -1262,14 +1447,15 @@ fn run_ios_ui_test(
     for attempt in 0..=IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS {
         if let Some(reason) = retry_reason {
             print_info(&format!("Retrying iOS UI test {test} after {reason}"));
-            reset_simulator_state(sh, udid)?;
-            boot_simulator(sh, udid)?;
         }
+
+        let udid = simulators.fresh()?;
+        let destination = format!("platform=iOS Simulator,id={udid}");
 
         let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, test, attempt));
         let test_cmd = cmd!(
             sh,
-            "xcodebuild test -project {IOS_PROJECT} -scheme {scheme} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -parallel-testing-enabled NO {only_testing}"
+            "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO {only_testing}"
         )
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
 
@@ -1288,9 +1474,9 @@ fn run_ios_ui_test(
             return Ok(());
         }
 
-        // collected before a retry or the next test erases the simulator
+        // collected before a retry or the next test deletes the simulator
         if let Some(artifacts) = &artifacts {
-            artifacts.collect_app_logs(sh, udid, suite);
+            artifacts.collect_app_logs(sh, &udid, suite);
         }
 
         let failure = XcodebuildFailure::from_output(output)?;
@@ -1306,11 +1492,92 @@ fn run_ios_ui_test(
     unreachable!("iOS UI test retry loop should return from every branch")
 }
 
+/// The UI test bundles of each scheme a run needs, built once with `build-for-testing`
+struct IosUiBuild(BTreeMap<IosUiSuite, PathBuf>);
+
+impl IosUiBuild {
+    /// Builds each suite's scheme for the simulator, and finds the `.xctestrun` file that
+    /// `test-without-building` runs it from
+    fn build(
+        sh: &Shell,
+        udid: &str,
+        suites: impl IntoIterator<Item = IosUiSuite>,
+        verbose: bool,
+    ) -> Result<Self> {
+        let derived_data_path = derived_data_path(IOS_UI_DERIVED_DATA_SUFFIX)?;
+        let products_dir = Path::new(&derived_data_path).join("Build/Products");
+        let destination = format!("platform=iOS Simulator,id={udid}");
+
+        let mut xctestruns = BTreeMap::new();
+        for suite in suites.into_iter().collect::<BTreeSet<_>>() {
+            let scheme = suite.scheme();
+
+            // Xcode names the file for the scheme and SDK version, so a stale one from an older
+            // Xcode would otherwise be picked up beside the fresh one
+            let prefix = format!("{scheme}_");
+            for stale in xctestrun_files(&products_dir, &prefix)? {
+                fs::remove_file(&stale)
+                    .wrap_err_with(|| format!("Failed to remove {}", stale.display()))?;
+            }
+
+            print_info(&format!("Building {scheme} for testing"));
+            let build_cmd = cmd!(
+                sh,
+                "xcodebuild build-for-testing -project {IOS_PROJECT} -scheme {scheme} -configuration {IOS_CONFIGURATION_DEBUG} -destination {destination} -derivedDataPath {derived_data_path}"
+            );
+
+            run_xcodebuild(build_cmd, verbose, &format!("Failed to build {scheme} for testing"))?;
+
+            let xctestrun = match xctestrun_files(&products_dir, &prefix)?.as_slice() {
+                [xctestrun] => xctestrun.clone(),
+                found => {
+                    return Err(eyre!(
+                        "Expected one {prefix}*.xctestrun in {}, found {}",
+                        products_dir.display(),
+                        found.len()
+                    ));
+                }
+            };
+
+            xctestruns.insert(suite, xctestrun);
+        }
+
+        Ok(Self(xctestruns))
+    }
+
+    fn xctestrun(&self, suite: IosUiSuite) -> Result<&Path> {
+        self.0
+            .get(&suite)
+            .map(PathBuf::as_path)
+            .ok_or_else(|| eyre!("{} wasn't built for testing", suite.scheme()))
+    }
+}
+
+/// The `.xctestrun` files in a build products directory whose names start with `prefix`
+fn xctestrun_files(products_dir: &Path, prefix: &str) -> Result<Vec<PathBuf>> {
+    if !products_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut files = Vec::new();
+    for entry in fs::read_dir(products_dir)
+        .wrap_err_with(|| format!("Failed to read {}", products_dir.display()))?
+    {
+        let path = entry?.path();
+        let name = path.file_name().map(|name| name.to_string_lossy()).unwrap_or_default();
+        if name.starts_with(prefix) && name.ends_with(".xctestrun") {
+            files.push(path);
+        }
+    }
+
+    Ok(files)
+}
+
 /// Where one attempt of one iOS UI test keeps the evidence of a failure
 ///
 /// Xcode keeps only the newest few result bundles in DerivedData, so by the end of a run the
 /// failing test's screenshots and hierarchy snapshots are gone, and the app's own log lives in
-/// the simulator, which the next test erases
+/// the simulator, which the next test deletes
 struct IosUiAttemptArtifacts {
     result_bundle: PathBuf,
     app_log_dir: PathBuf,
@@ -1375,7 +1642,7 @@ impl IosUiAttemptArtifacts {
     }
 
     fn write_unified_log(&self, sh: &Shell, udid: &str, suite: IosUiSuite) -> Result<()> {
-        // one erased simulator per test, so the window only needs to cover this attempt
+        // one fresh simulator per attempt, so the window only needs to cover this attempt
         let (app, runner) = suite.processes();
         let predicate = format!(r#"process == "{app}" OR process == "{runner}""#);
         let log = cmd!(
@@ -1419,6 +1686,7 @@ impl XcodebuildFailure {
 enum IosUiEnvironmentFailure {
     TestRunnerBootstrap,
     AppLaunch,
+    MissingSimulator,
 }
 
 impl IosUiEnvironmentFailure {
@@ -1435,7 +1703,15 @@ impl IosUiEnvironmentFailure {
             || output.contains("does not have a process ID")
             || output.contains("App startup timed out on relaunch");
 
-        app_launch_failed.then_some(Self::AppLaunch)
+        if app_launch_failed {
+            return Some(Self::AppLaunch);
+        }
+
+        // the clone was booted, but CoreSimulator briefly lost track of the iOS runtime and with
+        // it the clone, which happened once in 32 tests on a busy local machine
+        output
+            .contains("Unable to find a device matching the provided destination specifier")
+            .then_some(Self::MissingSimulator)
     }
 }
 
@@ -1444,6 +1720,7 @@ impl std::fmt::Display for IosUiEnvironmentFailure {
         match self {
             Self::TestRunnerBootstrap => f.write_str("Xcode test runner bootstrap failure"),
             Self::AppLaunch => f.write_str("simulator app launch failure"),
+            Self::MissingSimulator => f.write_str("Xcode not finding the simulator"),
         }
     }
 }
@@ -1470,7 +1747,7 @@ fn non_empty_output<'a>(output: &'a str, fallback: &'a str) -> &'a str {
 
 /// The UI test target a test belongs to, which decides the scheme it runs under and the app and
 /// runner processes whose logs belong to it
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum IosUiSuite {
     /// `CoveUITests`, which drives the Cove app
     Main,
@@ -1485,6 +1762,21 @@ impl IosUiSuite {
         match test.split('/').next() {
             Some(IOS_CLOUD_BACKUP_UI_TEST_TARGET) => Self::CloudBackup,
             _ => Self::Main,
+        }
+    }
+
+    fn from_target(target: &str) -> Option<Self> {
+        match target {
+            IOS_UI_TEST_TARGET => Some(Self::Main),
+            IOS_CLOUD_BACKUP_UI_TEST_TARGET => Some(Self::CloudBackup),
+            _ => None,
+        }
+    }
+
+    fn target(self) -> &'static str {
+        match self {
+            Self::Main => IOS_UI_TEST_TARGET,
+            Self::CloudBackup => IOS_CLOUD_BACKUP_UI_TEST_TARGET,
         }
     }
 
@@ -1504,33 +1796,131 @@ impl IosUiSuite {
     }
 }
 
-/// Expands a `CoveUITests/<Class>` with a matching source file into one test per method, so each
-/// method starts on a freshly erased simulator; anything else runs as given
-fn ios_ui_tests_to_run(sh: &Shell, test: &str) -> Result<Vec<String>> {
-    let Some(file) = ios_ui_test_class_file(test).filter(|file| sh.path_exists(file)) else {
-        return Ok(vec![test.to_string()]);
-    };
+/// Expands a comma-separated list of tests, then keeps the shard's slice of the result
+fn ios_ui_shard_tests(sh: &Shell, tests: &str, shard: IosUiShard) -> Result<Vec<String>> {
+    let project = sh
+        .read_file(IOS_PROJECT_FILE)
+        .wrap_err_with(|| format!("Failed to read {IOS_PROJECT_FILE}"))?;
 
-    let contents = sh.read_file(&file).wrap_err_with(|| format!("Failed to read {file}"))?;
-
-    let tests = contents
-        .lines()
-        .filter_map(test_method_name)
-        .map(|method| format!("{test}/{method}"))
-        .collect::<Vec<_>>();
-
-    if tests.is_empty() {
-        color_eyre::eyre::bail!("No test methods found in {file}");
+    let mut expanded = Vec::new();
+    for test in tests.split(',').map(str::trim).filter(|test| !test.is_empty()) {
+        expanded.extend(ios_ui_tests_to_run(sh, &project, test)?);
     }
 
-    Ok(tests)
+    if expanded.is_empty() {
+        color_eyre::eyre::bail!("No iOS UI tests given");
+    }
+
+    // a class and one of its methods can both be listed, and running a test twice only costs time
+    let mut seen = HashSet::new();
+    expanded.retain(|test| seen.insert(test.clone()));
+
+    Ok(expanded
+        .into_iter()
+        .enumerate()
+        .filter(|(position, _)| shard.includes(*position))
+        .map(|(_, test)| test)
+        .collect())
 }
 
-fn ios_ui_test_class_file(test: &str) -> Option<String> {
-    let class = test.strip_prefix(IOS_UI_TEST_TARGET)?.strip_prefix('/')?;
-    let is_class = !class.is_empty() && !class.contains('/');
+/// Expands a `<Target>/<Class>` into one test per method, so each method starts on a fresh
+/// simulator, and checks that a `<Target>/<Class>/<method>` names one of its methods
+///
+/// Xcode also accepts a bare target, a module-qualified class, a method with `()` or a class the
+/// target doesn't build, which this can't expand or tell apart from the plain form: those would run
+/// tests in one simulator session, twice, or not at all while passing, so only plain names of a
+/// class the named target builds are accepted
+fn ios_ui_tests_to_run(sh: &Shell, project: &str, test: &str) -> Result<Vec<String>> {
+    let usage = || {
+        eyre!(
+            "{test} isn't a <Target>/<Class> or <Target>/<Class>/<method> test, with <Target> \
+             {IOS_UI_TEST_TARGET} or {IOS_CLOUD_BACKUP_UI_TEST_TARGET}"
+        )
+    };
 
-    is_class.then(|| format!("{IOS_UI_TEST_TARGET}/{class}.swift"))
+    let is_name = |part: &str| {
+        !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    };
+
+    let parts = test.split('/').collect::<Vec<_>>();
+    let (target, class, method) = match parts.as_slice() {
+        [target, class] => (*target, *class, None),
+        [target, class, method] => (*target, *class, Some(*method)),
+        _ => return Err(usage()),
+    };
+
+    let Some(suite) = IosUiSuite::from_target(target) else {
+        return Err(usage());
+    };
+
+    if !is_name(class) || !method.is_none_or(is_name) {
+        return Err(usage());
+    }
+
+    let file_name = format!("{class}.swift");
+    if !target_source_files(project, suite.target()).contains(&file_name.as_str()) {
+        color_eyre::eyre::bail!("{test} names no test class: {target} doesn't build {file_name}");
+    }
+
+    let file = format!("{IOS_UI_TEST_SOURCE_DIR}/{file_name}");
+    let contents = sh.read_file(&file).wrap_err_with(|| format!("Failed to read {file}"))?;
+    let methods = contents.lines().filter_map(test_method_name).collect::<Vec<_>>();
+
+    match method {
+        Some(method) if methods.contains(&method) => Ok(vec![test.to_string()]),
+        Some(_) => Err(eyre!("{test} names no test method in {file}")),
+        None if methods.is_empty() => Err(eyre!("No test methods found in {file}")),
+        None => Ok(methods.into_iter().map(|method| format!("{test}/{method}")).collect()),
+    }
+}
+
+/// The Swift files in a native target's Sources build phase, read from the project file
+///
+/// `OnboardingFullLaunchUITests.swift` is built by both UI test targets and the cloud backup
+/// classes keep their sources beside the main ones, so a file's directory doesn't say which
+/// target a class belongs to
+fn target_source_files<'a>(project: &'a str, target: &str) -> Vec<&'a str> {
+    let target_name = format!("name = {target};");
+    let is_target = |body: &[&str]| {
+        body.iter().any(|line| line.trim() == "isa = PBXNativeTarget;")
+            && body.iter().any(|line| line.trim() == target_name)
+    };
+
+    let Some(phase_id) =
+        pbxproj_objects(project).find(|(_, body)| is_target(body)).and_then(|(_, body)| {
+            body.into_iter().find_map(|line| line.trim().strip_suffix(" /* Sources */,"))
+        })
+    else {
+        return Vec::new();
+    };
+
+    pbxproj_objects(project)
+        .find(|(id, _)| *id == phase_id)
+        .map(|(_, body)| {
+            body.into_iter()
+                .filter_map(|line| line.split_once("/* ")?.1.strip_suffix(" in Sources */,"))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Each multi-line object in a project file's `objects` section, as its ID and body lines
+///
+/// Objects open on a line indented two tabs that ends with `= {` and close on a line that is
+/// exactly two tabs and `};`; deeper lines are nested values and one-line objects have no body
+fn pbxproj_objects(project: &str) -> impl Iterator<Item = (&str, Vec<&str>)> {
+    let mut lines = project.lines();
+
+    std::iter::from_fn(move || {
+        let id = lines.by_ref().find_map(|line| {
+            let header = line.strip_prefix("\t\t")?;
+            let is_open = !header.starts_with('\t') && header.ends_with("= {");
+            is_open.then(|| header.split_whitespace().next()).flatten()
+        })?;
+
+        let body = lines.by_ref().take_while(|line| *line != "\t\t};").collect();
+        Some((id, body))
+    })
 }
 
 fn test_method_name(line: &str) -> Option<&str> {
@@ -1982,9 +2372,12 @@ fn available_device_context(devices: &[ResolvedDevice]) -> String {
 
 #[cfg(test)]
 mod tests {
-    mod ui_test_expansion {
-        use crate::ios::ios_ui_tests_to_run;
+    mod ui_test_plan {
+        use crate::ios::{ios_ui_shard_tests, IosUiShard, IosUiSuite};
+        use std::collections::HashSet;
         use xshell::Shell;
+
+        const ONBOARDING: &str = "CoveUITests/OnboardingFullLaunchUITests";
 
         fn ios_shell() -> Shell {
             let sh = Shell::new().unwrap();
@@ -1992,42 +2385,98 @@ mod tests {
             sh
         }
 
-        #[test]
-        fn expands_a_class_with_a_source_file_into_its_test_methods() {
-            let tests =
-                ios_ui_tests_to_run(&ios_shell(), "CoveUITests/UtxoLockFullLaunchUITests").unwrap();
-
-            assert_eq!(
-                tests,
-                ["CoveUITests/UtxoLockFullLaunchUITests/testLockedUtxosAreExcludedFromCoinControlAndSends"]
-            );
+        fn shard(value: &str) -> IosUiShard {
+            value.parse().unwrap()
         }
 
         #[test]
-        fn expanded_onboarding_class_lists_only_test_methods() {
-            let tests =
-                ios_ui_tests_to_run(&ios_shell(), "CoveUITests/OnboardingFullLaunchUITests")
-                    .unwrap();
-
-            assert!(tests.contains(
-                &"CoveUITests/OnboardingFullLaunchUITests/testWelcomeScreenShowsFirstLaunchEntryPoint"
-                    .to_string()
-            ));
-            assert!(tests.iter().all(|test| {
-                test.strip_prefix("CoveUITests/OnboardingFullLaunchUITests/test").is_some()
-            }));
-        }
-
-        #[test]
-        fn runs_methods_targets_and_unknown_classes_as_given() {
+        fn shards_split_a_class_into_disjoint_slices_that_cover_it() {
             let sh = ios_shell();
+            let all = ios_ui_shard_tests(&sh, ONBOARDING, shard("1/1")).unwrap();
+            assert!(all.len() > 3, "the onboarding class should have enough tests to shard");
+            assert!(all.iter().all(|test| test.starts_with(&format!("{ONBOARDING}/test"))));
 
-            for test in [
-                "CoveUITests/UtxoLockFullLaunchUITests/testLockedUtxosAreExcludedFromCoinControlAndSends",
-                "CoveUITests",
-                "CoveUITests/NoSuchClass",
-            ] {
-                assert_eq!(ios_ui_tests_to_run(&sh, test).unwrap(), [test]);
+            let slices = ["1/3", "2/3", "3/3"]
+                .map(|value| ios_ui_shard_tests(&sh, ONBOARDING, shard(value)).unwrap());
+
+            let mut covered = HashSet::new();
+            for slice in &slices {
+                assert!(!slice.is_empty());
+                assert!(slice.len().abs_diff(all.len() / 3) <= 1, "shards stay balanced");
+
+                for test in slice {
+                    assert!(covered.insert(test.clone()), "{test} ran in two shards");
+                }
+            }
+
+            assert_eq!(covered, all.into_iter().collect::<HashSet<_>>());
+        }
+
+        #[test]
+        fn lists_expand_each_entry_once_and_keep_methods_as_given() {
+            let sh = ios_shell();
+            let method = format!("{ONBOARDING}/testWelcomeScreenShowsFirstLaunchEntryPoint");
+            let class = ios_ui_shard_tests(&sh, ONBOARDING, shard("1/1")).unwrap();
+
+            let listed = format!(" {method} ,{ONBOARDING},, ");
+            let tests = ios_ui_shard_tests(&sh, &listed, shard("1/1")).unwrap();
+
+            assert_eq!(tests[0], method);
+            assert_eq!(tests.len(), class.len(), "the listed method isn't repeated");
+        }
+
+        #[test]
+        fn an_empty_list_is_an_error() {
+            assert!(ios_ui_shard_tests(&ios_shell(), " , ", shard("1/1")).is_err());
+        }
+
+        // each form selects tests xcodebuild would run unexpanded or under a second name
+        #[test]
+        fn entries_other_than_plain_class_and_method_names_are_errors() {
+            let method = "testWelcomeScreenShowsFirstLaunchEntryPoint";
+            let rejected = [
+                "CoveUITests".to_string(),
+                "CoveUITests/".to_string(),
+                "CoveUITests//testA".to_string(),
+                "/Class".to_string(),
+                "OtherUITests/OnboardingFullLaunchUITests".to_string(),
+                // the cloud backup classes keep their sources beside the main target's
+                "CoveUITests/PrivateKeyExportFullAppUITests".to_string(),
+                "CoveCloudBackupUITests/UtxoLockFullLaunchUITests".to_string(),
+                "CoveUITests/CoveUITests.OnboardingFullLaunchUITests".to_string(),
+                "CoveUITests/NotAClass".to_string(),
+                format!("{ONBOARDING}/{method}()"),
+                format!("{ONBOARDING}/{method}/"),
+                format!("{ONBOARDING}/testNotAMethod"),
+            ];
+
+            for entry in rejected {
+                let listed = format!("{entry},{ONBOARDING}");
+                assert!(
+                    ios_ui_shard_tests(&ios_shell(), &listed, shard("1/1")).is_err(),
+                    "{entry:?} was accepted"
+                );
+            }
+        }
+
+        // a class runs under the scheme its target belongs to, which the project file decides
+        #[test]
+        fn cloud_backup_classes_expand_under_their_own_target() {
+            let sh = ios_shell();
+            let class = "CoveCloudBackupUITests/PrivateKeyExportFullAppUITests";
+            let tests = ios_ui_shard_tests(&sh, class, shard("1/1")).unwrap();
+
+            assert!(!tests.is_empty());
+            assert!(tests.iter().all(|test| test.starts_with(&format!("{class}/test"))));
+            assert!(tests.iter().all(|test| IosUiSuite::for_test(test) == IosUiSuite::CloudBackup));
+        }
+
+        #[test]
+        fn shards_parse_only_in_range_slices() {
+            assert_eq!(shard("2/3").to_string(), "2/3");
+
+            for invalid in ["0/3", "4/3", "1/0", "3", "a/b", ""] {
+                assert!(invalid.parse::<IosUiShard>().is_err(), "{invalid:?} parsed");
             }
         }
     }
@@ -2036,7 +2485,7 @@ mod tests {
         use crate::ios::IosUiEnvironmentFailure;
 
         #[test]
-        fn retries_simulator_launch_failures_seen_in_ci() {
+        fn retries_simulator_failures_seen_in_runs() {
             let launch_timeout = "OnboardingFullLaunchUITests.swift:280: error: -[CoveUITests.OnboardingFullLaunchUITests testCanReachExistingWalletStorageChoices] : Failed to launch <XCUIApplicationImpl: 0x109c16800 org.bitcoinppl.cove at Cove.app> via Xcode: Timed out while launching application via Xcode.";
             let lost_process = "OnboardingFullLaunchUITests.swift:280: error: -[CoveUITests.OnboardingFullLaunchUITests testExchangeUserCanReachFundingAfterBackup] : Application 'org.bitcoinppl.cove' does not have a process ID";
             let watchdog = "OnboardingFullLaunchUITests.swift:290: error: -[CoveUITests.OnboardingFullLaunchUITests testWelcomeScreenShowsFirstLaunchEntryPoint] : failed - App startup timed out on relaunch";
@@ -2052,6 +2501,12 @@ mod tests {
             assert_eq!(
                 IosUiEnvironmentFailure::detect(runner),
                 Some(IosUiEnvironmentFailure::TestRunnerBootstrap)
+            );
+
+            let missing = "xcodebuild: error: Unable to find a device matching the provided destination specifier:\n\t\t{ platform:iOS Simulator, id:D4598B8A-2900-4ACB-83F9-922C21B15772 }";
+            assert_eq!(
+                IosUiEnvironmentFailure::detect(missing),
+                Some(IosUiEnvironmentFailure::MissingSimulator)
             );
         }
 

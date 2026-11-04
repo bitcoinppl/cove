@@ -222,9 +222,13 @@ enum Commands {
         #[arg(long, default_value = "iPhone 17")]
         device: String,
 
-        /// Test class or method to run
+        /// Comma-separated test classes or methods to run, as `<Target>/<Class>[/<method>]`
         #[arg(long, default_value = "CoveUITests/OnboardingFullLaunchUITests")]
         test: String,
+
+        /// Run only this slice of the expanded tests, as `<index>/<count>`, such as `2/3`
+        #[arg(long, default_value = "1/1")]
+        shard: ios::IosUiShard,
 
         /// Open Simulator before running tests
         #[arg(long)]
@@ -233,6 +237,10 @@ enum Commands {
         /// Keep each failed attempt's result bundle and app logs in this directory
         #[arg(long)]
         results_dir: Option<std::path::PathBuf>,
+
+        /// Print the shard's tests, one per line, instead of running them
+        #[arg(long)]
+        list: bool,
     },
 
     /// Bump and upload to TestFlight, copy previous test notes, and add to me-only
@@ -444,8 +452,9 @@ fn main() -> Result<()> {
             mobile::build_run_all(ios_options, android_options, cli.verbose)
         }
 
-        Commands::IosUi { device, test, foreground, results_dir } => {
-            let options = ios::IosUiOptions::new(device, test, foreground, results_dir);
+        Commands::IosUi { device, test, shard, foreground, results_dir, list } => {
+            let options =
+                ios::IosUiOptions::new(device, test, shard, foreground, results_dir, list);
             ios::run_ios_ui_tests(options, cli.verbose)
         }
 

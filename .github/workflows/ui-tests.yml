@@ -1,9 +1,20 @@
 name: UI tests
 
 # emulator and simulator suites take far longer than the rest of CI, so they
-# run after merge, nightly, and on PRs that opt in with the `ui-tests` label
+# run after merge, nightly, and on PRs that opt in with the `ui-tests` label.
+# A manual run can name tests to run instead of the full suites, to check a fix
+# without waiting on every test again; see docs/testing.md
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      ios_tests:
+        description: "iOS tests to run, comma-separated <Target>/<Class>[/<method>]; empty with android_tests empty runs everything"
+        required: false
+        default: ""
+      android_tests:
+        description: "Android tests to run, comma-separated <package>.<Class>[#<method>]"
+        required: false
+        default: ""
   schedule:
     # 08:00 UTC is 03:00 US Central during daylight time and 02:00 in winter
     - cron: "0 8 * * *"
@@ -24,6 +35,21 @@ concurrency:
 env:
   CARGO_HTTP_MULTIPLEXING: "false"
   CARGO_NET_RETRY: "10"
+  # every iOS suite a full run covers, comma-separated; the rest of CoveCloudBackupUITests stays
+  # out until its inventory scenarios pass on master, see #947, and the two classes here use the
+  # scripted cloud host only to restore a fixture wallet or reach a screen
+  IOS_UI_SUITES: >-
+    CoveUITests/OnboardingFullLaunchUITests,
+    CoveUITests/UtxoLockFullLaunchUITests,
+    CoveUITests/HardwareSigningFullLaunchUITests,
+    CoveUITests/PublicKeyImportFullLaunchUITests,
+    CoveUITests/TapSignerLayoutFullLaunchUITests,
+    CoveCloudBackupUITests/PrivateKeyExportFullAppUITests,
+    CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests
+  ANDROID_FLAVOURS: Dev UiTest
+  # tests a manual run names, read by tools/ui-test-plan.sh; empty on every other trigger
+  IOS_TESTS: ${{ inputs.ios_tests }}
+  ANDROID_TESTS: ${{ inputs.android_tests }}
 
 jobs:
   android-instrumented:
@@ -31,6 +57,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     # one flavour per job: with both in one job the hosted runner shut down about 35 minutes in, twice
+    # the matrix is fixed, not planned by an earlier job, so a run cancelled before it starts still
+    # names its checks the way the run that replaces it does
     strategy:
       fail-fast: false
       matrix:
@@ -38,16 +66,27 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # a manual run that names tests runs only those, so a job may have nothing to do
+      - name: Plan this job's tests
+        id: plan
+        env:
+          PLATFORM: android
+          FLAVOUR: ${{ matrix.flavour }}
+        run: tools/ui-test-plan.sh
+
       - name: Enable KVM for the emulator
+        if: steps.plan.outputs.run == 'true'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
       - name: Install Rust toolchain
+        if: steps.plan.outputs.run == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust builds
+        if: steps.plan.outputs.run == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust -> target
@@ -55,31 +94,37 @@ jobs:
           prefix-key: v1-rust-android-x86_64
 
       - name: Set up just
+        if: steps.plan.outputs.run == 'true'
         uses: taiki-e/install-action@v2
         with:
           tool: just
 
       - name: Setup Java
+        if: steps.plan.outputs.run == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: "temurin"
           java-version: "17"
 
       - name: Install build dependencies
+        if: steps.plan.outputs.run == 'true'
         run: cd rust && cargo --locked xtask install-deps
 
       # the hosted emulator is x86_64, which the default arm64-only build skips
       - name: Build Rust FFI for the x86_64 emulator
+        if: steps.plan.outputs.run == 'true'
         run: just xtask build-android debug --x86-64
 
       # the TAPSIGNER emulator runs in a Python environment uv builds
       - name: Set up uv
+        if: steps.plan.outputs.run == 'true'
         uses: astral-sh/setup-uv@v10.3.3
 
       # the recipe starts cove-fake-node and the hardware signer host and forwards their
       # ports 39000-39002 and 39010-39011 into the emulator, for the tests that fund a
       # wallet or sign with a hardware wallet
       - name: Run instrumented tests
+        if: steps.plan.outputs.run == 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -92,7 +137,11 @@ jobs:
           ram-size: 4096M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: just android-instrumented-ci ${{ matrix.flavour }}
+          script: just android-instrumented-ci "$FLAVOUR" "$ANDROID_TESTS"
+        env:
+          FLAVOUR: ${{ matrix.flavour }}
+          # empty runs every test in the flavour
+          ANDROID_TESTS: ${{ steps.plan.outputs.tests }}
 
       # the emulator has died mid-run with no output of its own, so record whether the host killed it
       - name: Show host memory and kernel kills
@@ -102,7 +151,7 @@ jobs:
           sudo dmesg --ctime | grep -iE 'out of memory|oom|killed process' || echo "no kernel OOM kills recorded"
 
       - name: Upload Android test reports
-        if: failure()
+        if: failure() && steps.plan.outputs.run == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: android-instrumented-reports-${{ matrix.flavour }}
@@ -114,17 +163,33 @@ jobs:
   ios-ui:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
     runs-on: macos-26
-    # each test erases and reboots the simulator, about 6 to 8 minutes a test on the hosted
-    # runner; a slow runner reached the last two suites after 250 minutes, so this takes the
-    # hosted runner's 360 minute limit
-    timeout-minutes: 360
+    # each shard runs about 11 tests, after about 25 minutes building the Rust library, the fake
+    # node and the test bundles; a test took 6 to 8 minutes when each erased the simulator and
+    # rebuilt, and the slowest hosted runners need headroom beyond the faster path's estimate
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        # a full run splits across this many macOS runners; fixed for the same reason as the
+        # Android flavours
+        shard: ["1/3", "2/3", "3/3"]
     steps:
       - uses: actions/checkout@v6
 
+      # a manual run that names tests runs only those, so a job may have nothing to do
+      - name: Plan this job's tests
+        id: plan
+        env:
+          PLATFORM: ios
+          SHARD: ${{ matrix.shard }}
+        run: tools/ui-test-plan.sh
+
       - name: Install Rust toolchain
+        if: steps.plan.outputs.run == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Rust builds
+        if: steps.plan.outputs.run == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust -> target
@@ -133,59 +198,51 @@ jobs:
           prefix-key: v2-rust-ios
 
       - name: Set up just
+        if: steps.plan.outputs.run == 'true'
         uses: taiki-e/install-action@v2
         with:
           tool: just
 
+      # a listed method lands on one shard, so the others stop here instead of building
+      - name: List this shard's tests
+        id: shard
+        if: steps.plan.outputs.run == 'true'
+        env:
+          TESTS: ${{ steps.plan.outputs.tests }}
+          SHARD: ${{ steps.plan.outputs.shard }}
+        run: |
+          cd rust
+          tests=$(cargo run --locked -q -p xtask -- ios-ui --test "$TESTS" --shard "$SHARD" --list)
+          printf '%s\n' "$tests"
+          echo "count=$(printf '%s' "$tests" | grep -c . || true)" >>"$GITHUB_OUTPUT"
+
       - name: Build Rust FFI bindings
+        if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         run: just build-ios
 
       # the TAPSIGNER emulator runs in a Python environment uv builds
       - name: Set up uv
+        if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         uses: astral-sh/setup-uv@v10.3.3
 
-      # xtask resets the simulator before each test so every one starts at first launch, and
-      # keeps cove-fake-node up on ports 39000-39002 for the tests that fund a wallet from it
-      # and the hardware signer host on 39010-39011 for the hardware signing tests
+      # xtask expands each class into its test methods and keeps this shard's slice, builds each
+      # scheme once, runs every test on a fresh clone of a once-booted simulator so each starts at
+      # first launch, and keeps cove-fake-node up on ports 39000-39002 for the tests that fund a
+      # wallet from it and the hardware signer host on 39010-39011 for the hardware signing tests
       # xcodebuild passes TEST_RUNNER_-prefixed variables to the test process without the prefix
-      - name: Run CoveUITests
+      - name: Run iOS UI tests
+        if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         env:
           TEST_RUNNER_COVE_SKIP_QUARANTINED: "1"
-        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --results-dir "$RUNNER_TEMP/ios-ui-results"
+          TESTS: ${{ steps.plan.outputs.tests }}
+          SHARD: ${{ steps.plan.outputs.shard }}
+        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test "$TESTS" --shard "$SHARD" --results-dir "$RUNNER_TEMP/ios-ui-results"
 
-      # runs even when an onboarding test failed, so one broken suite doesn't hide the other
-      - name: Run UTXO lock UI tests
-        if: ${{ !cancelled() }}
-        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/UtxoLockFullLaunchUITests --results-dir "$RUNNER_TEMP/ios-ui-results"
-
-      - name: Run hardware signing UI tests
-        if: ${{ !cancelled() }}
-        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/HardwareSigningFullLaunchUITests --results-dir "$RUNNER_TEMP/ios-ui-results"
-
-      - name: Run public key import UI tests
-        if: ${{ !cancelled() }}
-        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/PublicKeyImportFullLaunchUITests --results-dir "$RUNNER_TEMP/ios-ui-results"
-
-      - name: Run TAPSIGNER layout UI tests
-        if: ${{ !cancelled() }}
-        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveUITests/TapSignerLayoutFullLaunchUITests --results-dir "$RUNNER_TEMP/ios-ui-results"
-
-      # the rest of CoveCloudBackupUITests stays out until its inventory scenarios pass on master; see #947
-      # these classes use the scripted cloud host only to restore a fixture wallet or reach a screen
-      - name: Run private key export UI tests
-        if: ${{ !cancelled() }}
-        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveCloudBackupUITests/PrivateKeyExportFullAppUITests --results-dir "$RUNNER_TEMP/ios-ui-results"
-
-      - name: Run large text cloud backup UI tests
-        if: ${{ !cancelled() }}
-        run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests --results-dir "$RUNNER_TEMP/ios-ui-results"
-
-      # every step writes there, each attempt's bundle and logs named for its test, so failures from
-      # any suite get uploaded; DerivedData keeps only the newest bundles
+      # each attempt's bundle and logs are named for its test; DerivedData keeps only the newest bundles
       - name: Upload iOS test results
-        if: failure()
+        if: failure() && steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         uses: actions/upload-artifact@v7
         with:
-          name: ios-ui-results
+          name: ios-ui-results-${{ strategy.job-index }}
           path: ${{ runner.temp }}/ios-ui-results
           retention-days: 7
