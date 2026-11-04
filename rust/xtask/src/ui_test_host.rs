@@ -27,7 +27,7 @@ use std::{
     net::{Shutdown, TcpListener, TcpStream},
     os::unix::net::UnixStream,
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Command},
     sync::Arc,
     thread,
     time::{Duration, Instant},
@@ -53,11 +53,13 @@ use color_eyre::{
 use parking_lot::Mutex;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use xshell::Shell;
 
 use crate::{
     android_device::AndroidDevice,
     common::{command_exists, print_info, print_success, print_warning},
     fake_node::{AndroidPorts, FakeNodeGuard},
+    tapsigner_emulator::{emulator_script, EmulatorPaths},
     util,
 };
 
@@ -68,11 +70,11 @@ const PORTS: [u16; 2] = [CONTROL_PORT, BRIDGE_PORT];
 /// The emulator derives every key from this seed, so the card and its wallet
 /// are the same on every run
 const EMULATOR_RNG_SEED: &str = "1337";
-const EMULATOR_START_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// Python packages `ecard.py` imports
-const EMULATOR_PACKAGES: [&str; 7] =
-    ["cbor2==5.4.6", "hexdump", "wallycore", "bech32==1.2.0", "base58", "click", "cryptography"];
+// ecard.py starts in well under a second, but on a busy macOS runner a start that overlaps a
+// simulator boot and app install has spent more than 20 seconds in its first imports. This stays
+// under the iOS tests' 60 second request timeout, so a start that still fails reports its log
+const EMULATOR_START_TIMEOUT: Duration = Duration::from_secs(45);
 
 // rust-cktap opens every session with this applet SELECT; the emulator has no
 // applet, so the bridge answers it with a status command as a real card does
@@ -134,14 +136,18 @@ pub struct HardwareSignerGuard {
 
 impl HardwareSignerGuard {
     pub fn start(android: AndroidPorts) -> Result<Self> {
-        let state = Arc::new(SignerState::default());
-
         let control = TcpListener::bind(("127.0.0.1", CONTROL_PORT)).wrap_err_with(|| {
             format!("Failed to listen on {CONTROL_PORT}; is another test run using it?")
         })?;
         let bridge = TcpListener::bind(("127.0.0.1", BRIDGE_PORT)).wrap_err_with(|| {
             format!("Failed to listen on {BRIDGE_PORT}; is another test run using it?")
         })?;
+
+        let state = Arc::new(SignerState {
+            emulator_paths: prepare_emulator(),
+            emulator: Mutex::new(None),
+            drop_after: Mutex::new(None),
+        });
 
         spawn_server(control, state.clone(), serve_control);
         spawn_server(bridge, state.clone(), serve_bridge);
@@ -190,8 +196,9 @@ impl Drop for HardwareSignerGuard {
     }
 }
 
-#[derive(Default)]
 struct SignerState {
+    // the error is a string because each /tapsigner/start reports it again
+    emulator_paths: Result<EmulatorPaths, String>,
     emulator: Mutex<Option<CardEmulator>>,
     // the next bridge session closes after this many exchanges
     drop_after: Mutex<Option<u32>>,
@@ -361,8 +368,12 @@ fn route(state: &SignerState, method: &str, path: &str, body: &[u8]) -> Result<V
                 old.stop();
             }
 
+            let paths = state.emulator_paths.as_ref().map_err(|error| {
+                eyre!("The TAPSIGNER emulator could not be prepared when the host started: {error}")
+            })?;
+
             *state.drop_after.lock() = None;
-            *emulator = Some(CardEmulator::start(request.needs_setup)?);
+            *emulator = Some(CardEmulator::start(paths, request.needs_setup)?);
             Ok(json!({ "ok": true }))
         }
         ("POST", "/tapsigner/drop") => {
@@ -660,10 +671,7 @@ struct CardEmulator {
 }
 
 impl CardEmulator {
-    fn start(needs_setup: bool) -> Result<Self> {
-        let python = emulator_python()?;
-        let script = ecard_script()?;
-
+    fn start(paths: &EmulatorPaths, needs_setup: bool) -> Result<Self> {
         // Unix socket paths are limited to about 100 bytes, which rules out the
         // per-user temporary directory on macOS
         let socket = PathBuf::from(format!("/tmp/cove-ecard-{}.sock", std::process::id()));
@@ -674,8 +682,14 @@ impl CardEmulator {
         let log_path = host_dir()?.join("ecard.log");
         let log = File::create(&log_path)?;
         // --no-init leaves the card's slot without a key, as a new card ships
-        let mut command = Command::new(&python);
-        command.arg(&script).args(["--rng-seed", EMULATOR_RNG_SEED, "emulate", "--tapsigner"]);
+        let mut command = Command::new(&paths.python);
+        command.arg(&paths.script).args([
+            "--rng-seed",
+            EMULATOR_RNG_SEED,
+            "emulate",
+            "--tapsigner",
+        ]);
+
         if needs_setup {
             command.arg("--no-init");
         }
@@ -684,31 +698,53 @@ impl CardEmulator {
             .arg("--pipe")
             .arg(&socket)
             .env("PYTHONUNBUFFERED", "1")
+            // a SIGABRT then writes every thread's Python stack to the log
+            .env("PYTHONFAULTHANDLER", "1")
             .stdout(log.try_clone()?)
             .stderr(log)
             .spawn()
-            .wrap_err_with(|| format!("Failed to start {}", script.display()))?;
+            .wrap_err_with(|| format!("Failed to start {}", paths.script.display()))?;
 
         let mut emulator = Self { child, socket };
-        let deadline = Instant::now() + EMULATOR_START_TIMEOUT;
+        let started = Instant::now();
+        let deadline = started + EMULATOR_START_TIMEOUT;
         while !emulator.socket.exists() {
             if let Some(status) = emulator.child.try_wait()? {
-                bail!("ecard.py exited with {status}; see {}", log_path.display());
+                bail!("ecard.py exited with {status}; {}", log_tail(&log_path));
             }
 
             if Instant::now() > deadline {
-                emulator.stop();
+                emulator.abort_with_stacks();
                 bail!(
-                    "ecard.py did not listen within {EMULATOR_START_TIMEOUT:?}; see {}",
-                    log_path.display()
+                    "ecard.py did not listen within {EMULATOR_START_TIMEOUT:?}; {}",
+                    log_tail(&log_path)
                 );
             }
 
             thread::sleep(Duration::from_millis(100));
         }
 
-        print_info(&format!("TAPSIGNER emulator listening on {}", emulator.socket.display()));
+        print_info(&format!(
+            "TAPSIGNER emulator listening on {} after {:.1?}",
+            emulator.socket.display(),
+            started.elapsed()
+        ));
+
         Ok(emulator)
+    }
+
+    /// Stops an emulator that hung, after asking Python to log where each thread was
+    fn abort_with_stacks(&mut self) {
+        let pid = self.child.id().to_string();
+        if Command::new("kill").args(["-ABRT", &pid]).status().is_ok_and(|status| status.success())
+        {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < deadline && matches!(self.child.try_wait(), Ok(None)) {
+                thread::sleep(Duration::from_millis(50));
+            }
+        }
+
+        self.stop();
     }
 
     fn stop(&mut self) {
@@ -720,86 +756,52 @@ impl CardEmulator {
     }
 }
 
-/// A directory under the cargo target dir for the emulator's venv and log
+/// Prepares the card emulator's Python and script before any test asks for a card
+///
+/// Building the venv takes most of a minute on a fresh CI runner, longer than the UI tests wait
+/// for `/tapsigner/start`. A failure only fails the TAPSIGNER tests, so the other UI tests still
+/// run on a host without uv
+fn prepare_emulator() -> Result<EmulatorPaths, String> {
+    print_info("Preparing the TAPSIGNER emulator");
+
+    emulator_paths().map_err(|error| {
+        let error = format!("{error:#}");
+        print_warning(&format!("TAPSIGNER emulator unavailable, its tests will fail: {error}"));
+        error
+    })
+}
+
+/// `COVE_ECARD_PYTHON` with the pinned `ecard.py`, or the shared uv venv
+fn emulator_paths() -> Result<EmulatorPaths> {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("xtask is in rust/");
+    let sh = Shell::new()?;
+    sh.change_dir(workspace);
+
+    match env::var_os("COVE_ECARD_PYTHON") {
+        Some(python) => Ok(EmulatorPaths { python: python.into(), script: emulator_script(&sh)? }),
+        None => EmulatorPaths::prepare(&sh),
+    }
+}
+
+/// The end of the emulator's log, so a failed start explains itself in the test's own output
+fn log_tail(path: &Path) -> String {
+    const LINES: usize = 25;
+
+    let log = fs::read_to_string(path).unwrap_or_default();
+    let lines: Vec<&str> = log.lines().collect();
+    if lines.is_empty() {
+        return format!("{} is empty", path.display());
+    }
+
+    let tail = lines[lines.len().saturating_sub(LINES)..].join("\n");
+    format!("last lines of {}:\n{tail}", path.display())
+}
+
+/// A directory under the cargo target dir for the emulator's log
 fn host_dir() -> Result<PathBuf> {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("xtask is in rust/");
     let dir = workspace.join("target").join("ui-test-host");
     fs::create_dir_all(&dir)?;
 
     Ok(dir)
-}
-
-/// `COVE_ECARD_PYTHON`, or a uv-managed venv with the emulator's packages
-fn emulator_python() -> Result<PathBuf> {
-    if let Some(python) = env::var_os("COVE_ECARD_PYTHON") {
-        return Ok(PathBuf::from(python));
-    }
-
-    let venv = host_dir()?.join("ecard-venv");
-    let python = venv.join("bin").join("python");
-    if python.exists() {
-        return Ok(python);
-    }
-
-    if !command_exists("uv") {
-        bail!("The TAPSIGNER emulator needs uv to build its Python environment, or COVE_ECARD_PYTHON set to a Python with its packages");
-    }
-
-    print_info("Creating the TAPSIGNER emulator's Python environment");
-
-    // wallycore publishes wheels for released Pythons only, so pin one rather
-    // than build it from source
-    let status =
-        Command::new("uv").args(["venv", "--quiet", "--python", "3.12"]).arg(&venv).status()?;
-    if !status.success() {
-        bail!("uv venv failed with {status}");
-    }
-
-    let status = Command::new("uv")
-        .args(["pip", "install", "--quiet", "--python"])
-        .arg(&python)
-        .args(EMULATOR_PACKAGES)
-        .status()?;
-    if !status.success() {
-        // a half-built venv would be reused next time
-        fs::remove_dir_all(&venv)?;
-        bail!("Installing the emulator's packages failed with {status}");
-    }
-
-    Ok(python)
-}
-
-/// The `ecard.py` that ships in the rust-cktap checkout Cargo.lock pins
-fn ecard_script() -> Result<PathBuf> {
-    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("xtask is in rust/");
-    let output = Command::new("cargo")
-        .args(["metadata", "--format-version", "1", "--locked"])
-        .current_dir(workspace)
-        .stderr(Stdio::inherit())
-        .output()
-        .wrap_err("Failed to run cargo metadata")?;
-    if !output.status.success() {
-        bail!("cargo metadata failed");
-    }
-
-    let metadata: Value = serde_json::from_slice(&output.stdout)?;
-    let manifest = metadata["packages"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .find(|package| package["name"] == "rust-cktap")
-        .and_then(|package| package["manifest_path"].as_str())
-        .ok_or_else(|| eyre!("rust-cktap is not in the dependency graph"))?;
-
-    // the crate lives in lib/, beside the coinkite-tap-proto submodule
-    let checkout = Path::new(manifest)
-        .ancestors()
-        .nth(2)
-        .ok_or_else(|| eyre!("Unexpected rust-cktap manifest path {manifest}"))?;
-    let script = checkout.join("coinkite/coinkite-tap-proto/emulator/ecard.py");
-    if !script.exists() {
-        bail!("{} is missing; the rust-cktap checkout has no emulator submodule", script.display());
-    }
-
-    Ok(script)
 }

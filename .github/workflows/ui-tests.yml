@@ -160,6 +160,16 @@ jobs:
             android/app/build/outputs/androidTest-results/connected
           retention-days: 7
 
+      # a separate artifact keeps the report layout; the host overwrites the log at each card start
+      - name: Upload TAPSIGNER emulator log
+        if: failure() && steps.plan.outputs.run == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tapsigner-emulator-log-android-${{ matrix.flavour }}
+          path: rust/target/ui-test-host/ecard.log
+          if-no-files-found: ignore
+          retention-days: 7
+
   ios-ui:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
     runs-on: macos-26
@@ -245,4 +255,14 @@ jobs:
         with:
           name: ios-ui-results-${{ strategy.job-index }}
           path: ${{ runner.temp }}/ios-ui-results
+          retention-days: 7
+
+      # a separate artifact keeps the results layout; the host overwrites the log at each card start
+      - name: Upload TAPSIGNER emulator log
+        if: failure() && steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
+        uses: actions/upload-artifact@v7
+        with:
+          name: tapsigner-emulator-log-ios-${{ strategy.job-index }}
+          path: rust/target/ui-test-host/ecard.log
+          if-no-files-found: ignore
           retention-days: 7
