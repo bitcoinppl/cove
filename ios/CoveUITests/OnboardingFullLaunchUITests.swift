@@ -376,11 +376,13 @@ final class OnboardingFullLaunchUITests: XCTestCase {
                 return
             }
 
-            guard button.exists, button.isHittable else { break }
+            // a button that stopped being hittable is mid-navigation, so give it one more wait
+            // instead of another tap; a still-hittable button after the last attempt fails here
+            guard button.exists, button.isHittable else {
+                if waitForAny(of: destinations, timeout: timeout) { return }
+                break
+            }
         }
-
-        // the last tap may have started a navigation that finishes late
-        if waitForAny(of: destinations, timeout: timeout) { return }
 
         XCTFail("Tapping \(button) never showed \(destinations)", file: file, line: line)
     }
