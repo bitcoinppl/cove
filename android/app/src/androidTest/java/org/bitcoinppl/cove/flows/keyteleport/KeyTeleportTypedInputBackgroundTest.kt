@@ -24,6 +24,7 @@ import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.deleteTestWallet
 import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.importTestWalletOrNull
+import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
 import org.bitcoinppl.cove_core.AuthManagerAction
@@ -83,10 +84,12 @@ class KeyTeleportTypedInputBackgroundTest {
             // setUp found no stored session, so one here is the receiver test's own, left by a failure
             if (hasStoredReceiveSession()) endReceive(app.getKeyTeleportManager())
         } finally {
-            instrumentation.runOnMainSync { app.clearKeyTeleportManager() }
-            Auth.dispatch(AuthManagerAction.DisablePin)
-            instrumentation.runOnMainSync { Auth.unlockIfAuthDisabled() }
-            deleteTestWallet(walletId)
+            try {
+                instrumentation.runOnMainSync { app.clearKeyTeleportManager() }
+                restoreNoAppLock()
+            } finally {
+                deleteTestWallet(walletId)
+            }
         }
     }
 

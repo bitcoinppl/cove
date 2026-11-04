@@ -35,6 +35,8 @@ The CI workflow runs the TAPSIGNER emulator tests in their own job. The `UI test
 
 `xtask ios-ui`, which the `ios-ui-*` recipes and CI run, builds each UI test scheme once with `xcodebuild build-for-testing` and runs each test with `test-without-building` on a simulator of its own. It creates a golden simulator from the model and runtime of the `--device` simulator and boots it once, then clones it for each test and each retry. A clone starts with no app, app data, keychain items or privacy grants, as an erased simulator does, without the erase and the slow first boot after it. The `--device` simulator itself is left alone. The run deletes its simulators, named `Cove UI Test`, when it ends, and the next run deletes any that a stopped run left behind.
 
+Android has no such isolation. The test orchestrator starts a fresh process for each test, but every test in a flavour shares the app's data, and CI runs them in order of fully qualified class name. A full-launch test usually wipes the data when it launches the app, but a test that hosts a screen directly does not. Tests that set up an app lock skip themselves when one is already there, so they never replace a lock a person relies on, which means a lock left behind by an earlier test silently skips them. So a test that sets a PIN, decoy PIN, wipe data PIN or biometric unlock calls `restoreNoAppLock()` from `@After`, which removes all of them, leaves decoy mode and fails the test if the lock survives.
+
 To check a fix without rerunning every suite, start the workflow on the branch with only the failed tests:
 
 ```sh

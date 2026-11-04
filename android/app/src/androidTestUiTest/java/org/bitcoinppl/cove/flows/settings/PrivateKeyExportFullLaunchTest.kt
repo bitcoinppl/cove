@@ -14,6 +14,7 @@ import org.bitcoinppl.cove.test.FullLaunchTestRule
 import org.bitcoinppl.cove.test.ManualFullLaunchTest
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.launchFullApp
+import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
@@ -22,6 +23,7 @@ import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletSettingsRoute
+import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -49,6 +51,12 @@ class PrivateKeyExportFullLaunchTest {
     fun prepareDevice() {
         ScriptedPasskeyProvider.reset()
         device = fullLaunchDevice()
+    }
+
+    // the next test may host LockView without relaunching, and refuses to run over a leftover PIN
+    @After
+    fun removeAppLock() {
+        restoreNoAppLock()
     }
 
     @Test
