@@ -11,7 +11,7 @@ import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.BootstrapStep
-import org.bitcoinppl.cove_core.Database
+import org.bitcoinppl.cove_core.RustAuthManager
 import org.bitcoinppl.cove_core.bootstrapProgress
 
 /**
@@ -44,16 +44,23 @@ fun restoreNoAppLock() {
         isLocked = auth.isLocked
     }
 
-    val authType = Database().use { it.globalConfig().use { config -> config.authType() } }
-    check(authType == AuthType.NONE && !isInDecoyMode && !isLocked) {
-        "the app lock is still set up after the test: authType=$authType decoy=$isInDecoyMode locked=$isLocked"
+    // read the stored settings, since deleting a trick PIN only logs a database error
+    val (authType, hasDecoyPin, hasWipeDataPin) =
+        RustAuthManager().use { rust ->
+            Triple(rust.authType(), rust.isDecoyPinEnabled(), rust.isWipeDataPinEnabled())
+        }
+
+    check(authType == AuthType.NONE && !hasDecoyPin && !hasWipeDataPin && !isInDecoyMode && !isLocked) {
+        "the app lock is still set up after the test: authType=$authType decoyPin=$hasDecoyPin " +
+            "wipeDataPin=$hasWipeDataPin decoyMode=$isInDecoyMode locked=$isLocked"
     }
 }
 
 /**
  * Types [pin] on a LockView number pad hosted by this rule and waits for the app lock to open
  *
- * A timeout reports how many digits the pad took and which keys were off screen, never the PIN
+ * A timeout reports how many digits the pad still shows and which keys were off screen, never the
+ * PIN. The pad clears a rejected PIN, so zero digits can also mean a full PIN was entered and refused
  */
 fun ComposeTestRule.enterPinAndAwaitUnlock(pin: String) {
     pin.forEach { digit ->
@@ -66,10 +73,10 @@ fun ComposeTestRule.enterPinAndAwaitUnlock(pin: String) {
     try {
         waitUntil(UNLOCK_TIMEOUT_MILLIS) { !AuthManager.getInstance().isLocked }
     } catch (timeout: ComposeTimeoutException) {
-        val taken = onAllNodesWithText(PIN_DOT, useUnmergedTree = true).fetchSemanticsNodes().size
+        val showing = onAllNodesWithText(PIN_DOT, useUnmergedTree = true).fetchSemanticsNodes().size
         val hiddenKeys = ('0'..'9').filterNot { onNodeWithTag("numberPadPin.digit.$it").isDisplayed() }
         throw AssertionError(
-            "the app stayed locked after the PIN: the pad took $taken of ${pin.length} digits, " +
+            "the app stayed locked after the PIN: the pad shows $showing of ${pin.length} digits, " +
                 "keys not displayed: $hiddenKeys",
             timeout,
         )
