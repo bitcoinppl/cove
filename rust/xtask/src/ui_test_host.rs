@@ -694,6 +694,8 @@ impl CardEmulator {
             .arg("--pipe")
             .arg(&socket)
             .env("PYTHONUNBUFFERED", "1")
+            // a SIGABRT then writes every thread's Python stack to the log
+            .env("PYTHONFAULTHANDLER", "1")
             .stdout(log.try_clone()?)
             .stderr(log)
             .spawn()
@@ -703,14 +705,14 @@ impl CardEmulator {
         let deadline = Instant::now() + EMULATOR_START_TIMEOUT;
         while !emulator.socket.exists() {
             if let Some(status) = emulator.child.try_wait()? {
-                bail!("ecard.py exited with {status}; see {}", log_path.display());
+                bail!("ecard.py exited with {status}; {}", log_tail(&log_path));
             }
 
             if Instant::now() > deadline {
-                emulator.stop();
+                emulator.abort_with_stacks();
                 bail!(
-                    "ecard.py did not listen within {EMULATOR_START_TIMEOUT:?}; see {}",
-                    log_path.display()
+                    "ecard.py did not listen within {EMULATOR_START_TIMEOUT:?}; {}",
+                    log_tail(&log_path)
                 );
             }
 
@@ -719,6 +721,20 @@ impl CardEmulator {
 
         print_info(&format!("TAPSIGNER emulator listening on {}", emulator.socket.display()));
         Ok(emulator)
+    }
+
+    /// Stops an emulator that hung, after asking Python to log where each thread was
+    fn abort_with_stacks(&mut self) {
+        let pid = self.child.id().to_string();
+        if Command::new("kill").args(["-ABRT", &pid]).status().is_ok_and(|status| status.success())
+        {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < deadline && matches!(self.child.try_wait(), Ok(None)) {
+                thread::sleep(Duration::from_millis(50));
+            }
+        }
+
+        self.stop();
     }
 
     fn stop(&mut self) {
@@ -755,6 +771,20 @@ fn emulator_paths() -> Result<EmulatorPaths> {
         Some(python) => Ok(EmulatorPaths { python: python.into(), script: emulator_script(&sh)? }),
         None => EmulatorPaths::prepare(&sh),
     }
+}
+
+/// The end of the emulator's log, so a failed start explains itself in the test's own output
+fn log_tail(path: &Path) -> String {
+    const LINES: usize = 25;
+
+    let log = fs::read_to_string(path).unwrap_or_default();
+    let lines: Vec<&str> = log.lines().collect();
+    if lines.is_empty() {
+        return format!("{} is empty", path.display());
+    }
+
+    let tail = lines[lines.len().saturating_sub(LINES)..].join("\n");
+    format!("last lines of {}:\n{tail}", path.display())
 }
 
 /// A directory under the cargo target dir for the emulator's log
