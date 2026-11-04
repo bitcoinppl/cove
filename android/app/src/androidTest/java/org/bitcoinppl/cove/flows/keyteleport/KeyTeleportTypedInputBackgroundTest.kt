@@ -10,7 +10,6 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -22,6 +21,7 @@ import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.deleteTestWallet
+import org.bitcoinppl.cove.test.enterPinAndAwaitUnlock
 import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.importTestWalletOrNull
 import org.bitcoinppl.cove.test.restoreNoAppLock
@@ -188,14 +188,7 @@ class KeyTeleportTypedInputBackgroundTest {
     }
 
     private fun unlock() {
-        TEST_PIN.forEach { digit ->
-            compose.onNodeWithTag("numberPadPin.digit.$digit").performClick()
-        }
-
-        // the pad checks a full PIN after coroutine delays on the test's virtual clock
-        compose.mainClock.advanceTimeBy(PIN_SUBMIT_SETTLE_MILLIS)
-        compose.waitUntil(STATE_TIMEOUT_MILLIS) { !Auth.isLocked }
-        compose.waitForIdle()
+        compose.enterPinAndAwaitUnlock(TEST_PIN)
     }
 
     // a password field reports one mask character per typed character, so the length alone shows
@@ -223,7 +216,6 @@ class KeyTeleportTypedInputBackgroundTest {
 
     private companion object {
         const val TEST_PIN = "975318"
-        const val PIN_SUBMIT_SETTLE_MILLIS = 1_000L
         const val GRACE_PERIOD_MILLIS = 2_500L
         const val BACKGROUND_TIMEOUT_MILLIS = 10_000L
         const val STATE_TIMEOUT_MILLIS = 15_000L

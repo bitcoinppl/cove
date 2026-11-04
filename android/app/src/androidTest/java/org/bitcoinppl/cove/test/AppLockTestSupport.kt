@@ -1,5 +1,11 @@
 package org.bitcoinppl.cove.test
 
+import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.junit4.ComposeTestRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove_core.AuthManagerAction
@@ -43,3 +49,35 @@ fun restoreNoAppLock() {
         "the app lock is still set up after the test: authType=$authType decoy=$isInDecoyMode locked=$isLocked"
     }
 }
+
+/**
+ * Types [pin] on a LockView number pad hosted by this rule and waits for the app lock to open
+ *
+ * A timeout reports how many digits the pad took and which keys were off screen, never the PIN
+ */
+fun ComposeTestRule.enterPinAndAwaitUnlock(pin: String) {
+    pin.forEach { digit ->
+        onNodeWithTag("numberPadPin.digit.$digit").performClick()
+    }
+
+    // the pad checks a full PIN after coroutine delays on the test's virtual clock
+    mainClock.advanceTimeBy(PIN_SUBMIT_SETTLE_MILLIS)
+
+    try {
+        waitUntil(UNLOCK_TIMEOUT_MILLIS) { !AuthManager.getInstance().isLocked }
+    } catch (timeout: ComposeTimeoutException) {
+        val taken = onAllNodesWithText(PIN_DOT, useUnmergedTree = true).fetchSemanticsNodes().size
+        val hiddenKeys = ('0'..'9').filterNot { onNodeWithTag("numberPadPin.digit.$it").isDisplayed() }
+        throw AssertionError(
+            "the app stayed locked after the PIN: the pad took $taken of ${pin.length} digits, " +
+                "keys not displayed: $hiddenKeys",
+            timeout,
+        )
+    }
+
+    waitForIdle()
+}
+
+private const val PIN_DOT = "\u25CF"
+private const val PIN_SUBMIT_SETTLE_MILLIS = 1_000L
+private const val UNLOCK_TIMEOUT_MILLIS = 15_000L
