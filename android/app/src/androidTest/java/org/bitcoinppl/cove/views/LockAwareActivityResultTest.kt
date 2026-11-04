@@ -23,6 +23,7 @@ import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.flows.SettingsFlow.FullScreenSettingsModal
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.AuthManagerAction
@@ -52,13 +53,8 @@ class LockAwareActivityResultTest {
     }
 
     @After
-    fun disablePin() {
-        instrumentation.runOnMainSync {
-            if (Auth.isInDecoyMode()) Auth.switchToMainMode()
-            Auth.dispatch(AuthManagerAction.DisableDecoyPin)
-            Auth.dispatch(AuthManagerAction.DisablePin)
-            Auth.unlockIfAuthDisabled()
-        }
+    fun removeAppLock() {
+        restoreNoAppLock()
     }
 
     @Test

@@ -10,6 +10,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.AuthManagerAction
@@ -33,12 +34,9 @@ class MainActivityAppShellLockTest {
     }
 
     @After
-    fun disablePin() {
-        instrumentation.runOnMainSync {
-            App.alertState = null
-            Auth.dispatch(AuthManagerAction.DisablePin)
-            Auth.unlockIfAuthDisabled()
-        }
+    fun removeAppLock() {
+        instrumentation.runOnMainSync { App.alertState = null }
+        restoreNoAppLock()
     }
 
     @Test
