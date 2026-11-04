@@ -961,7 +961,10 @@ private fun walletCreationStartedOrFinished(): DescribedSelector =
 private fun desc(value: String): DescribedSelector =
     DescribedSelector(By.desc(value), "content description \"$value\"")
 
-private fun UiDevice.dumpWindowHierarchy(): String {
+/**
+ * The window hierarchy as UiAutomator sees it, for failure messages, truncated to keep reports readable
+ */
+fun UiDevice.dumpWindowHierarchy(): String {
     val output = ByteArrayOutputStream()
     dumpWindowHierarchy(output)
 
