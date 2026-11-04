@@ -70,7 +70,11 @@ const PORTS: [u16; 2] = [CONTROL_PORT, BRIDGE_PORT];
 /// The emulator derives every key from this seed, so the card and its wallet
 /// are the same on every run
 const EMULATOR_RNG_SEED: &str = "1337";
-const EMULATOR_START_TIMEOUT: Duration = Duration::from_secs(20);
+
+// ecard.py starts in well under a second, but on a busy macOS runner a start that overlaps a
+// simulator boot and app install has spent more than 20 seconds in its first imports. This stays
+// under the iOS tests' 60 second request timeout, so a start that still fails reports its log
+const EMULATOR_START_TIMEOUT: Duration = Duration::from_secs(45);
 
 // rust-cktap opens every session with this applet SELECT; the emulator has no
 // applet, so the bridge answers it with a status command as a real card does
@@ -702,7 +706,8 @@ impl CardEmulator {
             .wrap_err_with(|| format!("Failed to start {}", paths.script.display()))?;
 
         let mut emulator = Self { child, socket };
-        let deadline = Instant::now() + EMULATOR_START_TIMEOUT;
+        let started = Instant::now();
+        let deadline = started + EMULATOR_START_TIMEOUT;
         while !emulator.socket.exists() {
             if let Some(status) = emulator.child.try_wait()? {
                 bail!("ecard.py exited with {status}; {}", log_tail(&log_path));
@@ -719,7 +724,12 @@ impl CardEmulator {
             thread::sleep(Duration::from_millis(100));
         }
 
-        print_info(&format!("TAPSIGNER emulator listening on {}", emulator.socket.display()));
+        print_info(&format!(
+            "TAPSIGNER emulator listening on {} after {:.1?}",
+            emulator.socket.display(),
+            started.elapsed()
+        ));
+
         Ok(emulator)
     }
 
