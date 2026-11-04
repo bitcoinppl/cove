@@ -110,6 +110,13 @@ class SecretWordsLockTest {
         assertNoRecoveryWordsInTree("after a credential that a later lock outlived")
         assertTrue("the screen must ask for a fresh credential", Auth.isLocked)
 
+        // onPause conceals before the background lock lands, so the words must go without any lock
+        unlockAndWaitForWords()
+        compose.runOnUiThread { Auth.concealSensitiveContent() }
+        compose.waitForIdle()
+        assertNoRecoveryWordsInTree("after onPause concealed sensitive content")
+        assertTrue("the screen must ask for the credential again", Auth.isLocked)
+
         unlockAndWaitForWords()
     }
 

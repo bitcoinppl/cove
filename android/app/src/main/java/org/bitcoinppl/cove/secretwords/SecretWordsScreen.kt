@@ -61,7 +61,8 @@ import org.bitcoinppl.cove_core.types.WalletId
  * Whether the recovery words are loaded
  *
  * The mnemonic exists only in [Revealed], which is reached only after the user opens the app lock
- * with a credential, so no word is in UI state while the lock cover is up
+ * with a credential. A later lock drops it on the next UI update, which can wait until the app
+ * returns to the foreground, so rendering also checks access and never shows a stale reveal
  */
 private sealed interface SecretWordsState {
     data object Unrequested : SecretWordsState
