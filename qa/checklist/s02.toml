@@ -2,19 +2,26 @@
 id = "s02-recovery-words-in-accessibility-tree-before-fresh"
 section = "2"
 title = "Recovery words in accessibility tree before fresh PIN"
-platforms = ["android"]
+platforms = ["ios", "android"]
 target = "ui"
 paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/secretwords/**",
     "android/app/src/main/java/org/bitcoinppl/cove/views/RecoveryWords.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/views/LockView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/AuthManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/CredentialUnlock.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/Security.kt",
+    "ios/Cove/Flows/SelectedWalletFlow/SecretWords*.swift",
+    "ios/Cove/Views/LockView.swift",
+    "ios/Cove/AuthManager.swift",
+    "ios/Cove/CoveMainView.swift",
 ]
 coverage = [
-    "agent",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/secretwords/SecretWordsLockTest.kt::wordsLoadOnlyAfterTheCorrectPinAndClearWhenTheAppLocksAgain",
+    "ios-unit:ios/CoveTests/SecretWordsLockTests.swift::testWordsLoadOnlyAfterTheCorrectPinAndClearWhenTheAppLocksAgain",
 ]
-# 1.4.0: ios N/A, android FAIL
-# the accessibility tree dump decides whether words sit under the auth overlay
+# 1.4.0: ios FAIL, android FAIL
+# the tests read the unmerged semantics tree and the accessibility tree, not pixels, because the lock overlay hides the words visually
 
 [[row]]
 id = "s02-decoy-diagnostics-and-report-history-absent"

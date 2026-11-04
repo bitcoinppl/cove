@@ -408,13 +408,20 @@ final class HotWalletCreateScreenLayoutTests: XCTestCase {
         try await bootstrapIfNeeded()
 
         let size = CGSize(width: 375, height: 667)
+        let words = Mnemonic.preview(numberOfBip39Words: .twentyFour)
+
+        // the screen only loads words after a credential, so render its layout with preview words
         let view = NavigationStack {
-            SecretWordsScreen(
-                id: WalletId(),
-                words: Mnemonic.preview(numberOfBip39Words: .twentyFour)
+            SecretWordsLayout(
+                sizeCategory: .medium,
+                words: words,
+                errorMessage: nil,
+                rowHeight: 30,
+                numberOfRows: words.words().count / 2,
+                numberOfColumns: 2
             )
-            .environment(AppManager.shared)
-            .environment(AuthManager.shared)
+            .background(SecretWordsPatternBackground())
+            .background(Color.midnightBlue)
         }
         .frame(width: size.width, height: size.height)
         let image = renderAfterScrollingToBottom(

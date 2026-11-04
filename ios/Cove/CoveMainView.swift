@@ -256,7 +256,7 @@ private struct CoveLockedContent: View {
             lockType: auth.type,
             isPinCorrect: isPinCorrect,
             showPin: false,
-            lockState: lockStateBinding,
+            lockState: auth.appLockState,
             onUnlock: handleUnlock
         ) {
             CoveNavigationContent(app: app)
@@ -273,18 +273,6 @@ private struct CoveLockedContent: View {
         .modifier(CoveWipePresentationModifier(auth: auth))
         .environment(app)
         .environment(auth)
-    }
-
-    /// The lock screen only reports unlocked after verifying a PIN or biometrics, a PIN
-    /// has already unlocked through `handleAndReturnUnlockMode`
-    private var lockStateBinding: Binding<LockState> {
-        Binding(
-            get: { auth.lockState },
-            set: { newValue in
-                guard newValue == .unlocked, auth.lockState == .locked else { return }
-                auth.completeBiometricAuthentication()
-            }
-        )
     }
 
     private func isPinCorrect(_ pin: String) async -> Bool {
