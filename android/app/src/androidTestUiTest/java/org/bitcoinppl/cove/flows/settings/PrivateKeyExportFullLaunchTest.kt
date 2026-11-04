@@ -17,6 +17,7 @@ import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
+import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
@@ -71,7 +72,7 @@ class PrivateKeyExportFullLaunchTest {
         waitUntil("decoy PIN should switch to decoy mode") { AuthManager.getInstance().isInDecoyMode() }
         device.assertPrivateKeyHiddenFor(REVEAL_SETTLE_MS)
 
-        onMain { AuthManager.getInstance().lock() }
+        onMain { AuthManager.getInstance().lock(AppLockReason.REAUTHENTICATION) }
         device.waitForLockScreen()
         device.enterPin(MAIN_PIN)
         waitUntil("main PIN should leave decoy mode") { !AuthManager.getInstance().isInDecoyMode() }

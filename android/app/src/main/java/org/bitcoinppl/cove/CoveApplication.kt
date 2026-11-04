@@ -12,7 +12,7 @@ import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
 import org.bitcoinppl.cove.flows.keyteleport.SENSITIVE_CLIPBOARD_LIFETIME_MILLIS
 import org.bitcoinppl.cove.flows.keyteleport.clearExpiredSensitiveClipboard
-import org.bitcoinppl.cove_core.AuthType
+import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.device.CloudStorage
 import org.bitcoinppl.cove_core.device.CloudStorageAccess
 import org.bitcoinppl.cove_core.device.Connectivity
@@ -22,12 +22,9 @@ import org.bitcoinppl.cove_core.device.PasskeyAccess
 import org.bitcoinppl.cove_core.device.PasskeyProvider
 import org.bitcoinppl.cove_core.initializeApp
 import org.bitcoinppl.cove_core.setRootDataDir
-import java.time.Instant
 
 // auto-unlock time thresholds (in seconds) - matches iOS behavior
 // TODO: make these configurable and store in database
-private const val AUTO_UNLOCK_THRESHOLD_ALL_AUTH = 1L
-private const val AUTO_UNLOCK_THRESHOLD_PIN_ONLY = 2L
 
 open class CoveApplication : Application() {
     // hold references to FFI objects for proper cleanup
@@ -258,10 +255,11 @@ open class CoveApplication : Application() {
                 auth.isUsingBiometrics = false
             }
 
-            if (auth.isAuthEnabled && !auth.isLocked) {
-                Log.d(TAG, "[LIFECYCLE] App going to background, locking")
-                auth.lock()
-            }
+            // lock even when already locked, so a lock another owner can release still
+            // leaves this one needing authentication. Rust skips the lock only when it can
+            // read that no authentication is set up, so a stale cached auth type never skips it
+            Log.d(TAG, "[LIFECYCLE] App going to background, locking")
+            auth.lock(AppLockReason.BACKGROUND)
         } catch (e: Exception) {
             Log.e(TAG, "Error handling background", e)
         }
@@ -276,41 +274,13 @@ open class CoveApplication : Application() {
             // if auth is not enabled, unlock immediately
             if (!auth.isAuthEnabled) {
                 Log.d(TAG, "[LIFECYCLE] Auth not enabled, unlocking")
-                auth.unlock()
+                auth.unlockIfAuthDisabled()
                 return
             }
 
-            // get time since lock
-            val lockedAt = auth.lockedAt
-            if (lockedAt == null) {
-                Log.d(TAG, "[LIFECYCLE] No locked_at timestamp, keeping current lock state")
-                return
-            }
-
-            val sinceLocked = Instant.now().epochSecond - lockedAt.epochSecond
-            Log.d(TAG, "[LIFECYCLE] Time since locked: ${sinceLocked}s")
-
-            // auto-unlock thresholds (matches iOS behavior)
-            when {
-                // less than 2 seconds - auto unlock only for PIN without decoy mode
-                sinceLocked < AUTO_UNLOCK_THRESHOLD_PIN_ONLY &&
-                    auth.type == AuthType.PIN &&
-                    !auth.isDecoyPinEnabled -> {
-                    Log.d(TAG, "[LIFECYCLE] < ${AUTO_UNLOCK_THRESHOLD_PIN_ONLY}s since lock (PIN only, no decoy), auto-unlocking")
-                    auth.unlock()
-                }
-
-                // less than 1 second - auto unlock for all auth types
-                sinceLocked < AUTO_UNLOCK_THRESHOLD_ALL_AUTH -> {
-                    Log.d(TAG, "[LIFECYCLE] < ${AUTO_UNLOCK_THRESHOLD_ALL_AUTH}s since lock, auto-unlocking")
-                    auth.unlock()
-                }
-
-                // otherwise - require authentication
-                else -> {
-                    Log.d(TAG, "[LIFECYCLE] Requiring authentication")
-                }
-            }
+            // a quick return skips authentication, only for the lock leaving the foreground took
+            auth.releaseBackgroundLockOnForeground()
+            Log.d(TAG, "[LIFECYCLE] Foregrounded, locked: ${auth.isLocked}")
         } catch (e: Exception) {
             Log.e(TAG, "Error handling foreground", e)
         }

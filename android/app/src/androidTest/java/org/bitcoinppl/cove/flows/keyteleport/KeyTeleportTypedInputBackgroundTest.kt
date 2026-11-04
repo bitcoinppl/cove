@@ -85,7 +85,7 @@ class KeyTeleportTypedInputBackgroundTest {
         } finally {
             instrumentation.runOnMainSync { app.clearKeyTeleportManager() }
             Auth.dispatch(AuthManagerAction.DisablePin)
-            instrumentation.runOnMainSync { Auth.unlock() }
+            instrumentation.runOnMainSync { Auth.unlockIfAuthDisabled() }
             deleteTestWallet(walletId)
         }
     }

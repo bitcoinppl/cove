@@ -15,7 +15,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
-import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
@@ -90,7 +89,7 @@ class AuthManager internal constructor(
     var type by mutableStateOf<AuthType>(Database().globalConfig().authType())
         private set
 
-    var isLocked by mutableStateOf(true)
+    var isLocked by mutableStateOf(rust.isLocked())
         private set
 
     var isUsingBiometrics by mutableStateOf(false)
@@ -112,12 +111,6 @@ class AuthManager internal constructor(
 
     val isAuthEnabled: Boolean
         get() = type != AuthType.NONE
-
-    val lockedAt: Instant?
-        get() =
-            withRustOr(null) {
-                lockedAt()
-            }?.let { Instant.ofEpochSecond(it.toLong()) }
 
     init {
         logDebug("Initializing AuthManager")
@@ -162,31 +155,50 @@ class AuthManager internal constructor(
     }
 
     /**
-     * lock the app - requires authentication to unlock
+     * lock the app until the user authenticates
      */
-    fun lock() {
-        if (!isAuthEnabled) return
-        val now = (System.currentTimeMillis() / 1000).toULong()
-        logDebug("[AUTH] locking at $now")
-        isLocked = true
-        try {
-            withRust {
-                setLockedAt(lockedAt = now)
-            }
-        } catch (e: Exception) {
-            android.util.Log.e(tag, "failed to set locked at", e)
-        }
+    fun lock(reason: AppLockReason) {
+        logDebug("[AUTH] locking for $reason")
+        isLocked = withRustOr(true) { lock(reason) }
     }
 
     /**
-     * unlock the app
+     * lock the app for a send confirmation screen, the returned token releases only this lock
      */
-    fun unlock() {
-        isLocked = false
+    fun lockForSendConfirmation(): SendConfirmationLock? {
+        val lock = withRustOr<SendConfirmationLock?>(null) { lockForSendConfirmation() } ?: return null
+        isLocked = true
+        return lock
+    }
+
+    /**
+     * release the lock a send confirmation screen took, other locks stay in place
+     */
+    fun releaseSendConfirmationLock(lock: SendConfirmationLock) {
+        isLocked = withRustOr(true) { releaseSendConfirmationLock(lock) }
+    }
+
+    /**
+     * skip authentication when the app comes back right after leaving the foreground
+     */
+    fun releaseBackgroundLockOnForeground() {
+        isLocked = withRustOr(true) { releaseBackgroundLockOnForeground() }
+    }
+
+    /**
+     * unlock when no authentication is set up
+     */
+    fun unlockIfAuthDisabled() {
+        isLocked = withRustOr(true) { unlockIfAuthDisabled() }
+    }
+
+    // only called after the user authenticated with a PIN, biometrics, or a trick PIN
+    private fun unlockAuthenticated() {
         try {
             withRust {
-                setLockedAt(lockedAt = 0UL)
+                unlockAuthenticated()
             }
+            isLocked = false
         } catch (e: Exception) {
             android.util.Log.e(tag, "failed to unlock", e)
         }
@@ -196,7 +208,7 @@ class AuthManager internal constructor(
         if (isInDecoyMode() && !switchToMainMode()) return
 
         recordMainCredentialAuthentication()
-        unlock()
+        unlockAuthenticated()
     }
 
     internal fun concealSensitiveContent() {
@@ -264,7 +276,7 @@ class AuthManager internal constructor(
         }
 
         recordMainCredentialAuthentication()
-        unlock()
+        unlockAuthenticated()
         return UnlockMode.MAIN
     }
 
@@ -282,7 +294,7 @@ class AuthManager internal constructor(
             }
         }
 
-        unlock()
+        unlockAuthenticated()
         return UnlockMode.DECOY
     }
 
@@ -336,7 +348,7 @@ class AuthManager internal constructor(
         App.applyWipeCompletion(completion)
         apply(completion.auth)
 
-        unlock()
+        unlockAuthenticated()
         wipePresentationState = WipePresentationState.Idle
         return UnlockMode.WIPE
     }

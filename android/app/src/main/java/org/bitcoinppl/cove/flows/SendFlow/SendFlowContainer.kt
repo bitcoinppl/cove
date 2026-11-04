@@ -449,11 +449,13 @@ private fun SendFlowRouteToScreen(
             var showErrorAlert by remember { mutableStateOf(false) }
             val scope = rememberCoroutineScope()
 
-            // lock on appear for hot wallets
+            var sendConfirmationLock by remember { mutableStateOf<SendConfirmationLock?>(null) }
+
+            // ask hot wallet users to authenticate again before sending
             LaunchedEffect(walletManager) {
                 kotlinx.coroutines.delay(50)
                 if (walletManager.walletMetadata?.walletType == WalletType.HOT) {
-                    Auth.lock()
+                    sendConfirmationLock = Auth.lockForSendConfirmation()
                 }
             }
 
@@ -463,7 +465,6 @@ private fun SendFlowRouteToScreen(
                 if (walletManager.payjoinTxBroadcast != null && sendState == SendState.Sending) {
                     sendState = SendState.Sent
                     showSuccessAlert = true
-                    Auth.unlock()
                 }
             }
 
@@ -481,17 +482,10 @@ private fun SendFlowRouteToScreen(
                 }
             }
 
-            // timed unlock on disappear
+            // give back only this screen's lock, any other lock still needs authentication
             DisposableEffect(Unit) {
                 onDispose {
-                    val lockedAt = Auth.lockedAt ?: return@onDispose
-                    val sinceLocked =
-                        java.time.Instant
-                            .now()
-                            .epochSecond - lockedAt.epochSecond
-                    if (sinceLocked < 5) {
-                        Auth.unlock()
-                    }
+                    sendConfirmationLock?.let(Auth::releaseSendConfirmationLock)
                 }
             }
 
@@ -566,7 +560,6 @@ private fun SendFlowRouteToScreen(
                             }
                             sendState = SendState.Sent
                             showSuccessAlert = true
-                            Auth.unlock()
                         } catch (e: WalletManagerException) {
                             sendState = SendState.Error(e.message ?: "Unknown error")
                             showErrorAlert = true
@@ -578,8 +571,9 @@ private fun SendFlowRouteToScreen(
                 },
             )
 
-            // success alert dialog
-            if (showSuccessAlert) {
+            // send results wait for any app lock to clear, so a send that finishes while the
+            // app is away never shows its result above the lock screen
+            if (showSuccessAlert && !Auth.isLocked) {
                 AlertDialog(
                     onDismissRequest = {
                         showSuccessAlert = false
@@ -600,8 +594,7 @@ private fun SendFlowRouteToScreen(
                 )
             }
 
-            // error alert dialog
-            if (showErrorAlert) {
+            if (showErrorAlert && !Auth.isLocked) {
                 AlertDialog(
                     onDismissRequest = {
                         showErrorAlert = false

@@ -297,7 +297,8 @@ csv = "1.4.0"
 strsim = "0.11.1"
 minicbor-serde = { workspace = true }
 
-[target.'cfg(target_os = "macos")'.dependencies]
+# macOS uses fcntl for full fsync, and every unix target reads a boot clock for app lock timing
+[target.'cfg(unix)'.dependencies]
 libc = "0.2.186"
 
 [build-dependencies]

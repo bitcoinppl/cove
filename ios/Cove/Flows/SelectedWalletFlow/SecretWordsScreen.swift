@@ -116,7 +116,7 @@ struct SecretWordsScreen: View {
     }
 
     private func loadWords() {
-        auth.lock()
+        auth.lock(reason: .reauthentication)
         guard words == nil else { return }
 
         do {

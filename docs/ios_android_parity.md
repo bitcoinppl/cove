@@ -295,6 +295,14 @@ iOS does not provide a public API for preventing screenshots of an individual vi
 
 Android may use the platform-supported `FLAG_SECURE` window flag for sensitive screens. This platform difference is intentional.
 
+### App Lock Ownership
+
+`RustAuthManager` owns the app lock and records why each lock was taken. Both platforms mirror its answer in `AuthManager` (`lockState` on iOS, `isLocked` on Android) and never set the lock state themselves.
+
+- Leaving the foreground locks with `AppLockReason.Background`, even when the app is already locked. Both platforms send this lock to Rust whatever their cached auth type says, and Rust skips it only when it can read that no authentication is set up. Screens that guard secrets lock with `AppLockReason.Reauthentication`. Only authentication clears these. The one exception is a quick return to the foreground, which can release the background lock but no other lock, and only when the auth settings can be read.
+- The send confirmation screen takes a `SendConfirmationLock` token and gives back only that token when it goes away. It never unlocks the app after a send, and its success and error results wait until the app is unlocked before they show.
+- Only a verified PIN, biometric check, or trick PIN unlocks every lock, through `AuthManager`'s private authenticated unlock path.
+
 ### Reactive Value Changes
 
 | iOS (SwiftUI) | Android (Compose) | Notes |

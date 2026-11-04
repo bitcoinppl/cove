@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Improved app lock handling so finishing or leaving a send never clears a lock that needs authentication
+
 ## [1.3.0] - 2026-07-16
 
 - Added encrypted cloud backup, onboarding restore, and backup management on iOS and Android

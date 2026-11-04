@@ -8038,13 +8038,41 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
     func isInDecoyMode()  -> Bool
 
     /**
+     * Whether any lock is held on the app
+     */
+    func isLocked()  -> Bool
+
+    /**
      * Check if the wipe data pin is enabled
      */
     func isWipeDataPinEnabled()  -> Bool
 
     func listenForUpdates(reconciler: AuthManagerReconciler)
 
-    func lockedAt()  -> UInt64?
+    /**
+     * Lock the app until the user authenticates, returns whether the app is locked
+     *
+     * Does nothing when no authentication is set up
+     */
+    func lock(reason: AppLockReason)  -> Bool
+
+    /**
+     * Lock the app for a send confirmation screen, returns the token that releases only
+     * this lock, or nothing when no authentication is set up
+     */
+    func lockForSendConfirmation()  -> SendConfirmationLock?
+
+    /**
+     * Skip authentication when the app returns to the foreground right after leaving it,
+     * returns whether the app is still locked
+     */
+    func releaseBackgroundLockOnForeground()  -> Bool
+
+    /**
+     * Release the lock a send confirmation screen took, returns whether the app is still
+     * locked for any other reason
+     */
+    func releaseSendConfirmationLock(lock: SendConfirmationLock)  -> Bool
 
     func send(message: AuthManagerReconcileMessage)
 
@@ -8054,8 +8082,6 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
      * Set the decoy pin
      */
     func setDecoyPin(pin: String) throws
-
-    func setLockedAt(lockedAt: UInt64) throws
 
     /**
      * Set the wipe data pin
@@ -8071,6 +8097,16 @@ public protocol RustAuthManagerProtocol: AnyObject, Sendable {
      * Switch from decoy mode to main mode
      */
     func switchToMainMode()
+
+    /**
+     * Clear every lock after the user authenticated with a PIN, biometrics, or a trick PIN
+     */
+    func unlockAuthenticated()
+
+    /**
+     * Clear every lock when no authentication is set up, returns whether the app is locked
+     */
+    func unlockIfAuthDisabled()  -> Bool
 
     /**
      * Validate a new PIN doesn't conflict with existing PINs
@@ -8246,6 +8282,18 @@ open func isInDecoyMode() -> Bool  {
 }
 
     /**
+     * Whether any lock is held on the app
+     */
+open func isLocked() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustauthmanager_is_locked(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
      * Check if the wipe data pin is enabled
      */
 open func isWipeDataPinEnabled() -> Bool  {
@@ -8266,11 +8314,57 @@ open func listenForUpdates(reconciler: AuthManagerReconciler)  {try! rustCall() 
 }
 }
 
-open func lockedAt() -> UInt64?  {
-    return try!  FfiConverterOptionUInt64.lift(try! rustCall() {
+    /**
+     * Lock the app until the user authenticates, returns whether the app is locked
+     *
+     * Does nothing when no authentication is set up
+     */
+open func lock(reason: AppLockReason) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
         uniffiCallStatus in
-    uniffi_cove_fn_method_rustauthmanager_locked_at(
+    uniffi_cove_fn_method_rustauthmanager_lock(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeAppLockReason_lower(reason),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Lock the app for a send confirmation screen, returns the token that releases only
+     * this lock, or nothing when no authentication is set up
+     */
+open func lockForSendConfirmation() -> SendConfirmationLock?  {
+    return try!  FfiConverterOptionTypeSendConfirmationLock.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustauthmanager_lock_for_send_confirmation(
             self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Skip authentication when the app returns to the foreground right after leaving it,
+     * returns whether the app is still locked
+     */
+open func releaseBackgroundLockOnForeground() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustauthmanager_release_background_lock_on_foreground(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+
+    /**
+     * Release the lock a send confirmation screen took, returns whether the app is still
+     * locked for any other reason
+     */
+open func releaseSendConfirmationLock(lock: SendConfirmationLock) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustauthmanager_release_send_confirmation_lock(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeSendConfirmationLock_lower(lock),uniffiCallStatus
     )
 })
 }
@@ -8301,15 +8395,6 @@ open func setDecoyPin(pin: String)throws   {try rustCallWithError(FfiConverterTy
     uniffi_cove_fn_method_rustauthmanager_set_decoy_pin(
             self.uniffiCloneHandle(),
         FfiConverterString.lower(pin),uniffiCallStatus
-    )
-}
-}
-
-open func setLockedAt(lockedAt: UInt64)throws   {try rustCallWithError(FfiConverterTypeAuthManagerError_lift) {
-        uniffiCallStatus in
-    uniffi_cove_fn_method_rustauthmanager_set_locked_at(
-            self.uniffiCloneHandle(),
-        FfiConverterUInt64.lower(lockedAt),uniffiCallStatus
     )
 }
 }
@@ -8346,6 +8431,29 @@ open func switchToMainMode()  {try! rustCall() {
             self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
+}
+
+    /**
+     * Clear every lock after the user authenticated with a PIN, biometrics, or a trick PIN
+     */
+open func unlockAuthenticated()  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustauthmanager_unlock_authenticated(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+}
+}
+
+    /**
+     * Clear every lock when no authentication is set up, returns whether the app is locked
+     */
+open func unlockIfAuthDisabled() -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_cove_fn_method_rustauthmanager_unlock_if_auth_disabled(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
 }
 
     /**
@@ -18927,6 +19035,61 @@ public func FfiConverterTypeScanningInfo_lower(_ value: ScanningInfo) -> RustBuf
 }
 
 
+/**
+ * Proof that a send confirmation screen took a lock, needed to release that lock
+ *
+ * Frontends keep this opaque and hand it back when the screen goes away
+ */
+public struct SendConfirmationLock: Equatable, Hashable {
+    public var id: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(id: UInt64) {
+        self.id = id
+    }
+
+
+
+
+}
+
+#if compiler(>=6)
+extension SendConfirmationLock: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSendConfirmationLock: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SendConfirmationLock {
+        return
+            try SendConfirmationLock(
+                id: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: SendConfirmationLock, into buf: inout [UInt8]) {
+        FfiConverterUInt64.write(value.id, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendConfirmationLock_lift(_ buf: RustBuffer) throws -> SendConfirmationLock {
+    return try FfiConverterTypeSendConfirmationLock.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSendConfirmationLock_lower(_ value: SendConfirmationLock) -> RustBuffer {
+    return FfiConverterTypeSendConfirmationLock.lower(value)
+}
+
+
 public struct SendFlowCoinControlMode {
     public var utxoList: UtxoList
     public var isMaxSelected: Bool
@@ -21403,6 +21566,81 @@ public func FfiConverterTypeAppInitError_lift(_ buf: RustBuffer) throws -> AppIn
 public func FfiConverterTypeAppInitError_lower(_ value: AppInitError) -> RustBuffer {
     return FfiConverterTypeAppInitError.lower(value)
 }
+
+
+/**
+ * Why the app is being locked until the user authenticates
+ */
+
+public enum AppLockReason: Equatable, Hashable {
+
+    /**
+     * The app left the foreground
+     */
+    case background
+    /**
+     * A screen needs the user to authenticate again before showing or using secrets
+     */
+    case reauthentication
+
+
+
+
+
+}
+
+#if compiler(>=6)
+extension AppLockReason: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeAppLockReason: FfiConverterRustBuffer {
+    typealias SwiftType = AppLockReason
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> AppLockReason {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        case 1: return .background
+
+        case 2: return .reauthentication
+
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: AppLockReason, into buf: inout [UInt8]) {
+        switch value {
+
+
+        case .background:
+            writeInt(&buf, Int32(1))
+
+
+        case .reauthentication:
+            writeInt(&buf, Int32(2))
+
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppLockReason_lift(_ buf: RustBuffer) throws -> AppLockReason {
+    return try FfiConverterTypeAppLockReason.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeAppLockReason_lower(_ value: AppLockReason) -> RustBuffer {
+    return FfiConverterTypeAppLockReason.lower(value)
+}
+
 
 
 
@@ -29221,7 +29459,6 @@ public enum GlobalConfigKey: Equatable, Hashable {
     case inDecoyMode
     case mainSelectedWalletId
     case decoySelectedWalletId
-    case lockedAt
     case onboardingProgress
     case customBlockExplorer(Network
     )
@@ -29271,11 +29508,9 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
 
         case 12: return .decoySelectedWalletId
 
-        case 13: return .lockedAt
+        case 13: return .onboardingProgress
 
-        case 14: return .onboardingProgress
-
-        case 15: return .customBlockExplorer(try FfiConverterTypeNetwork.read(from: &buf)
+        case 14: return .customBlockExplorer(try FfiConverterTypeNetwork.read(from: &buf)
         )
 
         default: throw UniffiInternalError.unexpectedEnumCase
@@ -29335,16 +29570,12 @@ public struct FfiConverterTypeGlobalConfigKey: FfiConverterRustBuffer {
             writeInt(&buf, Int32(12))
 
 
-        case .lockedAt:
+        case .onboardingProgress:
             writeInt(&buf, Int32(13))
 
 
-        case .onboardingProgress:
-            writeInt(&buf, Int32(14))
-
-
         case let .customBlockExplorer(v1):
-            writeInt(&buf, Int32(15))
+            writeInt(&buf, Int32(14))
             FfiConverterTypeNetwork.write(v1, into: &buf)
 
         }
@@ -45205,6 +45436,30 @@ fileprivate struct FfiConverterOptionTypeLoadedCloudBackupDetail: FfiConverterRu
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeSendConfirmationLock: FfiConverterRustBuffer {
+    typealias SwiftType = SendConfirmationLock?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeSendConfirmationLock.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeSendConfirmationLock.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeWalletMetadata: FfiConverterRustBuffer {
     typealias SwiftType = WalletMetadata?
 
@@ -47829,13 +48084,25 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_is_in_decoy_mode() != 2667) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_cove_checksum_method_rustauthmanager_is_locked() != 47594) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_cove_checksum_method_rustauthmanager_is_wipe_data_pin_enabled() != 9487) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_listen_for_updates() != 2817) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustauthmanager_locked_at() != 56936) {
+    if (uniffi_cove_checksum_method_rustauthmanager_lock() != 50796) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_lock_for_send_confirmation() != 14355) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_release_background_lock_on_foreground() != 55799) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_release_send_confirmation_lock() != 16591) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_send() != 57691) {
@@ -47847,9 +48114,6 @@ private let initializationResult: InitializationResult = {
     if (uniffi_cove_checksum_method_rustauthmanager_set_decoy_pin() != 8681) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cove_checksum_method_rustauthmanager_set_locked_at() != 10095) {
-        return InitializationResult.apiChecksumMismatch
-    }
     if (uniffi_cove_checksum_method_rustauthmanager_set_wipe_data_pin() != 47802) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -47857,6 +48121,12 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_switch_to_main_mode() != 36755) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_unlock_authenticated() != 37105) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_cove_checksum_method_rustauthmanager_unlock_if_auth_disabled() != 13357) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_cove_checksum_method_rustauthmanager_validate_new_pin() != 9789) {

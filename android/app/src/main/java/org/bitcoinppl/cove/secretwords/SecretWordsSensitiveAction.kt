@@ -51,6 +51,7 @@ import org.bitcoinppl.cove.flows.settings.hasFreshMainCredential
 import org.bitcoinppl.cove.views.ColumnMajorGrid
 import org.bitcoinppl.cove.views.RecoveryWordChip
 import org.bitcoinppl.cove_core.AppAlertState
+import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.types.WalletId
 
 internal enum class SecretWordsSensitiveAction(
@@ -143,7 +144,7 @@ internal fun rememberKeyTeleportSendRequest(
                     )
             } else {
                 pendingGeneration = auth.mainCredentialGeneration
-                auth.lock()
+                auth.lock(AppLockReason.REAUTHENTICATION)
             }
         }
     }
