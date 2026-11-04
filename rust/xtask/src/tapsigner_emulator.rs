@@ -16,8 +16,6 @@ use std::{
     env, fs,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
-    process::Command,
-    time::{Duration, Instant},
 };
 use xshell::{cmd, Shell};
 
@@ -70,30 +68,6 @@ impl EmulatorPaths {
         let python = emulator_python(sh)?;
 
         Ok(Self { python, script })
-    }
-
-    /// Runs `ecard.py --help`, which imports everything the emulator needs and exits, and returns
-    /// how long that took
-    ///
-    /// The first run after an install compiles bytecode and reads every module cold. On a busy
-    /// macOS runner that took longer than a card start may, so a caller that times card starts
-    /// should pay it here first
-    pub fn warm_up(&self) -> Result<Duration> {
-        let started = Instant::now();
-        let output = Command::new(&self.python)
-            .arg(&self.script)
-            .arg("--help")
-            .output()
-            .wrap_err_with(|| format!("Failed to run {}", self.python.display()))?;
-
-        ensure!(
-            output.status.success(),
-            "ecard.py --help exited with {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-
-        Ok(started.elapsed())
     }
 }
 

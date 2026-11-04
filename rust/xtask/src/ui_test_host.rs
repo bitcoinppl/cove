@@ -746,22 +746,15 @@ impl CardEmulator {
     }
 }
 
-/// Prepares the card emulator's Python and script and runs it once before any test asks for a card
+/// Prepares the card emulator's Python and script before any test asks for a card
 ///
 /// Building the venv takes most of a minute on a fresh CI runner, longer than the UI tests wait
-/// for `/tapsigner/start`, and the first run of `ecard.py` after that took longer than
-/// [`EMULATOR_START_TIMEOUT`] on a busy macOS runner. A failure only fails the TAPSIGNER tests, so
-/// the other UI tests still run on a host without uv
+/// for `/tapsigner/start`. A failure only fails the TAPSIGNER tests, so the other UI tests still
+/// run on a host without uv
 fn prepare_emulator() -> Result<EmulatorPaths, String> {
     print_info("Preparing the TAPSIGNER emulator");
 
-    let prepared = emulator_paths().and_then(|paths| {
-        let elapsed = paths.warm_up()?;
-        print_info(&format!("TAPSIGNER emulator imports loaded in {elapsed:.1?}"));
-        Ok(paths)
-    });
-
-    prepared.map_err(|error| {
+    emulator_paths().map_err(|error| {
         let error = format!("{error:#}");
         print_warning(&format!("TAPSIGNER emulator unavailable, its tests will fail: {error}"));
         error
