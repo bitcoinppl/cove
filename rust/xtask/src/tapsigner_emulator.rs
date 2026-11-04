@@ -3,7 +3,8 @@
 //! The emulator ships as the `coinkite-tap-proto` submodule of the pinned rust-cktap checkout,
 //! so it always matches the card code Cove builds. This command finds its `ecard.py`, installs
 //! the emulator's Python dependencies into a cached uv venv, and runs the ignored emulator tests
-//! with `COVE_TAPSIGNER_EMULATOR_PYTHON` and `COVE_TAPSIGNER_EMULATOR_SCRIPT` set
+//! with `COVE_TAPSIGNER_EMULATOR_PYTHON` and `COVE_TAPSIGNER_EMULATOR_SCRIPT` set. The UI test
+//! host runs its emulated card from the same venv through [`EmulatorPaths::prepare`]
 
 use crate::common::{command_exists, ensure_rust_directory, print_info, print_success};
 use color_eyre::{
@@ -46,23 +47,41 @@ struct Package {
     manifest_path: PathBuf,
 }
 
+/// The emulator's `ecard.py` and a Python interpreter that has its dependencies
+pub struct EmulatorPaths {
+    pub python: PathBuf,
+    pub script: PathBuf,
+}
+
+impl EmulatorPaths {
+    /// Finds `ecard.py` and installs its dependencies into the shared venv, creating the venv on
+    /// first use
+    ///
+    /// `sh` must be in the `rust/` workspace directory
+    pub fn prepare(sh: &Shell) -> Result<Self> {
+        ensure!(
+            command_exists("uv"),
+            "the TAPSIGNER emulator needs uv to install its Python; see https://docs.astral.sh/uv/"
+        );
+
+        let script = emulator_script(sh)?;
+        let python = emulator_python(sh)?;
+
+        Ok(Self { python, script })
+    }
+}
+
 /// Installs the emulator and runs the TAPSIGNER emulator tests under nextest
 pub fn run() -> Result<()> {
     let sh = Shell::new()?;
     ensure_rust_directory(&sh)?;
 
     ensure!(
-        command_exists("uv"),
-        "the TAPSIGNER emulator tests need uv to install the emulator's Python; see https://docs.astral.sh/uv/"
-    );
-
-    ensure!(
         command_exists("cargo-nextest"),
         "the TAPSIGNER emulator tests need cargo-nextest; see https://nexte.st/"
     );
 
-    let script = emulator_script(&sh)?;
-    let python = emulator_python(&sh)?;
+    let EmulatorPaths { python, script } = EmulatorPaths::prepare(&sh)?;
 
     print_info("Running TAPSIGNER emulator tests");
     cmd!(
@@ -78,7 +97,9 @@ pub fn run() -> Result<()> {
 }
 
 /// Finds `ecard.py` in the rust-cktap checkout that Cargo.lock pins
-fn emulator_script(sh: &Shell) -> Result<PathBuf> {
+///
+/// `sh` must be in the `rust/` workspace directory
+pub fn emulator_script(sh: &Shell) -> Result<PathBuf> {
     cmd!(sh, "cargo fetch --locked").run()?;
 
     let output = cmd!(sh, "cargo metadata --locked --offline --format-version 1")
@@ -114,6 +135,10 @@ fn emulator_script(sh: &Shell) -> Result<PathBuf> {
 
 /// Returns a Python interpreter with the emulator's dependencies installed, creating its venv on
 /// first use
+///
+/// The venv lives in the user cache rather than the cargo target dir, because CI caches of the
+/// target dir delete regular files but keep symlinks, which leaves a venv whose `bin/python`
+/// still resolves but whose packages are gone
 fn emulator_python(sh: &Shell) -> Result<PathBuf> {
     let venv = cache_dir()?.join("cove/tapsigner-emulator-venv");
     let python = venv.join("bin/python");
