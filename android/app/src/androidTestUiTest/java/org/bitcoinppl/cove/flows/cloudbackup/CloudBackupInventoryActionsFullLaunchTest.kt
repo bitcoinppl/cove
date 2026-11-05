@@ -113,11 +113,24 @@ class CloudBackupInventoryActionsFullLaunchTest {
             device.wait(Until.gone(By.text(DELETE_FOREVER)), 10_000L),
         )
 
-        whileKnownInventoryIsChecked(trigger = { device.clickTextScrollingUp(CHECK_AGAIN) }) {
+        whileKnownInventoryIsChecked(trigger = ::tapCheckAgainUntilTheCheckStarts) {
             assertNoCloudOnlyRowOpensItsActions()
         }
 
         assertRowOpensEnabledActions(WALLET_TWO)
+    }
+
+    // the error banner appears as the failed refresh lands, so a tap during that layout change can
+    // miss; another tap only asks for the same refresh, and a Check Again that does nothing still
+    // fails every attempt
+    private fun tapCheckAgainUntilTheCheckStarts() {
+        repeat(CHECK_AGAIN_ATTEMPTS) {
+            device.waitForIdle()
+            device.clickTextScrollingUp(CHECK_AGAIN)
+
+            // longer than the minimum interval between refreshes, which can defer the check
+            if (ScriptedCloudStorageAccess.awaitBlockedWalletListSnapshot(timeoutMs = 8_000L)) return
+        }
     }
 
     // a refresh of a confirmed inventory keeps it complete, so each check starts from a failed
@@ -427,6 +440,7 @@ class CloudBackupInventoryActionsFullLaunchTest {
         const val WALLET_TWO = "Fixture Wallet Two"
         const val WALLET_THREE = "Fixture Wallet Three"
         const val CHECK_AGAIN = "Check Again"
+        const val CHECK_AGAIN_ATTEMPTS = 3
         const val RESTORE_ACTION = "Restore to this device"
         const val DELETE_ACTION = "Delete from Cloud Backup"
         const val DELETE_FOREVER = "Delete Forever"
