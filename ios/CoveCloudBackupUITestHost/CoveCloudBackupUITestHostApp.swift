@@ -13,13 +13,13 @@ struct CoveCloudBackupUITestHostApp: App {
     }
 
     private static func dependencies() -> CoveApplicationDependencies {
-        // a test that names a control directory drives cloud storage and passkeys from its script
-        // and keeps the keychain in that directory, so the app can be killed and relaunched
+        // a test that names a control directory drives cloud storage, passkeys and the network from
+        // its script and keeps the keychain in that directory, so the app can be killed and relaunched
         if let controller = CloudBackupUITestController.fromEnvironment() {
             return CoveApplicationDependencies(
                 keychain: ScriptedKeychainAccess(storeURL: controller.keychainURL),
                 device: DeviceAccesor(),
-                connectivity: CloudConnectivityMonitor.shared,
+                connectivity: ControlledConnectivityAccess(controller: controller),
                 passkey: ControlledPasskeyProvider(controller: controller),
                 cloudStorage: ControlledCloudStorageAccess(controller: controller)
             )

@@ -45,7 +45,7 @@ private struct SafeAreaInsetsCapture: ViewModifier {
 struct CoveApplicationDependencies {
     let keychain: KeychainAccess
     let device: DeviceAccess
-    let connectivity: ConnectivityAccess
+    let connectivity: any LifecycleConnectivityAccess
     let passkey: PasskeyProvider
     let cloudStorage: CloudStorageAccess
 
@@ -122,7 +122,10 @@ struct CoveApplicationRoot: View {
     @State private var bdkMigrationWarning: String?
     @State private var bootstrapRequestID = 0
 
+    private let connectivity: any LifecycleConnectivityAccess
+
     init(dependencies: CoveApplicationDependencies) {
+        connectivity = dependencies.connectivity
         dependencies.install()
         Self.excludeDataDirFromBackup(logFailure: false)
     }
@@ -342,7 +345,7 @@ extension CoveApplicationRoot {
         Self.excludeDataDirFromBackup(logFailure: true)
         let appManager = AppManager.shared
         appManager.asyncRuntimeReady = true
-        CloudConnectivityMonitor.shared.start()
+        connectivity.start()
         CloudBackupManager.shared.rust.syncPersistedState()
         CloudBackupManager.shared.rust.startBackgroundInventoryDiscovery()
         self.bdkMigrationWarning = warning

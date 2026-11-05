@@ -1,7 +1,16 @@
 import Network
 import os
 
-final class CloudConnectivityMonitor: ConnectivityAccess, @unchecked Sendable {
+/// Connectivity the app starts once bootstrap has finished, after which it reports every change
+/// to Rust
+///
+/// Production uses `CloudConnectivityMonitor`; the Cloud Backup UI test host swaps in a scripted
+/// network so a test can drop and restore it without touching the simulator's network
+protocol LifecycleConnectivityAccess: ConnectivityAccess {
+    func start()
+}
+
+final class CloudConnectivityMonitor: LifecycleConnectivityAccess, @unchecked Sendable {
     static let shared = CloudConnectivityMonitor()
 
     private struct State {

@@ -4,8 +4,8 @@ import Foundation
 /// Cloud storage driven by the UI test's control directory instead of a fixed scenario
 ///
 /// The test's script picks the fixture backup or an empty cloud for a fresh enable, and adds
-/// holds, failures and delayed visibility. Uploads are kept as files in the control directory, so
-/// a relaunched app finds what its killed process uploaded
+/// holds, failures, delayed visibility and a dropped network. Uploads are kept as files in the
+/// control directory, so a relaunched app finds what its killed process uploaded
 final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendable {
     private static let masterKeyRecordId = "cspp-master-key-v1"
 
@@ -46,11 +46,12 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         policy _: CloudAccessPolicy
     ) async throws {
         let attempt = controller.record(.walletUpload) + 1
+
+        // a hold here proves which action made the upload, since it can't return until released;
+        // the script is read after it, so a network dropped while the upload waited fails it
+        await controller.holdIfScripted(at: .walletUpload, recordId: recordId, matchingCallIndex: attempt - 1)
         let script = controller.script()
         try recordUpload(script, kind: .wallet, attempt: attempt, namespace: namespace, recordId: recordId)
-
-        // a hold here proves which action made the upload, since it can't return until released
-        await controller.holdIfScripted(at: .walletUpload, recordId: recordId, matchingCallIndex: attempt - 1)
         try validateWritable(namespace: namespace, script: script)
         try store.storeWallet(namespace: namespace, recordId: recordId, data: data)
     }
@@ -60,6 +61,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         locations _: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
     ) async throws -> Data {
+        try throwIfOffline()
         controller.record(.masterDownload)
 
         switch controller.script().cloud {
@@ -89,6 +91,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         locations _: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
     ) async throws -> Data {
+        try throwIfOffline()
         let index = controller.record(.walletDownload(recordId: recordId))
         await controller.holdIfScripted(at: .walletDownload, recordId: recordId, matchingCallIndex: index)
         let script = controller.script()
@@ -126,15 +129,19 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         locations _: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
     ) async throws {
+        try throwIfOffline()
+
         // the fixture cloud falls back to built-in records, so a deletion leaves a marker
         store.deleteWallet(namespace: namespace, recordId: recordId)
     }
 
     func deleteNamespace(namespace: String, policy _: CloudAccessPolicy) async throws {
+        try throwIfOffline()
         store.deleteNamespace(namespace)
     }
 
     func listNamespaces(policy _: CloudAccessPolicy) async throws -> [String] {
+        try throwIfOffline()
         let index = controller.record(.namespaceList)
         await controller.holdIfScripted(at: .namespaceList, matchingCallIndex: index)
         let script = controller.script()
@@ -160,6 +167,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
     }
 
     func listWalletFiles(namespace: String, policy _: CloudAccessPolicy) async throws -> [String] {
+        try throwIfOffline()
         let index = controller.record(.walletList)
         await controller.holdIfScripted(at: .walletList, matchingCallIndex: index)
 
@@ -170,6 +178,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         namespace: String,
         policy _: CloudAccessPolicy
     ) async throws -> CloudStorageInventorySnapshot {
+        try throwIfOffline()
         controller.record(.walletListSnapshot)
 
         return try CloudStorageInventorySnapshot(names: walletFileNames(namespace: namespace), isComplete: true)
@@ -181,6 +190,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         locations _: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
     ) async throws -> CloudBackupUploadStatus {
+        try throwIfOffline()
         controller.record(.uploadStatus)
 
         switch controller.script().cloud {
@@ -241,7 +251,19 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         }
     }
 
-    /// Records the upload, and throws the script's failure when it fails this attempt
+    /// Fails a call while the scripted network is down, as a real provider does, counting the
+    /// refusal instead of the call, so call counts show only calls the provider served
+    ///
+    /// `overallSyncHealth` is left alone, since iCloud answers it from the files on the device
+    private func throwIfOffline() throws {
+        guard !controller.script().networkConnected else { return }
+
+        controller.record(.offlineRejection)
+        throw CloudStorageError.Offline("scripted network is offline")
+    }
+
+    /// Records the upload, and throws the script's failure or the dropped network when either
+    /// fails this attempt
     private func recordUpload(
         _ script: CloudBackupUITestScript,
         kind: CloudBackupUITestScript.UploadKind,
@@ -250,7 +272,13 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         recordId: String?
     ) throws {
         let failure = script.uploadFailures.first { $0.kind == kind && $0.attempt == attempt }
-        controller.recordUpload(.init(kind: kind, namespace: namespace, recordId: recordId, accepted: failure == nil))
+        let accepted = failure == nil && script.networkConnected
+        controller.recordUpload(.init(kind: kind, namespace: namespace, recordId: recordId, accepted: accepted))
+
+        if !script.networkConnected {
+            controller.record(.offlineRejection)
+            throw CloudStorageError.Offline("scripted network is offline")
+        }
         guard let failure else { return }
 
         switch failure.error {
