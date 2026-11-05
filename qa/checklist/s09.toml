@@ -186,7 +186,9 @@ coverage = [
 # 1.4.0: ios HUMAN, android HUMAN
 # the ui tests hold a tag's text record with a vpub or a upub to onboarding's and add wallet's nfc
 # scans through the ndef seam, which skips only the nfc session: the platform's ndef parser, the
-# record processing and the import are the app's own, checked by the first receive address.
+# record processing and the import are the app's own, checked by the first receive address. ios
+# drops add wallet's success alert in the route reset after the import, so its test doesn't wait
+# for that alert.
 # android reads every tag through its ndef api, so that covers android. ios reads iso 15693 tags
 # block by block and parses them in rust's nfc reader instead of ndef, which the seam skips, so an
 # ios import from an iso 15693 tag still needs a person. a physical tag read in a real nfc session

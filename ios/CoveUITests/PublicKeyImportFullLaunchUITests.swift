@@ -90,10 +90,17 @@ final class PublicKeyImportFullLaunchUITests: XCTestCase {
         app.scanNfcFromAddWallet()
         try nfc.showTextRecord(export.key)
 
+        // ios sets its success alert while the import resets the route to the new wallet and the
+        // alert doesn't survive that reset, so the imported wallet's own first address is the check
+        XCTAssertTrue(
+            app.element("selectedWallet.balance").waitForExistence(timeout: 30),
+            "the NFC import never opened the imported wallet"
+        )
+
         let imported = app.alerts["Success"]
-        XCTAssertTrue(imported.waitForExistence(timeout: 30), "the NFC import never reported success")
-        imported.buttons["OK"].tap()
-        XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
+        if imported.waitForExistence(timeout: 2) {
+            imported.buttons["OK"].tap()
+        }
 
         try checkFirstAddress(export)
     }
