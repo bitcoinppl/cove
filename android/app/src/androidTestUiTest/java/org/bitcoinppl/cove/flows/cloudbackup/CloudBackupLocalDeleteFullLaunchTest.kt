@@ -20,12 +20,14 @@ import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
+import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudBackupWalletStatus
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletSettingsRoute
+import org.bitcoinppl.cove_core.bootstrapProgress
 import org.bitcoinppl.cove_core.types.WalletId
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -78,7 +80,8 @@ class CloudBackupLocalDeleteFullLaunchTest {
     fun deletingTheLocalWalletKeepsARestorableCloudOnlyCopy() {
         restoreFixtureWallet()
 
-        deleteThroughWalletSettingsThenRestoreFromCloudBackup()
+        // the fixture wallet is xpub-only, which skips the Final Warning
+        deleteThroughWalletSettingsThenRestoreFromCloudBackup(expectedConfirmations = 2)
     }
 
     @Test
@@ -89,10 +92,11 @@ class CloudBackupLocalDeleteFullLaunchTest {
         launchApp()
         enableFreshBackupAndFinishOnboarding()
 
-        deleteThroughWalletSettingsThenRestoreFromCloudBackup()
+        // a new hot wallet whose words were never verified needs the Final Warning
+        deleteThroughWalletSettingsThenRestoreFromCloudBackup(expectedConfirmations = 3)
     }
 
-    private fun deleteThroughWalletSettingsThenRestoreFromCloudBackup() {
+    private fun deleteThroughWalletSettingsThenRestoreFromCloudBackup(expectedConfirmations: Int) {
         val wallet = AppManager.getInstance().wallets.single()
         var recordId: String? = null
 
@@ -105,13 +109,18 @@ class CloudBackupLocalDeleteFullLaunchTest {
         }
 
         openWalletSettings(wallet.id)
-        val requiredConfirmations =
+
+        // pinned per fixture, since the dialogs read the same count and a wrong one would pass both
+        assertEquals(
+            "the wallet should need $expectedConfirmations deletion confirmations",
+            expectedConfirmations,
             runBlocking { AppManager.getInstance().getWalletManagerLoaded(wallet.id) }
                 .requiredDeletionConfirmations()
-                .toInt()
+                .toInt(),
+        )
 
         device.clickClickableAncestorForText(DELETE_WALLET_ITEM)
-        confirmDeletionDialogs(requiredConfirmations)
+        confirmDeletionDialogs(expectedConfirmations)
 
         waitUntil("the wallet should leave this device") {
             AppManager.getInstance().wallets.none { it.id == wallet.id }
@@ -226,7 +235,19 @@ class CloudBackupLocalDeleteFullLaunchTest {
     private fun launchApp() {
         // the reset only runs in a fresh activity, which the test orchestrator's process per test gives
         launchFullApp()
+        awaitBootstrap()
         walletIdsAtLaunch = AppManager.getInstance().wallets.map { it.id }.toSet()
+    }
+
+    // the activity starts before bootstrap finishes, and AppManager is unavailable until it does
+    private fun awaitBootstrap() {
+        val deadline = System.currentTimeMillis() + 30_000L
+
+        while (bootstrapProgress() != BootstrapStep.COMPLETE && System.currentTimeMillis() < deadline) {
+            Thread.sleep(100)
+        }
+
+        assertEquals("the app should finish bootstrapping after launch", BootstrapStep.COMPLETE, bootstrapProgress())
     }
 
     private fun cloudOnlyWallets(): List<CloudBackupWalletItem> =
@@ -337,6 +358,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
                 "localWallets=${AppManager.getInstance().wallets.map { it.name }}, " +
                 "walletLists=${ScriptedCloudStorageAccess.walletListCount()}, " +
                 "walletDownloads=${ScriptedCloudStorageAccess.walletDownloadRecordIds()}"
+
         assertTrue("$message; $diagnostics", condition())
     }
 

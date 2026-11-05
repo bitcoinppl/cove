@@ -19,12 +19,14 @@ import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
+import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
+import org.bitcoinppl.cove_core.bootstrapProgress
 import org.bitcoinppl.cove_core.device.CloudStorageException
 import org.bitcoinppl.cove_core.types.WalletId
 import org.junit.After
@@ -83,11 +85,50 @@ class CloudBackupInventoryActionsFullLaunchTest {
         waitForConfirmedInventory()
         assertRowOpensEnabledActions(WALLET_TWO)
 
-        // a refresh of a confirmed inventory keeps it complete, so the check starts from a failed
-        // refresh, and the sheet opened above stays open through it
+        // the sheet opened above stays open through the check
+        whileKnownInventoryIsChecked(trigger = { dispatchOnMain(CloudBackupManagerAction.RefreshDetail) }) {
+            assertOpenSheetActionsDisabledAndInert()
+        }
+
+        for (action in listOf(RESTORE_ACTION, DELETE_ACTION)) {
+            waitUntil("$action should be enabled again once the inventory is complete") {
+                device.findObject(By.text(action))?.let { device.clickableAncestor(it).isEnabled } == true
+            }
+        }
+
+        // Delete swaps the sheet for its own confirmation, which keeps a separate readiness gate
+        device.clickableAncestor(device.waitForText(DELETE_ACTION)).click()
+        device.waitForText(DELETE_FOREVER)
+        whileKnownInventoryIsChecked(trigger = { dispatchOnMain(CloudBackupManagerAction.RefreshDetail) }) {
+            assertDeleteForeverDisabledAndInert()
+        }
+
+        waitUntil("Delete Forever should be enabled again once the inventory is complete") {
+            device.findObject(By.text(DELETE_FOREVER))?.let { device.clickableAncestor(it).isEnabled } == true
+        }
+
+        device.clickableAncestor(device.waitForText(CANCEL)).click()
+        assertTrue(
+            "Cancel should close the delete confirmation",
+            device.wait(Until.gone(By.text(DELETE_FOREVER)), 10_000L),
+        )
+
+        whileKnownInventoryIsChecked(trigger = { device.clickTextScrollingUp(CHECK_AGAIN) }) {
+            assertNoCloudOnlyRowOpensItsActions()
+        }
+
+        assertRowOpensEnabledActions(WALLET_TWO)
+    }
+
+    // a refresh of a confirmed inventory keeps it complete, so each check starts from a failed
+    // refresh, which leaves the known rows retained for the held check to work from
+    private fun whileKnownInventoryIsChecked(
+        trigger: () -> Unit,
+        assertions: () -> Unit,
+    ) {
         failNextRefresh()
         ScriptedCloudStorageAccess.blockNextWalletList()
-        dispatchOnMain(CloudBackupManagerAction.RefreshDetail)
+        trigger()
         assertTrue(
             "the check should list wallets from the provider again",
             ScriptedCloudStorageAccess.awaitBlockedWalletList(timeoutMs = 20_000L),
@@ -95,41 +136,12 @@ class CloudBackupInventoryActionsFullLaunchTest {
 
         try {
             waitForCheckingInventory()
-            assertOpenSheetActionsDisabledAndInert()
+            assertions()
         } finally {
             ScriptedCloudStorageAccess.releaseBlockedWalletList()
         }
 
         waitForConfirmedInventory()
-        for (action in listOf(RESTORE_ACTION, DELETE_ACTION)) {
-            waitUntil("$action should be enabled again once the inventory is complete") {
-                device.findObject(By.text(action))?.let { device.clickableAncestor(it).isEnabled } == true
-            }
-        }
-
-        device.pressBack()
-        assertTrue(
-            "back should close the action sheet",
-            device.wait(Until.gone(By.text(RESTORE_ACTION)), 10_000L),
-        )
-
-        failNextRefresh()
-        ScriptedCloudStorageAccess.blockNextWalletList()
-        device.clickTextScrollingUp(CHECK_AGAIN)
-        assertTrue(
-            "Check Again should list wallets from the provider again",
-            ScriptedCloudStorageAccess.awaitBlockedWalletList(timeoutMs = 20_000L),
-        )
-
-        try {
-            waitForCheckingInventory()
-            assertNoCloudOnlyRowOpensItsActions()
-        } finally {
-            ScriptedCloudStorageAccess.releaseBlockedWalletList()
-        }
-
-        waitForConfirmedInventory()
-        assertRowOpensEnabledActions(WALLET_TWO)
     }
 
     // ends the next refresh with a provider error that the refresh does not retry, so it lands in
@@ -224,6 +236,30 @@ class CloudBackupInventoryActionsFullLaunchTest {
         )
     }
 
+    private fun assertDeleteForeverDisabledAndInert() {
+        waitUntil("Delete Forever should be disabled while checking") {
+            device.findObject(By.text(DELETE_FOREVER))?.let { device.clickableAncestor(it).isEnabled } == false
+        }
+
+        device.clickableAncestor(device.waitForText(DELETE_FOREVER)).click()
+        assertFalse(
+            "a disabled Delete Forever must leave its confirmation open",
+            device.wait(Until.gone(By.text("Delete $WALLET_TWO?")), 2_000L),
+        )
+
+        assertEquals(
+            "a disabled Delete Forever must not start a delete",
+            CloudOnlyOperation.Idle,
+            CloudBackupManager.getInstance().cloudOnlyOperation,
+        )
+
+        assertEquals(
+            "a disabled Delete Forever must leave both backups listed",
+            FIXTURE_CLOUD_ONLY_RECORD_IDS,
+            cloudOnlyRecordIds(),
+        )
+    }
+
     private fun assertRowOpensEnabledActions(name: String) {
         device.scrollUntilText(name)
         waitUntil("$name should be enabled once the inventory is complete") {
@@ -244,6 +280,7 @@ class CloudBackupInventoryActionsFullLaunchTest {
 
         // the reset only runs in a fresh activity, which the test orchestrator's process per test gives
         launchFullApp()
+        awaitBootstrap()
         walletIdsAtLaunch = AppManager.getInstance().wallets.map { it.id }.toSet()
 
         device.waitForText("Google Drive Backup Found")
@@ -262,6 +299,17 @@ class CloudBackupInventoryActionsFullLaunchTest {
             1,
             AppManager.getInstance().wallets.size,
         )
+    }
+
+    // the activity starts before bootstrap finishes, and AppManager is unavailable until it does
+    private fun awaitBootstrap() {
+        val deadline = System.currentTimeMillis() + 30_000L
+
+        while (bootstrapProgress() != BootstrapStep.COMPLETE && System.currentTimeMillis() < deadline) {
+            Thread.sleep(100)
+        }
+
+        assertEquals("the app should finish bootstrapping after launch", BootstrapStep.COMPLETE, bootstrapProgress())
     }
 
     private fun openCloudBackup() {
@@ -359,6 +407,7 @@ class CloudBackupInventoryActionsFullLaunchTest {
             "detail=${manager.state.lifecycle}, ready=${manager.isDetailInventoryReady}, " +
                 "complete=${manager.isDetailInventoryComplete}, cloudOnly=${cloudOnlyRecordIds()}, " +
                 "restoreAll=${manager.restoreAllState}, walletLists=${ScriptedCloudStorageAccess.walletListCount()}"
+
         assertTrue("$message; $diagnostics", condition())
     }
 
@@ -368,6 +417,8 @@ class CloudBackupInventoryActionsFullLaunchTest {
         const val CHECK_AGAIN = "Check Again"
         const val RESTORE_ACTION = "Restore to this device"
         const val DELETE_ACTION = "Delete from Cloud Backup"
+        const val DELETE_FOREVER = "Delete Forever"
+        const val CANCEL = "Cancel"
         val FIXTURE_CLOUD_ONLY_RECORD_IDS =
             listOf(
                 ScriptedCloudBackupFixture.WALLET_TWO_RECORD_ID,

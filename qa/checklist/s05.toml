@@ -40,7 +40,7 @@ coverage = [
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # rust tests cover inventory staying incomplete until the provider confirms it; the ios per-row restore and delete buttons read isDetailInventoryReady and no ios ui test asserts they stay disabled
-# the android test holds the provider listing while a known inventory is checked again after a failed refresh, and checks that neither a listed cloud-only row nor its open action sheet can restore or delete until the provider confirms the inventory
+# the android test holds the provider listing while a known inventory is checked again after a failed refresh, and checks that no listed cloud-only row, open action sheet or delete confirmation can restore or delete until the provider confirms the inventory
 # the first inventory load has no android ui test, since onboarding can start inventory discovery before the test can hold the listing that opening cloud backup makes
 
 [[row]]
