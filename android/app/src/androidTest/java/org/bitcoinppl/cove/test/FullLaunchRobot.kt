@@ -408,6 +408,20 @@ class FullLaunchOnboardingRobot(
         return this
     }
 
+    fun assertCloudBackupEnableFailed(message: String): FullLaunchOnboardingRobot {
+        device.waitUntilVisible(text(message), timeoutMillis = 30_000)
+        assertNull(device.findObject(text("Cloud Backup enabled").value))
+
+        return this
+    }
+
+    /** Taps Enable Cloud Backup again after a failure, leaving the acknowledgements as they are */
+    fun retryCloudBackupEnable(): FullLaunchOnboardingRobot {
+        device.clickSafely(tag("onboarding.cloudBackup.enable"))
+
+        return this
+    }
+
     fun assertPendingEnableRecovery(): FullLaunchOnboardingRobot {
         device.waitUntilVisible(text("Cloud Backup"), timeoutMillis = 30_000)
         device.scrollUntilVisible(text("Confirm Passkey"))

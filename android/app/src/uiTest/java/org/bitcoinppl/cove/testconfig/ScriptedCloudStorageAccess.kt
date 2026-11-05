@@ -56,6 +56,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     @Volatile
     private var fixtureWalletRecordIds = listOf(ScriptedCloudBackupFixture.WALLET_RECORD_ID)
 
+    private val masterUploads = AtomicInteger(0)
+    private val walletUploads = AtomicInteger(0)
+    private val uploadFailures = CopyOnWriteArrayList<UploadFailure>()
+
     enum class NamespaceResult {
         EMPTY,
         BACKUP_FOUND,
@@ -68,6 +72,23 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         CORRUPT,
         UNAVAILABLE,
     }
+
+    enum class UploadKind {
+        MASTER,
+        WALLET,
+    }
+
+    enum class UploadError {
+        UPLOAD_FAILED,
+        OFFLINE,
+        NOT_AVAILABLE,
+    }
+
+    private data class UploadFailure(
+        val kind: UploadKind,
+        val attempt: Int,
+        val error: UploadError,
+    )
 
     fun attach(context: Context): CloudStorageAccess {
         persistentRoot = context.filesDir.resolve(".ui-test-cloud-provider")
@@ -109,6 +130,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         walletListBlock = null
         walletDownloadBlock = null
         fixtureWalletRecordIds = listOf(ScriptedCloudBackupFixture.WALLET_RECORD_ID)
+        resetUploads()
     }
 
     /** Cloud holds only the private-key fixture wallet, so restore installs an xprv wallet */
@@ -203,6 +225,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     }
 
     fun configureFreshEnableWithDelayedVisibility(blockMasterUploadReturn: Boolean = false) {
+        resetUploads()
         fixtureRestoreEnabled = false
         namespaceScenario = NamespaceScenario.immediateEmpty()
         freshEnableScenario = FreshEnableScenario(blockMasterUploadReturn)
@@ -214,9 +237,45 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     ) {
         val storage = PersistentFreshEnableStorage(requireNotNull(persistentRoot))
         storage.prepare(resetStoredState)
+        resetUploads()
         fixtureRestoreEnabled = false
         namespaceScenario = NamespaceScenario.immediateEmpty()
         freshEnableScenario = FreshEnableScenario(blockMasterUploadReturn, storage = storage)
+    }
+
+    /**
+     * Fails the upload of [kind] numbered [attempt], counted from one since the scenario was
+     * configured, so a test can retry a setup whose upload the provider rejected
+     */
+    fun failUpload(
+        kind: UploadKind,
+        attempt: Int,
+        error: UploadError = UploadError.UPLOAD_FAILED,
+    ) {
+        require(attempt > 0) { "upload attempts are one-based" }
+        uploadFailures += UploadFailure(kind, attempt, error)
+    }
+
+    fun uploadCount(kind: UploadKind): Int =
+        when (kind) {
+            UploadKind.MASTER -> masterUploads.get()
+            UploadKind.WALLET -> walletUploads.get()
+        }
+
+    fun awaitUploadCount(
+        kind: UploadKind,
+        expected: Int,
+        timeoutMs: Long = 20_000,
+    ): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+
+        while (System.nanoTime() < deadline) {
+            if (uploadCount(kind) >= expected) return true
+
+            Thread.sleep(NAMESPACE_REQUEST_POLL_INTERVAL_MS)
+        }
+
+        return uploadCount(kind) >= expected
     }
 
     fun awaitNamespaceRequest(timeoutMs: Long = 10_000): Boolean =
@@ -399,6 +458,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         data: ByteArray,
         policy: CloudAccessPolicy,
     ) {
+        failIfScripted(UploadKind.MASTER, masterUploads.incrementAndGet())
+
         if (fixtureRestoreEnabled) {
             check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
                 "unexpected fixture namespace $namespace"
@@ -424,6 +485,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         data: ByteArray,
         policy: CloudAccessPolicy,
     ) {
+        failIfScripted(UploadKind.WALLET, walletUploads.incrementAndGet())
+
         if (fixtureRestoreEnabled) {
             check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
                 "unexpected fixture namespace $namespace"
@@ -438,6 +501,25 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         val scenario = freshEnableScenario ?: unsupported()
         scenario.storeWalletBackup(namespace, recordId, data)
         scenario.allProviderWritesAccepted.countDown()
+    }
+
+    private fun resetUploads() {
+        masterUploads.set(0)
+        walletUploads.set(0)
+        uploadFailures.clear()
+    }
+
+    private fun failIfScripted(
+        kind: UploadKind,
+        attempt: Int,
+    ) {
+        val failure = uploadFailures.firstOrNull { it.kind == kind && it.attempt == attempt } ?: return
+
+        throw when (failure.error) {
+            UploadError.UPLOAD_FAILED -> CloudStorageException.UploadFailed("scripted $kind upload failure")
+            UploadError.OFFLINE -> CloudStorageException.Offline("scripted provider is offline")
+            UploadError.NOT_AVAILABLE -> CloudStorageException.NotAvailable("scripted provider is unavailable")
+        }
     }
 
     override suspend fun downloadWalletBackup(
