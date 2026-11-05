@@ -52,6 +52,8 @@ import org.bitcoinppl.cove_core.Mnemonic
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
+import org.bitcoinppl.cove_core.WalletLifecycleFailure
+import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.bootstrapProgress
 import org.bitcoinppl.cove_core.types.WalletId
@@ -544,8 +546,19 @@ class PrivateKeyExportFullLaunchTest {
     // the manager the KeyTeleport screen shows now, which a route change or relaunch replaces
     private fun receiveState(): KeyTeleportManagerState = AppManager.getInstance().getKeyTeleportManager().state
 
-    // a manager of its own, since the app's cache cancels a load when the app moves to another wallet
-    private fun readPrivateKey(id: WalletId): String = runBlocking { WalletManager.load(id) }.use { it.exposeXprv() }
+    // a manager of its own, since the app's cache cancels a load when the app moves to another wallet;
+    // the app's own wallet changes hold the lifecycle coordinator for a moment, so a busy one is retried
+    private fun readPrivateKey(id: WalletId): String {
+        val deadline = SystemClock.uptimeMillis() + KEY_READ_TIMEOUT_MS
+        while (true) {
+            try {
+                return runBlocking { WalletManager.load(id) }.use { it.exposeXprv() }
+            } catch (e: WalletManagerException.WalletLifecycle) {
+                if (e.v1 != WalletLifecycleFailure.CoordinatorBusy || SystemClock.uptimeMillis() > deadline) throw e
+                Thread.sleep(SETTLE_POLL_MS)
+            }
+        }
+    }
 
     private fun walletIds(): List<WalletId> = Database().wallets().all().map { it.id }
 
@@ -741,6 +754,7 @@ class PrivateKeyExportFullLaunchTest {
         const val SEND_ROUNDS = 4
         const val REVEAL_SETTLE_MS = 3_000L
         const val SETTLE_POLL_MS = 200L
+        const val KEY_READ_TIMEOUT_MS = 15_000L
         const val PROMPT_QUIET_MS = 3_000L
         const val PROMPT_SETTLE_TIMEOUT_MS = 30_000L
         const val WALLET_SETTINGS_SECTION = "Wallet information"
