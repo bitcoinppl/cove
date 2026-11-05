@@ -15,7 +15,6 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.WalletManager
@@ -57,6 +56,7 @@ import org.bitcoinppl.cove_core.WalletLifecycleFailure
 import org.bitcoinppl.cove_core.WalletManagerException
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.bootstrapProgress
+import org.bitcoinppl.cove_core.device.KeychainException
 import org.bitcoinppl.cove_core.types.WalletId
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -555,11 +555,21 @@ class PrivateKeyExportFullLaunchTest {
         val deadline = SystemClock.uptimeMillis() + KEY_READ_TIMEOUT_MS
         while (true) {
             try {
-                appWalletManager(id)?.let { return it.exposeXprv() }
+                val appManager = appWalletManager(id)
+                if (appManager != null) {
+                    try {
+                        return appManager.exposeXprv()
+                    } catch (e: IllegalStateException) {
+                        // the handle guard reports a manager the app closed mid-read this way
+                        if (e.message != CLOSED_WALLET_MANAGER || SystemClock.uptimeMillis() > deadline) throw e
+                        Thread.sleep(SETTLE_POLL_MS)
+                        continue
+                    }
+                }
 
-                // load retries a closing or constructing manager on its own, so bound it by the same deadline
-                val remaining = (deadline - SystemClock.uptimeMillis()).coerceAtLeast(1L)
-                return runBlocking { withTimeout(remaining) { WalletManager.load(id) } }.use { it.exposeXprv() }
+                // load can't be cancelled once construction starts, and a timeout here could drop a
+                // finished manager without closing it, so it is left to the runner's own test timeout
+                return runBlocking { WalletManager.load(id) }.use { it.exposeXprv() }
             } catch (e: WalletManagerException) {
                 val transient =
                     e is WalletManagerException.ManagerClosed ||
@@ -589,6 +599,7 @@ class PrivateKeyExportFullLaunchTest {
         try {
             readPrivateKey(id) == FIXTURE_XPRV
         } catch (e: WalletManagerException.SecretRetrievalException) {
+            if (e.v1 !is KeychainException.WalletSecretTypeMismatch) throw e
             false
         } catch (e: WalletManagerException.WalletDoesNotExist) {
             false
@@ -782,6 +793,10 @@ class PrivateKeyExportFullLaunchTest {
         const val REVEAL_SETTLE_MS = 3_000L
         const val SETTLE_POLL_MS = 200L
         const val KEY_READ_TIMEOUT_MS = 15_000L
+
+        // RustHandleGuard's message for a closed WalletManager
+        const val CLOSED_WALLET_MANAGER = "WalletManager is closed"
+
         const val PROMPT_QUIET_MS = 3_000L
         const val PROMPT_SETTLE_TIMEOUT_MS = 30_000L
         const val WALLET_SETTINGS_SECTION = "Wallet information"
