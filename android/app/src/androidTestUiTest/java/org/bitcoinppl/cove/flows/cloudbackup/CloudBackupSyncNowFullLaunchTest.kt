@@ -4,6 +4,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
+import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
@@ -42,7 +44,12 @@ import org.junit.runner.RunWith
 class CloudBackupSyncNowFullLaunchTest {
     private companion object {
         const val SYNC_NOW = "Sync Now"
-        const val DETAIL_SCAN_MAX_SWIPES = 20
+        const val DETAIL_SCAN_MAX_SCROLLS = 20
+        const val FAILURE_REOPEN_ATTEMPTS = 6
+
+        // every label the wallet row's status badge can show
+        val STATUS_BADGE_LABELS =
+            listOf("Dirty", "Syncing", "Confirmed", "Failed", "Not on device", "Unsupported", "Unknown")
 
         // a published BIP39 test vector, never used for funds
         val PENDING_WALLET =
@@ -165,11 +172,23 @@ class CloudBackupSyncNowFullLaunchTest {
             ScriptedCloudStorageAccess.rejectedNewWalletUploadCount() == 1
         }
         // Sync Now skips a wallet still uploading, so wait for the detail to show the rejected
-        // upload's persisted failure rather than an earlier dirty snapshot
-        waitUntil("the detail should list the new wallet as needing sync after its upload failed") {
+        // upload's persisted failure; the failure itself requests no detail refresh, so a refresh
+        // that ran before it keeps showing the dirty wallet until the detail is opened again
+        val showsFailure = {
             CloudBackupManager.getInstance().detail?.needsSync?.any { item ->
                 item.name == wallet.name && item.syncStatus == CloudBackupWalletStatus.FAILED
             } == true
+        }
+        var reopens = 0
+
+        while (!pollUntil(5_000L, showsFailure) && reopens < FAILURE_REOPEN_ATTEMPTS) {
+            device.openSettings()
+            device.openCloudBackup()
+            reopens += 1
+        }
+
+        waitUntil("the detail should list the new wallet as needing sync after its upload failed", 1_000L) {
+            showsFailure()
         }
         device.scrollUntilText(SYNC_NOW)
 
@@ -187,15 +206,40 @@ class CloudBackupSyncNowFullLaunchTest {
                 detail.upToDate.any { it.name == walletName }
         }
 
-        // the screen must show the refresh too: the wallet listed, and no Needs Sync section or
-        // Sync Now anywhere in the detail, not only in the current viewport
+        // the screen must show the refresh too: no Needs Sync section or Sync Now anywhere in the
+        // detail, not only in the current viewport; a wallet row merges its texts into one node, so
+        // these match within texts
         val texts = device.textsAcrossDetail()
-        assertTrue("the refreshed detail should show $walletName, saw $texts", walletName in texts)
+        assertTrue("the refreshed detail should show $walletName, saw $texts", texts.any { walletName in it })
         assertFalse(
             "the refreshed detail should have no Needs Sync section, saw $texts",
-            texts.any { text -> text.endsWith("Needs Sync") },
+            texts.any { text -> "Needs Sync" in text },
         )
-        assertFalse("Sync Now should disappear once nothing needs sync, saw $texts", SYNC_NOW in texts)
+        assertFalse(
+            "Sync Now should disappear once nothing needs sync, saw $texts",
+            texts.any { text -> SYNC_NOW in text },
+        )
+
+        val badges = device.walletRowBadges(walletName)
+        assertEquals("the refreshed wallet's row should show only the Confirmed badge", setOf("Confirmed"), badges)
+    }
+
+    // the status badges drawn in the row that names the wallet, found from the wallet's text node up
+    // to the first ancestor that holds a badge, whether the row merges its texts or not
+    private fun UiDevice.walletRowBadges(walletName: String): Set<String> {
+        var node: UiObject2? = scrollUntil(By.textContains(walletName))
+        var levels = 0
+
+        while (node != null && levels <= 4) {
+            val texts = listOfNotNull(node.text) + node.findObjects(By.textStartsWith("")).mapNotNull { it.text }
+            val badges = STATUS_BADGE_LABELS.filterTo(mutableSetOf()) { label -> texts.any { label in it } }
+            if (badges.isNotEmpty()) return badges
+
+            node = node.parent
+            levels += 1
+        }
+
+        error("no status badge found in the row for $walletName")
     }
 
     private fun passkeyAssertionCount(): Int =
@@ -275,36 +319,46 @@ class CloudBackupSyncNowFullLaunchTest {
         wait(Until.findObject(By.textContains(value)), timeoutMs)
             ?: error("Timed out waiting for text containing \"$value\"")
 
-    // collects every text the detail shows, swiping until the screen stops changing at its end and
-    // again at its top, and fails rather than return a partial scan
+    // collects every text the detail shows, scrolling its container until the container reports no
+    // more scroll at its end and again at its top, and fails rather than return a partial scan
     private fun UiDevice.textsAcrossDetail(): Set<String> {
         val texts = mutableSetOf<String>()
 
-        listOf(false, true).forEach { upward ->
-            var previous = visibleTexts()
-            texts += previous
-            var reachedLimit = false
+        listOf(Direction.DOWN, Direction.UP).forEach { direction ->
+            var scrolls = 0
+            var more = true
 
-            repeat(DETAIL_SCAN_MAX_SWIPES) {
-                if (reachedLimit) return@repeat
+            while (more) {
+                texts += visibleTexts()
+                check(scrolls < DETAIL_SCAN_MAX_SCROLLS) {
+                    "scanning the detail never reached its ${direction.name.lowercase()} end, saw $texts"
+                }
 
-                val startY = if (upward) displayHeight / 4 else displayHeight * 3 / 4
-                val endY = if (upward) displayHeight * 3 / 4 else displayHeight / 4
-                swipe(displayWidth / 2, startY, displayWidth / 2, endY, 20)
-                Thread.sleep(400)
-
-                val current = visibleTexts()
-                texts += current
-                reachedLimit = current == previous
-                previous = current
+                more = scrollDetail(direction)
+                scrolls += 1
             }
 
-            check(reachedLimit) {
-                "scanning the detail never reached its ${if (upward) "top" else "end"}, saw $texts"
-            }
+            texts += visibleTexts()
         }
 
         return texts
+    }
+
+    // scrolls the detail's container, finding it again when a recomposition replaces it; returns
+    // false once the container cannot scroll further that way
+    private fun UiDevice.scrollDetail(direction: Direction): Boolean {
+        repeat(5) {
+            try {
+                val container =
+                    findObject(By.scrollable(true)) ?: error("the Cloud Backup detail has no scrollable container")
+
+                return container.scroll(direction, 0.8f)
+            } catch (_: StaleObjectException) {
+                Thread.sleep(100)
+            }
+        }
+
+        error("the detail's container kept changing while it was scrolled")
     }
 
     // reads the same viewport again when the tree moves under the read
@@ -324,12 +378,17 @@ class CloudBackupSyncNowFullLaunchTest {
     private fun UiDevice.scrollUntilText(
         value: String,
         timeoutMs: Long = 20_000L,
+    ): UiObject2 = scrollUntil(By.text(value), timeoutMs)
+
+    private fun UiDevice.scrollUntil(
+        selector: BySelector,
+        timeoutMs: Long = 20_000L,
     ): UiObject2 {
         val deadline = System.currentTimeMillis() + timeoutMs
         var swipes = 0
 
         while (System.currentTimeMillis() < deadline) {
-            findObject(By.text(value))?.let { return it }
+            findObject(selector)?.let { return it }
             val upward = (swipes / 4) % 2 == 1
             val startY = if (upward) displayHeight / 4 else displayHeight * 3 / 4
             val endY = if (upward) displayHeight * 3 / 4 else displayHeight / 4
@@ -338,7 +397,7 @@ class CloudBackupSyncNowFullLaunchTest {
             Thread.sleep(250)
         }
 
-        error("Timed out scrolling to text \"$value\"")
+        error("Timed out scrolling to $selector")
     }
 
     private fun UiDevice.clickText(value: String) {
@@ -359,6 +418,21 @@ class CloudBackupSyncNowFullLaunchTest {
         }
 
         error("Timed out clicking text \"$value\"")
+    }
+
+    private fun pollUntil(
+        timeoutMs: Long,
+        condition: () -> Boolean,
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return true
+
+            Thread.sleep(100)
+        }
+
+        return condition()
     }
 
     private fun waitUntil(
