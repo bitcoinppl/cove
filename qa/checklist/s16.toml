@@ -288,19 +288,20 @@ id = "s16-restore-normal-font-and-compare-receive-controls"
 section = "16"
 title = "Restore normal font and compare Receive controls"
 platforms = ["ios", "android"]
-target = "device"
+target = "ui"
 paths = [
     "ios/Cove/Flows/SelectedWalletFlow/ReceiveView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
 ]
 coverage = [
-    "human:ios",
+    "ios-ui:ios/CoveUITests/ReceiveTextSizeFullLaunchUITests.swift::testReceiveLaysOutAgainWhenTextSizeChangesWhileOpen",
     "ios-ui:ios/CoveUITests/ReceiveTextSizeFullLaunchUITests.swift::testReceiveControlsMatchAtLargestAndDefaultTextSize",
     "device-script:qa/device/android/rows.py::s16-restore-normal-font-and-compare-receive-controls",
 ]
 # 1.4.0: ios HUMAN, android PASS
-# the ios test sets the text size per launch with a launch argument instead of the settings slider, so a live text-size change while the app runs isn't covered
-# ios still needs a person to restore the os text size with the app open; the ui test is partial coverage
+# ios: the live test opens receive at the largest simulator text size, sets the simulator back to the default with simctl while the app runs and receive stays open, and checks that copy address shrinks, every control is usable and the address is unchanged
+# android: the device script changes font_scale with adb while the app runs and reopens receive, since the font change recreates the activity; it compares the controls but not the address
+# nothing is left for a person; putting a real phone's own slider back is s16-restore-original-ios-text-size-tick
 
 [[row]]
 id = "s16-clean-install-onboarding-and-late-restore-layout"

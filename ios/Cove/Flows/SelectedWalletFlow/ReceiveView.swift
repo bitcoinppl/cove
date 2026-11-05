@@ -258,6 +258,7 @@ private struct ReceiveAddressCardBottom: View {
                     .font(.body)
                     .foregroundStyle(.white)
                     .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("receive.address")
 
                 if addressLoaded, refreshState == .failed {
                     Text("Unable to refresh address")
