@@ -379,18 +379,32 @@ pub fn run_command(
 mod tests {
     use std::{
         fs,
-        path::Path,
+        path::{Path, PathBuf},
         process::Command,
+        sync::Arc,
         thread,
         time::{Duration, Instant},
     };
 
     use super::run_command;
-    use crate::{shutdown, ui_test_ports::UiTestPorts};
+    use crate::{
+        shutdown::{self, Stop},
+        ui_test_ports::UiTestPorts,
+    };
 
     const CANCELLED_RUN_DIR_ENV: &str = "COVE_TEST_CANCELLED_RUN_DIR";
     const TEST_NAME: &str =
         "fake_node::tests::a_cancelled_command_returns_only_after_its_processes_stop";
+
+    // registered before the command, so the cleanup, which stops the newest first, stops it after
+    // the command's group and holds the exit until the run has recorded when it returned
+    struct HoldExitUntil(PathBuf);
+
+    impl Stop for HoldExitUntil {
+        fn stop(&self) {
+            wait_for(&self.0);
+        }
+    }
 
     fn wait_for(path: &Path) -> bool {
         let deadline = Instant::now() + Duration::from_secs(30);
@@ -411,6 +425,7 @@ mod tests {
         if let Some(dir) = std::env::var_os(CANCELLED_RUN_DIR_ENV) {
             let dir = Path::new(&dir);
             shutdown::install().unwrap();
+            let _hold = shutdown::register(Arc::new(HoldExitUntil(dir.join("returned"))));
 
             // the leader dies on SIGTERM at once, while the process it started ignores SIGTERM
             // and is still using the device for a second, as a Gradle worker can outlive the
@@ -421,7 +436,9 @@ mod tests {
 
             // the caller releases the run's locks from here on
             let returned = if dir.join("finished").exists() { "after" } else { "before" };
-            fs::write(dir.join("returned"), returned).unwrap();
+            // renamed into place, so the parent never reads it half written
+            fs::write(dir.join("returned.tmp"), returned).unwrap();
+            fs::rename(dir.join("returned.tmp"), dir.join("returned")).unwrap();
             shutdown::finish();
             return;
         }
