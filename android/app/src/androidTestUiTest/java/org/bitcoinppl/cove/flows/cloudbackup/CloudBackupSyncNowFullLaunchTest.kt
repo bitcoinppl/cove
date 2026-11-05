@@ -42,7 +42,7 @@ import org.junit.runner.RunWith
 class CloudBackupSyncNowFullLaunchTest {
     private companion object {
         const val SYNC_NOW = "Sync Now"
-        const val DETAIL_SCAN_SWIPES = 6
+        const val DETAIL_SCAN_MAX_SWIPES = 20
 
         // a published BIP39 test vector, never used for funds
         val PENDING_WALLET =
@@ -164,10 +164,11 @@ class CloudBackupSyncNowFullLaunchTest {
         waitUntil("the automatic upload of the new wallet should be rejected") {
             ScriptedCloudStorageAccess.rejectedNewWalletUploadCount() == 1
         }
-        // the rejected upload must have settled, since Sync Now skips a wallet still uploading
+        // Sync Now skips a wallet still uploading, so wait for the detail to show the rejected
+        // upload's persisted failure rather than an earlier dirty snapshot
         waitUntil("the detail should list the new wallet as needing sync after its upload failed") {
             CloudBackupManager.getInstance().detail?.needsSync?.any { item ->
-                item.name == wallet.name && item.syncStatus != CloudBackupWalletStatus.UPLOADING
+                item.name == wallet.name && item.syncStatus == CloudBackupWalletStatus.FAILED
             } == true
         }
         device.scrollUntilText(SYNC_NOW)
@@ -274,26 +275,49 @@ class CloudBackupSyncNowFullLaunchTest {
         wait(Until.findObject(By.textContains(value)), timeoutMs)
             ?: error("Timed out waiting for text containing \"$value\"")
 
-    // collects every text the detail shows, swiping to its end and back to its top
+    // collects every text the detail shows, swiping until the screen stops changing at its end and
+    // again at its top, and fails rather than return a partial scan
     private fun UiDevice.textsAcrossDetail(): Set<String> {
         val texts = mutableSetOf<String>()
 
-        repeat(DETAIL_SCAN_SWIPES * 2) { swipe ->
-            try {
-                findObjects(By.textStartsWith("")).mapNotNullTo(texts) { node -> node.text }
-            } catch (_: StaleObjectException) {
-                // the next swipe reads the moved nodes again
+        listOf(false, true).forEach { upward ->
+            var previous = visibleTexts()
+            texts += previous
+            var reachedLimit = false
+
+            repeat(DETAIL_SCAN_MAX_SWIPES) {
+                if (reachedLimit) return@repeat
+
+                val startY = if (upward) displayHeight / 4 else displayHeight * 3 / 4
+                val endY = if (upward) displayHeight * 3 / 4 else displayHeight / 4
+                swipe(displayWidth / 2, startY, displayWidth / 2, endY, 20)
+                Thread.sleep(400)
+
+                val current = visibleTexts()
+                texts += current
+                reachedLimit = current == previous
+                previous = current
             }
 
-            val upward = swipe >= DETAIL_SCAN_SWIPES
-            val startY = if (upward) displayHeight / 4 else displayHeight * 3 / 4
-            val endY = if (upward) displayHeight * 3 / 4 else displayHeight / 4
-            swipe(displayWidth / 2, startY, displayWidth / 2, endY, 20)
-            Thread.sleep(250)
+            check(reachedLimit) {
+                "scanning the detail never reached its ${if (upward) "top" else "end"}, saw $texts"
+            }
         }
 
-        findObjects(By.textStartsWith("")).mapNotNullTo(texts) { node -> node.text }
         return texts
+    }
+
+    // reads the same viewport again when the tree moves under the read
+    private fun UiDevice.visibleTexts(): List<String> {
+        repeat(5) {
+            try {
+                return findObjects(By.textStartsWith("")).mapNotNull { node -> node.text }
+            } catch (_: StaleObjectException) {
+                Thread.sleep(100)
+            }
+        }
+
+        error("the detail kept changing while its texts were read")
     }
 
     // scrolls down, then back up, since the detail may already be scrolled past the text
