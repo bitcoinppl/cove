@@ -546,18 +546,26 @@ class PrivateKeyExportFullLaunchTest {
     // the manager the KeyTeleport screen shows now, which a route change or relaunch replaces
     private fun receiveState(): KeyTeleportManagerState = AppManager.getInstance().getKeyTeleportManager().state
 
-    // a manager of its own, since the app's cache cancels a load when the app moves to another wallet;
-    // the app's own wallet changes hold the lifecycle coordinator for a moment, so a busy one is retried
+    // only one manager may hold a wallet, so read through the app's when it holds this one, and
+    // otherwise through a manager of its own, since the app's cache cancels a load when the app moves
+    // to another wallet; while the app is still loading the wallet the coordinator reports busy
     private fun readPrivateKey(id: WalletId): String {
         val deadline = SystemClock.uptimeMillis() + KEY_READ_TIMEOUT_MS
         while (true) {
             try {
+                appWalletManager(id)?.let { return it.exposeXprv() }
                 return runBlocking { WalletManager.load(id) }.use { it.exposeXprv() }
             } catch (e: WalletManagerException.WalletLifecycle) {
                 if (e.v1 != WalletLifecycleFailure.CoordinatorBusy || SystemClock.uptimeMillis() > deadline) throw e
                 Thread.sleep(SETTLE_POLL_MS)
             }
         }
+    }
+
+    private fun appWalletManager(id: WalletId): WalletManager? {
+        var manager: WalletManager? = null
+        onMain { manager = AppManager.getInstance().cachedWalletManager(id) }
+        return manager
     }
 
     private fun walletIds(): List<WalletId> = Database().wallets().all().map { it.id }
