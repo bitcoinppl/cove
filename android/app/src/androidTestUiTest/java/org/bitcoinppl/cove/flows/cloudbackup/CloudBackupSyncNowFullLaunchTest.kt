@@ -1,5 +1,12 @@
 package org.bitcoinppl.cove.flows.cloudbackup
 
+import android.view.View
+import android.view.ViewGroup
+import android.view.inspector.WindowInspector
+import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getAllSemanticsNodes
+import androidx.compose.ui.semantics.getOrNull
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
@@ -224,18 +231,38 @@ class CloudBackupSyncNowFullLaunchTest {
         assertEquals("the refreshed wallet's row should show only the Confirmed badge", setOf("Confirmed"), badges)
     }
 
-    // the status badges in the wallet's own row; the row merges its texts into the one node that
-    // names the wallet, so the search never leaves that node and can't read another wallet's badge
+    // the status badges in the wallet's own row, read from compose's merged semantics tree: the row
+    // merges its texts into one node, so only that node's own texts are read and another wallet's
+    // badge can't count. uiautomator's view of a merged row doesn't list the badge text
     private fun UiDevice.walletRowBadges(walletName: String): Set<String> {
-        val row = scrollUntil(By.textContains(walletName))
-        val texts =
-            listOfNotNull(row.text, row.contentDescription) +
-                row.findObjects(By.textStartsWith("")).mapNotNull { it.text }
-        val badges = STATUS_BADGE_LABELS.filterTo(mutableSetOf()) { label -> texts.any { label in it } }
+        scrollUntil(By.textContains(walletName))
+
+        val rows = mutableListOf<List<String>>()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            rows +=
+                WindowInspector
+                    .getGlobalWindowViews()
+                    .flatMap { it.composeRoots() }
+                    .flatMap { root -> root.semanticsOwner.getAllSemanticsNodes(mergingEnabled = true) }
+                    .filter { node -> node.config.isMergingSemanticsOfDescendants }
+                    .map { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
+                    .filter { texts -> walletName in texts }
+        }
+
+        check(rows.size == 1) { "expected one row for $walletName, saw $rows" }
+        val texts = rows.single()
+        val badges = STATUS_BADGE_LABELS.filterTo(mutableSetOf()) { label -> label in texts }
         check(badges.isNotEmpty()) { "the row for $walletName shows no status badge, saw $texts" }
 
         return badges
     }
+
+    private fun View.composeRoots(): List<RootForTest> =
+        when (this) {
+            is RootForTest -> listOf(this)
+            is ViewGroup -> (0 until childCount).flatMap { getChildAt(it).composeRoots() }
+            else -> emptyList()
+        }
 
     private fun passkeyAssertionCount(): Int =
         ScriptedPasskeyProvider.callCount(Invocation.AUTHENTICATE) +
