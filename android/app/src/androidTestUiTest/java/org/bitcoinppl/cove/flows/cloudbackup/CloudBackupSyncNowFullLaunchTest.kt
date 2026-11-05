@@ -224,22 +224,17 @@ class CloudBackupSyncNowFullLaunchTest {
         assertEquals("the refreshed wallet's row should show only the Confirmed badge", setOf("Confirmed"), badges)
     }
 
-    // the status badges drawn in the row that names the wallet, found from the wallet's text node up
-    // to the first ancestor that holds a badge, whether the row merges its texts or not
+    // the status badges in the wallet's own row; the row merges its texts into the one node that
+    // names the wallet, so the search never leaves that node and can't read another wallet's badge
     private fun UiDevice.walletRowBadges(walletName: String): Set<String> {
-        var node: UiObject2? = scrollUntil(By.textContains(walletName))
-        var levels = 0
+        val row = scrollUntil(By.textContains(walletName))
+        val texts =
+            listOfNotNull(row.text, row.contentDescription) +
+                row.findObjects(By.textStartsWith("")).mapNotNull { it.text }
+        val badges = STATUS_BADGE_LABELS.filterTo(mutableSetOf()) { label -> texts.any { label in it } }
+        check(badges.isNotEmpty()) { "the row for $walletName shows no status badge, saw $texts" }
 
-        while (node != null && levels <= 4) {
-            val texts = listOfNotNull(node.text) + node.findObjects(By.textStartsWith("")).mapNotNull { it.text }
-            val badges = STATUS_BADGE_LABELS.filterTo(mutableSetOf()) { label -> texts.any { label in it } }
-            if (badges.isNotEmpty()) return badges
-
-            node = node.parent
-            levels += 1
-        }
-
-        error("no status badge found in the row for $walletName")
+        return badges
     }
 
     private fun passkeyAssertionCount(): Int =
