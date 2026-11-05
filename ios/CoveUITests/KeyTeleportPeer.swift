@@ -54,7 +54,7 @@ struct KeyTeleportPeer {
         let titles: [String]?
     }
 
-    private let baseUrl = URL(string: "http://127.0.0.1:39010")!
+    private let baseUrl = UITestHostPorts.signerControl
 
     /// Encrypts the payload for the receiver request, as a sending phone does
     func send(_ payload: Payload, to request: String, code: String, minParts: Int = 1) throws -> Response {

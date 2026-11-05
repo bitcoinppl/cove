@@ -10,7 +10,7 @@ import XCTest
 /// (`just ios-ui-background`) starts for every run, and a freshly erased simulator, which xtask
 /// also provides
 final class KeyTeleportSendFullLaunchUITests: XCTestCase {
-    private static let esploraUrl = "http://127.0.0.1:39001"
+    private static let esploraUrl = UITestHostPorts.esploraUrl
     private static let pin = "135791"
 
     private var app: XCUIApplication!
