@@ -14,7 +14,7 @@ final class CloudBackupOnboardingLateOfferFullAppUITests: XCTestCase {
     }
 
     override func tearDown() {
-        CloudBackupHostControl.attachAppLogIfFailed(to: self)
+        CloudBackupHostControl.tearDown(self, app: app)
         super.tearDown()
     }
 

@@ -13,28 +13,36 @@ final class CloudBackupHostControl {
     init(script: CloudBackupUITestScript) throws {
         directory = URL(fileURLWithPath: "/tmp/cove-cloud-ui-\(UUID().uuidString)", isDirectory: true)
         self.script = script
-        Self.lastAppLog = nil
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try writeScript()
+        Self.active.append(self)
     }
 
-    /// What the app logged under the most recently cleaned-up control, for a failed test to attach
-    private(set) static var lastAppLog: String?
+    /// Controls made during the current test, kept until `tearDown` so a running host never loses
+    /// its directory
+    private static var active: [CloudBackupHostControl] = []
 
-    deinit {
-        let log = directory.appendingPathComponent(CloudBackupUITestControl.appLogFileName)
-        Self.lastAppLog = try? String(contentsOf: log, encoding: .utf8)
-        try? FileManager.default.removeItem(at: directory)
-    }
+    /// Stops the app, attaches its log to a failed test, and removes the test's control directories
+    ///
+    /// The host keeps writing `state.json` from background work after the test body returns, and
+    /// treats a missing directory as a broken test, so the app stops before its directory goes.
+    /// The log is attached here because the simulator clone is deleted after the test
+    static func tearDown(_ testCase: XCTestCase, app: XCUIApplication) {
+        app.terminate()
 
-    /// Attaches the app's log to a failed test, since the simulator clone is deleted after it
-    static func attachAppLogIfFailed(to testCase: XCTestCase) {
-        guard testCase.testRun?.hasSucceeded == false, let log = lastAppLog else { return }
+        for control in active {
+            let log = control.directory.appendingPathComponent(CloudBackupUITestControl.appLogFileName)
+            if testCase.testRun?.hasSucceeded == false, let text = try? String(contentsOf: log, encoding: .utf8) {
+                let attachment = XCTAttachment(string: text)
+                attachment.name = "app log"
+                attachment.lifetime = .keepAlways
+                testCase.add(attachment)
+            }
 
-        let attachment = XCTAttachment(string: log)
-        attachment.name = "app log"
-        attachment.lifetime = .keepAlways
-        testCase.add(attachment)
+            try? FileManager.default.removeItem(at: control.directory)
+        }
+
+        active.removeAll()
     }
 
     func configure(_ app: XCUIApplication) {
