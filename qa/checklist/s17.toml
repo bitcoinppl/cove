@@ -107,9 +107,11 @@ paths = [
 ]
 coverage = [
     "human",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPasteRejectionTest.kt::senderRejectsARawPsbtPasteByAskingForTheReceiverRequest",
 ]
 # 1.4.0: ios N/A, android HUMAN
-# the protected screen returns no screencap over adb
+# the protected screen returns no screencap over adb, so the test captures the error dialog and the sender after OK from inside the app (Pictures/cove-layout-screenshots), checks each dialog text is drawn, unclipped, inside the dialog and not overlapping, and that the sender still takes a paste after OK
+# still a person: one strong pixel per text and a multicolor capture after OK do not prove the whole dialog and sender are readable
 
 [[row]]
 id = "s17-ios-pj-uri-parses-to-ordinary-draft"

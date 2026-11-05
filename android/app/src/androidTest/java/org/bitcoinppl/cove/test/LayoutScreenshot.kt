@@ -7,6 +7,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -21,15 +22,20 @@ fun ComposeContentTestRule.saveNodeScreenshotToLayoutAudit(
     tag: String,
     name: String,
 ) {
+    saveNodeScreenshotToLayoutAudit(onNodeWithTag(tag), name)
+}
+
+/** Save [node] as [name] in the layout audit folders and return the captured image */
+fun saveNodeScreenshotToLayoutAudit(
+    node: SemanticsNodeInteraction,
+    name: String,
+): Bitmap {
     val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
     val screenshotDir = File(targetContext.getExternalFilesDir(null), "layout-screenshots")
     screenshotDir.mkdirs()
 
     val screenshotFile = File(screenshotDir, name)
-    val bitmap =
-        onNodeWithTag(tag)
-            .captureToImage()
-            .asAndroidBitmap()
+    val bitmap = node.captureToImage().asAndroidBitmap()
 
     FileOutputStream(screenshotFile).use { output ->
         check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
@@ -38,6 +44,7 @@ fun ComposeContentTestRule.saveNodeScreenshotToLayoutAudit(
     }
 
     saveBitmapToPictures(targetContext, name, bitmap)
+    return bitmap
 }
 
 private fun saveBitmapToPictures(
