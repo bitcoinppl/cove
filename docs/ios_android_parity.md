@@ -329,6 +329,7 @@ On Android, Compose dialogs, bottom sheets, and dropdown menus each open their o
 
 - Dialogs and sheets hide their window while locked. A hidden window is not drawn, takes no touches or focus, and is left out of what accessibility services read, but its content stays composed, like the screen under the lock screen. State, pending work, and activity result launchers registered inside it survive the lock. The window skips its exit animation when hidden, which would otherwise fade its last frame out above the lock screen. A dialog or sheet that would first open while locked waits for unlock instead, because Android draws a new window's first frame before it can be hidden. A window hidden while its opening animation or an activity transition is still running can stay on screen, without taking input, until that animation ends.
 - Menus leave composition at once while locked, skipping their exit animation, and open again after unlock if the caller still has them expanded.
+- Text selection handles and the copy and paste toolbar also open their own windows. When the app locks, `AppLockScope` clears focus in the activity window, and each dialog or sheet wrapper does the same in its own window, so text fields and selection containers drop their selection, handles, and toolbar. Focus is not restored on unlock.
 
 Detekt's `ForbiddenImport` rule rejects the Compose originals. Only the lock screen's own lock window and wipe failure dialogs use them, because they must show while the app is locked.
 

@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
@@ -55,7 +56,8 @@ val LocalAppLocked = compositionLocalOf { false }
 
 /**
  * Provides [LocalAppLocked] from [auth] to [content], so the wrappers in this file hide or close
- * their windows while the app lock is up
+ * their windows while the app lock is up, and drops focus and text selection in the activity
+ * window when the app locks
  *
  * `MainActivity` wraps everything it shows after bootstrap in this
  */
@@ -64,7 +66,10 @@ fun AppLockScope(
     auth: AuthManager,
     content: @Composable () -> Unit,
 ) {
-    CompositionLocalProvider(LocalAppLocked provides auth.isLocked, content = content)
+    CompositionLocalProvider(LocalAppLocked provides auth.isLocked) {
+        ClearFocusWhenLocked()
+        content()
+    }
 }
 
 /**
@@ -252,10 +257,13 @@ private class OpenedUnlocked {
  * Call it from the content of a dialog or sheet window. A hidden window is not drawn, takes no
  * touches or focus, and is left out of what accessibility services read, but its content stays
  * composed. So state, pending work, and activity result launchers registered inside survive the
- * lock, as the screen under the lock screen does
+ * lock, as the screen under the lock screen does. Focus and text selection in it are dropped, see
+ * [ClearFocusWhenLocked]
  */
 @Composable
 private fun HideWindowWhileLocked() {
+    ClearFocusWhenLocked()
+
     val isLocked = LocalAppLocked.current
     val view = LocalView.current
     val window = (view.parent as? DialogWindowProvider)?.window
@@ -272,6 +280,28 @@ private fun HideWindowWhileLocked() {
             windowRoot.visibility = View.VISIBLE
             windowAnimations?.let { window?.setWindowAnimations(it) }
         }
+
+        onDispose {}
+    }
+}
+
+/**
+ * Clears focus in the window this is composed in when the app locks, which drops text selection
+ *
+ * Selection handles and the copy and paste toolbar open their own windows, which the lock window
+ * does not cover, and selected text stays copyable through them. Text fields and selection
+ * containers drop their selection, handles, and toolbar when they lose focus. Each window has its
+ * own focus, so the activity window and every dialog or sheet clears its own. Focus is not restored
+ * on unlock, so the user taps the field again
+ */
+@Composable
+private fun ClearFocusWhenLocked() {
+    val isLocked = LocalAppLocked.current
+    val focusManager = LocalFocusManager.current
+
+    DisposableEffect(isLocked, focusManager) {
+        // forced, so a node that captured focus lets go of it too
+        if (isLocked) focusManager.clearFocus(force = true)
 
         onDispose {}
     }

@@ -1,23 +1,39 @@
 package org.bitcoinppl.cove.views.lockaware
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.text.contextmenu.provider.LocalTextContextMenuToolbarProvider
+import androidx.compose.foundation.text.contextmenu.provider.TextContextMenuDataProvider
+import androidx.compose.foundation.text.contextmenu.provider.TextContextMenuProvider
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.awaitCancellation
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.enterPinAndAwaitUnlock
@@ -29,6 +45,7 @@ import org.bitcoinppl.cove_core.AuthManagerAction
 import org.bitcoinppl.cove_core.AuthType
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -45,6 +62,9 @@ import org.junit.Test
  * draws nor sends touches to nor lists for accessibility services, the same as `Dialog.hide()`.
  * Menus close outright, and a window first opened while locked waits for unlock. So this checks
  * whether each window exists and has its root view shown
+ *
+ * Text selection handles and the copy and paste toolbar are windows of their own too, so locking
+ * must also drop focus and selection in the activity window and in each dialog
  */
 class LockAwareWindowsTest {
     @get:Rule
@@ -89,6 +109,70 @@ class LockAwareWindowsTest {
             checkAcrossLock(window)
             checkOpenedWhileLocked(window)
         }
+    }
+
+    @Test
+    fun lockDropsFocusAndTextSelectionInEveryWindow() {
+        val toolbar = RecordingTextToolbar()
+        var dialogShown by mutableStateOf(false)
+
+        compose.setContent {
+            CoveTheme(dynamicColor = false) {
+                AppLockScope(Auth) {
+                    LockView {
+                        CompositionLocalProvider(LocalTextContextMenuToolbarProvider provides toolbar) {
+                            Column {
+                                SelectionContainer { Text(SELECTABLE_TEXT) }
+                                TextField(
+                                    value = ACTIVITY_FIELD_TEXT,
+                                    onValueChange = {},
+                                    modifier = Modifier.testTag(ACTIVITY_FIELD),
+                                )
+                            }
+
+                            if (dialogShown) {
+                                Dialog(onDismissRequest = {}) {
+                                    SelectionContainer { Text(DIALOG_SELECTABLE_TEXT) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (Auth.isLocked) compose.enterPinAndAwaitUnlock(TEST_PIN)
+
+        // a selection container has no window focus check of its own, so its toolbar stayed up
+        compose.onNodeWithText(SELECTABLE_TEXT).performTouchInput { longClick() }
+        checkLockDropsSelection("selected text", toolbar)
+
+        compose.onNodeWithTag(ACTIVITY_FIELD).performTouchInput { longClick() }
+        compose.onNodeWithTag(ACTIVITY_FIELD).assertIsFocused()
+        checkLockDropsSelection("activity text field", toolbar)
+        compose.onNodeWithTag(ACTIVITY_FIELD).assertIsNotFocused()
+
+        // a dialog has its own focus, which the activity window's clearing does not reach
+        compose.runOnUiThread { dialogShown = true }
+        compose.waitUntil(STATE_TIMEOUT_MILLIS) {
+            compose.onAllNodesWithText(DIALOG_SELECTABLE_TEXT).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText(DIALOG_SELECTABLE_TEXT).performTouchInput { longClick() }
+        checkLockDropsSelection("dialog selected text", toolbar)
+    }
+
+    // waits for the toolbar to show the user's selection, then locks and expects it gone, then unlocks
+    private fun checkLockDropsSelection(
+        what: String,
+        toolbar: RecordingTextToolbar,
+    ) {
+        compose.waitUntil(STATE_TIMEOUT_MILLIS) { toolbar.isShown }
+
+        instrumentation.runOnMainSync { Auth.lock(AppLockReason.REAUTHENTICATION) }
+        compose.waitForIdle()
+        assertTrue("the app did not lock", Auth.isLocked)
+        assertFalse("$what kept its toolbar while locked", toolbar.isShown)
+
+        compose.enterPinAndAwaitUnlock(TEST_PIN)
     }
 
     private fun checkAcrossLock(window: LockAwareWindow) {
@@ -158,6 +242,10 @@ class LockAwareWindowsTest {
     private companion object {
         const val TEST_PIN = "864213"
         const val STATE_TIMEOUT_MILLIS = 15_000L
+        const val SELECTABLE_TEXT = "selectable words"
+        const val ACTIVITY_FIELD = "activity-field"
+        const val ACTIVITY_FIELD_TEXT = "activity field words"
+        const val DIALOG_SELECTABLE_TEXT = "dialog selectable words"
     }
 }
 
@@ -209,4 +297,24 @@ private fun LockAwareWindowHost(window: LockAwareWindow) {
 private fun TapCounter(window: LockAwareWindow) {
     var taps by remember { mutableIntStateOf(0) }
     TextButton(onClick = { taps++ }) { Text(window.label(taps)) }
+}
+
+/**
+ * Records whether Compose is showing the copy and paste toolbar, in place of the platform toolbar,
+ * which is not a Compose node a test can find
+ */
+private class RecordingTextToolbar : TextContextMenuProvider {
+    @Volatile
+    var isShown = false
+        private set
+
+    override suspend fun showTextContextMenu(dataProvider: TextContextMenuDataProvider) {
+        // Compose cancels this call to close the toolbar
+        isShown = true
+        try {
+            awaitCancellation()
+        } finally {
+            isShown = false
+        }
+    }
 }
