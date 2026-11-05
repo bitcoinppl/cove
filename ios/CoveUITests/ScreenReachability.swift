@@ -12,6 +12,9 @@ struct ScreenReachability {
     /// Taller than the keyboard's suggestion bar and shorter than any screen's scroll area
     private static let rowHeight: CGFloat = 100
 
+    /// Room for one line of a text at the largest text size, about 50 points, with margin
+    private static let endLineHeight: CGFloat = 80
+
     let app: XCUIApplication
 
     /// Every text and action must lie wholly inside the window once scrolled to, the actions must
@@ -72,12 +75,15 @@ struct ScreenReachability {
         }
     }
 
-    /// A match too tall for its scroll area at any scroll position, such as a revealed private
-    /// key wrapped at the largest text size, which a user reads by scrolling through it
+    /// A match too tall to scroll wholly into view by dragging, such as a revealed private key
+    /// wrapped at the largest text size, which a user reads by scrolling through it
+    ///
+    /// A drag moves the content by 40% of its scroll area, so a text taller than the other 60%
+    /// has less room to land in than one drag moves and can be stepped over every time
     private func tallerThanItsScrollArea(_ query: XCUIElementQuery) -> XCUIElement? {
         guard query.firstMatch.waitForExistence(timeout: 15) else { return nil }
 
-        return query.allElementsBoundByIndex.first { $0.frame.height > visibleArea(of: $0).height }
+        return query.allElementsBoundByIndex.first { $0.frame.height > readableArea(of: $0).height * 0.6 }
     }
 
     /// Scrolls a text too tall to show whole until its first line shows, then its last, and at
@@ -90,23 +96,45 @@ struct ScreenReachability {
             "\(name) runs off the side of the screen at \(element.frame)"
         )
 
+        // each end's line runs into the text from that edge, so the edge needs a line's room
+        // inside the readable area on that side
+        let line = Self.endLineHeight
         let compact = text.filter { !$0.isWhitespace }
-        let ends: [(part: String, edge: (CGRect) -> CGFloat)] = [(String(compact.prefix(8)), \.minY), (String(compact.suffix(8)), \.maxY)]
-        for (part, edge) in ends {
-            for _ in 0 ..< 8 {
-                let visible = visibleArea(of: element)
-                let y = edge(element.frame)
-                if y >= visible.minY, y <= visible.maxY { break }
+        let ends: [(part: String, edge: (CGRect) -> CGFloat, room: (CGRect) -> ClosedRange<CGFloat>)] = [
+            (String(compact.prefix(8)), \.minY, { $0.minY ... max($0.minY, $0.maxY - line) }),
+            (String(compact.suffix(8)), \.maxY, { min($0.minY + line, $0.maxY) ... $0.maxY }),
+        ]
 
-                drag(scrollContainers(holding: element).last ?? visibleScrollView() ?? app.windows.firstMatch, revealingContentBelow: y > visible.maxY)
+        for (part, edge, room) in ends {
+            for _ in 0 ..< 8 {
+                let y = edge(element.frame)
+                let fits = room(readableArea(of: element))
+                if fits.contains(y) { break }
+
+                drag(scrollContainers(holding: element).last ?? visibleScrollView() ?? app.windows.firstMatch, revealingContentBelow: y > fits.upperBound)
             }
 
-            let visible = visibleArea(of: element)
             let y = edge(element.frame)
-            XCTAssertTrue(y >= visible.minY && y <= visible.maxY, "\(name): its end at \(y) never scrolled into \(visible)")
+            let fits = room(readableArea(of: element))
+            XCTAssertTrue(fits.contains(y), "\(name): its end at \(y) never scrolled into \(fits)")
             XCTAssertTrue(app.waitForVisibleText(containing: part, misreads: 1, timeout: 3), "\(name): Vision never read '\(part)' on screen")
             assertNoTruncatedText(name)
         }
+    }
+
+    /// The part of the element's visible area below the top navigation bar, where content
+    /// scrolled beneath the bar's translucent material no longer counts as shown
+    private func readableArea(of element: XCUIElement) -> CGRect {
+        let window = app.windows.firstMatch.frame
+        let visible = visibleArea(of: element)
+        let barBottom = app.navigationBars.allElementsBoundByIndex
+            .map(\.frame)
+            .filter { $0.minY > 0 && $0.maxY < window.midY }
+            .map(\.maxY)
+            .max() ?? visible.minY
+
+        let top = min(max(visible.minY, barBottom), visible.maxY)
+        return CGRect(x: visible.minX, y: top, width: visible.width, height: visible.maxY - top)
     }
 
     /// Scrolls down until a match exists, for a lazy grid or stack that builds only the cells near
