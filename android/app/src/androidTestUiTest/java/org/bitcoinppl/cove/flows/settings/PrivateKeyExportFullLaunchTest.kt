@@ -43,6 +43,7 @@ import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.AuthManagerAction
+import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
@@ -52,6 +53,7 @@ import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.RouteFactory
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletSettingsRoute
+import org.bitcoinppl.cove_core.bootstrapProgress
 import org.bitcoinppl.cove_core.types.WalletId
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -90,6 +92,9 @@ class PrivateKeyExportFullLaunchTest {
     // set once this test puts the key or a request on the clipboard, which cleanup then clears
     private var usedClipboard = false
 
+    // set before the restore, so cleanup looks for the fixture key even when the restore never finished
+    private var startedRestore = false
+
     @get:Rule
     val fullLaunch = FullLaunchTestRule()
 
@@ -102,6 +107,10 @@ class PrivateKeyExportFullLaunchTest {
     @After
     fun cleanUp() {
         try {
+            // the next test may host LockView without relaunching, and refuses to run over a leftover
+            // PIN; this also leaves decoy mode, which lists only decoy wallets, before the lookups below
+            restoreNoAppLock()
+        } finally {
             // a leftover session makes every later receiving test skip
             if (startedReceive && hasStoredReceiveSession()) {
                 KeyTeleportTestPeer().use { peer -> peer.startReceive() }
@@ -110,12 +119,13 @@ class PrivateKeyExportFullLaunchTest {
             bystanderId?.let(::deleteTestWallet)
 
             // every copy of the fixture key is this test's, whether restored or received, and a
-            // leftover one makes the next restore find the wallet already there
-            if (::walletId.isInitialized) fixtureKeyWalletIds().forEach(::deleteTestWallet)
+            // leftover one makes the next restore find the wallet already there; a launch that never
+            // finished bootstrap never opened the database, so it wrote no wallet
+            if (startedRestore && bootstrapProgress() == BootstrapStep.COMPLETE) {
+                fixtureKeyWalletIds().forEach(::deleteTestWallet)
+            }
+
             if (usedClipboard) clearClipboard()
-        } finally {
-            // the next test may host LockView without relaunching, and refuses to run over a leftover PIN
-            restoreNoAppLock()
         }
     }
 
@@ -370,6 +380,7 @@ class PrivateKeyExportFullLaunchTest {
     }
 
     private fun restorePrivateKeyWallet() {
+        startedRestore = true
         ScriptedCloudStorageAccess.configurePrivateKeyWalletRestore()
         launchFullApp()
 

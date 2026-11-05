@@ -15,6 +15,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.awaitOnMain
@@ -52,10 +54,7 @@ class KeyTeleportMnemonicReviewTest {
     @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
-    // the wallet this test created last, deleted afterwards
-    private var walletId: WalletId? = null
-
-    // set once setUp's guards pass, so a skipped test never ends a session it found stored
+    // set once setUp's guards pass, so a skipped test never ends a session or deletes a wallet it found
     private var ownsReceiveSession = false
 
     // bumped to recompose the hosted screen with a fresh manager from AppManager
@@ -81,7 +80,10 @@ class KeyTeleportMnemonicReviewTest {
             if (ownsReceiveSession && hasStoredReceiveSession()) endReceive(app.getKeyTeleportManager())
         } finally {
             InstrumentationRegistry.getInstrumentation().runOnMainSync { app.clearKeyTeleportManager() }
-            walletId?.let(::deleteTestWallet)
+
+            // setUp found no wallet for the test words, so each one now is this test's, including one
+            // an import wrote without reporting back
+            if (ownsReceiveSession) testWordWalletIds().forEach(::deleteTestWallet)
         }
     }
 
@@ -126,10 +128,14 @@ class KeyTeleportMnemonicReviewTest {
                 (receiver.state as? KeyTeleportManagerState.ReceiveImportedWallet)?.v1?.id
             }
 
-        walletId = imported
         compose.onNodeWithText("Wallet imported").assertExists()
         compose.onNodeWithText("Done").performClick()
-        awaitOnMain("Done to open the imported wallet") { opensWallet(app.router.default, imported).takeIf { it } }
+
+        // selecting a wallet sets a loading route that the app's route host completes, and this test
+        // hosts the screen without one, so finish that load the way the host does
+        val selected = awaitOnMain("Done to select the imported wallet") { app.router.default.takeIf { selects(it, imported) } }
+        if (selected is Route.LoadAndReset) runBlocking(Dispatchers.Main) { app.completeLoadAndReset(selected) }
+        assertEquals("Done did not open the imported wallet", Route.SelectedWallet(imported), onMainValue { app.router.default })
 
         assertEquals("Import Wallet did not add exactly one wallet", 1, walletsForTheTestWords())
         assertEquals("the imported wallet holds different words", TEST_WORDS, Mnemonic(id = imported).use { it.words() })
@@ -146,14 +152,12 @@ class KeyTeleportMnemonicReviewTest {
         val sender = importTestWalletOrNull(TEST_WALLET)
         assertTrue("the test words were already on this device", sender != null)
         val senderId = requireNotNull(sender).id
-        walletId = senderId
 
         val response = KeyTeleportTestPeer().use { peer -> peer.sendWallet(senderId, request) }
         deleteTestWallet(senderId)
 
-        // deleteTestWallet only logs a failure, so keep the id for teardown until the wallet is really gone
+        // deleteTestWallet only logs a failure, so wait until the wallet is really gone
         awaitOnMain("the sending wallet to be deleted") { (walletsForTheTestWords() == 0).takeIf { it } }
-        walletId = null
 
         val receiver = reopenReceiveScreen()
         assertEquals("the reopened screen did not resume the same request", request, awaitRequest(receiver))
@@ -172,9 +176,8 @@ class KeyTeleportMnemonicReviewTest {
         return request to receiver
     }
 
-    // selecting a wallet sets a short loading route that resets to it; the app's route host finishes
-    // that reset, and this test hosts the screen without one, so either form means Done opened it
-    private fun opensWallet(
+    // the wallet itself, or the loading route that resets to it
+    private fun selects(
         route: Route,
         id: WalletId,
     ): Boolean =
@@ -250,8 +253,14 @@ class KeyTeleportMnemonicReviewTest {
 
     private fun <T : Any> onMainValue(read: () -> T): T = awaitOnMain("a value from the main thread", read = read)
 
-    private fun walletsForTheTestWords(): Int =
-        Database().wallets().all().count { it.masterFingerprint?.asLowercase() == TEST_WALLET.masterFingerprint }
+    private fun walletsForTheTestWords(): Int = testWordWalletIds().size
+
+    private fun testWordWalletIds(): List<WalletId> =
+        Database()
+            .wallets()
+            .all()
+            .filter { it.masterFingerprint?.asLowercase() == TEST_WALLET.masterFingerprint }
+            .map { it.id }
 
     private companion object {
         const val STATE_TIMEOUT_MILLIS = 15_000L

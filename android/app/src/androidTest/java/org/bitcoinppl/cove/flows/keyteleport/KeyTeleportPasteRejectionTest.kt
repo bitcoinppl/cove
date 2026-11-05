@@ -19,6 +19,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.core.graphics.ColorUtils
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.bitcoinppl.cove.AppManager
@@ -130,9 +131,9 @@ class KeyTeleportPasteRejectionTest {
     }
 
     /**
-     * Clipped, truncated, overlapping or undrawn text is what a screenshot of the error would have
-     * shown, so each text node must keep its full laid-out size on screen, stay inside the dialog,
-     * and put more than one color into its part of the dialog's [capture]
+     * Clipped, truncated, overlapping, undrawn or faint text is what a screenshot of the error would
+     * have shown, so each text node must keep its full laid-out size on screen, stay inside the
+     * dialog, and stand out from its background in the dialog's [capture]
      */
     private fun assertDialogTextFitsInsideTheDialog(capture: Bitmap) {
         val dialog = compose.onNode(isDialog()).fetchSemanticsNode().boundsInWindow
@@ -155,7 +156,8 @@ class KeyTeleportPasteRejectionTest {
                 "\"$label\" is clipped by its container",
                 bounds.width >= node.size.width - CLIP_TOLERANCE_PX && bounds.height >= node.size.height - CLIP_TOLERANCE_PX,
             )
-            assertTrue("\"$label\" draws nothing visible", capture.hasMoreThanOneColorIn(bounds.translate(-dialog.topLeft)))
+            val contrast = capture.textContrastIn(bounds.translate(-dialog.topLeft))
+            assertTrue("\"$label\" is hard to read: contrast $contrast:1", contrast >= MIN_TEXT_CONTRAST)
         }
 
         texts.forEachIndexed { index, node ->
@@ -177,14 +179,17 @@ class KeyTeleportPasteRejectionTest {
         assertTrue("the capture is a single color", colors.size > 1)
     }
 
-    private fun Bitmap.hasMoreThanOneColorIn(region: Rect): Boolean {
+    // glyphs cover less of a text's box than the space around them, so the most common color there
+    // is the background, and the strongest pixel against it is the text's own color
+    private fun Bitmap.textContrastIn(region: Rect): Double {
         val left = region.left.toInt().coerceIn(0, width - 1)
         val top = region.top.toInt().coerceIn(0, height - 1)
         val right = region.right.toInt().coerceIn(left + 1, width)
         val bottom = region.bottom.toInt().coerceIn(top + 1, height)
-        val first = getPixel(left, top)
+        val pixels = (top until bottom).flatMap { y -> (left until right).map { x -> ColorUtils.setAlphaComponent(getPixel(x, y), 255) } }
+        val background = pixels.groupingBy { it }.eachCount().maxBy { it.value }.key
 
-        return (top until bottom).any { y -> (left until right).any { x -> getPixel(x, y) != first } }
+        return pixels.maxOf { ColorUtils.calculateContrast(it, background) }
     }
 
     private fun Rect.contains(other: Rect): Boolean =
@@ -225,6 +230,9 @@ class KeyTeleportPasteRejectionTest {
 
         // bounds are floats from the same layout, so allow rounding but not a clipped line of text
         const val CLIP_TOLERANCE_PX = 1f
+
+        // WCAG AA for body text, what a person checking the screenshot would need to read it
+        const val MIN_TEXT_CONTRAST = 4.5
 
         // a recognisable non-KeyTeleport payload
         const val MAINNET_ADDRESS = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
