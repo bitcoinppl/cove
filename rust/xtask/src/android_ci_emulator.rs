@@ -279,6 +279,21 @@ impl AndroidSdk {
 
     /// Creates the AVD, and installs its system image, unless the AVD already exists
     fn ensure_avd(&self) -> Result<()> {
+        // held until the config is written, so a second first-time start waits here and then
+        // finds the finished AVD rather than creating it again or booting it half set up
+        let avd_home = avd_home()?;
+        fs::create_dir_all(&avd_home)
+            .wrap_err_with(|| format!("Failed to create {}", avd_home.display()))?;
+
+        let lock_path = avd_home.join(format!("{AVD}.setup.lock"));
+        let setup_lock = File::options()
+            .create(true)
+            .write(true)
+            .truncate(false)
+            .open(&lock_path)
+            .wrap_err_with(|| format!("Failed to open {}", lock_path.display()))?;
+        setup_lock.lock().wrap_err_with(|| format!("Failed to lock {}", lock_path.display()))?;
+
         let output =
             self.emulator().arg("-list-avds").output().wrap_err("Failed to list the AVDs")?;
 
@@ -315,7 +330,7 @@ impl AndroidSdk {
             bail!("avdmanager failed to create {AVD}: {status}");
         }
 
-        let config = avd_home()?.join(format!("{AVD}.avd/config.ini"));
+        let config = avd_home.join(format!("{AVD}.avd/config.ini"));
         let contents = fs::read_to_string(&config)
             .wrap_err_with(|| format!("Failed to read {}", config.display()))?;
 
