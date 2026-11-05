@@ -142,6 +142,7 @@ coverage = [
 # 1.4.0: ios HUMAN, android HUMAN
 # rust tests remove wallet data directly and send the change notification themselves; the ios production delete path stays human
 # the android tests delete the wallet through wallet settings and every confirmation dialog its count calls for, then restore it from its cloud-only row; in the fresh-enable test the scripted provider drops deleted backups, so a stray cloud delete would fail it
+# the android tests reopen cloud backup after the delete, so they don't show that an already-open cloud backup updates without the change notification
 
 [[row]]
 id = "s05-cloud-restored-wallet-performs-full-rescan"
