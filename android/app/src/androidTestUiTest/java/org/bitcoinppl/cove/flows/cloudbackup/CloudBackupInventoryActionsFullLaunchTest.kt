@@ -43,8 +43,8 @@ import org.junit.runner.RunWith
  * and checks that no cloud-only row can restore or delete a wallet until the provider confirms it
  *
  * The first inventory load is not covered here: finishing onboarding can start inventory discovery
- * in the background, and the scripted provider cannot tell that listing from the one opening Cloud
- * Backup makes, so a hold armed for the first load could catch either
+ * in the background, which can confirm the inventory before a test opens Cloud Backup and holds
+ * its listing
  */
 @ManualFullLaunchTest
 @LargeTest
@@ -67,7 +67,7 @@ class CloudBackupInventoryActionsFullLaunchTest {
     @After
     fun cleanUp() {
         // a failed assertion must not leave a listing suspended or restored wallets behind
-        ScriptedCloudStorageAccess.releaseBlockedWalletList()
+        ScriptedCloudStorageAccess.releaseBlockedWalletListSnapshot()
         val launchedWith = walletIdsAtLaunch ?: return
 
         AppManager
@@ -96,7 +96,7 @@ class CloudBackupInventoryActionsFullLaunchTest {
             }
         }
 
-        // Delete swaps the sheet for its own confirmation, which keeps a separate readiness gate
+        // tapping Delete swaps the sheet for its own confirmation, which keeps a separate readiness gate
         device.clickableAncestor(device.waitForText(DELETE_ACTION)).click()
         device.waitForText(DELETE_FOREVER)
         whileKnownInventoryIsChecked(trigger = { dispatchOnMain(CloudBackupManagerAction.RefreshDetail) }) {
@@ -127,18 +127,18 @@ class CloudBackupInventoryActionsFullLaunchTest {
         assertions: () -> Unit,
     ) {
         failNextRefresh()
-        ScriptedCloudStorageAccess.blockNextWalletList()
+        ScriptedCloudStorageAccess.blockNextWalletListSnapshot()
         trigger()
         assertTrue(
             "the check should list wallets from the provider again",
-            ScriptedCloudStorageAccess.awaitBlockedWalletList(timeoutMs = 20_000L),
+            ScriptedCloudStorageAccess.awaitBlockedWalletListSnapshot(timeoutMs = 20_000L),
         )
 
         try {
             waitForCheckingInventory()
             assertions()
         } finally {
-            ScriptedCloudStorageAccess.releaseBlockedWalletList()
+            ScriptedCloudStorageAccess.releaseBlockedWalletListSnapshot()
         }
 
         waitForConfirmedInventory()
@@ -147,14 +147,14 @@ class CloudBackupInventoryActionsFullLaunchTest {
     // ends the next refresh with a provider error that the refresh does not retry, so it lands in
     // Failed with the known rows retained
     private fun failNextRefresh() {
-        ScriptedCloudStorageAccess.blockNextWalletList()
+        ScriptedCloudStorageAccess.blockNextWalletListSnapshot()
         dispatchOnMain(CloudBackupManagerAction.RefreshDetail)
         assertTrue(
             "the refresh should list wallets from the provider",
-            ScriptedCloudStorageAccess.awaitBlockedWalletList(timeoutMs = 20_000L),
+            ScriptedCloudStorageAccess.awaitBlockedWalletListSnapshot(timeoutMs = 20_000L),
         )
 
-        ScriptedCloudStorageAccess.failBlockedWalletList(
+        ScriptedCloudStorageAccess.failBlockedWalletListSnapshot(
             CloudStorageException.DownloadFailed("scripted provider listing failed"),
         )
 

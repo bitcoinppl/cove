@@ -108,6 +108,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
         var recordId: String? = null
 
         openCloudBackup()
+
         // fixture storage accepts uploads without keeping them, so the restored wallet's re-upload
         // never confirms and its backup can stay in needsSync; the provider still holds the record
         waitUntil("the provider should hold the wallet's backup and nothing should be cloud-only") {

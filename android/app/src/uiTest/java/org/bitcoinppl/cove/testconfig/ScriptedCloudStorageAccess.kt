@@ -57,6 +57,11 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     @Volatile
     private var walletListBlock: WalletListBlock? = null
 
+    // held apart from walletListBlock because a detail refresh also starts a sync-health check,
+    // whose plain listing could otherwise take the hold meant for the refresh's snapshot
+    @Volatile
+    private var walletSnapshotListBlock: WalletListBlock? = null
+
     @Volatile
     private var walletDownloadBlock: WalletDownloadBlock? = null
 
@@ -156,6 +161,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         fixtureWalletDownloadResults.clear()
         fixtureWalletDownloadDefaults.clear()
         walletListBlock = null
+        walletSnapshotListBlock = null
         walletDownloadBlock = null
         fixtureWalletRecordIds = listOf(ScriptedCloudBackupFixture.WALLET_RECORD_ID)
         resetUploads()
@@ -227,9 +233,24 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         walletListBlock?.release?.complete(Unit)
     }
 
-    /** Ends the held wallet listing with [error], as a provider that lost its connection would */
-    fun failBlockedWalletList(error: CloudStorageException) {
-        walletListBlock?.release?.completeExceptionally(error)
+    /** Holds the next inventory snapshot listing, which only a Cloud Backup detail refresh makes */
+    fun blockNextWalletListSnapshot() {
+        check(walletSnapshotListBlock?.claimed?.get() != false) {
+            "a wallet-list snapshot block is already pending"
+        }
+        walletSnapshotListBlock = WalletListBlock()
+    }
+
+    fun awaitBlockedWalletListSnapshot(timeoutMs: Long = 10_000): Boolean =
+        walletSnapshotListBlock?.entered?.await(timeoutMs, TimeUnit.MILLISECONDS) == true
+
+    fun releaseBlockedWalletListSnapshot() {
+        walletSnapshotListBlock?.release?.complete(Unit)
+    }
+
+    /** Ends the held snapshot listing with [error], as a provider that failed the listing would */
+    fun failBlockedWalletListSnapshot(error: CloudStorageException) {
+        walletSnapshotListBlock?.release?.completeExceptionally(error)
     }
 
     fun blockNextWalletDownload(
@@ -470,11 +491,19 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     override suspend fun listWalletFilesSnapshot(
         namespace: String,
         policy: CloudAccessPolicy,
-    ): CloudStorageInventorySnapshot =
-        CloudStorageInventorySnapshot(
+    ): CloudStorageInventorySnapshot {
+        walletSnapshotListBlock?.let { block ->
+            if (block.claimed.compareAndSet(false, true)) {
+                block.entered.countDown()
+                block.release.await()
+            }
+        }
+
+        return CloudStorageInventorySnapshot(
             names = listWalletFiles(namespace, policy),
             isComplete = true,
         )
+    }
 
     override suspend fun isBackupUploaded(
         namespace: String,
