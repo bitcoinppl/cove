@@ -8,6 +8,7 @@ import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
@@ -27,6 +28,8 @@ import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.types.WalletId
 import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -44,6 +47,9 @@ import org.junit.runner.RunWith
 class CloudBackupLocalDeleteFullLaunchTest {
     private lateinit var device: UiDevice
 
+    // wallets the app already had once this test launched it, so cleanup removes only this test's
+    private var walletIdsAtLaunch: Set<WalletId>? = null
+
     @get:Rule
     val fullLaunch = FullLaunchTestRule()
 
@@ -58,7 +64,14 @@ class CloudBackupLocalDeleteFullLaunchTest {
         // a failed assertion must not leave provider reads held or test wallets behind
         ScriptedCloudStorageAccess.releaseVisibility()
         ScriptedCloudStorageAccess.releaseMasterUploadReturn()
-        AppManager.getInstance().wallets.map { it.id }.forEach(::deleteTestWallet)
+        val launchedWith = walletIdsAtLaunch ?: return
+
+        AppManager
+            .getInstance()
+            .wallets
+            .map { it.id }
+            .filterNot(launchedWith::contains)
+            .forEach(::deleteTestWallet)
     }
 
     @Test
@@ -73,7 +86,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
         // this provider keeps what the app writes and drops what it deletes, so a stray cloud
         // delete would leave nothing to list or restore
         ScriptedCloudStorageAccess.configureFreshEnableWithDelayedVisibility()
-        launchFullApp()
+        launchApp()
         enableFreshBackupAndFinishOnboarding()
 
         deleteThroughWalletSettingsThenRestoreFromCloudBackup()
@@ -92,8 +105,13 @@ class CloudBackupLocalDeleteFullLaunchTest {
         }
 
         openWalletSettings(wallet.id)
+        val requiredConfirmations =
+            runBlocking { AppManager.getInstance().getWalletManagerLoaded(wallet.id) }
+                .requiredDeletionConfirmations()
+                .toInt()
+
         device.clickClickableAncestorForText(DELETE_WALLET_ITEM)
-        confirmEveryDeletionDialog()
+        confirmDeletionDialogs(requiredConfirmations)
 
         waitUntil("the wallet should leave this device") {
             AppManager.getInstance().wallets.none { it.id == wallet.id }
@@ -162,7 +180,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
 
     private fun restoreFixtureWallet() {
         ScriptedCloudStorageAccess.configureProductionFixtureRestore()
-        launchFullApp()
+        launchApp()
 
         device.waitForText("Google Drive Backup Found")
         device.clickClickableAncestor(device.waitForText("Restore with Passkey"))
@@ -175,42 +193,40 @@ class CloudBackupLocalDeleteFullLaunchTest {
         )
     }
 
-    // taps through however many confirmations the wallet needs, checking each dialog's wording
-    private fun confirmEveryDeletionDialog() {
-        device.waitForText("Are you sure?")
-        device.clickText(DELETE_BUTTON)
+    // the wallet's own confirmation count decides the dialogs, so an unverified hot wallet must reach
+    // the Final Warning, the only dialog that tells the user the cloud copy survives
+    private fun confirmDeletionDialogs(requiredConfirmations: Int) {
+        val titles = DELETION_DIALOG_TITLES.take(requiredConfirmations)
 
-        val deadline = System.currentTimeMillis() + 20_000L
+        assertEquals(
+            "a wallet needs between one and three deletion confirmations",
+            requiredConfirmations,
+            titles.size,
+        )
 
-        while (System.currentTimeMillis() < deadline) {
-            when {
-                device.hasObject(By.text("Confirm Deletion")) -> {
-                    device.clickText(DELETE_BUTTON)
-                    device.wait(Until.gone(By.text("Confirm Deletion")), 10_000L)
-                }
-
-                device.hasObject(By.text("Final Warning")) -> {
-                    // with Cloud Backup on, the last dialog must promise the cloud copy survives
-                    assertTrue(
-                        "the final warning should point to the cloud copy",
-                        device.hasObject(By.textStartsWith(CLOUD_RECOVERY_MESSAGE)),
-                    )
-
-                    device.clickText(DELETE_BUTTON)
-                    device.wait(Until.gone(By.text("Final Warning")), 10_000L)
-                }
-
-                device.hasObject(By.text("Failed to Delete Wallet")) -> {
-                    error("wallet deletion showed Failed to Delete Wallet")
-                }
-
-                AppManager.getInstance().wallets.isEmpty() -> return
-
-                else -> Thread.sleep(100)
+        for (title in titles) {
+            device.waitForText(title)
+            if (title == FINAL_WARNING) {
+                assertTrue(
+                    "the final warning should point to the cloud copy",
+                    device.hasObject(By.textStartsWith(CLOUD_RECOVERY_MESSAGE)),
+                )
             }
+
+            device.clickText(DELETE_BUTTON)
+            assertTrue("$title should close once confirmed", device.wait(Until.gone(By.text(title)), 10_000L))
         }
 
-        error("Timed out confirming wallet deletion")
+        assertFalse(
+            "wallet deletion should not fail",
+            device.wait(Until.hasObject(By.text("Failed to Delete Wallet")), 2_000L),
+        )
+    }
+
+    private fun launchApp() {
+        // the reset only runs in a fresh activity, which the test orchestrator's process per test gives
+        launchFullApp()
+        walletIdsAtLaunch = AppManager.getInstance().wallets.map { it.id }.toSet()
     }
 
     private fun cloudOnlyWallets(): List<CloudBackupWalletItem> =
@@ -327,6 +343,8 @@ class CloudBackupLocalDeleteFullLaunchTest {
     private companion object {
         const val DELETE_WALLET_ITEM = "Delete wallet"
         const val DELETE_BUTTON = "Delete"
+        const val FINAL_WARNING = "Final Warning"
+        val DELETION_DIALOG_TITLES = listOf("Are you sure?", "Confirm Deletion", FINAL_WARNING)
         const val RESTORE_ACTION = "Restore to this device"
         const val NOT_ON_THIS_DEVICE = "Not on This Device"
         const val CLOUD_RECOVERY_MESSAGE = "This wallet will be deleted from this device. You can recover it"

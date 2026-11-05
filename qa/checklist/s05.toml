@@ -33,7 +33,6 @@ paths = [
 ]
 coverage = [
     "human:ios",
-    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupInventoryActionsFullLaunchTest.kt::cloudOnlyRowActionsStayUnavailableUntilTheFirstInventoryLoadCompletes",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupInventoryActionsFullLaunchTest.kt::cloudOnlyRowActionsStayDisabledWhileAKnownInventoryIsCheckedAgain",
     "rust:rust/src/manager/cloud_backup_manager/model.rs::provisional_detail_is_visible_without_becoming_complete",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::trusted_local_snapshot_is_confirmed_by_provider_in_background",
@@ -41,7 +40,8 @@ coverage = [
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # rust tests cover inventory staying incomplete until the provider confirms it; the ios per-row restore and delete buttons read isDetailInventoryReady and no ios ui test asserts they stay disabled
-# the android tests hold the provider listing during the first inventory load and while a known inventory is checked again after a failed refresh, and check that neither a cloud-only row nor its open action sheet can restore or delete until the provider confirms the inventory
+# the android test holds the provider listing while a known inventory is checked again after a failed refresh, and checks that neither a listed cloud-only row nor its open action sheet can restore or delete until the provider confirms the inventory
+# the first inventory load has no android ui test, since onboarding can start inventory discovery before the test can hold the listing that opening cloud backup makes
 
 [[row]]
 id = "s05-offline-inventory-keeps-existing-rows-and-disables"
@@ -141,7 +141,7 @@ coverage = [
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # rust tests remove wallet data directly and send the change notification themselves; the ios production delete path stays human
-# the android tests delete the wallet through wallet settings and its confirmation dialogs, then restore it from its cloud-only row; in the fresh-enable test the scripted provider drops deleted backups, so a stray cloud delete would fail it
+# the android tests delete the wallet through wallet settings and every confirmation dialog its count calls for, then restore it from its cloud-only row; in the fresh-enable test the scripted provider drops deleted backups, so a stray cloud delete would fail it
 
 [[row]]
 id = "s05-cloud-restored-wallet-performs-full-rescan"

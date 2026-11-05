@@ -26,6 +26,7 @@ import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.device.CloudStorageException
+import org.bitcoinppl.cove_core.types.WalletId
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -36,14 +37,21 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Holds the provider's wallet listing while Cloud Backup loads or checks the cloud-only inventory,
+ * Holds the provider's wallet listing while Cloud Backup checks a known cloud-only inventory again,
  * and checks that no cloud-only row can restore or delete a wallet until the provider confirms it
+ *
+ * The first inventory load is not covered here: finishing onboarding can start inventory discovery
+ * in the background, and the scripted provider cannot tell that listing from the one opening Cloud
+ * Backup makes, so a hold armed for the first load could catch either
  */
 @ManualFullLaunchTest
 @LargeTest
 @RunWith(AndroidJUnit4::class)
 class CloudBackupInventoryActionsFullLaunchTest {
     private lateinit var device: UiDevice
+
+    // wallets the app already had once this test launched it, so cleanup removes only this test's
+    private var walletIdsAtLaunch: Set<WalletId>? = null
 
     @get:Rule
     val fullLaunch = FullLaunchTestRule()
@@ -58,33 +66,14 @@ class CloudBackupInventoryActionsFullLaunchTest {
     fun cleanUp() {
         // a failed assertion must not leave a listing suspended or restored wallets behind
         ScriptedCloudStorageAccess.releaseBlockedWalletList()
-        AppManager.getInstance().wallets.map { it.id }.forEach(::deleteTestWallet)
-    }
+        val launchedWith = walletIdsAtLaunch ?: return
 
-    @Test
-    fun cloudOnlyRowActionsStayUnavailableUntilTheFirstInventoryLoadCompletes() {
-        restoreFixtureWallets()
-
-        // held before Cloud Backup opens, so its first inventory load waits on the provider
-        ScriptedCloudStorageAccess.blockNextWalletList()
-        openCloudBackup()
-        assertTrue(
-            "opening Cloud Backup should list wallets from the provider",
-            ScriptedCloudStorageAccess.awaitBlockedWalletList(timeoutMs = 20_000L),
-        )
-
-        try {
-            assertFalse(
-                "the inventory must not complete while the provider listing is held",
-                CloudBackupManager.getInstance().isDetailInventoryComplete,
-            )
-            assertNoCloudOnlyRowOpensItsActions()
-        } finally {
-            ScriptedCloudStorageAccess.releaseBlockedWalletList()
-        }
-
-        waitForConfirmedInventory()
-        assertRowOpensEnabledActions(WALLET_TWO)
+        AppManager
+            .getInstance()
+            .wallets
+            .map { it.id }
+            .filterNot(launchedWith::contains)
+            .forEach(::deleteTestWallet)
     }
 
     @Test
@@ -183,16 +172,15 @@ class CloudBackupInventoryActionsFullLaunchTest {
         }
     }
 
-    // each row is either not listed yet or listed as disabled, and tapping it opens no actions
+    // every fixture row must be listed, so the check cannot pass without tapping a disabled row
     private fun assertNoCloudOnlyRowOpensItsActions() {
-        val listedRecordIds = cloudOnlyRecordIds()
+        assertEquals(
+            "both fixture rows should stay listed while the inventory is checked",
+            FIXTURE_CLOUD_ONLY_RECORD_IDS,
+            cloudOnlyRecordIds(),
+        )
 
-        for ((recordId, name) in FIXTURE_CLOUD_ONLY_RECORD_IDS.zip(listOf(WALLET_TWO, WALLET_THREE))) {
-            if (recordId !in listedRecordIds) {
-                assertFalse("$name should not be shown before it is listed", device.hasObject(By.text(name)))
-                continue
-            }
-
+        for (name in listOf(WALLET_TWO, WALLET_THREE)) {
             device.scrollUntilText(name)
             waitUntil("$name should be disabled until the inventory is complete") {
                 device.findObject(By.text(name))?.let { device.clickableAncestor(it).isEnabled } == false
@@ -253,7 +241,10 @@ class CloudBackupInventoryActionsFullLaunchTest {
 
     private fun restoreFixtureWallets() {
         ScriptedCloudStorageAccess.configureProductionFixtureRestore()
+
+        // the reset only runs in a fresh activity, which the test orchestrator's process per test gives
         launchFullApp()
+        walletIdsAtLaunch = AppManager.getInstance().wallets.map { it.id }.toSet()
 
         device.waitForText("Google Drive Backup Found")
         device.clickableAncestor(device.waitForText("Restore with Passkey")).click()
