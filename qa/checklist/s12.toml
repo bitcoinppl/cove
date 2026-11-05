@@ -133,7 +133,7 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "human:android",
+  "human",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_restart_discards_only_unregistered_staged_material",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_restart_hydrates_registered_passkey_for_manual_confirmation",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_restart_finishes_promoted_state_with_matching_completion",
@@ -146,7 +146,7 @@ coverage = [
   "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testKilledEnableRecoversThroughRelaunchWithoutNewPasskey",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust tests build each interrupted state and call recovery directly; on ios a relaunch after a kill during the upload brings back Confirm Passkey through normal startup and finishes with the same passkey. android stays human
+# rust tests build each interrupted state and call recovery directly; on ios a relaunch after a kill once the cloud accepted the master key brings back Confirm Passkey through normal startup and finishes with the same passkey. kills during registration, confirmation and promotion stay human on both platforms
 
 [[row]]
 id = "s12-retry-interrupted-setup-without-duplicates"
