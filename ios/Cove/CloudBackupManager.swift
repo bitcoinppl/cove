@@ -271,6 +271,10 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
         let loaded: LoadedCloudBackupDetail? = switch configuredState?.detail {
         case let .complete(state):
             state
+        // mirrors Rust's detail_inventory_is_ready: offline, the known rows stay listed while
+        // their actions wait for a check that succeeds
+        case .failed(reason: .offline, _, _):
+            nil
         case let .failed(_, _, retained):
             retained
         case nil, .notLoaded, .checking:

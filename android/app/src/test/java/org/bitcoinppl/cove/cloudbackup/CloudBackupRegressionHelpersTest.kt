@@ -303,7 +303,7 @@ class CloudBackupRegressionHelpersTest {
     }
 
     @Test
-    fun trustedRetainedInventoryKeepsRowsAndActionsAvailableAfterFailure() {
+    fun trustedRetainedInventoryKeepsRowsAfterFailureAndActionsUnlessOffline() {
         val detail =
             CloudBackupDetail(
                 lastSync = null,
@@ -348,7 +348,23 @@ class CloudBackupRegressionHelpersTest {
         )
         assertFalse(failed.isDetailInventoryChecking)
         assertFalse(failed.isDetailInventoryComplete)
-        assertTrue(failed.isDetailInventoryReady)
+        assertFalse(
+            "an offline device keeps the known rows but can't restore or delete them",
+            failed.isDetailInventoryReady,
+        )
+
+        val unavailable =
+            cloudBackupManager(
+                detail =
+                    CloudBackupDetailState.Failed(
+                        reason = CloudBackupInventoryIncompleteReason.PROVIDER_UNAVAILABLE,
+                        error = "Drive inventory is unavailable",
+                        retained = loaded,
+                    ),
+            )
+        assertEquals(detail, unavailable.detail)
+        assertFalse(unavailable.isDetailInventoryComplete)
+        assertTrue(unavailable.isDetailInventoryReady)
 
         val complete = cloudBackupManager(detail = CloudBackupDetailState.Complete(state = loaded))
         assertEquals(detail, complete.detail)

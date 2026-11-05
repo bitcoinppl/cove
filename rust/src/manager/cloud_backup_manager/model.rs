@@ -727,6 +727,13 @@ impl CloudBackupReducerState {
     fn detail_inventory_is_ready(&self) -> bool {
         let loaded = match &self.configured.detail {
             CloudBackupDetailState::Complete { state } => Some(state),
+
+            // an offline device can't reach the backups a row would restore or delete, so the
+            // known rows stay listed while their actions wait for a check that succeeds
+            CloudBackupDetailState::Failed {
+                reason: CloudBackupInventoryIncompleteReason::Offline,
+                ..
+            } => None,
             CloudBackupDetailState::Failed { retained, .. } => retained.as_ref(),
             CloudBackupDetailState::NotLoaded | CloudBackupDetailState::Checking { .. } => None,
         };
@@ -2497,6 +2504,39 @@ mod tests {
         assert_eq!(retained.detail, provisional);
         assert!(!model.detail_inventory_is_complete());
         assert!(!model.detail_inventory_is_ready());
+    }
+
+    #[test]
+    fn offline_failure_keeps_confirmed_rows_without_individual_wallet_actions() {
+        let mut model = CloudBackupStateReducer {
+            state: configured_state(
+                CloudBackupVerificationState::NotVerified,
+                CloudSyncHealth::Unknown,
+            ),
+        };
+        let detail = test_detail(2);
+
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshApplied {
+            detail: (detail.clone(), CloudBackupInventoryAuthority::ProviderConfirmed),
+            cloud_only_listing: CloudOnlyListingUpdate::Unlisted,
+        });
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
+            reason: CloudBackupInventoryIncompleteReason::Offline,
+            error: "This device is offline".into(),
+        });
+
+        assert_eq!(model.state.detail(), Some(detail));
+        assert!(!model.detail_inventory_is_complete());
+        assert!(!model.detail_inventory_is_ready());
+
+        // a provider failure that isn't the network keeps the confirmed rows actionable
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
+            reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
+            error: "iCloud unavailable".into(),
+        });
+
+        assert!(!model.detail_inventory_is_complete());
+        assert!(model.detail_inventory_is_ready());
     }
 
     #[test]

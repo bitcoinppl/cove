@@ -280,7 +280,12 @@ class CloudBackupManager private constructor(
         get() =
             when (val detail = configuredState?.detail) {
                 is CloudBackupDetailState.Complete -> detail.state
-                is CloudBackupDetailState.Failed -> detail.retained
+                // mirrors Rust's detail_inventory_is_ready: offline, the known rows stay listed
+                // while their actions wait for a check that succeeds
+                is CloudBackupDetailState.Failed ->
+                    detail.retained.takeUnless {
+                        detail.reason == CloudBackupInventoryIncompleteReason.OFFLINE
+                    }
                 else -> null
             }?.inventoryAuthority in
                 setOf(
