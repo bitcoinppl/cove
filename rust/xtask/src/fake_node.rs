@@ -110,6 +110,55 @@ impl AndroidTarget {
     }
 }
 
+/// The `adb reverse` rules a guard added, which the run and the signal thread can both remove
+///
+/// Adding and removing hold one lock, so a signal while the rules go in removes them all once
+/// they are in, and a guard can't add rules after its removal has already run
+#[derive(Default)]
+pub struct ReversedPorts(Mutex<Reversed>);
+
+#[derive(Default)]
+enum Reversed {
+    #[default]
+    Nothing,
+    To(AndroidDevice),
+    Removed,
+}
+
+impl ReversedPorts {
+    /// Forwards each device port to its host port on `device`
+    pub fn add(
+        &self,
+        device: &AndroidDevice,
+        ports: impl IntoIterator<Item = (u16, u16)>,
+    ) -> Result<()> {
+        let mut reversed = self.0.lock();
+        if matches!(*reversed, Reversed::Removed) {
+            bail!("The run is stopping, so its ports were not forwarded");
+        }
+
+        // recorded first so a partial forward is still removed
+        *reversed = Reversed::To(device.clone());
+        for (device_port, host_port) in ports {
+            device.reverse_port(device_port, host_port)?;
+        }
+
+        Ok(())
+    }
+
+    /// Removes the rules for `device_ports`, if any were added, and stops later adds
+    pub fn remove(&self, device_ports: impl IntoIterator<Item = u16>) {
+        let mut reversed = self.0.lock();
+        if let Reversed::To(device) = std::mem::replace(&mut *reversed, Reversed::Removed) {
+            for port in device_ports {
+                if let Err(error) = device.remove_reverse_port(port) {
+                    print_warning(&format!("{error}"));
+                }
+            }
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct Ready {
     control: String,
@@ -125,7 +174,7 @@ pub struct FakeNodeGuard {
 
 struct FakeNode {
     child: Mutex<Option<Child>>,
-    forwarded: Mutex<Option<AndroidDevice>>,
+    reversed: ReversedPorts,
 }
 
 impl FakeNodeGuard {
@@ -143,8 +192,10 @@ impl FakeNodeGuard {
         let stdout = child.stdout.take().expect("stdout is piped");
 
         // owned and registered at once, so a failure or a signal from here on stops the node
-        let node =
-            Arc::new(FakeNode { child: Mutex::new(Some(child)), forwarded: Mutex::new(None) });
+        let node = Arc::new(FakeNode {
+            child: Mutex::new(Some(child)),
+            reversed: ReversedPorts::default(),
+        });
         let guard = Self { _registration: shutdown::register(node.clone()), node };
 
         // the binary prints its ready line only once every port listens, and exits
@@ -182,25 +233,13 @@ impl FakeNodeGuard {
 
 impl FakeNode {
     fn forward(&self, device: &AndroidDevice, ports: UiTestPorts) -> Result<()> {
-        // recorded first so a partial forward is still removed
-        *self.forwarded.lock() = Some(device.clone());
-
-        for (device_port, host_port) in UiTestPorts::DEVICE.node().into_iter().zip(ports.node()) {
-            device.reverse_port(device_port, host_port)?;
-        }
-
+        self.reversed.add(device, UiTestPorts::DEVICE.node().into_iter().zip(ports.node()))?;
         print_info(&format!("Forwarded fake node ports to {}", device.description()));
         Ok(())
     }
 
     fn try_stop(&self) -> Result<()> {
-        if let Some(device) = self.forwarded.lock().take() {
-            for port in UiTestPorts::DEVICE.node() {
-                if let Err(error) = device.remove_reverse_port(port) {
-                    print_warning(&format!("{error}"));
-                }
-            }
-        }
+        self.reversed.remove(UiTestPorts::DEVICE.node());
 
         // taken out, so whichever of the run and the signal thread stops it first does so once
         let Some(mut child) = self.child.lock().take() else {

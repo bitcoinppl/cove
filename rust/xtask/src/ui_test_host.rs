@@ -62,7 +62,7 @@ mod key_teleport;
 use crate::{
     android_device::AndroidDevice,
     common::{log_tail, print_info, print_success, print_warning},
-    fake_node::{AndroidPorts, AndroidTarget, FakeNodeGuard},
+    fake_node::{AndroidPorts, AndroidTarget, FakeNodeGuard, ReversedPorts},
     shutdown::{self, Registration, Stop},
     tapsigner_emulator::{emulator_script, EmulatorPaths},
     ui_test_ports::{PortReservation, UiTestPorts},
@@ -158,7 +158,7 @@ pub struct HardwareSignerGuard {
 
 struct HardwareSigner {
     state: Arc<SignerState>,
-    forwarded: Mutex<Option<AndroidDevice>>,
+    reversed: ReversedPorts,
 }
 
 impl HardwareSignerGuard {
@@ -180,7 +180,8 @@ impl HardwareSignerGuard {
             key_teleport_receivers: key_teleport::Receivers::default(),
         });
 
-        let signer = Arc::new(HardwareSigner { state: state.clone(), forwarded: Mutex::new(None) });
+        let signer =
+            Arc::new(HardwareSigner { state: state.clone(), reversed: ReversedPorts::default() });
         let guard = Self { _registration: shutdown::register(signer.clone()), signer };
 
         spawn_server(control, state.clone(), serve_control);
@@ -201,14 +202,7 @@ impl HardwareSignerGuard {
 
 impl HardwareSigner {
     fn forward(&self, device: &AndroidDevice, ports: UiTestPorts) -> Result<()> {
-        // recorded first so a partial forward is still removed
-        *self.forwarded.lock() = Some(device.clone());
-
-        for (device_port, host_port) in UiTestPorts::DEVICE.signer().into_iter().zip(ports.signer())
-        {
-            device.reverse_port(device_port, host_port)?;
-        }
-
+        self.reversed.add(device, UiTestPorts::DEVICE.signer().into_iter().zip(ports.signer()))?;
         print_info(&format!("Forwarded hardware signer ports to {}", device.description()));
         Ok(())
     }
@@ -216,13 +210,7 @@ impl HardwareSigner {
 
 impl Stop for HardwareSigner {
     fn stop(&self) {
-        if let Some(device) = self.forwarded.lock().take() {
-            for port in UiTestPorts::DEVICE.signer() {
-                if let Err(error) = device.remove_reverse_port(port) {
-                    print_warning(&format!("{error}"));
-                }
-            }
-        }
+        self.reversed.remove(UiTestPorts::DEVICE.signer());
 
         // bounded, since an exchange with a card that stopped replying holds the lock; after a
         // signal, the card then stops with the run's other commands
