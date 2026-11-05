@@ -12,10 +12,12 @@ on:
 permissions:
   contents: read
 
-# a new push to a PR cancels its older run so stacked PRs don't pile up on the
-# limited macOS runners; master pushes key on run_id so every commit is tested
+# a new push cancels the older run on the same PR or branch so runs don't pile up on the limited
+# macOS runners. That includes master: squash merges make each master commit contain the ones
+# before it, so testing the newest commit covers them, and a burst of merges once queued a full
+# macOS set per commit
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
