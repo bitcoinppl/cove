@@ -11,7 +11,7 @@ import XCTest
 /// Settings. Needs the fake node and the host, which `xtask ios-ui` (`just ios-ui-background`)
 /// starts for every run
 final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
-    private static let esploraUrl = "http://127.0.0.1:39001"
+    private static let esploraUrl = UITestHostPorts.esploraUrl
     private static let largestContentSize = "UICTContentSizeCategoryAccessibilityXXXL"
 
     /// Every control the Receive sheet offers once its address has loaded
