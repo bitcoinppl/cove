@@ -18,6 +18,7 @@ import org.bitcoinppl.cove.test.ManualFullLaunchTest
 import org.bitcoinppl.cove.test.deleteTestWallet
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.launchFullApp
+import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove_core.BootstrapStep
@@ -81,7 +82,10 @@ class CloudBackupLocalDeleteFullLaunchTest {
         restoreFixtureWallet()
 
         // the fixture wallet is xpub-only, which skips the Final Warning
-        deleteThroughWalletSettingsThenRestoreFromCloudBackup(expectedConfirmations = 2)
+        deleteThroughWalletSettingsThenRestoreFromCloudBackup(
+            expectedConfirmations = 2,
+            expectedRecordId = ScriptedCloudBackupFixture.WALLET_RECORD_ID,
+        )
     }
 
     @Test
@@ -93,19 +97,28 @@ class CloudBackupLocalDeleteFullLaunchTest {
         enableFreshBackupAndFinishOnboarding()
 
         // a new hot wallet whose words were never verified needs the Final Warning
-        deleteThroughWalletSettingsThenRestoreFromCloudBackup(expectedConfirmations = 3)
+        deleteThroughWalletSettingsThenRestoreFromCloudBackup(expectedConfirmations = 3, expectedRecordId = null)
     }
 
-    private fun deleteThroughWalletSettingsThenRestoreFromCloudBackup(expectedConfirmations: Int) {
+    private fun deleteThroughWalletSettingsThenRestoreFromCloudBackup(
+        expectedConfirmations: Int,
+        expectedRecordId: String?,
+    ) {
         val wallet = AppManager.getInstance().wallets.single()
         var recordId: String? = null
 
         openCloudBackup()
-        waitUntil("the wallet should be backed up and nothing should be cloud-only") {
+        // fixture storage accepts uploads without keeping them, so the restored wallet's re-upload
+        // never confirms and its backup can stay in needsSync; the provider still holds the record
+        waitUntil("the provider should hold the wallet's backup and nothing should be cloud-only") {
             val manager = CloudBackupManager.getInstance()
-            recordId = manager.detail?.upToDate?.singleOrNull()?.recordId
+            val detail = manager.detail
+            recordId = detail?.let { it.upToDate + it.needsSync }?.singleOrNull()?.recordId
 
-            manager.isDetailInventoryComplete && recordId != null && cloudOnlyWallets().isEmpty()
+            manager.isDetailInventoryComplete &&
+                recordId != null &&
+                (expectedRecordId == null || recordId == expectedRecordId) &&
+                cloudOnlyWallets().isEmpty()
         }
 
         openWalletSettings(wallet.id)

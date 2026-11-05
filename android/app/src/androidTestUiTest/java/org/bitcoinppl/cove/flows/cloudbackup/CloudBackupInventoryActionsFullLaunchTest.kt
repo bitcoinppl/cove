@@ -214,7 +214,9 @@ class CloudBackupInventoryActionsFullLaunchTest {
             }
         }
 
-        val downloadsBefore = ScriptedCloudStorageAccess.walletDownloadCount()
+        // background verification reads backups while the check is held, so a restore is judged by
+        // its outcome, a new local wallet, rather than by provider downloads
+        val localWalletsBefore = AppManager.getInstance().wallets.map { it.id }
         device.clickableAncestor(device.waitForText(RESTORE_ACTION)).click()
         device.clickableAncestor(device.waitForText(DELETE_ACTION)).click()
 
@@ -224,15 +226,21 @@ class CloudBackupInventoryActionsFullLaunchTest {
         )
 
         assertEquals(
-            "a disabled Restore must not download the backup",
-            downloadsBefore,
-            ScriptedCloudStorageAccess.walletDownloadCount(),
+            "a disabled Restore must not add the wallet to this device",
+            localWalletsBefore,
+            AppManager.getInstance().wallets.map { it.id },
         )
 
         assertEquals(
             "a disabled Restore must not start a restore",
             CloudOnlyOperation.Idle,
             CloudBackupManager.getInstance().cloudOnlyOperation,
+        )
+
+        assertEquals(
+            "disabled actions must leave both backups listed",
+            FIXTURE_CLOUD_ONLY_RECORD_IDS,
+            cloudOnlyRecordIds(),
         )
     }
 
