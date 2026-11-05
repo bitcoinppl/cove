@@ -290,12 +290,13 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/import_wallet_manager.rs", "rust/src/wallet_identity/existing.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReviewViews.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewViews.kt"]
 coverage = [
+    "human:ios",
     "ios-ui:ios/CoveUITests/WatchOnlyUpgradeFullLaunchUITests.swift::testRecoveryWordsTurnTheWatchOnlyWalletIntoASigningWallet",
     "agent:android",
     "rust:rust/src/manager/import_wallet_manager.rs::existing_wallet_upgrade_preserves_public_material_and_origin",
 ]
 # 1.4.0: ios HUMAN, android BLOCKED
-# the ios test imports the signing keys as recovery words from add wallet, not through keyteleport
+# the ios test covers the recovery-words upgrade up to View Secret Words; it doesn't sign a spend or cover the keyteleport import route
 
 [[row]]
 id = "s09-clear-saved-screenshot-of-invalid-public-key"
