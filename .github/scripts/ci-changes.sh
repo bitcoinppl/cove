@@ -9,7 +9,7 @@
 # Each rule maps a path to the jobs that read it, and a path no rule names runs every job, so a
 # new top-level file or directory is tested until a rule here says otherwise. A push, a schedule,
 # a dispatch without a base, any change under .github, and a diff that can't be computed run
-# every job
+# every job. ci-changes-test.sh tests the rules and these fallbacks
 #
 #   GITHUB_EVENT_NAME  pull_request diffs the merge commit actions/checkout made against its
 #                      first parent, the base branch; workflow_dispatch diffs against BASE_REF

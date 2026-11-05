@@ -54,6 +54,10 @@ jobs:
           filter: blob:none
           sparse-checkout: .github/scripts
 
+      # a failure here fails the job before it writes outputs, so every job runs
+      - name: Test the job filter
+        run: .github/scripts/ci-changes-test.sh
+
       - name: Pick the jobs this change needs
         id: plan
         env:
