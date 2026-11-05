@@ -66,8 +66,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # restores the Gradle User Home that CI's compile-android job writes on master, so a cold
-      # download of the Kotlin compiler from its GitHub release redirect can't fail the build;
+      # restores the Gradle User Home that CI's compile-android job writes on master, so the job
+      # rarely downloads the Kotlin compiler from its GitHub release redirect, which can 504;
       # read-only so only compile-android saves under the shared key
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
