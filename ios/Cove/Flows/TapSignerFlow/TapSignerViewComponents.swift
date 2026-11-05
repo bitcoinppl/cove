@@ -263,9 +263,12 @@ struct TapSignerResultStatus: View {
                 .fontWeight(.light)
 
             VStack(spacing: 12) {
+                // the setup success screen's description crowds this stack at large text sizes, and
+                // unless the title keeps the height it needs, it gives up its second line and truncates
                 Text(title)
                     .font(titleFont)
                     .fontWeight(.bold)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(message)
                     .font(.subheadline)
