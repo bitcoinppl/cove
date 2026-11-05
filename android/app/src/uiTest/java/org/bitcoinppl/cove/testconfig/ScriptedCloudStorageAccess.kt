@@ -24,6 +24,12 @@ import java.util.concurrent.atomic.AtomicInteger
 object ScriptedCloudStorageAccess : CloudStorageAccess {
     private const val MASTER_KEY_RECORD_ID = "cspp-master-key-v1"
     private const val NAMESPACE_REQUEST_POLL_INTERVAL_MS = 10L
+    private const val OFFLINE_SYNC_HEALTH_MESSAGE =
+        "Cove couldn't reach Google Drive. Reconnect to the internet, then try again."
+
+    // wallet backups the device wrote after a fixture restore, served back the way Google Drive
+    // would, so checking an upload finds what was written rather than the original fixture
+    private val uploadedFixtureWalletBackups = ConcurrentHashMap<String, ByteArray>()
 
     @Volatile
     private var namespaceScenario = NamespaceScenario.immediateEmpty()
@@ -155,6 +161,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         walletLists.set(0)
         walletListNamespaces.clear()
         walletDownloads.set(0)
+        uploadedFixtureWalletBackups.clear()
         fixtureWalletDownloadRequests.clear()
         deletedFixtureWalletRecordIds.clear()
         deleteLocationErrors.clear()
@@ -419,6 +426,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
             )
 
     override suspend fun listNamespaces(policy: CloudAccessPolicy): List<String> {
+        ScriptedConnectivityAccess.throwIfOffline()
         val enableScenario = freshEnableScenario
 
         return if (enableScenario == null) {
@@ -435,6 +443,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         locations: List<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ): ByteArray {
+        ScriptedConnectivityAccess.throwIfOffline()
         masterDownloads.incrementAndGet()
         freshEnableScenario?.let { scenario ->
             if (!scenario.isVisibilityReleased()) {
@@ -456,6 +465,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         namespace: String,
         policy: CloudAccessPolicy,
     ): List<String> {
+        ScriptedConnectivityAccess.throwIfOffline()
         walletLists.incrementAndGet()
         walletListNamespaces += namespace
         walletListBlock?.let { block ->
@@ -511,6 +521,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         locations: List<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ): CloudBackupUploadStatus {
+        ScriptedConnectivityAccess.throwIfOffline()
+
         if (fixtureRestoreEnabled) {
             return if (
                 namespace == ScriptedCloudBackupFixture.NAMESPACE &&
@@ -539,6 +551,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     }
 
     override suspend fun overallSyncHealth(policy: CloudAccessPolicy): CloudSyncHealth {
+        // the Google Drive provider reports a failed health instead of throwing when offline
+        if (!ScriptedConnectivityAccess.isConnected()) return CloudSyncHealth.Failed(OFFLINE_SYNC_HEALTH_MESSAGE)
         if (fixtureRestoreEnabled) return CloudSyncHealth.AllUploaded
 
         val scenario = freshEnableScenario ?: return CloudSyncHealth.NoFiles
@@ -563,10 +577,12 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
             check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
                 "unexpected fixture namespace $namespace"
             }
+            ScriptedConnectivityAccess.throwIfOffline()
 
             return
         }
 
+        ScriptedConnectivityAccess.throwIfOffline()
         val scenario = freshEnableScenario ?: unsupported()
         scenario.storeMasterBackup(namespace, data)
         scenario.masterWriteAccepted.countDown()
@@ -598,10 +614,13 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
             check(recordId in fixtureWalletRecordIds || recordId in ScriptedCloudBackupFixture.WALLET_RECORD_IDS) {
                 "unexpected fixture wallet record id $recordId"
             }
+            ScriptedConnectivityAccess.throwIfOffline()
+            uploadedFixtureWalletBackups[recordId] = data.copyOf()
 
             return
         }
 
+        ScriptedConnectivityAccess.throwIfOffline()
         val scenario = freshEnableScenario ?: unsupported()
         scenario.storeWalletBackup(namespace, recordId, data)
         scenario.allProviderWritesAccepted.countDown()
@@ -640,10 +659,16 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         locations: List<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ): ByteArray {
+        ScriptedConnectivityAccess.throwIfOffline()
         walletDownloads.incrementAndGet()
         val scenario = freshEnableScenario
         if (scenario == null) {
             if (fixtureRestoreEnabled && namespace == ScriptedCloudBackupFixture.NAMESPACE) {
+                // a deleted backup stays gone even if Cove uploaded it earlier in the test
+                if (recordId !in deletedFixtureWalletRecordIds) {
+                    uploadedFixtureWalletBackups[recordId]?.let { backup -> return backup.copyOf() }
+                }
+
                 val wrapper = ScriptedCloudBackupFixture.walletWrapper(recordId) ?: unsupported()
                 fixtureWalletDownloadRequests += recordId
                 if (recordId in deletedFixtureWalletRecordIds) {
@@ -699,6 +724,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         locations: List<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) {
+        ScriptedConnectivityAccess.throwIfOffline()
         val scenario = freshEnableScenario
         if (scenario != null) {
             scenario.deleteWalletBackup(namespace, recordId)
@@ -724,12 +750,14 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         }
 
         deletedFixtureWalletRecordIds += recordId
+        uploadedFixtureWalletBackups.remove(recordId)
     }
 
     override suspend fun deleteNamespace(
         namespace: String,
         policy: CloudAccessPolicy,
     ) {
+        ScriptedConnectivityAccess.throwIfOffline()
         val scenario = freshEnableScenario ?: unsupported()
         scenario.deleteNamespace(namespace)
     }
