@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +47,7 @@ import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.ChoiceAlertDialog
 import org.bitcoinppl.cove.views.DialogChoice
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.CloudBackupEnablePromptChoice
 import org.bitcoinppl.cove_core.CloudBackupManagerAction

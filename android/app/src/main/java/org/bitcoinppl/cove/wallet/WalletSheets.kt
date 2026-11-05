@@ -9,10 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,6 +37,8 @@ import org.bitcoinppl.cove.flows.SelectedWalletFlow.ReceiveAddressSheet
 import org.bitcoinppl.cove.flows.SelectedWalletFlow.WalletMoreOptionsSheet
 import org.bitcoinppl.cove.nfc.NfcLabelImportSheet
 import org.bitcoinppl.cove.views.QrExportView
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.LabelManager
 import java.io.File

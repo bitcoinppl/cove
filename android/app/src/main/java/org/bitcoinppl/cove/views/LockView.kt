@@ -1,3 +1,7 @@
+// the lock window and the wipe failure dialogs belong to the lock screen and must show while the
+// app is locked, so they use the Compose Dialog and AlertDialog rather than the lock-aware wrappers
+@file:Suppress("ForbiddenImport")
+
 package org.bitcoinppl.cove.views
 
 import android.content.Intent

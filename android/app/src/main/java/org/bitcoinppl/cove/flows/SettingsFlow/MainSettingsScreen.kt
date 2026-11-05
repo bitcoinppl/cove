@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -59,7 +58,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import org.bitcoinppl.cove.Auth
@@ -79,6 +77,8 @@ import org.bitcoinppl.cove.views.MaterialSettingsItem
 import org.bitcoinppl.cove.views.NumberPadPinView
 import org.bitcoinppl.cove.views.SectionHeader
 import org.bitcoinppl.cove.views.WalletIcon
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove.views.lockaware.Dialog
 import org.bitcoinppl.cove_core.AuthType
 import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
 import org.bitcoinppl.cove_core.Database

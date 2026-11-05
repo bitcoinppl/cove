@@ -5,7 +5,6 @@ package org.bitcoinppl.cove.flows.SendFlow.HardwareScreen
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -14,6 +13,7 @@ import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.SendFlow.Common.SendFlowAdvancedDetailsView
 import org.bitcoinppl.cove.views.QrExportView
+import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 
 internal enum class HardwareSheetState {

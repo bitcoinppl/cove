@@ -22,7 +22,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -72,6 +71,7 @@ import org.bitcoinppl.cove.views.ColumnMajorGrid
 import org.bitcoinppl.cove.views.DotMenuView
 import org.bitcoinppl.cove.views.DotMenuViewCircle
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 

@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -50,7 +49,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
@@ -59,6 +57,9 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.cloudbackup.ForegroundUiBridge
 import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
+import org.bitcoinppl.cove.views.lockaware.AlertDialog
+import org.bitcoinppl.cove.views.lockaware.AppLockScope
+import org.bitcoinppl.cove.views.lockaware.Dialog
 import org.bitcoinppl.cove_core.bootstrapProgress
 import org.bitcoinppl.cove_core.checkCatastrophicCloudRestoreBackup
 import org.bitcoinppl.cove_core.resetBootstrapForRestore
@@ -515,48 +516,52 @@ class MainActivity : FragmentActivity() {
             val app = remember { AppManager.getInstance() }
             val auth = remember { AuthManager.getInstance() }
 
-            if (bdkMigrationWarning != null && auth.wipePresentationState != WipePresentationState.Running) {
-                AlertDialog(
-                    onDismissRequest = { bdkMigrationWarning = null },
-                    title = { Text("Encryption Migration Issue") },
-                    text = {
-                        Text(
-                            "Some wallet databases couldn't be encrypted. Your wallets still work and encryption will retry on next launch.\n\nIf this persists, please contact feedback@covebitcoinwallet.com"
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { bdkMigrationWarning = null }) { Text("OK") }
-                    },
-                )
-            }
-
-            val snackbarHostState = remember { SnackbarHostState() }
-            var startupMode by remember {
-                mutableStateOf(resolveStartupMode(app.needsOnboarding))
-            }
-            LaunchedEffect(app.needsOnboarding) {
-                startupMode = resolveStartupMode(app.needsOnboarding)
-            }
-            val onboardingManager =
-                remember(startupMode) {
-                    if (startupMode == StartupMode.ONBOARDING) {
-                        onboardingManagerViewModel.manager(app)
-                    } else {
-                        null
-                    }
+            // dialogs and sheets open windows above the lock screen, so everything shown after
+            // bootstrap, including the migration warning, reads the lock from this scope
+            AppLockScope(auth) {
+                if (bdkMigrationWarning != null && auth.wipePresentationState != WipePresentationState.Running) {
+                    AlertDialog(
+                        onDismissRequest = { bdkMigrationWarning = null },
+                        title = { Text("Encryption Migration Issue") },
+                        text = {
+                            Text(
+                                "Some wallet databases couldn't be encrypted. Your wallets still work and encryption will retry on next launch.\n\nIf this persists, please contact feedback@covebitcoinwallet.com"
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { bdkMigrationWarning = null }) { Text("OK") }
+                        },
+                    )
                 }
 
-            MainActivityAppShell(
-                app = app,
-                auth = auth,
-                snackbarHostState = snackbarHostState,
-                startupMode = startupMode,
-                onboardingManager = onboardingManager,
-                isPrivacyCoverVisible = isPrivacyCoverVisible,
-            ) {
-                app.cloudBackupManager.syncPersistedState()
-                onboardingManagerViewModel.release()
-                startupMode = StartupMode.READY
+                val snackbarHostState = remember { SnackbarHostState() }
+                var startupMode by remember {
+                    mutableStateOf(resolveStartupMode(app.needsOnboarding))
+                }
+                LaunchedEffect(app.needsOnboarding) {
+                    startupMode = resolveStartupMode(app.needsOnboarding)
+                }
+                val onboardingManager =
+                    remember(startupMode) {
+                        if (startupMode == StartupMode.ONBOARDING) {
+                            onboardingManagerViewModel.manager(app)
+                        } else {
+                            null
+                        }
+                    }
+
+                MainActivityAppShell(
+                    app = app,
+                    auth = auth,
+                    snackbarHostState = snackbarHostState,
+                    startupMode = startupMode,
+                    onboardingManager = onboardingManager,
+                    isPrivacyCoverVisible = isPrivacyCoverVisible,
+                ) {
+                    app.cloudBackupManager.syncPersistedState()
+                    onboardingManagerViewModel.release()
+                    startupMode = StartupMode.READY
+                }
             }
         }
 

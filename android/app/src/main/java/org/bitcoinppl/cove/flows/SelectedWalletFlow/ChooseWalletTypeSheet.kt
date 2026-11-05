@@ -9,7 +9,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -34,6 +33,7 @@ import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AddressText
+import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.FoundAddress
 import org.bitcoinppl.cove_core.WalletAddressType

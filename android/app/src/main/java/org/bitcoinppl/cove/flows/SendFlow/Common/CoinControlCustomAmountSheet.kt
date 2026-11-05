@@ -32,6 +32,7 @@ import org.bitcoinppl.cove.flows.CoinControlFlow.displayName
 import org.bitcoinppl.cove.flows.SendFlow.SendFlowManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AddressText
+import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.SendFlowManagerAction
 import org.bitcoinppl.cove_core.ffiConservativeDustLimitSats
 import org.bitcoinppl.cove_core.types.Amount

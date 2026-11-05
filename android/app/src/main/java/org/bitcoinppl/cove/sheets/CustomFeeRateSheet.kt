@@ -31,6 +31,7 @@ import org.bitcoinppl.cove.flows.SendFlow.SendFlowPresenter
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.utils.toColor
+import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.SendFlowAlertState
 import org.bitcoinppl.cove_core.SendFlowException
 import org.bitcoinppl.cove_core.WalletManagerException

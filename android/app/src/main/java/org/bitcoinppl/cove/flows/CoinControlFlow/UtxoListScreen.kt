@@ -36,7 +36,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -76,6 +75,7 @@ import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.ui.theme.coveColors
 import org.bitcoinppl.cove.views.AddressText
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove.views.lockaware.DropdownMenu
 import org.bitcoinppl.cove_core.utxoDate
 import kotlinx.coroutines.launch
 
@@ -229,7 +229,7 @@ private fun UtxoListScreenContent(
                             contentDescription = null,
                         )
                     }
-                    androidx.compose.material3.DropdownMenu(
+                    DropdownMenu(
                         expanded = menuExpanded,
                         onDismissRequest = { menuExpanded = false },
                     ) {

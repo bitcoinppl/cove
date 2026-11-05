@@ -321,7 +321,18 @@ iOS document pickers run inside Cove's scene, so opening one doesn't background 
 
 Compose launchers for external activities must use `rememberLockAwareLauncherForActivityResult` (`android/app/src/main/java/org/bitcoinppl/cove/views/LockAwareActivityResult.kt`) instead of `rememberLauncherForActivityResult`. It holds a result that arrives while the app is locked and handles it after unlock. Without it, alerts appear over the lock screen, where the first PIN tap dismisses them, and routes get pushed where the user can't see them. A held result survives activity recreation and is dropped if the unlock switches between main and decoy mode. detekt's `ForbiddenImport` rule enforces this.
 
-Android dialogs and bottom sheets are separate windows, so `LockView` draws the lock screen in its own full-screen dialog window. That window opens when the app locks, after any dialog or sheet that was already up, so it covers them, and a result held inside a modal such as Backup Export can still reach the PIN. Back on the lock screen sends the app to the background instead of navigating underneath it. Accessibility services can still read the activity window under the lock window, so `LockView` also clears its content from the semantics tree while locked. When the activity is recreated, every window opens again in composition order, so `MainActivityAppShell` keeps the app-wide sheets and alerts inside `LockView`'s content, where they open before the lock window. A dialog or sheet that opens while the app is already locked still appears above the lock.
+Android dialogs and bottom sheets are separate windows, so `LockView` draws the lock screen in its own full-screen dialog window. That window opens when the app locks, after any dialog or sheet that was already up, so it covers them, and a result held inside a modal such as Backup Export can still reach the PIN. Back on the lock screen sends the app to the background instead of navigating underneath it. Accessibility services can still read the activity window under the lock window, so `LockView` also clears its content from the semantics tree while locked. When the activity is recreated, every window opens again in composition order, so `MainActivityAppShell` keeps the app-wide sheets and alerts inside `LockView`'s content, where they open before the lock window. A dialog or sheet that opens while the app is already locked would appear above the lock window, so the wrappers below keep it from opening until unlock.
+
+### Dialogs, Sheets, and Menus Behind the App Lock
+
+On Android, Compose dialogs, bottom sheets, and dropdown menus each open their own window. The lock window covers those already open when the app locks, but one that opens while the app is locked would appear above it, and windows reopen in composition order when the activity is recreated. Android code imports `AlertDialog`, `ModalBottomSheet`, `Dialog`, and `DropdownMenu` from `org.bitcoinppl.cove.views.lockaware` instead of Compose. These wrappers take the same parameters and read `LocalAppLocked`, which `MainActivity` provides from `AuthManager.isLocked` through `AppLockScope` for everything it shows after bootstrap.
+
+- Dialogs and sheets hide their window while locked. A hidden window is not drawn, takes no touches or focus, and is left out of what accessibility services read, but its content stays composed, like the screen under the lock screen. State, pending work, and activity result launchers registered inside it survive the lock. The window skips its exit animation when hidden, which would otherwise fade its last frame out above the lock screen. A dialog or sheet that would first open while locked waits for unlock instead, because Android draws a new window's first frame before it can be hidden. A window hidden while its opening animation or an activity transition is still running can stay on screen, without taking input, until that animation ends.
+- Menus leave composition at once while locked, skipping their exit animation, and open again after unlock if the caller still has them expanded.
+
+Detekt's `ForbiddenImport` rule rejects the Compose originals. Only the lock screen's own lock window and wipe failure dialogs use them, because they must show while the app is locked.
+
+On iOS, leaving the foreground dismisses every presented sheet and alert before the background lock.
 
 ### Reactive Value Changes
 
@@ -361,6 +372,8 @@ Android dialogs and bottom sheets are separate windows, so `LockView` draws the 
 | `.alert(isPresented:)` | `if (showAlert) AlertDialog(...)` | Conditional dialog |
 | `.alert(item:)` | `alertItem?.let { AlertDialog(...) }` | Item-based alert |
 | `.confirmationDialog()` | `DropdownMenu` or `AlertDialog` with options | Action sheet equivalent |
+
+On Android, import these from `org.bitcoinppl.cove.views.lockaware`, not Compose, so they hide or close while the app is locked. See [Dialogs, Sheets, and Menus Behind the App Lock](#dialogs-sheets-and-menus-behind-the-app-lock).
 
 ### Focus Management
 

@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SouthWest
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -58,6 +57,7 @@ import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.AutoSizeText
+import org.bitcoinppl.cove.views.lockaware.DropdownMenu
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.FiatOrBtc
 import org.bitcoinppl.cove_core.FiatAmount

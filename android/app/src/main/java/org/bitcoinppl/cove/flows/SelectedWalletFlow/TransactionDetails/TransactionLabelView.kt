@@ -14,7 +14,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
@@ -49,6 +48,7 @@ import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.runCatchingCancellable
+import org.bitcoinppl.cove.views.lockaware.DropdownMenu
 import org.bitcoinppl.cove_core.TransactionDetails
 import org.bitcoinppl.cove_core.types.TxId
 
