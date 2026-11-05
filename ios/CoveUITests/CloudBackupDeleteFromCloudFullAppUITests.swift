@@ -63,6 +63,9 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
             XCTAssertEqual(deletedRecordIds(), [], "Cancel must not delete any backup")
             Thread.sleep(forTimeInterval: 0.2)
         }
+        // the empty delete log above is the proof that Cancel deleted nothing; this state check is
+        // supplementary, while the one after Delete Forever can't pass on stale state, since only an
+        // applied post-delete refresh shows the marker
         assertSettledInventory(cloudOnly: [keptRecordId, selectedRecordId], "Cancel should keep both cloud-only rows")
         robot.scrollToHittable(walletRow(recordId: selectedRecordId))
         robot.scrollToHittable(walletRow(recordId: keptRecordId))

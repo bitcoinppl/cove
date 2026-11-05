@@ -7,12 +7,33 @@ import Observation
 /// app holds rather than what the lazily built Cloud Backup form happens to have on screen
 @MainActor
 enum CloudBackupUITestStateProbe {
-    static func start() {
+    static func start() async {
         guard let logPath = ProcessInfo.processInfo.environment["COVE_CLOUD_BACKUP_UI_DELETE_LOG"] else {
             return
         }
 
-        observe(path: logPath + ".state")
+        // creating CloudBackupManager.shared spawns rust actors, so wait until bootstrap has set
+        // its last step (rust/src/bootstrap.rs:132); the app's runBootstrap then resumes on the
+        // main actor and its completeBootstrap creates the shared manager (ios/Cove/CoveApp.swift:171
+        // and :346), which the pause leaves it time to do first
+        do {
+            while bootstrapProgress() != .complete {
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            try await Task.sleep(for: .seconds(1))
+        } catch {
+            return
+        }
+
+        let path = logPath + ".state"
+        observe(path: path)
+
+        // rewrites the latest state on a slow timer too, so a failed write doesn't leave the file
+        // stale until the next manager change
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(500))
+            write(Snapshot(CloudBackupManager.shared), to: path)
+        }
     }
 
     private static func observe(path: String) {
@@ -23,6 +44,10 @@ enum CloudBackupUITestStateProbe {
             Task { @MainActor in observe(path: path) }
         }
 
+        write(snapshot, to: path)
+    }
+
+    private static func write(_ snapshot: Snapshot, to path: String) {
         // atomic, since the test polls the file while the host writes it
         do {
             try JSONEncoder().encode(snapshot).write(to: URL(fileURLWithPath: path), options: .atomic)
