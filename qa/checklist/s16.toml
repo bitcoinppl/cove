@@ -289,11 +289,11 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
 ]
 coverage = [
-    "human:ios",
+    "ios-ui:ios/CoveUITests/ReceiveTextSizeFullLaunchUITests.swift::testReceiveControlsMatchAtLargestAndDefaultTextSize",
     "device-script:qa/device/android/rows.py::s16-restore-normal-font-and-compare-receive-controls",
 ]
 # 1.4.0: ios HUMAN, android PASS
-# needs the os font size changed; the ios slider could not be set through the mirror
+# the ios test sets the text size per launch with a launch argument instead of the settings slider
 
 [[row]]
 id = "s16-clean-install-onboarding-and-late-restore-layout"

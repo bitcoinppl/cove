@@ -184,8 +184,9 @@ platforms = ["ios", "android"]
 target = "ui"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/send.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSharedViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportContainer.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportToolbarMenu.kt"]
 coverage = [
-    "human:ios",
+    "ios-ui:ios/CoveUITests/PrivateKeyExportFullAppUITests.swift::testRevealCopiesTheKeyAndKeyTeleportNeedsAFreshMainPin",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::bothExportRoutesNeedAFreshMainPinAndCarryTheSameKey",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # the android test receives the KeyTeleport send on a second manager and compares it with the revealed and copied key
+# the ios test stops once the main pin starts the send, so it doesn't compare the key the send carries
