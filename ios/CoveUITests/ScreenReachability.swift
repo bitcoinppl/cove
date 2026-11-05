@@ -43,8 +43,13 @@ struct ScreenReachability {
 
     /// Fails when Vision reads an ellipsis on screen, which SwiftUI draws in place of the end of a
     /// text it truncates
+    ///
+    /// Text above the top navigation bar is left out: the status bar draws over content scrolled
+    /// beneath it, and Vision reads its clock and signal dots as one line with that content, as
+    /// "9:33 e sending....."
     func assertNoTruncatedText(_ screen: String) {
-        let truncated = app.visibleText.filter { $0.contains("…") || $0.contains("...") }
+        let statusBarBottom = app.navigationBars.allElementsBoundByIndex.map(\.frame.minY).filter { $0 > 0 }.min() ?? 0
+        let truncated = app.visibleText(below: statusBarBottom).filter { $0.contains("…") || $0.contains("...") }
         XCTAssertTrue(truncated.isEmpty, "\(screen): text draws truncated: \(truncated)")
     }
 
