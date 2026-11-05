@@ -1,10 +1,14 @@
 name: UI tests
 
 # emulator and simulator suites take far longer than the rest of CI, so they
-# run after merge, nightly, and on PRs that opt in with the `ui-tests` label;
-# a labeled PR runs only the platforms its changes reach.
+# run after merge, nightly, and on PRs that opt in with the `ui-tests` label.
+# A labeled PR runs only the Android suites, and only when its changes reach
+# Android: the iOS shards would hold three of GitHub's few macOS runners for up
+# to two hours each, so iOS UI runs for a PR happen locally with cove-local-ci
+# or through a manual run.
 # A manual run can name tests to run instead of the full suites, to check a fix
-# without waiting on every test again; see docs/testing.md
+# without waiting on every test again, and then runs only the platforms whose
+# tests it names; see docs/testing.md
 on:
   workflow_dispatch:
     inputs:
@@ -85,7 +89,8 @@ jobs:
 
   android-instrumented:
     needs: changes
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && (needs.changes.result != 'success' || needs.changes.outputs.android_instrumented != 'false') }}
+    # a manual run that names only iOS tests has none for Android, so it skips before taking a runner
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && (needs.changes.result != 'success' || needs.changes.outputs.android_instrumented != 'false') && (github.event_name != 'workflow_dispatch' || inputs.android_tests != '' || inputs.ios_tests == '') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     # one flavour per job: with both in one job the hosted runner shut down about 35 minutes in, twice
@@ -214,7 +219,9 @@ jobs:
 
   ios-ui:
     needs: changes
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && (needs.changes.result != 'success' || needs.changes.outputs.ios_ui != 'false') }}
+    # never on a pull request, see the top of this file, and a manual run that names only Android
+    # tests skips it before the shards take macOS runners only to find nothing to run
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && (needs.changes.result != 'success' || needs.changes.outputs.ios_ui != 'false') && (github.event_name != 'workflow_dispatch' || inputs.ios_tests != '' || inputs.android_tests == '') }}
     runs-on: macos-26
     # each shard runs about 11 tests, after about 25 minutes building the Rust library, the fake
     # node and the test bundles; a test took 6 to 8 minutes when each erased the simulator and
