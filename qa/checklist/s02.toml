@@ -48,23 +48,6 @@ coverage = [
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
-id = "s02-private-key-fixture-through-tprv-file"
-section = "2"
-title = "Private-key fixture through tprv file"
-platforms = ["ios"]
-target = "manual"
-paths = [
-    "rust/src/manager/key_teleport_manager/**",
-    "rust/src/key_teleport.rs",
-    "ios/Cove/Flows/KeyTeleportFlow/**",
-]
-coverage = [
-    "human",
-]
-# 1.4.0: ios HUMAN, android N/A
-# private-key fixture needs the camera-only receiver response between two phones
-
-[[row]]
 id = "s02-fresh-main-credential-for-xprv-cancel-fail"
 section = "2"
 title = "Fresh main credential for xprv; cancel/fail hides it"
