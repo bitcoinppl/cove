@@ -11,11 +11,12 @@ import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
+import org.bitcoinppl.cove.test.FullLaunchStartupRobot
 import org.bitcoinppl.cove.test.FullLaunchTestRule
 import org.bitcoinppl.cove.test.ManualFullLaunchTest
+import org.bitcoinppl.cove.test.deleteTestWallet
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.launchFullApp
-import org.bitcoinppl.cove.testconfig.ScriptedCloudBackupFixture
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
@@ -25,6 +26,7 @@ import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.WalletSettingsRoute
 import org.bitcoinppl.cove_core.types.WalletId
+import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -33,7 +35,8 @@ import org.junit.runner.RunWith
 
 /**
  * Deletes a cloud-backed wallet from this device through Wallet Settings and its confirmation
- * dialogs, then checks that Cloud Backup lists the cloud copy as restorable and restores it
+ * dialogs, then checks that Cloud Backup lists the cloud copy as restorable and restores it, both
+ * for a wallet restored from the fixture backup and for one backed up by a fresh enable
  */
 @ManualFullLaunchTest
 @LargeTest
@@ -50,36 +53,60 @@ class CloudBackupLocalDeleteFullLaunchTest {
         device = fullLaunchDevice()
     }
 
+    @After
+    fun cleanUp() {
+        // a failed assertion must not leave provider reads held or test wallets behind
+        ScriptedCloudStorageAccess.releaseVisibility()
+        ScriptedCloudStorageAccess.releaseMasterUploadReturn()
+        AppManager.getInstance().wallets.map { it.id }.forEach(::deleteTestWallet)
+    }
+
     @Test
     fun deletingTheLocalWalletKeepsARestorableCloudOnlyCopy() {
         restoreFixtureWallet()
+
+        deleteThroughWalletSettingsThenRestoreFromCloudBackup()
+    }
+
+    @Test
+    fun deletingAFreshlyBackedUpWalletKeepsItsProviderCopyRestorable() {
+        // this provider keeps what the app writes and drops what it deletes, so a stray cloud
+        // delete would leave nothing to list or restore
+        ScriptedCloudStorageAccess.configureFreshEnableWithDelayedVisibility()
+        launchFullApp()
+        enableFreshBackupAndFinishOnboarding()
+
+        deleteThroughWalletSettingsThenRestoreFromCloudBackup()
+    }
+
+    private fun deleteThroughWalletSettingsThenRestoreFromCloudBackup() {
         val wallet = AppManager.getInstance().wallets.single()
+        var recordId: String? = null
 
         openCloudBackup()
-        waitUntil("the restored wallet should be backed up and nothing should be cloud-only") {
+        waitUntil("the wallet should be backed up and nothing should be cloud-only") {
             val manager = CloudBackupManager.getInstance()
+            recordId = manager.detail?.upToDate?.singleOrNull()?.recordId
 
-            manager.isDetailInventoryComplete &&
-                manager.detail?.upToDate?.map(CloudBackupWalletItem::recordId) ==
-                listOf(ScriptedCloudBackupFixture.WALLET_RECORD_ID) &&
-                cloudOnlyWallets().isEmpty()
+            manager.isDetailInventoryComplete && recordId != null && cloudOnlyWallets().isEmpty()
         }
 
         openWalletSettings(wallet.id)
         device.clickClickableAncestorForText(DELETE_WALLET_ITEM)
         confirmEveryDeletionDialog()
+
         waitUntil("the wallet should leave this device") {
             AppManager.getInstance().wallets.none { it.id == wallet.id }
         }
 
         openCloudBackup()
-        waitUntil("the deleted wallet's backup should become a restorable cloud-only row") {
+        waitUntil("the provider should still list the deleted wallet's backup as restorable") {
             val restorable = cloudOnlyWallets().singleOrNull()
 
-            CloudBackupManager.getInstance().isDetailInventoryReady &&
-                restorable?.recordId == ScriptedCloudBackupFixture.WALLET_RECORD_ID &&
-                restorable.syncStatus == CloudBackupWalletStatus.DELETED_FROM_DEVICE &&
-                restorable.restoreFailure == null
+            CloudBackupManager.getInstance().isDetailInventoryComplete &&
+                restorable?.recordId == recordId &&
+                restorable?.syncStatus == CloudBackupWalletStatus.DELETED_FROM_DEVICE &&
+                restorable?.restoreFailure == null
         }
 
         device.scrollUntilText(NOT_ON_THIS_DEVICE)
@@ -90,9 +117,46 @@ class CloudBackupLocalDeleteFullLaunchTest {
             cloudOnlyWallets().isEmpty() &&
                 AppManager.getInstance().wallets.any { it.id == wallet.id && it.name == wallet.name }
         }
+
         assertTrue(
             "the restored wallet should leave the Not on This Device section",
             device.wait(Until.gone(By.text(NOT_ON_THIS_DEVICE)), 10_000L),
+        )
+    }
+
+    private fun enableFreshBackupAndFinishOnboarding() {
+        FullLaunchStartupRobot(device).assertBootstrappedIntoOnboarding()
+        val onboarding =
+            FullLaunchOnboardingRobot(device)
+                .tapGetStarted()
+                .chooseNewUser()
+                .openCloudBackupFromBackupWallet()
+                .assertCloudBackupDetails()
+                .enableCloudBackupFromDetails()
+
+        assertTrue(
+            "expected the provider to accept the fresh master and wallet backups",
+            ScriptedCloudStorageAccess.awaitAllProviderWritesAccepted(),
+        )
+
+        onboarding.assertCloudBackupSuccess()
+
+        ScriptedCloudStorageAccess.releaseVisibility()
+        CloudBackupManager.getInstance().resumePendingCloudUploadVerification()
+        assertTrue(
+            "expected the new backup to become visible to the app",
+            ScriptedCloudStorageAccess.awaitVisibleConfirmationRead(),
+        )
+
+        waitUntil("expected background upload confirmation to settle") {
+            !CloudBackupManager.getInstance().hasPendingUploadVerification
+        }
+
+        device.clickClickableAncestor(device.waitForText("Continue"))
+        onboarding.continueFromBackupWallet().acceptTermsAfterImport()
+        assertTrue(
+            "accepting terms should complete onboarding before opening Settings",
+            device.wait(Until.gone(By.text("Terms & Conditions")), 10_000L),
         )
     }
 
@@ -131,6 +195,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
                         "the final warning should point to the cloud copy",
                         device.hasObject(By.textStartsWith(CLOUD_RECOVERY_MESSAGE)),
                     )
+
                     device.clickText(DELETE_BUTTON)
                     device.wait(Until.gone(By.text("Final Warning")), 10_000L)
                 }
@@ -163,6 +228,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             AppManager.getInstance().resetRoute(Route.Settings(SettingsRoute.Main))
         }
+
         device.waitForText("Security")
 
         // pushed onto Settings, the same stack tapping the wallet's row builds
@@ -171,6 +237,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
                 Route.Settings(SettingsRoute.Wallet(id = walletId, route = WalletSettingsRoute.MAIN)),
             )
         }
+
         device.scrollUntilText(DELETE_WALLET_ITEM)
     }
 

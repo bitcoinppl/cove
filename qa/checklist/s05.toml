@@ -33,14 +33,15 @@ paths = [
 ]
 coverage = [
     "human:ios",
-    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupInventoryActionsFullLaunchTest.kt::cloudOnlyRowActionsStayDisabledUntilTheInventoryCheckCompletes",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupInventoryActionsFullLaunchTest.kt::cloudOnlyRowActionsStayUnavailableUntilTheFirstInventoryLoadCompletes",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupInventoryActionsFullLaunchTest.kt::cloudOnlyRowActionsStayDisabledWhileAKnownInventoryIsCheckedAgain",
     "rust:rust/src/manager/cloud_backup_manager/model.rs::provisional_detail_is_visible_without_becoming_complete",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::trusted_local_snapshot_is_confirmed_by_provider_in_background",
     "rust:rust/src/manager/cloud_backup_manager/model.rs::retained_restore_all_count_stays_enabled_until_inventory_becomes_incomplete",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # rust tests cover inventory staying incomplete until the provider confirms it; the ios per-row restore and delete buttons read isDetailInventoryReady and no ios ui test asserts they stay disabled
-# the android test holds the provider listing while a known inventory is checked again after a failed refresh, and checks the cloud-only rows stay listed but cannot open restore or delete until the check completes
+# the android tests hold the provider listing during the first inventory load and while a known inventory is checked again after a failed refresh, and check that neither a cloud-only row nor its open action sheet can restore or delete until the provider confirms the inventory
 
 [[row]]
 id = "s05-offline-inventory-keeps-existing-rows-and-disables"
@@ -132,6 +133,7 @@ paths = [
 ]
 coverage = [
     "human:ios",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupLocalDeleteFullLaunchTest.kt::deletingAFreshlyBackedUpWalletKeepsItsProviderCopyRestorable",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupLocalDeleteFullLaunchTest.kt::deletingTheLocalWalletKeepsARestorableCloudOnlyCopy",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::deleting_the_matching_local_wallet_makes_its_cloud_duplicate_restorable",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_deleted",
@@ -139,7 +141,7 @@ coverage = [
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # rust tests remove wallet data directly and send the change notification themselves; the ios production delete path stays human
-# the android test deletes the wallet through wallet settings and its confirmation dialogs, then restores it from its cloud-only row
+# the android tests delete the wallet through wallet settings and its confirmation dialogs, then restore it from its cloud-only row; in the fresh-enable test the scripted provider drops deleted backups, so a stray cloud delete would fail it
 
 [[row]]
 id = "s05-cloud-restored-wallet-performs-full-rescan"
