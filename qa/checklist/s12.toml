@@ -430,14 +430,14 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "human:android",
+  "human",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_restart_marker_enters_detail_without_passkey_verification",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read",
   "rust:rust/src/manager/cloud_backup_manager/store.rs::atomic_state_mutations_preserve_restore_marker_count_and_verification",
   "ios-ui:ios/CoveUITests/CloudBackupRestoreAllFullAppUITests.swift::testRelaunchAfterKillOffersRetryRemainingWithoutAutomaticWork",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust tests cover the restart marker and an unreadable record; on ios a relaunch after a kill partway through a batch offers Retry Remaining for the rest without automatic work, and the retry restores it. android stays human
+# rust tests cover the restart marker and an unreadable record; on ios a relaunch after a kill partway through a batch offers Retry Remaining for the rest, and the retry restores it. ios stays human because the test counts downloads only after opening Cloud Backup, so an automatic attempt that failed before then would go unseen
 
 [[row]]
 id = "s12-onboarding-cloud-recovery-and-late-discovery"
