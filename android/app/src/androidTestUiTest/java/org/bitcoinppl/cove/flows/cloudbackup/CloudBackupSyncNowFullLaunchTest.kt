@@ -285,14 +285,16 @@ class CloudBackupSyncNowFullLaunchTest {
 
         // onboarding's last step selects the restored wallet and resets the route, which would
         // replace a settings route opened before it
-        waitUntil("onboarding should finish on the restored wallet") {
-            val app = AppManager.getInstance()
-            val walletId = app.wallets.singleOrNull()?.id
-
-            walletId != null &&
-                app.router.default == Route.SelectedWallet(walletId) &&
-                app.router.routes.isEmpty()
-        }
+        val app = AppManager.getInstance()
+        val finished =
+            pollUntil(30_000L) {
+                app.router.default is Route.SelectedWallet && app.router.routes.isEmpty()
+            }
+        assertTrue(
+            "onboarding should finish on a selected wallet; default=${app.router.default}, " +
+                "routes=${app.router.routes}, wallets=${app.wallets.map { it.name }}",
+            finished,
+        )
 
         device.openSettings()
         val walletListsBeforeEntry = ScriptedCloudStorageAccess.walletListCount()
