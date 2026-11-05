@@ -39,6 +39,7 @@ struct CoveCloudBackupUITestHostApp: App {
     var body: some Scene {
         WindowGroup {
             root
+                .task { await CloudBackupUITestStateProbe.start() }
         }
     }
 }

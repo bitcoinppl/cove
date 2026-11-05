@@ -233,8 +233,9 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
-    "human",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::identity_duplicate_row_can_be_deleted_and_then_stops_blocking_disable",
+    "ios-ui:ios/CoveUITests/CloudBackupDeleteFromCloudFullAppUITests.swift::testCancelKeepsEveryBackupAndDeleteForeverRemovesOnlyTheSelectedOne",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupDeleteFromCloudFullLaunchTest.kt::cancelKeepsEveryBackupAndDeleteForeverRemovesOnlyTheSelectedOne",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust test deletes one record and keeps the other backup and the local wallet; the confirmation dialog has no ui test on either app
+# ui tests on both apps open the second of two cloud-only rows, check that the action sheet and Delete Forever confirmation name it, cancel without deleting, then delete it and check that scripted cloud storage deleted only its record at exactly its current and legacy locations, and that once the inventory refresh after the delete is applied the row is gone while the other cloud-only row and the local wallet stay; the real iCloud and Google Drive providers' delete calls are not exercised

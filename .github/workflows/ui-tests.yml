@@ -51,7 +51,8 @@ env:
     CoveUITests/KeyTeleportReceiveFullLaunchUITests/testMultiPartBbqrResponseReachesTheReview,
     CoveUITests/KeyTeleportSendFullLaunchUITests,
     CoveCloudBackupUITests/PrivateKeyExportFullAppUITests,
-    CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests
+    CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests,
+    CoveCloudBackupUITests/CloudBackupDeleteFromCloudFullAppUITests
   ANDROID_FLAVOURS: Dev UiTest
   # tests a manual run names, read by tools/ui-test-plan.sh; empty on every other trigger
   IOS_TESTS: ${{ inputs.ios_tests }}

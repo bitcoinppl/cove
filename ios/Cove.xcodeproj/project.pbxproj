@@ -61,6 +61,7 @@
 		C0F100012F60000000000001 /* CloudBackupHostUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100022F60000000000001 /* CloudBackupHostUITestSupport.swift */; };
 		C0F100032F60000000000001 /* PrivateKeyExportFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100042F60000000000001 /* PrivateKeyExportFullAppUITests.swift */; };
 		C0F100052F60000000000001 /* CloudBackupLargeTextFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100062F60000000000001 /* CloudBackupLargeTextFullAppUITests.swift */; };
+		C0F5D0012F70000000000001 /* CloudBackupDeleteFromCloudFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F5D0022F70000000000001 /* CloudBackupDeleteFromCloudFullAppUITests.swift */; };
 		C0E0000C2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */; };
 		C0F000012F40000000000001 /* PresentationTransitionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000022F40000000000001 /* PresentationTransitionCoordinatorTests.swift */; };
 		C0F000012F50000000000001 /* KeyTeleportSecurityHelpersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000022F50000000000001 /* KeyTeleportSecurityHelpersTests.swift */; };
@@ -150,6 +151,7 @@
 		C0F100022F60000000000001 /* CloudBackupHostUITestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupHostUITestSupport.swift; sourceTree = "<group>"; };
 		C0F100042F60000000000001 /* PrivateKeyExportFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateKeyExportFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F100062F60000000000001 /* CloudBackupLargeTextFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupLargeTextFullAppUITests.swift; sourceTree = "<group>"; };
+		C0F5D0022F70000000000001 /* CloudBackupDeleteFromCloudFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupDeleteFromCloudFullAppUITests.swift; sourceTree = "<group>"; };
 		C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupInventoryFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F000022F40000000000001 /* PresentationTransitionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentationTransitionCoordinatorTests.swift; sourceTree = "<group>"; };
 		C0F000022F50000000000001 /* KeyTeleportSecurityHelpersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportSecurityHelpersTests.swift; sourceTree = "<group>"; };
@@ -233,6 +235,7 @@
 			children = (
 				C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */,
 				C0F100062F60000000000001 /* CloudBackupLargeTextFullAppUITests.swift */,
+				C0F5D0022F70000000000001 /* CloudBackupDeleteFromCloudFullAppUITests.swift */,
 				C0F100042F60000000000001 /* PrivateKeyExportFullAppUITests.swift */,
 				C0F100022F60000000000001 /* CloudBackupHostUITestSupport.swift */,
 				C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */,
@@ -618,6 +621,7 @@
 				C0F100092F60000000000001 /* HardwareSignerControl.swift in Sources */,
 				C0E0000C2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift in Sources */,
 				C0F100052F60000000000001 /* CloudBackupLargeTextFullAppUITests.swift in Sources */,
+				C0F5D0012F70000000000001 /* CloudBackupDeleteFromCloudFullAppUITests.swift in Sources */,
 				C0F100032F60000000000001 /* PrivateKeyExportFullAppUITests.swift in Sources */,
 				C0F100012F60000000000001 /* CloudBackupHostUITestSupport.swift in Sources */,
 				C0E000012F20000000000001 /* OnboardingFullLaunchUITests.swift in Sources */,
