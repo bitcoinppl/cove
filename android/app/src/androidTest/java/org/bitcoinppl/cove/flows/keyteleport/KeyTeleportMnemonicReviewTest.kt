@@ -129,9 +129,7 @@ class KeyTeleportMnemonicReviewTest {
         walletId = imported
         compose.onNodeWithText("Wallet imported").assertExists()
         compose.onNodeWithText("Done").performClick()
-        awaitOnMain("Done to open the imported wallet") {
-            (app.router.default == Route.SelectedWallet(imported)).takeIf { it }
-        }
+        awaitOnMain("Done to open the imported wallet") { opensWallet(app.router.default, imported).takeIf { it } }
 
         assertEquals("Import Wallet did not add exactly one wallet", 1, walletsForTheTestWords())
         assertEquals("the imported wallet holds different words", TEST_WORDS, Mnemonic(id = imported).use { it.words() })
@@ -173,6 +171,15 @@ class KeyTeleportMnemonicReviewTest {
 
         return request to receiver
     }
+
+    // selecting a wallet sets a short loading route that resets to it; the app's route host finishes
+    // that reset, and this test hosts the screen without one, so either form means Done opened it
+    private fun opensWallet(
+        route: Route,
+        id: WalletId,
+    ): Boolean =
+        route == Route.SelectedWallet(id) ||
+            (route as? Route.LoadAndReset)?.resetTo?.map { it.route() } == listOf(Route.SelectedWallet(id))
 
     private fun currentReceiver(): KeyTeleportManager = onMainValue { AppManager.getInstance().getKeyTeleportManager() }
 

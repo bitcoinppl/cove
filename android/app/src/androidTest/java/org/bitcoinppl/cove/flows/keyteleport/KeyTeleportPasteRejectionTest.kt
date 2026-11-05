@@ -190,18 +190,19 @@ class KeyTeleportPasteRejectionTest {
     private fun Rect.contains(other: Rect): Boolean =
         other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom
 
-    // hasVisualOverflow compares float paragraph sizes with whole-pixel layout sizes, and flagged a
-    // one-word dialog title on CI, so allow a pixel of rounding and say what overflowed
+    // the paragraph width is the width the text was offered, not the width it drew, so a short title
+    // in a wide dialog looked overflowing to hasVisualOverflow on CI; measure the widest drawn line
     private fun SemanticsNode.overflow(): String? {
         val layouts = mutableListOf<TextLayoutResult>()
         config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
 
         return layouts.firstNotNullOfOrNull { layout ->
             val paragraph = layout.multiParagraph
+            val widestLine = (0 until paragraph.lineCount).maxOfOrNull { paragraph.getLineRight(it) - paragraph.getLineLeft(it) } ?: 0f
             when {
                 paragraph.didExceedMaxLines -> "it has more lines than it may show"
-                paragraph.width - layout.size.width > CLIP_TOLERANCE_PX ->
-                    "its text is ${paragraph.width}px wide in a ${layout.size.width}px layout"
+                widestLine - layout.size.width > CLIP_TOLERANCE_PX ->
+                    "its widest line is ${widestLine}px in a ${layout.size.width}px layout"
                 paragraph.height - layout.size.height > CLIP_TOLERANCE_PX ->
                     "its text is ${paragraph.height}px tall in a ${layout.size.height}px layout"
                 else -> null

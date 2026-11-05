@@ -17,6 +17,7 @@ import androidx.test.uiautomator.Until
 import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
+import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportFlowDirection
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportResponseCopy
@@ -243,13 +244,14 @@ class PrivateKeyExportFullLaunchTest {
         device.assertPrivateKeyNotShown()
 
         device.clickText("Import Wallet")
-        device.waitForText("Wallet imported")
-        dismissCloudBackupVerificationPrompts()
         val imported =
             awaitOnMain("the received key to import") {
                 (receiveState() as? KeyTeleportManagerState.ReceiveImportedWallet)?.v1?.id
             }
 
+        // a new wallet can raise the cloud backup verification prompt over the result screen
+        dismissCloudBackupVerificationPrompts()
+        device.waitForText("Wallet imported")
         device.clickText("Done")
         waitUntil("Done should open the imported wallet") {
             app.router.default == Route.SelectedWallet(imported) && app.router.routes.isEmpty()
@@ -531,8 +533,8 @@ class PrivateKeyExportFullLaunchTest {
     // the manager the KeyTeleport screen shows now, which a route change or relaunch replaces
     private fun receiveState(): KeyTeleportManagerState = AppManager.getInstance().getKeyTeleportManager().state
 
-    private fun readPrivateKey(id: WalletId): String =
-        runBlocking { AppManager.getInstance().getWalletManagerLoaded(id) }.exposeXprv()
+    // a manager of its own, since the app's cache cancels a load when the app moves to another wallet
+    private fun readPrivateKey(id: WalletId): String = runBlocking { WalletManager.load(id) }.use { it.exposeXprv() }
 
     private fun walletIds(): List<WalletId> = Database().wallets().all().map { it.id }
 
