@@ -341,7 +341,16 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                     continue
                 }
 
-                // text record (type "T") and others
+                // text record (type "T"): the payload starts with a status byte and a language
+                // code, which aren't part of the text, so a key or address on a tag written by a
+                // generic NFC app would fail to parse with them
+                if typeString == "T", let text = record.wellKnownTypeTextPayload().0 {
+                    Log.debug("Found text: \(text)")
+                    textMessage = text
+                    continue
+                }
+
+                // other well-known types
                 if let payload = String(data: record.payload, encoding: .utf8) {
                     textMessage = payload
                 }
