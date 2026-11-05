@@ -106,6 +106,8 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
         )
         device.scrollUntilText(REFRESH_MARKER_WALLET_NAME)
         device.scrollUntilText(KEPT_WALLET_NAME)
+
+        // the manager state check above is the proof; this on-screen check is supplementary
         assertTrue(
             "the deleted wallet should leave Not on This Device",
             device.wait(Until.gone(By.text(SELECTED_WALLET_NAME)), 10_000L),

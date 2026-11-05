@@ -4,7 +4,8 @@ import XCTest
 /// confirmation alert, against the scripted host's cloud storage
 ///
 /// The host writes every wallet backup it deletes to the file `COVE_CLOUD_BACKUP_UI_DELETE_LOG`
-/// names, under `/tmp`, which the simulator shares with the test runner
+/// names, under `/tmp`, which the simulator shares with the test runner, and the cloud backup
+/// manager's detail state next to it with a `.state` suffix
 final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
     private let localRecordId = "24a462de41c1dcbfba825e87674d526b4fc0b7811fb0cee65232cb4f8209c11d"
     private let keptRecordId = "b1089e1017cd2b2a2e0085048b346f2e1c4a850a65b69a43b8d839cd60bd3f6b"
@@ -30,6 +31,7 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
 
     override func tearDown() {
         try? FileManager.default.removeItem(atPath: deleteLogPath)
+        try? FileManager.default.removeItem(atPath: statePath)
         super.tearDown()
     }
 
@@ -44,10 +46,11 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         cloudBackup.tap()
         XCTAssertTrue(app.navigationBars["Cloud Backup"].waitForExistence(timeout: 10))
 
-        // the form builds only rows near the screen, so each row is scrolled to before it counts
-        robot.scrollToHittable(walletRow(recordId: keptRecordId), initialWait: 20)
+        // the app's state is the proof, since the form builds only rows near the screen; the rows
+        // are also scrolled to so the screen shows them
+        assertSettledInventory(cloudOnly: [keptRecordId, selectedRecordId], timeout: 30, "the inventory never settled")
+        robot.scrollToHittable(walletRow(recordId: keptRecordId))
         robot.scrollToHittable(walletRow(recordId: selectedRecordId))
-        XCTAssertTrue(inventoryChecking.waitForNonExistence(timeout: 15), "the inventory check never finished")
 
         // the second cloud-only row, so a delete that took the first row's id would remove the wrong one
         let confirmation = openDeleteConfirmation()
@@ -60,7 +63,7 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
             XCTAssertEqual(deletedRecordIds(), [], "Cancel must not delete any backup")
             Thread.sleep(forTimeInterval: 0.2)
         }
-        // cancel should keep both rows
+        assertSettledInventory(cloudOnly: [keptRecordId, selectedRecordId], "Cancel should keep both cloud-only rows")
         robot.scrollToHittable(walletRow(recordId: selectedRecordId))
         robot.scrollToHittable(walletRow(recordId: keptRecordId))
 
@@ -73,13 +76,15 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         )
         XCTAssertEqual(deletedRecordIds(), [selectedRecordId], "only the selected backup should be deleted")
 
-        // rust drops the row before its detail refresh lands, so wait for the refresh marker row,
-        // which only a listing after the delete names, to prove the refreshed inventory was applied
-        robot.scrollToHittable(walletRow(recordId: refreshMarkerRecordId), initialWait: 20)
-        XCTAssertTrue(inventoryChecking.waitForNonExistence(timeout: 20), "the refresh after the delete never finished")
-        assertRowAbsentFromWholeList(recordId: selectedRecordId, "the deleted wallet should leave Not on This Device")
+        // rust drops the row before its detail refresh lands, so wait for the refresh marker, which
+        // only a listing after the delete names, to prove the refreshed inventory was applied
+        assertSettledInventory(
+            cloudOnly: [keptRecordId, refreshMarkerRecordId],
+            "the refreshed inventory should keep only the other cloud-only row and the marker"
+        )
 
-        // the other cloud-only wallet and the local wallet's backup row should stay
+        // the marker, the other cloud-only wallet and the local wallet's backup row stay on screen
+        robot.scrollToHittable(walletRow(recordId: refreshMarkerRecordId))
         robot.scrollToHittable(walletRow(recordId: keptRecordId))
         robot.scrollToHittable(walletRow(recordId: localRecordId))
         XCTAssertEqual(deletedRecordIds(), [selectedRecordId], "only the selected backup should be deleted")
@@ -87,43 +92,41 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         assertLocalWalletStillOnDevice()
     }
 
-    /// Walks the whole Cloud Backup list from top to bottom and checks the row at every step, since
-    /// the form builds only rows near the screen and a row left farther down would be missing from
-    /// the tree rather than absent
-    private func assertRowAbsentFromWholeList(recordId: String, _ message: String) {
-        let list = app.collectionViews.firstMatch
-        XCTAssertTrue(list.waitForExistence(timeout: 5), "the Cloud Backup list is missing")
-
-        swipeUntilListStops(list, swipe: { list.swipeDown(velocity: .slow) }, check: {})
-        swipeUntilListStops(list, swipe: { list.swipeUp(velocity: .slow) }) {
-            XCTAssertFalse(walletRow(recordId: recordId).exists, message)
-        }
+    /// The cloud backup manager's detail state, which the host writes to `<delete log>.state`
+    private struct AppState: Decodable, Equatable {
+        let detail: String
+        let operation: String
+        let cloudOnly: [String]
+        let cloudOnlyIncomplete: Bool
     }
 
-    /// Swipes until the list's last built cell stops moving, running `check` before every swipe
-    /// and once more at the end
-    private func swipeUntilListStops(_ list: XCUIElement, swipe: () -> Void, check: () -> Void) {
-        func lastCellPosition() -> String {
-            let cells = list.cells.allElementsBoundByIndex
-            XCTAssertFalse(cells.isEmpty, "the Cloud Backup list has no rows to walk")
+    private var statePath: String {
+        deleteLogPath + ".state"
+    }
 
-            return cells.last.map { "\($0.identifier) \($0.label) \($0.frame)" } ?? ""
-        }
+    private func appState() -> AppState? {
+        guard let data = FileManager.default.contents(atPath: statePath) else { return nil }
 
-        var position = lastCellPosition()
-        for _ in 0 ..< 30 {
-            check()
-            swipe()
+        return try? JSONDecoder().decode(AppState.self, from: data)
+    }
 
-            let next = lastCellPosition()
-            if next == position {
-                check()
+    /// Waits until the provider-confirmed inventory is complete, no cloud-only operation is running,
+    /// and the cloud-only rows are exactly `cloudOnly`
+    private func assertSettledInventory(cloudOnly: Set<String>, timeout: TimeInterval = 20, _ message: String) {
+        let deadline = Date().addingTimeInterval(timeout)
+        var state = appState()
+        while Date() < deadline {
+            if let state, state.detail == "complete", state.operation == "idle", !state.cloudOnlyIncomplete,
+               state.cloudOnly.count == cloudOnly.count, Set(state.cloudOnly) == cloudOnly
+            {
                 return
             }
-            position = next
+
+            Thread.sleep(forTimeInterval: 0.2)
+            state = appState()
         }
 
-        XCTFail("the Cloud Backup list never stopped scrolling")
+        XCTFail("\(message); last app state: \(String(describing: state))")
     }
 
     /// Leaves Cloud Backup for the wallet list in the sidebar, which lists only wallets on this
@@ -193,10 +196,6 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         }
 
         return !deletedRecordIds().isEmpty
-    }
-
-    private var inventoryChecking: XCUIElement {
-        app.descendants(matching: .any)["cloudBackup.inventory.checking"]
     }
 
     private func walletRow(recordId: String) -> XCUIElement {
