@@ -35,8 +35,14 @@ jobs:
   # workflow paths filter because a skipped job still reports, and branch protection counts it as
   # passed. A job skips only when the changes job succeeded and said 'false', so a failed or broken
   # changes job runs everything
+  # It also skips a macOS job a trusted maintainer's cove-local-ci run already passed on this
+  # commit, see .github/scripts/ci-local-results.sh, since GitHub runs only a few macOS jobs at once
   changes:
     runs-on: ubuntu-24.04
+    # statuses: read lets the local results step list the commit's statuses
+    permissions:
+      contents: read
+      statuses: read
     outputs:
       rustfmt: ${{ steps.plan.outputs.rustfmt }}
       clippy: ${{ steps.plan.outputs.clippy }}
@@ -47,6 +53,9 @@ jobs:
       ktlint: ${{ steps.plan.outputs.ktlint }}
       compile_ios: ${{ steps.plan.outputs.compile_ios }}
       compile_android: ${{ steps.plan.outputs.compile_android }}
+      compile_ios_local: ${{ steps.local.outputs.compile_ios_local }}
+      swift_lint_local: ${{ steps.local.outputs.swift_lint_local }}
+      test_macos_local: ${{ steps.local.outputs.test_macos_local }}
     steps:
       # the merge commit and both its parents, or with a base input the whole history, so the
       # script finds where the branch left it; diffing names reads trees, never blobs
@@ -58,13 +67,29 @@ jobs:
 
       # a failure here fails the job before it writes outputs, so every job runs
       - name: Test the job filter
-        run: .github/scripts/ci-changes-test.sh
+        run: |
+          .github/scripts/ci-changes-test.sh
+          .github/scripts/ci-local-results-test.sh
 
       - name: Pick the jobs this change needs
         id: plan
         env:
           BASE_REF: ${{ inputs.base }}
         run: .github/scripts/ci-changes.sh
+
+      # a failure here leaves its outputs empty, which runs the macOS jobs, without failing the
+      # job and with it the path filter above
+      - name: Find macOS jobs a local run passed
+        id: local
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          # cove-local-ci tests a pull request's head, not the merge commit this run checks out
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          # the maintainers whose own Macs run cove-local-ci
+          TRUSTED: praveenperera
+        run: .github/scripts/ci-local-results.sh
 
   rustfmt:
     needs: changes
@@ -84,7 +109,7 @@ jobs:
 
   swift-lint:
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.swift_lint != 'false') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.swift_lint != 'false') && needs.changes.outputs.swift_lint_local != 'true' }}
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
@@ -201,7 +226,7 @@ jobs:
 
   compile-ios:
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.compile_ios != 'false') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.compile_ios != 'false') && needs.changes.outputs.compile_ios_local != 'true' }}
     runs-on: macos-26
     env:
       RUSTFLAGS: -D warnings
@@ -307,7 +332,7 @@ jobs:
   test-macos:
     name: test (macos-latest)
     needs: changes
-    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.test != 'false') }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.test != 'false') && needs.changes.outputs.test_macos_local != 'true' }}
     runs-on: macos-latest
     env:
       RUSTFLAGS: -D warnings
