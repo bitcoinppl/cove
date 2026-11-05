@@ -47,8 +47,28 @@ struct HardwareSignerControl {
         case wrappedSegwit = "wrapped_segwit"
     }
 
+    /// The text sizes the simulator offers, named as `simctl ui content_size` takes them
+    enum ContentSize: String, Decodable {
+        case extraSmall = "extra-small"
+        case small
+        case medium
+        case large
+        case extraLarge = "extra-large"
+        case extraExtraLarge = "extra-extra-large"
+        case extraExtraExtraLarge = "extra-extra-extra-large"
+        case accessibilityMedium = "accessibility-medium"
+        case accessibilityLarge = "accessibility-large"
+        case accessibilityExtraLarge = "accessibility-extra-large"
+        case accessibilityExtraExtraLarge = "accessibility-extra-extra-large"
+        case accessibilityExtraExtraExtraLarge = "accessibility-extra-extra-extra-large"
+    }
+
     private struct Pasteboard: Decodable {
         let text: String
+    }
+
+    private struct ContentSizeChange: Decodable {
+        let previous: ContentSize?
     }
 
     /// The bridge the app's debug TAPSIGNER seam connects to
@@ -106,6 +126,15 @@ struct HardwareSignerControl {
     func setSimulatorAppearance(dark: Bool) throws {
         let body: [String: Any] = try ["udid": Self.simulatorUdid(), "appearance": dark ? "dark" : "light"]
         _ = try controlRequest(baseUrl, "POST", "simulator-appearance", body: body)
+    }
+
+    /// Changes the simulator's text size, which the running app gets as a live change, unlike the
+    /// `-UIPreferredContentSizeCategoryName` launch argument; returns the size it replaced, or nil
+    /// when the simulator reported none
+    @discardableResult
+    func setSimulatorContentSize(_ size: ContentSize) throws -> ContentSize? {
+        let body: [String: Any] = try ["udid": Self.simulatorUdid(), "content_size": size.rawValue]
+        return try decode(ContentSizeChange.self, controlRequest(baseUrl, "POST", "simulator-content-size", body: body)).previous
     }
 
     private static func simulatorUdid() throws -> String {

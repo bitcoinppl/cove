@@ -13,8 +13,9 @@
 //!   `/public-key-export` returns an account's bare SLIP-132 public key, as a
 //!   plain QR and as a single-part BBQr, with the first receive address it
 //!   should import as. `/simulator-pasteboard` reads an iOS simulator's
-//!   pasteboard and `/simulator-appearance` switches it between light and
-//!   dark mode. The `/tapsigner/...` routes start the card emulator, set up or
+//!   pasteboard, `/simulator-appearance` switches it between light and
+//!   dark mode, and `/simulator-content-size` changes its text size while
+//!   the app runs, answering with the size it replaced. The `/tapsigner/...` routes start the card emulator, set up or
 //!   factory fresh, and inject dropped sessions. The `/keyteleport/...` routes
 //!   play the other phone in a KeyTeleport transfer ([`key_teleport`])
 //! - [`UiTestPorts::tapsigner_bridge`]: the TAPSIGNER bridge. Each APDU arrives as a frame with a
@@ -383,6 +384,50 @@ enum Appearance {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct ContentSizeRequest {
+    udid: String,
+    content_size: ContentSize,
+}
+
+/// The preferred content size categories, named as `simctl ui content_size` takes and prints them
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "kebab-case")]
+enum ContentSize {
+    ExtraSmall,
+    Small,
+    Medium,
+    Large,
+    ExtraLarge,
+    ExtraExtraLarge,
+    ExtraExtraExtraLarge,
+    AccessibilityMedium,
+    AccessibilityLarge,
+    AccessibilityExtraLarge,
+    AccessibilityExtraExtraLarge,
+    AccessibilityExtraExtraExtraLarge,
+}
+
+impl ContentSize {
+    fn name(self) -> &'static str {
+        match self {
+            Self::ExtraSmall => "extra-small",
+            Self::Small => "small",
+            Self::Medium => "medium",
+            Self::Large => "large",
+            Self::ExtraLarge => "extra-large",
+            Self::ExtraExtraLarge => "extra-extra-large",
+            Self::ExtraExtraExtraLarge => "extra-extra-extra-large",
+            Self::AccessibilityMedium => "accessibility-medium",
+            Self::AccessibilityLarge => "accessibility-large",
+            Self::AccessibilityExtraLarge => "accessibility-extra-large",
+            Self::AccessibilityExtraExtraLarge => "accessibility-extra-extra-large",
+            Self::AccessibilityExtraExtraExtraLarge => "accessibility-extra-extra-extra-large",
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DropRequest {
     after_exchanges: u32,
 }
@@ -408,6 +453,9 @@ fn route(state: &SignerState, method: &str, path: &str, body: &[u8]) -> Result<V
         ("POST", "/public-key-export") => public_key_export(serde_json::from_slice(body)?),
         ("POST", "/simulator-pasteboard") => simulator_pasteboard(serde_json::from_slice(body)?),
         ("POST", "/simulator-appearance") => simulator_appearance(serde_json::from_slice(body)?),
+        ("POST", "/simulator-content-size") => {
+            simulator_content_size(serde_json::from_slice(body)?)
+        }
         ("POST", "/tapsigner/start") => {
             let request: TapSignerStartRequest = if body.is_empty() {
                 TapSignerStartRequest::default()
@@ -589,16 +637,39 @@ fn simulator_appearance(request: AppearanceRequest) -> Result<Value> {
         Appearance::Dark => "dark",
     };
 
+    simctl_ui(&request.udid, &["appearance", appearance])?;
+    Ok(json!({ "ok": true }))
+}
+
+/// Changes an iOS simulator's text size, which reaches a running app as a live
+/// `UIContentSizeCategory.didChangeNotification`, unlike the launch argument
+/// a test sets per launch. Answers with the size it replaced, or null when
+/// simctl reported none, so the test can put it back
+fn simulator_content_size(request: ContentSizeRequest) -> Result<Value> {
+    let previous = simctl_ui(&request.udid, &["content_size"])?;
+
+    // simctl prints `unknown` or `unsupported` when it can't tell, which leaves nothing to restore
+    let previous = serde_json::from_value::<ContentSize>(json!(previous.trim())).ok();
+    simctl_ui(&request.udid, &["content_size", request.content_size.name()])?;
+
+    Ok(json!({ "previous": previous.map(ContentSize::name) }))
+}
+
+/// Runs `simctl ui <udid> <args>` and returns what it printed
+fn simctl_ui(udid: &str, args: &[&str]) -> Result<String> {
+    let option = args.first().copied().unwrap_or_default();
     let output = Command::new("xcrun")
-        .args(["simctl", "ui", &request.udid, "appearance", appearance])
+        .args(["simctl", "ui", udid])
+        .args(args)
         .output()
-        .wrap_err("Failed to run simctl ui appearance")?;
+        .wrap_err_with(|| format!("Failed to run simctl ui {option}"))?;
 
     if !output.status.success() {
-        bail!("simctl ui appearance failed: {}", String::from_utf8_lossy(&output.stderr).trim());
+        bail!("simctl ui {option} failed: {}", String::from_utf8_lossy(&output.stderr).trim());
     }
 
-    Ok(json!({ "ok": true }))
+    String::from_utf8(output.stdout)
+        .wrap_err_with(|| format!("simctl ui {option} printed non-UTF-8"))
 }
 
 fn signed_frames(psbt: &Psbt, min_parts: usize) -> Result<Value> {

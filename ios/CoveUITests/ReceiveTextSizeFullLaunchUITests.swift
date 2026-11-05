@@ -1,12 +1,15 @@
 import XCTest
 
-/// Opens Receive at the largest accessibility text size and again at the default size, and checks
-/// that both offer the same controls, each reachable inside the window and enabled, and that the
+/// Opens Receive at the largest accessibility text size and at the default size, and checks that
+/// both offer the same controls, each reachable inside the window and enabled, and that the
 /// largest size really took effect
 ///
-/// The text size comes from the `-UIPreferredContentSizeCategoryName` launch argument, which sets
-/// it for that launch only, so the default-size launch is the phone's text size put back. Needs the
-/// fake node, which `xtask ios-ui` (`just ios-ui-background`) starts for every run
+/// One test sets the text size with the `-UIPreferredContentSizeCategoryName` launch argument,
+/// which sets it for that launch only, so the default-size launch is the phone's text size put
+/// back. The other changes the simulator's own text size through the hardware signer host while
+/// Receive stays open, which the app gets as a live change, as when a person moves the slider in
+/// Settings. Needs the fake node and the host, which `xtask ios-ui` (`just ios-ui-background`)
+/// starts for every run
 final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
     private static let esploraUrl = "http://127.0.0.1:39001"
     private static let largestContentSize = "UICTContentSizeCategoryAccessibilityXXXL"
@@ -21,6 +24,7 @@ final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
     private static let minimumGrowth: CGFloat = 1.3
 
     private var app: XCUIApplication!
+    private let signer = HardwareSignerControl()
 
     override func setUp() {
         super.setUp()
@@ -37,11 +41,13 @@ final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
 
         app.launchArguments = ["-UIPreferredContentSizeCategoryName", Self.largestContentSize]
         app.launch(expecting: app.element("selectedWallet.balance"))
+        app.openReceive()
         let largest = reachableReceiveControls()
         app.terminate()
 
         app.launchArguments = []
         app.launch(expecting: app.element("selectedWallet.balance"))
+        app.openReceive()
         let normal = reachableReceiveControls()
 
         // equal controls prove nothing if the launch argument was ignored and both launches used the same size
@@ -59,11 +65,40 @@ final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
         )
     }
 
-    /// Opens Receive and lists the controls that can be used, scrolling the sheet toward any that
-    /// are off screen, as a user would, along with the height Copy Address renders at once usable
-    private func reachableReceiveControls() -> (controls: [String], copyAddressHeight: CGFloat) {
-        app.openReceive()
+    /// Opens Receive at the largest text size, then sets the simulator back to the default size while
+    /// the app keeps running and Receive stays open, and checks that the sheet lays out again at the
+    /// new size with every control usable and the same address
+    ///
+    /// The launch argument the other test uses pins the size for the whole launch, so this one sets
+    /// the simulator's own size through the host instead, both before the largest-size launch and
+    /// for the live change, and puts back the size the simulator had once the test ends, even when
+    /// it fails
+    func testReceiveLaysOutAgainWhenTextSizeChangesWhileOpen() throws {
+        try signer.requireHealthy()
+        app.launch(expecting: app.staticTexts["Welcome to Cove"])
+        app.importTestMnemonic()
+        app.terminate()
 
+        try setSimulatorContentSize(.accessibilityExtraExtraExtraLarge)
+        app.launch(expecting: app.element("selectedWallet.balance"))
+        app.openReceive()
+        let largest = reachableReceiveControls()
+        let largestAddress = receiveAddress()
+        XCTAssertFalse(largestAddress.isEmpty, "Receive shows no address at the largest text size")
+
+        try setSimulatorContentSize(.large)
+        waitForCopyAddressToShrink(from: largest.copyAddressHeight)
+        let restored = reachableReceiveControls()
+
+        XCTAssertEqual(restored.controls, Self.receiveControls, "controls missing from Receive after the text size went back to the default")
+        XCTAssertEqual(largest.controls, restored.controls, "Receive offered different controls at the largest text size")
+        XCTAssertEqual(receiveAddress(), largestAddress, "Receive shows another address after the text size changed")
+    }
+
+    /// Lists the controls the open Receive sheet offers that can be used, scrolling the sheet
+    /// toward any that are off screen, as a user would, along with the height Copy Address renders
+    /// at once usable
+    private func reachableReceiveControls() -> (controls: [String], copyAddressHeight: CGFloat) {
         let copyAddress = button("Copy Address")
         XCTAssertTrue(copyAddress.waitForExistence(timeout: 10), "Receive has no Copy Address button")
 
@@ -82,6 +117,51 @@ final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
         }
 
         return (Self.receiveControls.filter(found.contains), copyAddressHeight)
+    }
+
+    /// Whether a teardown block already puts back the size the simulator had before this test
+    private var restoresContentSize = false
+
+    /// Sets the simulator's text size while the app runs, and the first time puts back the size the
+    /// simulator had once the test ends, whether it passes or fails
+    private func setSimulatorContentSize(_ size: HardwareSignerControl.ContentSize) throws {
+        let previous = try signer.setSimulatorContentSize(size)
+        guard !restoresContentSize else { return }
+
+        restoresContentSize = true
+        let signer = signer
+
+        // a simulator that reported no size gets the default, which a new simulator starts at
+        addTeardownBlock {
+            try signer.setSimulatorContentSize(previous ?? .large)
+        }
+    }
+
+    /// Waits for Copy Address to lay out again at the default size, which proves the sheet took the
+    /// live change rather than keeping the layout it had at the largest size
+    private func waitForCopyAddressToShrink(from largestHeight: CGFloat) {
+        let copyAddress = button("Copy Address")
+        let deadline = Date().addingTimeInterval(10)
+        var height = copyAddress.frame.height
+
+        while height * Self.minimumGrowth > largestHeight, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.25)
+            height = copyAddress.exists ? copyAddress.frame.height : 0
+        }
+
+        XCTAssertGreaterThan(height, 0, "Copy Address is gone after the text size changed")
+        XCTAssertLessThanOrEqual(
+            height * Self.minimumGrowth,
+            largestHeight,
+            "Copy Address is still \(height)pt tall after the text size went back to the default, \(largestHeight)pt at the largest, so Receive didn't lay out again"
+        )
+    }
+
+    /// The address the open Receive sheet shows, spaced into groups as drawn
+    private func receiveAddress() -> String {
+        let address = app.staticTexts["receive.address"]
+        XCTAssertTrue(address.waitForExistence(timeout: 10), "Receive shows no address")
+        return address.label
     }
 
     /// A control counts only when it lies wholly inside the window, takes a tap and is enabled
