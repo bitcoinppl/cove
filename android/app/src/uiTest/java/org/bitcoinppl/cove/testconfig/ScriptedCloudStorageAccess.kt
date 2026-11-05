@@ -227,6 +227,11 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         walletListBlock?.release?.complete(Unit)
     }
 
+    /** Ends the held wallet listing with [error], as a provider that lost its connection would */
+    fun failBlockedWalletList(error: CloudStorageException) {
+        walletListBlock?.release?.completeExceptionally(error)
+    }
+
     fun blockNextWalletDownload(
         recordId: String,
         matchingRequestsToSkip: Int = 0,
