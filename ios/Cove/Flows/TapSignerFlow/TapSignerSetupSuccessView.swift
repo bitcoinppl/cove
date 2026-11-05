@@ -100,8 +100,10 @@ private struct TapSignerSetupSuccessContent: View {
             TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
 
             VStack(spacing: 14) {
-                Button("Continue", action: continueAction)
-                    .buttonStyle(DarkButtonStyle())
+                Button(action: continueAction) {
+                    Text("Continue").uiTestTruncationProbe()
+                }
+                .buttonStyle(DarkButtonStyle())
             }
         }
         .padding(.horizontal)
@@ -141,6 +143,7 @@ private struct TapSignerBackupButton: View {
                             .font(.footnote)
                             .fontWeight(.semibold)
                             .foregroundStyle(Color.primary)
+                            .uiTestTruncationProbe()
                         Spacer()
                     }
 

@@ -5,15 +5,16 @@ import XCTest
 /// TAPSIGNER seam and an emulated card (docs/testing.md)
 ///
 /// The checks catch text and actions pushed off screen, cut off by their scroll view or out of
-/// reach. XCUITest reports a text's whole label even when it draws truncated, so each title also
-/// carries the debug truncation probe, which reports whether the title draws whole. Needs the
-/// hardware signer host, which `xtask ios-ui` (`just ios-ui-background`) starts for every run
+/// reach. XCUITest reports a text's whole label even when it draws truncated, so each title and
+/// button label also carries the debug truncation probe, which reports whether it draws whole.
+/// Needs the hardware signer host, which `xtask ios-ui` (`just ios-ui-background`) starts for
+/// every run
 final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private static let esploraUrl = "http://127.0.0.1:39001"
     private static let largestContentSize = "UICTContentSizeCategoryAccessibilityXXXL"
     private static let newCvc = "246810"
 
-    /// The value a probed title reports when it draws whole, from `UITestTruncationProbe` in the app
+    /// The value a probed text reports when it draws whole, from `UITestTruncationProbe` in the app
     private static let fitsValue = "fits"
 
     /// Inside the screens' 16 to 20 point side padding, so a drag there lands on no field
@@ -157,7 +158,9 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     // MARK: - Layout checks
 
     /// Every text and action must lie wholly inside the window once scrolled to, the actions must
-    /// take a tap there, and every text must draw whole
+    /// take a tap there, and every text and button label must draw whole
+    ///
+    /// Text fields carry no probe, so only buttons among the actions are checked for truncation
     private func assertScreenFits(_ screen: String, texts: [String], buttons: [XCUIElementQuery]) {
         for text in texts {
             let name = "\(screen): '\(text)'"
@@ -166,14 +169,20 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         }
 
         for button in buttons {
-            assertReachable(button, "\(screen): \(button.firstMatch.description)", needsHit: true)
+            let name = "\(screen): \(button.firstMatch.description)"
+            let element = assertReachable(button, name, needsHit: true)
+            if element.elementType == .button {
+                assertDrawsWhole(element, name)
+            }
         }
     }
 
-    /// Fails unless the text's truncation probe reports it draws whole
+    /// Fails unless the truncation probe of the text, or of the button's label, reports it draws
+    /// whole
     ///
-    /// A text without the probe has no value, so dropping the probe fails here too. The probe
-    /// measures after layout, so its value gets a moment to settle
+    /// A button takes its label's accessibility value. A text without the probe has no value, so
+    /// dropping the probe fails here too. The probe measures after layout, so its value gets a
+    /// moment to settle
     private func assertDrawsWhole(_ element: XCUIElement, _ name: String) {
         let value = { element.value as? String ?? "" }
         let settled = Date().addingTimeInterval(3)

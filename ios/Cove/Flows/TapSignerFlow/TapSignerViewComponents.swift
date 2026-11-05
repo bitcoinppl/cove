@@ -81,7 +81,7 @@ struct TapSignerTopActionHeader: View {
                     Image(systemName: systemImage)
                 }
 
-                Text(title)
+                Text(title).uiTestTruncationProbe()
             }
 
             Spacer()
@@ -222,10 +222,12 @@ struct TapSignerCvcScreen<Header: View>: View {
                         .padding(.horizontal)
                 }
 
-                Button(submitTitle, action: submitAction)
-                    .buttonStyle(DarkButtonStyle())
-                    .padding(.horizontal)
-                    .disabled(isSubmitting)
+                Button(action: submitAction) {
+                    Text(submitTitle).uiTestTruncationProbe()
+                }
+                .buttonStyle(DarkButtonStyle())
+                .padding(.horizontal)
+                .disabled(isSubmitting)
 
                 Spacer()
             }
@@ -301,9 +303,11 @@ struct TapSignerRetryContent: View {
             TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
 
             VStack(spacing: 14) {
-                Button("Retry", action: retryAction)
-                    .buttonStyle(DarkButtonStyle())
-                    .padding(.horizontal)
+                Button(action: retryAction) {
+                    Text("Retry").uiTestTruncationProbe()
+                }
+                .buttonStyle(DarkButtonStyle())
+                .padding(.horizontal)
             }
         }
     }
@@ -333,10 +337,12 @@ struct TapSignerContinuationContent: View {
 
             TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
 
-            Button(isSubmitting ? "Working…" : "Continue Setup", action: continueAction)
-                .buttonStyle(DarkButtonStyle())
-                .padding(.horizontal)
-                .disabled(isSubmitting)
+            Button(action: continueAction) {
+                Text(isSubmitting ? "Working…" : "Continue Setup").uiTestTruncationProbe()
+            }
+            .buttonStyle(DarkButtonStyle())
+            .padding(.horizontal)
+            .disabled(isSubmitting)
         }
     }
 }
@@ -389,8 +395,10 @@ struct TapSignerSuccessContent: View {
             TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
 
             VStack(spacing: 14) {
-                Button("Continue", action: continueAction)
-                    .buttonStyle(DarkButtonStyle())
+                Button(action: continueAction) {
+                    Text("Continue").uiTestTruncationProbe()
+                }
+                .buttonStyle(DarkButtonStyle())
             }
         }
         .padding(.horizontal)

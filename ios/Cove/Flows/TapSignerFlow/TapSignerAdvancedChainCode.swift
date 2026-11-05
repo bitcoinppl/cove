@@ -123,21 +123,24 @@ private struct TapSignerAdvancedChainCodeContent: View {
                 Text("Generate new string for me")
                     .font(.footnote)
                     .fontWeight(.semibold)
+                    .uiTestTruncationProbe()
                     .padding(.bottom, 30)
             }
             .contentShape(Rectangle())
             .padding(.bottom, usesFlexibleSpacing ? screenHeight * 0.1 : 0)
 
-            Button("Continue", action: continueAction)
-                .buttonStyle(
-                    DarkButtonStyle(
-                        backgroundColor: isButtonDisabled ? .systemGray4 : .midnightBtn,
-                        foregroundColor: isButtonDisabled ? .systemGray6 : .white
-                    )
+            Button(action: continueAction) {
+                Text("Continue").uiTestTruncationProbe()
+            }
+            .buttonStyle(
+                DarkButtonStyle(
+                    backgroundColor: isButtonDisabled ? .systemGray4 : .midnightBtn,
+                    foregroundColor: isButtonDisabled ? .systemGray6 : .white
                 )
-                .padding()
-                .padding(.bottom, 30)
-                .disabled(isButtonDisabled)
+            )
+            .padding()
+            .padding(.bottom, 30)
+            .disabled(isButtonDisabled)
         }
     }
 }

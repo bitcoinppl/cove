@@ -208,8 +208,9 @@ coverage = [
 # 1.4.0: ios HUMAN, android HUMAN
 # the ui tests walk the choose, advanced, cvc, retry and success screens at the largest text size
 # through the tapsigner seam and check every text and action scrolls fully on screen and takes a
-# tap, and that each title draws whole: android reads every checked text's compose layout for an
-# ellipsis or overflow, and ios titles carry a debug probe that compares each with an unlimited copy
+# tap, and that each title and action label draws whole: android reads every checked text's compose
+# layout for an ellipsis or overflow, and ios probes compare each with an unlimited copy; signing
+# asks for the cvc on the same enter-cvc view the import walk checks
 
 [[row]]
 id = "s16-keyteleport-request-and-code-layout-at-largest"

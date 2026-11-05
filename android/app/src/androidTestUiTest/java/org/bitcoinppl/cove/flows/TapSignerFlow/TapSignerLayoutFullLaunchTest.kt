@@ -77,6 +77,9 @@ class TapSignerLayoutFullLaunchTest {
         // Compose positions are floats that the accessibility bounds round
         const val CLIP_TOLERANCE_PX = 1
 
+        // a text's box is its widest line rounded up to a whole pixel
+        const val LINE_WIDTH_TOLERANCE_PX = 1f
+
         // taps in gesture navigation's bottom strip go to the system, not the app
         const val GESTURE_STRIP_DP = 48
     }
@@ -179,7 +182,7 @@ class TapSignerLayoutFullLaunchTest {
         reachable(By.clazz("android.widget.EditText"), "advanced setup: chain code field")
         wallet.typeInto(By.clazz("android.widget.EditText"), randomChainCode())
         wallet.dismissKeyboard()
-        reachable(By.text("Continue").enabled(true), "advanced setup: Continue").click()
+        reachable(By.text("Continue").enabled(true), "advanced setup: Continue", drawsWhole = "Continue").click()
 
         enterCvc(TAPSIGNER_CVC, "Enter Factory CVC", "Back", "Continue")
         enterCvc(NEW_CVC, "Create New CVC", "Back", "Continue")
@@ -233,7 +236,7 @@ class TapSignerLayoutFullLaunchTest {
         assertScreenFits(title, back, title)
         reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
 
-        screens.enterTapSignerCvc(cvc, title, submit) { reachable(it, "$title: $submit") }
+        screens.enterTapSignerCvc(cvc, title, submit) { reachable(it, "$title: $submit", drawsWhole = submit) }
         assertTrue(
             "the $title screen didn't accept the CVC",
             device.wait(Until.gone(By.text(title)), 15_000L),
@@ -338,8 +341,8 @@ class TapSignerLayoutFullLaunchTest {
 
     /**
      * Fails unless every Compose text in the control UiAutomator shows at [visible] that reads
-     * [text] lays out whole: no line ellipsized, and no line cut off by the text's height, line
-     * limit or width
+     * [text] lays out whole: no line ellipsized, no line past the text's height or line limit, and
+     * no line wider than the text
      *
      * UiAutomator reports a text's whole string even when it draws cut short, so the layout comes
      * from Compose. A text that reports no layout fails too, so a change that hides the layout
@@ -372,20 +375,31 @@ class TapSignerLayoutFullLaunchTest {
         problem?.let { error("$name doesn't draw whole: $it") }
     }
 
-    // a text node reports its layout through this action, as the accessibility service reads it
+    /**
+     * Why the text's layout doesn't show whole, or null when it does
+     *
+     * A text node reports its layout through this action, as the accessibility service reads it.
+     * Compose lays that copy out again at the text's maximum width constraint rather than the width
+     * it took, so its paragraph width is the parent's and `didOverflowWidth` holds for any text
+     * narrower than its parent. Line breaks and heights match the drawn text, since a text only
+     * takes less than its maximum width when it fits on its lines without wrapping, so the width
+     * check measures each line instead
+     */
     private fun SemanticsNode.layoutProblem(): String? {
         val action = config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action ?: return "its text reports no layout"
         val layouts = mutableListOf<TextLayoutResult>()
         if (!action(layouts)) return "its text has no layout yet"
 
         val layout = layouts.singleOrNull() ?: return "its text reports ${layouts.size} layouts"
-        val ellipsized = (0 until layout.lineCount).filter(layout::isLineEllipsized)
+        val lines = 0 until layout.lineCount
+        val ellipsized = lines.filter(layout::isLineEllipsized)
+        val widest = lines.maxOfOrNull { layout.getLineRight(it) - layout.getLineLeft(it) } ?: 0f
 
         return when {
             ellipsized.isNotEmpty() -> "line ${ellipsized.first() + 1} of ${layout.lineCount} is ellipsized"
             layout.multiParagraph.didExceedMaxLines -> "it needs more than its ${layout.lineCount} line limit"
             layout.didOverflowHeight -> "it needs ${layout.multiParagraph.height}px but gets ${layout.size.height}px"
-            layout.didOverflowWidth -> "it needs ${layout.multiParagraph.width}px wide but gets ${layout.size.width}px"
+            widest > layout.size.width + LINE_WIDTH_TOLERANCE_PX -> "a line needs ${widest}px wide but gets ${layout.size.width}px"
             else -> null
         }
     }

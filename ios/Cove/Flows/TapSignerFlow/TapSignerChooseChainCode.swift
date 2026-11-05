@@ -91,6 +91,7 @@ private struct TapSignerChooseChainCodeContent: View {
                 Text("Advanced Setup")
                     .font(.footnote)
                     .fontWeight(.semibold)
+                    .uiTestTruncationProbe()
                     .padding(.bottom, 30)
             }
             .contentShape(Rectangle())
@@ -109,6 +110,7 @@ private struct TapSignerAutomaticSetupButton: View {
                         .font(.footnote)
                         .fontWeight(.semibold)
                         .foregroundColor(.primary)
+                        .uiTestTruncationProbe()
 
                     Spacer()
 
