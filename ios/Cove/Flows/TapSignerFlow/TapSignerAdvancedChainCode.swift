@@ -87,6 +87,7 @@ private struct TapSignerAdvancedChainCodeContent: View {
             VStack(spacing: 12) {
                 Group {
                     Text("Enter your custom 32-byte chain code below. If you’re unsure, select automatic on the previous screen.")
+                        .uiTestTruncationProbe()
                 }
                 .font(.callout)
                 .opacity(0.9)

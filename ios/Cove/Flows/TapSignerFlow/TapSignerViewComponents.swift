@@ -106,6 +106,7 @@ struct TapSignerPinDescription: View {
 
             Text(message)
                 .font(.subheadline)
+                .uiTestTruncationProbe()
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -277,6 +278,7 @@ struct TapSignerResultStatus: View {
                 Text(message)
                     .font(.subheadline)
                     .foregroundStyle(.primary.opacity(0.8))
+                    .uiTestTruncationProbe()
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -366,6 +368,7 @@ private struct TapSignerRetryStatus: View {
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(.primary.opacity(0.8))
+                .uiTestTruncationProbe()
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }

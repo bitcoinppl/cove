@@ -200,6 +200,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/TapSignerFlow/**",
 ]
 coverage = [
+    "human",
     "ios-ui:ios/CoveUITests/TapSignerLayoutFullLaunchUITests.swift::testTapSignerSetupScreensFitAtLargestTextSize",
     "ios-ui:ios/CoveUITests/TapSignerLayoutFullLaunchUITests.swift::testTapSignerImportScreensFitAtLargestTextSize",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/TapSignerFlow/TapSignerLayoutFullLaunchTest.kt::tapSignerSetupScreensFitAtLargestFontScale",
@@ -207,10 +208,10 @@ coverage = [
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # the ui tests walk the choose, advanced, cvc, retry and success screens at the largest text size
-# through the tapsigner seam and check every text and action scrolls fully on screen and takes a
-# tap, and that each title and action label draws whole: android reads every checked text's compose
-# layout for an ellipsis or overflow, and ios probes compare each with an unlimited copy; signing
-# asks for the cvc on the same enter-cvc view the import walk checks
+# through the tapsigner seam and check every title, description and action draws whole, each action
+# scrolls fully on screen and is enabled and clickable; android reads each text's compose layout for
+# an ellipsis or overflow, and ios probes compare each with an unlimited copy. only the signing cvc
+# screen, whose message differs from import's, still needs a person at the largest text size
 
 [[row]]
 id = "s16-keyteleport-request-and-code-layout-at-largest"

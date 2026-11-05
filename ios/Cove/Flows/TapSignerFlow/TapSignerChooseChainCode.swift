@@ -70,8 +70,10 @@ private struct TapSignerChooseChainCodeContent: View {
             VStack(spacing: 12) {
                 Group {
                     Text("A chain code works with your private key to generate Bitcoin addresses")
+                        .uiTestTruncationProbe()
 
                     Text("You can provide your own chain code for advanced setups, or let the app create one automatically for easy setup.")
+                        .uiTestTruncationProbe()
                 }
                 .font(.callout)
                 .opacity(0.9)

@@ -125,6 +125,7 @@ private struct TapSignerSetupSuccessDescription: View {
             )
             .font(.subheadline)
             .foregroundStyle(.primary.opacity(0.8))
+            .uiTestTruncationProbe()
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
         }
