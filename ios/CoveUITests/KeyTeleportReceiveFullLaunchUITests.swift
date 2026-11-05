@@ -327,6 +327,7 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         for (index, word) in Self.sentWords.split(separator: " ").map(String.init).enumerated() {
             let name = "revealed words: word \(index + 1)"
             let numbers = app.staticTexts.matching(NSPredicate(format: "label == %@", "\(index + 1)"))
+            layout.scrollDown(untilExists: numbers)
             layout.assertReachable(numbers, name, needsHit: false)
             let shown = app.staticTexts.matching(NSPredicate(format: "label == %@", word)).allElementsBoundByIndex.first { candidate in
                 numbers.allElementsBoundByIndex.contains { isBeside(candidate.frame, $0.frame) }

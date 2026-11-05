@@ -188,16 +188,17 @@ private extension String {
     }
 
     private static let lookalikes: [Character: Character] = [
-        "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P", "С": "C", "Т": "T", "У": "Y", "Х": "X",
+        "А": "A", "В": "B", "Е": "E", "І": "I", "Ј": "J", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P", "С": "C", "Ѕ": "S",
+        "Т": "T", "У": "Y", "Х": "X",
         "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X",
     ]
 
     /// Whether Vision's reading is the hint and nothing beyond it
     ///
     /// Vision may misread or miss up to two of the hint's letters and digits, and read the eye
-    /// icon before them as one more, but read no more than the hint holds. Codes and passwords show
-    /// in pairs, so a leaked pair fails unless Vision also misses two of the hint's characters
-    /// beside it
+    /// icon before them as one more, but read no more than the hint holds. Text alone can't tell a
+    /// leaked character from a misread one, so codes and passwords, which show in pairs, can leak a
+    /// pair past this only when Vision also misses one of the hint's own characters
     func readsAs(_ hint: String) -> Bool {
         let read = Array(filter { $0.isLetter || $0.isNumber }.uppercased().latinized)
         let expected = Array(hint.filter { $0.isLetter || $0.isNumber }.uppercased().latinized)
@@ -251,8 +252,11 @@ private extension [VNRecognizedTextObservation] {
         for observation in sorted(by: { $0.boundingBox.midY > $1.boundingBox.midY }) {
             let box = observation.boundingBox
 
-            // a box centered within half a line of the row's last box continues that row
-            if let last = rows.last?.last?.boundingBox, abs(last.midY - box.midY) < Swift.max(last.height, box.height) / 2 {
+            // a box overlapping the row's last box by half the shorter one's height continues that
+            // row; wrapped lines don't overlap that much
+            if let last = rows.last?.last?.boundingBox,
+               Swift.min(last.maxY, box.maxY) - Swift.max(last.minY, box.minY) > Swift.min(last.height, box.height) / 2
+            {
                 rows[rows.count - 1].append(observation)
             } else {
                 rows.append([observation])

@@ -61,6 +61,14 @@ struct ScreenReachability {
         }
     }
 
+    /// Scrolls down until a match exists, for a lazy grid or stack that builds only the cells near
+    /// the screen, so `assertReachable` has one to scroll to
+    func scrollDown(untilExists query: XCUIElementQuery) {
+        for _ in 0 ..< 8 where !query.firstMatch.exists {
+            drag(visibleScrollView() ?? app.windows.firstMatch, revealingContentBelow: true)
+        }
+    }
+
     @discardableResult
     func reachAndTap(_ query: XCUIElementQuery, _ name: String) -> XCUIElement {
         let element = assertReachable(query, name, needsHit: true)
