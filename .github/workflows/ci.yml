@@ -30,13 +30,13 @@ env:
   CARGO_NET_RETRY: "10"
 
 jobs:
-  # picks the jobs below that the change needs, see .github/scripts/ci-changes.sh; pushes to master
+  # picks the jobs below that the change needs, see .github/scripts/ci_changes.py; pushes to master
   # and runs without a diff run them all. Jobs are skipped by their own if rather than a
   # workflow paths filter because a skipped job still reports, and branch protection counts it as
   # passed. A job skips only when the changes job succeeded and said 'false', so a failed or broken
   # changes job runs everything
   # It also skips a macOS job a trusted maintainer's cove-local-ci run already passed on this
-  # commit, see .github/scripts/ci-local-results.sh, since GitHub runs only a few macOS jobs at once
+  # commit, see .github/scripts/ci_local_results.py, since GitHub runs only a few macOS jobs at once
   changes:
     runs-on: ubuntu-24.04
     # statuses: read lets the local results step list the commit's statuses
@@ -67,15 +67,13 @@ jobs:
 
       # a failure here fails the job before it writes outputs, so every job runs
       - name: Test the job filter
-        run: |
-          .github/scripts/ci-changes-test.sh
-          .github/scripts/ci-local-results-test.sh
+        run: python3 -I -m unittest discover -s .github/scripts -p "test_*.py"
 
       - name: Pick the jobs this change needs
         id: plan
         env:
           BASE_REF: ${{ inputs.base }}
-        run: .github/scripts/ci-changes.sh
+        run: python3 -I .github/scripts/ci_changes.py
 
       # a failure here leaves its outputs empty, which runs the macOS jobs, without failing the
       # job and with it the path filter above
@@ -89,7 +87,7 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           # the maintainers whose own Macs run cove-local-ci
           TRUSTED: praveenperera
-        run: .github/scripts/ci-local-results.sh
+        run: python3 -I .github/scripts/ci_local_results.py
 
   rustfmt:
     needs: changes
@@ -301,6 +299,11 @@ jobs:
       # the iOS device scripts import wdalib from tools/wda, so its commands are checked against a mock WDA
       - name: Test WebDriverAgent tools
         run: tools/wda/test/run-mock-tests.sh
+
+      # here rather than in the changes job, which every job waits on, so no run waits for mypy to
+      # install; a change to these scripts is under .github, which runs this job
+      - name: Type check the CI scripts
+        run: pipx run --spec mypy==2.4.0 mypy --strict --python-version 3.12 .github/scripts
 
   # one job per runner, not a matrix: a matrix job its if skips reports a single check without the
   # runner in its name, while branch protection waits on these two names
