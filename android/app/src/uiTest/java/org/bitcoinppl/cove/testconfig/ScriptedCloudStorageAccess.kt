@@ -59,6 +59,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     private val masterUploads = AtomicInteger(0)
     private val walletUploads = AtomicInteger(0)
     private val uploadFailures = CopyOnWriteArrayList<UploadFailure>()
+    private val uploads = CopyOnWriteArrayList<Upload>()
+
+    @Volatile
+    private var walletUploadBlock: WalletUploadBlock? = null
 
     enum class NamespaceResult {
         EMPTY,
@@ -89,6 +93,21 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         val attempt: Int,
         val error: UploadError,
     )
+
+    /** One upload the app asked the provider to store, with [recordId] null for the master key */
+    data class Upload(
+        val kind: UploadKind,
+        val namespace: String,
+        val recordId: String?,
+        val accepted: Boolean,
+    )
+
+    private class WalletUploadBlock(
+        val attempt: Int,
+    ) {
+        val entered = CountDownLatch(1)
+        val release = CompletableDeferred<Unit>()
+    }
 
     fun attach(context: Context): CloudStorageAccess {
         persistentRoot = context.filesDir.resolve(".ui-test-cloud-provider")
@@ -255,6 +274,30 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         require(attempt > 0) { "upload attempts are one-based" }
         uploadFailures += UploadFailure(kind, attempt, error)
     }
+
+    /** Uploads since the scenario was configured, in call order */
+    fun uploads(): List<Upload> = uploads.toList()
+
+    /**
+     * Holds the next wallet upload until [releaseBlockedWalletUpload], so a test can tell which
+     * action made it
+     */
+    fun blockNextWalletUpload() {
+        walletUploadBlock = WalletUploadBlock(attempt = walletUploads.get() + 1)
+    }
+
+    fun awaitBlockedWalletUpload(timeoutMs: Long = 20_000): Boolean =
+        walletUploadBlock?.entered?.await(timeoutMs, TimeUnit.MILLISECONDS) == true
+
+    fun releaseBlockedWalletUpload() {
+        walletUploadBlock?.release?.complete(Unit)
+    }
+
+    /** Namespaces the fresh-enable cloud holds a master key for */
+    fun freshEnableNamespaces(): List<String> = freshEnableScenario?.masterNamespaces().orEmpty()
+
+    fun freshEnableWalletRecordIds(namespace: String): List<String> =
+        freshEnableScenario?.walletRecordIds(namespace).orEmpty()
 
     fun uploadCount(kind: UploadKind): Int =
         when (kind) {
@@ -458,7 +501,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         data: ByteArray,
         policy: CloudAccessPolicy,
     ) {
-        failIfScripted(UploadKind.MASTER, masterUploads.incrementAndGet())
+        recordUpload(UploadKind.MASTER, masterUploads.incrementAndGet(), namespace, recordId = null)
 
         if (fixtureRestoreEnabled) {
             check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
@@ -485,7 +528,12 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         data: ByteArray,
         policy: CloudAccessPolicy,
     ) {
-        failIfScripted(UploadKind.WALLET, walletUploads.incrementAndGet())
+        val attempt = walletUploads.incrementAndGet()
+        recordUpload(UploadKind.WALLET, attempt, namespace, recordId)
+        walletUploadBlock?.takeIf { it.attempt == attempt }?.let { block ->
+            block.entered.countDown()
+            block.release.await()
+        }
 
         if (fixtureRestoreEnabled) {
             check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
@@ -507,13 +555,21 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         masterUploads.set(0)
         walletUploads.set(0)
         uploadFailures.clear()
+        uploads.clear()
+        walletUploadBlock?.release?.complete(Unit)
+        walletUploadBlock = null
     }
 
-    private fun failIfScripted(
+    /** Records the upload, and throws the scripted failure when one fails this attempt */
+    private fun recordUpload(
         kind: UploadKind,
         attempt: Int,
+        namespace: String,
+        recordId: String?,
     ) {
-        val failure = uploadFailures.firstOrNull { it.kind == kind && it.attempt == attempt } ?: return
+        val failure = uploadFailures.firstOrNull { it.kind == kind && it.attempt == attempt }
+        uploads += Upload(kind, namespace, recordId, accepted = failure == null)
+        if (failure == null) return
 
         throw when (failure.error) {
             UploadError.UPLOAD_FAILED -> CloudStorageException.UploadFailed("scripted $kind upload failure")
