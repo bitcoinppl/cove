@@ -24,10 +24,12 @@ import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider.Invocation
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider.Result
 import org.bitcoinppl.cove_core.CloudBackupSyncState
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
+import org.bitcoinppl.cove_core.CloudBackupWalletStatus
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -40,6 +42,7 @@ import org.junit.runner.RunWith
 class CloudBackupSyncNowFullLaunchTest {
     private companion object {
         const val SYNC_NOW = "Sync Now"
+        const val DETAIL_SCAN_SWIPES = 6
 
         // a published BIP39 test vector, never used for funds
         val PENDING_WALLET =
@@ -115,6 +118,7 @@ class CloudBackupSyncNowFullLaunchTest {
         }
         val createsBefore = ScriptedPasskeyProvider.callCount(Invocation.CREATE)
         val assertionsBefore = passkeyAssertionCount()
+        val authenticationsBefore = ScriptedPasskeyProvider.authenticatedCredentialIds().size
         ScriptedPasskeyProvider.configureResults(Invocation.AUTHENTICATE, Result.USER_CANCELLED, Result.SUCCESS)
         ScriptedPasskeyProvider.configureResults(Invocation.DISCOVER, Result.USER_CANCELLED, Result.SUCCESS)
 
@@ -138,6 +142,14 @@ class CloudBackupSyncNowFullLaunchTest {
             createsBefore,
             ScriptedPasskeyProvider.callCount(Invocation.CREATE),
         )
+
+        // the provider holds one passkey, the one the restore discovered, so any other credential
+        // would be a passkey a real phone might not have
+        val retryCredentials = ScriptedPasskeyProvider.authenticatedCredentialIds().drop(authenticationsBefore)
+        assertTrue(
+            "verification must authenticate with the restored passkey, got $retryCredentials",
+            retryCredentials.all { id -> id == ScriptedPasskeyProvider.knownCredentialIdHex() },
+        )
     }
 
     // a wallet added while its upload cannot finish, so the detail offers Sync Now for it
@@ -152,8 +164,11 @@ class CloudBackupSyncNowFullLaunchTest {
         waitUntil("the automatic upload of the new wallet should be rejected") {
             ScriptedCloudStorageAccess.rejectedNewWalletUploadCount() == 1
         }
-        waitUntil("the detail should list the new wallet as needing sync") {
-            CloudBackupManager.getInstance().detail?.needsSync?.any { it.name == wallet.name } == true
+        // the rejected upload must have settled, since Sync Now skips a wallet still uploading
+        waitUntil("the detail should list the new wallet as needing sync after its upload failed") {
+            CloudBackupManager.getInstance().detail?.needsSync?.any { item ->
+                item.name == wallet.name && item.syncStatus != CloudBackupWalletStatus.UPLOADING
+            } == true
         }
         device.scrollUntilText(SYNC_NOW)
 
@@ -161,15 +176,25 @@ class CloudBackupSyncNowFullLaunchTest {
     }
 
     private fun assertSyncedDetailShows(walletName: String) {
-        waitUntil("the detail should refresh to show the wallet up to date") {
-            val detail = CloudBackupManager.getInstance().detail
+        waitUntil("the sync should finish and the detail refresh to show the wallet up to date") {
+            val manager = CloudBackupManager.getInstance()
+            val detail = manager.detail
 
-            detail?.needsSync?.isEmpty() == true && detail.upToDate.any { it.name == walletName }
+            manager.syncState == CloudBackupSyncState.Idle &&
+                manager.isDetailInventoryComplete &&
+                detail?.needsSync?.isEmpty() == true &&
+                detail.upToDate.any { it.name == walletName }
         }
-        assertTrue(
-            "Sync Now should disappear once nothing needs sync",
-            device.wait(Until.gone(By.text(SYNC_NOW)), 10_000L),
+
+        // the screen must show the refresh too: the wallet listed, and no Needs Sync section or
+        // Sync Now anywhere in the detail, not only in the current viewport
+        val texts = device.textsAcrossDetail()
+        assertTrue("the refreshed detail should show $walletName, saw $texts", walletName in texts)
+        assertFalse(
+            "the refreshed detail should have no Needs Sync section, saw $texts",
+            texts.any { text -> text.endsWith("Needs Sync") },
         )
+        assertFalse("Sync Now should disappear once nothing needs sync, saw $texts", SYNC_NOW in texts)
     }
 
     private fun passkeyAssertionCount(): Int =
@@ -190,6 +215,17 @@ class CloudBackupSyncNowFullLaunchTest {
             "accepting terms should complete onboarding before opening Cloud Backup settings",
             device.wait(Until.gone(By.text("Terms & Conditions")), 10_000L),
         )
+
+        // onboarding's last step selects the restored wallet and resets the route, which would
+        // replace a settings route opened before it
+        waitUntil("onboarding should finish on the restored wallet") {
+            val app = AppManager.getInstance()
+            val walletId = app.wallets.singleOrNull()?.id
+
+            walletId != null &&
+                app.router.default == Route.SelectedWallet(walletId) &&
+                app.router.routes.isEmpty()
+        }
 
         device.openSettings()
         val walletListsBeforeEntry = ScriptedCloudStorageAccess.walletListCount()
@@ -237,6 +273,28 @@ class CloudBackupSyncNowFullLaunchTest {
     ): UiObject2 =
         wait(Until.findObject(By.textContains(value)), timeoutMs)
             ?: error("Timed out waiting for text containing \"$value\"")
+
+    // collects every text the detail shows, swiping to its end and back to its top
+    private fun UiDevice.textsAcrossDetail(): Set<String> {
+        val texts = mutableSetOf<String>()
+
+        repeat(DETAIL_SCAN_SWIPES * 2) { swipe ->
+            try {
+                findObjects(By.textStartsWith("")).mapNotNullTo(texts) { node -> node.text }
+            } catch (_: StaleObjectException) {
+                // the next swipe reads the moved nodes again
+            }
+
+            val upward = swipe >= DETAIL_SCAN_SWIPES
+            val startY = if (upward) displayHeight / 4 else displayHeight * 3 / 4
+            val endY = if (upward) displayHeight * 3 / 4 else displayHeight / 4
+            swipe(displayWidth / 2, startY, displayWidth / 2, endY, 20)
+            Thread.sleep(250)
+        }
+
+        findObjects(By.textStartsWith("")).mapNotNullTo(texts) { node -> node.text }
+        return texts
+    }
 
     // scrolls down, then back up, since the detail may already be scrolled past the text
     private fun UiDevice.scrollUntilText(
