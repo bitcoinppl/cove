@@ -116,7 +116,7 @@ extension XCUIElement {
             return []
         }
 
-        return request.results ?? []
+        return (request.results ?? []).inReadingOrder
     }
 
     /// The text with whitespace removed, so a grouped value reads the same however Vision splits it
@@ -124,12 +124,13 @@ extension XCUIElement {
         visibleText.joined().withoutSpaces
     }
 
-    /// Waits for Vision to read the text, compared without whitespace and case
-    func waitForVisibleText(containing text: String, timeout: TimeInterval = 5) -> Bool {
-        let compact = text.withoutSpaces
+    /// Waits for Vision to read the text, compared without whitespace and case, allowing up to
+    /// `misreads` characters misread, missed or added
+    func waitForVisibleText(containing text: String, misreads: Int = 0, timeout: TimeInterval = 5) -> Bool {
+        let compact = Array(text.withoutSpaces)
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if visibleTextWithoutSpaces.contains(compact) { return true }
+            if Array(visibleTextWithoutSpaces).contains(compact, allowingEdits: misreads) { return true }
 
             Thread.sleep(forTimeInterval: 0.3)
         }
@@ -162,38 +163,47 @@ extension XCUIElement {
     }
 
     /// Fails if the element, a reveal hint drawn over a concealed value, shows any of that value:
-    /// a QR code that decodes, or anything Vision reads besides the hint
+    /// a QR code that decodes, or anything Vision reads beyond the hint
     ///
     /// Vision must read the hint itself, so a screenshot it reads nothing from fails rather than
-    /// passing as concealed. The lines join top to bottom, since the hint wraps at large text
-    /// sizes, and two letters or digits beyond the hint fail anywhere, on its lines or their own:
-    /// codes and passwords show in pairs, so two is the least of one that can leak
+    /// passing as concealed. Its lines join in reading order, since the hint wraps at large text
+    /// sizes
     func assertConceals(hint: String, _ name: String) {
         XCTAssertTrue(visibleQrCodes.isEmpty, "\(name): a QR code decodes while it is hidden")
 
-        // Vision's boxes have their origin at the bottom left
-        let lines = recognizedText
-            .sorted { $0.boundingBox.midY > $1.boundingBox.midY }
-            .compactMap { $0.topCandidates(1).first?.string }
-
+        let lines = visibleText
         XCTAssertTrue(lines.joined(separator: " ").readsAs(hint), "\(name): Vision read \(lines) while it was hidden, not just '\(hint)'")
     }
 }
 
 private extension String {
     var withoutSpaces: String {
-        filter { !$0.isWhitespace }.uppercased()
+        filter { !$0.isWhitespace }.uppercased().latinized
     }
 
-    /// Whether Vision's reading is the hint and nothing more, allowing two misread characters, of
-    /// which one may be extra, such as the eye icon read as a letter
+    /// Latin capitals in place of the Cyrillic and Greek ones drawn the same, which Vision
+    /// sometimes reads a Latin letter as, such as a Cyrillic 'С' in 'Copy'
+    var latinized: String {
+        String(map { Self.lookalikes[$0] ?? $0 })
+    }
+
+    private static let lookalikes: [Character: Character] = [
+        "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H", "О": "O", "Р": "P", "С": "C", "Т": "T", "У": "Y", "Х": "X",
+        "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X",
+    ]
+
+    /// Whether Vision's reading is the hint and nothing beyond it
     ///
-    /// A second extra character fails, so two characters of a concealed value can't pass as part
-    /// of the hint
+    /// Vision may misread or miss up to two of the hint's letters and digits, and read the eye
+    /// icon before them as one more, but read no more than the hint holds. Codes and passwords show
+    /// in pairs, so a leaked pair fails unless Vision also misses two of the hint's characters
+    /// beside it
     func readsAs(_ hint: String) -> Bool {
-        let read = Array(filter { $0.isLetter || $0.isNumber }.uppercased())
-        let expected = Array(hint.filter { $0.isLetter || $0.isNumber }.uppercased())
-        return read.count <= expected.count + 1 && Self.editDistance(read, expected) <= 2
+        let read = Array(filter { $0.isLetter || $0.isNumber }.uppercased().latinized)
+        let expected = Array(hint.filter { $0.isLetter || $0.isNumber }.uppercased().latinized)
+        return [read, Array(read.dropFirst())].contains { reading in
+            reading.count <= expected.count && Self.editDistance(reading, expected) <= 2
+        }
     }
 
     static func editDistance(_ lhs: [Character], _ rhs: [Character]) -> Int {
@@ -208,6 +218,48 @@ private extension String {
         }
 
         return previous[rhs.count]
+    }
+}
+
+private extension [Character] {
+    /// Whether some stretch of these characters reads as the needle within `allowingEdits`
+    /// characters misread, missed or added
+    func contains(_ needle: [Character], allowingEdits edits: Int) -> Bool {
+        // edit distance from the needle to the best stretch ending at each character, where a
+        // stretch may start anywhere, so the first row is all zeros
+        var previous = [Int](repeating: 0, count: count + 1)
+        for (i, wanted) in needle.enumerated() {
+            var current = [i + 1]
+            for (j, read) in enumerated() {
+                current.append(Swift.min(previous[j + 1] + 1, current[j] + 1, previous[j] + (wanted == read ? 0 : 1)))
+            }
+
+            previous = current
+        }
+
+        return (previous.min() ?? needle.count) <= edits
+    }
+}
+
+private extension [VNRecognizedTextObservation] {
+    /// Rows top to bottom, each left to right, so a wrapped hint or label joins in the order it
+    /// reads; Vision doesn't promise an order
+    var inReadingOrder: [VNRecognizedTextObservation] {
+        var rows: [[VNRecognizedTextObservation]] = []
+
+        // boxes have their origin at the bottom left, so the top row has the greatest y
+        for observation in sorted(by: { $0.boundingBox.midY > $1.boundingBox.midY }) {
+            let box = observation.boundingBox
+
+            // a box centered within half a line of the row's last box continues that row
+            if let last = rows.last?.last?.boundingBox, abs(last.midY - box.midY) < Swift.max(last.height, box.height) / 2 {
+                rows[rows.count - 1].append(observation)
+            } else {
+                rows.append([observation])
+            }
+        }
+
+        return rows.flatMap { row in row.sorted { $0.boundingBox.minX < $1.boundingBox.minX } }
     }
 }
 

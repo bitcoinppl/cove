@@ -48,14 +48,17 @@ struct ScreenReachability {
         XCTAssertTrue(truncated.isEmpty, "\(screen): text draws truncated: \(truncated)")
     }
 
-    /// Fails unless Vision reads the start of the text where it is drawn, so the ellipsis check
-    /// above is reading the screen it is meant to and not, say, one still sliding in
+    /// Fails unless Vision reads the start and the end of the text where it is drawn, so a text
+    /// clipped without an ellipsis fails, and the ellipsis check above is reading the screen it is
+    /// meant to and not, say, one still sliding in
     ///
-    /// Only the start, since a longer stretch of a key or address is more likely to have one
-    /// character misread than to be missing
-    private func assertDrawn(_ text: String, in element: XCUIElement, _ name: String) {
-        let start = String(text.filter { !$0.isWhitespace }.prefix(8))
-        XCTAssertTrue(element.waitForVisibleText(containing: start, timeout: 3), "\(name): Vision never read '\(start)' where it is drawn")
+    /// Eight characters at each end, allowing one misread, since across a whole key or address a
+    /// misread is likelier than missing text, and clipping cuts off an end
+    func assertDrawn(_ text: String, in element: XCUIElement, _ name: String) {
+        let compact = text.filter { !$0.isWhitespace }
+        for part in [String(compact.prefix(8)), String(compact.suffix(8))] {
+            XCTAssertTrue(element.waitForVisibleText(containing: part, misreads: 1, timeout: 3), "\(name): Vision never read '\(part)' where it is drawn")
+        }
     }
 
     @discardableResult

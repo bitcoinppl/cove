@@ -21,8 +21,8 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
 
     /// A note and a password record in the shape COLDCARD's Secure Notes send them
     private static let sentNotes: [[String: String]] = [
-        ["title": "Quick Note", "misc": "Attack at dawn."],
-        ["title": "Exchange", "user": "satoshi", "password": "hunter2", "site": "example.com", "misc": ""],
+        ["title": "Quick Note", "misc": "Attack at dawn.", "group": "Personal"],
+        ["title": "Exchange", "user": "satoshi", "password": "hunter2", "site": "example.com", "misc": "Rotate yearly", "group": "Work"],
     ]
 
     private var app: XCUIApplication!
@@ -138,7 +138,7 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         )
 
         layout.reachAndTap(button("Tap to reveal recovery words"), "mnemonic review: reveal")
-        layout.assertScreenFits("revealed words", texts: Self.sentWords.split(separator: " ").map(String.init), buttons: [])
+        assertNumberedWordsFit()
         layout.reachAndTap(button("Import Wallet"), "mnemonic review: Import Wallet")
 
         XCTAssertTrue(app.staticTexts["Wallet imported"].waitForExistence(timeout: 30))
@@ -193,8 +193,8 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
             texts: [
                 "Messages received",
                 "This transfer contains text, not a wallet. Cove has displayed it exactly as received.",
-                "Quick Note", "MESSAGE", "Attack at dawn.",
-                "Exchange", "USERNAME", "satoshi", "PASSWORD", "hunter2", "WEBSITE", "example.com",
+                "Quick Note", "Personal", "MESSAGE", "Attack at dawn.",
+                "Exchange", "Work", "USERNAME", "satoshi", "PASSWORD", "hunter2", "WEBSITE", "example.com", "NOTES", "Rotate yearly",
             ],
             buttons: [button("Done")]
         )
@@ -318,6 +318,29 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
 
         let hint = "Tap to reveal recovery words"
         layout.assertReachable(button(hint), "review: '\(hint)'", needsHit: true).assertConceals(hint: hint, "the recovery words")
+    }
+
+    /// Each word fits on screen beside its number, found by position since the test words repeat,
+    /// so a clipped second 'legal' can't pass on the first
+    private func assertNumberedWordsFit() {
+        let window = app.windows.firstMatch.frame
+        for (index, word) in Self.sentWords.split(separator: " ").map(String.init).enumerated() {
+            let name = "revealed words: word \(index + 1)"
+            let numbers = app.staticTexts.matching(NSPredicate(format: "label == %@", "\(index + 1)"))
+            layout.assertReachable(numbers, name, needsHit: false)
+            let shown = app.staticTexts.matching(NSPredicate(format: "label == %@", word)).allElementsBoundByIndex.first { candidate in
+                numbers.allElementsBoundByIndex.contains { isBeside(candidate.frame, $0.frame) }
+            }
+
+            guard let shown else {
+                XCTFail("\(name) should be '\(word)'")
+                continue
+            }
+
+            XCTAssertTrue(window.contains(shown.frame), "\(name), '\(word)', runs off screen at \(shown.frame)")
+            layout.assertDrawn(word, in: shown, name)
+            layout.assertNoTruncatedText(name)
+        }
     }
 
     /// Each word must show beside its number, so a review that swaps two words, or shows one
