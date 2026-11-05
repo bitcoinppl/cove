@@ -1,15 +1,20 @@
 use bdk_electrum::electrum_client::{self, Client as ElectrumClient, ElectrumApi as _, Param};
 use bdk_esplora::esplora_client;
 use bitcoin::{
-    Address, Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid,
-    Witness,
+    Address, Amount, CompressedPublicKey, EcdsaSighashType, Network, OutPoint, ScriptBuf, Sequence,
+    TapSighashType, Transaction, TxIn, TxOut, Txid, Witness,
     absolute::LockTime,
+    ecdsa,
     hashes::{Hash as _, sha256},
+    key::{Keypair, TapTweak as _},
+    secp256k1::{Message, Secp256k1, SecretKey},
+    sighash::{Prevouts, SighashCache},
+    taproot,
     transaction::Version,
 };
 use serde_json::Value;
 
-use crate::{FakeNode, Protocol, TxLocation};
+use crate::{BroadcastError, FakeNode, Protocol, TxLocation};
 
 fn test_script(tag: u8) -> ScriptBuf {
     ScriptBuf::from_bytes(vec![
@@ -150,8 +155,9 @@ async fn balances_subtract_spent_outputs_on_both_protocols() {
 #[tokio::test]
 async fn rebroadcasts_are_accepted_until_the_transaction_confirms() {
     let node = FakeNode::start(Network::Bitcoin);
-    let funding = node.chain().pay(&test_script(7), Amount::from_sat(5_000));
-    let tx = spend(funding, test_script(8), Amount::from_sat(4_000));
+    let key = SecretKey::from_slice(&[7; 32]).unwrap();
+    let funding = node.chain().pay(&p2wpkh_script(&key), Amount::from_sat(5_000));
+    let tx = p2wpkh_spend(&node.chain().tx(funding).unwrap().tx, &key, Amount::from_sat(4_000));
     let txid = tx.compute_txid();
 
     let esplora = esplora_client::Builder::new(&node.esplora_url()).build_async().unwrap();
@@ -233,4 +239,98 @@ async fn pending_children_of_pending_parents_report_height_minus_one() {
     let height = node.chain().confirm(parent) as i32;
     assert_eq!(heights(&parent_script), [(parent, height), (child, 0)]);
     assert_eq!(heights(&child_script), [(child, 0)]);
+}
+
+fn compressed_public(key: &SecretKey) -> CompressedPublicKey {
+    let private = bitcoin::PrivateKey::new(*key, Network::Bitcoin);
+
+    CompressedPublicKey::from_private_key(&Secp256k1::new(), &private)
+        .expect("the key is compressed")
+}
+
+fn p2wpkh_script(key: &SecretKey) -> ScriptBuf {
+    ScriptBuf::new_p2wpkh(&compressed_public(key).wpubkey_hash())
+}
+
+/// A spend of `funding`'s output 0, which pays to [`p2wpkh_script`] of `key`,
+/// signed with `key`
+fn p2wpkh_spend(funding: &Transaction, key: &SecretKey, amount: Amount) -> Transaction {
+    let prevout = &funding.output[0];
+    let mut tx = spend(funding.compute_txid(), test_script(20), amount);
+
+    let sighash = SighashCache::new(&tx)
+        .p2wpkh_signature_hash(0, &prevout.script_pubkey, prevout.value, EcdsaSighashType::All)
+        .expect("output 0 is P2WPKH");
+    let message = Message::from_digest(sighash.to_byte_array());
+    let signature = ecdsa::Signature::sighash_all(Secp256k1::new().sign_ecdsa(&message, key));
+    tx.input[0].witness = Witness::p2wpkh(&signature, &compressed_public(key).0);
+
+    tx
+}
+
+#[tokio::test]
+async fn broadcasts_must_spend_known_outputs_with_valid_signatures() {
+    let node = FakeNode::start(Network::Bitcoin);
+    let chain = node.chain();
+    let secp = Secp256k1::new();
+    let key = SecretKey::from_slice(&[7; 32]).unwrap();
+    let other_key = SecretKey::from_slice(&[8; 32]).unwrap();
+
+    let funding = chain.tx(chain.pay(&p2wpkh_script(&key), Amount::from_sat(10_000))).unwrap().tx;
+
+    // an unsigned spend is refused on both protocols with bitcoind's reject reason
+    let unsigned = spend(funding.compute_txid(), test_script(20), Amount::from_sat(9_000));
+    let esplora = esplora_client::Builder::new(&node.esplora_url()).build_async().unwrap();
+    let electrum = ElectrumClient::new(&node.electrum_url()).unwrap();
+
+    let esplora_error = esplora.broadcast(&unsigned).await.unwrap_err().to_string();
+    assert!(esplora_error.contains("mandatory-script-verify-flag-failed"), "{esplora_error}");
+
+    let electrum_error = electrum.transaction_broadcast(&unsigned).unwrap_err().to_string();
+    assert!(electrum_error.contains("mandatory-script-verify-flag-failed"), "{electrum_error}");
+
+    // a signature from the wrong key is refused, the right one is accepted
+    let wrong = p2wpkh_spend(&funding, &other_key, Amount::from_sat(9_000));
+    assert!(matches!(chain.broadcast(wrong), Err(BroadcastError::InvalidScript { index: 0, .. })));
+
+    let signed = p2wpkh_spend(&funding, &key, Amount::from_sat(9_000));
+    esplora.broadcast(&signed).await.expect("a signed spend is accepted");
+    assert!(chain.broadcasts().iter().any(|tx| tx.compute_txid() == signed.compute_txid()));
+
+    // taproot key spends are checked too, which libbitcoinconsensus before Core 26 skipped
+    let keypair = Keypair::from_secret_key(&secp, &key);
+    let (internal, _) = keypair.x_only_public_key();
+    let p2tr = ScriptBuf::new_p2tr(&secp, internal, None);
+    let taproot_funding = chain.tx(chain.pay(&p2tr, Amount::from_sat(10_000))).unwrap().tx;
+    let prevouts = [taproot_funding.output[0].clone()];
+    let mut taproot_spend =
+        spend(taproot_funding.compute_txid(), test_script(21), Amount::from_sat(9_000));
+
+    let sighash = SighashCache::new(&taproot_spend)
+        .taproot_key_spend_signature_hash(0, &Prevouts::All(&prevouts), TapSighashType::Default)
+        .unwrap();
+    let message = Message::from_digest(sighash.to_byte_array());
+    let tweaked = keypair.tap_tweak(&secp, None).to_keypair();
+
+    // signing with the untweaked key gives a well-formed but invalid signature
+    let untweaked = secp.sign_schnorr_no_aux_rand(&message, &keypair);
+    taproot_spend.input[0].witness =
+        Witness::p2tr_key_spend(&taproot::Signature::from_slice(untweaked.as_ref()).unwrap());
+    assert!(matches!(
+        chain.broadcast(taproot_spend.clone()),
+        Err(BroadcastError::InvalidScript { index: 0, .. })
+    ));
+
+    let valid = secp.sign_schnorr_no_aux_rand(&message, &tweaked);
+    taproot_spend.input[0].witness =
+        Witness::p2tr_key_spend(&taproot::Signature::from_slice(valid.as_ref()).unwrap());
+    assert_eq!(chain.broadcast(taproot_spend.clone()), Ok(taproot_spend.compute_txid()));
+
+    // an input the chain has never seen is refused before any script runs
+    let unknown = OutPoint { txid: Txid::from_byte_array([9; 32]), vout: 0 };
+    let orphan = spend(unknown.txid, test_script(22), Amount::from_sat(1_000));
+    assert_eq!(chain.broadcast(orphan.clone()), Err(BroadcastError::MissingInput(unknown)));
+
+    let electrum_error = electrum.transaction_broadcast(&orphan).unwrap_err().to_string();
+    assert!(electrum_error.contains("bad-txns-inputs-missingorspent"), "{electrum_error}");
 }

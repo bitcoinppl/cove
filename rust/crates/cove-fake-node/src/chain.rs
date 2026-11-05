@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, fmt, sync::Arc};
 
 use bitcoin::{
     Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxMerkleNode, TxOut, Txid,
@@ -6,6 +6,7 @@ use bitcoin::{
     absolute::LockTime,
     block::{Header, Version as BlockVersion},
     blockdata::constants::genesis_block,
+    consensus::encode::serialize,
     hashes::{Hash as _, sha256, sha256d},
     opcodes::all::OP_PUSHNUM_1,
     pow::CompactTarget,
@@ -56,9 +57,41 @@ pub struct Balance {
     pub unconfirmed: i64,
 }
 
-/// A broadcast of a transaction that is already confirmed, which a node rejects
+/// Why the node refused a broadcast
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub struct AlreadyConfirmed;
+pub enum BroadcastError {
+    /// The transaction is already in a block
+    AlreadyConfirmed,
+    /// An input spends an output the chain has never seen
+    MissingInput(OutPoint),
+    /// Input `index` does not satisfy the script of the output it spends, such as a
+    /// missing or invalid signature
+    InvalidScript { index: usize, error: bitcoinconsensus::Error },
+}
+
+/// Messages start with bitcoind's reject reasons, so a client that reports them
+/// shows what a real node would send
+impl fmt::Display for BroadcastError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AlreadyConfirmed => f.write_str("Transaction already in block chain"),
+            Self::MissingInput(outpoint) => {
+                write!(f, "bad-txns-inputs-missingorspent ({outpoint})")
+            }
+
+            // ERR_SCRIPT is libbitcoinconsensus's "no error" value, set when the script itself fails
+            Self::InvalidScript { index, error: bitcoinconsensus::Error::ERR_SCRIPT } => {
+                write!(f, "mandatory-script-verify-flag-failed (input {index})")
+            }
+
+            Self::InvalidScript { index, error } => {
+                write!(f, "mandatory-script-verify-flag-failed (input {index}: {error})")
+            }
+        }
+    }
+}
+
+impl std::error::Error for BroadcastError {}
 
 /// A merkle inclusion proof with sibling hashes in internal byte order
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -170,14 +203,19 @@ impl FakeChain {
     /// Like bitcoind, a transaction already in the mempool is accepted again so
     /// a retried broadcast succeeds, while a confirmed one is rejected. Only the
     /// first acceptance is added to the broadcast log
-    pub fn broadcast(&self, tx: Transaction) -> Result<Txid, AlreadyConfirmed> {
+    ///
+    /// A new transaction must spend outputs the chain knows, and every input's
+    /// scripts and signatures must pass consensus checks. Fees, dust,
+    /// standardness and double spends are not checked
+    pub fn broadcast(&self, tx: Transaction) -> Result<Txid, BroadcastError> {
         let txid = tx.compute_txid();
         let mut state = self.state.lock();
 
         match state.txs.get(&txid).map(|entry| entry.location) {
             Some(TxLocation::Mempool) => Ok(txid),
-            Some(TxLocation::Confirmed { .. }) => Err(AlreadyConfirmed),
+            Some(TxLocation::Confirmed { .. }) => Err(BroadcastError::AlreadyConfirmed),
             None => {
+                state.verify_scripts(&tx)?;
                 state.add_to_mempool(tx);
                 state.broadcasts.push(txid);
 
@@ -503,6 +541,44 @@ impl ChainState {
 
             entry.tx.output.get(outpoint.vout as usize).cloned()
         })
+    }
+
+    /// Runs every input of `tx` through libbitcoinconsensus against the output it spends
+    fn verify_scripts(&self, tx: &Transaction) -> Result<(), BroadcastError> {
+        let spent = tx
+            .input
+            .iter()
+            .map(|input| {
+                let outpoint = input.previous_output;
+                self.prevout(&outpoint).ok_or(BroadcastError::MissingInput(outpoint))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // taproot signatures commit to every spent output, so each check gets all of them;
+        // the pointers borrow from `spent`, which outlives every call below
+        let spent_outputs = spent
+            .iter()
+            .map(|output| bitcoinconsensus::Utxo {
+                script_pubkey: output.script_pubkey.as_bytes().as_ptr(),
+                script_pubkey_len: u32::try_from(output.script_pubkey.len())
+                    .expect("a script is shorter than 4 GB"),
+                value: output.value.to_signed().expect("an amount fits in i64").to_sat(),
+            })
+            .collect::<Vec<_>>();
+        let serialized = serialize(tx);
+
+        for (index, output) in spent.iter().enumerate() {
+            bitcoinconsensus::verify(
+                output.script_pubkey.as_bytes(),
+                output.value.to_sat(),
+                &serialized,
+                Some(&spent_outputs),
+                index,
+            )
+            .map_err(|error| BroadcastError::InvalidScript { index, error })?;
+        }
+
+        Ok(())
     }
 
     fn touches_script(&self, tx: &Transaction, script: &ScriptBuf) -> bool {

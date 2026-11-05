@@ -7,6 +7,16 @@ It runs two ways:
 - **In process**, for Rust tests: `FakeNode::start(network)` binds free loopback ports. Tests mutate the chain through `FakeNode::chain()`, read the request log, and script requests to fail, stall, run slowly or wait on a gate (`FakeNode::on`). The app crate takes this library as a dev-dependency only, and `rust/src/test_support/fake_node.rs` adds the helpers that point Cove's node settings at it
 - **As the `cove-fake-node` binary**, for iOS and Android UI tests: it serves the node on the ports it is given with a JSON control API, so a test running in a simulator or emulator can fund a wallet, mine blocks and check what the app broadcast
 
+## Broadcasts
+
+Esplora `POST /tx` and Electrum `blockchain.transaction.broadcast` check a new transaction before accepting it, the way consensus would:
+
+- Every input must spend an output the chain knows, whether confirmed or pending. Otherwise the reply is `bad-txns-inputs-missingorspent`.
+- Every input's scripts and signatures must satisfy the output it spends, checked by libbitcoinconsensus from Bitcoin Core 26 with taproot enabled. Otherwise the reply is `mandatory-script-verify-flag-failed (input N)`.
+- A transaction that is already confirmed is refused with `Transaction already in block chain`. A rebroadcast of one in the mempool is accepted again.
+
+Esplora replies with status 400 and the message, and Electrum replies with a JSON-RPC error. Mempool policy is not checked: fees, dust, standardness, double spends, replacement and coinbase maturity all pass. Funding transactions from `pay`, `/fund` and `/fund-wallet` spend synthetic `OP_1` outputs and skip the check, since they never go through a broadcast.
+
 ## Running the binary
 
 ```sh

@@ -842,6 +842,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitcoinconsensus"
+version = "0.106.0+26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e12cba9cce5043cdda968e07b9df6d05ec6b0b38aa27a9a40bb575cf3e521ae9"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1502,6 +1511,7 @@ dependencies = [
  "bdk_esplora",
  "bip39",
  "bitcoin",
+ "bitcoinconsensus",
  "clap",
  "color-eyre",
  "hex",
