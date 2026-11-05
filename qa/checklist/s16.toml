@@ -208,10 +208,12 @@ coverage = [
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # the ui tests walk the choose, advanced, cvc, retry and success screens at the largest text size
-# through the tapsigner seam and check every title, description and action draws whole, each action
-# scrolls fully on screen and is enabled and clickable; android reads each text's compose layout for
-# an ellipsis or overflow, and ios probes compare each with an unlimited copy. only the signing cvc
-# screen, whose message differs from import's, still needs a person at the largest text size
+# through the tapsigner seam and check titles, descriptions and actions draw whole, each action
+# scrolls fully on screen and is enabled and clickable; android reads every text's compose layout for
+# an ellipsis or overflow, and ios probes compare each probed text with an unlimited copy. a person
+# still checks the signing cvc screen, whose message differs from import's, at the largest text size,
+# and on ios the descriptions inside the automatic setup and download backup buttons, which carry no
+# probe
 
 [[row]]
 id = "s16-keyteleport-request-and-code-layout-at-largest"
