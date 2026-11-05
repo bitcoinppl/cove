@@ -10,6 +10,7 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
     private let keptRecordId = "b1089e1017cd2b2a2e0085048b346f2e1c4a850a65b69a43b8d839cd60bd3f6b"
     private let selectedRecordId = "fa5eab18295a70b89491f347427099da2dd9d528e59d85b8934084fa01119914"
     private let selectedWalletName = "Fixture Wallet Three"
+    private let localWalletName = "Fixture Wallet One"
 
     private var app: XCUIApplication!
     private var robot: CloudBackupHostRobot!
@@ -26,6 +27,7 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
 
     override func tearDown() {
         try? FileManager.default.removeItem(atPath: deleteLogPath)
+        try? FileManager.default.removeItem(atPath: listingCountPath)
         super.tearDown()
     }
 
@@ -60,29 +62,60 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
 
         let deleteConfirmation = openDeleteConfirmation()
         deleteConfirmation.buttons["Delete Forever"].tap()
+        let listingsAtDelete = completedListingCount()
 
         XCTAssertTrue(
             waitForDeletedRecordIds(nonEmptyWithin: 20),
             "Delete Forever never reached the cloud provider"
         )
         XCTAssertEqual(deletedRecordIds(), [selectedRecordId], "only the selected backup should be deleted")
+
+        // rust drops the row before it refreshes, so wait for the refresh's listing to return and
+        // the screen to settle before checking that the row stays gone
         XCTAssertTrue(
-            walletRow(recordId: selectedRecordId).waitForNonExistence(timeout: 20),
+            waitUntil(timeout: 20) { self.completedListingCount() > listingsAtDelete },
+            "the inventory refresh after the delete never listed the cloud"
+        )
+        XCTAssertTrue(inventoryChecking.waitForNonExistence(timeout: 20), "the refresh after the delete never finished")
+        XCTAssertTrue(walletRow(recordId: keptRecordId).waitForExistence(timeout: 10), "the other cloud-only wallet should stay")
+        XCTAssertTrue(
+            walletRow(recordId: selectedRecordId).waitForNonExistence(timeout: 10),
             "the deleted wallet should leave Not on This Device"
         )
 
-        // the app refreshes the inventory after a delete, listing the cloud again, so the row must
-        // stay gone through that refresh
         let settleDeadline = Date().addingTimeInterval(3)
         while Date() < settleDeadline {
-            XCTAssertFalse(walletRow(recordId: selectedRecordId).exists, "the deleted wallet came back")
+            XCTAssertFalse(walletRow(recordId: selectedRecordId).exists, "the deleted wallet came back after the refresh")
             Thread.sleep(forTimeInterval: 0.2)
         }
-        XCTAssertTrue(inventoryChecking.waitForNonExistence(timeout: 20), "the refresh after the delete never finished")
-        XCTAssertFalse(walletRow(recordId: selectedRecordId).exists, "the deleted wallet came back after the refresh")
         XCTAssertTrue(walletRow(recordId: keptRecordId).exists, "the other cloud-only wallet should stay")
-        XCTAssertTrue(walletRow(recordId: localRecordId).exists, "the local wallet should stay on this device")
+        XCTAssertTrue(walletRow(recordId: localRecordId).exists, "the local wallet's backup row should stay")
         XCTAssertEqual(deletedRecordIds(), [selectedRecordId], "only the selected backup should be deleted")
+
+        assertLocalWalletStillOnDevice()
+    }
+
+    /// Leaves Cloud Backup for the wallet list in the sidebar, which lists only wallets on this
+    /// device, since Cloud Backup's rows share one identifier across its on-device and cloud-only sections
+    private func assertLocalWalletStillOnDevice() {
+        let backToSettings = app.navigationBars["Cloud Backup"].buttons.firstMatch
+        XCTAssertTrue(backToSettings.waitForExistence(timeout: 5))
+        backToSettings.tap()
+
+        let backToWallet = app.navigationBars["Settings"].buttons.firstMatch
+        XCTAssertTrue(backToWallet.waitForExistence(timeout: 10))
+        backToWallet.tap()
+
+        let openSidebar = app.buttons["app.sidebar.open"]
+        XCTAssertTrue(openSidebar.waitForExistence(timeout: 10))
+        openSidebar.tap()
+
+        let localWallet = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", localWalletName)).firstMatch
+        XCTAssertTrue(localWallet.waitForExistence(timeout: 10), "the local wallet should stay on this device")
+        XCTAssertFalse(
+            app.buttons.matching(NSPredicate(format: "label CONTAINS %@", selectedWalletName)).firstMatch.exists,
+            "deleting the cloud backup must not add its wallet to this device"
+        )
     }
 
     /// Opens the selected row's action dialog, checks it names the wallet, and returns the
@@ -118,6 +151,27 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
             XCTFail("the delete log is not a JSON array of record ids: \(error)")
             return []
         }
+    }
+
+    private var listingCountPath: String {
+        deleteLogPath + ".listings"
+    }
+
+    private func completedListingCount() -> Int {
+        guard let data = FileManager.default.contents(atPath: listingCountPath) else { return 0 }
+
+        return (try? JSONDecoder().decode(Int.self, from: data)) ?? 0
+    }
+
+    private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return true }
+
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+
+        return condition()
     }
 
     private func waitForDeletedRecordIds(nonEmptyWithin timeout: TimeInterval) -> Bool {

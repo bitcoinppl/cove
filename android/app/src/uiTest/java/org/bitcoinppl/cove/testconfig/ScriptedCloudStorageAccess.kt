@@ -39,12 +39,16 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     private val masterDownloads = AtomicInteger(0)
     private val walletLists = AtomicInteger(0)
+    private val completedWalletLists = AtomicInteger(0)
     private val walletListNamespaces = CopyOnWriteArrayList<String>()
     private val walletDownloads = AtomicInteger(0)
     private val fixtureWalletDownloadRequests = CopyOnWriteArrayList<String>()
 
     // fixture wallets the app deleted, in call order, so tests can assert exactly which backup went
     private val deletedFixtureWalletRecordIds = CopyOnWriteArrayList<String>()
+
+    // deletes whose locations named another record, which production providers would have removed instead
+    private val deleteLocationErrors = CopyOnWriteArrayList<String>()
 
     private val fixtureWalletDownloadResults =
         ConcurrentHashMap<String, ConcurrentLinkedQueue<FixtureWalletDownloadResult>>()
@@ -105,10 +109,12 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         namespaceScenario = NamespaceScenario.sequence(listOf(NamespaceResult.BACKUP_FOUND), null)
         masterDownloads.set(0)
         walletLists.set(0)
+        completedWalletLists.set(0)
         walletListNamespaces.clear()
         walletDownloads.set(0)
         fixtureWalletDownloadRequests.clear()
         deletedFixtureWalletRecordIds.clear()
+        deleteLocationErrors.clear()
         fixtureWalletDownloadResults.clear()
         fixtureWalletDownloadDefaults.clear()
         walletListBlock = null
@@ -164,6 +170,12 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     /** Fixture wallet record ids the app deleted from the cloud, one entry per delete call */
     fun deletedWalletRecordIds(): List<String> = deletedFixtureWalletRecordIds.toList()
+
+    /** Deletes refused because their locations didn't name the record being deleted */
+    fun deleteLocationErrors(): List<String> = deleteLocationErrors.toList()
+
+    /** Wallet listings that returned a result, so a test can tell a refresh's listing finished */
+    fun completedWalletListCount(): Int = completedWalletLists.get()
 
     fun blockNextWalletList() {
         check(walletListBlock?.claimed?.get() != false) { "a wallet-list block is already pending" }
@@ -327,6 +339,11 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
                 block.release.await()
             }
         }
+
+        return currentWalletFilenames(namespace).also { completedWalletLists.incrementAndGet() }
+    }
+
+    private fun currentWalletFilenames(namespace: String): List<String> {
         val enableScenario = freshEnableScenario
 
         if (enableScenario != null) {
@@ -526,6 +543,15 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         }
         check(ScriptedCloudBackupFixture.walletWrapper(recordId) != null) {
             "unexpected fixture wallet record id $recordId"
+        }
+
+        // production providers delete the files at these locations, not by record id, so they must
+        // name this record's current or legacy file
+        val expected = setOf("wallets/${walletFilename(recordId)}", walletFilename(recordId))
+        val paths = locations.map(RemoteBackupLocation::relativePath)
+        if (paths.isEmpty() || !expected.containsAll(paths)) {
+            deleteLocationErrors += "record $recordId got locations $paths"
+            throw CloudStorageException.NotAvailable("delete locations don't match record $recordId")
         }
 
         deletedFixtureWalletRecordIds += recordId

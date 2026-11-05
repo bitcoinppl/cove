@@ -10,6 +10,8 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
     private var uploadedWallets: [String: Data] = [:]
     /// Wallet record ids the app deleted, in call order; fixture wallets in it leave every listing
     private var deletedWalletRecordIds: [String] = []
+    /// Wallet listings that returned a result, so a test can tell a refresh's listing finished
+    private var completedWalletListings = 0
     private var detailSnapshotAttempts = 0
     private var firstDetailCompletionDeadline: Date?
 
@@ -79,10 +81,20 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
     func deleteWalletBackup(
         namespace: String,
         recordId: String,
-        locations _: [RemoteBackupLocation],
+        locations: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
     ) async throws {
         try validate(namespace: namespace)
+
+        // production providers delete the files at these locations, not by record id, so they must
+        // name this record's current or legacy file; a mismatch fails the delete visibly
+        let filename = "wallet-\(recordId).json"
+        let expected: Set<String> = ["wallets/\(filename)", filename]
+        let paths = locations.map(\.relativePath)
+        guard !paths.isEmpty, paths.allSatisfy(expected.contains) else {
+            throw CloudStorageError.NotAvailable("delete locations \(paths) don't match record \(recordId)")
+        }
+
         let deleted = lock.withLock {
             uploadedWallets[recordId] = nil
             deletedWalletRecordIds.append(recordId)
@@ -110,6 +122,17 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
     }
 
     func listWalletFiles(namespace: String, policy _: CloudAccessPolicy) async throws -> [String] {
+        let filenames = try await currentWalletFilenames(namespace: namespace)
+        let completed = lock.withLock {
+            completedWalletListings += 1
+            return completedWalletListings
+        }
+
+        Self.writeListingCount(completed)
+        return filenames
+    }
+
+    private func currentWalletFilenames(namespace: String) async throws -> [String] {
         try validate(namespace: namespace)
 
         if scenario == .nativePasskeySmoke {
@@ -117,7 +140,7 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
         }
 
         if scenario == .privateKeyWallet {
-            return [fixture.xprvWallet.filename]
+            return visibleFixtureFilenames(in: [fixture.xprvWallet])
         }
 
         let detailAttempt = lock.withLock { () -> (attempt: Int, delay: TimeInterval)? in
@@ -155,7 +178,10 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
         }
 
         if scenario == .privateKeyWallet {
-            return CloudStorageInventorySnapshot(names: [fixture.xprvWallet.filename], isComplete: true)
+            return CloudStorageInventorySnapshot(
+                names: visibleFixtureFilenames(in: [fixture.xprvWallet]),
+                isComplete: true
+            )
         }
 
         lock.withLock {
@@ -214,16 +240,25 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
     /// Writes every deleted record id as a JSON array to the file `COVE_CLOUD_BACKUP_UI_DELETE_LOG`
     /// names, so a UI test can check exactly which backups the app deleted
     private static func writeDeleteLog(_ recordIds: [String]) {
+        writeTestLog(recordIds, suffix: "")
+    }
+
+    /// Writes the completed wallet listing count next to the delete log, with a `.listings` suffix
+    private static func writeListingCount(_ count: Int) {
+        writeTestLog(count, suffix: ".listings")
+    }
+
+    private static func writeTestLog(_ value: some Encodable, suffix: String) {
         guard let path = ProcessInfo.processInfo.environment["COVE_CLOUD_BACKUP_UI_DELETE_LOG"] else {
             return
         }
 
         // atomic, since the test polls the file while the app writes it; a failed write leaves the
-        // delete itself alone and the test fails on the missing record id instead
+        // provider call alone and the test fails on the missing value instead
         do {
-            try JSONEncoder().encode(recordIds).write(to: URL(fileURLWithPath: path), options: .atomic)
+            try JSONEncoder().encode(value).write(to: URL(fileURLWithPath: path + suffix), options: .atomic)
         } catch {
-            print("failed to write the scripted cloud delete log: \(error)")
+            print("failed to write the scripted cloud test log: \(error)")
         }
     }
 

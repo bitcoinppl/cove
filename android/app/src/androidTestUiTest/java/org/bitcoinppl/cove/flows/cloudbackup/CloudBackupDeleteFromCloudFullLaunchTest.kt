@@ -72,43 +72,91 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
         device.waitForText(SELECTED_WALLET_NAME)
         device.waitForText(KEPT_WALLET_NAME)
 
-        val walletListsBeforeDelete = ScriptedCloudStorageAccess.walletListCount()
         openDeleteConfirmation(SELECTED_WALLET_NAME)
         device.clickText("Delete Forever")
+        val listingsAtDelete = ScriptedCloudStorageAccess.completedWalletListCount()
 
-        // the refresh after the delete lists the cloud again, so the row must stay gone after it
-        waitUntil("Delete Forever should remove only the selected backup and refresh the inventory") {
-            val manager = CloudBackupManager.getInstance()
-
-            ScriptedCloudStorageAccess.deletedWalletRecordIds().isNotEmpty() &&
-                ScriptedCloudStorageAccess.walletListCount() > walletListsBeforeDelete &&
-                manager.isDetailInventoryComplete &&
-                manager.cloudOnlyOperation !is CloudOnlyOperation.Operating &&
-                cloudOnlyRecordIds() == listOf(KEPT_RECORD_ID)
+        waitUntil("Delete Forever should reach the cloud provider") {
+            ScriptedCloudStorageAccess.deletedWalletRecordIds().isNotEmpty() ||
+                ScriptedCloudStorageAccess.deleteLocationErrors().isNotEmpty()
         }
+        assertEquals(
+            "the delete should name only the selected record's files",
+            emptyList<String>(),
+            ScriptedCloudStorageAccess.deleteLocationErrors(),
+        )
         assertEquals(
             "only the selected backup should be deleted from the cloud",
             listOf(SELECTED_RECORD_ID),
             ScriptedCloudStorageAccess.deletedWalletRecordIds(),
         )
+
+        // rust drops the row before it refreshes, so wait for the refresh's listing to return and
+        // its result to settle before checking that the row stays gone
+        waitUntil("the inventory refresh after the delete should list the cloud again") {
+            ScriptedCloudStorageAccess.completedWalletListCount() > listingsAtDelete
+        }
+        waitUntil("the refreshed inventory should settle with only the other cloud-only row") {
+            val manager = CloudBackupManager.getInstance()
+
+            manager.isDetailInventoryComplete &&
+                manager.cloudOnlyOperation !is CloudOnlyOperation.Operating &&
+                cloudOnlyRecordIds() == listOf(KEPT_RECORD_ID)
+        }
+        device.scrollUntilText(KEPT_WALLET_NAME)
         assertTrue(
             "the deleted wallet should leave Not on This Device",
             device.wait(Until.gone(By.text(SELECTED_WALLET_NAME)), 10_000L),
         )
-        device.scrollUntilText(KEPT_WALLET_NAME)
+        assertRowStaysGoneFor(CANCEL_SETTLE_MS)
         assertEquals("the local wallet should stay on this device", localWalletIds, onMainValue(::localWalletIds))
+    }
+
+    private fun assertRowStaysGoneFor(durationMs: Long) {
+        val deadline = System.currentTimeMillis() + durationMs
+
+        while (System.currentTimeMillis() < deadline) {
+            assertEquals(
+                "the deleted wallet came back after the refresh",
+                listOf(KEPT_RECORD_ID),
+                onMainValue(::cloudOnlyRecordIds),
+            )
+            assertTrue("the deleted wallet's row came back", device.findObject(By.text(SELECTED_WALLET_NAME)) == null)
+            Thread.sleep(100)
+        }
     }
 
     private fun openDeleteConfirmation(walletName: String) {
         device.clickText(walletName)
 
         // the sheet slides up, so its action is tapped only once it holds still
-        device.waitForText("Restore this wallet to the device or delete it from Cloud Backup.")
-        device.clickText("Delete from Cloud Backup")
+        val description = "Restore this wallet to the device or delete it from Cloud Backup."
+        device.waitForText(description)
+        val deleteAction = device.waitForSettled(By.text("Delete from Cloud Backup"), "Delete from Cloud Backup")
+        assertTrue(
+            "the action sheet should be titled with the selected wallet",
+            sheetContaining(deleteAction, description).hasObject(By.text(walletName)),
+        )
+        device.clickClickableAncestor(deleteAction)
 
         device.waitForText("Delete $walletName?")
         device.waitForText("This wallet backup will be permanently removed from Cloud Backup")
         device.waitForText("Delete Forever")
+    }
+
+    // the innermost ancestor of the sheet's delete action that also holds its description is the
+    // sheet itself, so a search inside it can't match the wallet row underneath
+    private fun sheetContaining(
+        action: UiObject2,
+        description: String,
+    ): UiObject2 {
+        var node: UiObject2? = action
+
+        while (node != null && !node.hasObject(By.text(description))) {
+            node = node.parent
+        }
+
+        return requireNotNull(node) { "the delete action is not inside the action sheet" }
     }
 
     // gives a delete that Cancel would have dispatched time to reach the provider before asserting none did
