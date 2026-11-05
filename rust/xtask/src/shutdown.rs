@@ -38,6 +38,9 @@ pub trait Stop: Send + Sync {
 // how long a command gets to exit after SIGTERM before it gets SIGKILL
 const STOP_GRACE: Duration = Duration::from_secs(5);
 
+// how long stopping waits for processes to exit after SIGKILL
+const KILL_WAIT: Duration = Duration::from_secs(2);
+
 // signals this soon after the first don't end the process before its cleanup finishes
 const REPEAT_SIGNAL_GRACE: Duration = Duration::from_secs(1);
 
@@ -228,9 +231,19 @@ impl Processes {
         while self.any_alive() {
             if Instant::now() > deadline {
                 self.signal("-KILL");
+                self.wait_for_exit(KILL_WAIT);
                 return;
             }
 
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    // SIGKILL can't be caught, but a process can take a moment to exit, such as while the
+    // kernel finishes its I/O. Bounded, since a zombie no one has reaped yet still counts
+    fn wait_for_exit(&self, timeout: Duration) {
+        let deadline = Instant::now() + timeout;
+        while self.any_alive() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(100));
         }
     }
@@ -266,54 +279,5 @@ impl Processes {
         };
 
         found.is_ok_and(|status| status.success())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{fs, os::unix::process::CommandExt, path::Path};
-
-    use super::*;
-
-    fn group_is_alive(leader: u32) -> bool {
-        Processes::Group(leader).any_alive()
-    }
-
-    fn wait_for(path: &Path) {
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while !path.exists() {
-            assert!(Instant::now() < deadline, "{} never appeared", path.display());
-            thread::sleep(Duration::from_millis(20));
-        }
-    }
-
-    #[test]
-    fn a_stopped_group_is_empty_before_the_wait_returns() {
-        let dir = tempfile::tempdir().unwrap();
-        let started = dir.path().join("started");
-
-        // the leader dies on SIGTERM at once, while the process it started ignores SIGTERM and
-        // runs on for a second, as a Gradle worker can outlive the shell that ran it
-        let mut leader = Command::new("sh")
-            .args(["-c", r#"(trap '' TERM; touch "$1"; sleep 1) & exec sleep 30"#, "sh"])
-            .arg(&started)
-            .process_group(0)
-            .spawn()
-            .unwrap();
-
-        let guard = register_process_group(&leader);
-        wait_for(&started);
-
-        // the signal thread's part
-        let group = guard.group.clone();
-        let cleanup = thread::spawn(move || group.stop());
-
-        // the run's part: the leader exits first, then the run waits before releasing its locks
-        leader.wait().unwrap();
-        guard.group.wait_stopped();
-
-        assert!(!group_is_alive(leader.id()), "the wait returned while the group still ran");
-        cleanup.join().unwrap();
-        fs::remove_file(started).unwrap();
     }
 }

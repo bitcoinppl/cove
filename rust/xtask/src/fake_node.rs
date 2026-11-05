@@ -335,3 +335,73 @@ pub fn run_command(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::Path,
+        process::Command,
+        thread,
+        time::{Duration, Instant},
+    };
+
+    use super::run_command;
+    use crate::{shutdown, ui_test_ports::UiTestPorts};
+
+    const CANCELLED_RUN_DIR_ENV: &str = "COVE_TEST_CANCELLED_RUN_DIR";
+    const TEST_NAME: &str =
+        "fake_node::tests::a_cancelled_command_returns_only_after_its_processes_stop";
+
+    fn wait_for(path: &Path) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !path.exists() {
+            if Instant::now() > deadline {
+                return false;
+            }
+
+            thread::sleep(Duration::from_millis(20));
+        }
+
+        true
+    }
+
+    #[test]
+    fn a_cancelled_command_returns_only_after_its_processes_stop() {
+        // the re-run below, which gets SIGTERM while run_command waits on its command
+        if let Some(dir) = std::env::var_os(CANCELLED_RUN_DIR_ENV) {
+            let dir = Path::new(&dir);
+            shutdown::install().unwrap();
+
+            // the leader dies on SIGTERM at once, while the process it started ignores SIGTERM
+            // and is still using the device for a second, as a Gradle worker can outlive the
+            // shell that ran it
+            let script = r#"(trap '' TERM; touch "$1/started"; sleep 1; touch "$1/finished") & exec sleep 30"#;
+            let command = ["sh", "-c", script, "sh", &dir.display().to_string()].map(String::from);
+            let _ = run_command(&command, UiTestPorts::DEVICE, None);
+
+            // the caller releases the run's locks from here on
+            let returned = if dir.join("finished").exists() { "after" } else { "before" };
+            fs::write(dir.join("returned"), returned).unwrap();
+            shutdown::finish();
+            return;
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut run = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", TEST_NAME])
+            .env(CANCELLED_RUN_DIR_ENV, dir.path())
+            .spawn()
+            .unwrap();
+
+        assert!(wait_for(&dir.path().join("started")), "the command never started");
+        Command::new("kill").args(["-TERM", &run.id().to_string()]).status().unwrap();
+        run.wait().unwrap();
+
+        let returned = fs::read_to_string(dir.path().join("returned")).unwrap_or_default();
+        assert_eq!(
+            returned, "after",
+            "run_command returned while a process its command started was still running"
+        );
+    }
+}
