@@ -402,7 +402,8 @@ class CloudBackupRestoreAllFullLaunchTest {
         val badge: String?,
     )
 
-    // every wallet row the detail composes, top to bottom, named by the record in its test tag
+    // every wallet row the detail composes, top to bottom, named by the record in its test tag;
+    // sorted by unclipped position, since clipped bounds put rows scrolled off screen at zero
     private fun walletRows(): List<WalletRow> =
         mergedSemanticsNodes()
             .mapNotNull { node ->
@@ -410,7 +411,7 @@ class CloudBackupRestoreAllFullLaunchTest {
                 val recordId = tag?.takeIf { it.startsWith(WALLET_ROW_TAG_PREFIX) }?.removePrefix(WALLET_ROW_TAG_PREFIX)
 
                 recordId?.let {
-                    WalletRow(it, node.boundsInRoot.top, node.texts().firstOrNull(STATUS_BADGES::contains))
+                    WalletRow(it, node.positionInRoot.y, node.texts().firstOrNull(STATUS_BADGES::contains))
                 }
             }.sortedBy { row -> row.top }
 
