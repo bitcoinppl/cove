@@ -64,6 +64,33 @@ final class CloudBackupHostControl {
         }
     }
 
+    /// Holds the next wallet upload made after this call, from whichever action makes it
+    func holdNextWalletUpload(id: String) throws {
+        let uploadsSoFar = state.count(.walletUpload)
+        try update {
+            $0.holds.append(.init(id: id, point: .walletUpload, matchingCallsToSkip: uploadsSoFar))
+        }
+    }
+
+    /// Namespaces the cloud holds a master key for, read from the host's cloud directory
+    var cloudNamespaces: [String] {
+        cloudNames(in: "masters")
+    }
+
+    /// Wallet records the cloud holds under `namespace`
+    func cloudWalletRecordIds(namespace: String) -> [String] {
+        cloudNames(in: "wallets/\(namespace)")
+    }
+
+    private func cloudNames(in path: String) -> [String] {
+        let url = directory
+            .appendingPathComponent(CloudBackupUITestControl.cloudDirectoryName)
+            .appendingPathComponent(path)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
+
+        return names.filter { !$0.hasPrefix(".") }.sorted()
+    }
+
     func release(_ id: String) {
         let url = directory.appendingPathComponent(CloudBackupUITestControl.releaseFileName(id))
         FileManager.default.createFile(atPath: url.path, contents: Data())

@@ -30,7 +30,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
     ) async throws {
         let attempt = controller.record(.masterUpload) + 1
         let script = controller.script()
-        try failIfScripted(script, kind: .master, attempt: attempt)
+        try recordUpload(script, kind: .master, attempt: attempt, namespace: namespace, recordId: nil)
         try validateWritable(namespace: namespace, script: script)
         try store.storeMaster(namespace: namespace, data: data)
 
@@ -47,7 +47,10 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
     ) async throws {
         let attempt = controller.record(.walletUpload) + 1
         let script = controller.script()
-        try failIfScripted(script, kind: .wallet, attempt: attempt)
+        try recordUpload(script, kind: .wallet, attempt: attempt, namespace: namespace, recordId: recordId)
+
+        // a hold here proves which action made the upload, since it can't return until released
+        await controller.holdIfScripted(at: .walletUpload, recordId: recordId, matchingCallIndex: attempt - 1)
         try validateWritable(namespace: namespace, script: script)
         try store.storeWallet(namespace: namespace, recordId: recordId, data: data)
     }
@@ -70,6 +73,10 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         case .fixture:
             guard namespace == fixture.namespace else {
                 throw CloudStorageError.NotFound("cloud backup is not available")
+            }
+
+            guard !store.isNamespaceDeleted(namespace) else {
+                throw CloudStorageError.NotFound("cloud backup was deleted")
             }
 
             return store.master(namespace: namespace) ?? fixture.masterData
@@ -96,6 +103,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
 
         case .fixture:
             guard namespace == fixture.namespace,
+                  !store.isWalletDeleted(namespace: namespace, recordId: recordId),
                   let wallet = fixture.walletsByRecordId[recordId]
                   ?? [fixture.duplicateWallet].first(where: { $0.recordId == recordId })
             else { throw CloudStorageError.NotFound("cloud backup is not available") }
@@ -118,6 +126,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         locations _: [RemoteBackupLocation],
         policy _: CloudAccessPolicy
     ) async throws {
+        // the fixture cloud falls back to built-in records, so a deletion leaves a marker
         store.deleteWallet(namespace: namespace, recordId: recordId)
     }
 
@@ -130,16 +139,19 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         await controller.holdIfScripted(at: .namespaceList, matchingCallIndex: index)
         let script = controller.script()
 
-        if script.cloud == .freshEnable {
-            return isVisible ? store.namespaces() : []
-        }
-
         let results = script.namespaceResults.isEmpty ? [.backupFound] : script.namespaceResults
         switch results[min(index, results.count - 1)] {
         case .empty:
-            return []
+            // a fresh-enable cloud lists what the app uploaded once it is visible
+            guard script.cloud == .freshEnable, isVisible else { return [] }
+
+            return store.namespaces()
         case .backupFound:
-            return [fixture.namespace]
+            guard script.cloud == .fixture else {
+                fatalError("a fresh-enable cloud has no fixture backup to find; script .empty instead")
+            }
+
+            return store.isNamespaceDeleted(fixture.namespace) ? [] : [fixture.namespace]
         case .offline:
             throw CloudStorageError.Offline("scripted provider is offline")
         case .unavailable:
@@ -185,7 +197,14 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
             return exists ? .uploaded : .notFound
 
         case .fixture:
-            return namespace == fixture.namespace ? .uploaded : .notFound
+            let exists =
+                if recordId == Self.masterKeyRecordId {
+                    !store.isNamespaceDeleted(namespace)
+                } else {
+                    !store.isWalletDeleted(namespace: namespace, recordId: recordId)
+                }
+
+            return namespace == fixture.namespace && exists ? .uploaded : .notFound
         }
     }
 
@@ -211,22 +230,28 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
             return store.walletRecordIds(namespace: namespace).map(Self.walletFileName)
 
         case .fixture:
-            guard namespace == fixture.namespace else {
+            guard namespace == fixture.namespace, !store.isNamespaceDeleted(namespace) else {
                 throw CloudStorageError.NotFound("cloud backup is not available")
             }
 
             let listed = script.listedWalletRecordIds ?? fixture.wallets.map(\.recordId)
-            return listed.map(Self.walletFileName)
+            return listed
+                .filter { !store.isWalletDeleted(namespace: namespace, recordId: $0) }
+                .map(Self.walletFileName)
         }
     }
 
-    private func failIfScripted(
+    /// Records the upload, and throws the script's failure when it fails this attempt
+    private func recordUpload(
         _ script: CloudBackupUITestScript,
         kind: CloudBackupUITestScript.UploadKind,
-        attempt: Int
+        attempt: Int,
+        namespace: String,
+        recordId: String?
     ) throws {
-        guard let failure = script.uploadFailures.first(where: { $0.kind == kind && $0.attempt == attempt })
-        else { return }
+        let failure = script.uploadFailures.first { $0.kind == kind && $0.attempt == attempt }
+        controller.recordUpload(.init(kind: kind, namespace: namespace, recordId: recordId, accepted: failure == nil))
+        guard let failure else { return }
 
         switch failure.error {
         case .uploadFailed:

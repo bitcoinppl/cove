@@ -88,6 +88,13 @@ final class CloudBackupUITestController: @unchecked Sendable {
         }
     }
 
+    func recordUpload(_ upload: CloudBackupUITestHostState.Upload) {
+        lock.withLock {
+            state.uploads.append(upload)
+            persistStateLocked()
+        }
+    }
+
     /// Waits on the first unclaimed hold at `point` once its skipped calls have passed
     ///
     /// `matchingCallIndex` is the zero-based index of this call among the calls the hold matches
@@ -144,11 +151,17 @@ final class CloudBackupUITestCloudStore: @unchecked Sendable {
     }
 
     func storeMaster(namespace: String, data: Data) throws {
-        try lock.withLock { try write(data, to: masterURL(namespace)) }
+        try lock.withLock {
+            try write(data, to: masterURL(namespace))
+            try? FileManager.default.removeItem(at: deletedNamespaceURL(namespace))
+        }
     }
 
     func storeWallet(namespace: String, recordId: String, data: Data) throws {
-        try lock.withLock { try write(data, to: walletURL(namespace, recordId)) }
+        try lock.withLock {
+            try write(data, to: walletURL(namespace, recordId))
+            try? FileManager.default.removeItem(at: deletedWalletURL(namespace, recordId))
+        }
     }
 
     func master(namespace: String) -> Data? {
@@ -169,17 +182,45 @@ final class CloudBackupUITestCloudStore: @unchecked Sendable {
         }
     }
 
+    /// Deletes the wallet and leaves a marker, so a built-in fixture record stays deleted too
     func deleteWallet(namespace: String, recordId: String) {
-        lock.withLock { try? FileManager.default.removeItem(at: walletURL(namespace, recordId)) }
+        lock.withLock {
+            try? FileManager.default.removeItem(at: walletURL(namespace, recordId))
+            try? write(Data(), to: deletedWalletURL(namespace, recordId))
+        }
     }
 
+    /// Deletes the namespace and leaves a marker, so the built-in fixture namespace stays deleted
     func deleteNamespace(_ namespace: String) {
         lock.withLock {
             try? FileManager.default.removeItem(at: masterURL(namespace))
             try? FileManager.default.removeItem(
                 at: root.appendingPathComponent("wallets").appendingPathComponent(safe(namespace))
             )
+            try? write(Data(), to: deletedNamespaceURL(namespace))
         }
+    }
+
+    func isNamespaceDeleted(_ namespace: String) -> Bool {
+        lock.withLock { FileManager.default.fileExists(atPath: deletedNamespaceURL(namespace).path) }
+    }
+
+    /// Whether the wallet or its whole namespace was deleted
+    func isWalletDeleted(namespace: String, recordId: String) -> Bool {
+        lock.withLock {
+            FileManager.default.fileExists(atPath: deletedNamespaceURL(namespace).path)
+                || FileManager.default.fileExists(atPath: deletedWalletURL(namespace, recordId).path)
+        }
+    }
+
+    private func deletedNamespaceURL(_ namespace: String) -> URL {
+        root.appendingPathComponent("deleted-namespaces").appendingPathComponent(safe(namespace))
+    }
+
+    private func deletedWalletURL(_ namespace: String, _ recordId: String) -> URL {
+        root.appendingPathComponent("deleted-wallets")
+            .appendingPathComponent(safe(namespace))
+            .appendingPathComponent(safe(recordId))
     }
 
     private func masterURL(_ namespace: String) -> URL {

@@ -80,6 +80,9 @@ struct CloudBackupUITestScript: Codable, Equatable {
         case walletDownload
         /// After `uploadMasterKeyBackup` stored the master key and before it returns
         case masterUploadReturn
+        /// When `uploadWalletBackup` is called, before the cloud stores it; skipped calls count
+        /// every wallet upload, whichever record it is for
+        case walletUpload
     }
 
     /// A call that waits until the test creates `release-<id>`
@@ -138,9 +141,20 @@ struct CloudBackupUITestHostState: Codable, Equatable {
         var calls: [String: Int] = [:]
     }
 
+    /// One upload the app asked the cloud to store, in call order
+    struct Upload: Codable, Equatable {
+        var kind: CloudBackupUITestScript.UploadKind
+        var namespace: String
+        /// Nil for the master key
+        var recordId: String?
+        /// False when the script failed it
+        var accepted: Bool
+    }
+
     var launches: [Launch] = []
     var calls: [String: Int] = [:]
     var enteredHolds: [String] = []
+    var uploads: [Upload] = []
 
     func count(_ call: CloudBackupUITestCall) -> Int {
         calls[call.key] ?? 0
