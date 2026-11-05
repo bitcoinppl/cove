@@ -41,6 +41,14 @@ class HardwareWalletScreens(
      * asks to set it up or import it depending on whether it has a key
      */
     fun scanTapSignerFromAddWallet(alert: String) {
+        scanNfcFromAddWallet()
+
+        device.waitFor(By.text(alert), timeoutMs = 15_000L)
+        device.waitFor(By.text("Yes")).click()
+    }
+
+    /** Opens Add Wallet from the sidebar and starts its NFC scan, which the NFC seams answer */
+    fun scanNfcFromAddWallet() {
         // a font scale change recreates the activity, which can replace Menu between finding and
         // clicking it
         wallet.waitUntil("expected Menu to open the sidebar") {
@@ -55,9 +63,6 @@ class HardwareWalletScreens(
         device.waitFor(By.text("Add Wallet")).click()
         device.waitFor(By.desc("More wallet options")).click()
         device.waitFor(By.text("NFC")).click()
-
-        device.waitFor(By.text(alert), timeoutMs = 15_000L)
-        device.waitFor(By.text("Yes")).click()
     }
 
     /**

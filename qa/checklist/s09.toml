@@ -164,11 +164,30 @@ id = "s09-nfc-public-key-import"
 section = "9"
 title = "NFC public-key import"
 platforms = ["ios", "android"]
-target = "manual"
-paths = ["rust/src/multi_format.rs", "ios/Cove/Flows/NewWalletFlow/NfcHelpView.swift", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NfcHelpSheet.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt"]
-coverage = ["human", "rust:rust/src/multi_format.rs::test_nfc_data_zpub_returns_hardware_export"]
+target = "ui"
+paths = [
+    "rust/src/multi_format.rs",
+    "ios/Cove/NFCReader.swift",
+    "ios/Cove/Flows/NewWalletFlow/NfcHelpView.swift",
+    "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/nfc/NfcReader.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/nfc/NfcScanSheet.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NfcHelpSheet.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt",
+]
+coverage = [
+    "rust:rust/src/multi_format.rs::test_nfc_data_zpub_returns_hardware_export",
+    "ios-ui:ios/CoveUITests/PublicKeyImportFullLaunchUITests.swift::testNfcTextRecordVpubImportsFromOnboarding",
+    "ios-ui:ios/CoveUITests/PublicKeyImportFullLaunchUITests.swift::testNfcTextRecordUpubImportsFromAddWallet",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/NewWalletFlow/PublicKeyImportFullLaunchTest.kt::nfcTextRecordVpubImportsFromOnboarding",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/NewWalletFlow/PublicKeyImportFullLaunchTest.kt::nfcTextRecordUpubImportsFromAddWallet",
+]
 # 1.4.0: ios HUMAN, android HUMAN
-# physical nfc tag read
+# the ui tests hold a tag's text record with a vpub or a upub to onboarding's and add wallet's nfc
+# scans through the ndef seam, which skips only the nfc session: the platform's ndef parser, the
+# record processing and the import are the app's own, checked by the first receive address. a
+# physical tag read in a real nfc session is covered by s19-hardware-journey-qr-and-nfc-legs and
+# s13-nfc-and-tapsigner-setup-retry-and-signing
 
 [[row]]
 id = "s09-plain-qr-and-single-part-bbqr-public"

@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.nfc
 
 import android.app.Activity
+import android.nfc.FormatException
 import android.nfc.NdefMessage
 import android.nfc.NfcAdapter
 import android.nfc.Tag
@@ -13,8 +14,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.Log
@@ -35,6 +38,7 @@ class NfcReader(
     private val _scanResults = Channel<NfcScanResult>(Channel.BUFFERED)
     val scanResults: Flow<NfcScanResult> = _scanResults.receiveAsFlow()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var scriptedScan: Job? = null
 
     var isScanning by mutableStateOf(false)
         private set
@@ -46,8 +50,13 @@ class NfcReader(
         private set
 
     fun startScanning() {
+        // both UI test seams are null or false in release builds; the TAPSIGNER bridge wins when
+        // a test sets both, since it answers every tag read itself
+        val scriptedMessages = UiTestSeams.nfcNdefMessages()
+
         when {
             UiTestSeams.tapSignerBridgeConfigured -> scanBridge()
+            scriptedMessages != null -> scanScriptedMessage(scriptedMessages)
             nfcAdapter == null -> scanFailed("NFC is not supported on this device")
             !nfcAdapter.isEnabled -> scanFailed("NFC is disabled. Please enable it in Settings")
             else -> scanTag(nfcAdapter)
@@ -84,6 +93,8 @@ class NfcReader(
         isScanning = false
         message = ""
         readingState = NfcReadingState.WAITING
+        scriptedScan?.cancel()
+        scriptedScan = null
         // must be called on UI thread
         activity.runOnUiThread {
             nfcAdapter?.disableReaderMode(activity)
@@ -112,6 +123,37 @@ class NfcReader(
                 stopScanning()
             }
         }
+    }
+
+    /**
+     * Reads the next NDEF message a UI test scripts as if a tag holding it were held to the phone
+     *
+     * Only the NFC adapter and tag discovery are replaced: the bytes go through the platform's NDEF
+     * parser and the record processing a real tag read uses
+     */
+    // debug-only test path, so it does not justify threading a dispatcher through the reader
+    @Suppress("InjectDispatcher")
+    private fun scanScriptedMessage(messages: Flow<ByteArray>) {
+        isScanning = true
+        message = "Hold your phone near the NFC tag"
+        readingState = NfcReadingState.WAITING
+
+        scriptedScan?.cancel()
+        scriptedScan =
+            CoroutineScope(Dispatchers.IO).launch {
+                val bytes = messages.first()
+                mainHandler.post {
+                    readingState = NfcReadingState.READING
+                    message = "Reading"
+                }
+
+                try {
+                    processNdefMessage(NdefMessage(bytes))
+                } catch (e: FormatException) {
+                    Log.e("NfcReader", "UI test NDEF message is not valid", e)
+                    _scanResults.trySend(NfcScanResult.Error("Error reading tag: ${e.message}"))
+                }
+            }
     }
 
     private fun handleTag(tag: Tag) {

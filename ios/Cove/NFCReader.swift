@@ -27,6 +27,9 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
 
     var isScanning = false
 
+    /// The UI test NFC seam's pending read, which stands in for an NFC session in debug builds
+    @ObservationIgnored private var scriptedScan: Task<Void, Never>?
+
     override init() {
         Log.debug("create nfc reader")
         consts = NfcConst()
@@ -52,6 +55,11 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 scanBridge(bridge)
                 return
             }
+
+            if let path = UITestNfcNdefScript.path {
+                scanScriptedMessage(at: path)
+                return
+            }
         #endif
 
         session = NFCTagReaderSession(pollingOption: [.iso14443, .iso15693], delegate: self)
@@ -73,11 +81,31 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 }
             }
         }
+
+        /// Reads the next NDEF message a UI test scripts as if a tag holding it were held to the
+        /// phone; only the NFC session is replaced, the bytes go through CoreNFC's NDEF parser and
+        /// the record processing a real tag read uses
+        private func scanScriptedMessage(at path: String) {
+            scriptedScan?.cancel()
+            scriptedScan = Task { @MainActor in
+                guard let data = await UITestNfcNdefScript.nextMessage(at: path) else { return }
+
+                guard let message = NFCNDEFMessage(data: data) else {
+                    Log.error("UI test NDEF message is not valid")
+                    isScanning = false
+                    return
+                }
+
+                processNDEFMessage(message)
+            }
+        }
     #endif
 
     func resetReader() {
         Log.debug("reset reader")
         isScanning = false
+        scriptedScan?.cancel()
+        scriptedScan = nil
         reader = FfiNfcReader()
         readBytes = Data()
         currentBlock = 0
