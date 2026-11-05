@@ -10,6 +10,14 @@ extension XCUIApplication {
         tapButton(startingWith: "Scan export QR")
     }
 
+    /// Opens onboarding's hardware wallet NFC scan from the welcome screen and starts it
+    func startHardwareNfcScan() {
+        startImportingExistingWallet()
+        tapButton(startingWith: "Hardware wallet", until: button(startingWith: "Scan with NFC"))
+        tapButton(startingWith: "Scan with NFC", until: buttons["Start NFC Scan"])
+        tapButton(named: "Start NFC Scan")
+    }
+
     /// Declines Cloud Backup and accepts the terms after a hardware wallet import, landing on the
     /// wallet screen
     func finishHardwareImport() {
@@ -58,12 +66,17 @@ extension XCUIApplication {
 
     /// Scans the card from Add Wallet and accepts the alert that follows
     func scanTapSigner(expectingAlert title: String) {
-        tapButton(named: "More wallet import options")
-        tapButton(named: "NFC")
+        scanNfcFromAddWallet()
 
         let alert = alerts[title]
         XCTAssertTrue(alert.waitForExistence(timeout: 15), "the TAPSIGNER scan never asked '\(title)'")
         alert.buttons["Yes"].tap()
+    }
+
+    /// Starts the NFC scan on the open Add Wallet screen, which the NFC seams answer
+    func scanNfcFromAddWallet() {
+        tapButton(named: "More wallet import options")
+        tapButton(named: "NFC")
     }
 
     /// Types the CVC into the open TAPSIGNER CVC screen and submits it

@@ -164,11 +164,36 @@ id = "s09-nfc-public-key-import"
 section = "9"
 title = "NFC public-key import"
 platforms = ["ios", "android"]
-target = "manual"
-paths = ["rust/src/multi_format.rs", "ios/Cove/Flows/NewWalletFlow/NfcHelpView.swift", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NfcHelpSheet.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt"]
-coverage = ["human", "rust:rust/src/multi_format.rs::test_nfc_data_zpub_returns_hardware_export"]
+target = "ui"
+paths = [
+    "rust/src/multi_format.rs",
+    "ios/Cove/NFCReader.swift",
+    "ios/Cove/Flows/NewWalletFlow/NfcHelpView.swift",
+    "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/nfc/NfcReader.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/nfc/NfcScanSheet.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NfcHelpSheet.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt",
+]
+coverage = [
+    "human:ios",
+    "rust:rust/src/multi_format.rs::test_nfc_data_zpub_returns_hardware_export",
+    "ios-ui:ios/CoveUITests/PublicKeyImportFullLaunchUITests.swift::testNfcTextRecordVpubImportsFromOnboarding",
+    "ios-ui:ios/CoveUITests/PublicKeyImportFullLaunchUITests.swift::testNfcTextRecordUpubImportsFromAddWallet",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/NewWalletFlow/PublicKeyImportFullLaunchTest.kt::nfcTextRecordVpubImportsFromOnboarding",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/NewWalletFlow/PublicKeyImportFullLaunchTest.kt::nfcTextRecordUpubImportsFromAddWallet",
+]
 # 1.4.0: ios HUMAN, android HUMAN
-# physical nfc tag read
+# the ui tests hold a tag's text record with a vpub or a upub to onboarding's and add wallet's nfc
+# scans through the ndef seam, which skips only the nfc session: the platform's ndef parser, the
+# record processing and the import are the app's own, checked by the first receive address. ios
+# drops add wallet's success alert in the route reset after the import, so its test doesn't wait
+# for that alert.
+# android reads every tag through its ndef api, so that covers android. ios reads iso 15693 tags
+# block by block and parses them in rust's nfc reader instead of ndef, which the seam skips, so an
+# ios import from an iso 15693 tag still needs a person. a physical tag read in a real nfc session
+# is also covered by s19-hardware-journey-qr-and-nfc-legs and
+# s13-nfc-and-tapsigner-setup-retry-and-signing
 
 [[row]]
 id = "s09-plain-qr-and-single-part-bbqr-public"

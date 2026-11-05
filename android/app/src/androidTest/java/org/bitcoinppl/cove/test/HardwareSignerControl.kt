@@ -1,5 +1,7 @@
 package org.bitcoinppl.cove.test
 
+import android.nfc.NdefMessage
+import android.nfc.NdefRecord
 import android.system.Os
 import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONArray
@@ -168,5 +170,43 @@ class QrScript {
     fun remove() {
         file.delete()
         Os.unsetenv("COVE_UI_TEST_QR_SCRIPT")
+    }
+}
+
+/**
+ * Holds NDEF messages to the app's NFC reader through the debug NFC seam
+ *
+ * The app reads `COVE_UI_TEST_NFC_NDEF_SCRIPT` when a scan starts, and while it scans it takes the
+ * file at that path and reads its message as if a tag held it. The test runs in the app's process,
+ * so it sets the variable with `Os.setenv` and uses the app's `noBackupFilesDir`
+ */
+class NfcNdefScript {
+    private val file =
+        File(InstrumentationRegistry.getInstrumentation().targetContext.noBackupFilesDir, "ui-test-nfc-${UUID.randomUUID()}.json")
+
+    init {
+        Os.setenv("COVE_UI_TEST_NFC_NDEF_SCRIPT", file.path, true)
+    }
+
+    /**
+     * Holds a tag with one well-known text record to the active scan, as a generic NFC writer app
+     * writes text: a status byte for UTF-8 and the `en` language code, then the text
+     */
+    fun showTextRecord(text: String) {
+        show(NdefMessage(NdefRecord.createTextRecord("en", text)))
+    }
+
+    private fun show(message: NdefMessage) {
+        val hex = message.toByteArray().joinToString("") { "%02x".format(it) }
+        val temporary = File(file.parentFile, "${file.name}.tmp")
+        temporary.writeText(JSONObject().put("ndef", hex).toString())
+
+        // the reader polls for the file, so it must never see a partial write
+        check(temporary.renameTo(file)) { "couldn't move the NDEF script into place" }
+    }
+
+    fun remove() {
+        file.delete()
+        Os.unsetenv("COVE_UI_TEST_NFC_NDEF_SCRIPT")
     }
 }

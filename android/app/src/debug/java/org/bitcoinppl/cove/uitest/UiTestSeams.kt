@@ -27,7 +27,7 @@ import org.json.JSONObject
  * The release source set has the same entry points, each reporting that no
  * seam is configured, so none of this code is in a release build.
  *
- * Both seams read their configuration from the process environment, which an
+ * The seams read their configuration from the process environment, which an
  * instrumented test sets with `Os.setenv` before it launches the activity:
  * - `COVE_UI_TEST_QR_SCRIPT` names a file an open QR scanner polls. The test
  *   writes `{"frames": ["…", …]}` there, atomically; the scanner takes the file
@@ -36,6 +36,10 @@ import org.json.JSONObject
  * - `COVE_UI_TEST_TAPSIGNER_BRIDGE` is `host:port` of the TAPSIGNER bridge that
  *   `xtask ui-test-host` serves, which `adb reverse` forwards to the device.
  *   TAPSIGNER commands and NFC tag reads talk to it instead of an NFC tag
+ * - `COVE_UI_TEST_NFC_NDEF_SCRIPT` names a file an active NFC scan polls. The
+ *   test writes `{"ndef": "<hex>"}` there, atomically, with the raw bytes of an
+ *   NDEF message; the scan takes the file and reads the message as if a tag
+ *   held it. The TAPSIGNER bridge takes precedence when both are set
  */
 // debug-only test seam with no caller that could inject a dispatcher
 @Suppress("InjectDispatcher")
@@ -43,8 +47,11 @@ internal object UiTestSeams {
     private const val TAG = "UiTestSeams"
     private const val QR_SCRIPT_ENV = "COVE_UI_TEST_QR_SCRIPT"
     private const val TAPSIGNER_BRIDGE_ENV = "COVE_UI_TEST_TAPSIGNER_BRIDGE"
+    private const val NFC_NDEF_SCRIPT_ENV = "COVE_UI_TEST_NFC_NDEF_SCRIPT"
     private const val QR_FRAME_INTERVAL_MS = 150L
     private const val QR_POLL_INTERVAL_MS = 200L
+    private const val NFC_POLL_INTERVAL_MS = 200L
+    private const val HEX_RADIX = 16
 
     // `{"cmd": "nfc"}` in a CBOR APDU, which returns the URL a card's NDEF record holds
     private val NFC_URL_APDU =
@@ -81,6 +88,24 @@ internal object UiTestSeams {
                 }
 
                 delay(QR_POLL_INTERVAL_MS)
+            }
+        }.flowOn(Dispatchers.IO)
+    }
+
+    /**
+     * Raw NDEF messages to read instead of NFC tags, or null to use the NFC adapter
+     *
+     * Each message is the bytes a tag's NDEF area holds, which the reader parses and processes
+     * as it does a real tag's
+     */
+    fun nfcNdefMessages(): Flow<ByteArray>? {
+        val path = Os.getenv(NFC_NDEF_SCRIPT_ENV) ?: return null
+        val script = File(path)
+
+        return flow {
+            while (true) {
+                takeNdefMessage(script)?.let { emit(it) }
+                delay(NFC_POLL_INTERVAL_MS)
             }
         }.flowOn(Dispatchers.IO)
     }
@@ -140,6 +165,29 @@ internal object UiTestSeams {
         } catch (e: JSONException) {
             Log.e(TAG, "UI test QR script at ${script.path} is not valid", e)
             emptyList()
+        } finally {
+            script.delete()
+        }
+    }
+
+    private fun takeNdefMessage(script: File): ByteArray? {
+        if (!script.exists()) return null
+
+        return try {
+            val hex = JSONObject(script.readText()).getString("ndef")
+            require(hex.length % 2 == 0) { "the NDEF hex has an odd length" }
+
+            Log.d(TAG, "Took a ${hex.length / 2}-byte NDEF message from ${script.path}")
+            hex.chunked(2).map { it.toInt(HEX_RADIX).toByte() }.toByteArray()
+        } catch (e: IOException) {
+            Log.e(TAG, "UI test NDEF script at ${script.path} could not be read", e)
+            null
+        } catch (e: JSONException) {
+            Log.e(TAG, "UI test NDEF script at ${script.path} is not valid", e)
+            null
+        } catch (e: IllegalArgumentException) {
+            Log.e(TAG, "UI test NDEF script at ${script.path} is not hex", e)
+            null
         } finally {
             script.delete()
         }

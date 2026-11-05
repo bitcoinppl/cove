@@ -13,6 +13,8 @@ import org.bitcoinppl.cove_core.TapcardTransportProtocol
 internal object UiTestSeams {
     fun qrScriptFrames(): Flow<String>? = null
 
+    fun nfcNdefMessages(): Flow<ByteArray>? = null
+
     val tapSignerBridgeConfigured: Boolean
         get() = false
 

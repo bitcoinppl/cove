@@ -1,8 +1,9 @@
 import XCTest
 
 /// Imports a hardware wallet from its bare public key in the real app, scanned through the debug
-/// QR seam as a plain QR and as a single-part BBQr, and checks the address type the app infers
-/// from the key by the first receive address it shows
+/// QR seam as a plain QR and as a single-part BBQr, or read through the debug NFC seam from a tag's
+/// text record, and checks the address type the app infers from the key by the first receive
+/// address it shows
 ///
 /// The signer host derives the key and the expected address from the test mnemonic, the address
 /// straight from the key at `/0/0` rather than from a descriptor. The fake node is reset first, so
@@ -15,6 +16,7 @@ final class PublicKeyImportFullLaunchUITests: XCTestCase {
     private var node: FakeNodeControl!
     private var signer: HardwareSignerControl!
     private var qr: QrScript!
+    private var nfc: NfcNdefScript!
 
     override func setUp() {
         super.setUp()
@@ -24,14 +26,17 @@ final class PublicKeyImportFullLaunchUITests: XCTestCase {
         node = FakeNodeControl()
         signer = HardwareSignerControl()
         qr = QrScript()
+        nfc = NfcNdefScript()
 
         // a fresh install on Signet against the fake node
         app.launchEnvironment["COVE_UI_TEST_ESPLORA_URL"] = Self.esploraUrl
         qr.configure(app)
+        nfc.configure(app)
     }
 
     override func tearDown() {
         qr.remove()
+        nfc.remove()
         super.tearDown()
     }
 
@@ -54,6 +59,52 @@ final class PublicKeyImportFullLaunchUITests: XCTestCase {
         try importAndCheckFirstAddress(export, frames: [export.bbqr])
     }
 
+    /// A vpub in a tag's text record imports from onboarding's NFC scan, where a new user first
+    /// holds a tag to the phone. The record's status byte and language code must not reach the key
+    func testNfcTextRecordVpubImportsFromOnboarding() throws {
+        let export = try publicKeyExport(.nativeSegwit)
+        XCTAssertTrue(export.key.hasPrefix("vpub"))
+
+        app.launch(expecting: app.staticTexts["Welcome to Cove"])
+        app.startHardwareNfcScan()
+        try nfc.showTextRecord(export.key)
+        app.finishHardwareImport()
+
+        try checkFirstAddress(export)
+    }
+
+    /// A upub in a tag's text record imports from Add Wallet's NFC scan as wrapped segwit
+    func testNfcTextRecordUpubImportsFromAddWallet() throws {
+        let first = try publicKeyExport(.nativeSegwit)
+        let export = try signer.publicKeyExport(.wrappedSegwit)
+        XCTAssertTrue(export.key.hasPrefix("upub"))
+
+        // Add Wallet is in the sidebar once the app has a wallet
+        app.launch(expecting: app.staticTexts["Welcome to Cove"])
+        app.openHardwareExportScanner()
+        try qr.show([first.key])
+        app.finishHardwareImport()
+
+        app.tapButton(named: "app.sidebar.open")
+        app.tapButton(named: "Add Wallet")
+        app.scanNfcFromAddWallet()
+        try nfc.showTextRecord(export.key)
+
+        // ios sets its success alert while the import resets the route to the new wallet and the
+        // alert doesn't survive that reset, so the imported wallet's own first address is the check
+        XCTAssertTrue(
+            app.element("selectedWallet.balance").waitForExistence(timeout: 30),
+            "the NFC import never opened the imported wallet"
+        )
+
+        let imported = app.alerts["Success"]
+        if imported.waitForExistence(timeout: 2) {
+            imported.buttons["OK"].tap()
+        }
+
+        try checkFirstAddress(export)
+    }
+
     private func publicKeyExport(_ addressType: HardwareSignerControl.AddressType) throws -> HardwareSignerControl.PublicKeyExport {
         try node.requireHealthy()
         try signer.requireHealthy()
@@ -68,6 +119,10 @@ final class PublicKeyImportFullLaunchUITests: XCTestCase {
         try qr.show(frames)
         app.finishHardwareImport()
 
+        try checkFirstAddress(export)
+    }
+
+    private func checkFirstAddress(_ export: HardwareSignerControl.PublicKeyExport) throws {
         app.openReceive()
 
         // the path's purpose is the address type, 84' for native and 49' for wrapped segwit

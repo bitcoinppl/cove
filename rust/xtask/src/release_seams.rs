@@ -36,7 +36,8 @@ use memchr::memmem;
 use crate::common::{print_info, print_success};
 
 /// Strings only the apps' seam code contains: the variables that turn the seams on
-const APP_MARKERS: &[&str] = &["COVE_UI_TEST_QR_SCRIPT", "COVE_UI_TEST_TAPSIGNER_BRIDGE"];
+const APP_MARKERS: &[&str] =
+    &["COVE_UI_TEST_QR_SCRIPT", "COVE_UI_TEST_TAPSIGNER_BRIDGE", "COVE_UI_TEST_NFC_NDEF_SCRIPT"];
 
 /// Seam variables only the iOS app has, which the Android debug control can't contain
 const IOS_APP_MARKERS: &[&str] = &["COVE_UI_TEST_TRUNCATION_PROBE"];

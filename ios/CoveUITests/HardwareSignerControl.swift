@@ -178,3 +178,53 @@ struct QrScript {
         try? FileManager.default.removeItem(atPath: path)
     }
 }
+
+/// Holds NDEF messages to the app's NFC reader through the debug NFC seam
+///
+/// The app reads `COVE_UI_TEST_NFC_NDEF_SCRIPT` at launch, and while an NFC scan is active it takes
+/// the file at that path and reads its message as if a tag held it. The simulator shares the host's
+/// file system, so both processes see the same `/tmp`
+struct NfcNdefScript {
+    private static let environmentKey = "COVE_UI_TEST_NFC_NDEF_SCRIPT"
+
+    let path = "/tmp/cove-ui-test-nfc-\(UUID().uuidString).json"
+
+    func configure(_ app: XCUIApplication) {
+        app.launchEnvironment[Self.environmentKey] = path
+    }
+
+    /// Holds a tag with one well-known text record to the active scan, as a generic NFC writer app
+    /// writes text: a status byte for UTF-8 and the `en` language code, then the text
+    func showTextRecord(_ text: String) throws {
+        let payload = [0x02] + Array("en".utf8) + Array(text.utf8)
+        try show(Self.message(type: Array("T".utf8), payload: payload))
+    }
+
+    /// One NDEF record with the well-known type name format, alone in its message
+    private static func message(type: [UInt8], payload: [UInt8]) -> [UInt8] {
+        // message begin, message end and type name format 1, well known
+        let flags: UInt8 = 0x80 | 0x40 | 0x01
+
+        // a short record has a 1-byte payload length, any other a 4-byte big-endian one
+        let header: [UInt8] =
+            if payload.count < 256 {
+                [flags | 0x10, UInt8(type.count), UInt8(payload.count)]
+            } else {
+                [flags, UInt8(type.count)] + withUnsafeBytes(of: UInt32(payload.count).bigEndian, Array.init)
+            }
+
+        return header + type + payload
+    }
+
+    private func show(_ message: [UInt8]) throws {
+        let hex = message.map { String(format: "%02x", $0) }.joined()
+        let data = try JSONSerialization.data(withJSONObject: ["ndef": hex])
+
+        // the reader polls for the file, so it must never see a partial write
+        try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+    }
+
+    func remove() {
+        try? FileManager.default.removeItem(atPath: path)
+    }
+}
