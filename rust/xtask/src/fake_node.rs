@@ -320,8 +320,13 @@ pub fn run_command(
         runner.process_group(0).spawn().wrap_err_with(|| format!("Failed to run {program}"))?;
 
     let status = {
-        let _registration = shutdown::register_process_group(&child);
-        child.wait().wrap_err_with(|| format!("Failed to wait for {program}"))?
+        let group = shutdown::register_process_group(&child);
+        let status = child.wait().wrap_err_with(|| format!("Failed to wait for {program}"));
+
+        // the caller releases the device and port locks once this returns, so a cancelled
+        // command's processes must have stopped first
+        group.wait_for_stop();
+        status?
     };
 
     if !status.success() {

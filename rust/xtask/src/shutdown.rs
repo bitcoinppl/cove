@@ -18,7 +18,7 @@ use std::{
 };
 
 use color_eyre::{eyre::Context, Result};
-use parking_lot::Mutex;
+use parking_lot::{Condvar, Mutex};
 use signal_hook::{
     consts::{SIGHUP, SIGINT, SIGTERM},
     iterator::Signals,
@@ -73,8 +73,62 @@ pub fn register(resource: Arc<dyn Stop>) -> Registration {
 
 /// Registers a command the run waits on, which leads its own process group, so a signal
 /// terminates it and every process it started, as a shell's children outlive the shell
-pub fn register_process_group(leader: &Child) -> Registration {
-    register(Arc::new(Processes::Group(leader.id())))
+pub fn register_process_group(leader: &Child) -> ProcessGroupGuard {
+    let group = Arc::new(ProcessGroup {
+        leader: leader.id(),
+        stopped: Mutex::new(false),
+        stopped_changed: Condvar::new(),
+    });
+
+    ProcessGroupGuard { _registration: register(group.clone()), group }
+}
+
+/// A command's process group, which a signal stops until this is dropped
+#[must_use = "dropping the guard unregisters the process group at once"]
+pub struct ProcessGroupGuard {
+    group: Arc<ProcessGroup>,
+    _registration: Registration,
+}
+
+impl ProcessGroupGuard {
+    /// Returns once a signal's cleanup has stopped every process in the group, or at once when
+    /// no signal arrived
+    ///
+    /// Call it after the leader exits and before releasing the run's locks: the leader can exit
+    /// on SIGTERM while processes it started are still in their grace period, still using the
+    /// device or ports the locks guard. A normal exit doesn't wait, since daemons such as
+    /// Gradle's stay in the group after the command ends
+    pub fn wait_for_stop(&self) {
+        // a group that registered too late to be stopped waits here until the cleanup, which
+        // stops this process's children too, ends the process
+        if STOPPING.load(Ordering::SeqCst) {
+            self.group.wait_stopped();
+        }
+    }
+}
+
+struct ProcessGroup {
+    leader: u32,
+    stopped: Mutex<bool>,
+    stopped_changed: Condvar,
+}
+
+impl ProcessGroup {
+    fn wait_stopped(&self) {
+        let mut stopped = self.stopped.lock();
+        while !*stopped {
+            self.stopped_changed.wait(&mut stopped);
+        }
+    }
+}
+
+impl Stop for ProcessGroup {
+    fn stop(&self) {
+        Processes::Group(self.leader).terminate();
+
+        *self.stopped.lock() = true;
+        self.stopped_changed.notify_all();
+    }
 }
 
 /// Installs the signal thread; call once, before anything registers
@@ -215,8 +269,51 @@ impl Processes {
     }
 }
 
-impl Stop for Processes {
-    fn stop(&self) {
-        self.terminate();
+#[cfg(test)]
+mod tests {
+    use std::{fs, os::unix::process::CommandExt, path::Path};
+
+    use super::*;
+
+    fn group_is_alive(leader: u32) -> bool {
+        Processes::Group(leader).any_alive()
+    }
+
+    fn wait_for(path: &Path) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !path.exists() {
+            assert!(Instant::now() < deadline, "{} never appeared", path.display());
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    #[test]
+    fn a_stopped_group_is_empty_before_the_wait_returns() {
+        let dir = tempfile::tempdir().unwrap();
+        let started = dir.path().join("started");
+
+        // the leader dies on SIGTERM at once, while the process it started ignores SIGTERM and
+        // runs on for a second, as a Gradle worker can outlive the shell that ran it
+        let mut leader = Command::new("sh")
+            .args(["-c", r#"(trap '' TERM; touch "$1"; sleep 1) & exec sleep 30"#, "sh"])
+            .arg(&started)
+            .process_group(0)
+            .spawn()
+            .unwrap();
+
+        let guard = register_process_group(&leader);
+        wait_for(&started);
+
+        // the signal thread's part
+        let group = guard.group.clone();
+        let cleanup = thread::spawn(move || group.stop());
+
+        // the run's part: the leader exits first, then the run waits before releasing its locks
+        leader.wait().unwrap();
+        guard.group.wait_stopped();
+
+        assert!(!group_is_alive(leader.id()), "the wait returned while the group still ran");
+        cleanup.join().unwrap();
+        fs::remove_file(started).unwrap();
     }
 }
