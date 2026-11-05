@@ -27,10 +27,8 @@ struct KeyTeleportPeer {
     }
 
     struct Response: Decodable {
-        let bbqr: String
-        let url: String
-
-        /// The response as BBQr frames, more than one when the test asked for a multi-part QR
+        /// The response as BBQr frames, more than one when the test asked for a multi-part QR or
+        /// the payload is too big for one
         let parts: [String]
 
         /// The Teleport Password as the sending phone shows it
@@ -76,41 +74,55 @@ struct KeyTeleportPeer {
     }
 }
 
-extension XCUIApplication {
-    /// Decodes every QR code a person could scan off the screen right now
+extension XCUIElement {
+    /// Decodes every QR code a person could scan off the element's part of the screen right now
     ///
     /// A concealed KeyTeleport QR code is blurred, so it doesn't decode; that it doesn't is what
     /// keeps a second phone's camera from reading it before the user reveals it
     var visibleQrCodes: [String] {
-        guard let image = CIImage(image: XCUIScreen.main.screenshot().image) else { return [] }
+        guard let image = CIImage(image: screenshot().image) else {
+            XCTFail("the screenshot of \(self) has no image to decode")
+            return []
+        }
 
         let detector = CIDetector(ofType: CIDetectorTypeQRCode, context: nil, options: [CIDetectorAccuracy: CIDetectorAccuracyHigh])
         return detector?.features(in: image).compactMap { ($0 as? CIQRCodeFeature)?.messageString } ?? []
     }
 
-    /// Every line of text a person could read off the screen right now, as Vision recognizes it
+    /// Every line of text a person could read off the element's part of the screen right now, as
+    /// Vision recognizes it
     ///
     /// The accessibility tree hides a concealed value, but only the pixels show whether its blur
-    /// actually makes it unreadable, so concealment checks read the screenshot instead
+    /// actually makes it unreadable, so concealment checks read the screenshot instead. A screenshot
+    /// Vision can't read fails the test, so no check passes because nothing was read
     var visibleText: [String] {
-        guard let image = XCUIScreen.main.screenshot().image.cgImage else { return [] }
+        guard let image = screenshot().image.cgImage else {
+            XCTFail("the screenshot of \(self) has no image to read")
+            return []
+        }
 
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = false
-        try? VNImageRequestHandler(cgImage: image).perform([request])
+
+        do {
+            try VNImageRequestHandler(cgImage: image).perform([request])
+        } catch {
+            XCTFail("Vision could not read the screenshot of \(self): \(error)")
+            return []
+        }
 
         return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
     }
 
-    /// The screen's text with whitespace removed, so a grouped value reads the same however Vision
-    /// splits it
+    /// The text with whitespace removed, so a grouped value reads the same however Vision splits it
     var visibleTextWithoutSpaces: String {
-        visibleText.joined().filter { !$0.isWhitespace }.uppercased()
+        visibleText.joined().withoutSpaces
     }
 
-    /// Waits for Vision to read the text, compared without whitespace, anywhere on screen
-    func waitForVisibleText(containing compact: String, timeout: TimeInterval = 5) -> Bool {
+    /// Waits for Vision to read the text, compared without whitespace and case
+    func waitForVisibleText(containing text: String, timeout: TimeInterval = 5) -> Bool {
+        let compact = text.withoutSpaces
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if visibleTextWithoutSpaces.contains(compact) { return true }
@@ -121,7 +133,7 @@ extension XCUIApplication {
         return false
     }
 
-    /// Waits for a QR code to show on screen and returns what it encodes
+    /// Waits for a QR code to show and returns what it encodes
     func waitForVisibleQrCode(timeout: TimeInterval = 10) -> String? {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
@@ -133,7 +145,7 @@ extension XCUIApplication {
         return nil
     }
 
-    /// Waits until no QR code on screen decodes
+    /// Waits until no QR code decodes
     func waitForNoVisibleQrCode(timeout: TimeInterval = 5) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
@@ -143,5 +155,94 @@ extension XCUIApplication {
         }
 
         return false
+    }
+
+    /// Fails if the element, a reveal hint drawn over a concealed value, shows any of that value:
+    /// a QR code that decodes, or a line Vision reads that isn't the hint and holds two or more
+    /// letters or digits
+    ///
+    /// Codes and passwords show in pairs, so two characters is the least of one that can leak
+    /// past the hint even where it covers the middle of the value
+    func assertConceals(hint: String, _ name: String) {
+        XCTAssertTrue(visibleQrCodes.isEmpty, "\(name): a QR code decodes while it is hidden")
+
+        let leaked = visibleText.filter { line in
+            !line.readsAs(hint) && line.filter { $0.isLetter || $0.isNumber }.count >= 2
+        }
+
+        XCTAssertTrue(leaked.isEmpty, "\(name): Vision read \(leaked) while it was hidden")
+    }
+}
+
+private extension String {
+    var withoutSpaces: String {
+        filter { !$0.isWhitespace }.uppercased()
+    }
+
+    /// Whether Vision's reading of the line is the hint, allowing a few misread or extra
+    /// characters such as the eye icon read as a letter
+    func readsAs(_ hint: String) -> Bool {
+        let read = Array(filter { $0.isLetter || $0.isNumber }.uppercased())
+        let expected = Array(hint.filter { $0.isLetter || $0.isNumber }.uppercased())
+        return Self.editDistance(read, expected) <= 3
+    }
+
+    static func editDistance(_ lhs: [Character], _ rhs: [Character]) -> Int {
+        var previous = Array(0 ... rhs.count)
+        for (i, left) in lhs.enumerated() {
+            var current = [i + 1]
+            for (j, right) in rhs.enumerated() {
+                current.append(Swift.min(previous[j + 1] + 1, current[j] + 1, previous[j] + (left == right ? 0 : 1)))
+            }
+
+            previous = current
+        }
+
+        return previous[rhs.count]
+    }
+}
+
+extension ScreenReachability {
+    /// Reveals a KeyTeleport QR code and decodes it from a screenshot, then reveals the code or
+    /// password beside it, as the other phone's user would; returns both, or nil if the QR code
+    /// never decoded
+    ///
+    /// On the way it checks the pixels under each hint: neither shows any of itself until the user
+    /// reveals it, and revealing either one, in both orders, conceals the other. Vision must read
+    /// the code once shown, which proves it could have read it while hidden. It ends with the QR
+    /// code showing
+    func readRevealPair(qrHint: String, codeHint: String, code: XCUIElement, _ name: String) -> (qr: String, code: String)? {
+        XCTAssertFalse(code.exists, "\(name): the code must stay hidden until the user reveals it")
+        cover(qrHint, name).assertConceals(hint: qrHint, "\(name): the QR code before either is revealed")
+        cover(codeHint, name).assertConceals(hint: codeHint, "\(name): the code before either is revealed")
+
+        cover(qrHint, name).tap()
+        guard let qr = app.waitForVisibleQrCode() else {
+            XCTFail("\(name): the revealed QR code never decoded")
+            return nil
+        }
+
+        XCTAssertFalse(code.exists, "\(name): the code must stay hidden while the QR code shows")
+        cover(codeHint, name).assertConceals(hint: codeHint, "\(name): the code while the QR code shows")
+
+        cover(codeHint, name).tap()
+        XCTAssertTrue(code.waitForExistence(timeout: 5), "\(name): the code never showed")
+        XCTAssertTrue(app.waitForNoVisibleQrCode(), "\(name): showing the code must make the QR code unreadable again")
+        cover(qrHint, name).assertConceals(hint: qrHint, "\(name): the QR code while the code shows")
+        let shownCode = code.label
+        XCTAssertTrue(code.waitForVisibleText(containing: shownCode), "\(name): Vision never read the code once shown")
+
+        // and back, so revealing the QR code again conceals the code it replaces
+        cover(qrHint, name).tap()
+        XCTAssertNotNil(app.waitForVisibleQrCode(), "\(name): the QR code never showed again")
+        XCTAssertTrue(code.waitForNonExistence(timeout: 5), "\(name): showing the QR code again must hide the code")
+        cover(codeHint, name).assertConceals(hint: codeHint, "\(name): the code once the QR code shows again")
+
+        return (qr, shownCode)
+    }
+
+    /// The hint over a concealed value, scrolled on screen so its screenshot shows what it covers
+    private func cover(_ hint: String, _ name: String) -> XCUIElement {
+        assertReachable(app.buttons.matching(NSPredicate(format: "label == %@", hint)), "\(name): '\(hint)'", needsHit: true)
     }
 }

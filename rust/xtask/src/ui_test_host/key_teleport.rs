@@ -112,17 +112,10 @@ pub fn send(request: SendRequest) -> Result<Value> {
         }
     };
 
-    let bbqr = packet.to_bbqr_part()?;
-    let parts = if request.min_parts > 1 {
-        split_sender_packet(&packet, request.min_parts)?
-    } else {
-        vec![bbqr.clone()]
-    };
-
+    // split even a single-part response, since a payload too big for one QR
+    // still needs frames to reach the scanner
     Ok(json!({
-        "bbqr": bbqr,
-        "url": packet.to_url()?,
-        "parts": parts,
+        "parts": split_sender_packet(&packet, request.min_parts)?,
         "password": password.as_display_text(),
     }))
 }
@@ -317,10 +310,11 @@ mod tests {
         )
         .unwrap();
 
-        let Packet::Sender(packet) = Packet::from_url(response["bbqr"].as_str().unwrap()).unwrap()
-        else {
-            panic!("expected a sender packet")
-        };
+        let parts: Vec<String> = serde_json::from_value(response["parts"].clone()).unwrap();
+        let joined = bbqr::join::Joined::try_from_parts(parts).unwrap();
+        assert_eq!(joined.file_type, FileType::KeyTeleportSender);
+        assert_eq!(joined.encoding, Encoding::Base32);
+        let packet = SenderPacket::new(joined.data).unwrap();
 
         let password = TeleportPassword::from_str(response["password"].as_str().unwrap()).unwrap();
         let decoded = receiver.decode(&packet, &password).unwrap();
@@ -335,12 +329,24 @@ mod tests {
         let DecodedPayload::Mnemonic(mnemonic) = decoded else { panic!("expected a mnemonic") };
         assert_eq!(mnemonic.to_string(), WORDS);
 
-        let parts: Vec<String> = serde_json::from_value(response["parts"].clone()).unwrap();
-        assert!(parts.len() >= 3, "expected at least 3 parts, got {}", parts.len());
+        let parts = response["parts"].as_array().unwrap().len();
+        assert!(parts >= 3, "expected at least 3 parts, got {parts}");
+    }
 
-        let joined = bbqr::join::Joined::try_from_parts(parts).unwrap();
-        assert_eq!(joined.file_type, FileType::KeyTeleportSender);
-        assert_eq!(joined.encoding, Encoding::Base32);
+    #[test]
+    fn notes_too_big_for_one_qr_come_back_in_several_parts() {
+        let note = "x".repeat(6_000);
+        let notes = json!({ "notes": [{ "title": "Long Note", "misc": note }] });
+        let (response, decoded) = round_trip(notes, 1);
+
+        let parts = response["parts"].as_array().unwrap().len();
+        assert!(parts > 1, "a payload bigger than one QR needs several parts");
+
+        let DecodedPayload::Notes(notes) = decoded else { panic!("expected notes") };
+        assert_eq!(
+            notes.records().iter().map(NotesRecord::title).collect::<Vec<_>>(),
+            ["Long Note"]
+        );
     }
 
     #[test]
