@@ -133,7 +133,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
                 .toInt(),
         )
 
-        device.clickClickableAncestorForText(DELETE_WALLET_ITEM)
+        tapUntilShown(DELETE_WALLET_ITEM, DELETION_DIALOG_TITLES.first())
         confirmDeletionDialogs(expectedConfirmations)
 
         waitUntil("the wallet should leave this device") {
@@ -151,7 +151,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
         }
 
         device.scrollUntilText(NOT_ON_THIS_DEVICE)
-        device.clickClickableAncestorForText(wallet.name)
+        tapUntilShown(wallet.name, RESTORE_ACTION)
         device.clickClickableAncestorForText(RESTORE_ACTION)
 
         waitUntil("restoring the cloud-only row should bring the wallet back") {
@@ -262,6 +262,21 @@ class CloudBackupLocalDeleteFullLaunchTest {
         }
 
         assertEquals("the app should finish bootstrapping after launch", BootstrapStep.COMPLETE, bootstrapProgress())
+    }
+
+    // a tap while a screen slides in or a list settles can miss; another tap only repeats the
+    // request, and an item that never responds still fails every attempt
+    private fun tapUntilShown(
+        target: String,
+        expected: String,
+    ) {
+        repeat(TAP_ATTEMPTS) {
+            device.waitForIdle()
+            device.clickClickableAncestorForText(target)
+            if (device.wait(Until.hasObject(By.text(expected)), 5_000L)) return
+        }
+
+        error("tapping \"$target\" never showed \"$expected\"")
     }
 
     private fun cloudOnlyWallets(): List<CloudBackupWalletItem> =
@@ -384,6 +399,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
         const val DELETE_WALLET_ITEM = "Delete wallet"
         const val DELETE_BUTTON = "Delete"
         const val FINAL_WARNING = "Final Warning"
+        const val TAP_ATTEMPTS = 3
         val DELETION_DIALOG_TITLES = listOf("Are you sure?", "Confirm Deletion", FINAL_WARNING)
         const val RESTORE_ACTION = "Restore to this device"
         const val NOT_ON_THIS_DEVICE = "Not on This Device"
