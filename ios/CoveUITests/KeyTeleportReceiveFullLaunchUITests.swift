@@ -323,7 +323,6 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
     /// Each word fits on screen beside its number, found by position since the test words repeat,
     /// so a clipped second 'legal' can't pass on the first
     private func assertNumberedWordsFit() {
-        let window = app.windows.firstMatch.frame
         for (index, word) in Self.sentWords.split(separator: " ").map(String.init).enumerated() {
             let name = "revealed words: word \(index + 1)"
             let numbers = app.staticTexts.matching(NSPredicate(format: "label == %@", "\(index + 1)"))
@@ -336,12 +335,17 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
             }
 
             // at the largest sizes a word wraps taller than its centered number, so scroll on until
-            // the whole word fits, as a user would, finding it again since the lazy grid may rebuild
+            // the whole word fits, as a user would, finding it again since the lazy grid may rebuild;
+            // fit is judged against the scroll area, since a word scrolled under the title bar still
+            // lies inside the window
             var shown = wordBesideNumber()
             for _ in 0 ..< 3 {
-                guard let partly = shown, !window.contains(partly.frame) else { break }
+                guard let partly = shown else { break }
 
-                layout.scroll(revealingContentBelow: partly.frame.maxY > window.maxY)
+                let visible = layout.visibleArea(of: partly)
+                guard !visible.contains(partly.frame) else { break }
+
+                layout.scroll(revealingContentBelow: partly.frame.maxY > visible.maxY)
                 shown = wordBesideNumber()
             }
 
@@ -350,7 +354,8 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
                 continue
             }
 
-            XCTAssertTrue(window.contains(shown.frame), "\(name), '\(word)', runs off screen at \(shown.frame)")
+            let visible = layout.visibleArea(of: shown)
+            XCTAssertTrue(visible.contains(shown.frame), "\(name), '\(word)', runs out of view at \(shown.frame) in \(visible)")
             layout.assertDrawn(word, in: shown, name)
             layout.assertNoTruncatedText(name)
         }

@@ -165,7 +165,7 @@ struct ScreenReachability {
     ///
     /// XCUITest reports an element's whole frame, not the part its scroll view clips, so a title
     /// scrolled half under a sheet's edge still lies inside the window
-    private func visibleArea(of element: XCUIElement) -> CGRect {
+    func visibleArea(of element: XCUIElement) -> CGRect {
         scrollContainers(holding: element).reduce(app.windows.firstMatch.frame) { $0.intersection($1.frame) }
     }
 
