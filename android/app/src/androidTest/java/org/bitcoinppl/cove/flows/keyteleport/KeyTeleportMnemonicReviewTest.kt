@@ -251,12 +251,12 @@ class KeyTeleportMnemonicReviewTest {
         const val RECOVERY_WORDS_HINT = "Tap to reveal recovery words"
         val RECEIVE_ROUTE = RouteFactory().keyTeleportReceive()
 
-        // published BIP39 test vector, never used for funds; distinct from the vectors other tests import
+        // published 12-word BIP39 test vector, never used for funds; distinct from the vectors other tests import
         val TEST_WORDS =
             listOf(
-                "hamster", "diagram", "private", "dutch", "cause", "delay",
-                "private", "meat", "slide", "toddler", "razor", "book",
+                "ozone", "drill", "grab", "fiber", "curtain", "grace",
+                "pudding", "thank", "cruise", "elder", "eight", "picnic",
             )
-        val TEST_WALLET = TestWalletWords(TEST_WORDS, masterFingerprint = "ee25b464")
+        val TEST_WALLET = TestWalletWords(TEST_WORDS, masterFingerprint = "a07d432c")
     }
 }

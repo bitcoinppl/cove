@@ -30,6 +30,7 @@ import org.bitcoinppl.cove_core.MultiFormatException
 import org.bitcoinppl.cove_core.StringOrData
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -147,7 +148,7 @@ class KeyTeleportPasteRejectionTest {
             val bounds = node.boundsInWindow
             assertTrue("\"$label\" has no size", bounds.width > 0f && bounds.height > 0f)
             assertTrue("\"$label\" reaches outside the dialog", dialog.contains(bounds))
-            assertTrue("\"$label\" is cut off", !node.overflows())
+            node.overflow()?.let { reason -> fail("\"$label\" is cut off: $reason") }
 
             // boundsInWindow is already clipped by every parent, so a clipped node shows less than its layout size
             assertTrue(
@@ -189,11 +190,23 @@ class KeyTeleportPasteRejectionTest {
     private fun Rect.contains(other: Rect): Boolean =
         other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom
 
-    private fun SemanticsNode.overflows(): Boolean {
+    // hasVisualOverflow compares float paragraph sizes with whole-pixel layout sizes, and flagged a
+    // one-word dialog title on CI, so allow a pixel of rounding and say what overflowed
+    private fun SemanticsNode.overflow(): String? {
         val layouts = mutableListOf<TextLayoutResult>()
         config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
 
-        return layouts.any { it.hasVisualOverflow }
+        return layouts.firstNotNullOfOrNull { layout ->
+            val paragraph = layout.multiParagraph
+            when {
+                paragraph.didExceedMaxLines -> "it has more lines than it may show"
+                paragraph.width - layout.size.width > CLIP_TOLERANCE_PX ->
+                    "its text is ${paragraph.width}px wide in a ${layout.size.width}px layout"
+                paragraph.height - layout.size.height > CLIP_TOLERANCE_PX ->
+                    "its text is ${paragraph.height}px tall in a ${layout.size.height}px layout"
+                else -> null
+            }
+        }
     }
 
     private fun putOnClipboard(text: String) {
