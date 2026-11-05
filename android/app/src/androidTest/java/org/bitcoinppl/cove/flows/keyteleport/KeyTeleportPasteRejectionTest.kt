@@ -3,6 +3,13 @@ package org.bitcoinppl.cove.flows.keyteleport
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasAnyAncestor
@@ -10,11 +17,13 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.saveNodeScreenshotToLayoutAudit
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.KeyTeleportRoute
 import org.bitcoinppl.cove_core.MultiFormatException
@@ -55,7 +64,11 @@ class KeyTeleportPasteRejectionTest {
 
         pasteIntoSender(BIP174_UNSIGNED_PSBT_BASE64)
 
+        // the protected screen gives adb no screencap, so the test captures the error and the
+        // screen after OK from inside the app, where a person used to photograph the phone
         assertRejectionAsksForTheReceiverRequest()
+        assertDialogTextFitsInsideTheDialog()
+        assertCaptureShowsContent(saveNodeScreenshotToLayoutAudit(compose.onNode(isDialog()), "s17-sender-psbt-error.png"))
         assertOkLeavesTheSenderReadyForAnotherPaste(BIP174_UNSIGNED_PSBT_BASE64)
     }
 
@@ -106,11 +119,59 @@ class KeyTeleportPasteRejectionTest {
         val dialogs = compose.onAllNodes(isDialog()).fetchSemanticsNodes()
         assertTrue("the rejection dialog stayed open after OK", dialogs.isEmpty())
         compose.onNodeWithText("Paste").assertIsDisplayed().assertIsEnabled()
+        assertCaptureShowsContent(saveNodeScreenshotToLayoutAudit(compose.onRoot(), "s17-sender-after-psbt-error.png"))
 
         // pasting again reaches the sender and is rejected the same way, rather than doing nothing
         putOnClipboard(rejected)
         compose.onNodeWithText("Paste").performClick()
         assertRejectionAsksForTheReceiverRequest()
+    }
+
+    // clipped, truncated or overlapping text is what a screenshot of the error would have shown
+    private fun assertDialogTextFitsInsideTheDialog() {
+        val dialog = compose.onNode(isDialog()).fetchSemanticsNode().boundsInWindow
+        val texts =
+            compose
+                .onAllNodes(hasAnyAncestor(isDialog()), useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .filter { it.config.getOrNull(SemanticsProperties.Text).orEmpty().isNotEmpty() }
+
+        assertTrue("the rejection dialog shows no text", texts.isNotEmpty())
+        texts.forEach { node ->
+            val label = node.config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString { it.text }
+            val bounds = node.boundsInWindow
+            assertTrue("\"$label\" has no size", bounds.width > 0f && bounds.height > 0f)
+            assertTrue("\"$label\" reaches outside the dialog", dialog.contains(bounds))
+            assertTrue("\"$label\" is cut off", !node.overflows())
+        }
+
+        texts.forEachIndexed { index, node ->
+            texts.drop(index + 1).forEach { other ->
+                assertTrue("dialog texts overlap", !node.boundsInWindow.overlaps(other.boundsInWindow))
+            }
+        }
+    }
+
+    // a protected window can come back blank, which would make the saved capture worthless
+    private fun assertCaptureShowsContent(bitmap: Bitmap) {
+        val colors = mutableSetOf<Int>()
+        for (y in 0 until bitmap.height step CAPTURE_SAMPLE_STEP) {
+            for (x in 0 until bitmap.width step CAPTURE_SAMPLE_STEP) {
+                colors += bitmap.getPixel(x, y)
+            }
+        }
+
+        assertTrue("the capture is a single color", colors.size > 1)
+    }
+
+    private fun Rect.contains(other: Rect): Boolean =
+        other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom
+
+    private fun SemanticsNode.overflows(): Boolean {
+        val layouts = mutableListOf<TextLayoutResult>()
+        config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
+
+        return layouts.any { it.hasVisualOverflow }
     }
 
     private fun putOnClipboard(text: String) {
@@ -123,6 +184,9 @@ class KeyTeleportPasteRejectionTest {
     }
 
     private companion object {
+        // every fourth pixel is enough to tell a drawn screen from a blank one
+        const val CAPTURE_SAMPLE_STEP = 4
+
         // a recognisable non-KeyTeleport payload
         const val MAINNET_ADDRESS = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
 

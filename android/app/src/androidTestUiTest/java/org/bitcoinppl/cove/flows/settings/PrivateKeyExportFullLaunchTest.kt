@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Rect
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
@@ -13,9 +14,10 @@ import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
-import org.bitcoinppl.cove.AppManager
 import kotlinx.coroutines.runBlocking
+import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
+import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportFlowDirection
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportResponseCopy
 import org.bitcoinppl.cove.flows.keyteleport.KeyTeleportTestPeer
@@ -40,6 +42,7 @@ import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.AuthManagerAction
+import org.bitcoinppl.cove_core.CloudBackupRootPrompt
 import org.bitcoinppl.cove_core.Database
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
@@ -76,6 +79,13 @@ class PrivateKeyExportFullLaunchTest {
     // leaving decoy mode reloads the wallet list, so the id is kept from the restore
     private lateinit var walletId: WalletId
 
+    // set once this test starts a receive on the app's own manager, so cleanup never ends a session
+    // that was stored before the test ran
+    private var startedReceive = false
+
+    // the bystander this test imported, deleted afterwards
+    private var bystanderId: WalletId? = null
+
     @get:Rule
     val fullLaunch = FullLaunchTestRule()
 
@@ -85,10 +95,19 @@ class PrivateKeyExportFullLaunchTest {
         device = fullLaunchDevice()
     }
 
-    // the next test may host LockView without relaunching, and refuses to run over a leftover PIN
     @After
-    fun removeAppLock() {
-        restoreNoAppLock()
+    fun cleanUp() {
+        try {
+            // a leftover session makes every later receiving test skip
+            if (startedReceive && hasStoredReceiveSession()) {
+                KeyTeleportTestPeer().use { peer -> peer.startReceive() }
+            }
+
+            bystanderId?.let(::deleteTestWallet)
+        } finally {
+            // the next test may host LockView without relaunching, and refuses to run over a leftover PIN
+            restoreNoAppLock()
+        }
     }
 
     @Test
@@ -159,17 +178,21 @@ class PrivateKeyExportFullLaunchTest {
         // the private-key wallet is deleted below, and a second wallet keeps the app on a wallet
         val bystander = importTestWalletOrNull(BYSTANDER_WALLET)
         assumeTrue("the bystander test wallet already exists on this device", bystander != null)
+        bystanderId = requireNotNull(bystander).id
         setMainPin()
 
         val app = AppManager.getInstance()
-        val receiver = onMainValue { app.getKeyTeleportManager() }
+        startedReceive = true
         onMain { app.pushRoute(RouteFactory().keyTeleportReceive()) }
-        val request = awaitRequest(receiver)
+        val request = awaitRequest(onMainValue { app.getKeyTeleportManager() })
         val response = KeyTeleportTestPeer().use { sender -> sender.sendWallet(walletId, request) }
 
-        // without the wallet on this phone, Import Wallet has to create it from the received key
+        // without the wallet on this phone, Import Wallet has to create it from the received key;
+        // deleting the selected wallet replaces the route, which closes the screen's manager, so
+        // reopening the screen resumes the stored session in a new one, read through receiveState
         deleteTestWallet(walletId)
         waitUntil("the private-key wallet should be deleted") { app.wallets.none { it.id == walletId } }
+        dismissCloudBackupVerificationPrompts()
         onMain {
             if (app.router.routes.lastOrNull() != RouteFactory().keyTeleportReceive()) {
                 app.pushRoute(RouteFactory().keyTeleportReceive())
@@ -178,7 +201,7 @@ class PrivateKeyExportFullLaunchTest {
 
         scanSenderResponse(response)
         awaitOnMain("the receiver to ask for the password") {
-            receiver.state.takeIf { it is KeyTeleportManagerState.ReceiveEnterPassword }
+            receiveState().takeIf { it is KeyTeleportManagerState.ReceiveEnterPassword }
         }
         device.typeIntoField(response.password)
         device.clickText("Continue")
@@ -206,15 +229,17 @@ class PrivateKeyExportFullLaunchTest {
         device.waitForLockScreen()
         device.assertPrivateKeyNotShown()
         device.enterPin(MAIN_PIN)
+        dismissCloudBackupVerificationPrompts()
         device.waitForText(XPRV_REVIEW_TITLE)
         device.waitForText("Reveal")
         device.assertPrivateKeyNotShown()
 
         device.clickText("Import Wallet")
         device.waitForText("Wallet imported")
+        dismissCloudBackupVerificationPrompts()
         val imported =
             awaitOnMain("the received key to import") {
-                (receiver.state as? KeyTeleportManagerState.ReceiveImportedWallet)?.v1?.id
+                (receiveState() as? KeyTeleportManagerState.ReceiveImportedWallet)?.v1?.id
             }
 
         device.clickText("Done")
@@ -235,6 +260,7 @@ class PrivateKeyExportFullLaunchTest {
         val bystander = importTestWalletOrNull(BYSTANDER_WALLET)
         assumeTrue("the bystander test wallet already exists on this device", bystander != null)
         val bystanderId = requireNotNull(bystander).id
+        this.bystanderId = bystanderId
         val otherWallets = walletIds() - walletId
 
         repeat(READ_ROUNDS) { round ->
@@ -467,6 +493,35 @@ class PrivateKeyExportFullLaunchTest {
         }
     }
 
+    /**
+     * Wave away the restored cloud backup's verification prompt with Not Now, as a person would
+     *
+     * Each wallet change asks to verify the updated backup, in a dialog over whatever screen is
+     * showing. It has nothing to do with the screen under test but blocks it, so this waits until
+     * no prompt has shown for [PROMPT_QUIET_MS], dismissing each one that does
+     */
+    private fun dismissCloudBackupVerificationPrompts() {
+        val deadline = SystemClock.uptimeMillis() + PROMPT_SETTLE_TIMEOUT_MS
+        var quietSince = SystemClock.uptimeMillis()
+
+        while (SystemClock.uptimeMillis() - quietSince < PROMPT_QUIET_MS) {
+            check(SystemClock.uptimeMillis() < deadline) { "the cloud backup verification prompt kept coming back" }
+
+            if (onMainValue { CloudBackupManager.getInstance().rootPrompt } is CloudBackupRootPrompt.Verification) {
+                device.clickText("Not Now")
+                waitUntil("Not Now should dismiss the verification prompt") {
+                    CloudBackupManager.getInstance().rootPrompt !is CloudBackupRootPrompt.Verification
+                }
+                quietSince = SystemClock.uptimeMillis()
+            }
+
+            Thread.sleep(SETTLE_POLL_MS)
+        }
+    }
+
+    // the manager the KeyTeleport screen shows now, which a route change or relaunch replaces
+    private fun receiveState(): KeyTeleportManagerState = AppManager.getInstance().getKeyTeleportManager().state
+
     private fun readPrivateKey(id: WalletId): String =
         runBlocking { AppManager.getInstance().getWalletManagerLoaded(id) }.exposeXprv()
 
@@ -662,6 +717,8 @@ class PrivateKeyExportFullLaunchTest {
         const val SEND_ROUNDS = 4
         const val REVEAL_SETTLE_MS = 3_000L
         const val SETTLE_POLL_MS = 200L
+        const val PROMPT_QUIET_MS = 3_000L
+        const val PROMPT_SETTLE_TIMEOUT_MS = 30_000L
         const val WALLET_SETTINGS_SECTION = "Wallet information"
 
         // published BIP39 test vector, never used for funds; the same bystander RepeatedSecretAccessTest uses
