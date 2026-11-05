@@ -28,7 +28,7 @@ MOBILE="compile_ios swift_lint ios_ui compile_android ktlint android_instrumente
 
 jobs_for() {
   case $1 in
-    .github/*) echo "$JOBS" ;;
+    .github/*) ;; # scratch only: lets this branch exercise the skip paths against master
     # xtask, which the app builds and swift-lint run through, embeds the release seam markers, and
     # the app release builds run the seam check script
     rust/* | tools/release-seams/*) echo "$RUST $MOBILE" ;;
