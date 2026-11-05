@@ -176,6 +176,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt",
 ]
 coverage = [
+    "human:ios",
     "rust:rust/src/multi_format.rs::test_nfc_data_zpub_returns_hardware_export",
     "ios-ui:ios/CoveUITests/PublicKeyImportFullLaunchUITests.swift::testNfcTextRecordVpubImportsFromOnboarding",
     "ios-ui:ios/CoveUITests/PublicKeyImportFullLaunchUITests.swift::testNfcTextRecordUpubImportsFromAddWallet",
@@ -185,8 +186,11 @@ coverage = [
 # 1.4.0: ios HUMAN, android HUMAN
 # the ui tests hold a tag's text record with a vpub or a upub to onboarding's and add wallet's nfc
 # scans through the ndef seam, which skips only the nfc session: the platform's ndef parser, the
-# record processing and the import are the app's own, checked by the first receive address. a
-# physical tag read in a real nfc session is covered by s19-hardware-journey-qr-and-nfc-legs and
+# record processing and the import are the app's own, checked by the first receive address.
+# android reads every tag through its ndef api, so that covers android. ios reads iso 15693 tags
+# block by block and parses them in rust's nfc reader instead of ndef, which the seam skips, so an
+# ios import from an iso 15693 tag still needs a person. a physical tag read in a real nfc session
+# is also covered by s19-hardware-journey-qr-and-nfc-legs and
 # s13-nfc-and-tapsigner-setup-retry-and-signing
 
 [[row]]
