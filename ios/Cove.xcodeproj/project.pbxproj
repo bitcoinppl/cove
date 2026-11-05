@@ -25,6 +25,8 @@
 		C0F100042F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100032F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift */; };
 		C0F100082F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */; };
 		C0F100062F30000000000001 /* ScreenReachability.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100052F30000000000001 /* ScreenReachability.swift */; };
+		C0A0001E2EF0000000000001 /* ReceiveTextSizeFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0001D2EF0000000000001 /* ReceiveTextSizeFullLaunchUITests.swift */; };
+		C0A000202EF0000000000001 /* WatchOnlyUpgradeFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0001F2EF0000000000001 /* WatchOnlyUpgradeFullLaunchUITests.swift */; };
 		C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */; };
 		C0B000022F00000000000001 /* Fixtures/wallet_2_descriptors.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */; };
 		C0B000102F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */; };
@@ -56,6 +58,9 @@
 		C0F100012F60000000000001 /* CloudBackupHostUITestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100022F60000000000001 /* CloudBackupHostUITestSupport.swift */; };
 		C0F100032F60000000000001 /* PrivateKeyExportFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100042F60000000000001 /* PrivateKeyExportFullAppUITests.swift */; };
 		C0F100052F60000000000001 /* CloudBackupLargeTextFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100062F60000000000001 /* CloudBackupLargeTextFullAppUITests.swift */; };
+		C0F100072F60000000000001 /* FullLaunchSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0000F2EF0000000000001 /* FullLaunchSupport.swift */; };
+		C0F100082F60000000000001 /* FakeNodeControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000112EF0000000000001 /* FakeNodeControl.swift */; };
+		C0F100092F60000000000001 /* HardwareSignerControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000132EF0000000000001 /* HardwareSignerControl.swift */; };
 		C0E0000C2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */; };
 		C0F000012F40000000000001 /* PresentationTransitionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000022F40000000000001 /* PresentationTransitionCoordinatorTests.swift */; };
 		C0F000012F50000000000001 /* KeyTeleportSecurityHelpersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000022F50000000000001 /* KeyTeleportSecurityHelpersTests.swift */; };
@@ -114,6 +119,8 @@
 		C0F100032F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportReceiveFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportSendFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F100052F30000000000001 /* ScreenReachability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenReachability.swift; sourceTree = "<group>"; };
+		C0A0001D2EF0000000000001 /* ReceiveTextSizeFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiveTextSizeFullLaunchUITests.swift; sourceTree = "<group>"; };
+		C0A0001F2EF0000000000001 /* WatchOnlyUpgradeFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchOnlyUpgradeFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0A000022EF0000000000001 /* CoveUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPromptLayoutTests.swift; sourceTree = "<group>"; };
 		C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Fixtures/wallet_2_descriptors.txt; sourceTree = "<group>"; };
@@ -241,6 +248,8 @@
 				C0F100032F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift */,
 				C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */,
 				C0F100052F30000000000001 /* ScreenReachability.swift */,
+				C0A0001D2EF0000000000001 /* ReceiveTextSizeFullLaunchUITests.swift */,
+				C0A0001F2EF0000000000001 /* WatchOnlyUpgradeFullLaunchUITests.swift */,
 			);
 			path = CoveUITests;
 			sourceTree = "<group>";
@@ -556,6 +565,8 @@
 				C0F100042F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift in Sources */,
 				C0F100082F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift in Sources */,
 				C0F100062F30000000000001 /* ScreenReachability.swift in Sources */,
+				C0A0001E2EF0000000000001 /* ReceiveTextSizeFullLaunchUITests.swift in Sources */,
+				C0A000202EF0000000000001 /* WatchOnlyUpgradeFullLaunchUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -606,6 +617,9 @@
 				C0F100052F60000000000001 /* CloudBackupLargeTextFullAppUITests.swift in Sources */,
 				C0F100032F60000000000001 /* PrivateKeyExportFullAppUITests.swift in Sources */,
 				C0F100012F60000000000001 /* CloudBackupHostUITestSupport.swift in Sources */,
+				C0F100072F60000000000001 /* FullLaunchSupport.swift in Sources */,
+				C0F100082F60000000000001 /* FakeNodeControl.swift in Sources */,
+				C0F100092F60000000000001 /* HardwareSignerControl.swift in Sources */,
 				C0E000012F20000000000001 /* OnboardingFullLaunchUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

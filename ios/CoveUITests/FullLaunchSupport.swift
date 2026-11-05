@@ -63,15 +63,7 @@ extension XCUIApplication {
         tapButton(startingWith: "Software wallet", until: button(startingWith: "Enter recovery words"))
         tapButton(startingWith: "Enter recovery words", until: button(startingWith: "12 words"))
         tapButton(startingWith: "12 words", until: navigationBars["Import Wallet"])
-
-        for (index, word) in Self.testMnemonic.split(separator: " ").enumerated() {
-            let field = textFields["hotWalletImport.word.\(index + 1)"]
-            XCTAssertTrue(field.waitForExistence(timeout: 10))
-            field.tap()
-            field.typeText(word == "about" ? "abou" : "aba")
-        }
-
-        buttons["hotWalletImport.import"].tap()
+        enterTestMnemonicAndImport()
 
         XCTAssertTrue(staticTexts["Protect this wallet with Cloud Backup?"].waitForExistence(timeout: 20))
         buttons["Not Now"].tap()
@@ -84,6 +76,18 @@ extension XCUIApplication {
         }
 
         XCTAssertTrue(element("selectedWallet.balance").waitForExistence(timeout: 30))
+    }
+
+    /// Types the test mnemonic into the open Import Wallet screen and taps Import
+    func enterTestMnemonicAndImport() {
+        for (index, word) in Self.testMnemonic.split(separator: " ").enumerated() {
+            let field = textFields["hotWalletImport.word.\(index + 1)"]
+            XCTAssertTrue(field.waitForExistence(timeout: 10))
+            field.tap()
+            field.typeText(word == "about" ? "abou" : "aba")
+        }
+
+        buttons["hotWalletImport.import"].tap()
     }
 
     func acceptTermsIfNeeded() {
