@@ -59,15 +59,18 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
-    "human",
+    "ios-ui:ios/CoveUITests/CloudBackupNetworkFullAppUITests.swift::testOfflineInventoryKeepsKnownRowsAndDisablesTheirActions",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupReconnectFullLaunchTest.kt::offlineInventoryKeepsKnownRowsAndDisablesTheirActions",
+    "rust:rust/src/manager/cloud_backup_manager/model.rs::offline_failure_keeps_confirmed_rows_without_individual_wallet_actions",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/sync_health.rs::authoritative_failure_retains_provisional_rows_in_failed_state",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::provider_confirmation_failure_marks_trusted_local_detail_incomplete",
     "rust:rust/src/manager/cloud_backup_manager/model.rs::initial_detail_refresh_failure_never_projects_confirmed_zero",
     "rust:rust/src/manager/cloud_backup_manager/model.rs::detail_refresh_failure_retains_last_known_rows",
     "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRegressionHelpersTest.kt::failedInventoryShowsRetryStateInsteadOfLoadingOrZero",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRegressionHelpersTest.kt::trustedRetainedInventoryKeepsRowsAfterFailureAndActionsUnlessOffline",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# tests cover retained rows in Failed state, never an empty inventory, and Restore All disabled; the per-row restore and delete buttons read isDetailInventoryComplete/Ready in each app and no ui test asserts they stay disabled
+# ui tests on both platforms drop the scripted network and reopen Cloud Backup: the known rows stay listed under the offline error instead of an empty cloud, Restore All is disabled, and each cloud-only row is disabled and opens neither Restore nor Delete. an offline failure makes the retained rows not ready in rust and in both apps, while other provider failures keep them actionable
 
 [[row]]
 id = "s05-reconnect-inventory-without-duplicate-new-passkey"
@@ -85,13 +88,13 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
-    "human:ios",
+    "ios-ui:ios/CoveUITests/CloudBackupNetworkFullAppUITests.swift::testReconnectCompletesInventoryWithoutDuplicatesOrPasskey",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_refresh_completes_inventory_once_per_wallet_without_passkey",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_retries_verification_after_offline_failure",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupReconnectFullLaunchTest.kt::reconnectAloneCompletesInventoryWithoutPasskeyPrompt",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# android: reopening the detail offline keeps the known rows with Restore All disabled, and the reconnect alone completes the inventory with no new passkey or passkey prompt; ios has no network switch in its test host, so a person still checks it there
+# on both platforms reopening the detail offline keeps the known rows with Restore All disabled, and the reconnect alone, with no tap, reads the inventory again and completes it with each wallet listed once, no new passkey or passkey prompt, and on ios no new master key or backup namespace
 
 [[row]]
 id = "s05-cloud-only-wallet-restore-data-matches"
