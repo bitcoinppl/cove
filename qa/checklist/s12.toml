@@ -173,7 +173,6 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "human:ios",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::registered_passkey_confirmation_session_prevents_duplicate_create",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::registered_passkey_stages_confirmation_without_duplicate_create",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::confirm_saved_passkey_reuses_original_credential_id",
@@ -184,7 +183,7 @@ coverage = [
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupRetryInterruptedSetupFullLaunchTest.kt::failedSetupUploadRetriesWithoutNewPasskey",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# ui tests on both platforms fail a setup upload at the provider and retry it through the production Enable action with the same passkey. ios stays human until its test class runs in ci
+# ui tests on both platforms fail a setup upload at the provider and retry it through the production Enable action with the same passkey, leaving one namespace and one copy of each wallet. ci runs the ios retry test by name, since the same class's background verification test fails on master
 
 [[row]]
 id = "s12-cancel-incomplete-setup-preserves-active-data"
@@ -305,7 +304,6 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "human:ios",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/deep_verify.rs::verification_retry_after_passkey_cancel_verifies_without_new_passkey",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_retries_verification_after_offline_failure",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/sync_health.rs::sync_now_offline_uploads_nothing_then_uploads_after_reconnect",
@@ -316,9 +314,12 @@ coverage = [
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupSyncNowFullLaunchTest.kt::syncNowUploadsPendingWalletAndRefreshesDetail",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupSyncNowFullLaunchTest.kt::offlineSyncNowUploadsNothingThenUploadsAfterReconnect",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupSyncNowFullLaunchTest.kt::cancelledVerificationRetriesWithTheSamePasskey",
+  "ios-ui:ios/CoveUITests/CloudBackupSyncNowFullAppUITests.swift::testSyncNowUploadsPendingWalletAndRefreshesDetail",
+  "ios-ui:ios/CoveUITests/CloudBackupSyncNowFullAppUITests.swift::testOfflineSyncNowUploadsNothingThenUploadsAfterReconnect",
+  "ios-ui:ios/CoveUITests/CloudBackupSyncNowFullAppUITests.swift::testCancelledVerificationRetriesWithTheSamePasskey",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# android: tapping Sync Now uploads a wallet whose upload was rejected and the detail refreshes to show it up to date; offline it uploads nothing and shows the offline error, then uploads after reconnecting; a cancelled passkey leaves Cloud Backup Not Verified and Verify Now verifies with the same passkey, creating none. Repairing a missing master-key wrapper has only the Rust tests; ios still needs a person for all of it
+# ui tests on both platforms: tapping Sync Now uploads a wallet whose upload the cloud rejected for quota and the detail refreshes to show it confirmed with Sync Now gone; offline it uploads nothing and shows the offline error, then uploads after reconnecting; a cancelled passkey leaves Cloud Backup Not Verified and Verify Now verifies with the same passkey, creating none. Repairing a missing master-key wrapper has only the Rust tests on both platforms
 
 [[row]]
 id = "s12-restore-all-sequential-progress-and-deduplication"

@@ -104,6 +104,33 @@ extension XCUIApplication {
         buttons["onboarding.terms.agree"].tap()
     }
 
+    /// Walks Add Wallet from the sidebar to the 12-word import, enters the test mnemonic and
+    /// lands on the new wallet
+    func importTestMnemonicFromAddWallet() {
+        tapButton(named: "app.sidebar.open")
+        tapButton(named: "Add Wallet")
+        tapButton(startingWith: "On This Device", until: buttons["Import existing wallet"])
+        tapButton(startingWith: "Import existing wallet", until: buttons["12 Words"])
+        tapButton(startingWith: "12 Words", until: navigationBars["Import Wallet"])
+        enterTestMnemonicAndImport()
+
+        // keeps native segwit when the node shows activity on other address types too
+        let keepCurrent = button(startingWith: "Keep Current")
+        let balance = element("selectedWallet.balance")
+        let deadline = Date().addingTimeInterval(30)
+        while Date() < deadline, !keepCurrent.exists {
+            if balance.exists, !keepCurrent.waitForExistence(timeout: 3) { return }
+
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+
+        XCTAssertTrue(keepCurrent.exists || balance.exists, "the import never reached the new wallet")
+        if keepCurrent.exists {
+            keepCurrent.tap()
+            XCTAssertTrue(keepCurrent.waitForNonExistence(timeout: 10))
+        }
+    }
+
     // MARK: - Sending
 
     /// BIP173 test vector: the P2WPKH address of private key 1, which is not in the test wallet
@@ -224,6 +251,10 @@ extension XCUIApplication {
         for _ in 0 ..< 3 {
             if button.exists, button.isHittable {
                 button.tap()
+            } else if button.exists, !button.frame.isEmpty {
+                // a layer drawn over a button, as on Add Wallet in the cloud backup host, can make
+                // XCUITest report it unhittable though a tap at its center lands
+                button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             }
 
             if target.waitForExistence(timeout: 5) { return }
