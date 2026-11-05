@@ -66,10 +66,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # restores the Gradle User Home master wrote, so a cold download of the Kotlin compiler
-      # from its GitHub release redirect can't fail the build
+      # restores the Gradle User Home that CI's compile-android job writes on master, so a cold
+      # download of the Kotlin compiler from its GitHub release redirect can't fail the build;
+      # read-only so only compile-android saves under the shared key
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+          cache-read-only: true
 
       - name: Install build dependencies
         run: cd rust && cargo --locked xtask install-deps

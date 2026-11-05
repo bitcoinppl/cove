@@ -75,8 +75,13 @@ jobs:
       # a cold Gradle User Home downloads kotlin-compiler-embeddable, which Maven Central
       # redirects to a GitHub release asset; a 504 there fails the configuration cache store,
       # so restore the dependency cache master wrote instead of downloading it every run
+      # the basic provider shares one key across jobs, so only compile-android writes it;
+      # otherwise this faster job would save first without the compile dependencies
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+          cache-read-only: true
       - name: Run ktlint
         run: cd android && ./gradlew ktlintCheck
       - name: Run detekt
@@ -110,9 +115,11 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      # restores the Gradle User Home master wrote, see the ktlint job
+      # the only writer of the shared Gradle User Home cache, from master; see the ktlint job
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
       - name: Install build dependencies
         run: cd rust && cargo --locked xtask install-deps

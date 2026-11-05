@@ -106,11 +106,15 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      # restores the Gradle User Home master wrote, so a cold download of the Kotlin compiler
-      # from its GitHub release redirect can't fail the build
+      # restores the Gradle User Home that CI's compile-android job writes on master, so a cold
+      # download of the Kotlin compiler from its GitHub release redirect can't fail the build;
+      # read-only so the scheduled master run doesn't save a different set under the shared key
       - name: Setup Gradle
         if: steps.plan.outputs.run == 'true'
         uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+          cache-read-only: true
 
       - name: Install build dependencies
         if: steps.plan.outputs.run == 'true'
