@@ -1,7 +1,8 @@
 name: UI tests
 
 # emulator and simulator suites take far longer than the rest of CI, so they
-# run after merge, nightly, and on PRs that opt in with the `ui-tests` label.
+# run after merge, nightly, and on PRs that opt in with the `ui-tests` label;
+# a labeled PR runs only the platforms its changes reach.
 # A manual run can name tests to run instead of the full suites, to check a fix
 # without waiting on every test again; see docs/testing.md
 on:
@@ -52,8 +53,30 @@ env:
   ANDROID_TESTS: ${{ inputs.android_tests }}
 
 jobs:
-  android-instrumented:
+  # on a labeled PR, picks the platforms the change reaches, as CI's changes job does, see
+  # .github/scripts/ci-changes.sh; every other trigger runs both, and each if checks for 'false',
+  # so a failed changes job runs both too
+  changes:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
+    runs-on: ubuntu-24.04
+    outputs:
+      ios_ui: ${{ steps.plan.outputs.ios_ui }}
+      android_instrumented: ${{ steps.plan.outputs.android_instrumented }}
+    steps:
+      # the merge commit and both its parents; diffing names reads trees, never blobs
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+          filter: blob:none
+          sparse-checkout: .github/scripts
+
+      - name: Pick the platforms this change needs
+        id: plan
+        run: .github/scripts/ci-changes.sh
+
+  android-instrumented:
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && needs.changes.outputs.android_instrumented != 'false' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     # one flavour per job: with both in one job the hosted runner shut down about 35 minutes in, twice
@@ -181,7 +204,8 @@ jobs:
           retention-days: 7
 
   ios-ui:
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && needs.changes.outputs.ios_ui != 'false' }}
     runs-on: macos-26
     # each shard runs about 11 tests, after about 25 minutes building the Rust library, the fake
     # node and the test bundles; a test took 6 to 8 minutes when each erased the simulator and
