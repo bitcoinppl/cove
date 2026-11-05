@@ -42,6 +42,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     private val walletListNamespaces = CopyOnWriteArrayList<String>()
     private val walletDownloads = AtomicInteger(0)
     private val fixtureWalletDownloadRequests = CopyOnWriteArrayList<String>()
+
+    // fixture wallets the app deleted, in call order, so tests can assert exactly which backup went
+    private val deletedFixtureWalletRecordIds = CopyOnWriteArrayList<String>()
+
     private val fixtureWalletDownloadResults =
         ConcurrentHashMap<String, ConcurrentLinkedQueue<FixtureWalletDownloadResult>>()
     private val fixtureWalletDownloadDefaults =
@@ -104,6 +108,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         walletListNamespaces.clear()
         walletDownloads.set(0)
         fixtureWalletDownloadRequests.clear()
+        deletedFixtureWalletRecordIds.clear()
         fixtureWalletDownloadResults.clear()
         fixtureWalletDownloadDefaults.clear()
         walletListBlock = null
@@ -156,6 +161,9 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         fixtureWalletDownloadRequests.count { it == recordId }
 
     fun walletDownloadRecordIds(): List<String> = fixtureWalletDownloadRequests.toList()
+
+    /** Fixture wallet record ids the app deleted from the cloud, one entry per delete call */
+    fun deletedWalletRecordIds(): List<String> = deletedFixtureWalletRecordIds.toList()
 
     fun blockNextWalletList() {
         check(walletListBlock?.claimed?.get() != false) { "a wallet-list block is already pending" }
@@ -335,7 +343,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
             "unexpected fixture namespace $namespace"
         }
 
-        return fixtureWalletRecordIds.map(::walletFilename)
+        return visibleFixtureWalletRecordIds().map(::walletFilename)
     }
 
     override suspend fun listWalletFilesSnapshot(
@@ -356,7 +364,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         if (fixtureRestoreEnabled) {
             return if (
                 namespace == ScriptedCloudBackupFixture.NAMESPACE &&
-                    (recordId == MASTER_KEY_RECORD_ID || recordId in fixtureWalletRecordIds)
+                    (recordId == MASTER_KEY_RECORD_ID || recordId in visibleFixtureWalletRecordIds())
             ) {
                 CloudBackupUploadStatus.UPLOADED
             } else {
@@ -452,6 +460,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
             if (fixtureRestoreEnabled && namespace == ScriptedCloudBackupFixture.NAMESPACE) {
                 val wrapper = ScriptedCloudBackupFixture.walletWrapper(recordId) ?: unsupported()
                 fixtureWalletDownloadRequests += recordId
+                if (recordId in deletedFixtureWalletRecordIds) {
+                    throw CloudStorageException.NotFound("scripted fixture wallet was deleted")
+                }
+
                 walletDownloadBlock?.let { block ->
                     if (block.shouldClaim(recordId)) {
                         block.entered.countDown()
@@ -501,8 +513,22 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         locations: List<RemoteBackupLocation>,
         policy: CloudAccessPolicy,
     ) {
-        val scenario = freshEnableScenario ?: unsupported()
-        scenario.deleteWalletBackup(namespace, recordId)
+        val scenario = freshEnableScenario
+        if (scenario != null) {
+            scenario.deleteWalletBackup(namespace, recordId)
+            return
+        }
+
+        if (!fixtureRestoreEnabled) unsupported()
+
+        check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
+            "unexpected fixture namespace $namespace"
+        }
+        check(ScriptedCloudBackupFixture.walletWrapper(recordId) != null) {
+            "unexpected fixture wallet record id $recordId"
+        }
+
+        deletedFixtureWalletRecordIds += recordId
     }
 
     override suspend fun deleteNamespace(
@@ -517,6 +543,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         throw CloudStorageException.NotAvailable("operation is not scripted for UI tests")
 
     private fun walletFilename(recordId: String): String = "wallet-$recordId.json"
+
+    // a deleted fixture wallet leaves the listing, so the refresh after a delete can't bring it back
+    private fun visibleFixtureWalletRecordIds(): List<String> =
+        fixtureWalletRecordIds.filterNot { it in deletedFixtureWalletRecordIds }
 
     private class NamespaceScenario(
         results: List<NamespaceResult>,
