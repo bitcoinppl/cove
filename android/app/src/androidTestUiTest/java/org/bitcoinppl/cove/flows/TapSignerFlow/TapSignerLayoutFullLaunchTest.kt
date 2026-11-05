@@ -8,7 +8,10 @@ import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getAllSemanticsNodes
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.toSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -48,9 +51,9 @@ import kotlin.math.roundToInt
  * and an emulated card (docs/testing.md)
  *
  * The TAPSIGNER sheet is its own window, which ignores a Compose test font scale, so this sets the
- * system font scale and restores it afterwards. Each node's full bounds come from the Compose
- * semantics tree, so the checks catch text and actions pushed off screen, cut off by their
- * container or squeezed, not an ellipsis inside a label.
+ * system font scale and restores it afterwards. Each node's full bounds and text layout come from
+ * the Compose semantics tree, so the checks catch text and actions pushed off screen, cut off by
+ * their container or squeezed, and text that lays out ellipsized or cut short inside its own bounds.
  * Runs in the uiTest flavour; needs the hardware signer host up and forwarded, which
  * `just android-instrumented-ci` does
  */
@@ -239,12 +242,15 @@ class TapSignerLayoutFullLaunchTest {
 
     // MARK: layout checks
 
-    /** Checks each text in order from the top, scrolling down to reach the later ones */
+    /**
+     * Checks each text in order from the top, scrolling down to reach the later ones, and checks
+     * each draws whole
+     */
     private fun assertScreenFits(
         screen: String,
         vararg texts: String,
     ) {
-        texts.forEach { reachable(By.text(it), "$screen: \"$it\"") }
+        texts.forEach { reachable(By.text(it), "$screen: \"$it\"", drawsWhole = it) }
     }
 
     /**
@@ -256,10 +262,13 @@ class TapSignerLayoutFullLaunchTest {
      * to the display, window and scroll container, so the control's full and shown bounds come from
      * the Compose semantics tree instead. A control cut off at the top or bottom is dragged inward
      * until it shows whole; one cut off at the side, or that never shows whole, fails
+     *
+     * With [drawsWhole], the control's text showing that string must also lay out whole
      */
     private fun reachable(
         selector: BySelector,
         name: String,
+        drawsWhole: String? = null,
     ): UiObject2 {
         val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
         val gestureStripTop = device.displayHeight - (GESTURE_STRIP_DP * density).toInt()
@@ -292,6 +301,8 @@ class TapSignerLayoutFullLaunchTest {
                     "$name is squeezed to $visible, under ${MIN_NODE_HEIGHT_DP}dp tall",
                     visible.height() >= MIN_NODE_HEIGHT_DP * density,
                 )
+
+                drawsWhole?.let { assertDrawsWhole(visible, it, name) }
                 return node
             }
 
@@ -309,26 +320,12 @@ class TapSignerLayoutFullLaunchTest {
         val whole: Rect,
     )
 
-    /**
-     * The bounds of the control holding the Compose node that UiAutomator shows at [visible]
-     *
-     * Every node's clipped bounds are compared with [visible], and the closest one is taken, so the
-     * same text elsewhere, such as behind the sheet, doesn't match
-     */
+    /** The bounds of the control holding the Compose node that UiAutomator shows at [visible] */
     private fun controlBounds(visible: Rect): ControlBounds? {
         var bounds: ControlBounds? = null
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val node =
-                WindowInspector
-                    .getGlobalWindowViews()
-                    .flatMap { it.composeRoots() }
-                    .flatMap { it.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false) }
-                    .filter { Rect.intersects(it.clippedOnScreen(), visible) }
-                    .minByOrNull { edgeDistance(it.clippedOnScreen(), visible) }
-                    ?: return@runOnMainSync
-
-            val control = node.controlOrSelf()
+            val control = semanticsNodeAt(visible)?.controlOrSelf() ?: return@runOnMainSync
             val shown = control.clippedOnScreen()
 
             // boundsInWindow isn't clipped to the display, which a window can extend past
@@ -338,6 +335,77 @@ class TapSignerLayoutFullLaunchTest {
 
         return bounds
     }
+
+    /**
+     * Fails unless every Compose text in the control UiAutomator shows at [visible] that reads
+     * [text] lays out whole: no line ellipsized, and no line cut off by the text's height, line
+     * limit or width
+     *
+     * UiAutomator reports a text's whole string even when it draws cut short, so the layout comes
+     * from Compose. A text that reports no layout fails too, so a change that hides the layout
+     * can't turn the check off
+     */
+    private fun assertDrawsWhole(
+        visible: Rect,
+        text: String,
+        name: String,
+    ) {
+        var problem: String? = null
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val control = semanticsNodeAt(visible)?.controlOrSelf()
+            val texts =
+                control
+                    ?.selfAndDescendants()
+                    ?.filter { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text == text } }
+                    ?.toList()
+                    .orEmpty()
+
+            problem =
+                when {
+                    control == null -> "matches no Compose semantics node"
+                    texts.isEmpty() -> "has no Compose text reading \"$text\" in its control"
+                    else -> texts.firstNotNullOfOrNull { it.layoutProblem() }
+                }
+        }
+
+        problem?.let { error("$name doesn't draw whole: $it") }
+    }
+
+    // a text node reports its layout through this action, as the accessibility service reads it
+    private fun SemanticsNode.layoutProblem(): String? {
+        val action = config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action ?: return "its text reports no layout"
+        val layouts = mutableListOf<TextLayoutResult>()
+        if (!action(layouts)) return "its text has no layout yet"
+
+        val layout = layouts.singleOrNull() ?: return "its text reports ${layouts.size} layouts"
+        val ellipsized = (0 until layout.lineCount).filter(layout::isLineEllipsized)
+
+        return when {
+            ellipsized.isNotEmpty() -> "line ${ellipsized.first() + 1} of ${layout.lineCount} is ellipsized"
+            layout.multiParagraph.didExceedMaxLines -> "it needs more than its ${layout.lineCount} line limit"
+            layout.didOverflowHeight -> "it needs ${layout.multiParagraph.height}px but gets ${layout.size.height}px"
+            layout.didOverflowWidth -> "it needs ${layout.multiParagraph.width}px wide but gets ${layout.size.width}px"
+            else -> null
+        }
+    }
+
+    /**
+     * The Compose node UiAutomator shows at [visible], read on the main thread
+     *
+     * Every node's clipped bounds are compared with [visible], and the closest one is taken, so the
+     * same text elsewhere, such as behind the sheet, doesn't match
+     */
+    private fun semanticsNodeAt(visible: Rect): SemanticsNode? =
+        WindowInspector
+            .getGlobalWindowViews()
+            .flatMap { it.composeRoots() }
+            .flatMap { it.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false) }
+            .filter { Rect.intersects(it.clippedOnScreen(), visible) }
+            .minByOrNull { edgeDistance(it.clippedOnScreen(), visible) }
+
+    private fun SemanticsNode.selfAndDescendants(): Sequence<SemanticsNode> =
+        sequenceOf(this) + children.asSequence().flatMap { it.selfAndDescendants() }
 
     // a clickable that merges its children is one control, such as a card with a title and a description
     private fun SemanticsNode.controlOrSelf(): SemanticsNode =

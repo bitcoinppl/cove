@@ -4,14 +4,17 @@ import XCTest
 /// that each screen's text and actions fit the window or scroll into it, through the debug
 /// TAPSIGNER seam and an emulated card (docs/testing.md)
 ///
-/// XCUITest reports a text's whole label even when it draws truncated, so the checks catch text and
-/// actions pushed off screen, cut off by their scroll view or out of reach, not an ellipsis inside a
-/// label. Needs the hardware
-/// signer host, which `xtask ios-ui` (`just ios-ui-background`) starts for every run
+/// The checks catch text and actions pushed off screen, cut off by their scroll view or out of
+/// reach. XCUITest reports a text's whole label even when it draws truncated, so each title also
+/// carries the debug truncation probe, which reports whether the title draws whole. Needs the
+/// hardware signer host, which `xtask ios-ui` (`just ios-ui-background`) starts for every run
 final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private static let esploraUrl = "http://127.0.0.1:39001"
     private static let largestContentSize = "UICTContentSizeCategoryAccessibilityXXXL"
     private static let newCvc = "246810"
+
+    /// The value a probed title reports when it draws whole, from `UITestTruncationProbe` in the app
+    private static let fitsValue = "fits"
 
     /// Inside the screens' 16 to 20 point side padding, so a drag there lands on no field
     private static let dragMargin: CGFloat = 8
@@ -34,6 +37,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         signer = HardwareSignerControl()
         app.launchEnvironment["COVE_UI_TEST_ESPLORA_URL"] = Self.esploraUrl
         app.launchEnvironment["COVE_UI_TEST_TAPSIGNER_BRIDGE"] = HardwareSignerControl.tapSignerBridge
+        app.launchEnvironment["COVE_UI_TEST_TRUNCATION_PROBE"] = "1"
     }
 
     /// A new card walks choose, advanced, the three PIN screens, setup retry and setup success
@@ -152,16 +156,32 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
     // MARK: - Layout checks
 
-    /// Every text and action must lie wholly inside the window once scrolled to, and the actions
-    /// must take a tap there
+    /// Every text and action must lie wholly inside the window once scrolled to, the actions must
+    /// take a tap there, and every text must draw whole
     private func assertScreenFits(_ screen: String, texts: [String], buttons: [XCUIElementQuery]) {
         for text in texts {
-            assertReachable(app.staticTexts.matching(NSPredicate(format: "label == %@", text)), "\(screen): '\(text)'", needsHit: false)
+            let name = "\(screen): '\(text)'"
+            let element = assertReachable(app.staticTexts.matching(NSPredicate(format: "label == %@", text)), name, needsHit: false)
+            assertDrawsWhole(element, name)
         }
 
         for button in buttons {
             assertReachable(button, "\(screen): \(button.firstMatch.description)", needsHit: true)
         }
+    }
+
+    /// Fails unless the text's truncation probe reports it draws whole
+    ///
+    /// A text without the probe has no value, so dropping the probe fails here too. The probe
+    /// measures after layout, so its value gets a moment to settle
+    private func assertDrawsWhole(_ element: XCUIElement, _ name: String) {
+        let value = { element.value as? String ?? "" }
+        let settled = Date().addingTimeInterval(3)
+        while value() != Self.fitsValue, Date() < settled {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+
+        XCTAssertEqual(value(), Self.fitsValue, "\(name) doesn't draw whole: its truncation probe reports '\(value())'")
     }
 
     @discardableResult

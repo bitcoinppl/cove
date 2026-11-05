@@ -102,6 +102,7 @@ struct TapSignerPinDescription: View {
             Text(title)
                 .font(.largeTitle)
                 .fontWeight(.bold)
+                .uiTestTruncationProbe()
 
             Text(message)
                 .font(.subheadline)
@@ -268,6 +269,7 @@ struct TapSignerResultStatus: View {
                 Text(title)
                     .font(titleFont)
                     .fontWeight(.bold)
+                    .uiTestTruncationProbe()
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(message)
@@ -353,6 +355,7 @@ private struct TapSignerRetryStatus: View {
             Text(title)
                 .font(.title)
                 .fontWeight(.bold)
+                .uiTestTruncationProbe()
 
             Text(message)
                 .font(.subheadline)

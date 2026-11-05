@@ -80,6 +80,7 @@ private struct TapSignerAdvancedChainCodeContent: View {
                 Text("Advanced Setup")
                     .font(.largeTitle)
                     .fontWeight(.bold)
+                    .uiTestTruncationProbe()
                     .padding(.bottom, 5)
             }
 

@@ -63,6 +63,7 @@ private struct TapSignerChooseChainCodeContent: View {
                 Text("Setup Chain Code")
                     .font(.largeTitle)
                     .fontWeight(.bold)
+                    .uiTestTruncationProbe()
                     .padding(.bottom, 5)
             }
 

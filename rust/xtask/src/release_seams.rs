@@ -1,12 +1,13 @@
 //! Proves the UI test seams are not in release builds
 //!
 //! Debug builds read `COVE_UI_TEST_*` environment variables to swap the camera
-//! and NFC for test seams. On iOS the seams are under `#if DEBUG`, which only
-//! the Debug configuration defines; on Android they live in the `debug` source
-//! set, and the `release` source set has inert stubs. In Rust, the trust in the
-//! card emulator's certificates is under `cfg(debug_assertions)`, which no
-//! release profile enables. Every seam starts by reading its variable, so a
-//! release build without those names has no way to turn one on
+//! and NFC for test seams, and on iOS to have texts report truncation. On iOS
+//! the seams are under `#if DEBUG`, which only the Debug configuration defines;
+//! on Android they live in the `debug` source set, and the `release` source set
+//! has inert stubs. In Rust, the trust in the card emulator's certificates is
+//! under `cfg(debug_assertions)`, which no release profile enables. Every seam
+//! starts by reading its variable, so a release build without those names has
+//! no way to turn one on
 //!
 //! The check builds each layer's release code and fails when a marker is in it:
 //! the Swift objects of the iOS app, the shrunk dex of the Android app, and the
@@ -36,6 +37,9 @@ use crate::common::{print_info, print_success};
 
 /// Strings only the apps' seam code contains: the variables that turn the seams on
 const APP_MARKERS: &[&str] = &["COVE_UI_TEST_QR_SCRIPT", "COVE_UI_TEST_TAPSIGNER_BRIDGE"];
+
+/// Seam variables only the iOS app has, which the Android debug control can't contain
+const IOS_APP_MARKERS: &[&str] = &["COVE_UI_TEST_TRUNCATION_PROBE"];
 
 /// Strings only the Rust seam contains, its variable and the emulator's root key, one per
 /// line; the Xcode and Gradle release checks read the same file
@@ -116,8 +120,9 @@ fn check_ios(repo: &Path) -> Result<()> {
         Ok(objects)
     };
 
-    expect_markers(&swift_objects("Debug")?, APP_MARKERS, true)?;
-    expect_markers(&swift_objects("Release")?, APP_MARKERS, false)?;
+    let markers = [APP_MARKERS, IOS_APP_MARKERS].concat();
+    expect_markers(&swift_objects("Debug")?, &markers, true)?;
+    expect_markers(&swift_objects("Release")?, &markers, false)?;
 
     print_success("iOS Release Swift code has no UI test seams");
     Ok(())
