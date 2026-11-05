@@ -87,13 +87,17 @@ class CloudBackupReconnectFullLaunchTest {
             device.scrollUntilText(RESTORE_ALL_TITLE).clickableAncestor().isEnabled,
         )
 
-        // the reconnect itself must refresh the open detail, so the test starts no refresh
+        // the reconnect itself must refresh the open detail, so the test starts no refresh; the
+        // provider counts only listings it served, so a later count shows the inventory was read
+        // again rather than the offline snapshot marked complete
+        val walletListsBeforeReconnect = ScriptedCloudStorageAccess.walletListCount()
         ScriptedConnectivityAccess.setConnected(true)
 
         waitUntil("reconnecting should complete the inventory without another refresh request") {
             val manager = CloudBackupManager.getInstance()
 
-            manager.detailError == null &&
+            ScriptedCloudStorageAccess.walletListCount() > walletListsBeforeReconnect &&
+                manager.detailError == null &&
                 manager.isDetailInventoryComplete &&
                 manager.restoreAllState == CloudBackupRestoreAllState.StartAvailable(2u) &&
                 cloudOnlyRecordIds() == expectedRecordIds
@@ -131,6 +135,17 @@ class CloudBackupReconnectFullLaunchTest {
             "accepting terms should complete onboarding before opening Cloud Backup settings",
             device.wait(Until.gone(By.text("Terms & Conditions")), 10_000L),
         )
+
+        // onboarding's last step selects the restored wallet and resets the route, which would
+        // replace a settings route opened before it
+        waitUntil("onboarding should finish on the restored wallet") {
+            val app = AppManager.getInstance()
+            val walletId = app.wallets.singleOrNull()?.id
+
+            walletId != null &&
+                app.router.default == Route.SelectedWallet(walletId) &&
+                app.router.routes.isEmpty()
+        }
 
         device.openSettings()
         val walletListsBeforeEntry = ScriptedCloudStorageAccess.walletListCount()
