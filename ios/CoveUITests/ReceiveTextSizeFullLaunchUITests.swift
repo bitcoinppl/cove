@@ -1,7 +1,8 @@
 import XCTest
 
 /// Opens Receive at the largest accessibility text size and again at the default size, and checks
-/// that both offer the same controls, each reachable inside the window and enabled
+/// that both offer the same controls, each reachable inside the window and enabled, and that the
+/// largest size really took effect
 ///
 /// The text size comes from the `-UIPreferredContentSizeCategoryName` launch argument, which sets
 /// it for that launch only, so the default-size launch is the phone's text size put back. Needs the
@@ -12,6 +13,10 @@ final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
 
     /// Every control the Receive sheet offers once its address has loaded
     private static let receiveControls = ["Done", "Copy Address", "Create New Address"]
+
+    /// How much taller Copy Address must be at the largest size, where its headline text grows from
+    /// 17pt to 53pt while the padding around it stays the same
+    private static let minimumGrowth: CGFloat = 1.3
 
     private var app: XCUIApplication!
 
@@ -37,14 +42,28 @@ final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
         app.launch(expecting: app.element("selectedWallet.balance"))
         let normal = reachableReceiveControls()
 
-        XCTAssertEqual(normal, Self.receiveControls, "controls missing from Receive at the default text size")
-        XCTAssertEqual(largest, normal, "Receive at the largest text size offers different controls from the default size")
+        // equal controls prove nothing if the launch argument was ignored and both launches used the same size
+        XCTAssertGreaterThanOrEqual(
+            largest.copyAddressHeight,
+            normal.copyAddressHeight * Self.minimumGrowth,
+            "Copy Address is \(largest.copyAddressHeight)pt tall at the largest size and \(normal.copyAddressHeight)pt at the default, so the largest size didn't take effect"
+        )
+        XCTAssertEqual(normal.controls, Self.receiveControls, "controls missing from Receive at the default text size")
+        XCTAssertEqual(
+            largest.controls,
+            normal.controls,
+            "Receive at the largest text size offers different controls from the default size"
+        )
     }
 
     /// Opens Receive and lists the controls that can be used, scrolling the sheet toward any that
-    /// are off screen, as a user would
-    private func reachableReceiveControls() -> [String] {
+    /// are off screen, as a user would, along with the height Copy Address renders at
+    private func reachableReceiveControls() -> (controls: [String], copyAddressHeight: CGFloat) {
         app.openReceive()
+
+        let copyAddress = button("Copy Address")
+        XCTAssertTrue(copyAddress.waitForExistence(timeout: 10), "Receive has no Copy Address button")
+        let copyAddressHeight = copyAddress.frame.height
 
         var found = Set<String>()
         for _ in 0 ..< 6 {
@@ -54,7 +73,7 @@ final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
             scrollReceiveSheet()
         }
 
-        return Self.receiveControls.filter(found.contains)
+        return (Self.receiveControls.filter(found.contains), copyAddressHeight)
     }
 
     /// A control counts only when it lies wholly inside the window, takes a tap and is enabled
