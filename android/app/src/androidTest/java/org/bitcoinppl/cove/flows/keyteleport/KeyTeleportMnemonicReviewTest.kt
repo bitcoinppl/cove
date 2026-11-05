@@ -75,6 +75,7 @@ class KeyTeleportMnemonicReviewTest {
     @After
     fun tearDown() {
         val app = AppManager.getInstance()
+
         try {
             // setUp found no stored session, so one here is this test's own, left by a failure
             if (ownsReceiveSession && hasStoredReceiveSession()) endReceive(app.getKeyTeleportManager())
@@ -135,7 +136,9 @@ class KeyTeleportMnemonicReviewTest {
         // hosts the screen without one, so finish that load the way the host does
         val selected = awaitOnMain("Done to select the imported wallet") { app.router.default.takeIf { selects(it, imported) } }
         if (selected is Route.LoadAndReset) runBlocking(Dispatchers.Main) { app.completeLoadAndReset(selected) }
-        assertEquals("Done did not open the imported wallet", Route.SelectedWallet(imported), onMainValue { app.router.default })
+
+        // the reset reaches the router through an async reconcile, and a failed load redirects instead
+        awaitOnMain("Done to open the imported wallet") { (app.router.default == Route.SelectedWallet(imported)).takeIf { it } }
 
         assertEquals("Import Wallet did not add exactly one wallet", 1, walletsForTheTestWords())
         assertEquals("the imported wallet holds different words", TEST_WORDS, Mnemonic(id = imported).use { it.words() })

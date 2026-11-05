@@ -204,6 +204,7 @@ class KeyTeleportPasteRejectionTest {
         return layouts.firstNotNullOfOrNull { layout ->
             val paragraph = layout.multiParagraph
             val widestLine = (0 until paragraph.lineCount).maxOfOrNull { paragraph.getLineRight(it) - paragraph.getLineLeft(it) } ?: 0f
+
             when {
                 paragraph.didExceedMaxLines -> "it has more lines than it may show"
                 widestLine - layout.size.width > CLIP_TOLERANCE_PX ->
