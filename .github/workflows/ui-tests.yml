@@ -67,7 +67,7 @@ env:
 
 jobs:
   # on a labeled PR, picks the platforms the change reaches, as CI's changes job does, see
-  # .github/scripts/ci-changes.sh; every other trigger runs both, and a job skips only when the
+  # .github/scripts/ci_changes.py; every other trigger runs both, and a job skips only when the
   # changes job succeeded and said 'false', so a failed changes job runs both too
   changes:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
@@ -87,7 +87,7 @@ jobs:
 
       - name: Pick the platforms this change needs
         id: plan
-        run: .github/scripts/ci-changes.sh
+        run: python3 -I .github/scripts/ci_changes.py
 
       # a manual run that names tests for only one platform has nothing for the other, whose jobs
       # then skip before taking a runner; inputs are read without whitespace, as
