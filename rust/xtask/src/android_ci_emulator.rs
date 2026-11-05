@@ -85,7 +85,14 @@ pub fn start(port: u16) -> Result<()> {
 
     sdk.ensure_avd()?;
 
-    let log_path = PathBuf::from(format!("/tmp/cove-{AVD}-{port}.log"));
+    // under the target dir rather than /tmp, where another user could plant a symlink at the
+    // predictable name for this to overwrite
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("xtask is in rust/");
+    let log_dir = workspace.join("target/android-ci-emulator");
+    fs::create_dir_all(&log_dir)
+        .wrap_err_with(|| format!("Failed to create {}", log_dir.display()))?;
+
+    let log_path = log_dir.join(format!("{AVD}-{port}.log"));
     let log = File::create(&log_path)
         .wrap_err_with(|| format!("Failed to create {}", log_path.display()))?;
 
