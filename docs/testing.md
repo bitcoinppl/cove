@@ -9,6 +9,7 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 - [Planning a release pass](#planning-a-release-pass)
 - [Fixtures](#fixtures)
 - [Hardware signing UI tests](#hardware-signing-ui-tests)
+- [Cloud Backup UI tests](#cloud-backup-ui-tests)
 - [Driving devices](#driving-devices)
 - [Running an agent pass](#running-an-agent-pass)
 - [Recording results](#recording-results)
@@ -122,6 +123,27 @@ The `/keyteleport/...` routes let the host play the other phone in a KeyTeleport
 `KeyTeleportReceiveFullLaunchUITests` (iOS) receives with the host as the sending phone. `POST /keyteleport/send` encrypts a mnemonic or master xprv for the app's request, or COLDCARD Secure Notes the way COLDCARD firmware does, and returns the response as BBQr frames, several when `min_parts` asks for them or the payload is too big for one QR code, with its Teleport Password. The test shows the frames to the scanner through the QR seam and types the password. It covers the mnemonic and xprv reviews (reveal, hide, copy, Finish Without Importing and Import Wallet), a multi-part response scanned out of order, and every review and result screen at the largest text size in dark mode, which `/simulator-appearance` switches on. The two largest-text tests aren't in `IOS_UI_SUITES` or mapped to a checklist row until they pass on GitHub. XCUITest reports a truncated label in full, so those layout checks also read the screenshot with Vision, failing on an ellipsis below the status bar (whose clock and signal dots Vision reads as one line with content scrolled beneath them), or when Vision can't read the start and end of a text or button label where it is drawn. A text taller than 60% of its scroll area below the navigation bar, such as a revealed xprv at the largest size, is scrolled through instead, since a drag moves 40% and could step over the room it has to show whole: Vision must read its start once its first line shows and its end once its last line shows, with no ellipsis at either.
 
 `KeyTeleportSendFullLaunchUITests` (iOS) turns this around: `/keyteleport/receive-request` makes a receiver request for the app to scan, the test sends the wallet's recovery words from Wallet Settings, entering the PIN they ask for, and `/keyteleport/receive-response` decrypts what the app showed back to the wallet's words. The camera itself, opened response links and the share sheet still need a person
+
+## Cloud Backup UI tests
+
+Cloud Backup UI tests run the whole app against a scripted cloud provider and passkey provider, so they need no iCloud or Google account and no real passkey. Neither provider ships: on iOS they live in the `CoveCloudBackupUITestHost` app, which builds all of `ios/Cove` with its own entry point, and on Android in the `uiTest` flavour's `ScriptedCloudStorageAccess` and `ScriptedPasskeyProvider`.
+
+### iOS host controls
+
+A `CoveCloudBackupUITests` test that creates a `CloudBackupHostControl` scripts the host through a directory under `/tmp`, which the simulator shares with the Mac. The control passes the directory to the app in `COVE_CLOUD_BACKUP_UI_CONTROL_DIR`. The directory holds:
+
+- **`script.json`:** a `CloudBackupUITestScript`, written atomically and read again on every provider call, so a test can change it while the app runs. It picks the fixture cloud (the generated backup in `CloudBackupFixture.json`) or a fresh-enable cloud that starts empty, and scripts namespace listings, which fixture wallets are listed, each wallet download's result, upload failures by attempt, and each passkey create, assertion and discovery result
+- **Holds:** a scripted hold parks one provider call (a namespace listing, a wallet listing, a wallet download, or the return of a master key upload after the cloud stored it) until the test creates the matching `release-<id>` file. The host records each hold it enters in `state.json` and never enters it again, even after a relaunch. `holdWalletDownload` counts downloads from the moment it is called, since inventory refreshes also read each record
+- **Delayed visibility:** the fresh-enable cloud accepts uploads but reports them pending, lists nothing and serves nothing until the test creates `release-visibility`, as a slow iCloud sync would
+- **`state.json`:** the host's call counts per provider call, in total and per launch, and the holds it entered, so a test can check that a retry created no second passkey or that a relaunch did no work on its own
+- **`app.log`:** the app's stdout and stderr, Rust logs included, across launches. The simulator clone is deleted after each test, so a failed test attaches this log to its result
+- **Persistence:** uploads land under `cloud/` and the keychain in `keychain.json`, so `CloudBackupHostRobot.killAndRelaunch` restarts the app on the same cloud and keychain. A test can edit the keychain between the two launches with `removeKeychainItems(containing:)`
+
+Without the variable the host keeps its fixed scenarios in `COVE_CLOUD_BACKUP_UI_SCENARIO`. The fixture's extra wallets come from the ignored generators in `rust/src/manager/cloud_backup_manager/ops/tests/ui_fixture.rs`, whose non-ignored tests check the pasted records.
+
+### Android scripted providers
+
+`ScriptedCloudStorageAccess` scripts the same cases in process: `configureFreshEnableWithDelayedVisibility` for a fresh enable whose uploads stay hidden until released, `configureProductionFixtureRestore` for the fixture cloud, blocks on namespace and wallet listings and wallet downloads, and `failUpload(kind, attempt)` to reject one master key or wallet upload, with `uploadCount` and `awaitUploadCount` to check retries. `ScriptedPasskeyProvider` scripts and counts passkey calls.
 
 ## Driving devices
 
