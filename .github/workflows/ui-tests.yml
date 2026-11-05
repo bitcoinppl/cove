@@ -75,6 +75,8 @@ jobs:
     outputs:
       ios_ui: ${{ steps.plan.outputs.ios_ui }}
       android_instrumented: ${{ steps.plan.outputs.android_instrumented }}
+      ios_named: ${{ steps.named.outputs.ios_named }}
+      android_named: ${{ steps.named.outputs.android_named }}
     steps:
       # the merge commit and both its parents; diffing names reads trees, never blobs
       - uses: actions/checkout@v6
@@ -87,10 +89,27 @@ jobs:
         id: plan
         run: .github/scripts/ci-changes.sh
 
+      # a manual run that names tests for only one platform has nothing for the other, whose jobs
+      # then skip before taking a runner; inputs are read without whitespace, as
+      # tools/ui-test-plan.sh reads them, so a blank input counts as none
+      - name: Pick the platforms a manual run names tests for
+        id: named
+        run: |
+          ios=$(printf '%s' "$IOS_TESTS" | tr -d '[:space:]')
+          android=$(printf '%s' "$ANDROID_TESTS" | tr -d '[:space:]')
+          ios_named=true
+          android_named=true
+          if [[ -n $ios$android ]]; then
+            [[ -n $ios ]] || ios_named=false
+            [[ -n $android ]] || android_named=false
+          fi
+
+          echo "ios_named=$ios_named" | tee -a "$GITHUB_OUTPUT"
+          echo "android_named=$android_named" | tee -a "$GITHUB_OUTPUT"
+
   android-instrumented:
     needs: changes
-    # a manual run that names only iOS tests has none for Android, so it skips before taking a runner
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && (needs.changes.result != 'success' || needs.changes.outputs.android_instrumented != 'false') && (github.event_name != 'workflow_dispatch' || inputs.android_tests != '' || inputs.ios_tests == '') }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && (needs.changes.result != 'success' || (needs.changes.outputs.android_instrumented != 'false' && needs.changes.outputs.android_named != 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     # one flavour per job: with both in one job the hosted runner shut down about 35 minutes in, twice
@@ -219,9 +238,8 @@ jobs:
 
   ios-ui:
     needs: changes
-    # never on a pull request, see the top of this file, and a manual run that names only Android
-    # tests skips it before the shards take macOS runners only to find nothing to run
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && (needs.changes.result != 'success' || needs.changes.outputs.ios_ui != 'false') && (github.event_name != 'workflow_dispatch' || inputs.ios_tests != '' || inputs.android_tests == '') }}
+    # never on a pull request, see the top of this file
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && (needs.changes.result != 'success' || (needs.changes.outputs.ios_ui != 'false' && needs.changes.outputs.ios_named != 'false')) }}
     runs-on: macos-26
     # each shard runs about 11 tests, after about 25 minutes building the Rust library, the fake
     # node and the test bundles; a test took 6 to 8 minutes when each erased the simulator and
