@@ -34,7 +34,18 @@ UI tests that need a funded wallet get it from the fake Esplora and Electrum nod
 
 `just android-ci-emulator`, or `cargo xtask android-ci-emulator --port <port>` from `rust/`, starts a headless emulator like the one the `UI tests` workflow runs the Android tests on: Android 15 (API 35) `google_apis` with the `pixel_6` profile, 4 cores, 4 GB, the workflow's emulator options and animations off. The only difference is the ABI, which follows this machine's, so Apple silicon gets arm64. On first use the recipe installs the system image, which needs the Android command-line tools in `$ANDROID_HOME/cmdline-tools/latest`, and creates the `CoveCI35` AVD. The emulator boots read-only, so several can run from the one AVD: `just android-ci-emulator 5556` starts a second on `emulator-5556`, and `ANDROID_SERIAL=emulator-5556 just android-instrumented-ci` runs tests on it while another run uses `emulator-5554`. A start that fails, times out or is interrupted before the emulator has booted stops the emulator again.
 
-The CI workflow runs the TAPSIGNER emulator tests in their own job. The `UI tests` workflow runs the iOS UI tests and Android instrumented tests nightly, on pushes to master, and on pull requests labeled `ui-tests`. It splits the iOS suites listed in its `IOS_UI_SUITES` across three macOS runners, `ios-ui (1/3)` through `ios-ui (3/3)`; add a new suite class to that list. Android runs one job per flavour.
+The CI workflow runs the TAPSIGNER emulator tests in their own job. The `UI tests` workflow runs the iOS UI tests and Android instrumented tests nightly, on pushes to master, and on pull requests labeled `ui-tests`, where it runs only the platforms the change reaches. It splits the iOS suites listed in its `IOS_UI_SUITES` across three macOS runners, `ios-ui (1/3)` through `ios-ui (3/3)`; add a new suite class to that list. Android runs one job per flavour.
+
+On a pull request, both workflows run only the jobs its changes can affect. Their `changes` job diffs the pull request's merge commit against the base branch and passes the changed paths to [`.github/scripts/ci-changes.sh`](../.github/scripts/ci-changes.sh), which maps each path to the jobs that read it. A change under `android/` alone skips the iOS jobs and the Rust tests, a change under `ios/` alone skips the Android jobs and the Rust jobs other than the tests, which read the Xcode project and the UI test sources, and a docs-only change skips every job. Changes under `rust/`, to the justfile or under `tools/release-seams/` reach both apps, so they run every iOS and Android job, the lint jobs included. A path the script doesn't name, any change under `.github/`, a push to master, a scheduled run, a manual run without `base` and a diff the job can't compute all run every job, and so does a failed `changes` job. A skipped job shows as skipped in the pull request's checks, and branch protection counts that as passed. A new top-level file or directory that no job reads runs every job until it's added to the script's list of paths that run nothing. [`ci-changes-test.sh`](../.github/scripts/ci-changes-test.sh) checks the main rules and every fallback against throwaway git repositories. CI's `changes` job runs it first, and when it fails, every job runs.
+
+Pull requests only start CI when they target master, so a stacked branch gets CI from a manual run. Without `base`, it runs every job:
+
+```sh
+gh workflow run ci.yml --ref <branch>
+gh workflow run ci.yml --ref <branch> -f base=<parent-branch>
+```
+
+With `base`, the run skips the jobs that the branch's changes since it left `<parent-branch>` don't need, as a pull request against that branch would.
 
 `xtask ios-ui`, which the `ios-ui-*` recipes and CI run, builds each UI test scheme once with `xcodebuild build-for-testing` and runs each test with `test-without-building` on a simulator of its own. It creates a golden simulator from the model and runtime of the `--device` simulator and boots it once, then clones it for each test and each retry. A clone starts with no app, app data, keychain items or privacy grants, as an erased simulator does, without the erase and the slow first boot after it. The `--device` simulator itself is left alone. The run deletes its simulators, named `Cove UI Test`, when it ends, and the next run deletes any that a stopped run left behind.
 
@@ -52,7 +63,7 @@ Both inputs take comma-separated lists, and a class runs all its tests. An iOS e
 
 A manual run shows under Actions but not in a pull request's checks, so it confirms a fix without clearing a failed check. To clear one, use GitHub's "Re-run failed jobs" on the pull request's run, which reruns only the failed shard or flavour, or push the fix.
 
-CI runs the manifest check behind `just qa-check` on pull requests, so the manifest stays consistent with the tests it names. Its workflow filters pull requests to those targeting master, so run `just qa-check` locally before pushing a checklist change on a stacked branch.
+CI runs the manifest check behind `just qa-check` on pull requests, so the manifest stays consistent with the tests it names. Its workflow filters pull requests to those targeting master, so run `just qa-check` locally before pushing a checklist change on a stacked branch, or start CI on the branch as shown above.
 
 ## Hardware signer tests
 

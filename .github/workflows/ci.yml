@@ -1,7 +1,12 @@
 name: CI
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Branch to diff against so only the jobs its changes need run, such as a stacked branch's parent; empty runs every job"
+        required: false
+        default: ""
   push:
     branches:
       - master
@@ -25,7 +30,45 @@ env:
   CARGO_NET_RETRY: "10"
 
 jobs:
+  # picks the jobs below that the change needs, see .github/scripts/ci-changes.sh; pushes to master
+  # and runs without a diff run them all. Jobs are skipped by their own if rather than a
+  # workflow paths filter because a skipped job still reports, and branch protection counts it as
+  # passed. A job skips only when the changes job succeeded and said 'false', so a failed or broken
+  # changes job runs everything
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      rustfmt: ${{ steps.plan.outputs.rustfmt }}
+      clippy: ${{ steps.plan.outputs.clippy }}
+      test: ${{ steps.plan.outputs.test }}
+      tapsigner_emulator: ${{ steps.plan.outputs.tapsigner_emulator }}
+      qa_manifest: ${{ steps.plan.outputs.qa_manifest }}
+      swift_lint: ${{ steps.plan.outputs.swift_lint }}
+      ktlint: ${{ steps.plan.outputs.ktlint }}
+      compile_ios: ${{ steps.plan.outputs.compile_ios }}
+      compile_android: ${{ steps.plan.outputs.compile_android }}
+    steps:
+      # the merge commit and both its parents, or with a base input the whole history, so the
+      # script finds where the branch left it; diffing names reads trees, never blobs
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && inputs.base != '' && '0' || '2' }}
+          filter: blob:none
+          sparse-checkout: .github/scripts
+
+      # a failure here fails the job before it writes outputs, so every job runs
+      - name: Test the job filter
+        run: .github/scripts/ci-changes-test.sh
+
+      - name: Pick the jobs this change needs
+        id: plan
+        env:
+          BASE_REF: ${{ inputs.base }}
+        run: .github/scripts/ci-changes.sh
+
   rustfmt:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.rustfmt != 'false') }}
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
@@ -40,6 +83,8 @@ jobs:
         run: cd rust && cargo fmt --all -- --check
 
   swift-lint:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.swift_lint != 'false') }}
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
@@ -66,6 +111,8 @@ jobs:
         run: swift run --package-path tools/cove-swift-lint cove-swift-lint ios --config .swift-ast-lint.yml
 
   ktlint:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.ktlint != 'false') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -90,6 +137,8 @@ jobs:
         run: cd android && ./gradlew detekt
 
   compile-android:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.compile_android != 'false') }}
     runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -D warnings
@@ -151,6 +200,8 @@ jobs:
         run: cd android && ./gradlew testDevDebugUnitTest
 
   compile-ios:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.compile_ios != 'false') }}
     runs-on: macos-26
     env:
       RUSTFLAGS: -D warnings
@@ -198,6 +249,8 @@ jobs:
         run: cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' -only-testing:CoveTests -parallel-testing-enabled NO test
 
   qa-manifest:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.qa_manifest != 'false') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -224,32 +277,47 @@ jobs:
       - name: Test WebDriverAgent tools
         run: tools/wda/test/run-mock-tests.sh
 
-  test:
-    strategy:
-      matrix:
-        os: [ubuntu-24.04, macos-latest]
-    runs-on: ${{ matrix.os }}
+  # one job per runner, not a matrix: a matrix job its if skips reports a single check without the
+  # runner in its name, while branch protection waits on these two names
+  test-ubuntu:
+    name: test (ubuntu-24.04)
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.test != 'false') }}
+    runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -D warnings
-    steps:
+    steps: &rust-test-steps
       - uses: actions/checkout@v6
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      # the key the matrix job used, so both jobs keep the caches it saved for each runner OS
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust -> target
           cache-bin: false
           prefix-key: v1-rust
+          shared-key: test
 
       - name: Run tests
         run: cd rust && cargo test --locked --workspace
 
+  test-macos:
+    name: test (macos-latest)
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.test != 'false') }}
+    runs-on: macos-latest
+    env:
+      RUSTFLAGS: -D warnings
+    steps: *rust-test-steps
+
   # the TAPSIGNER tests are ignored in the plain test run because they need Coinkite's card
   # emulator; this job installs it and fails when the emulator is missing or a test fails
   tapsigner-emulator:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.tapsigner_emulator != 'false') }}
     runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -D warnings
@@ -278,6 +346,8 @@ jobs:
         run: just test-tapsigner-emulator
 
   clippy:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.clippy != 'false') }}
     runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -D warnings
