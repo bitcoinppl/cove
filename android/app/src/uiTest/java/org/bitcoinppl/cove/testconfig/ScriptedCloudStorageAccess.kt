@@ -199,7 +199,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         fixtureWalletRecordIds = ScriptedCloudBackupFixture.WALLET_RECORD_IDS
     }
 
-    /** Lists exactly [recordIds] from now on, which may name any record the fixture holds */
+    /**
+     * Lists [recordIds] as the fixture's own records from now on, which may name any record the
+     * fixture holds; backups Cove uploads during the test are listed beside them as before
+     */
     fun exposeProductionFixtureWallets(recordIds: List<String>) {
         check(fixtureRestoreEnabled) { "production fixture restore is not configured" }
         require(recordIds.all { ScriptedCloudBackupFixture.walletWrapper(it) != null }) {
@@ -334,8 +337,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         policy: CloudAccessPolicy? = null,
     ) {
         require(matchingRequestsToSkip >= 0) { "matching requests to skip must not be negative" }
-        check(walletDownloadHolds[recordId]?.claimed?.get() != false) {
-            "a download hold for $recordId is already pending"
+        // a hold still parking a download must be released first, or replacing it would strand
+        // that download where no release reaches it
+        check(walletDownloadHolds[recordId]?.release?.isCompleted != false) {
+            "a download hold for $recordId is still pending or parked"
         }
 
         walletDownloadHolds[recordId] = WalletDownloadBlock(recordId, matchingRequestsToSkip, policy)

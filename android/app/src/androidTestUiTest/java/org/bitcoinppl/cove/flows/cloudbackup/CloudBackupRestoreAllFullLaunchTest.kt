@@ -35,7 +35,6 @@ import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.device.CloudAccessPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -54,6 +53,13 @@ class CloudBackupRestoreAllFullLaunchTest {
     private companion object {
         const val FIXTURE_WALLET_ONE = "Fixture Wallet One"
         const val CLOUD_BACKUP_ROW = "Cloud Backup"
+        const val WALLET_ROW_TAG_PREFIX = "cloudBackup.wallet."
+        const val NOT_ON_DEVICE = "Not on device"
+        const val ALREADY_ON_DEVICE = "Already on this device"
+
+        // badges of a wallet on this phone; Failed and Unknown are not proof that a restore landed
+        val ON_DEVICE_BADGES = setOf("Confirmed", "Syncing", "Dirty")
+        val STATUS_BADGES = ON_DEVICE_BADGES + setOf("Failed", NOT_ON_DEVICE, ALREADY_ON_DEVICE, "Unsupported", "Unknown")
 
         // the batch's authoritative fetch reads each listed record once before it restores any
         const val PREPARATION_DOWNLOADS = 1
@@ -104,11 +110,6 @@ class CloudBackupRestoreAllFullLaunchTest {
         val duplicate = ScriptedCloudBackupFixture.DUPLICATE_WALLET_RECORD_ID
         val order = openDetailWithCloudOnlyWallets(listDuplicate = true)
 
-        assertEquals(
-            "the copy of the wallet already on the phone should show as already on this device",
-            CloudBackupWalletStatus.ALREADY_ON_DEVICE,
-            cloudOnlyWallet(duplicate)?.syncStatus,
-        )
         assertTrue(
             "Restore All must leave the copy out of its count",
             device.findObject(By.text("Restore All (4)")) == null,
@@ -126,18 +127,26 @@ class CloudBackupRestoreAllFullLaunchTest {
                     "held=${ScriptedCloudStorageAccess.heldWalletDownloadRecordIds()}",
                 ScriptedCloudStorageAccess.awaitWalletDownloadHold(recordId, 30_000L),
             )
+
             assertEquals(
                 "the batch must restore one wallet at a time, in the listed order",
                 setOf(recordId),
                 ScriptedCloudStorageAccess.heldWalletDownloadRecordIds(),
             )
             waitForProgress(completed = index, total = 3, detail = "Restoring $name")
+            waitForScreen("rows before $name should be on the phone and the rest still in the cloud") {
+                order.take(index).all { showsRow(it, ON_DEVICE_BADGES) } &&
+                    order.drop(index).all { showsRow(it, setOf(NOT_ON_DEVICE)) }
+            }
 
             val local = localWalletNames()
             val finished = order.take(index).map(WALLET_NAMES::getValue)
             val pending = order.drop(index).map(WALLET_NAMES::getValue)
             assertTrue("wallets before $name should be on the phone, saw $local", local.containsAll(finished))
-            assertTrue("$name and the wallets after it should not be on the phone yet, saw $local", pending.none(local::contains))
+            assertTrue(
+                "$name and the wallets after it should not be on the phone yet, saw $local",
+                pending.none(local::contains),
+            )
 
             ScriptedCloudStorageAccess.releaseWalletDownloadHold(recordId)
         }
@@ -156,10 +165,15 @@ class CloudBackupRestoreAllFullLaunchTest {
             (WALLET_NAMES.values + FIXTURE_WALLET_ONE).sorted(),
             local.sorted(),
         )
-        assertEquals("the finished batch should leave no progress", emptyList<List<String>>(), progressCardTexts())
-        val texts = detailTexts()
-        assertFalse("nothing should be left to restore, saw $texts", texts.any { it.startsWith("Restore All") })
-        assertFalse("nothing should be left to retry, saw $texts", texts.any { it.startsWith("Retry Remaining") })
+
+        waitForScreen("the finished batch should show every wallet on the phone and the copy beside them") {
+            val texts = detailTexts()
+
+            progressCardTexts().isEmpty() &&
+                (order + ScriptedCloudBackupFixture.WALLET_RECORD_ID).all { showsRow(it, ON_DEVICE_BADGES) } &&
+                showsRow(duplicate, setOf(ALREADY_ON_DEVICE)) &&
+                texts.none { it.startsWith("Restore All") || it.startsWith("Retry Remaining") }
+        }
     }
 
     /**
@@ -179,6 +193,7 @@ class CloudBackupRestoreAllFullLaunchTest {
             "the batch should start restoring ${names[0]}",
             ScriptedCloudStorageAccess.awaitWalletDownloadHold(first, 30_000L),
         )
+
         waitForProgress(completed = 0, total = 3, detail = "Restoring ${names[0]}")
 
         // back out of Cloud Backup and Settings to the wallet
@@ -186,6 +201,7 @@ class CloudBackupRestoreAllFullLaunchTest {
         waitUntil("Back should leave Cloud Backup for Settings") {
             AppManager.getInstance().currentRoute == Route.Settings(SettingsRoute.Main)
         }
+
         device.pressBack()
         waitUntil("Back should leave Settings for the wallet") {
             AppManager.getInstance().currentRoute is Route.SelectedWallet
@@ -197,6 +213,7 @@ class CloudBackupRestoreAllFullLaunchTest {
             "the batch should keep going while Cloud Backup is closed",
             ScriptedCloudStorageAccess.awaitWalletDownloadHold(second, 30_000L),
         )
+
         waitUntil("the running batch should report ${names[1]} next") {
             val state = CloudBackupManager.getInstance().restoreAllState
             state is CloudBackupRestoreAllState.Running &&
@@ -205,11 +222,16 @@ class CloudBackupRestoreAllFullLaunchTest {
                 state.currentWalletName == names[1] &&
                 !state.cancellationRequested
         }
+
         assertTrue("${names[0]} should be on the phone", localWalletNames().contains(names[0]))
 
         device.openSettings()
         device.openCloudBackupFromSettings()
         waitForProgress(completed = 1, total = 3, detail = "Restoring ${names[1]}")
+        waitForScreen("coming back should show ${names[0]} on the phone and the rest still in the cloud") {
+            showsRow(first, ON_DEVICE_BADGES) && showsRow(second, setOf(NOT_ON_DEVICE)) && showsRow(third, setOf(NOT_ON_DEVICE))
+        }
+
         assertEquals(
             "coming back must show the same batch, not start another",
             setOf(second),
@@ -218,6 +240,7 @@ class CloudBackupRestoreAllFullLaunchTest {
 
         device.clickText("Cancel")
         waitForProgress(completed = 1, total = 3, detail = "Finishing the current wallet before stopping")
+
         assertEquals(
             "Cancel must let the current wallet's restore keep running",
             setOf(second),
@@ -235,16 +258,18 @@ class CloudBackupRestoreAllFullLaunchTest {
                 local.containsAll(names.take(2)) &&
                 !local.contains(names[2])
         }
+
         device.scrollUntilText("Retry Remaining (1)")
 
-        assertEquals("the cancelled batch should leave no progress", emptyList<List<String>>(), progressCardTexts())
-        val texts = detailTexts()
-        assertFalse("only Retry Remaining should be offered, saw $texts", texts.any { it.startsWith("Restore All") })
-        assertEquals(
-            "${names[2]} should stay cloud-only",
-            CloudBackupWalletStatus.DELETED_FROM_DEVICE,
-            cloudOnlyWallet(third)?.syncStatus,
-        )
+        waitForScreen("the cancelled batch should show ${names[2]} alone left in the cloud") {
+            val texts = detailTexts()
+
+            progressCardTexts().isEmpty() &&
+                showsRow(first, ON_DEVICE_BADGES) &&
+                showsRow(second, ON_DEVICE_BADGES) &&
+                showsRow(third, setOf(NOT_ON_DEVICE)) &&
+                texts.none { it.startsWith("Restore All") }
+        }
     }
 
     /**
@@ -252,8 +277,8 @@ class CloudBackupRestoreAllFullLaunchTest {
      * key wallet as well, and the copy of wallet one when [listDuplicate], so the detail offers
      * Restore All (3)
      *
-     * Returns the cloud-only record ids in the order the detail lists them, which is the order
-     * Restore All takes them in
+     * Returns the Not on device rows' record ids in the order the screen shows them, which the
+     * tests expect Restore All to follow
      */
     private fun openDetailWithCloudOnlyWallets(listDuplicate: Boolean): List<String> {
         ScriptedCloudStorageAccess.configureProductionFixtureRestore()
@@ -307,9 +332,17 @@ class CloudBackupRestoreAllFullLaunchTest {
                 restorableRecordIds().toSet() == CLOUD_ONLY_RECORD_IDS &&
                 (!listDuplicate || cloudOnlyWallet(duplicate.single()) != null)
         }
-        device.scrollUntilText("Restore All (3)")
 
-        return restorableRecordIds()
+        device.scrollUntilText("Restore All (3)")
+        waitForScreen("the detail should show the three wallets as not on device and the copy as already on it") {
+            CLOUD_ONLY_RECORD_IDS.all { showsRow(it, setOf(NOT_ON_DEVICE)) } &&
+                duplicate.all { showsRow(it, setOf(ALREADY_ON_DEVICE)) }
+        }
+
+        val shown = walletRows().filter { row -> row.badge == NOT_ON_DEVICE }.map { row -> row.recordId }
+        assertEquals("the screen should list the wallets in the order Restore All takes them", restorableRecordIds(), shown)
+
+        return shown
     }
 
     // waits until the progress card on screen reads [completed] of [total] and [detail]; the card
@@ -362,6 +395,42 @@ class CloudBackupRestoreAllFullLaunchTest {
             is ViewGroup -> (0 until childCount).flatMap { getChildAt(it).composeRoots() }
             else -> emptyList()
         }
+
+    private data class WalletRow(
+        val recordId: String,
+        val top: Float,
+        val badge: String?,
+    )
+
+    // every wallet row the detail composes, top to bottom, named by the record in its test tag
+    private fun walletRows(): List<WalletRow> =
+        mergedSemanticsNodes()
+            .mapNotNull { node ->
+                val tag = node.config.getOrNull(SemanticsProperties.TestTag)
+                val recordId = tag?.takeIf { it.startsWith(WALLET_ROW_TAG_PREFIX) }?.removePrefix(WALLET_ROW_TAG_PREFIX)
+
+                recordId?.let {
+                    WalletRow(it, node.boundsInRoot.top, node.texts().firstOrNull(STATUS_BADGES::contains))
+                }
+            }.sortedBy { row -> row.top }
+
+    // whether the screen shows exactly one row for the record, with one of [badges]
+    private fun showsRow(
+        recordId: String,
+        badges: Set<String>,
+    ): Boolean = walletRows().singleOrNull { row -> row.recordId == recordId }?.badge in badges
+
+    // polls the composed detail, since it can trail the manager state by a frame or more
+    private fun waitForScreen(
+        message: String,
+        timeoutMs: Long = 20_000L,
+        condition: () -> Boolean,
+    ) {
+        if (pollUntil(timeoutMs, condition)) return
+
+        val rows = walletRows().map { row -> row.recordId.take(8) to row.badge }
+        assertTrue("$message; rows=$rows, progress=${progressCardTexts()}, texts=${detailTexts()}", condition())
+    }
 
     private fun isCloudOnlyLoaded(): Boolean = CloudBackupManager.getInstance().cloudOnly is CloudOnlyState.Loaded
 
