@@ -10,6 +10,7 @@ import org.bitcoinppl.cove_core.device.PasskeyRegistrationPlatform
 import org.bitcoinppl.cove_core.device.PasskeyRegistrationResult
 import org.bitcoinppl.cove_core.device.PasskeyRegistrationUser
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -35,6 +36,9 @@ object ScriptedPasskeyProvider : PasskeyProvider {
     private val authenticationCalls = AtomicInteger(0)
     private val discoveryCalls = AtomicInteger(0)
 
+    // the credentials Cove asked to authenticate with, so a test can check it reused the restored one
+    private val authenticatedCredentialIds = CopyOnWriteArrayList<String>()
+
     enum class Result {
         SUCCESS,
         PRE_PRESENTATION_FAILURE,
@@ -57,7 +61,14 @@ object ScriptedPasskeyProvider : PasskeyProvider {
         createCalls.set(0)
         authenticationCalls.set(0)
         discoveryCalls.set(0)
+        authenticatedCredentialIds.clear()
     }
+
+    /** The one credential this provider creates and discovers, hex encoded */
+    fun knownCredentialIdHex(): String = credentialId.toHex()
+
+    /** The credential of each `authenticateWithPrf` call so far, hex encoded, oldest first */
+    fun authenticatedCredentialIds(): List<String> = authenticatedCredentialIds.toList()
 
     fun configureResults(
         invocation: Invocation,
@@ -121,6 +132,7 @@ object ScriptedPasskeyProvider : PasskeyProvider {
         challenge: ByteArray,
     ): ByteArray {
         authenticationCalls.incrementAndGet()
+        authenticatedCredentialIds += credentialId.toHex()
         authenticationResults.next().throwIfFailed(PasskeyOperation.AUTHENTICATE_ASSERTION)
 
         return prfOutput.copyOf()
@@ -146,6 +158,8 @@ object ScriptedPasskeyProvider : PasskeyProvider {
         rpId: String,
         credentialId: ByteArray,
     ): PasskeyCredentialPresence = PasskeyCredentialPresence.PRESENT
+
+    private fun ByteArray.toHex(): String = joinToString("") { byte -> "%02x".format(byte) }
 
     private fun Result.throwIfFailed(operation: PasskeyOperation) {
         val failure =

@@ -305,7 +305,7 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "human",
+  "human:ios",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/deep_verify.rs::verification_retry_after_passkey_cancel_verifies_without_new_passkey",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_retries_verification_after_offline_failure",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/sync_health.rs::sync_now_offline_uploads_nothing_then_uploads_after_reconnect",
@@ -313,9 +313,12 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/passkey.rs::wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/pending_upload.rs::pending_upload_verification_survives_restart",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::startup_resume_retries_interrupted_uploading_wallets",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupSyncNowFullLaunchTest.kt::syncNowUploadsPendingWalletAndRefreshesDetail",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupSyncNowFullLaunchTest.kt::offlineSyncNowUploadsNothingThenUploadsAfterReconnect",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupSyncNowFullLaunchTest.kt::cancelledVerificationRetriesWithTheSamePasskey",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# the sync test calls the sync work directly; the Sync Now action through completion and detail refresh stays human
+# android: tapping Sync Now uploads a wallet whose upload was rejected and the detail refreshes to show it up to date; offline it uploads nothing and shows the offline error, then uploads after reconnecting; a cancelled passkey leaves Cloud Backup Not Verified and Verify Now verifies with the same passkey, creating none. Repairing a missing master-key wrapper has only the Rust tests; ios still needs a person for all of it
 
 [[row]]
 id = "s12-restore-all-sequential-progress-and-deduplication"

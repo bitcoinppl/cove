@@ -31,6 +31,11 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     // would, so checking an upload finds what was written rather than the original fixture
     private val uploadedFixtureWalletBackups = ConcurrentHashMap<String, ByteArray>()
 
+    // uploads of wallets added on the device after a fixture restore, which are not the fixture's own
+    private val acceptedNewWalletUploads = AtomicInteger(0)
+    private val rejectedNewWalletUploads = AtomicInteger(0)
+    private val rejectNextNewWalletUpload = AtomicBoolean(false)
+
     @Volatile
     private var namespaceScenario = NamespaceScenario.immediateEmpty()
 
@@ -162,6 +167,9 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         walletListNamespaces.clear()
         walletDownloads.set(0)
         uploadedFixtureWalletBackups.clear()
+        acceptedNewWalletUploads.set(0)
+        rejectedNewWalletUploads.set(0)
+        rejectNextNewWalletUpload.set(false)
         fixtureWalletDownloadRequests.clear()
         deletedFixtureWalletRecordIds.clear()
         deleteLocationErrors.clear()
@@ -206,6 +214,23 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
         fixtureWalletDownloadDefaults[recordId] = result
     }
+
+    /**
+     * Rejects the next upload of a wallet that is not one of the fixture's own as over quota
+     *
+     * Quota errors are not retried on their own, so the wallet stays unsynced until someone asks
+     * Cove to sync it again
+     */
+    fun rejectNextNewWalletUploadForQuota() {
+        check(fixtureRestoreEnabled) { "production fixture restore is not configured" }
+        rejectNextNewWalletUpload.set(true)
+    }
+
+    /** Uploads of wallets added after the fixture restore that the provider stored */
+    fun acceptedNewWalletUploadCount(): Int = acceptedNewWalletUploads.get()
+
+    /** Uploads of wallets added after the fixture restore that the provider rejected */
+    fun rejectedNewWalletUploadCount(): Int = rejectedNewWalletUploads.get()
 
     fun masterDownloadCount(): Int = masterDownloads.get()
 
@@ -611,11 +636,16 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
             check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
                 "unexpected fixture namespace $namespace"
             }
-            check(recordId in fixtureWalletRecordIds || recordId in ScriptedCloudBackupFixture.WALLET_RECORD_IDS) {
-                "unexpected fixture wallet record id $recordId"
-            }
             ScriptedConnectivityAccess.throwIfOffline()
+            val isFixtureWallet =
+                recordId in fixtureWalletRecordIds || recordId in ScriptedCloudBackupFixture.WALLET_RECORD_IDS
+            if (!isFixtureWallet && rejectNextNewWalletUpload.compareAndSet(true, false)) {
+                rejectedNewWalletUploads.incrementAndGet()
+                throw CloudStorageException.QuotaExceeded()
+            }
+
             uploadedFixtureWalletBackups[recordId] = data.copyOf()
+            if (!isFixtureWallet) acceptedNewWalletUploads.incrementAndGet()
 
             return
         }
@@ -669,7 +699,9 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
                     uploadedFixtureWalletBackups[recordId]?.let { backup -> return backup.copyOf() }
                 }
 
-                val wrapper = ScriptedCloudBackupFixture.walletWrapper(recordId) ?: unsupported()
+                val wrapper =
+                    ScriptedCloudBackupFixture.walletWrapper(recordId)
+                        ?: throw CloudStorageException.NotFound("wallet backup not found")
                 fixtureWalletDownloadRequests += recordId
                 if (recordId in deletedFixtureWalletRecordIds) {
                     throw CloudStorageException.NotFound("scripted fixture wallet was deleted")
@@ -767,6 +799,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     private fun walletFilename(recordId: String): String = "wallet-$recordId.json"
 
+    // wallets Cove uploaded during the test are listed like the fixture's own;
     // a deleted fixture wallet leaves the listing, so the refresh after a delete can't bring it back;
     // after a delete the private-key fixture wallet joins it as a test-only refresh marker, so a
     // test that sees its row knows a post-delete detail refresh was applied
@@ -776,7 +809,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
                 .takeIf { deletedFixtureWalletRecordIds.isNotEmpty() }
                 .orEmpty()
 
-        return (fixtureWalletRecordIds + refreshMarker)
+        return (fixtureWalletRecordIds + uploadedFixtureWalletBackups.keys.sorted() + refreshMarker)
             .distinct()
             .filterNot { it in deletedFixtureWalletRecordIds }
     }
