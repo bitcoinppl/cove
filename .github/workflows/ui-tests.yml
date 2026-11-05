@@ -54,8 +54,8 @@ env:
 
 jobs:
   # on a labeled PR, picks the platforms the change reaches, as CI's changes job does, see
-  # .github/scripts/ci-changes.sh; every other trigger runs both, and each if checks for 'false',
-  # so a failed changes job runs both too
+  # .github/scripts/ci-changes.sh; every other trigger runs both, and a job skips only when the
+  # changes job succeeded and said 'false', so a failed changes job runs both too
   changes:
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')
     runs-on: ubuntu-24.04
@@ -76,7 +76,7 @@ jobs:
 
   android-instrumented:
     needs: changes
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && needs.changes.outputs.android_instrumented != 'false' }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && (needs.changes.result != 'success' || needs.changes.outputs.android_instrumented != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     # one flavour per job: with both in one job the hosted runner shut down about 35 minutes in, twice
@@ -205,7 +205,7 @@ jobs:
 
   ios-ui:
     needs: changes
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && needs.changes.outputs.ios_ui != 'false' }}
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && (needs.changes.result != 'success' || needs.changes.outputs.ios_ui != 'false') }}
     runs-on: macos-26
     # each shard runs about 11 tests, after about 25 minutes building the Rust library, the fake
     # node and the test bundles; a test took 6 to 8 minutes when each erased the simulator and

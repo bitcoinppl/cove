@@ -34,8 +34,9 @@ jobs_for() {
     rust/* | tools/release-seams/*) echo "$RUST $MOBILE" ;;
     # its recipes build both apps' Rust libraries and run the TAPSIGNER emulator and UI tests
     justfile) echo "$MOBILE tapsigner_emulator" ;;
-    # checklist rows name app tests and source files too
-    ios/*) echo "compile_ios swift_lint qa_manifest ios_ui" ;;
+    # checklist rows name app tests and source files too, and xtask's tests of the iOS UI test
+    # planner read the Xcode project and the UI test sources
+    ios/*) echo "compile_ios swift_lint qa_manifest ios_ui test" ;;
     android/*) echo "compile_android ktlint qa_manifest android_instrumented" ;;
     .swiftlint.yml | .swiftformat | .swift-ast-lint.yml | tools/cove-swift-lint/* | tools/swift-tools.json) echo swift_lint ;;
     # the device scripts and their tool wrappers are tested offline by the manifest job
@@ -62,7 +63,8 @@ print_jobs() {
 
 classify() {
   local path selected=""
-  while IFS= read -r path; do
+  # the second test keeps a last path that has no trailing newline
+  while IFS= read -r path || [[ -n $path ]]; do
     [[ -n $path ]] && selected+=" $(jobs_for "$path")"
   done
 

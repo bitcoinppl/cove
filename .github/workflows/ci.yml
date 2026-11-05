@@ -31,7 +31,8 @@ jobs:
   # picks the jobs below that the change needs, see .github/scripts/ci-changes.sh; pushes to master
   # and runs without a diff run them all. Jobs are skipped by their own if rather than a
   # workflow paths filter because a skipped job still reports, and branch protection counts it as
-  # passed. Each if checks for 'false', so a failed or broken changes job runs everything
+  # passed. A job skips only when the changes job succeeded and said 'false', so a failed or broken
+  # changes job runs everything
   changes:
     runs-on: ubuntu-24.04
     outputs:
@@ -61,7 +62,7 @@ jobs:
 
   rustfmt:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.rustfmt != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.rustfmt != 'false') }}
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout sources
@@ -77,7 +78,7 @@ jobs:
 
   swift-lint:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.swift_lint != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.swift_lint != 'false') }}
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v6
@@ -105,7 +106,7 @@ jobs:
 
   ktlint:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.ktlint != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.ktlint != 'false') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -131,7 +132,7 @@ jobs:
 
   compile-android:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.compile_android != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.compile_android != 'false') }}
     runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -D warnings
@@ -194,7 +195,7 @@ jobs:
 
   compile-ios:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.compile_ios != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.compile_ios != 'false') }}
     runs-on: macos-26
     env:
       RUSTFLAGS: -D warnings
@@ -243,7 +244,7 @@ jobs:
 
   qa-manifest:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.qa_manifest != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.qa_manifest != 'false') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -275,7 +276,7 @@ jobs:
   test-ubuntu:
     name: test (ubuntu-24.04)
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.test != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.test != 'false') }}
     runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -D warnings
@@ -300,7 +301,7 @@ jobs:
   test-macos:
     name: test (macos-latest)
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.test != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.test != 'false') }}
     runs-on: macos-latest
     env:
       RUSTFLAGS: -D warnings
@@ -310,7 +311,7 @@ jobs:
   # emulator; this job installs it and fails when the emulator is missing or a test fails
   tapsigner-emulator:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.tapsigner_emulator != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.tapsigner_emulator != 'false') }}
     runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -D warnings
@@ -340,7 +341,7 @@ jobs:
 
   clippy:
     needs: changes
-    if: ${{ !cancelled() && needs.changes.outputs.clippy != 'false' }}
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.clippy != 'false') }}
     runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -D warnings
