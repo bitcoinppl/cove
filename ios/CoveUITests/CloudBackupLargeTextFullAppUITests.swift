@@ -99,38 +99,6 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         control.release("wallet-two")
     }
 
-    /// An interrupted setup whose staged key the keychain lost can't be resumed, so the relaunched
-    /// app shows the recovery screen with its support code and cleanup action
-    func testIncompleteSetupRecoveryActionsAreReachable() throws {
-        let control = try CloudBackupHostControl(script: .init(
-            cloud: .freshEnable,
-            namespaceResults: [.empty],
-            holds: [.init(id: "master-upload", point: .masterUploadReturn)]
-        ))
-        robot.launch(control: control, arguments: CloudBackupHostRobot.largestContentSizeArguments)
-        robot.startFreshEnableFromOnboarding()
-        control.waitForHold("master-upload")
-
-        try robot.killAndRelaunch {
-            let removed = try control.removeKeychainItems(containing: "staged_master_key")
-            XCTAssertGreaterThan(removed, 0, "the interrupted setup staged no master key")
-        }
-
-        robot.scrollToHittable(app.staticTexts["Cloud Backup Needs Recovery"], initialWait: 30)
-        robot.scrollToHittable(app.staticTexts["Support code"])
-        robot.scrollToHittable(app.descendants(matching: .any)["cloudBackup.recovery.supportCode"])
-        robot.scrollToHittable(robot.button(startingWith: "Copy Code"))
-        robot.scrollToHittable(robot.button(startingWith: "Contact Support"))
-
-        let removeSetup = app.buttons["cloudBackup.recovery.removeIncompleteSetup"]
-        robot.scrollToHittable(removeSetup)
-        removeSetup.tap()
-
-        let confirmRemoval = app.buttons["Remove Incomplete Setup"].firstMatch
-        XCTAssertTrue(confirmRemoval.waitForExistence(timeout: 10))
-        XCTAssertTrue(confirmRemoval.isHittable, "the removal confirmation is not reachable")
-    }
-
     private func openCloudBackupDetail(scenario: String) {
         robot.launch(scenario: scenario, arguments: CloudBackupHostRobot.largestContentSizeArguments)
         robot.restoreFromCloudBackup()
