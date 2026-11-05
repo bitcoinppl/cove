@@ -1,0 +1,106 @@
+name: CodeQL
+
+# Replaces code scanning's default setup, which analyzed Swift on every pull request on a macOS
+# runner. Its autobuild never built the app: Xcode stops at the missing cove_core_ffi.xcframework,
+# which only `just build-ios` makes, so each run held one of GitHub's few macOS runners for about
+# 25 minutes without analyzing the app. Here Swift builds the Rust library first and runs on a
+# schedule, while the languages CodeQL reads without a build still run on every pull request on
+# Linux. Code scanning rejects these uploads while default setup is on, so it stays off
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  schedule:
+    # 10:00 UTC is 05:00 US Central during daylight time and 04:00 in winter, after the nightly UI
+    # tests have freed most macOS runners
+    - cron: "0 10 * * *"
+
+permissions:
+  contents: read
+
+# the event is part of the group so a push to master doesn't cancel the scheduled Swift analysis
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, python, rust]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      # default setup's category, so alerts and their dismissals carry over
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  # Swift needs a real build, and only a macOS runner can make one, so it runs nightly and on
+  # demand rather than holding a macOS runner for every pull request and push
+  analyze-swift:
+    name: Analyze (swift)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # compile-ios's key, so this reuses the dependencies master's CI cached
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          cache-bin: false
+          cache-targets: false
+          prefix-key: v2-rust-ios
+          save-if: false
+
+      - name: Set up just
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
+
+      # before init, so CodeQL traces only the Swift build and not the Rust one
+      - name: Build Rust FFI bindings
+        run: just build-ios
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: swift
+          build-mode: manual
+
+      # the settings CodeQL's own Swift autobuild passes: its tracer needs every file compiled
+      # by the standalone driver, with compilation caching off
+      - name: Build the app
+        run: |
+          cd ios
+          xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build \
+            CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            COMPILATION_CACHE_ENABLE_CACHING=NO SWIFT_ENABLE_COMPILE_CACHE=NO \
+            SWIFT_USE_INTEGRATED_DRIVER=NO
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:swift
