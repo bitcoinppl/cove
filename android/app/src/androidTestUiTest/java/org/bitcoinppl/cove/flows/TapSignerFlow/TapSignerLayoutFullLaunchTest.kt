@@ -8,7 +8,10 @@ import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getAllSemanticsNodes
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.toSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -48,9 +51,9 @@ import kotlin.math.roundToInt
  * and an emulated card (docs/testing.md)
  *
  * The TAPSIGNER sheet is its own window, which ignores a Compose test font scale, so this sets the
- * system font scale and restores it afterwards. Each node's full bounds come from the Compose
- * semantics tree, so the checks catch text and actions pushed off screen, cut off by their
- * container or squeezed, not an ellipsis inside a label.
+ * system font scale and restores it afterwards. Each node's full bounds and text layout come from
+ * the Compose semantics tree, so the checks catch text and actions pushed off screen, cut off by
+ * their container or squeezed, and text that lays out ellipsized or cut short inside its own bounds.
  * Runs in the uiTest flavour; needs the hardware signer host up and forwarded, which
  * `just android-instrumented-ci` does
  */
@@ -73,6 +76,12 @@ class TapSignerLayoutFullLaunchTest {
 
         // Compose positions are floats that the accessibility bounds round
         const val CLIP_TOLERANCE_PX = 1
+
+        // a text's box is its widest line rounded up to a whole pixel
+        const val LINE_WIDTH_TOLERANCE_PX = 1f
+
+        // enough of a text to tell which one a failure names
+        const val TEXT_IN_MESSAGE = 40
 
         // taps in gesture navigation's bottom strip go to the system, not the app
         const val GESTURE_STRIP_DP = 48
@@ -176,7 +185,7 @@ class TapSignerLayoutFullLaunchTest {
         reachable(By.clazz("android.widget.EditText"), "advanced setup: chain code field")
         wallet.typeInto(By.clazz("android.widget.EditText"), randomChainCode())
         wallet.dismissKeyboard()
-        reachable(By.text("Continue").enabled(true), "advanced setup: Continue").click()
+        reachable(By.text("Continue").enabled(true), "advanced setup: Continue", drawsWhole = "Continue", usable = true).click()
 
         enterCvc(TAPSIGNER_CVC, "Enter Factory CVC", "Back", "Continue")
         enterCvc(NEW_CVC, "Create New CVC", "Back", "Continue")
@@ -192,12 +201,12 @@ class TapSignerLayoutFullLaunchTest {
         repeat(3) {
             if (device.hasObject(By.text("Setup Complete"))) return@repeat
 
-            reachable(By.text("Continue Setup").enabled(true), "Continue Setup").click()
+            reachable(By.text("Continue Setup").enabled(true), "Continue Setup", usable = true).click()
             device.wait(Until.hasObject(By.text("Setup Complete")), 30_000L)
         }
 
         assertScreenFits("setup success", "Cancel", "Setup Complete", "Download Backup", "Continue")
-        reachable(By.text("Continue"), "setup success: Continue").click()
+        reachable(By.text("Continue"), "setup success: Continue", usable = true).click()
         device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
     }
 
@@ -209,11 +218,11 @@ class TapSignerLayoutFullLaunchTest {
 
         device.waitFor(By.text("Continue Import"), timeoutMs = 30_000L)
         assertScreenFits("import retry", "Cancel", "Import needs to continue", "Continue Import")
-        reachable(By.text("Continue Import"), "Continue Import").click()
+        reachable(By.text("Continue Import"), "Continue Import", usable = true).click()
 
         device.waitFor(By.text("Import Complete"), timeoutMs = 30_000L)
         assertScreenFits("import success", "Cancel", "Import Complete", "Continue")
-        reachable(By.text("Continue"), "import success: Continue").click()
+        reachable(By.text("Continue"), "import success: Continue", usable = true).click()
         device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
     }
 
@@ -230,7 +239,7 @@ class TapSignerLayoutFullLaunchTest {
         assertScreenFits(title, back, title)
         reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
 
-        screens.enterTapSignerCvc(cvc, title, submit) { reachable(it, "$title: $submit") }
+        screens.enterTapSignerCvc(cvc, title, submit) { reachable(it, "$title: $submit", drawsWhole = submit, usable = true) }
         assertTrue(
             "the $title screen didn't accept the CVC",
             device.wait(Until.gone(By.text(title)), 15_000L),
@@ -239,12 +248,25 @@ class TapSignerLayoutFullLaunchTest {
 
     // MARK: layout checks
 
-    /** Checks each text in order from the top, scrolling down to reach the later ones */
+    /**
+     * Checks the back action, the title and then each action in order from the top, scrolling down
+     * to reach the later ones; each must draw whole, and each action must take a click
+     *
+     * Once the title shows, every other text in its window, such as the descriptions, must lay
+     * out whole too
+     */
     private fun assertScreenFits(
         screen: String,
-        vararg texts: String,
+        back: String,
+        title: String,
+        vararg actions: String,
     ) {
-        texts.forEach { reachable(By.text(it), "$screen: \"$it\"") }
+        reachable(By.text(back), "$screen: \"$back\"", drawsWhole = back, usable = true)
+
+        val titleNode = reachable(By.text(title), "$screen: \"$title\"", drawsWhole = title)
+        assertWindowTextsDrawWhole(screen, titleNode.visibleBounds)
+
+        actions.forEach { reachable(By.text(it), "$screen: \"$it\"", drawsWhole = it, usable = true) }
     }
 
     /**
@@ -256,10 +278,15 @@ class TapSignerLayoutFullLaunchTest {
      * to the display, window and scroll container, so the control's full and shown bounds come from
      * the Compose semantics tree instead. A control cut off at the top or bottom is dragged inward
      * until it shows whole; one cut off at the side, or that never shows whole, fails
+     *
+     * With [drawsWhole], the control's text showing that string must also lay out whole, and with
+     * [usable], the control must take a click and be enabled
      */
     private fun reachable(
         selector: BySelector,
         name: String,
+        drawsWhole: String? = null,
+        usable: Boolean = false,
     ): UiObject2 {
         val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
         val gestureStripTop = device.displayHeight - (GESTURE_STRIP_DP * density).toInt()
@@ -292,6 +319,9 @@ class TapSignerLayoutFullLaunchTest {
                     "$name is squeezed to $visible, under ${MIN_NODE_HEIGHT_DP}dp tall",
                     visible.height() >= MIN_NODE_HEIGHT_DP * density,
                 )
+
+                drawsWhole?.let { assertDrawsWhole(visible, it, name) }
+                if (usable) assertUsable(visible, name)
                 return node
             }
 
@@ -309,26 +339,12 @@ class TapSignerLayoutFullLaunchTest {
         val whole: Rect,
     )
 
-    /**
-     * The bounds of the control holding the Compose node that UiAutomator shows at [visible]
-     *
-     * Every node's clipped bounds are compared with [visible], and the closest one is taken, so the
-     * same text elsewhere, such as behind the sheet, doesn't match
-     */
+    /** The bounds of the control holding the Compose node that UiAutomator shows at [visible] */
     private fun controlBounds(visible: Rect): ControlBounds? {
         var bounds: ControlBounds? = null
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val node =
-                WindowInspector
-                    .getGlobalWindowViews()
-                    .flatMap { it.composeRoots() }
-                    .flatMap { it.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false) }
-                    .filter { Rect.intersects(it.clippedOnScreen(), visible) }
-                    .minByOrNull { edgeDistance(it.clippedOnScreen(), visible) }
-                    ?: return@runOnMainSync
-
-            val control = node.controlOrSelf()
+            val control = semanticsNodeAt(visible)?.second?.controlOrSelf() ?: return@runOnMainSync
             val shown = control.clippedOnScreen()
 
             // boundsInWindow isn't clipped to the display, which a window can extend past
@@ -338,6 +354,137 @@ class TapSignerLayoutFullLaunchTest {
 
         return bounds
     }
+
+    /**
+     * Fails unless every Compose text in the control UiAutomator shows at [visible] that reads
+     * [text] lays out whole: no line ellipsized, no line past the text's height or line limit, and
+     * no line wider than the text
+     *
+     * UiAutomator reports a text's whole string even when it draws cut short, so the layout comes
+     * from Compose. A text that reports no layout fails too, so a change that hides the layout
+     * can't turn the check off
+     */
+    private fun assertDrawsWhole(
+        visible: Rect,
+        text: String,
+        name: String,
+    ) {
+        var problem: String? = null
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val control = semanticsNodeAt(visible)?.second?.controlOrSelf()
+            val texts =
+                control
+                    ?.selfAndDescendants()
+                    ?.filter { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text == text } }
+                    ?.toList()
+                    .orEmpty()
+
+            problem =
+                when {
+                    control == null -> "matches no Compose semantics node"
+                    texts.isEmpty() -> "has no Compose text reading \"$text\" in its control"
+                    else -> texts.firstNotNullOfOrNull { it.layoutProblem() }
+                }
+        }
+
+        problem?.let { error("$name doesn't draw whole: $it") }
+    }
+
+    /**
+     * Fails unless every Compose text in the window that shows [titleVisible] lays out whole
+     *
+     * The TAPSIGNER screens are a sheet in their own window, so this covers each screen's
+     * descriptions without naming them. Text fields are left out, since they scroll a long entry
+     * inside themselves by design
+     */
+    private fun assertWindowTextsDrawWhole(
+        screen: String,
+        titleVisible: Rect,
+    ) {
+        var problems = listOf("its title matches no Compose semantics node")
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val root = semanticsNodeAt(titleVisible)?.first ?: return@runOnMainSync
+            problems =
+                root.semanticsOwner
+                    .getAllSemanticsNodes(mergingEnabled = false)
+                    .filter { SemanticsProperties.Text in it.config && SemanticsProperties.EditableText !in it.config }
+                    .mapNotNull { node ->
+                        val text = node.config[SemanticsProperties.Text].joinToString(" ") { it.text }
+                        node.layoutProblem()?.let { "\"${text.take(TEXT_IN_MESSAGE)}\": $it" }
+                    }
+        }
+
+        assertTrue("$screen has texts that don't draw whole: $problems", problems.isEmpty())
+    }
+
+    /** Fails unless the control UiAutomator shows at [visible] takes a click and is enabled */
+    private fun assertUsable(
+        visible: Rect,
+        name: String,
+    ) {
+        var problem: String? = null
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val control = semanticsNodeAt(visible)?.second?.controlOrSelf()
+            problem =
+                when {
+                    control == null -> "matches no Compose semantics node"
+                    SemanticsActions.OnClick !in control.config -> "takes no click"
+                    SemanticsProperties.Disabled in control.config -> "is disabled"
+                    else -> null
+                }
+        }
+
+        problem?.let { error("$name $it") }
+    }
+
+    /**
+     * Why the text's layout doesn't show whole, or null when it does
+     *
+     * A text node reports its layout through this action, as the accessibility service reads it.
+     * Compose lays that copy out again at the text's maximum width constraint rather than the width
+     * it took, so its paragraph width is the parent's and `didOverflowWidth` holds for any text
+     * narrower than its parent. Line breaks and heights match the drawn text, since a text only
+     * takes less than its maximum width when it fits on its lines without wrapping, so the width
+     * check measures each line instead
+     */
+    private fun SemanticsNode.layoutProblem(): String? {
+        val action = config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action ?: return "its text reports no layout"
+        val layouts = mutableListOf<TextLayoutResult>()
+        if (!action(layouts)) return "its text has no layout yet"
+
+        val layout = layouts.singleOrNull() ?: return "its text reports ${layouts.size} layouts"
+        val lines = 0 until layout.lineCount
+        val ellipsized = lines.filter(layout::isLineEllipsized)
+        val widest = lines.maxOfOrNull { layout.getLineRight(it) - layout.getLineLeft(it) } ?: 0f
+
+        return when {
+            ellipsized.isNotEmpty() -> "line ${ellipsized.first() + 1} of ${layout.lineCount} is ellipsized"
+            layout.multiParagraph.didExceedMaxLines -> "it needs more than its ${layout.lineCount} line limit"
+            layout.didOverflowHeight -> "it needs ${layout.multiParagraph.height}px but gets ${layout.size.height}px"
+            widest > layout.size.width + LINE_WIDTH_TOLERANCE_PX -> "a line needs ${widest}px wide but gets ${layout.size.width}px"
+            else -> null
+        }
+    }
+
+    /**
+     * The Compose node UiAutomator shows at [visible], read on the main thread
+     *
+     * Every node's clipped bounds are compared with [visible], and the closest one is taken, so the
+     * same text elsewhere, such as behind the sheet, doesn't match
+     */
+    private fun semanticsNodeAt(visible: Rect): Pair<RootForTest, SemanticsNode>? =
+        WindowInspector
+            .getGlobalWindowViews()
+            .flatMap { it.composeRoots() }
+            .flatMap { root -> root.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false).map { root to it } }
+            .filter { (_, node) -> Rect.intersects(node.clippedOnScreen(), visible) }
+            .minByOrNull { (_, node) -> edgeDistance(node.clippedOnScreen(), visible) }
+
+    private fun SemanticsNode.selfAndDescendants(): Sequence<SemanticsNode> =
+        sequenceOf(this) + children.asSequence().flatMap { it.selfAndDescendants() }
 
     // a clickable that merges its children is one control, such as a card with a title and a description
     private fun SemanticsNode.controlOrSelf(): SemanticsNode =

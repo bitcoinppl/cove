@@ -63,14 +63,17 @@ private struct TapSignerChooseChainCodeContent: View {
                 Text("Setup Chain Code")
                     .font(.largeTitle)
                     .fontWeight(.bold)
+                    .uiTestTruncationProbe()
                     .padding(.bottom, 5)
             }
 
             VStack(spacing: 12) {
                 Group {
                     Text("A chain code works with your private key to generate Bitcoin addresses")
+                        .uiTestTruncationProbe()
 
                     Text("You can provide your own chain code for advanced setups, or let the app create one automatically for easy setup.")
+                        .uiTestTruncationProbe()
                 }
                 .font(.callout)
                 .opacity(0.9)
@@ -90,6 +93,7 @@ private struct TapSignerChooseChainCodeContent: View {
                 Text("Advanced Setup")
                     .font(.footnote)
                     .fontWeight(.semibold)
+                    .uiTestTruncationProbe()
                     .padding(.bottom, 30)
             }
             .contentShape(Rectangle())
@@ -108,6 +112,7 @@ private struct TapSignerAutomaticSetupButton: View {
                         .font(.footnote)
                         .fontWeight(.semibold)
                         .foregroundColor(.primary)
+                        .uiTestTruncationProbe()
 
                     Spacer()
 

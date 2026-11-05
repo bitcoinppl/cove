@@ -81,7 +81,7 @@ struct TapSignerTopActionHeader: View {
                     Image(systemName: systemImage)
                 }
 
-                Text(title)
+                Text(title).uiTestTruncationProbe()
             }
 
             Spacer()
@@ -102,9 +102,11 @@ struct TapSignerPinDescription: View {
             Text(title)
                 .font(.largeTitle)
                 .fontWeight(.bold)
+                .uiTestTruncationProbe()
 
             Text(message)
                 .font(.subheadline)
+                .uiTestTruncationProbe()
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -221,10 +223,12 @@ struct TapSignerCvcScreen<Header: View>: View {
                         .padding(.horizontal)
                 }
 
-                Button(submitTitle, action: submitAction)
-                    .buttonStyle(DarkButtonStyle())
-                    .padding(.horizontal)
-                    .disabled(isSubmitting)
+                Button(action: submitAction) {
+                    Text(submitTitle).uiTestTruncationProbe()
+                }
+                .buttonStyle(DarkButtonStyle())
+                .padding(.horizontal)
+                .disabled(isSubmitting)
 
                 Spacer()
             }
@@ -263,13 +267,18 @@ struct TapSignerResultStatus: View {
                 .fontWeight(.light)
 
             VStack(spacing: 12) {
+                // the setup success screen's description crowds this stack at large text sizes, and
+                // unless the title keeps the height it needs, it gives up its second line and truncates
                 Text(title)
                     .font(titleFont)
                     .fontWeight(.bold)
+                    .uiTestTruncationProbe()
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(message)
                     .font(.subheadline)
                     .foregroundStyle(.primary.opacity(0.8))
+                    .uiTestTruncationProbe()
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -296,9 +305,11 @@ struct TapSignerRetryContent: View {
             TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
 
             VStack(spacing: 14) {
-                Button("Retry", action: retryAction)
-                    .buttonStyle(DarkButtonStyle())
-                    .padding(.horizontal)
+                Button(action: retryAction) {
+                    Text("Retry").uiTestTruncationProbe()
+                }
+                .buttonStyle(DarkButtonStyle())
+                .padding(.horizontal)
             }
         }
     }
@@ -328,10 +339,12 @@ struct TapSignerContinuationContent: View {
 
             TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
 
-            Button(isSubmitting ? "Working…" : "Continue Setup", action: continueAction)
-                .buttonStyle(DarkButtonStyle())
-                .padding(.horizontal)
-                .disabled(isSubmitting)
+            Button(action: continueAction) {
+                Text(isSubmitting ? "Working…" : "Continue Setup").uiTestTruncationProbe()
+            }
+            .buttonStyle(DarkButtonStyle())
+            .padding(.horizontal)
+            .disabled(isSubmitting)
         }
     }
 }
@@ -350,10 +363,12 @@ private struct TapSignerRetryStatus: View {
             Text(title)
                 .font(.title)
                 .fontWeight(.bold)
+                .uiTestTruncationProbe()
 
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(.primary.opacity(0.8))
+                .uiTestTruncationProbe()
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -383,8 +398,10 @@ struct TapSignerSuccessContent: View {
             TapSignerFlexibleSpacer(enabled: usesFlexibleSpacing)
 
             VStack(spacing: 14) {
-                Button("Continue", action: continueAction)
-                    .buttonStyle(DarkButtonStyle())
+                Button(action: continueAction) {
+                    Text("Continue").uiTestTruncationProbe()
+                }
+                .buttonStyle(DarkButtonStyle())
             }
         }
         .padding(.horizontal)

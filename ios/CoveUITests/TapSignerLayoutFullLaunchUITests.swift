@@ -4,14 +4,18 @@ import XCTest
 /// that each screen's text and actions fit the window or scroll into it, through the debug
 /// TAPSIGNER seam and an emulated card (docs/testing.md)
 ///
-/// XCUITest reports a text's whole label even when it draws truncated, so the checks catch text and
-/// actions pushed off screen, cut off by their scroll view or out of reach, not an ellipsis inside a
-/// label. Needs the hardware
-/// signer host, which `xtask ios-ui` (`just ios-ui-background`) starts for every run
+/// The checks catch text and actions pushed off screen, cut off by their scroll view or out of
+/// reach. XCUITest reports a text's whole label even when it draws truncated, so each title and
+/// button label also carries the debug truncation probe, which reports whether it draws whole.
+/// Needs the hardware signer host, which `xtask ios-ui` (`just ios-ui-background`) starts for
+/// every run
 final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private static let esploraUrl = "http://127.0.0.1:39001"
     private static let largestContentSize = "UICTContentSizeCategoryAccessibilityXXXL"
     private static let newCvc = "246810"
+
+    /// The value a probed text reports when it draws whole, from `UITestTruncationProbe` in the app
+    private static let fitsValue = "fits"
 
     /// Inside the screens' 16 to 20 point side padding, so a drag there lands on no field
     private static let dragMargin: CGFloat = 8
@@ -34,6 +38,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         signer = HardwareSignerControl()
         app.launchEnvironment["COVE_UI_TEST_ESPLORA_URL"] = Self.esploraUrl
         app.launchEnvironment["COVE_UI_TEST_TAPSIGNER_BRIDGE"] = HardwareSignerControl.tapSignerBridge
+        app.launchEnvironment["COVE_UI_TEST_TRUNCATION_PROBE"] = "1"
     }
 
     /// A new card walks choose, advanced, the three PIN screens, setup retry and setup success
@@ -73,6 +78,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         assertScreenFits(
             "choose chain code",
             texts: ["Setup Chain Code"],
+            descriptions: ["A chain code works", "You can provide your own chain code"],
             buttons: [button("Cancel"), button(startingWith: "Automatic Setup"), button("Advanced Setup")]
         )
         reachAndTap(button("Advanced Setup"), "choose chain code: Advanced Setup")
@@ -84,27 +90,41 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             XCUIElement.ElementType.textField.rawValue,
             XCUIElement.ElementType.textView.rawValue
         ))
+        let advancedContinue = button("Continue")
         assertScreenFits(
             "advanced setup",
             texts: ["Advanced Setup"],
-            buttons: [button("Back"), chainCodeField, button("Generate new string for me"), button("Continue")]
+            descriptions: ["Enter your custom 32-byte chain code"],
+            buttons: [button("Back"), chainCodeField, button("Generate new string for me"), advancedContinue],
+            awaitingInput: [advancedContinue]
         )
         reachAndTap(chainCodeField, "advanced setup: chain code field").typeText(Self.randomChainCode())
         reachAndTap(button("Continue"), "advanced setup: Continue")
 
-        try enterCvc(HardwareSignerControl.tapSignerCvc, on: "factory CVC", title: "Enter Factory CVC", cancel: "Back")
-        try enterCvc(Self.newCvc, on: "new CVC", title: "Create New CVC", cancel: "Back")
+        try enterCvc(
+            HardwareSignerControl.tapSignerCvc,
+            on: "factory CVC",
+            title: "Enter Factory CVC",
+            description: "The factory code is the 6 digit",
+            cancel: "Back"
+        )
+        try enterCvc(Self.newCvc, on: "new CVC", title: "Create New CVC", description: "The CVC prevents unauthorized access", cancel: "Back")
 
         // the card leaves the field once setup has started on it
         try signer.dropNextTapSignerSession(afterExchanges: Self.exchangesBeforeDrop)
-        try enterCvc(Self.newCvc, on: "confirm CVC", title: "Confirm New CVC", cancel: "Back")
+        try enterCvc(Self.newCvc, on: "confirm CVC", title: "Confirm New CVC", description: "Enter the same CVC again", cancel: "Back")
 
         let complete = app.staticTexts["Setup Complete"]
         XCTAssertTrue(
             button("Continue Setup").firstMatch.waitForExistence(timeout: 30),
             "the dropped session should leave setup in progress"
         )
-        assertScreenFits("setup retry", texts: ["Setup in Progress"], buttons: [button("Cancel"), button("Continue Setup")])
+        assertScreenFits(
+            "setup retry",
+            texts: ["Setup in Progress"],
+            descriptions: ["Your TAPSIGNER saved its setup progress"],
+            buttons: [button("Cancel"), button("Continue Setup")]
+        )
 
         // each scan can stop at another stage, which offers to continue again
         for _ in 0 ..< 3 where !complete.exists {
@@ -115,6 +135,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         assertScreenFits(
             "setup success",
             texts: ["Setup Complete"],
+            descriptions: ["Your TAPSIGNER ready to use", "If you haven"],
             buttons: [button("Cancel"), button(startingWith: "Download Backup"), button("Continue")]
         )
         reachAndTap(button("Continue"), "setup success: Continue")
@@ -125,14 +146,30 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
     private func importCardThroughEveryScreen() throws {
         try signer.dropNextTapSignerSession(afterExchanges: Self.exchangesBeforeDrop)
-        try enterCvc(HardwareSignerControl.tapSignerCvc, on: "import CVC", title: "Enter TAPSIGNER CVC", cancel: "Cancel")
+        try enterCvc(
+            HardwareSignerControl.tapSignerCvc,
+            on: "import CVC",
+            title: "Enter TAPSIGNER CVC",
+            description: "For security purposes, you need to enter your TAPSIGNER PIN",
+            cancel: "Cancel"
+        )
 
         XCTAssertTrue(button("Retry").firstMatch.waitForExistence(timeout: 30), "the dropped session should offer to retry the import")
-        assertScreenFits("import retry", texts: ["Could not complete import"], buttons: [button("Cancel"), button("Retry")])
+        assertScreenFits(
+            "import retry",
+            texts: ["Could not complete import"],
+            descriptions: ["Please try again and hold your TAPSIGNER steady"],
+            buttons: [button("Cancel"), button("Retry")]
+        )
         reachAndTap(button("Retry"), "import retry: Retry")
 
         XCTAssertTrue(app.staticTexts["Import Complete"].waitForExistence(timeout: 30))
-        assertScreenFits("import success", texts: ["Import Complete"], buttons: [button("Cancel"), button("Continue")])
+        assertScreenFits(
+            "import success",
+            texts: ["Import Complete"],
+            descriptions: ["Your TAPSIGNER ready to use"],
+            buttons: [button("Cancel"), button("Continue")]
+        )
         reachAndTap(button("Continue"), "import success: Continue")
         XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
     }
@@ -140,10 +177,17 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     // MARK: - CVC screens
 
     /// Checks the CVC screen fits with the number pad up, then enters the CVC and submits it
-    private func enterCvc(_ cvc: String, on screen: String, title: String, cancel: String) throws {
+    private func enterCvc(_ cvc: String, on screen: String, title: String, description: String, cancel: String) throws {
         let field = app.secureTextFields.matching(identifier: "Enter CVC")
+        let submit = button("Continue")
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 15), "the \(screen) screen never showed")
-        assertScreenFits(screen, texts: [title], buttons: [button(cancel), field, button("Continue")])
+        assertScreenFits(
+            screen,
+            texts: [title],
+            descriptions: [description],
+            buttons: [button(cancel), field, submit],
+            awaitingInput: [submit]
+        )
 
         reachAndTap(field, "\(screen): CVC field").typeText(cvc)
         reachAndTap(button("Continue"), "\(screen): Continue")
@@ -152,21 +196,69 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
     // MARK: - Layout checks
 
-    /// Every text and action must lie wholly inside the window once scrolled to, and the actions
-    /// must take a tap there
-    private func assertScreenFits(_ screen: String, texts: [String], buttons: [XCUIElementQuery]) {
+    /// Every text and action must lie wholly inside the window once scrolled to, the actions must
+    /// be enabled and take a tap there, and every text, description and button label must draw
+    /// whole
+    ///
+    /// Descriptions are matched by the start of their text and only checked for truncation, since a
+    /// long one can be taller than the window. Text fields carry no probe, so only buttons among the
+    /// actions are checked for truncation. Actions in `awaitingInput` stay disabled until the screen
+    /// gets its input, and `reachAndTap` checks them enabled when the test taps them
+    private func assertScreenFits(
+        _ screen: String,
+        texts: [String],
+        descriptions: [String],
+        buttons: [XCUIElementQuery],
+        awaitingInput: [XCUIElementQuery] = []
+    ) {
         for text in texts {
-            assertReachable(app.staticTexts.matching(NSPredicate(format: "label == %@", text)), "\(screen): '\(text)'", needsHit: false)
+            let name = "\(screen): '\(text)'"
+            let element = assertReachable(app.staticTexts.matching(NSPredicate(format: "label == %@", text)), name, needsHit: false)
+            assertDrawsWhole(element, name)
+        }
+
+        for prefix in descriptions {
+            let name = "\(screen): '\(prefix)…'"
+            let element = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
+            XCTAssertTrue(element.waitForExistence(timeout: 15), "\(name) is missing")
+            assertDrawsWhole(element, name)
         }
 
         for button in buttons {
-            assertReachable(button, "\(screen): \(button.firstMatch.description)", needsHit: true)
+            let name = "\(screen): \(button.firstMatch.description)"
+            let element = assertReachable(button, name, needsHit: true)
+            if !awaitingInput.contains(where: { $0 === button }) {
+                XCTAssertTrue(element.isEnabled, "\(name) is disabled")
+            }
+
+            if element.elementType == .button {
+                assertDrawsWhole(element, name)
+            }
         }
+    }
+
+    /// Fails unless the truncation probe of the text, or of the button's label, reports it draws
+    /// whole
+    ///
+    /// A button takes its label's accessibility value. A text without the probe has no value, so
+    /// dropping the probe fails here too. The probe measures after layout, so its value gets a
+    /// moment to settle
+    private func assertDrawsWhole(_ element: XCUIElement, _ name: String) {
+        let value = { element.value as? String ?? "" }
+        let settled = Date().addingTimeInterval(3)
+        while value() != Self.fitsValue, Date() < settled {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+
+        XCTAssertEqual(value(), Self.fitsValue, "\(name) doesn't draw whole: its truncation probe reports '\(value())'")
     }
 
     @discardableResult
     private func reachAndTap(_ query: XCUIElementQuery, _ name: String) -> XCUIElement {
         let element = assertReachable(query, name, needsHit: true)
+
+        // a tap on a disabled button does nothing, which would only show as a later timeout
+        XCTAssertTrue(element.isEnabled, "\(name) is disabled")
         element.tap()
         return element
     }
