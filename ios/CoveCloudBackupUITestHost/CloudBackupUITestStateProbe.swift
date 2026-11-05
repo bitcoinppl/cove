@@ -100,8 +100,23 @@ enum CloudBackupUITestStateProbe {
             inventoryReady: manager.isDetailInventoryReady,
             inventoryComplete: manager.isDetailInventoryComplete,
             inventoryError: manager.detailError,
-            restoreAll: restoreAllDescription(manager.restoreAllState)
+            restoreAll: restoreAllDescription(manager.restoreAllState),
+            verification: verificationDescription(manager.verificationState)
         )
+    }
+
+    private static func verificationDescription(_ state: CloudBackupVerificationState?) -> String {
+        switch state {
+        case nil: "none"
+        case .notVerified: "notVerified"
+        case .verified: "verified"
+        case .needsAttention: "needsAttention"
+        case .required: "required"
+        case .running: "running"
+        case .awaitingUploadConfirmation: "awaitingUploadConfirmation"
+        case .cancelled: "cancelled"
+        case .failed: "failed"
+        }
     }
 
     private static func restoreAllDescription(_ state: CloudBackupRestoreAllState) -> String {

@@ -46,12 +46,11 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         policy _: CloudAccessPolicy
     ) async throws {
         let attempt = controller.record(.walletUpload) + 1
-
-        // a hold here proves which action made the upload, since it can't return until released;
-        // the script is read after it, so a network dropped while the upload waited fails it
-        await controller.holdIfScripted(at: .walletUpload, recordId: recordId, matchingCallIndex: attempt - 1)
         let script = controller.script()
         try recordUpload(script, kind: .wallet, attempt: attempt, namespace: namespace, recordId: recordId)
+
+        // a hold here proves which action made the upload, since it can't return until released
+        await controller.holdIfScripted(at: .walletUpload, recordId: recordId, matchingCallIndex: attempt - 1)
         try validateWritable(namespace: namespace, script: script)
         try store.storeWallet(namespace: namespace, recordId: recordId, data: data)
     }

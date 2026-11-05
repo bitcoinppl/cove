@@ -67,7 +67,7 @@ coverage = [
     "rust:rust/src/manager/cloud_backup_manager/model.rs::initial_detail_refresh_failure_never_projects_confirmed_zero",
     "rust:rust/src/manager/cloud_backup_manager/model.rs::detail_refresh_failure_retains_last_known_rows",
     "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRegressionHelpersTest.kt::failedInventoryShowsRetryStateInsteadOfLoadingOrZero",
-    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRegressionHelpersTest.kt::trustedRetainedInventoryKeepsRowsAfterFailureAndActionsUnlessOffline",
+    "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRegressionHelpersTest.kt::offlineFailureKeepsTrustedRowsButDisablesTheirActions",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # ui tests on both platforms drop the scripted network and reopen Cloud Backup: the known rows stay listed under the offline error instead of an empty cloud, Restore All is disabled, and each cloud-only row is disabled and opens neither Restore nor Delete. an offline failure makes the retained rows not ready in rust and in both apps, while other provider failures keep them actionable

@@ -231,4 +231,6 @@ struct CloudBackupUITestAppState: Codable, Equatable {
     var inventoryError: String?
     /// The Restore All state, such as `startAvailable(2)` or `running(1/2)`
     var restoreAll: String
+    /// The verification case, such as `verified` or `awaitingUploadConfirmation`, or `none`
+    var verification: String
 }

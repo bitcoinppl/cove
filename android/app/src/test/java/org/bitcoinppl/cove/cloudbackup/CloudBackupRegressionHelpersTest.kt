@@ -303,22 +303,9 @@ class CloudBackupRegressionHelpersTest {
     }
 
     @Test
-    fun trustedRetainedInventoryKeepsRowsAfterFailureAndActionsUnlessOffline() {
-        val detail =
-            CloudBackupDetail(
-                lastSync = null,
-                upToDate = emptyList(),
-                needsSync = emptyList(),
-                cloudOnlyCount = 1u,
-            )
-        val loaded =
-            LoadedCloudBackupDetail(
-                detail = detail,
-                inventoryAuthority = CloudBackupInventoryAuthority.PROVIDER_CONFIRMED,
-                cloudOnly = CloudOnlyState.NotFetched,
-                cloudOnlyOperation = CloudOnlyOperation.Idle,
-                otherBackupsOperation = OtherBackupsOperation.Idle,
-            )
+    fun trustedRetainedInventoryKeepsRowsAndActionsAvailableAfterFailure() {
+        val loaded = providerConfirmedDetail()
+        val detail = loaded.detail
 
         val notLoaded = cloudBackupManager()
         assertNull(notLoaded.detail)
@@ -332,27 +319,6 @@ class CloudBackupRegressionHelpersTest {
         assertFalse(checking.isDetailInventoryComplete)
         assertFalse(checking.isDetailInventoryReady)
 
-        val failed =
-            cloudBackupManager(
-                detail =
-                    CloudBackupDetailState.Failed(
-                        reason = CloudBackupInventoryIncompleteReason.OFFLINE,
-                        error = "Drive inventory is unavailable",
-                        retained = loaded,
-                    ),
-            )
-        assertEquals(detail, failed.detail)
-        assertEquals(
-            "This device is offline. Connect to the internet, then check Google Drive again.",
-            failed.detailError,
-        )
-        assertFalse(failed.isDetailInventoryChecking)
-        assertFalse(failed.isDetailInventoryComplete)
-        assertFalse(
-            "an offline device keeps the known rows but can't restore or delete them",
-            failed.isDetailInventoryReady,
-        )
-
         val unavailable =
             cloudBackupManager(
                 detail =
@@ -363,6 +329,7 @@ class CloudBackupRegressionHelpersTest {
                     ),
             )
         assertEquals(detail, unavailable.detail)
+        assertFalse(unavailable.isDetailInventoryChecking)
         assertFalse(unavailable.isDetailInventoryComplete)
         assertTrue(unavailable.isDetailInventoryReady)
 
@@ -371,6 +338,32 @@ class CloudBackupRegressionHelpersTest {
         assertFalse(complete.isDetailInventoryChecking)
         assertTrue(complete.isDetailInventoryComplete)
         assertTrue(complete.isDetailInventoryReady)
+    }
+
+    @Test
+    fun offlineFailureKeepsTrustedRowsButDisablesTheirActions() {
+        val loaded = providerConfirmedDetail()
+        val failed =
+            cloudBackupManager(
+                detail =
+                    CloudBackupDetailState.Failed(
+                        reason = CloudBackupInventoryIncompleteReason.OFFLINE,
+                        error = "Drive inventory is unavailable",
+                        retained = loaded,
+                    ),
+            )
+
+        assertEquals(loaded.detail, failed.detail)
+        assertEquals(
+            "This device is offline. Connect to the internet, then check Google Drive again.",
+            failed.detailError,
+        )
+        assertFalse(failed.isDetailInventoryChecking)
+        assertFalse(failed.isDetailInventoryComplete)
+        assertFalse(
+            "an offline device keeps the known rows but can't restore or delete them",
+            failed.isDetailInventoryReady,
+        )
     }
 
     @Test
@@ -636,6 +629,21 @@ class CloudBackupRegressionHelpersTest {
         CloudBackupEnableContext(
             savedPasskeyConfirmation = SavedPasskeyConfirmationMode.MANUAL,
             verificationSource = CloudBackupVerificationSource.SETTINGS,
+        )
+
+    private fun providerConfirmedDetail() =
+        LoadedCloudBackupDetail(
+            detail =
+                CloudBackupDetail(
+                    lastSync = null,
+                    upToDate = emptyList(),
+                    needsSync = emptyList(),
+                    cloudOnlyCount = 1u,
+                ),
+            inventoryAuthority = CloudBackupInventoryAuthority.PROVIDER_CONFIRMED,
+            cloudOnly = CloudOnlyState.NotFetched,
+            cloudOnlyOperation = CloudOnlyOperation.Idle,
+            otherBackupsOperation = OtherBackupsOperation.Idle,
         )
 
     private fun cloudBackupManager(
