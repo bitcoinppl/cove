@@ -22,7 +22,13 @@ struct ScreenReachability {
     /// actions without a drawn label, such as icon-only buttons and fields, checked for reach only
     func assertScreenFits(_ screen: String, texts: [String], buttons: [XCUIElementQuery], controls: [XCUIElementQuery] = []) {
         for text in texts {
-            let element = assertReachable(app.staticTexts.matching(NSPredicate(format: "label == %@", text)), "\(screen): '\(text)'", needsHit: false)
+            let query = app.staticTexts.matching(NSPredicate(format: "label == %@", text))
+            if let tall = tallerThanItsScrollArea(query) {
+                assertBothEndsFit(text, in: tall, "\(screen): '\(text)'")
+                continue
+            }
+
+            let element = assertReachable(query, "\(screen): '\(text)'", needsHit: false)
             assertDrawn(text, in: element, "\(screen): '\(text)'")
             assertNoTruncatedText("\(screen) at '\(text)'")
         }
@@ -63,6 +69,43 @@ struct ScreenReachability {
         let compact = text.filter { !$0.isWhitespace }
         for part in [String(compact.prefix(8)), String(compact.suffix(8))] {
             XCTAssertTrue(element.waitForVisibleText(containing: part, misreads: 1, timeout: 3), "\(name): Vision never read '\(part)' where it is drawn")
+        }
+    }
+
+    /// A match too tall for its scroll area at any scroll position, such as a revealed private
+    /// key wrapped at the largest text size, which a user reads by scrolling through it
+    private func tallerThanItsScrollArea(_ query: XCUIElementQuery) -> XCUIElement? {
+        guard query.firstMatch.waitForExistence(timeout: 15) else { return nil }
+
+        return query.allElementsBoundByIndex.first { $0.frame.height > visibleArea(of: $0).height }
+    }
+
+    /// Scrolls a text too tall to show whole until its first line shows, then its last, and at
+    /// each needs Vision to read that end of it on screen and no ellipsis, as a user reading it
+    /// through would; across the screen it must still fit the window
+    private func assertBothEndsFit(_ text: String, in element: XCUIElement, _ name: String) {
+        let window = app.windows.firstMatch.frame
+        XCTAssertTrue(
+            element.frame.minX >= window.minX && element.frame.maxX <= window.maxX,
+            "\(name) runs off the side of the screen at \(element.frame)"
+        )
+
+        let compact = text.filter { !$0.isWhitespace }
+        let ends: [(part: String, edge: (CGRect) -> CGFloat)] = [(String(compact.prefix(8)), \.minY), (String(compact.suffix(8)), \.maxY)]
+        for (part, edge) in ends {
+            for _ in 0 ..< 8 {
+                let visible = visibleArea(of: element)
+                let y = edge(element.frame)
+                if y >= visible.minY, y <= visible.maxY { break }
+
+                drag(scrollContainers(holding: element).last ?? visibleScrollView() ?? app.windows.firstMatch, revealingContentBelow: y > visible.maxY)
+            }
+
+            let visible = visibleArea(of: element)
+            let y = edge(element.frame)
+            XCTAssertTrue(y >= visible.minY && y <= visible.maxY, "\(name): its end at \(y) never scrolled into \(visible)")
+            XCTAssertTrue(app.waitForVisibleText(containing: part, misreads: 1, timeout: 3), "\(name): Vision never read '\(part)' on screen")
+            assertNoTruncatedText(name)
         }
     }
 
