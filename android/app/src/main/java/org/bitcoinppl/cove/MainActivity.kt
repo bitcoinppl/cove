@@ -609,3 +609,5 @@ class MainActivity : FragmentActivity() {
         private const val TAG = "MainActivity"
     }
 }
+
+// scratch: Android-only change for the CI path filter test on #1032, never merged
