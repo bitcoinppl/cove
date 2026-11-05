@@ -151,6 +151,7 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
         XCTAssertTrue(screen.progress.waitForNonExistence(timeout: 30), "Restore All never finished")
         screen.waitUntilOnDevice(Self.walletTwoRecordId)
         screen.waitUntilOnDevice(Self.walletThreeRecordId)
+        screen.waitUntilOnDevice("24a462de41c1dcbfba825e87674d526b4fc0b7811fb0cee65232cb4f8209c11d")
         robot.scrollToHittable(screen.row(duplicate))
         XCTAssertTrue(screen.row(duplicate).label.contains("Already on this device"), "the copy was restored")
         XCTAssertFalse(robot.button(startingWith: "Retry Remaining").exists)
@@ -249,20 +250,46 @@ struct RestoreAllScreen {
         return row.waitForExistence(timeout: 5) && row.label.contains("Not on device")
     }
 
+    /// Fixture wallet names, which each row's label starts with
+    private static let walletNames = [
+        "24a462de41c1dcbfba825e87674d526b4fc0b7811fb0cee65232cb4f8209c11d": "Fixture Wallet One",
+        CloudBackupRestoreAllFullAppUITests.walletTwoRecordId: "Fixture Wallet Two",
+        CloudBackupRestoreAllFullAppUITests.walletThreeRecordId: "Fixture Wallet Three",
+    ]
+
+    /// Statuses of a wallet that is on this device and backed up; Unknown and Failed are not proof
+    /// that a restore landed
+    private static let onDeviceStatuses = ["Confirmed", "Uploaded, confirming", "Uploading", "Dirty"]
+
+    /// Waits until the wallet's row names it and shows an on-device status
+    ///
+    /// A missing row is not enough, since the list may be reloading or not have built the row
     func waitUntilOnDevice(
         _ recordId: String,
         timeout: TimeInterval = 20,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
+        guard let name = Self.walletNames[recordId] else {
+            return XCTFail("no fixture wallet name for \(recordId)", file: file, line: line)
+        }
+
         let deadline = Date().addingTimeInterval(timeout)
+        var label = ""
         while Date() < deadline {
             let row = row(recordId)
-            if !row.exists || !row.label.contains("Not on device") { return }
+            label = row.exists ? row.label : ""
+            if label.hasPrefix("\(name), "),
+               !label.contains("Not on device"),
+               Self.onDeviceStatuses.contains(where: label.contains)
+            {
+                return
+            }
 
             Thread.sleep(forTimeInterval: 0.2)
         }
 
-        XCTFail("wallet \(recordId) stayed in the cloud-only rows", file: file, line: line)
+        robot.attachScreen(named: "wallet not on device")
+        XCTFail("\(name) never showed as on this device; row label \"\(label)\"", file: file, line: line)
     }
 }
