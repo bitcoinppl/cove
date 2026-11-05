@@ -1,6 +1,6 @@
 use crate::common::{command_exists, print_info};
 use color_eyre::{
-    eyre::{eyre, Context, ContextCompat},
+    eyre::{bail, eyre, Context, ContextCompat},
     Result,
 };
 use std::{
@@ -68,14 +68,34 @@ impl AndroidDevice {
         Self::select(None)
     }
 
-    /// Every ready device, narrowed to `ANDROID_SERIAL` when it is set, matching
-    /// the devices Gradle's connected tasks and plain `adb` calls would use
-    pub(crate) fn list_targeted() -> Result<Vec<Self>> {
+    /// The emulator a UI test run uses, picked before any device operation so a physical device
+    /// is never touched: the one `ANDROID_SERIAL` names, which must be an `emulator-*` serial,
+    /// else the only connected emulator. None when no such emulator is connected
+    pub(crate) fn find_ui_test_emulator() -> Result<Option<Self>> {
+        let android_serial = env_device_serial("ANDROID_SERIAL");
+
+        // checked before adb runs, so a phone serial fails without listing devices
+        if let Some(serial) = android_serial.as_deref() {
+            ensure_emulator_serial(serial)?;
+        }
+
+        resolve_ui_test_emulator(&list_connected()?, android_serial.as_deref())
+    }
+
+    /// [`Self::find_ui_test_emulator`], failing when no emulator is connected
+    pub(crate) fn require_ui_test_emulator() -> Result<Self> {
         let devices = list_connected()?;
 
-        Ok(match env_device_serial("ANDROID_SERIAL") {
-            Some(serial) => devices.into_iter().filter(|device| device.serial == serial).collect(),
-            None => devices,
+        if let Some(serial) = env_device_serial("ANDROID_SERIAL") {
+            ensure_emulator_serial(&serial)?;
+            return resolve_serial(&devices, &serial);
+        }
+
+        resolve_ui_test_emulator(&devices, None)?.ok_or_else(|| {
+            eyre!(
+                "No emulator is connected; start one with `just android-ci-emulator`. UI test runs never use a physical device. {}",
+                available_android_device_context(&devices)
+            )
         })
     }
 
@@ -136,17 +156,17 @@ impl AndroidDevice {
         Ok(())
     }
 
-    /// Makes `port` on the device reach `port` on this machine
-    pub(crate) fn reverse_port(&self, port: u16) -> Result<()> {
+    /// Makes `device_port` on the device reach `host_port` on this machine
+    pub(crate) fn reverse_port(&self, device_port: u16, host_port: u16) -> Result<()> {
         let output = self
             .adb_command()
-            .args(["reverse", &format!("tcp:{port}"), &format!("tcp:{port}")])
+            .args(["reverse", &format!("tcp:{device_port}"), &format!("tcp:{host_port}")])
             .output()
             .wrap_err("Failed to run adb reverse")?;
 
         if !output.status.success() {
             color_eyre::eyre::bail!(
-                "Failed to forward port {port} to Android device {}: {}",
+                "Failed to forward port {device_port} to {host_port} on Android device {}: {}",
                 self.serial,
                 command_error(&output)
             );
@@ -306,6 +326,39 @@ fn resolve_sim(devices: &[AndroidDevice]) -> Result<AndroidDevice> {
     }
 }
 
+fn ensure_emulator_serial(serial: &str) -> Result<()> {
+    if !serial_is_emulator(serial) {
+        bail!("ANDROID_SERIAL is {serial}, which is not an emulator; UI test runs only use emulator-* devices");
+    }
+
+    Ok(())
+}
+
+fn resolve_ui_test_emulator(
+    devices: &[AndroidDevice],
+    android_serial: Option<&str>,
+) -> Result<Option<AndroidDevice>> {
+    if let Some(serial) = android_serial {
+        ensure_emulator_serial(serial)?;
+        return Ok(devices.iter().find(|device| device.serial == serial).cloned());
+    }
+
+    let emulators: Vec<&AndroidDevice> =
+        devices.iter().filter(|device| device.is_emulator()).collect();
+
+    match emulators.as_slice() {
+        [] => Ok(None),
+        [emulator] => Ok(Some((*emulator).clone())),
+
+        // every test resets and funds the run's node, so tests on two emulators at once would
+        // overwrite each other's chain
+        _ => Err(eyre!(
+            "{} emulators are connected and would share one fake node; set ANDROID_SERIAL to pick one",
+            emulators.len()
+        )),
+    }
+}
+
 fn resolve_serial(devices: &[AndroidDevice], serial: &str) -> Result<AndroidDevice> {
     devices.iter().find(|device| device.serial == serial).cloned().ok_or_else(|| {
         eyre!(
@@ -453,8 +506,8 @@ fn remote_shell_quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_connected, remote_shell_quote, serial_is_emulator, AndroidDevice,
-        AndroidDeviceSelector,
+        parse_connected, remote_shell_quote, resolve_ui_test_emulator, serial_is_emulator,
+        AndroidDevice, AndroidDeviceSelector,
     };
 
     #[test]
@@ -502,6 +555,25 @@ mod tests {
             remote_shell_quote("/sdcard/Pictures/Screenshots/it's.png"),
             "'/sdcard/Pictures/Screenshots/it'\\''s.png'"
         );
+    }
+
+    #[test]
+    fn ui_test_emulator_never_resolves_to_a_physical_device() {
+        let phone =
+            AndroidDevice { serial: "RFCN4002AKK".into(), details: "model:SM_G981W".into() };
+        let emulator = AndroidDevice { serial: "emulator-5554".into(), details: String::new() };
+        let second = AndroidDevice { serial: "emulator-5556".into(), details: String::new() };
+        let both = [phone.clone(), emulator.clone()];
+
+        assert!(resolve_ui_test_emulator(&both, Some("RFCN4002AKK")).is_err());
+        assert_eq!(resolve_ui_test_emulator(std::slice::from_ref(&phone), None).unwrap(), None);
+        assert_eq!(resolve_ui_test_emulator(&both, None).unwrap(), Some(emulator.clone()));
+        assert_eq!(
+            resolve_ui_test_emulator(&both, Some("emulator-5554")).unwrap(),
+            Some(emulator.clone())
+        );
+        assert_eq!(resolve_ui_test_emulator(&both, Some("emulator-5556")).unwrap(), None);
+        assert!(resolve_ui_test_emulator(&[phone, emulator, second], None).is_err());
     }
 
     #[test]

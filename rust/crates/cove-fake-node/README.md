@@ -5,7 +5,7 @@ A fake Esplora and Electrum node backed by one deterministic in-memory chain. Bo
 It runs two ways:
 
 - **In process**, for Rust tests: `FakeNode::start(network)` binds free loopback ports. Tests mutate the chain through `FakeNode::chain()`, read the request log, and script requests to fail, stall, run slowly or wait on a gate (`FakeNode::on`). The app crate takes this library as a dev-dependency only, and `rust/src/test_support/fake_node.rs` adds the helpers that point Cove's node settings at it
-- **As the `cove-fake-node` binary**, for iOS and Android UI tests: it serves the node on fixed ports with a JSON control API, so a test running in a simulator or emulator can fund a wallet, mine blocks and check what the app broadcast
+- **As the `cove-fake-node` binary**, for iOS and Android UI tests: it serves the node on the ports it is given with a JSON control API, so a test running in a simulator or emulator can fund a wallet, mine blocks and check what the app broadcast
 
 ## Running the binary
 
@@ -29,19 +29,19 @@ Port `0` picks a free port. Once every port listens, the binary prints one JSON 
 
 It exits with an error without printing that line when a port is taken. The chain starts as it is after `POST /reset`.
 
-To run a command with the node up, use the xtask wrapper. It builds and starts the binary on the fixed ports, checks `/health`, runs the command from the current directory, then stops the node:
+To run a command with the node up, use the xtask wrapper. It builds and starts the binary on the first free block of ports from 39100 in steps of 100, reserved with a lock until the node stops, checks `/health`, runs the command from the current directory with `COVE_UI_TEST_PORT_BASE` set to the block's control port, then stops the node:
 
 ```sh
 just fake-node-run <command>                     # runs from rust/
 cd rust && cargo xtask fake-node run -- <command>
-cargo xtask fake-node run --android -- <command> # fail when no Android device is connected
+cargo xtask fake-node run --android -- <command> # fail when no emulator is connected
 ```
 
-Without `--android`, the wrapper forwards the three ports with `adb reverse` to the connected Android device, if any, and removes the forwards afterwards. Every test resets and funds the one node, so the wrapper refuses to run with more than one device connected unless `ANDROID_SERIAL` picks one; Gradle honors `ANDROID_SERIAL` too. Interrupting the run with Ctrl-C skips that cleanup, so remove leftover forwards with `adb reverse --remove-all`. `xtask ios-ui` (behind `just ios-ui-background` and `just ios-ui-foreground`), `xtask android-ui-manual` and `just android-instrumented-ci` run their tests with the node up. The iOS simulator shares the host's loopback, so the app reaches the node at `http://127.0.0.1:39001` on both platforms.
+Without `--android`, the wrapper forwards the three ports with `adb reverse` to the connected emulator, if any, and removes the forwards afterwards. It only uses emulators, the one `ANDROID_SERIAL` names or else the only one connected, and never a physical device. The device always sees 39000-39002, whichever block the run took, and the run locks the device so a second run can't replace its forwards. No run takes 39000-39002 on the host, since revisions before port blocks use it. Every test resets and funds the one node, so the wrapper refuses to run with more than one emulator connected unless `ANDROID_SERIAL` picks one. The command runs with `ANDROID_SERIAL` set to the emulator, which Gradle honors. Interrupting or terminating the run with SIGINT, SIGTERM or SIGHUP still stops the command and the node and removes the forwards. `xtask ios-ui` (behind `just ios-ui-background` and `just ios-ui-foreground`), `xtask android-ui-manual` and `just android-instrumented-ci` run their tests with the node up. On Android the app reaches the node at `http://127.0.0.1:39001`. The iOS simulator shares the host's loopback, so the iOS tests read the block from `COVE_UI_TEST_PORT_BASE` and reach Esplora at base + 1, such as 39101.
 
-Point the app at the node with a custom Esplora node at `http://127.0.0.1:39001`.
+Point the app at the node with a custom Esplora node at its Esplora port: `http://127.0.0.1:39001` on Android, or base + 1 on the host, such as `http://127.0.0.1:39101` for a lone run. Started by hand with its defaults, the binary's Esplora port is 39001.
 
-The Esplora port also answers mempool.space's `GET /api/v1/fees/recommended` with fixed fee rates. Debug builds of the app fetch fees from `COVE_FEE_URL` when it is set, so pointing it at `http://127.0.0.1:39001/api/v1/fees/recommended` keeps sends off the internet.
+The Esplora port also answers mempool.space's `GET /api/v1/fees/recommended` with fixed fee rates. Debug builds of the app fetch fees from `COVE_FEE_URL` when it is set, so pointing it at `/api/v1/fees/recommended` on the Esplora port, such as `http://127.0.0.1:39001/api/v1/fees/recommended` on Android, keeps sends off the internet.
 
 ## Control API
 

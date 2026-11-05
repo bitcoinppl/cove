@@ -1,5 +1,31 @@
 import XCTest
 
+/// Where the test host's services listen, see rust/xtask/src/ui_test_ports.rs
+///
+/// Several UI test runs on one Mac each take their own block of ports, and xtask names this run's
+/// base in `COVE_UI_TEST_PORT_BASE`. Without it the tests use 39100, the first block a run takes,
+/// which is where a lone `just fake-node-run` listens
+enum UITestHostPorts {
+    static let base = ProcessInfo.processInfo.environment["COVE_UI_TEST_PORT_BASE"].flatMap(Int.init) ?? 39100
+
+    /// the simulator shares the host's loopback, so no forwarding is needed
+    static var fakeNodeControl: URL {
+        URL(string: "http://127.0.0.1:\(base)")!
+    }
+
+    static var esploraUrl: String {
+        "http://127.0.0.1:\(base + 1)"
+    }
+
+    static var signerControl: URL {
+        URL(string: "http://127.0.0.1:\(base + 10)")!
+    }
+
+    static var tapSignerBridge: String {
+        "127.0.0.1:\(base + 11)"
+    }
+}
+
 /// Synchronous client for the cove-fake-node control API, see rust/crates/cove-fake-node/README.md
 struct FakeNodeControl {
     struct FundedOutput: Decodable {
@@ -37,8 +63,7 @@ struct FakeNodeControl {
         let outputs: [FundedOutput]
     }
 
-    /// the simulator shares the host's loopback, where xtask runs the node
-    private let baseUrl = URL(string: "http://127.0.0.1:39000")!
+    private let baseUrl = UITestHostPorts.fakeNodeControl
 
     func requireHealthy() throws {
         do {

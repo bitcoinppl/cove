@@ -9,7 +9,7 @@ import XCTest
 /// which `xtask ios-ui` (`just ios-ui-background`) starts for every run, and a freshly erased
 /// simulator, which xtask also provides
 final class HardwareSigningFullLaunchUITests: XCTestCase {
-    private static let esploraUrl = "http://127.0.0.1:39001"
+    private static let esploraUrl = UITestHostPorts.esploraUrl
     private static let feeUrl = "\(esploraUrl)/api/v1/fees/recommended"
     private static let fundedSats: [UInt64] = [100_000, 60000]
 

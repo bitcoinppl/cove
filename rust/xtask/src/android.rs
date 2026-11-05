@@ -4,7 +4,7 @@ use crate::common::{
     trim_generated_trailing_whitespace,
 };
 use crate::version::KeepBuildNumber;
-use crate::{fake_node::AndroidPorts, ui_test_host::UiTestHost};
+use crate::{fake_node::AndroidPorts, ui_test_host::UiTestHost, ui_test_ports::RunLock};
 use color_eyre::{
     eyre::{bail, Context, ContextCompat},
     Result,
@@ -953,13 +953,35 @@ pub fn run_with_stay_awake(command: &[String]) -> Result<()> {
 }
 
 pub fn run_manual_ui_tests() -> Result<()> {
+    pin_ui_test_emulator()?;
+
     // tests that need a funded wallet reset and fund the fake node, and hardware signing
     // tests sign through the signer services, all through adb reverse
     let _host = UiTestHost::start(AndroidPorts::Required)?;
 
+    // the host holds the emulator's lock for the whole run, so the stages run without taking it
     run_independent_manual_ui_tests()?;
-    run_durable_relaunch_ui_test()?;
-    run_restore_all_relaunch_ui_test()
+    durable_relaunch_ui_test()?;
+    restore_all_relaunch_ui_test()
+}
+
+/// Points every plain `adb` and Gradle call this process makes at the UI test emulator, so the
+/// manual and staged tests, which uninstall and reinstall the app, never reach a physical phone
+///
+/// Call it before starting any thread that runs commands, since it sets `ANDROID_SERIAL`
+fn pin_ui_test_emulator() -> Result<AndroidDevice> {
+    let emulator = AndroidDevice::require_ui_test_emulator()?;
+
+    print_info(&format!("Running the Android UI tests on {}", emulator.description()));
+    std::env::set_var("ANDROID_SERIAL", emulator.serial());
+    Ok(emulator)
+}
+
+/// Pins the UI test emulator and locks it for a staged test run on its own, which would
+/// otherwise reinstall the app under another run that is using the emulator
+fn lock_ui_test_emulator() -> Result<RunLock> {
+    let emulator = pin_ui_test_emulator()?;
+    RunLock::android_device(emulator.serial())
 }
 
 fn run_independent_manual_ui_tests() -> Result<()> {
@@ -975,6 +997,11 @@ fn run_independent_manual_ui_tests() -> Result<()> {
 }
 
 pub fn run_durable_relaunch_ui_test() -> Result<()> {
+    let _emulator = lock_ui_test_emulator()?;
+    durable_relaunch_ui_test()
+}
+
+fn durable_relaunch_ui_test() -> Result<()> {
     run_staged_process_ui_test(
         "durable-relaunch",
         DURABLE_RELAUNCH_TEST_CLASS,
@@ -987,6 +1014,11 @@ pub fn run_durable_relaunch_ui_test() -> Result<()> {
 }
 
 pub fn run_restore_all_relaunch_ui_test() -> Result<()> {
+    let _emulator = lock_ui_test_emulator()?;
+    restore_all_relaunch_ui_test()
+}
+
+fn restore_all_relaunch_ui_test() -> Result<()> {
     run_staged_process_ui_test(
         "Restore All relaunch",
         RESTORE_ALL_RELAUNCH_TEST_CLASS,

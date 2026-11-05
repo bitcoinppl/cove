@@ -2,10 +2,11 @@ import XCTest
 
 /// Locks and unlocks UTXOs in the real app against cove-fake-node, then checks what the app broadcast
 ///
-/// Needs the fake node on its fixed ports, which `xtask ios-ui` (`just ios-ui-background`) starts for
-/// every run, and a freshly erased simulator, which xtask also provides
+/// Needs the fake node on the ports `COVE_UI_TEST_PORT_BASE` names, which `xtask ios-ui`
+/// (`just ios-ui-background`) starts for every run, and a freshly erased simulator, which xtask
+/// also provides
 final class UtxoLockFullLaunchUITests: XCTestCase {
-    private static let esploraUrl = "http://127.0.0.1:39001"
+    private static let esploraUrl = UITestHostPorts.esploraUrl
     private static let feeUrl = "\(esploraUrl)/api/v1/fees/recommended"
 
     private var app: XCUIApplication!

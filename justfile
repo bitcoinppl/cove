@@ -203,6 +203,7 @@ ui-manual:
 android-stay-awake *command:
     just xtask android-stay-awake -- {{ command }}
 
+# Runs on an emulator only, the one ANDROID_SERIAL names or else the only connected one, never a physical device
 # [external] Run manual Android full-launch onboarding UI tests
 [group('test')]
 android-ui-manual:
@@ -210,8 +211,8 @@ android-ui-manual:
 
 alias aum := android-ui-manual
 
-# The command runs from rust/, with the node's control API on 39000, Esplora on 39001 and Electrum on 39002
-# [variable] Run a command with the fake Esplora and Electrum node up, forwarded to the Android device; set ANDROID_SERIAL when several are connected
+# The command runs from rust/ with the node on the first free port block from 39100, which COVE_UI_TEST_PORT_BASE names
+# [variable] Run a command with the fake Esplora and Electrum node up, forwarded to a connected emulator, never a physical device; set ANDROID_SERIAL when several are connected
 [group('test')]
 fake-node-run *command:
     just xtask fake-node run -- {{ command }}
@@ -219,12 +220,22 @@ fake-node-run *command:
 # Skips staged process-death tests, which need `android-ui-manual`, and tests marked @QuarantinedInCi
 # Runs with the fake node and the hardware signer host up and forwarded to the device, for tests
 # that need a funded wallet or a signer
+# Runs on an emulator only: the one ANDROID_SERIAL names, which must be an emulator-* serial, else
+# the only connected emulator, and Gradle gets that serial in ANDROID_SERIAL
 # tests: optional comma-separated `package.Class` or `package.Class#method` entries to run instead of all
 # [long, external] Run Android instrumented tests the way the UI tests workflow does; flavours: Dev, UiTest or both
 [group('test')]
 [working-directory('android')]
 android-instrumented-ci flavours="Dev UiTest" tests="":
     cargo run --locked -q --manifest-path ../rust/Cargo.toml --package xtask -- ui-test-host run --android -- ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi" "-Pandroid.testInstrumentationRunnerArguments.listener=org.bitcoinppl.cove.test.DismissAnrDialogs" {{ if tests == "" { "" } else { quote("-Pandroid.testInstrumentationRunnerArguments.class=" + replace(tests, " ", "")) } }}
+
+# Creates the CoveCI35 AVD on first use with the UI tests workflow's emulator settings, and boots it
+# read-only, so several can run at once: give each its own even console port from 5554 and point
+# each test run at one with ANDROID_SERIAL=emulator-<port>
+# [long, external] Start a headless emulator like the UI tests workflow's and wait for it to boot
+[group('test')]
+android-ci-emulator port="5554":
+    just xtask android-ci-emulator --port {{ port }}
 
 # [bounded] Update Android Compose preview screenshot references
 [group('test')]
