@@ -284,7 +284,7 @@ paths = [
 ]
 coverage = [
     "agent:ios",
-    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/secretwords/SecretWordsLockTest.kt::wordsLoadOnlyAfterTheCorrectPinAndClearWhenTheAppLocksAgain",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/secretwords/SecretWordsLockTest.kt::wordsClearWhenTheAppReallyGoesToTheBackground",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::receivedPrivateKeyStaysHiddenUntilRevealedAndImportsAsAWallet",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportBackgroundLockTest.kt::receiverStepsShowThePinCoverAndNoSecretAfterReturning",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportBackgroundLockTest.kt::senderResponseShowsThePinCoverAndNoPasswordAfterReturning",

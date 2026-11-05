@@ -7,10 +7,14 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.lifecycle.Lifecycle
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import kotlinx.coroutines.runBlocking
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.test.TestWalletWords
+import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.deleteTestWallet
 import org.bitcoinppl.cove.test.importTestWalletOrNull
@@ -126,6 +130,37 @@ class SecretWordsLockTest {
         assertTrue("the grace period must release a background-only lock", !Auth.isLocked)
     }
 
+    @Test
+    fun wordsClearWhenTheAppReallyGoesToTheBackground() {
+        unlockAndWaitForWords()
+
+        // a real app switch, so the process lifecycle and onPause conceal the words, not a direct lock call
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        device.executeShellCommand("am start -W -a android.settings.SETTINGS")
+
+        // compose waits need frames, which a stopped activity does not produce, so poll directly
+        awaitOnMain("the app lock to engage in the background", BACKGROUND_TIMEOUT_MILLIS) {
+            Auth.isLocked.takeIf { it }
+        }
+
+        // a return within the grace period reopens a PIN lock without the PIN
+        Thread.sleep(GRACE_PERIOD_MILLIS)
+
+        device.pressBack()
+        awaitOnMain("the test activity to resume", BACKGROUND_TIMEOUT_MILLIS) {
+            compose.activity.lifecycle.currentState
+                .isAtLeast(Lifecycle.State.RESUMED)
+                .takeIf { it }
+        }
+
+        compose.waitForIdle()
+        assertTrue("the app lock was open on returning", Auth.isLocked)
+        compose.onNodeWithText("Enter Cove PIN").assertExists()
+        assertNoRecoveryWordsInTree("after leaving the app and returning past the grace period")
+
+        unlockAndWaitForWords()
+    }
+
     private fun unlockAndWaitForWords() {
         enterPin(TEST_PIN)
         waitForPinPadToFinishSubmitting()
@@ -163,6 +198,8 @@ class SecretWordsLockTest {
         const val TEST_PIN = "246813"
         const val WRONG_PIN = "135792"
         const val PIN_SUBMIT_SETTLE_MILLIS = 1_000L
+        const val GRACE_PERIOD_MILLIS = 2_500L
+        const val BACKGROUND_TIMEOUT_MILLIS = 10_000L
 
         // published BIP39 test vector, never used for funds; distinct from the vector other tests import
         val TEST_WORDS =

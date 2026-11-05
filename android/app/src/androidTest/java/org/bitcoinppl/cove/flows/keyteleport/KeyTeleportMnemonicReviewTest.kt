@@ -97,7 +97,7 @@ class KeyTeleportMnemonicReviewTest {
         }
 
         // the words start hidden, reveal on tap at their own positions, and finishing leaves no wallet
-        var receiver = reachReview()
+        val (firstRequest, firstReceiver) = reachReview()
         assertNoWordsInTree("before revealing")
         compose.onNodeWithContentDescription(RECOVERY_WORDS_HINT).performClick()
         compose.waitUntil(STATE_TIMEOUT_MILLIS) { wordsInTree() > 0 }
@@ -106,15 +106,19 @@ class KeyTeleportMnemonicReviewTest {
         // the screen sits outside the router here, so give Finish a route of its own to close
         onMain { app.pushRoute(RECEIVE_ROUTE) }
         compose.onNodeWithText("Finish Without Importing").performClick()
-        compose.waitUntil(STATE_TIMEOUT_MILLIS) { receiver.state !is KeyTeleportManagerState.ReceiveMnemonicReview }
+        compose.waitUntil(STATE_TIMEOUT_MILLIS) { firstReceiver.state !is KeyTeleportManagerState.ReceiveMnemonicReview }
         compose.waitForIdle()
         assertFalse("Finish Without Importing left the receive screen open", onMainValue { RECEIVE_ROUTE in app.router.routes })
         assertEquals("Finish Without Importing added a wallet", 0, walletsForTheTestWords())
 
-        // Finish closed the screen, so open it again for a fresh request, then Import Wallet adds
-        // the wallet once and Done opens it
+        // closing the screen also idles its manager, so only the stored session shows Finish ended the receive
+        awaitOnMain("Finish Without Importing to end the receive session") { (!hasStoredReceiveSession()).takeIf { it } }
+
+        // the finished session is gone, so the reopened screen makes a new request, then Import
+        // Wallet adds the wallet once and Done opens it
         reopenReceiveScreen()
-        receiver = reachReview()
+        val (secondRequest, receiver) = reachReview()
+        assertTrue("the reopened screen resumed the finished request", secondRequest != firstRequest)
         assertNoWordsInTree("on the second review")
         compose.onNodeWithText("Import Wallet").performClick()
         val imported =
@@ -137,9 +141,9 @@ class KeyTeleportMnemonicReviewTest {
      * Import the test words, send them from a second manager to the receive screen's request,
      * delete them again, and enter the password on screen to reach the review
      *
-     * Returns the screen's manager, which is a new one after the reopen
+     * Returns the request the review answers and the screen's manager, which is a new one after the reopen
      */
-    private fun reachReview(): KeyTeleportManager {
+    private fun reachReview(): Pair<KeyTeleportRequestCopy, KeyTeleportManager> {
         val request = awaitRequest(currentReceiver())
         val sender = importTestWalletOrNull(TEST_WALLET)
         assertTrue("the test words were already on this device", sender != null)
@@ -148,8 +152,10 @@ class KeyTeleportMnemonicReviewTest {
 
         val response = KeyTeleportTestPeer().use { peer -> peer.sendWallet(senderId, request) }
         deleteTestWallet(senderId)
-        walletId = null
+
+        // deleteTestWallet only logs a failure, so keep the id for teardown until the wallet is really gone
         awaitOnMain("the sending wallet to be deleted") { (walletsForTheTestWords() == 0).takeIf { it } }
+        walletId = null
 
         val receiver = reopenReceiveScreen()
         assertEquals("the reopened screen did not resume the same request", request, awaitRequest(receiver))
@@ -165,7 +171,7 @@ class KeyTeleportMnemonicReviewTest {
         compose.waitUntil(STATE_TIMEOUT_MILLIS) { receiver.state is KeyTeleportManagerState.ReceiveMnemonicReview }
         compose.waitForIdle()
 
-        return receiver
+        return request to receiver
     }
 
     private fun currentReceiver(): KeyTeleportManager = onMainValue { AppManager.getInstance().getKeyTeleportManager() }

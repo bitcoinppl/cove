@@ -86,6 +86,9 @@ class PrivateKeyExportFullLaunchTest {
     // the bystander this test imported, deleted afterwards
     private var bystanderId: WalletId? = null
 
+    // set once this test puts the key or a request on the clipboard, which cleanup then clears
+    private var usedClipboard = false
+
     @get:Rule
     val fullLaunch = FullLaunchTestRule()
 
@@ -104,6 +107,11 @@ class PrivateKeyExportFullLaunchTest {
             }
 
             bystanderId?.let(::deleteTestWallet)
+
+            // every copy of the fixture key is this test's, whether restored or received, and a
+            // leftover one makes the next restore find the wallet already there
+            if (::walletId.isInitialized) fixtureKeyWalletIds().forEach(::deleteTestWallet)
+            if (usedClipboard) clearClipboard()
         } finally {
             // the next test may host LockView without relaunching, and refuses to run over a leftover PIN
             restoreNoAppLock()
@@ -116,7 +124,7 @@ class PrivateKeyExportFullLaunchTest {
         restorePrivateKeyWallet()
         setPins()
 
-        // Reveal shows the key after the main PIN, and Copy puts that same key on the clipboard
+        // revealing shows the key after the main PIN, and Copy puts that same key on the clipboard
         openWalletSettings()
         requestExport(REVEAL_ACTION)
         device.enterPin(MAIN_PIN)
@@ -512,6 +520,7 @@ class PrivateKeyExportFullLaunchTest {
                 waitUntil("Not Now should dismiss the verification prompt") {
                     CloudBackupManager.getInstance().rootPrompt !is CloudBackupRootPrompt.Verification
                 }
+
                 quietSince = SystemClock.uptimeMillis()
             }
 
@@ -527,19 +536,21 @@ class PrivateKeyExportFullLaunchTest {
 
     private fun walletIds(): List<WalletId> = Database().wallets().all().map { it.id }
 
-    private fun walletsHoldingTheFixtureKey(): Int =
-        Database().wallets().all().count { wallet ->
-            runCatching { readPrivateKey(wallet.id) }.getOrNull() == FIXTURE_XPRV
-        }
+    private fun walletsHoldingTheFixtureKey(): Int = fixtureKeyWalletIds().size
+
+    private fun fixtureKeyWalletIds(): List<WalletId> =
+        walletIds().filter { id -> runCatching { readPrivateKey(id) }.getOrNull() == FIXTURE_XPRV }
 
     private fun clipboard(): ClipboardManager =
         InstrumentationRegistry.getInstrumentation().targetContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
     private fun putOnClipboard(text: String) {
+        usedClipboard = true
         onMain { clipboard().setPrimaryClip(ClipData.newPlainText("test", text)) }
     }
 
     private fun clearClipboard() {
+        usedClipboard = true
         onMain { clipboard().clearPrimaryClip() }
     }
 

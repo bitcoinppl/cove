@@ -67,8 +67,9 @@ class KeyTeleportPasteRejectionTest {
         // the protected screen gives adb no screencap, so the test captures the error and the
         // screen after OK from inside the app, where a person used to photograph the phone
         assertRejectionAsksForTheReceiverRequest()
-        assertDialogTextFitsInsideTheDialog()
-        assertCaptureShowsContent(saveNodeScreenshotToLayoutAudit(compose.onNode(isDialog()), "s17-sender-psbt-error.png"))
+        val capture = saveNodeScreenshotToLayoutAudit(compose.onNode(isDialog()), "s17-sender-psbt-error.png")
+        assertCaptureShowsContent(capture)
+        assertDialogTextFitsInsideTheDialog(capture)
         assertOkLeavesTheSenderReadyForAnotherPaste(BIP174_UNSIGNED_PSBT_BASE64)
     }
 
@@ -127,8 +128,12 @@ class KeyTeleportPasteRejectionTest {
         assertRejectionAsksForTheReceiverRequest()
     }
 
-    // clipped, truncated or overlapping text is what a screenshot of the error would have shown
-    private fun assertDialogTextFitsInsideTheDialog() {
+    /**
+     * Clipped, truncated, overlapping or undrawn text is what a screenshot of the error would have
+     * shown, so each text node must keep its full laid-out size on screen, stay inside the dialog,
+     * and put more than one color into its part of the dialog's [capture]
+     */
+    private fun assertDialogTextFitsInsideTheDialog(capture: Bitmap) {
         val dialog = compose.onNode(isDialog()).fetchSemanticsNode().boundsInWindow
         val texts =
             compose
@@ -143,6 +148,13 @@ class KeyTeleportPasteRejectionTest {
             assertTrue("\"$label\" has no size", bounds.width > 0f && bounds.height > 0f)
             assertTrue("\"$label\" reaches outside the dialog", dialog.contains(bounds))
             assertTrue("\"$label\" is cut off", !node.overflows())
+
+            // boundsInWindow is already clipped by every parent, so a clipped node shows less than its layout size
+            assertTrue(
+                "\"$label\" is clipped by its container",
+                bounds.width >= node.size.width - CLIP_TOLERANCE_PX && bounds.height >= node.size.height - CLIP_TOLERANCE_PX,
+            )
+            assertTrue("\"$label\" draws nothing visible", capture.hasMoreThanOneColorIn(bounds.translate(-dialog.topLeft)))
         }
 
         texts.forEachIndexed { index, node ->
@@ -162,6 +174,16 @@ class KeyTeleportPasteRejectionTest {
         }
 
         assertTrue("the capture is a single color", colors.size > 1)
+    }
+
+    private fun Bitmap.hasMoreThanOneColorIn(region: Rect): Boolean {
+        val left = region.left.toInt().coerceIn(0, width - 1)
+        val top = region.top.toInt().coerceIn(0, height - 1)
+        val right = region.right.toInt().coerceIn(left + 1, width)
+        val bottom = region.bottom.toInt().coerceIn(top + 1, height)
+        val first = getPixel(left, top)
+
+        return (top until bottom).any { y -> (left until right).any { x -> getPixel(x, y) != first } }
     }
 
     private fun Rect.contains(other: Rect): Boolean =
@@ -186,6 +208,9 @@ class KeyTeleportPasteRejectionTest {
     private companion object {
         // every fourth pixel is enough to tell a drawn screen from a blank one
         const val CAPTURE_SAMPLE_STEP = 4
+
+        // bounds are floats from the same layout, so allow rounding but not a clipped line of text
+        const val CLIP_TOLERANCE_PX = 1f
 
         // a recognisable non-KeyTeleport payload
         const val MAINNET_ADDRESS = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
