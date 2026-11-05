@@ -134,9 +134,9 @@ jobs:
         if: steps.plan.outputs.run == 'true'
         uses: astral-sh/setup-uv@v10.3.3
 
-      # the recipe starts cove-fake-node and the hardware signer host and forwards their
-      # ports 39000-39002 and 39010-39011 into the emulator, for the tests that fund a
-      # wallet or sign with a hardware wallet
+      # the recipe starts cove-fake-node and the hardware signer host on the first host port
+      # block, 39100-39111, and forwards them to 39000-39002 and 39010-39011 in the emulator, for
+      # the tests that fund a wallet or sign with a hardware wallet
       - name: Run instrumented tests
         if: steps.plan.outputs.run == 'true'
         uses: reactivecircus/android-emulator-runner@v2
@@ -180,7 +180,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: tapsigner-emulator-log-android-${{ matrix.flavour }}
-          path: rust/target/ui-test-host/ecard.log
+          path: rust/target/ui-test-host/ecard-*.log
           if-no-files-found: ignore
           retention-days: 7
 
@@ -251,8 +251,9 @@ jobs:
 
       # xtask expands each class into its test methods and keeps this shard's slice, builds each
       # scheme once, runs every test on a fresh clone of a once-booted simulator so each starts at
-      # first launch, and keeps cove-fake-node up on ports 39000-39002 for the tests that fund a
-      # wallet from it and the hardware signer host on 39010-39011 for the hardware signing tests
+      # first launch, and keeps cove-fake-node up on the first port block, 39100-39102, for the
+      # tests that fund a wallet from it and the hardware signer host on 39110-39111 for the
+      # hardware signing tests
       # xcodebuild passes TEST_RUNNER_-prefixed variables to the test process without the prefix
       - name: Run iOS UI tests
         if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
@@ -277,6 +278,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: tapsigner-emulator-log-ios-${{ strategy.job-index }}
-          path: rust/target/ui-test-host/ecard.log
+          path: rust/target/ui-test-host/ecard-*.log
           if-no-files-found: ignore
           retention-days: 7

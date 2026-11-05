@@ -3,10 +3,10 @@
 //! Debug builds of the app have two test seams: the QR scanner can read frames
 //! from a script file instead of the camera, and TAPSIGNER commands can go to a
 //! TCP bridge instead of an NFC session. This module serves the host side of
-//! both on fixed ports, reachable from the iOS simulator over the shared
-//! loopback and from Android through `adb reverse`:
+//! both on the run's block of [`UiTestPorts`], reachable from the iOS simulator
+//! over the shared loopback and from Android through `adb reverse`:
 //!
-//! - [`CONTROL_PORT`]: a JSON API. `POST /sign-psbt` signs a PSBT the way a
+//! - [`UiTestPorts::signer_control`]: a JSON API. `POST /sign-psbt` signs a PSBT the way a
 //!   hardware wallet would and returns it as UR and BBQr frames for the QR
 //!   seam, `/unrelated-psbt` signs one that matches no draft, and
 //!   `/watch-only-descriptor` returns the account a hardware wallet exports.
@@ -17,7 +17,7 @@
 //!   dark mode. The `/tapsigner/...` routes start the card emulator, set up or
 //!   factory fresh, and inject dropped sessions. The `/keyteleport/...` routes
 //!   play the other phone in a KeyTeleport transfer ([`key_teleport`])
-//! - [`BRIDGE_PORT`]: the TAPSIGNER bridge. Each APDU arrives as a frame with a
+//! - [`UiTestPorts::tapsigner_bridge`]: the TAPSIGNER bridge. Each APDU arrives as a frame with a
 //!   4-byte big-endian length, goes to Coinkite's `ecard.py` emulator, and the
 //!   card's response goes back the same way. Closing the connection is how a
 //!   dropped NFC session looks to the app
@@ -61,15 +61,16 @@ mod key_teleport;
 
 use crate::{
     android_device::AndroidDevice,
-    common::{command_exists, print_info, print_success, print_warning},
-    fake_node::{AndroidPorts, FakeNodeGuard},
+    common::{log_tail, print_info, print_success, print_warning},
+    fake_node::{AndroidPorts, AndroidTarget, FakeNodeGuard},
+    shutdown::{self, Registration, Stop},
     tapsigner_emulator::{emulator_script, EmulatorPaths},
+    ui_test_ports::{PortReservation, UiTestPorts},
     util,
 };
 
-pub const CONTROL_PORT: u16 = 39010;
-pub const BRIDGE_PORT: u16 = 39011;
-const PORTS: [u16; 2] = [CONTROL_PORT, BRIDGE_PORT];
+/// How long stopping the signer waits for an exchange with the card emulator to finish
+const EMULATOR_LOCK_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The emulator derives every key from this seed, so the card and its wallet
 /// are the same on every run
@@ -90,9 +91,9 @@ const INSTRUCTION_NOT_SUPPORTED: [u8; 2] = [0x6d, 0x00];
 
 #[derive(Subcommand)]
 pub enum UiTestHostCommand {
-    /// Start the fake node and the hardware signer services, run a command, then stop them
+    /// Start the fake node and the hardware signer services on the first free port block, run a command with COVE_UI_TEST_PORT_BASE set to the block, then stop them
     Run {
-        /// Forward the ports to Android with adb reverse and fail when no device is connected. Without it, ports are forwarded only to devices adb already lists
+        /// Forward the ports with adb reverse to an emulator, the one ANDROID_SERIAL names or else the only connected one, and fail when there is none. Without it, ports go to such an emulator only if one is connected. Physical devices are never used, and the command runs with ANDROID_SERIAL set to the emulator
         #[arg(long)]
         android: bool,
 
@@ -106,104 +107,146 @@ pub fn run(command: UiTestHostCommand) -> Result<()> {
     match command {
         UiTestHostCommand::Run { android, command } => {
             let android = if android { AndroidPorts::Required } else { AndroidPorts::IfConnected };
-            let _host = UiTestHost::start(android)?;
+            let host = UiTestHost::start(android)?;
 
-            crate::fake_node::run_command(&command)
+            crate::fake_node::run_command(&command, host.ports(), host.android_device())
         }
     }
 }
 
 /// Everything the full-launch UI tests reach on the host; dropping it stops them
 pub struct UiTestHost {
-    // the signer stops first so its forwards go before the node's
+    // dropped in this order: the signer and its forwards, the node and its forwards, then the
+    // device lock and the port block, so the next run on either starts after these have stopped
     _signer: HardwareSignerGuard,
     _node: FakeNodeGuard,
+    android: Option<AndroidTarget>,
+    ports: PortReservation,
 }
 
 impl UiTestHost {
+    /// Locks the Android device first, as scripts take the emulator lock before the UI lock,
+    /// then reserves a port block and starts both services on it
     pub fn start(android: AndroidPorts) -> Result<Self> {
-        let node = FakeNodeGuard::start(android)?;
-        let signer = HardwareSignerGuard::start(android)?;
+        let android = android.target()?;
+        let ports = PortReservation::take()?;
+        let device = android.as_ref().map(AndroidTarget::device);
+        let node = FakeNodeGuard::start(ports.ports(), device)?;
+        let signer = HardwareSignerGuard::start(ports.ports(), device)?;
 
-        Ok(Self { _signer: signer, _node: node })
+        Ok(Self { _signer: signer, _node: node, android, ports })
+    }
+
+    pub const fn ports(&self) -> UiTestPorts {
+        self.ports.ports()
+    }
+
+    /// The device the ports are forwarded to, if any
+    pub fn android_device(&self) -> Option<&AndroidDevice> {
+        self.android.as_ref().map(AndroidTarget::device)
     }
 }
 
-/// The control API and TAPSIGNER bridge; dropping it removes the port forwards
-/// and stops the card emulator
+/// The control API and TAPSIGNER bridge; dropping it, or a signal, removes the port forwards and
+/// stops the card emulator
 ///
 /// The servers run on threads of this process, which ends with the test run
 pub struct HardwareSignerGuard {
+    signer: Arc<HardwareSigner>,
+    _registration: Registration,
+}
+
+struct HardwareSigner {
     state: Arc<SignerState>,
-    forwarded: Vec<AndroidDevice>,
+    forwarded: Mutex<Option<AndroidDevice>>,
 }
 
 impl HardwareSignerGuard {
-    pub fn start(android: AndroidPorts) -> Result<Self> {
-        let control = TcpListener::bind(("127.0.0.1", CONTROL_PORT)).wrap_err_with(|| {
-            format!("Failed to listen on {CONTROL_PORT}; is another test run using it?")
-        })?;
-        let bridge = TcpListener::bind(("127.0.0.1", BRIDGE_PORT)).wrap_err_with(|| {
-            format!("Failed to listen on {BRIDGE_PORT}; is another test run using it?")
-        })?;
+    pub fn start(ports: UiTestPorts, android: Option<&AndroidDevice>) -> Result<Self> {
+        let listen = |port: u16| {
+            TcpListener::bind(("127.0.0.1", port)).wrap_err_with(|| {
+                format!("Failed to listen on {port}; is another program using it?")
+            })
+        };
+        let control = listen(ports.signer_control())?;
+        let bridge = listen(ports.tapsigner_bridge())?;
 
+        // one log per port block, so concurrent runs from one worktree keep their own
         let state = Arc::new(SignerState {
             emulator_paths: prepare_emulator(),
+            emulator_log: host_dir()?.join(format!("ecard-{}.log", ports.base())),
             emulator: Mutex::new(None),
             drop_after: Mutex::new(None),
             key_teleport_receivers: key_teleport::Receivers::default(),
         });
 
+        let signer = Arc::new(HardwareSigner { state: state.clone(), forwarded: Mutex::new(None) });
+        let guard = Self { _registration: shutdown::register(signer.clone()), signer };
+
         spawn_server(control, state.clone(), serve_control);
-        spawn_server(bridge, state.clone(), serve_bridge);
+        spawn_server(bridge, state, serve_bridge);
         print_success(&format!(
-            "Hardware signer up: control http://127.0.0.1:{CONTROL_PORT}, TAPSIGNER bridge 127.0.0.1:{BRIDGE_PORT}"
+            "Hardware signer up: control http://127.0.0.1:{}, TAPSIGNER bridge 127.0.0.1:{}",
+            ports.signer_control(),
+            ports.tapsigner_bridge()
         ));
 
-        let mut guard = Self { state, forwarded: Vec::new() };
-        guard.forward_to_android(android)?;
+        if let Some(device) = android {
+            guard.signer.forward(device, ports)?;
+        }
 
         Ok(guard)
     }
+}
 
-    fn forward_to_android(&mut self, android: AndroidPorts) -> Result<()> {
-        if android == AndroidPorts::Skip || !command_exists("adb") {
-            return Ok(());
+impl HardwareSigner {
+    fn forward(&self, device: &AndroidDevice, ports: UiTestPorts) -> Result<()> {
+        // recorded first so a partial forward is still removed
+        *self.forwarded.lock() = Some(device.clone());
+
+        for (device_port, host_port) in UiTestPorts::DEVICE.signer().into_iter().zip(ports.signer())
+        {
+            device.reverse_port(device_port, host_port)?;
         }
 
-        // the fake node guard already rejected a missing or ambiguous device
-        for device in AndroidDevice::list_targeted()? {
-            self.forwarded.push(device.clone());
-            for port in PORTS {
-                device.reverse_port(port)?;
-            }
-
-            print_info(&format!("Forwarded hardware signer ports to {}", device.description()));
-        }
-
+        print_info(&format!("Forwarded hardware signer ports to {}", device.description()));
         Ok(())
     }
 }
 
-impl Drop for HardwareSignerGuard {
-    fn drop(&mut self) {
-        for device in self.forwarded.drain(..) {
-            for port in PORTS {
+impl Stop for HardwareSigner {
+    fn stop(&self) {
+        if let Some(device) = self.forwarded.lock().take() {
+            for port in UiTestPorts::DEVICE.signer() {
                 if let Err(error) = device.remove_reverse_port(port) {
                     print_warning(&format!("{error}"));
                 }
             }
         }
 
-        if let Some(mut emulator) = self.state.emulator.lock().take() {
-            emulator.stop();
+        // bounded, since an exchange with a card that stopped replying holds the lock; after a
+        // signal, the card then stops with the run's other commands
+        match self.state.emulator.try_lock_for(EMULATOR_LOCK_TIMEOUT) {
+            Some(mut emulator) => {
+                if let Some(mut emulator) = emulator.take() {
+                    emulator.stop();
+                }
+            }
+            None => print_warning("The card emulator is stuck in an exchange and was not stopped"),
         }
+    }
+}
+
+impl Drop for HardwareSignerGuard {
+    fn drop(&mut self) {
+        self.signer.stop();
     }
 }
 
 struct SignerState {
     // the error is a string because each /tapsigner/start reports it again
     emulator_paths: Result<EmulatorPaths, String>,
+    emulator_log: PathBuf,
     emulator: Mutex<Option<CardEmulator>>,
     // the next bridge session closes after this many exchanges
     drop_after: Mutex<Option<u32>>,
@@ -394,7 +437,7 @@ fn route(state: &SignerState, method: &str, path: &str, body: &[u8]) -> Result<V
             })?;
 
             *state.drop_after.lock() = None;
-            *emulator = Some(CardEmulator::start(paths, request.needs_setup)?);
+            *emulator = Some(CardEmulator::start(paths, &state.emulator_log, request.needs_setup)?);
             Ok(json!({ "ok": true }))
         }
         ("POST", "/tapsigner/drop") => {
@@ -717,7 +760,7 @@ struct CardEmulator {
 }
 
 impl CardEmulator {
-    fn start(paths: &EmulatorPaths, needs_setup: bool) -> Result<Self> {
+    fn start(paths: &EmulatorPaths, log_path: &Path, needs_setup: bool) -> Result<Self> {
         // Unix socket paths are limited to about 100 bytes, which rules out the
         // per-user temporary directory on macOS
         let socket = PathBuf::from(format!("/tmp/cove-ecard-{}.sock", std::process::id()));
@@ -725,8 +768,7 @@ impl CardEmulator {
             fs::remove_file(&socket)?;
         }
 
-        let log_path = host_dir()?.join("ecard.log");
-        let log = File::create(&log_path)?;
+        let log = File::create(log_path)?;
         // --no-init leaves the card's slot without a key, as a new card ships
         let mut command = Command::new(&paths.python);
         command.arg(&paths.script).args([
@@ -756,14 +798,14 @@ impl CardEmulator {
         let deadline = started + EMULATOR_START_TIMEOUT;
         while !emulator.socket.exists() {
             if let Some(status) = emulator.child.try_wait()? {
-                bail!("ecard.py exited with {status}; {}", log_tail(&log_path));
+                bail!("ecard.py exited with {status}; {}", log_tail(log_path));
             }
 
             if Instant::now() > deadline {
                 emulator.abort_with_stacks();
                 bail!(
                     "ecard.py did not listen within {EMULATOR_START_TIMEOUT:?}; {}",
-                    log_tail(&log_path)
+                    log_tail(log_path)
                 );
             }
 
@@ -827,20 +869,6 @@ fn emulator_paths() -> Result<EmulatorPaths> {
         Some(python) => Ok(EmulatorPaths { python: python.into(), script: emulator_script(&sh)? }),
         None => EmulatorPaths::prepare(&sh),
     }
-}
-
-/// The end of the emulator's log, so a failed start explains itself in the test's own output
-fn log_tail(path: &Path) -> String {
-    const LINES: usize = 25;
-
-    let log = fs::read_to_string(path).unwrap_or_default();
-    let lines: Vec<&str> = log.lines().collect();
-    if lines.is_empty() {
-        return format!("{} is empty", path.display());
-    }
-
-    let tail = lines[lines.len().saturating_sub(LINES)..].join("\n");
-    format!("last lines of {}:\n{tail}", path.display())
 }
 
 /// A directory under the cargo target dir for the emulator's log

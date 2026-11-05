@@ -18,6 +18,8 @@ reqwest = { workspace = true, features = ["blocking", "rustls"] }
 parking_lot = { workspace = true }
 memchr = { workspace = true }
 jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"] }
+# stops UI test services when xtask is interrupted or terminated
+signal-hook = "0.4.6"
 
 # for util sign-psbt
 bdk_wallet = { version = "3.0.0", features = ["keys-bip39"] }

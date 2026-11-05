@@ -4,12 +4,18 @@ use crate::common::{
     trim_generated_trailing_whitespace,
 };
 use crate::version::BuildNumberFile;
-use crate::{fake_node::AndroidPorts, ui_test_host::UiTestHost};
+use crate::{
+    fake_node::AndroidPorts,
+    shutdown::{self, Registration, Stop},
+    ui_test_host::UiTestHost,
+    ui_test_ports::{RunLock, UiTestPorts, PORT_BASE_ENV},
+};
 use color_eyre::{
-    eyre::{eyre, Context},
+    eyre::{eyre, Context, ContextCompat},
     Result,
 };
 use colored::Colorize;
+use parking_lot::Mutex;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -17,6 +23,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 #[cfg(unix)]
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
@@ -683,11 +690,20 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
 
     let udid = SimctlDevices::load(&sh)?.resolve(&options.device)?;
 
-    // tests that need a funded wallet reset and fund the fake node, and hardware
-    // signing tests sign through the signer services; the simulator shares this
-    // machine's loopback, so no forwarding is needed. Its fixed ports also make a second run
-    // fail here, before its build replaces the test bundles the first run is still using
-    let _host = UiTestHost::start(AndroidPorts::Skip)?;
+    // runs from other worktrees build into their own DerivedData and use their own simulators
+    // and ports, but a second run from this worktree would replace the test bundles this one is
+    // still using, so it stops here
+    let derived_data = derived_data_path(IOS_UI_DERIVED_DATA_SUFFIX)?;
+    let _build_lock = RunLock::acquire(
+        Path::new(&format!("{derived_data}.lock")),
+        &format!("this worktree's iOS UI test build in {derived_data}"),
+    )?;
+
+    // tests that need a funded wallet reset and fund the fake node, and hardware signing tests
+    // sign through the signer services; the simulator shares this machine's loopback, so the
+    // tests reach them on the run's ports with no forwarding
+    let host = UiTestHost::start(AndroidPorts::Skip)?;
+    print_info(&format!("UI test host ports start at {}", host.ports().base()));
 
     // `xcodebuild test` rebuilds before every test even when nothing changed, about a minute a
     // test on a hosted runner, so each scheme is built once and every test runs the built bundles
@@ -698,9 +714,15 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
     // run every test before failing so one broken test doesn't hide the state of the rest
     let mut failures = Vec::new();
     for test in tests {
-        if let Err(error) =
-            run_ios_ui_test(&sh, &build, &mut simulators, &test, results_dir.as_deref(), verbose)
-        {
+        if let Err(error) = run_ios_ui_test(
+            &sh,
+            &build,
+            &mut simulators,
+            host.ports(),
+            &test,
+            results_dir.as_deref(),
+            verbose,
+        ) {
             print_error(&format!("{error:?}"));
             failures.push(test);
         }
@@ -1261,7 +1283,17 @@ const IOS_UI_SIMULATOR_NAME: &str = "Cove UI Test";
 /// minutes a test on a hosted runner. The requested simulator itself is left as it is
 struct IosUiSimulators<'a> {
     sh: &'a Shell,
-    golden: String,
+    created: Arc<CreatedSimulators>,
+    _registration: Registration,
+}
+
+/// The UI test simulators a run has created and not yet deleted, which a signal deletes too
+#[derive(Default)]
+struct CreatedSimulators(Mutex<SimulatorIds>);
+
+#[derive(Default)]
+struct SimulatorIds {
+    golden: Option<String>,
     clone: Option<String>,
 }
 
@@ -1272,16 +1304,23 @@ impl<'a> IosUiSimulators<'a> {
 
         let (runtime, device) = devices.find(device)?;
         let device_type = &device.device_type;
+
+        // registered before anything is created, so a signal deletes whatever exists by then
+        let created = Arc::new(CreatedSimulators::default());
+        let simulators = Self { sh, _registration: shutdown::register(created.clone()), created };
+
         let name = format!("{IOS_UI_SIMULATOR_NAME} golden (pid {})", std::process::id());
         let golden = cmd!(sh, "xcrun simctl create {name} {device_type} {runtime}")
             .quiet()
             .read()
             .wrap_err("Failed to create the golden UI test simulator")?;
 
+        let golden = golden.trim().to_string();
+        simulators.created.0.lock().golden = Some(golden.clone());
+
         // owned before booting, so a failed boot still deletes it
-        let simulators = Self { sh, golden: golden.trim().to_string(), clone: None };
-        boot_simulator(sh, &simulators.golden)?;
-        shutdown_simulator(sh, &simulators.golden)?;
+        boot_simulator(sh, &golden)?;
+        shutdown_simulator(sh, &golden)?;
 
         Ok(simulators)
     }
@@ -1290,30 +1329,64 @@ impl<'a> IosUiSimulators<'a> {
     fn fresh(&mut self) -> Result<String> {
         self.delete_clone();
 
-        let golden = &self.golden;
+        let golden = self.created.0.lock().golden.clone().context("The UI test run was stopped")?;
         let name = format!("{IOS_UI_SIMULATOR_NAME} (pid {})", std::process::id());
         let clone = cmd!(self.sh, "xcrun simctl clone {golden} {name}")
             .quiet()
             .read()
             .wrap_err("Failed to clone the golden UI test simulator")?;
 
-        let clone = self.clone.insert(clone.trim().to_string()).clone();
+        let clone = clone.trim().to_string();
+        self.created.0.lock().clone = Some(clone.clone());
         boot_simulator(self.sh, &clone)?;
 
         Ok(clone)
     }
 
     fn delete_clone(&mut self) {
-        if let Some(clone) = self.clone.take() {
+        let clone = self.created.0.lock().clone.take();
+
+        if let Some(clone) = clone {
             delete_simulator(self.sh, &clone);
+        }
+    }
+}
+
+impl Stop for CreatedSimulators {
+    fn stop(&self) {
+        let (clone, golden) = {
+            let mut ids = self.0.lock();
+            (ids.clone.take(), ids.golden.take())
+        };
+
+        if clone.is_none() && golden.is_none() {
+            return;
+        }
+
+        // a shell of its own, since the signal thread can't borrow the run's
+        let sh = match Shell::new() {
+            Ok(sh) => sh,
+            Err(error) => {
+                print_warning(&format!("Failed to delete the UI test simulators: {error}"));
+                return;
+            }
+        };
+
+        // simctl deletes a booted simulator in well under a second, while shutting it down
+        // first can wait out a boot that a signal interrupted, longer than a supervisor's grace
+        // period before SIGKILL
+        let udids: Vec<&String> = clone.iter().chain(&golden).collect();
+        let deleted = cmd!(sh, "xcrun simctl delete {udids...}").quiet().ignore_stdout().run();
+
+        if deleted.is_err() {
+            clone.iter().chain(&golden).for_each(|udid| delete_simulator(&sh, udid));
         }
     }
 }
 
 impl Drop for IosUiSimulators<'_> {
     fn drop(&mut self) {
-        self.delete_clone();
-        delete_simulator(self.sh, &self.golden);
+        self.created.stop();
     }
 }
 
@@ -1407,6 +1480,7 @@ fn run_ios_ui_test(
     sh: &Shell,
     build: &IosUiBuild,
     simulators: &mut IosUiSimulators,
+    ports: UiTestPorts,
     test: &str,
     results_dir: Option<&Path>,
     verbose: bool,
@@ -1417,6 +1491,10 @@ fn run_ios_ui_test(
     let suite = IosUiSuite::for_test(test);
     let xctestrun = build.xctestrun(suite)?;
 
+    // xcodebuild hands TEST_RUNNER_ variables to the test runner without the prefix
+    let port_base_env = format!("TEST_RUNNER_{PORT_BASE_ENV}");
+    let port_base = ports.base().to_string();
+
     if verbose {
         let udid = simulators.fresh()?;
         let destination = format!("platform=iOS Simulator,id={udid}");
@@ -1425,6 +1503,7 @@ fn run_ios_ui_test(
             sh,
             "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO {only_testing}"
         )
+        .env(&port_base_env, &port_base)
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
 
         if let Err(error) = test_cmd.run() {
@@ -1457,6 +1536,7 @@ fn run_ios_ui_test(
             sh,
             "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO {only_testing}"
         )
+        .env(&port_base_env, &port_base)
         .args(artifacts.iter().flat_map(IosUiAttemptArtifacts::xcodebuild_args));
 
         let output = test_cmd

@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use color_eyre::Result;
 
 mod android;
+mod android_ci_emulator;
 mod android_device;
 mod common;
 mod fake_node;
@@ -12,9 +13,11 @@ mod mobile_artifact;
 mod qa;
 mod rebase;
 mod release_seams;
+mod shutdown;
 mod swift_tools;
 mod tapsigner_emulator;
 mod ui_test_host;
+mod ui_test_ports;
 mod util;
 mod version;
 
@@ -123,6 +126,14 @@ enum Commands {
     /// Run the staged Android Restore All process-death scenario
     #[command(name = "android-ui-restore-all-relaunch")]
     AndroidUiRestoreAllRelaunch,
+
+    /// Start a headless emulator like the UI tests workflow's, creating its AVD first if needed, and wait for it to boot
+    #[command(name = "android-ci-emulator")]
+    AndroidCiEmulator {
+        /// Console port, an even number from 5554 to 5682; each running emulator needs its own, and its adb serial is emulator-<port>
+        #[arg(long, default_value_t = 5554, value_parser = android_ci_emulator::parse_console_port)]
+        port: u16,
+    },
 
     /// Build iOS library and generate Swift bindings
     #[command(name = "build-ios")]
@@ -385,8 +396,17 @@ enum UtilCommands {
 fn main() -> Result<()> {
     color_eyre::install()?;
 
-    let cli = Cli::parse();
+    // before any command starts services a signal would otherwise leave running
+    shutdown::install()?;
 
+    let result = run(Cli::parse());
+
+    // a signal's cleanup may still be running on its own thread, which returning would end
+    shutdown::finish();
+    result
+}
+
+fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Commands::BumpVersion { bump_type, targets } => version::bump_version(bump_type, targets),
 
@@ -430,6 +450,8 @@ fn main() -> Result<()> {
         Commands::AndroidUiDurableRelaunch => android::run_durable_relaunch_ui_test(),
 
         Commands::AndroidUiRestoreAllRelaunch => android::run_restore_all_relaunch_ui_test(),
+
+        Commands::AndroidCiEmulator { port } => android_ci_emulator::start(port),
 
         Commands::BuildIos { build_type, device, sign } => {
             let ios_build_type = ios::IosBuildType::from_str(&build_type);

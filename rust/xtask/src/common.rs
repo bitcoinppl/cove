@@ -154,3 +154,17 @@ pub fn trim_generated_trailing_whitespace(dir: impl AsRef<Path>, extension: &str
 
     visit_dir(dir.as_ref(), extension)
 }
+
+/// The end of a log file, so a process that failed to start explains itself in the caller's error
+pub fn log_tail(path: &Path) -> String {
+    const LINES: usize = 25;
+
+    let log = fs::read_to_string(path).unwrap_or_default();
+    let lines: Vec<&str> = log.lines().collect();
+    if lines.is_empty() {
+        return format!("{} is empty", path.display());
+    }
+
+    let tail = lines[lines.len().saturating_sub(LINES)..].join("\n");
+    format!("last lines of {}:\n{tail}", path.display())
+}

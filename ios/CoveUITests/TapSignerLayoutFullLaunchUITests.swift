@@ -9,7 +9,7 @@ import XCTest
 /// label. Needs the hardware
 /// signer host, which `xtask ios-ui` (`just ios-ui-background`) starts for every run
 final class TapSignerLayoutFullLaunchUITests: XCTestCase {
-    private static let esploraUrl = "http://127.0.0.1:39001"
+    private static let esploraUrl = UITestHostPorts.esploraUrl
     private static let largestContentSize = "UICTContentSizeCategoryAccessibilityXXXL"
     private static let newCvc = "246810"
 

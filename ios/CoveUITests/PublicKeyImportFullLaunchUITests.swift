@@ -9,7 +9,7 @@ import XCTest
 /// the account has no history and Receive opens at index 0. Needs the fake node and the hardware
 /// signer host, which `xtask ios-ui` (`just ios-ui-background`) starts for every run
 final class PublicKeyImportFullLaunchUITests: XCTestCase {
-    private static let esploraUrl = "http://127.0.0.1:39001"
+    private static let esploraUrl = UITestHostPorts.esploraUrl
 
     private var app: XCUIApplication!
     private var node: FakeNodeControl!

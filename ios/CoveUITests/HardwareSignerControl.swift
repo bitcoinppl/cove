@@ -52,12 +52,14 @@ struct HardwareSignerControl {
     }
 
     /// The bridge the app's debug TAPSIGNER seam connects to
-    static let tapSignerBridge = "127.0.0.1:39011"
+    static var tapSignerBridge: String {
+        UITestHostPorts.tapSignerBridge
+    }
 
     /// The emulated card's CVC
     static let tapSignerCvc = "123456"
 
-    private let baseUrl = URL(string: "http://127.0.0.1:39010")!
+    private let baseUrl = UITestHostPorts.signerControl
 
     func requireHealthy() throws {
         do {

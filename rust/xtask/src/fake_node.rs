@@ -1,41 +1,41 @@
 //! Runs the `cove-fake-node` binary around UI tests that need a funded wallet
 //!
-//! The node listens on fixed ports so the iOS and Android tests can hardcode
-//! them: the iOS simulator shares this machine's loopback, and Android devices
-//! reach it through `adb reverse`
+//! The node listens on the run's reserved block of [`UiTestPorts`]. The iOS simulator shares this
+//! machine's loopback, and Android devices reach it through `adb reverse` on the fixed device
+//! ports
 
 use std::{
     io::{BufRead, BufReader},
+    os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
+    sync::Arc,
     thread,
     time::{Duration, Instant},
 };
 
 use clap::Subcommand;
 use color_eyre::{
-    eyre::{bail, eyre, Context},
+    eyre::{bail, eyre, Context, ContextCompat},
     Result,
 };
+use parking_lot::Mutex;
 use serde::Deserialize;
 
 use crate::{
     android_device::AndroidDevice,
     common::{command_exists, print_info, print_success, print_warning},
+    shutdown::{self, Registration, Stop},
+    ui_test_ports::{PortReservation, RunLock, UiTestPorts, PORT_BASE_ENV},
 };
-
-pub const CONTROL_PORT: u16 = 39000;
-pub const ESPLORA_PORT: u16 = 39001;
-pub const ELECTRUM_PORT: u16 = 39002;
-const PORTS: [u16; 3] = [CONTROL_PORT, ESPLORA_PORT, ELECTRUM_PORT];
 
 const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Subcommand)]
 pub enum FakeNodeCommand {
-    /// Start the fake node on ports 39000 (control), 39001 (Esplora) and 39002 (Electrum), run a command, then stop the node
+    /// Start the fake node on the first free port block from 39100 (control), 39101 (Esplora) and 39102 (Electrum), run a command with COVE_UI_TEST_PORT_BASE set to the block, then stop the node
     Run {
-        /// Forward the ports to Android with adb reverse and fail when no device is connected. Without it, ports are forwarded only to devices adb already lists
+        /// Forward the ports with adb reverse to an emulator, the one ANDROID_SERIAL names or else the only connected one, and fail when there is none. Without it, ports go to such an emulator only if one is connected. Physical devices are never used
         #[arg(long)]
         android: bool,
 
@@ -49,22 +49,65 @@ pub fn run(command: FakeNodeCommand) -> Result<()> {
     match command {
         FakeNodeCommand::Run { android, command } => {
             let android = if android { AndroidPorts::Required } else { AndroidPorts::IfConnected };
-            let _node = FakeNodeGuard::start(android)?;
 
-            run_command(&command)
+            // dropped in reverse: the node stops before the port block and device are released
+            let target = android.target()?;
+            let reservation = PortReservation::take()?;
+            let device = target.as_ref().map(AndroidTarget::device);
+            let _node = FakeNodeGuard::start(reservation.ports(), device)?;
+
+            run_command(&command, reservation.ports(), device)
         }
     }
 }
 
-/// Whether the node's ports are forwarded to Android devices
+/// Which Android device, if any, a run forwards its ports to
+///
+/// Only emulators are ever picked, so a run never resets the app on, or forwards ports to, a
+/// physical phone that happens to be plugged in
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AndroidPorts {
     /// Leave Android devices alone, as the iOS tests do
     Skip,
-    /// Forward to the one targeted device, if any
+    /// Forward to the emulator `ANDROID_SERIAL` names, else the only connected emulator, if any
     IfConnected,
-    /// Forward to the one targeted device and fail when there is none
+    /// Like [`Self::IfConnected`], but fail when there is no such emulator
     Required,
+}
+
+impl AndroidPorts {
+    /// Picks the emulator this run forwards its ports to, if any, and locks it for the run
+    pub fn target(self) -> Result<Option<AndroidTarget>> {
+        let device = match self {
+            Self::Skip => None,
+            Self::IfConnected if !command_exists("adb") => None,
+            Self::IfConnected => AndroidDevice::find_ui_test_emulator()?,
+            Self::Required if !command_exists("adb") => {
+                bail!("adb not found, so the UI test ports cannot reach Android");
+            }
+            Self::Required => Some(AndroidDevice::require_ui_test_emulator()?),
+        };
+
+        device.map(AndroidTarget::lock).transpose()
+    }
+}
+
+/// The Android device a run forwards its ports to, locked until this is dropped so a second run
+/// can't replace its forwards and app
+pub struct AndroidTarget {
+    device: AndroidDevice,
+    _lock: RunLock,
+}
+
+impl AndroidTarget {
+    fn lock(device: AndroidDevice) -> Result<Self> {
+        let lock = RunLock::android_device(device.serial())?;
+        Ok(Self { device, _lock: lock })
+    }
+
+    pub const fn device(&self) -> &AndroidDevice {
+        &self.device
+    }
 }
 
 #[derive(Deserialize)]
@@ -74,39 +117,53 @@ struct Ready {
     electrum: String,
 }
 
-/// A running fake node; dropping it removes the port forwards and stops the node
+/// A running fake node; dropping it, or a signal, removes the port forwards and stops the node
 pub struct FakeNodeGuard {
-    child: Child,
-    forwarded: Vec<AndroidDevice>,
+    node: Arc<FakeNode>,
+    _registration: Registration,
+}
+
+struct FakeNode {
+    child: Mutex<Option<Child>>,
+    forwarded: Mutex<Option<AndroidDevice>>,
 }
 
 impl FakeNodeGuard {
-    pub fn start(android: AndroidPorts) -> Result<Self> {
+    pub fn start(ports: UiTestPorts, android: Option<&AndroidDevice>) -> Result<Self> {
         let binary = build_binary()?;
         let mut child = Command::new(&binary)
             .args(["--network", "signet", "--bind", "127.0.0.1"])
-            .args(["--control-port", &CONTROL_PORT.to_string()])
-            .args(["--esplora-port", &ESPLORA_PORT.to_string()])
-            .args(["--electrum-port", &ELECTRUM_PORT.to_string()])
+            .args(["--control-port", &ports.control().to_string()])
+            .args(["--esplora-port", &ports.esplora().to_string()])
+            .args(["--electrum-port", &ports.electrum().to_string()])
             .stdout(Stdio::piped())
             .spawn()
             .wrap_err_with(|| format!("Failed to start {}", binary.display()))?;
 
+        let stdout = child.stdout.take().expect("stdout is piped");
+
+        // owned and registered at once, so a failure or a signal from here on stops the node
+        let node =
+            Arc::new(FakeNode { child: Mutex::new(Some(child)), forwarded: Mutex::new(None) });
+        let guard = Self { _registration: shutdown::register(node.clone()), node };
+
         // the binary prints its ready line only once every port listens, and exits
         // without one when a port is taken
-        let stdout = child.stdout.take().expect("stdout is piped");
         let mut line = String::new();
         BufReader::new(stdout).read_line(&mut line).wrap_err("Failed to read the fake node")?;
 
         if line.trim().is_empty() {
+            let mut child = guard.node.child.lock().take().context("The fake node was stopped")?;
             let status = child.wait().wrap_err("Failed to wait for the fake node")?;
+
+            // the block is reserved, so something outside the UI test runs took a port
             bail!(
-                "The fake node exited with {status} before listening; is another one already using ports {CONTROL_PORT}-{ELECTRUM_PORT}?"
+                "The fake node exited with {status} before listening; is another program using ports {}-{}?",
+                ports.control(),
+                ports.electrum()
             );
         }
 
-        // from here a failure drops the guard, which stops the node
-        let mut guard = Self { child, forwarded: Vec::new() };
         let ready = serde_json::from_str::<Ready>(&line)
             .wrap_err_with(|| format!("Unexpected fake node ready line: {line}"))?;
         check_health(&ready.control)?;
@@ -115,73 +172,54 @@ impl FakeNodeGuard {
             ready.control, ready.esplora, ready.electrum
         ));
 
-        guard.forward_to_android(android)?;
+        if let Some(device) = android {
+            guard.node.forward(device, ports)?;
+        }
 
         Ok(guard)
     }
+}
 
-    fn forward_to_android(&mut self, android: AndroidPorts) -> Result<()> {
-        if android == AndroidPorts::Skip {
-            return Ok(());
+impl FakeNode {
+    fn forward(&self, device: &AndroidDevice, ports: UiTestPorts) -> Result<()> {
+        // recorded first so a partial forward is still removed
+        *self.forwarded.lock() = Some(device.clone());
+
+        for (device_port, host_port) in UiTestPorts::DEVICE.node().into_iter().zip(ports.node()) {
+            device.reverse_port(device_port, host_port)?;
         }
 
-        if !command_exists("adb") {
-            if android == AndroidPorts::Required {
-                bail!("adb not found, so the fake node ports cannot reach Android");
-            }
-
-            return Ok(());
-        }
-
-        let devices = AndroidDevice::list_targeted()?;
-        if devices.is_empty() && android == AndroidPorts::Required {
-            bail!("No Android device is connected to forward the fake node ports to");
-        }
-
-        // every test resets and funds the node, so tests running on two devices at once would
-        // overwrite each other's chain
-        if devices.len() > 1 {
-            bail!(
-                "{} Android devices are connected and would share one fake node; set ANDROID_SERIAL to pick one",
-                devices.len()
-            );
-        }
-
-        for device in devices {
-            // record first so a partial forward is still removed on drop
-            self.forwarded.push(device.clone());
-            for port in PORTS {
-                device.reverse_port(port)?;
-            }
-
-            print_info(&format!("Forwarded fake node ports to {}", device.description()));
-        }
-
+        print_info(&format!("Forwarded fake node ports to {}", device.description()));
         Ok(())
     }
 
-    fn stop(&mut self) -> Result<()> {
-        for device in self.forwarded.drain(..) {
-            for port in PORTS {
+    fn try_stop(&self) -> Result<()> {
+        if let Some(device) = self.forwarded.lock().take() {
+            for port in UiTestPorts::DEVICE.node() {
                 if let Err(error) = device.remove_reverse_port(port) {
                     print_warning(&format!("{error}"));
                 }
             }
         }
 
-        if self.child.try_wait()?.is_some() {
+        // taken out, so whichever of the run and the signal thread stops it first does so once
+        let Some(mut child) = self.child.lock().take() else {
+            return Ok(());
+        };
+
+        if child.try_wait()?.is_some() {
             bail!("The fake node exited while the command ran");
         }
 
         // SIGTERM lets the node close its sockets before exiting
         Command::new("kill")
-            .args(["-TERM", &self.child.id().to_string()])
+            .args(["-TERM", &child.id().to_string()])
             .status()
             .wrap_err("Failed to signal the fake node")?;
 
         let deadline = Instant::now() + STOP_TIMEOUT;
         while Instant::now() < deadline {
-            if let Some(status) = self.child.try_wait()? {
+            if let Some(status) = child.try_wait()? {
                 if !status.success() {
                     bail!("The fake node exited with {status}");
                 }
@@ -192,17 +230,23 @@ impl FakeNodeGuard {
             thread::sleep(Duration::from_millis(50));
         }
 
-        self.child.kill()?;
-        self.child.wait()?;
+        child.kill()?;
+        child.wait()?;
         Err(eyre!("The fake node did not stop within {STOP_TIMEOUT:?} of SIGTERM and was killed"))
+    }
+}
+
+impl Stop for FakeNode {
+    fn stop(&self) {
+        if let Err(error) = self.try_stop() {
+            print_warning(&format!("{error}"));
+        }
     }
 }
 
 impl Drop for FakeNodeGuard {
     fn drop(&mut self) {
-        if let Err(error) = self.stop() {
-            print_warning(&format!("{error}"));
-        }
+        self.node.stop();
     }
 }
 
@@ -246,16 +290,39 @@ fn check_health(control: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn run_command(command: &[String]) -> Result<()> {
+/// Runs `command` with the run's base port in [`PORT_BASE_ENV`], and again with a `TEST_RUNNER_`
+/// prefix so an `xcodebuild test` it starts hands the port to the iOS tests
+///
+/// With an Android device, `ANDROID_SERIAL` names it, so Gradle and adb in the command use the
+/// device the ports were forwarded to and no other
+pub fn run_command(
+    command: &[String],
+    ports: UiTestPorts,
+    android: Option<&AndroidDevice>,
+) -> Result<()> {
     let [program, args @ ..] = command else {
         bail!("Command is required after --");
     };
 
     print_info(&format!("Running with the fake node up: {}", command.join(" ")));
-    let status = Command::new(program)
-        .args(args)
-        .status()
-        .wrap_err_with(|| format!("Failed to run {program}"))?;
+    let base = ports.base().to_string();
+    let mut runner = Command::new(program);
+    runner.args(args).env(PORT_BASE_ENV, &base).env(format!("TEST_RUNNER_{PORT_BASE_ENV}"), &base);
+
+    if let Some(device) = android {
+        runner.env("ANDROID_SERIAL", device.serial());
+    }
+
+    // its own process group, so a signal to xtask alone stops the command and everything it
+    // started rather than leaving them running against stopped services. Ctrl-C reaches xtask's
+    // group only, and the signal thread passes it on
+    let mut child =
+        runner.process_group(0).spawn().wrap_err_with(|| format!("Failed to run {program}"))?;
+
+    let status = {
+        let _registration = shutdown::register_process_group(&child);
+        child.wait().wrap_err_with(|| format!("Failed to wait for {program}"))?
+    };
 
     if !status.success() {
         bail!("{program} failed with {status}");
