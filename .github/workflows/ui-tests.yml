@@ -48,6 +48,8 @@ env:
     CoveUITests/KeyTeleportReceiveFullLaunchUITests/testXprvReviewRevealHideCopyAndImport,
     CoveUITests/KeyTeleportReceiveFullLaunchUITests/testMultiPartBbqrResponseReachesTheReview,
     CoveUITests/KeyTeleportSendFullLaunchUITests,
+    CoveCloudBackupUITests/CloudBackupRestoreAllFullAppUITests,
+    CoveCloudBackupUITests/CloudBackupOnboardingLateOfferFullAppUITests,
     CoveCloudBackupUITests/PrivateKeyExportFullAppUITests,
     CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests
   ANDROID_FLAVOURS: Dev UiTest
