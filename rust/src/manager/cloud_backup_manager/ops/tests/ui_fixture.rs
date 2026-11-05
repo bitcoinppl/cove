@@ -260,4 +260,28 @@ fn ui_test_duplicate_wallet_fixture_is_fixture_wallet_one() {
         serde_json::to_value(&entry).unwrap(),
         serde_json::to_value(ui_test_duplicate_wallet_entry(&fixture)).unwrap()
     );
+
+    // android serves its own copy of the same record
+    let android_fixture = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../android/app/src/uiTest/java/org/bitcoinppl/cove/testconfig/ScriptedCloudBackupFixture.kt"
+    ))
+    .unwrap();
+    assert!(
+        android_fixture.contains(&format!("\"{}\"", record["record_id"].as_str().unwrap())),
+        "the android fixture names a different duplicate wallet record"
+    );
+
+    let android_base64: String = android_fixture
+        .split("private val duplicateWalletWrapper =")
+        .nth(1)
+        .and_then(|rest| rest.split("\"\"\"").nth(1))
+        .unwrap()
+        .split_whitespace()
+        .collect();
+    assert_eq!(
+        android_base64,
+        record["base64"].as_str().unwrap(),
+        "android duplicate wrapper is stale"
+    );
 }

@@ -340,7 +340,6 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "human:android",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_mixed_failure_continues_through_later_success_and_settles",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restoring_one_of_three_copies_leaves_the_others_already_on_device",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_local_wallet",
@@ -350,9 +349,10 @@ coverage = [
   "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testRestoreAllProgressCopyIncludesCurrentWalletCountsAndCancellation",
   "ios-ui:ios/CoveUITests/CloudBackupRestoreAllFullAppUITests.swift::testRunningBatchReportsSequentialProgress",
   "ios-ui:ios/CoveUITests/CloudBackupRestoreAllFullAppUITests.swift::testRestoreAllSkipsACloudCopyOfAWalletAlreadyOnDevice",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupRestoreAllFullLaunchTest.kt::runningBatchRestoresEachWalletInTurnAndSkipsTheCopyAlreadyOnDevice",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust tests project progress from supplied events and check batch results; on ios a running batch reports each wallet in turn and skips a cloud copy of a wallet already on the device. android stays human
+# rust tests project progress from supplied events and check batch results; on ios a running batch reports each wallet in turn and skips a cloud copy of a wallet already on the device. on android Restore All (3) leaves out a cloud copy of the wallet already on the phone, the progress card shows each wallet in turn with its completed/total count while the batch reads one wallet at a time in the listed order, and every wallet ends up on the phone once with the copy still already on this device
 
 [[row]]
 id = "s12-restore-all-navigation-and-cancel"
@@ -374,7 +374,6 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "human:android",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::reentering_detail_keeps_the_running_restore_all_batch",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::supplemental_inventory_does_not_cancel_restore_all",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_cancellation_finishes_the_active_wallet_and_skips_the_next",
@@ -382,9 +381,10 @@ coverage = [
   "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllHelpersTest.kt::cancellationRequestKeepsProgressAndRemovesRepeatedCancelIntent",
   "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testRestoreAllProgressCopyIncludesCurrentWalletCountsAndCancellation",
   "ios-ui:ios/CoveUITests/CloudBackupRestoreAllFullAppUITests.swift::testLeavingAndReenteringKeepsTheBatchAndCancelSkipsTheNextWallet",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupRestoreAllFullLaunchTest.kt::leavingAndReenteringKeepsTheBatchAndCancelSkipsTheRemainingWallets",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust owns the batch and keeps it across re-entry; on ios leaving and re-entering Cloud Backup and Settings keeps the batch, and Cancel finishes the current wallet and skips the next. android stays human
+# rust owns the batch and keeps it across re-entry; on ios leaving and re-entering Cloud Backup and Settings keeps the batch, and Cancel finishes the current wallet and skips the next. on android Back out of Cloud Backup and Settings leaves the batch running on to the next wallet, coming back shows its progress for the same batch, and Cancel lets the current wallet finish and leaves the last wallet cloud-only behind Retry Remaining (1)
 
 [[row]]
 id = "s12-restore-all-wallet-and-provider-failure"

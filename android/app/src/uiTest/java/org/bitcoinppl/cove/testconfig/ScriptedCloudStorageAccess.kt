@@ -76,6 +76,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     @Volatile
     private var walletDownloadBlock: WalletDownloadBlock? = null
 
+    // holds keyed by record id, apart from walletDownloadBlock because several can be pending at
+    // once, so a test can hold every wallet of a batch and see which one the batch reads first
+    private val walletDownloadHolds = ConcurrentHashMap<String, WalletDownloadBlock>()
+
     @Volatile
     private var fixtureWalletRecordIds = listOf(ScriptedCloudBackupFixture.WALLET_RECORD_ID)
 
@@ -178,6 +182,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         walletListBlock = null
         walletSnapshotListBlock = null
         walletDownloadBlock = null
+        releaseAllWalletDownloadHolds()
+        walletDownloadHolds.clear()
         fixtureWalletRecordIds = listOf(ScriptedCloudBackupFixture.WALLET_RECORD_ID)
         resetUploads()
     }
@@ -191,6 +197,16 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     fun exposeAllProductionFixtureWallets() {
         check(fixtureRestoreEnabled) { "production fixture restore is not configured" }
         fixtureWalletRecordIds = ScriptedCloudBackupFixture.WALLET_RECORD_IDS
+    }
+
+    /** Lists exactly [recordIds] from now on, which may name any record the fixture holds */
+    fun exposeProductionFixtureWallets(recordIds: List<String>) {
+        check(fixtureRestoreEnabled) { "production fixture restore is not configured" }
+        require(recordIds.all { ScriptedCloudBackupFixture.walletWrapper(it) != null }) {
+            "unknown fixture wallet record id in $recordIds"
+        }
+
+        fixtureWalletRecordIds = recordIds.distinct()
     }
 
     fun configureFixtureWalletDownloads(
@@ -301,6 +317,48 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     fun releaseBlockedWalletDownload() {
         walletDownloadBlock?.release?.complete(Unit)
+    }
+
+    /**
+     * Holds the download of [recordId] that comes after [matchingRequestsToSkip] more downloads of
+     * it, until [releaseWalletDownloadHold]
+     *
+     * Unlike [blockNextWalletDownload], holds on different records can be pending together. Only
+     * downloads of the fixture's own backups count, not ones Cove uploaded during the test, and
+     * with [policy] only downloads made under that policy, so a user-started read such as a
+     * restore can be told from a background inventory refresh reading the same record
+     */
+    fun holdWalletDownload(
+        recordId: String,
+        matchingRequestsToSkip: Int = 0,
+        policy: CloudAccessPolicy? = null,
+    ) {
+        require(matchingRequestsToSkip >= 0) { "matching requests to skip must not be negative" }
+        check(walletDownloadHolds[recordId]?.claimed?.get() != false) {
+            "a download hold for $recordId is already pending"
+        }
+
+        walletDownloadHolds[recordId] = WalletDownloadBlock(recordId, matchingRequestsToSkip, policy)
+    }
+
+    fun awaitWalletDownloadHold(
+        recordId: String,
+        timeoutMs: Long = 10_000,
+    ): Boolean = walletDownloadHolds[recordId]?.entered?.await(timeoutMs, TimeUnit.MILLISECONDS) == true
+
+    /** Records whose download is parked in a hold right now, so a test can see what runs at once */
+    fun heldWalletDownloadRecordIds(): Set<String> =
+        walletDownloadHolds
+            .filterValues { hold -> hold.entered.count == 0L && !hold.release.isCompleted }
+            .keys
+
+    fun releaseWalletDownloadHold(recordId: String) {
+        walletDownloadHolds[recordId]?.release?.complete(Unit)
+    }
+
+    /** Releases every hold, entered or not, so a failed test leaves no download parked */
+    fun releaseAllWalletDownloadHolds() {
+        walletDownloadHolds.values.forEach { hold -> hold.release.complete(Unit) }
     }
 
     fun awaitWalletListCount(
@@ -714,6 +772,13 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
                     }
                 }
 
+                walletDownloadHolds[recordId]?.let { hold ->
+                    if (hold.shouldClaim(recordId, policy)) {
+                        hold.entered.countDown()
+                        hold.release.await()
+                    }
+                }
+
                 return when (
                     fixtureWalletDownloadResults[recordId]?.poll()
                         ?: fixtureWalletDownloadDefaults[recordId]
@@ -905,14 +970,20 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     private class WalletDownloadBlock(
         val recordId: String,
         matchingRequestsToSkip: Int,
+        // null matches a download under any policy
+        private val policy: CloudAccessPolicy? = null,
     ) {
         val claimed = AtomicBoolean(false)
         val entered = CountDownLatch(1)
         val release = CompletableDeferred<Unit>()
         private val remainingRequestsToSkip = AtomicInteger(matchingRequestsToSkip)
 
-        fun shouldClaim(requestedRecordId: String): Boolean {
+        fun shouldClaim(
+            requestedRecordId: String,
+            requestedPolicy: CloudAccessPolicy? = null,
+        ): Boolean {
             if (recordId != requestedRecordId || claimed.get()) return false
+            if (policy != null && policy != requestedPolicy) return false
             if (remainingRequestsToSkip.getAndUpdate { value -> value.coerceAtLeast(1) - 1 } > 0) {
                 return false
             }

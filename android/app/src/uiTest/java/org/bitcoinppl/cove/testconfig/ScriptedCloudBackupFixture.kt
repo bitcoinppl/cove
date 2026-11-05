@@ -22,6 +22,13 @@ internal object ScriptedCloudBackupFixture {
         "042d85e772a6b6381c81acc04737bf48ae9e9151edea2114f567948f77dad5c4"
     const val XPRV_WALLET_NAME = "Fixture Private Key Wallet"
 
+    /**
+     * A second backup of Fixture Wallet One under another wallet id, as another install of the
+     * same wallet would upload it, printed by the Rust test `print_ui_test_duplicate_wallet_fixture`
+     */
+    const val DUPLICATE_WALLET_RECORD_ID =
+        "5be7eb6500dc9cd23536f3b86b3506cf5252fb0f23f1a5284eafc612764fb4d7"
+
     val masterWrapper: ByteArray =
         Base64.getDecoder().decode(
             "eyJ2ZXJzaW9uIjoxLCJraW5kIjoibWFzdGVyX2tleSIsInNjaGVtYV92ZXJzaW9uIjoxLCJuYW1lc3BhY2VfaWQiOiIwOWRlMjhjMzk4ZTBjNjg3YWY2MWUwYWVmMGRjODlkNCIsInJlY29yZF9pZCI6ImNzcHAtbWFzdGVyLWtleS12MSIsInVwZGF0ZWRfYXQiOjEsInBhc3NrZXlfcHJvdmlkZXJfaGludCI6bnVsbCwicHJmX3NhbHQiOiIwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3Iiwibm9uY2UiOiJjYTA0NGFjOTUxZGUwYTQxYTk3NzI5MjIiLCJjaXBoZXJ0ZXh0IjoiQ3lQUFBmK3RDNkIzM2lIcTN1empCYll0NmsvMEllRG5SVkwyYy9qNDdhdWdTN2lyM1d6WVRiM3EzSkZOcFRIUyJ9",
@@ -116,12 +123,47 @@ internal object ScriptedCloudBackupFixture {
             """.trimIndent().replace("\n", ""),
         )
 
+    private val duplicateWalletWrapper =
+        Base64.getDecoder().decode(
+            """
+            eyJ2ZXJzaW9uIjoxLCJraW5kIjoid2FsbGV0Iiwic2NoZW1hX3ZlcnNpb24iOjEsIm5hbWVzcGFj
+            ZV9pZCI6IjA5ZGUyOGMzOThlMGM2ODdhZjYxZTBhZWYwZGM4OWQ0IiwicmVjb3JkX2lkIjoiNWJl
+            N2ViNjUwMGRjOWNkMjM1MzZmM2I4NmIzNTA2Y2Y1MjUyZmIwZjIzZjFhNTI4NGVhZmM2MTI3NjRm
+            YjRkNyIsIndhbGxldF9pZCI6InVpLWZpeHR1cmUtd2FsbGV0LTEtY29weSIsInVwZGF0ZWRfYXQi
+            OjUsIndhbGxldF9zYWx0IjoiNTYyOTRhODQ5YTFhOTA1ZmE4NjdmODgyMjM0MTBiODlkMDY2Njdi
+            ODBjYzAwNzNhYzExNjA5NjdmZWRjZDhmYiIsIm5vbmNlIjoiZTNkYmI1YjZhNTIwM2I2NzRkYjQ3
+            NTUwIiwiY2lwaGVydGV4dCI6IllUQW8yampzQ0krMWhYclljV0I3QmUzZ0RqVCttL0ZMdU90SGFo
+            U3lkcTBwWEFndGV3SFBnZ1NvUmx0My93bEMrV09ERTVPS04wZytaa2k3RGUxd1VHclIzZ1Z0VGFp
+            czhwWkdJZzM5eE5ISmtJdnNseHUwaGNKRTgyS3VtNnVoaTUwNWNIbXQvVUtNOEdsT2U4b0lkLy9Q
+            L3RGWWtOcjNEQkRLcnZJT1JxYUNidEpCdzh4MjVwa3VXdWhpNC8vVWcrUzk4ekFSaEF0Znl5R1Bw
+            czJiZGc2ay9oSWxzN043aEdQSlQrVnNUaTBuTFUzUkVra2dMNUdjRXRnQ21UOXBBeEVpM252Qzh6
+            Ly94MXdqVzhUVW4vWkJrajE4RWI4aUU1NVNSdXV1MXZLT01Wa2kzUUt2azJ2M1UxT0syWG1PZEl0
+            a3VoRGU1VUJsYlVWQ05xd1BhQytycFpxQWNySDZMdkNpazU4dzBDQmI2ZUR4L3BmS2JoY2s3TFRs
+            OHJGQmdoR3ErOWwyYnBuR0FXQUpEUk9lZ2dBb0M4UzNWYVdVMDFDTWZjOUF5QmVxWnZrcVpTNnhV
+            ZlgzTUxGdUQvN1VkYlQ1VlRZUFZ0NWdyU0Exc2c4ams4eWVCSGQxbW1tc08xWEtuSHpxOFpLQUhX
+            KzlJRWUwUE81VTR1RWVodW9nVVI2bEx5a1BoV3ZENUZvc3B5MDhmT09pTU8yKzZrR2hFL0FVNCsr
+            TE1QN0dmc3drV3VST0NiS1JiSkFlbWdkRkF2K1RTZHhZZmlpZEVscHl6bnJuR3lPZDZYejg1RitS
+            U1VZRjA1UkUrWkx2c3dxTzIwTnBDSXdpWkJEbklEUnFTYm5XKzY3dEdtNXptMzF4UlhBU3BLSDg5
+            K29hTWFQbEx2eVZ1U0VDYmpkdmVqaDhXRlhpaXV0ZDFTcVlvcjhWYUZMbS8xNjVmc25VM3M1MGo3
+            dnM0clpYcHpEem5lcEtkaEpHVDBwWmNKaVFObnIzTzhXZldZeFV2U3k2TGJiNXJqOVRHMHhiV1Uv
+            MzBUVmtBS0x2cUo1dlRCcEJ6T2tFOFRMeEEvdDhDZEIxNHRkNndSdHVUMzhEMWZjaGtjWnFZZXBs
+            NCtWQVF0QTBTTHdjem9RbUVrVDZOcTk1QnZ3NnlSZ2Y0UjNjay9yWVFPZ3hKOWozYk9qb28rWjJ3
+            WkMxTEZLdmcyKzJxZVl4anloNmNUcUFnTUZWaUlEK0xlRVVBTzVIWTlmTzgwT2tMM1BoT29OL01C
+            T2tCQ0UxRHVUQy9Rc3Y5V2E5ZXZ4SW1OWGRsZWhaeUp5QkUwSE4wM2h4NThCVXBXTmFMQnN0cnVK
+            cUNjWXpYSUJCWlBoZzgvcnpuQjM4ZkhsQkJQYTNzVnVKQmVRKzlLOVNWMTVUMGhucVZYU1VHS0lQ
+            Z21qdGRUNmRzdEpuZThlclk4LzlvMGY5M0tuZnZsNHI5WG5IUzVyeTh3SVhTQi9tN2lSMEkvazZW
+            S0t3MS9UQVUvQS9JRUtsTWw5dk83S0sxbGpvVjdudlVheTc5dU5aSTBHM3hVWHR4ZWVUQklheGU5
+            VVpWc21jNlQyWSJ9
+            """.trimIndent().replace("\n", ""),
+        )
+
     fun walletWrapper(recordId: String): ByteArray? =
         when (recordId) {
             WALLET_RECORD_ID -> walletWrapper
             WALLET_TWO_RECORD_ID -> walletTwoWrapper
             WALLET_THREE_RECORD_ID -> walletThreeWrapper
             XPRV_WALLET_RECORD_ID -> xprvWalletWrapper
+            DUPLICATE_WALLET_RECORD_ID -> duplicateWalletWrapper
             else -> null
         }
 }
