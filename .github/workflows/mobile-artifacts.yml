@@ -66,6 +66,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # restores the Gradle User Home master wrote, so a cold download of the Kotlin compiler
+      # from its GitHub release redirect can't fail the build
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
       - name: Install build dependencies
         run: cd rust && cargo --locked xtask install-deps
 

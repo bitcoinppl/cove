@@ -72,6 +72,11 @@ jobs:
         with:
           distribution: "temurin"
           java-version: "17"
+      # a cold Gradle User Home downloads kotlin-compiler-embeddable, which Maven Central
+      # redirects to a GitHub release asset; a 504 there fails the configuration cache store,
+      # so restore the dependency cache master wrote instead of downloading it every run
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
       - name: Run ktlint
         run: cd android && ./gradlew ktlintCheck
       - name: Run detekt
@@ -104,6 +109,10 @@ jobs:
         with:
           distribution: "temurin"
           java-version: "17"
+
+      # restores the Gradle User Home master wrote, see the ktlint job
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Install build dependencies
         run: cd rust && cargo --locked xtask install-deps
