@@ -40,6 +40,8 @@ env:
   # scripted cloud host only to restore a fixture wallet or reach a screen
   IOS_UI_SUITES: >-
     CoveUITests/OnboardingFullLaunchUITests,
+    CoveUITests/ReceiveTextSizeFullLaunchUITests,
+    CoveUITests/WatchOnlyUpgradeFullLaunchUITests,
     CoveUITests/UtxoLockFullLaunchUITests,
     CoveUITests/HardwareSigningFullLaunchUITests,
     CoveUITests/PublicKeyImportFullLaunchUITests,

@@ -57,6 +57,48 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Private Key"].waitForNonExistence(timeout: 5))
     }
 
+    /// Reveal's Copy puts the shown key on the pasteboard, and Continue with KeyTeleport asks for
+    /// the main PIN afresh as Reveal does before it starts a send of this wallet
+    ///
+    /// The host reads the pasteboard, since reading it here shows the paste prompt
+    func testRevealCopiesTheKeyAndKeyTeleportNeedsAFreshMainPin() throws {
+        let signer = HardwareSignerControl()
+        try signer.requireHealthy()
+
+        restorePrivateKeyWallet()
+        robot.openSettings()
+        enableMainAndDecoyPins()
+        openWalletSettings()
+
+        startReveal()
+        robot.enterPin(mainPin)
+        XCTAssertTrue(app.navigationBars["Private Key"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts[fixtureXprv].exists)
+        app.buttons["Copy for 2 Minutes"].tap()
+        XCTAssertTrue(app.buttons["Copied for 2 Minutes"].waitForExistence(timeout: 5))
+        XCTAssertEqual(
+            try signer.simulatorPasteboard().trimmingCharacters(in: .whitespacesAndNewlines),
+            fixtureXprv,
+            "Copy put something other than the revealed key on the pasteboard"
+        )
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.navigationBars["Private Key"].waitForNonExistence(timeout: 5))
+
+        // the PIN Reveal took doesn't carry over, and neither a wrong PIN nor the decoy PIN starts a send
+        startExport("Continue with KeyTeleport")
+        for pin in [wrongPin, decoyPin] {
+            robot.enterPin(pin)
+
+            // gives a send that would follow the PIN time to start before asserting it never did
+            XCTAssertFalse(keyTeleportSend.waitForExistence(timeout: 3), "PIN \(pin) started a KeyTeleport send")
+            XCTAssertTrue(verifyIdentity.exists, "PIN \(pin) dismissed the prompt")
+        }
+
+        robot.enterPin(mainPin)
+        XCTAssertTrue(keyTeleportSend.waitForExistence(timeout: 10), "the main PIN didn't start a KeyTeleport send")
+        assertPrivateKeyHidden()
+    }
+
     func testExportWithoutAppPinIsRefused() {
         restorePrivateKeyWallet()
         robot.openSettings()
@@ -78,6 +120,11 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
 
     private var verifyIdentity: XCUIElement {
         app.navigationBars["Verify Identity"]
+    }
+
+    /// The first KeyTeleport send screen, which waits for the receiving phone's request
+    private var keyTeleportSend: XCUIElement {
+        app.staticTexts["Scan Receiver Request"]
     }
 
     private func restorePrivateKeyWallet() {
@@ -139,11 +186,16 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
     }
 
     private func startReveal() {
+        startExport("Reveal and Copy")
+    }
+
+    /// Picks the export route from the warning and waits for the PIN prompt it opens
+    private func startExport(_ route: String) {
         tapExportPrivateKey()
 
-        let reveal = app.buttons["Reveal and Copy"]
-        XCTAssertTrue(reveal.waitForExistence(timeout: 5))
-        reveal.tap()
+        let choice = app.buttons[route]
+        XCTAssertTrue(choice.waitForExistence(timeout: 5))
+        choice.tap()
 
         XCTAssertTrue(verifyIdentity.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Enter Cove PIN"].waitForExistence(timeout: 5))
