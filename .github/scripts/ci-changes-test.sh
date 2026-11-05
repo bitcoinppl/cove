@@ -43,8 +43,10 @@ expect ".github runs every job" "$all" "$(classify 'docs/testing.md\n.github/wor
 expect "an unknown path runs every job" "$all" "$(classify 'docs/testing.md\nnew-dir/file\n')"
 expect "a last path without a newline counts" "$all" "$(classify 'rust/src/lib.rs')"
 
-repo=$(mktemp -d)
-trap 'rm -rf "$repo"' EXIT
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+repo="$work/repo"
+mkdir "$repo"
 cd "$repo"
 git init -q -b master
 git config user.name test
@@ -54,7 +56,22 @@ echo a >android/app.kt
 echo d >docs/a.md
 git add -A
 git commit -q -m base
-git update-ref refs/remotes/origin/master HEAD
+git tag base
+
+# runs the script as the changes job does and prints the jobs its $GITHUB_OUTPUT selects, which
+# is what the workflow reads; a failed run or an output without every job prints why instead
+run() {
+  local out="$work/output"
+  : >"$out"
+
+  if ! env -u BASE_REF GITHUB_OUTPUT="$out" "$@" "$script" >/dev/null 2>&1; then
+    echo "<script failed>"
+  elif [[ $(grep -c -E '^[a-z_]+=(true|false)$' "$out") -ne $(wc -w <<<"$all") ]]; then
+    echo "<output lacks some jobs>"
+  else
+    selected <"$out"
+  fi
+}
 
 # a branch that moves a file from android/ to ios/, so both the old and new path must count
 git checkout -q -b feature
@@ -62,28 +79,38 @@ git mv android/app.kt ios/app.swift
 git commit -q -m move
 
 # HEAD is a merge commit whose first parent is the base, as actions/checkout leaves a pull_request
-git checkout -q master
+git checkout -q -b pr-merge base
 git merge -q --no-ff -m merge feature
-run() {
-  env -u BASE_REF GITHUB_OUTPUT=/dev/null "$@" "$script" | selected
-}
 expect "pull_request counts a rename's old and new path" \
   "android_instrumented compile_android compile_ios ios_ui ktlint qa_manifest swift_lint test" \
   "$(run GITHUB_EVENT_NAME=pull_request)"
-expect "pull_request without a merge commit runs every job" "$all" \
-  "$(git checkout -q feature && run GITHUB_EVENT_NAME=pull_request)"
 
 git checkout -q feature
+expect "pull_request without a merge commit runs every job" "$all" "$(run GITHUB_EVENT_NAME=pull_request)"
+
+# the parent moved on after the child left it, with the child's Android edit and a docs change of
+# its own, so only a diff from the merge base still sees the child's Android change
+git checkout -q -b child base
+echo b >android/app.kt
+git commit -q -am "child edit"
+git checkout -q -b parent base
+echo b >android/app.kt
+echo e >docs/a.md
+git commit -q -am "parent edit"
+git update-ref refs/remotes/origin/parent parent
+
+git checkout -q child
 expect "dispatch with a base diffs from the merge base" \
-  "android_instrumented compile_android compile_ios ios_ui ktlint qa_manifest swift_lint test" \
-  "$(run GITHUB_EVENT_NAME=workflow_dispatch BASE_REF=master)"
+  "android_instrumented compile_android ktlint qa_manifest" \
+  "$(run GITHUB_EVENT_NAME=workflow_dispatch BASE_REF=parent)"
 expect "dispatch without a base runs every job" "$all" "$(run GITHUB_EVENT_NAME=workflow_dispatch)"
 expect "dispatch with a missing base runs every job" "$all" \
   "$(run GITHUB_EVENT_NAME=workflow_dispatch BASE_REF=no-such-branch)"
 expect "dispatch with an invalid base runs every job" "$all" \
   "$(run GITHUB_EVENT_NAME=workflow_dispatch BASE_REF='bad..ref')"
+git update-ref refs/remotes/origin/child HEAD
 expect "dispatch with an empty diff runs every job" "$all" \
-  "$(git update-ref refs/remotes/origin/feature HEAD && run GITHUB_EVENT_NAME=workflow_dispatch BASE_REF=feature)"
+  "$(run GITHUB_EVENT_NAME=workflow_dispatch BASE_REF=child)"
 expect "push runs every job" "$all" "$(run GITHUB_EVENT_NAME=push)"
 expect "schedule runs every job" "$all" "$(run GITHUB_EVENT_NAME=schedule)"
 
