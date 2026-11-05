@@ -10,8 +10,6 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
     private var uploadedWallets: [String: Data] = [:]
     /// Wallet record ids the app deleted, in call order; fixture wallets in it leave every listing
     private var deletedWalletRecordIds: [String] = []
-    /// Wallet listings that returned a result, so a test can tell a refresh's listing finished
-    private var completedWalletListings = 0
     private var detailSnapshotAttempts = 0
     private var firstDetailCompletionDeadline: Date?
 
@@ -68,7 +66,7 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
         if isDeletedFixtureWallet(recordId) {
             throw CloudStorageError.NotFound("cloud backup was deleted")
         }
-        if scenario == .privateKeyWallet, recordId == fixture.xprvWallet.recordId {
+        if recordId == fixture.xprvWallet.recordId, scenario == .privateKeyWallet || listsRefreshMarker {
             return fixture.xprvWallet.data
         }
         guard let wallet = fixture.walletsByRecordId[recordId] else {
@@ -87,11 +85,11 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
         try validate(namespace: namespace)
 
         // production providers delete the files at these locations, not by record id, so they must
-        // name this record's current or legacy file; a mismatch fails the delete visibly
+        // name exactly this record's current and legacy files; a mismatch fails the delete visibly
         let filename = "wallet-\(recordId).json"
         let expected: Set<String> = ["wallets/\(filename)", filename]
         let paths = locations.map(\.relativePath)
-        guard !paths.isEmpty, paths.allSatisfy(expected.contains) else {
+        guard paths.count == expected.count, Set(paths) == expected else {
             throw CloudStorageError.NotAvailable("delete locations \(paths) don't match record \(recordId)")
         }
 
@@ -122,17 +120,6 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
     }
 
     func listWalletFiles(namespace: String, policy _: CloudAccessPolicy) async throws -> [String] {
-        let filenames = try await currentWalletFilenames(namespace: namespace)
-        let completed = lock.withLock {
-            completedWalletListings += 1
-            return completedWalletListings
-        }
-
-        Self.writeListingCount(completed)
-        return filenames
-    }
-
-    private func currentWalletFilenames(namespace: String) async throws -> [String] {
         try validate(namespace: namespace)
 
         if scenario == .nativePasskeySmoke {
@@ -161,7 +148,8 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
             throw CloudStorageError.NotAvailable("iCloud metadata query timed out")
         }
 
-        return visibleFixtureFilenames(in: fixture.wallets)
+        let refreshMarker = listsRefreshMarker ? [fixture.xprvWallet] : []
+        return visibleFixtureFilenames(in: fixture.wallets + refreshMarker)
     }
 
     func listWalletFilesSnapshot(
@@ -227,6 +215,13 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
         return .allUploaded
     }
 
+    /// Test-only refresh marker: once a wallet is deleted, the full fixture listing also names the
+    /// private-key fixture wallet, so a UI test that sees its row knows a post-delete detail refresh
+    /// was applied
+    private var listsRefreshMarker: Bool {
+        lock.withLock { !deletedWalletRecordIds.isEmpty }
+    }
+
     private func isDeletedFixtureWallet(_ recordId: String) -> Bool {
         lock.withLock { deletedWalletRecordIds.contains(recordId) }
     }
@@ -240,23 +235,14 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
     /// Writes every deleted record id as a JSON array to the file `COVE_CLOUD_BACKUP_UI_DELETE_LOG`
     /// names, so a UI test can check exactly which backups the app deleted
     private static func writeDeleteLog(_ recordIds: [String]) {
-        writeTestLog(recordIds, suffix: "")
-    }
-
-    /// Writes the completed wallet listing count next to the delete log, with a `.listings` suffix
-    private static func writeListingCount(_ count: Int) {
-        writeTestLog(count, suffix: ".listings")
-    }
-
-    private static func writeTestLog(_ value: some Encodable, suffix: String) {
         guard let path = ProcessInfo.processInfo.environment["COVE_CLOUD_BACKUP_UI_DELETE_LOG"] else {
             return
         }
 
         // atomic, since the test polls the file while the app writes it; a failed write leaves the
-        // provider call alone and the test fails on the missing value instead
+        // provider call alone and the test fails on the missing record ids instead
         do {
-            try JSONEncoder().encode(value).write(to: URL(fileURLWithPath: path + suffix), options: .atomic)
+            try JSONEncoder().encode(recordIds).write(to: URL(fileURLWithPath: path), options: .atomic)
         } catch {
             print("failed to write the scripted cloud test log: \(error)")
         }

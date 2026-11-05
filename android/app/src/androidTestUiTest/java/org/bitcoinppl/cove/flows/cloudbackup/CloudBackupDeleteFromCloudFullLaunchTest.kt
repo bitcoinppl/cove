@@ -74,14 +74,13 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
 
         openDeleteConfirmation(SELECTED_WALLET_NAME)
         device.clickText("Delete Forever")
-        val listingsAtDelete = ScriptedCloudStorageAccess.completedWalletListCount()
 
         waitUntil("Delete Forever should reach the cloud provider") {
             ScriptedCloudStorageAccess.deletedWalletRecordIds().isNotEmpty() ||
                 ScriptedCloudStorageAccess.deleteLocationErrors().isNotEmpty()
         }
         assertEquals(
-            "the delete should name only the selected record's files",
+            "the delete should name exactly the selected record's files",
             emptyList<String>(),
             ScriptedCloudStorageAccess.deleteLocationErrors(),
         )
@@ -91,39 +90,32 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
             ScriptedCloudStorageAccess.deletedWalletRecordIds(),
         )
 
-        // rust drops the row before it refreshes, so wait for the refresh's listing to return and
-        // its result to settle before checking that the row stays gone
-        waitUntil("the inventory refresh after the delete should list the cloud again") {
-            ScriptedCloudStorageAccess.completedWalletListCount() > listingsAtDelete
-        }
-        waitUntil("the refreshed inventory should settle with only the other cloud-only row") {
+        // rust drops the row before its detail refresh lands, so wait for the refresh marker row,
+        // which only a listing after the delete names, to prove the refreshed inventory was applied
+        waitUntil("the refreshed inventory after the delete should be applied") {
             val manager = CloudBackupManager.getInstance()
 
             manager.isDetailInventoryComplete &&
                 manager.cloudOnlyOperation !is CloudOnlyOperation.Operating &&
-                cloudOnlyRecordIds() == listOf(KEPT_RECORD_ID)
+                REFRESH_MARKER_RECORD_ID in cloudOnlyRecordIds()
         }
+        assertEquals(
+            "the refreshed inventory should keep only the other cloud-only row and the marker",
+            setOf(KEPT_RECORD_ID, REFRESH_MARKER_RECORD_ID),
+            onMainValue(::cloudOnlyRecordIds).toSet(),
+        )
+        device.scrollUntilText(REFRESH_MARKER_WALLET_NAME)
         device.scrollUntilText(KEPT_WALLET_NAME)
         assertTrue(
             "the deleted wallet should leave Not on This Device",
             device.wait(Until.gone(By.text(SELECTED_WALLET_NAME)), 10_000L),
         )
-        assertRowStaysGoneFor(CANCEL_SETTLE_MS)
+        assertEquals(
+            "only the selected backup should be deleted from the cloud",
+            listOf(SELECTED_RECORD_ID),
+            ScriptedCloudStorageAccess.deletedWalletRecordIds(),
+        )
         assertEquals("the local wallet should stay on this device", localWalletIds, onMainValue(::localWalletIds))
-    }
-
-    private fun assertRowStaysGoneFor(durationMs: Long) {
-        val deadline = System.currentTimeMillis() + durationMs
-
-        while (System.currentTimeMillis() < deadline) {
-            assertEquals(
-                "the deleted wallet came back after the refresh",
-                listOf(KEPT_RECORD_ID),
-                onMainValue(::cloudOnlyRecordIds),
-            )
-            assertTrue("the deleted wallet's row came back", device.findObject(By.text(SELECTED_WALLET_NAME)) == null)
-            Thread.sleep(100)
-        }
     }
 
     private fun openDeleteConfirmation(walletName: String) {
@@ -342,6 +334,11 @@ class CloudBackupDeleteFromCloudFullLaunchTest {
         const val SELECTED_WALLET_NAME = "Fixture Wallet Three"
         const val KEPT_RECORD_ID = ScriptedCloudBackupFixture.WALLET_TWO_RECORD_ID
         const val KEPT_WALLET_NAME = "Fixture Wallet Two"
+
+        // test-only signal: the scripted provider lists this spare fixture wallet only after a
+        // delete, so its row shows only once a post-delete detail refresh was applied
+        const val REFRESH_MARKER_RECORD_ID = ScriptedCloudBackupFixture.XPRV_WALLET_RECORD_ID
+        const val REFRESH_MARKER_WALLET_NAME = ScriptedCloudBackupFixture.XPRV_WALLET_NAME
         const val CANCEL_SETTLE_MS = 3_000L
         const val SETTLE_POLL_MS = 200L
     }

@@ -39,7 +39,6 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     private val masterDownloads = AtomicInteger(0)
     private val walletLists = AtomicInteger(0)
-    private val completedWalletLists = AtomicInteger(0)
     private val walletListNamespaces = CopyOnWriteArrayList<String>()
     private val walletDownloads = AtomicInteger(0)
     private val fixtureWalletDownloadRequests = CopyOnWriteArrayList<String>()
@@ -109,7 +108,6 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         namespaceScenario = NamespaceScenario.sequence(listOf(NamespaceResult.BACKUP_FOUND), null)
         masterDownloads.set(0)
         walletLists.set(0)
-        completedWalletLists.set(0)
         walletListNamespaces.clear()
         walletDownloads.set(0)
         fixtureWalletDownloadRequests.clear()
@@ -175,7 +173,6 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     fun deleteLocationErrors(): List<String> = deleteLocationErrors.toList()
 
     /** Wallet listings that returned a result, so a test can tell a refresh's listing finished */
-    fun completedWalletListCount(): Int = completedWalletLists.get()
 
     fun blockNextWalletList() {
         check(walletListBlock?.claimed?.get() != false) { "a wallet-list block is already pending" }
@@ -340,7 +337,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
             }
         }
 
-        return currentWalletFilenames(namespace).also { completedWalletLists.incrementAndGet() }
+        return currentWalletFilenames(namespace)
     }
 
     private fun currentWalletFilenames(namespace: String): List<String> {
@@ -546,10 +543,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         }
 
         // production providers delete the files at these locations, not by record id, so they must
-        // name this record's current or legacy file
-        val expected = setOf("wallets/${walletFilename(recordId)}", walletFilename(recordId))
+        // name exactly this record's current and legacy files
+        val expected = listOf("wallets/${walletFilename(recordId)}", walletFilename(recordId))
         val paths = locations.map(RemoteBackupLocation::relativePath)
-        if (paths.isEmpty() || !expected.containsAll(paths)) {
+        if (paths.size != expected.size || paths.toSet() != expected.toSet()) {
             deleteLocationErrors += "record $recordId got locations $paths"
             throw CloudStorageException.NotAvailable("delete locations don't match record $recordId")
         }
@@ -570,9 +567,19 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     private fun walletFilename(recordId: String): String = "wallet-$recordId.json"
 
-    // a deleted fixture wallet leaves the listing, so the refresh after a delete can't bring it back
-    private fun visibleFixtureWalletRecordIds(): List<String> =
-        fixtureWalletRecordIds.filterNot { it in deletedFixtureWalletRecordIds }
+    // a deleted fixture wallet leaves the listing, so the refresh after a delete can't bring it back;
+    // after a delete the private-key fixture wallet joins it as a test-only refresh marker, so a
+    // test that sees its row knows a post-delete detail refresh was applied
+    private fun visibleFixtureWalletRecordIds(): List<String> {
+        val refreshMarker =
+            listOf(ScriptedCloudBackupFixture.XPRV_WALLET_RECORD_ID)
+                .takeIf { deletedFixtureWalletRecordIds.isNotEmpty() }
+                .orEmpty()
+
+        return (fixtureWalletRecordIds + refreshMarker)
+            .distinct()
+            .filterNot { it in deletedFixtureWalletRecordIds }
+    }
 
     private class NamespaceScenario(
         results: List<NamespaceResult>,

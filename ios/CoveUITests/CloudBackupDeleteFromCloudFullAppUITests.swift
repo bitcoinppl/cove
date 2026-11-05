@@ -10,6 +10,9 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
     private let keptRecordId = "b1089e1017cd2b2a2e0085048b346f2e1c4a850a65b69a43b8d839cd60bd3f6b"
     private let selectedRecordId = "fa5eab18295a70b89491f347427099da2dd9d528e59d85b8934084fa01119914"
     private let selectedWalletName = "Fixture Wallet Three"
+    /// Test-only signal: the scripted host lists this spare private-key fixture wallet only after a
+    /// delete, so its row shows only once a post-delete detail refresh was applied
+    private let refreshMarkerRecordId = "042d85e772a6b6381c81acc04737bf48ae9e9151edea2114f567948f77dad5c4"
     private let localWalletName = "Fixture Wallet One"
 
     private var app: XCUIApplication!
@@ -27,7 +30,6 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
 
     override func tearDown() {
         try? FileManager.default.removeItem(atPath: deleteLogPath)
-        try? FileManager.default.removeItem(atPath: listingCountPath)
         super.tearDown()
     }
 
@@ -62,7 +64,6 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
 
         let deleteConfirmation = openDeleteConfirmation()
         deleteConfirmation.buttons["Delete Forever"].tap()
-        let listingsAtDelete = completedListingCount()
 
         XCTAssertTrue(
             waitForDeletedRecordIds(nonEmptyWithin: 20),
@@ -70,24 +71,14 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         )
         XCTAssertEqual(deletedRecordIds(), [selectedRecordId], "only the selected backup should be deleted")
 
-        // rust drops the row before it refreshes, so wait for the refresh's listing to return and
-        // the screen to settle before checking that the row stays gone
+        // rust drops the row before its detail refresh lands, so wait for the refresh marker row,
+        // which only a listing after the delete names, to prove the refreshed inventory was applied
         XCTAssertTrue(
-            waitUntil(timeout: 20) { self.completedListingCount() > listingsAtDelete },
-            "the inventory refresh after the delete never listed the cloud"
+            walletRow(recordId: refreshMarkerRecordId).waitForExistence(timeout: 20),
+            "the refreshed inventory after the delete was never applied"
         )
         XCTAssertTrue(inventoryChecking.waitForNonExistence(timeout: 20), "the refresh after the delete never finished")
-        XCTAssertTrue(walletRow(recordId: keptRecordId).waitForExistence(timeout: 10), "the other cloud-only wallet should stay")
-        XCTAssertTrue(
-            walletRow(recordId: selectedRecordId).waitForNonExistence(timeout: 10),
-            "the deleted wallet should leave Not on This Device"
-        )
-
-        let settleDeadline = Date().addingTimeInterval(3)
-        while Date() < settleDeadline {
-            XCTAssertFalse(walletRow(recordId: selectedRecordId).exists, "the deleted wallet came back after the refresh")
-            Thread.sleep(forTimeInterval: 0.2)
-        }
+        XCTAssertFalse(walletRow(recordId: selectedRecordId).exists, "the deleted wallet should leave Not on This Device")
         XCTAssertTrue(walletRow(recordId: keptRecordId).exists, "the other cloud-only wallet should stay")
         XCTAssertTrue(walletRow(recordId: localRecordId).exists, "the local wallet's backup row should stay")
         XCTAssertEqual(deletedRecordIds(), [selectedRecordId], "only the selected backup should be deleted")
@@ -151,27 +142,6 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
             XCTFail("the delete log is not a JSON array of record ids: \(error)")
             return []
         }
-    }
-
-    private var listingCountPath: String {
-        deleteLogPath + ".listings"
-    }
-
-    private func completedListingCount() -> Int {
-        guard let data = FileManager.default.contents(atPath: listingCountPath) else { return 0 }
-
-        return (try? JSONDecoder().decode(Int.self, from: data)) ?? 0
-    }
-
-    private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if condition() { return true }
-
-            Thread.sleep(forTimeInterval: 0.2)
-        }
-
-        return condition()
     }
 
     private func waitForDeletedRecordIds(nonEmptyWithin timeout: TimeInterval) -> Bool {
