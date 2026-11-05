@@ -15,7 +15,7 @@ use tokio::{
 
 use crate::{
     Shared,
-    chain::{AlreadyConfirmed, ChainTx, FakeChain, HistoryEntry, TxLocation},
+    chain::{ChainTx, FakeChain, HistoryEntry, TxLocation},
     control::{Protocol, Verdict},
     http::{Request, Response, read_request, write_response},
 };
@@ -252,7 +252,7 @@ fn broadcast(chain: &FakeChain, body: &[u8]) -> Response {
 
     match chain.broadcast(tx) {
         Ok(txid) => Response::text(txid.to_string()),
-        Err(AlreadyConfirmed) => Response::error(400, "Transaction already in block chain"),
+        Err(error) => Response::error(400, &error.to_string()),
     }
 }
 

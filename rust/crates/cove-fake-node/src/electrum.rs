@@ -14,7 +14,7 @@ use tokio::{
 
 use crate::{
     Shared,
-    chain::{AlreadyConfirmed, Balance, FakeChain, HistoryEntry, TxLocation},
+    chain::{Balance, FakeChain, HistoryEntry, TxLocation},
     control::{Protocol, Verdict},
 };
 
@@ -234,9 +234,9 @@ fn handle(chain: &FakeChain, method: &str, params: &[Value]) -> Result<Value, Rp
             let raw = hex::decode(hex).map_err(|_| RpcError::invalid_params())?;
             let tx = deserialize::<Transaction>(&raw).map_err(|_| RpcError::invalid_params())?;
 
-            let txid = chain.broadcast(tx).map_err(|AlreadyConfirmed| {
-                RpcError::new(DAEMON_ERROR, "Transaction already in block chain")
-            })?;
+            let txid = chain
+                .broadcast(tx)
+                .map_err(|error| RpcError::new(DAEMON_ERROR, error.to_string()))?;
 
             Ok(json!(txid))
         }

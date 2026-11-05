@@ -33,7 +33,7 @@ use bitcoin::{Network, ScriptBuf};
 use tokio::{net::TcpListener, sync::watch};
 
 pub use chain::{
-    AlreadyConfirmed, Balance, ChainTx, FakeChain, HistoryEntry, MerkleProof, TxLocation,
+    Balance, BroadcastError, ChainTx, FakeChain, HistoryEntry, MerkleProof, TxLocation,
 };
 pub use control::{Gate, LoggedRequest, Protocol, RuleBuilder, RuleHandle};
 pub use control_api::{ControlServer, RESET_BLOCKS};

@@ -9,8 +9,16 @@ use std::{
 };
 
 use bitcoin::{
-    Address, Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid, Witness,
-    absolute::LockTime, consensus::encode::serialize_hex, transaction::Version,
+    Address, Amount, CompressedPublicKey, EcdsaSighashType, Network, OutPoint, ScriptBuf, Sequence,
+    Transaction, TxIn, TxOut, Txid, Witness,
+    absolute::LockTime,
+    bip32::{DerivationPath, Xpriv},
+    consensus::encode::serialize_hex,
+    ecdsa,
+    hashes::Hash as _,
+    secp256k1::{Message, Secp256k1},
+    sighash::SighashCache,
+    transaction::Version,
 };
 use cove_fake_node::RESET_BLOCKS;
 use serde_json::{Value, json};
@@ -154,15 +162,24 @@ fn http(base: &str, method: &str, path: &str, body: &str) -> (u16, String) {
     (status.expect("a status code"), String::from_utf8(body).expect("a utf-8 body"))
 }
 
-/// A transaction spending `outpoint` to the external address
-fn spend(outpoint: OutPoint, sats: u64) -> Transaction {
+/// A transaction spending a `/fund-wallet` output to the external address,
+/// signed with the [`MNEMONIC`] key for receive `index`, since the node checks
+/// signatures on broadcast
+fn spend(output: &Value, index: u32, sats: u64) -> Transaction {
+    let secp = Secp256k1::new();
     let external = Address::from_str(EXTERNAL).unwrap().assume_checked();
+    let funded = Amount::from_sat(output["sats"].as_u64().expect("funded sats"));
 
-    Transaction {
+    let seed = bip39::Mnemonic::parse(MNEMONIC).unwrap().to_seed("");
+    let path = DerivationPath::from_str(&format!("m/84'/1'/0'/0/{index}")).unwrap();
+    let key = Xpriv::new_master(Network::Signet, &seed).unwrap().derive_priv(&secp, &path).unwrap();
+    let public = CompressedPublicKey::from_private_key(&secp, &key.to_priv()).unwrap();
+
+    let mut tx = Transaction {
         version: Version::TWO,
         lock_time: LockTime::ZERO,
         input: vec![TxIn {
-            previous_output: outpoint,
+            previous_output: outpoint(output),
             script_sig: ScriptBuf::new(),
             sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
             witness: Witness::new(),
@@ -171,7 +188,17 @@ fn spend(outpoint: OutPoint, sats: u64) -> Transaction {
             value: Amount::from_sat(sats),
             script_pubkey: external.script_pubkey(),
         }],
-    }
+    };
+
+    let script = ScriptBuf::new_p2wpkh(&public.wpubkey_hash());
+    let sighash = SighashCache::new(&tx)
+        .p2wpkh_signature_hash(0, &script, funded, EcdsaSighashType::All)
+        .unwrap();
+    let message = Message::from_digest(sighash.to_byte_array());
+    let signature = ecdsa::Signature::sighash_all(secp.sign_ecdsa(&message, &key.private_key));
+    tx.input[0].witness = Witness::p2wpkh(&signature, &public.0);
+
+    tx
 }
 
 fn outpoint(output: &Value) -> OutPoint {
@@ -238,8 +265,8 @@ fn ui_test_fixture_flow_runs_over_the_control_api() {
     );
 
     // broadcasts on both protocols are logged once each, in order
-    let spend_a = spend(outpoint(a), 99_000);
-    let spend_b = spend(outpoint(b), 59_000);
+    let spend_a = spend(a, 0, 99_000);
+    let spend_b = spend(b, 1, 59_000);
     assert_eq!(node.broadcast_on_esplora(&spend_a), spend_a.compute_txid().to_string());
     assert_eq!(node.broadcast_on_electrum(&spend_b)["result"], spend_b.compute_txid().to_string());
     node.broadcast_on_esplora(&spend_a);
