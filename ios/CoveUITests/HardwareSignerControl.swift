@@ -96,12 +96,22 @@ struct HardwareSignerControl {
 
     /// Reads the simulator's pasteboard from the host, since reading it here shows the paste prompt
     func simulatorPasteboard() throws -> String {
+        let body: [String: Any] = try ["udid": Self.simulatorUdid()]
+        return try decode(Pasteboard.self, controlRequest(baseUrl, "POST", "simulator-pasteboard", body: body)).text
+    }
+
+    /// Switches the simulator to dark or light mode, which only the host can do
+    func setSimulatorAppearance(dark: Bool) throws {
+        let body: [String: Any] = try ["udid": Self.simulatorUdid(), "appearance": dark ? "dark" : "light"]
+        _ = try controlRequest(baseUrl, "POST", "simulator-appearance", body: body)
+    }
+
+    private static func simulatorUdid() throws -> String {
         guard let udid = ProcessInfo.processInfo.environment["SIMULATOR_UDID"] else {
             throw ControlRequestError(description: "SIMULATOR_UDID is not set; this test runs only on a simulator")
         }
 
-        let body: [String: Any] = ["udid": udid]
-        return try decode(Pasteboard.self, controlRequest(baseUrl, "POST", "simulator-pasteboard", body: body)).text
+        return udid
     }
 
     /// Starts a fresh emulated TAPSIGNER with the default CVC, set up with a key unless

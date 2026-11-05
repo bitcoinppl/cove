@@ -47,16 +47,20 @@ struct KeyTeleportRevealable<Content: View>: View {
                         ZStack {
                             Color.clear
 
+                            // wraps rather than staying on one line, which at the largest
+                            // text sizes ran the hint off both edges of the screen
                             Label(hint, systemImage: "eye")
                                 .font(.caption)
                                 .foregroundStyle(.white)
-                                .fixedSize(horizontal: true, vertical: false)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
                                 .background(
-                                    Capsule()
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                                         .fill(Color.midnightBlue.opacity(0.88))
                                 )
+                                .padding(.horizontal, 12)
                         }
                         .contentShape(Rectangle())
                     }

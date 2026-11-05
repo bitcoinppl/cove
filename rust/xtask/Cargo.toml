@@ -31,6 +31,12 @@ gif = "0.14.2"
 bbqr = { workspace = true }
 foundation-ur = { version = "0.5.0", default-features = false, features = ["std"] }
 hex = "0.4.3"
+# for the ui test host's KeyTeleport peer
+keyteleport = "0.1.0"
+aes = { workspace = true }
+ctr = { workspace = true }
+pbkdf2 = { workspace = true }
+rand = { workspace = true }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]

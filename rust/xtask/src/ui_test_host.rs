@@ -13,8 +13,10 @@
 //!   `/public-key-export` returns an account's bare SLIP-132 public key, as a
 //!   plain QR and as a single-part BBQr, with the first receive address it
 //!   should import as. `/simulator-pasteboard` reads an iOS simulator's
-//!   pasteboard. The `/tapsigner/...` routes start the card emulator, set up or
-//!   factory fresh, and inject dropped sessions
+//!   pasteboard and `/simulator-appearance` switches it between light and
+//!   dark mode. The `/tapsigner/...` routes start the card emulator, set up or
+//!   factory fresh, and inject dropped sessions. The `/keyteleport/...` routes
+//!   play the other phone in a KeyTeleport transfer ([`key_teleport`])
 //! - [`BRIDGE_PORT`]: the TAPSIGNER bridge. Each APDU arrives as a frame with a
 //!   4-byte big-endian length, goes to Coinkite's `ecard.py` emulator, and the
 //!   card's response goes back the same way. Closing the connection is how a
@@ -54,6 +56,8 @@ use parking_lot::Mutex;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use xshell::Shell;
+
+mod key_teleport;
 
 use crate::{
     android_device::AndroidDevice,
@@ -147,6 +151,7 @@ impl HardwareSignerGuard {
             emulator_paths: prepare_emulator(),
             emulator: Mutex::new(None),
             drop_after: Mutex::new(None),
+            key_teleport_receivers: key_teleport::Receivers::default(),
         });
 
         spawn_server(control, state.clone(), serve_control);
@@ -202,6 +207,7 @@ struct SignerState {
     emulator: Mutex<Option<CardEmulator>>,
     // the next bridge session closes after this many exchanges
     drop_after: Mutex<Option<u32>>,
+    key_teleport_receivers: key_teleport::Receivers,
 }
 
 fn spawn_server(
@@ -332,6 +338,20 @@ struct PasteboardRequest {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct AppearanceRequest {
+    udid: String,
+    appearance: Appearance,
+}
+
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum Appearance {
+    Light,
+    Dark,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DropRequest {
     after_exchanges: u32,
 }
@@ -356,6 +376,7 @@ fn route(state: &SignerState, method: &str, path: &str, body: &[u8]) -> Result<V
         ("POST", "/watch-only-descriptor") => watch_only_descriptor(serde_json::from_slice(body)?),
         ("POST", "/public-key-export") => public_key_export(serde_json::from_slice(body)?),
         ("POST", "/simulator-pasteboard") => simulator_pasteboard(serde_json::from_slice(body)?),
+        ("POST", "/simulator-appearance") => simulator_appearance(serde_json::from_slice(body)?),
         ("POST", "/tapsigner/start") => {
             let request: TapSignerStartRequest = if body.is_empty() {
                 TapSignerStartRequest::default()
@@ -380,6 +401,11 @@ fn route(state: &SignerState, method: &str, path: &str, body: &[u8]) -> Result<V
             let request: DropRequest = serde_json::from_slice(body)?;
             *state.drop_after.lock() = Some(request.after_exchanges);
             Ok(json!({ "ok": true }))
+        }
+        ("POST", "/keyteleport/send") => key_teleport::send(serde_json::from_slice(body)?),
+        ("POST", "/keyteleport/receive-request") => state.key_teleport_receivers.receive_request(),
+        ("POST", "/keyteleport/receive-response") => {
+            state.key_teleport_receivers.receive_response(serde_json::from_slice(body)?)
         }
         _ => Err(eyre!("No route for {method} {path}")),
     }
@@ -522,6 +548,26 @@ fn simulator_pasteboard(request: PasteboardRequest) -> Result<Value> {
     }
 
     Ok(json!({ "text": String::from_utf8(output.stdout).wrap_err("The pasteboard is not UTF-8")? }))
+}
+
+/// Switches an iOS simulator between light and dark mode, which an XCUITest
+/// can't do from inside the simulator
+fn simulator_appearance(request: AppearanceRequest) -> Result<Value> {
+    let appearance = match request.appearance {
+        Appearance::Light => "light",
+        Appearance::Dark => "dark",
+    };
+
+    let output = Command::new("xcrun")
+        .args(["simctl", "ui", &request.udid, "appearance", appearance])
+        .output()
+        .wrap_err("Failed to run simctl ui appearance")?;
+
+    if !output.status.success() {
+        bail!("simctl ui appearance failed: {}", String::from_utf8_lossy(&output.stderr).trim());
+    }
+
+    Ok(json!({ "ok": true }))
 }
 
 fn signed_frames(psbt: &Psbt, min_parts: usize) -> Result<Value> {

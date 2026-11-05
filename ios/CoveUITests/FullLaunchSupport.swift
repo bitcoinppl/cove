@@ -45,7 +45,9 @@ extension XCUIApplication {
 
     /// Walks onboarding from the welcome screen to the choice of how the user stores bitcoin
     func startImportingExistingWallet() {
-        tapButton(named: "Get Started")
+        // a tap right after launch can land while the welcome screen settles and do nothing
+        let next = staticTexts.matching(NSPredicate(format: "label IN %@", ["Terms & Conditions", "Do you already have Bitcoin?"]))
+        tapButton(startingWith: "Get Started", until: next.firstMatch)
         acceptTermsIfNeeded()
         tapButton(startingWith: "Yes, I have Bitcoin")
 

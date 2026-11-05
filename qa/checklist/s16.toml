@@ -266,7 +266,7 @@ id = "s16-receiver-payload-and-private-key-review-layout"
 section = "16"
 title = "Receiver payload and private-key review layout"
 platforms = ["ios", "android"]
-target = "manual"
+target = "ui"
 paths = [
     "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReviewViews.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewViews.kt",
@@ -275,7 +275,8 @@ coverage = [
     "human",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# reaching the review screens needs a camera qr hand-off between two phones
+# on android, reaching the review screens needs a camera qr hand-off between two phones
+# on ios, testMnemonicReceiveScreensFitAtLargestTextSizeInDarkMode and testXprvAndMessageReviewsFitAtLargestTextSizeInDarkMode in KeyTeleportReceiveFullLaunchUITests check these screens at the largest text size in dark mode, but they haven't passed on GitHub yet (Vision misses a lone recovery word and the Copy label where drawn), so a person still checks the layout
 
 [[row]]
 id = "s16-restore-normal-font-and-compare-receive-controls"

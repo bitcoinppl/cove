@@ -44,6 +44,10 @@ env:
     CoveUITests/HardwareSigningFullLaunchUITests,
     CoveUITests/PublicKeyImportFullLaunchUITests,
     CoveUITests/TapSignerLayoutFullLaunchUITests,
+    CoveUITests/KeyTeleportReceiveFullLaunchUITests/testMnemonicReviewRevealsOnTapAndOnlyImportAddsTheWallet,
+    CoveUITests/KeyTeleportReceiveFullLaunchUITests/testXprvReviewRevealHideCopyAndImport,
+    CoveUITests/KeyTeleportReceiveFullLaunchUITests/testMultiPartBbqrResponseReachesTheReview,
+    CoveUITests/KeyTeleportSendFullLaunchUITests,
     CoveCloudBackupUITests/PrivateKeyExportFullAppUITests,
     CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests
   ANDROID_FLAVOURS: Dev UiTest

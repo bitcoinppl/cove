@@ -163,9 +163,10 @@ title = "BBQr scans and opened/shared response links"
 platforms = ["ios", "android"]
 target = "manual"
 paths = ["rust/src/key_teleport.rs", "rust/src/qr_scanner.rs", "ios/Cove/ScanManager+KeyTeleport.swift", "ios/Cove/ScanManager.swift", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt", "android/app/src/main/java/org/bitcoinppl/cove/ExternalKeyTeleportIntentHandler.kt", "android/app/src/main/java/org/bitcoinppl/cove/ScanManager.kt"]
-coverage = ["human"]
+coverage = ["human", "ios-ui:ios/CoveUITests/KeyTeleportReceiveFullLaunchUITests.swift::testMultiPartBbqrResponseReachesTheReview"]
 # 1.4.0: ios HUMAN, android HUMAN
 # camera scans and share sheet routing need a person
+# the ios test scans a multi-part BBQr response out of order through the qr seam; opened and shared links still need a person
 
 [[row]]
 id = "s08-private-key-export-reveal-copy-and-keyteleport"
