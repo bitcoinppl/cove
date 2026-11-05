@@ -17,7 +17,10 @@ struct ScreenReachability {
     /// Every text and action must lie wholly inside the window once scrolled to, the actions must
     /// take a tap there, and no text on screen may draw truncated wherever one of them is scrolled
     /// into view
-    func assertScreenFits(_ screen: String, texts: [String], buttons: [XCUIElementQuery]) {
+    ///
+    /// Vision must also read each text and each button's label where it is drawn. `controls` are
+    /// actions without a drawn label, such as icon-only buttons and fields, checked for reach only
+    func assertScreenFits(_ screen: String, texts: [String], buttons: [XCUIElementQuery], controls: [XCUIElementQuery] = []) {
         for text in texts {
             let element = assertReachable(app.staticTexts.matching(NSPredicate(format: "label == %@", text)), "\(screen): '\(text)'", needsHit: false)
             assertDrawn(text, in: element, "\(screen): '\(text)'")
@@ -26,7 +29,14 @@ struct ScreenReachability {
 
         for button in buttons {
             let name = button.firstMatch.description
-            assertReachable(button, "\(screen): \(name)", needsHit: true)
+            let element = assertReachable(button, "\(screen): \(name)", needsHit: true)
+            assertDrawn(element.label, in: element, "\(screen): \(name)")
+            assertNoTruncatedText("\(screen) at \(name)")
+        }
+
+        for control in controls {
+            let name = control.firstMatch.description
+            assertReachable(control, "\(screen): \(name)", needsHit: true)
             assertNoTruncatedText("\(screen) at \(name)")
         }
     }

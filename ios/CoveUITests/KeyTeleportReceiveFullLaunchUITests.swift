@@ -133,7 +133,7 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         assertWordsConcealed()
         layout.assertScreenFits(
             "mnemonic review",
-            texts: ["Recovery words received"],
+            texts: ["Recovery words received", "Cove found a 12-word wallet. Review it below or import it directly."],
             buttons: [button("Tap to reveal recovery words"), button("Import Wallet"), button("Finish Without Importing")]
         )
 
@@ -142,7 +142,7 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         layout.reachAndTap(button("Import Wallet"), "mnemonic review: Import Wallet")
 
         XCTAssertTrue(app.staticTexts["Wallet imported"].waitForExistence(timeout: 30))
-        layout.assertScreenFits("imported", texts: ["Wallet imported"], buttons: [button("Done")])
+        layout.assertScreenFits("imported", texts: ["Wallet imported", message(endingWith: " is ready to use in Cove.")], buttons: [button("Done")])
         layout.reachAndTap(button("Done"), "imported: Done")
         XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
 
@@ -153,7 +153,11 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         layout.reachAndTap(button("Import Wallet"), "mnemonic review: Import Wallet")
 
         XCTAssertTrue(app.staticTexts["Wallet already imported"].waitForExistence(timeout: 30))
-        layout.assertScreenFits("already imported", texts: ["Wallet already imported"], buttons: [button("Open Wallet")])
+        layout.assertScreenFits(
+            "already imported",
+            texts: ["Wallet already imported", message(endingWith: " is already available in Cove.")],
+            buttons: [button("Open Wallet")]
+        )
         layout.reachAndTap(button("Open Wallet"), "already imported: Open Wallet")
         XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
     }
@@ -169,7 +173,11 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         XCTAssertFalse(revealedKey().exists, "the key must stay hidden until Reveal XPRV")
         layout.assertScreenFits(
             "xprv review",
-            texts: ["Extended private key received"],
+            texts: [
+                "Extended private key received",
+                "Import this key as a hot wallet, or reveal it only when you are ready to handle the private key.",
+                "Reveal only if you are ready to handle this private key.",
+            ],
             buttons: [button("Reveal XPRV"), button("Import Wallet"), button("Finish Without Importing")]
         )
 
@@ -182,7 +190,12 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         waitForReview("Messages received")
         layout.assertScreenFits(
             "message review",
-            texts: ["Messages received", "Quick Note", "Attack at dawn.", "Exchange", "satoshi", "hunter2", "example.com"],
+            texts: [
+                "Messages received",
+                "This transfer contains text, not a wallet. Cove has displayed it exactly as received.",
+                "Quick Note", "MESSAGE", "Attack at dawn.",
+                "Exchange", "USERNAME", "satoshi", "PASSWORD", "hunter2", "WEBSITE", "example.com",
+            ],
             buttons: [button("Done")]
         )
         layout.reachAndTap(button("Done"), "message review: Done")
@@ -240,7 +253,12 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         let field = app.secureTextFields["Teleport Password"]
         XCTAssertTrue(field.waitForExistence(timeout: 20), "the scanned response never asked for the password")
         if checkingLayout {
-            layout.assertScreenFits("password", texts: [], buttons: [app.secureTextFields.matching(identifier: "Teleport Password"), button("Show password"), button("Unlock")])
+            layout.assertScreenFits(
+                "password",
+                texts: [],
+                buttons: [button("Unlock")],
+                controls: [app.secureTextFields.matching(identifier: "Teleport Password"), button("Show password")]
+            )
             layout.assertNoTruncatedText("password")
         }
 
@@ -349,6 +367,13 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
 
     private func button(_ label: String) -> XCUIElementQuery {
         app.buttons.matching(NSPredicate(format: "label == %@", label))
+    }
+
+    /// A result screen's message, which starts with the wallet's name
+    private func message(endingWith suffix: String) -> String {
+        let message = app.staticTexts.matching(NSPredicate(format: "label ENDSWITH %@", suffix)).firstMatch
+        XCTAssertTrue(message.waitForExistence(timeout: 5), "the message ending '\(suffix)' is missing")
+        return message.label
     }
 
     private func button(startingWith prefix: String) -> XCUIElementQuery {

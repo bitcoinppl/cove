@@ -96,6 +96,10 @@ extension XCUIElement {
     /// actually makes it unreadable, so concealment checks read the screenshot instead. A screenshot
     /// Vision can't read fails the test, so no check passes because nothing was read
     var visibleText: [String] {
+        recognizedText.compactMap { $0.topCandidates(1).first?.string }
+    }
+
+    private var recognizedText: [VNRecognizedTextObservation] {
         guard let image = screenshot().image.cgImage else {
             XCTFail("the screenshot of \(self) has no image to read")
             return []
@@ -112,7 +116,7 @@ extension XCUIElement {
             return []
         }
 
-        return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        return request.results ?? []
     }
 
     /// The text with whitespace removed, so a grouped value reads the same however Vision splits it
@@ -158,19 +162,21 @@ extension XCUIElement {
     }
 
     /// Fails if the element, a reveal hint drawn over a concealed value, shows any of that value:
-    /// a QR code that decodes, or a line Vision reads that isn't the hint and holds two or more
-    /// letters or digits
+    /// a QR code that decodes, or anything Vision reads besides the hint
     ///
-    /// Codes and passwords show in pairs, so two characters is the least of one that can leak
-    /// past the hint even where it covers the middle of the value
+    /// Vision must read the hint itself, so a screenshot it reads nothing from fails rather than
+    /// passing as concealed. The lines join top to bottom, since the hint wraps at large text
+    /// sizes, and two letters or digits beyond the hint fail anywhere, on its lines or their own:
+    /// codes and passwords show in pairs, so two is the least of one that can leak
     func assertConceals(hint: String, _ name: String) {
         XCTAssertTrue(visibleQrCodes.isEmpty, "\(name): a QR code decodes while it is hidden")
 
-        let leaked = visibleText.filter { line in
-            !line.readsAs(hint) && line.filter { $0.isLetter || $0.isNumber }.count >= 2
-        }
+        // Vision's boxes have their origin at the bottom left
+        let lines = recognizedText
+            .sorted { $0.boundingBox.midY > $1.boundingBox.midY }
+            .compactMap { $0.topCandidates(1).first?.string }
 
-        XCTAssertTrue(leaked.isEmpty, "\(name): Vision read \(leaked) while it was hidden")
+        XCTAssertTrue(lines.joined(separator: " ").readsAs(hint), "\(name): Vision read \(lines) while it was hidden, not just '\(hint)'")
     }
 }
 
@@ -179,12 +185,15 @@ private extension String {
         filter { !$0.isWhitespace }.uppercased()
     }
 
-    /// Whether Vision's reading of the line is the hint, allowing a few misread or extra
-    /// characters such as the eye icon read as a letter
+    /// Whether Vision's reading is the hint and nothing more, allowing two misread characters, of
+    /// which one may be extra, such as the eye icon read as a letter
+    ///
+    /// A second extra character fails, so two characters of a concealed value can't pass as part
+    /// of the hint
     func readsAs(_ hint: String) -> Bool {
         let read = Array(filter { $0.isLetter || $0.isNumber }.uppercased())
         let expected = Array(hint.filter { $0.isLetter || $0.isNumber }.uppercased())
-        return Self.editDistance(read, expected) <= 3
+        return read.count <= expected.count + 1 && Self.editDistance(read, expected) <= 2
     }
 
     static func editDistance(_ lhs: [Character], _ rhs: [Character]) -> Int {
