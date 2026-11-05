@@ -256,6 +256,7 @@ fn ui_test_duplicate_wallet_fixture_is_fixture_wallet_one() {
         record["record_id"].as_str().unwrap(),
         cove_cspp::backup_data::wallet_record_id(UI_TEST_DUPLICATE_WALLET_ID)
     );
+
     assert_eq!(
         serde_json::to_value(&entry).unwrap(),
         serde_json::to_value(ui_test_duplicate_wallet_entry(&fixture)).unwrap()
@@ -267,6 +268,7 @@ fn ui_test_duplicate_wallet_fixture_is_fixture_wallet_one() {
         "/../android/app/src/uiTest/java/org/bitcoinppl/cove/testconfig/ScriptedCloudBackupFixture.kt"
     ))
     .unwrap();
+
     assert!(
         android_fixture.contains(&format!("\"{}\"", record["record_id"].as_str().unwrap())),
         "the android fixture names a different duplicate wallet record"
@@ -279,6 +281,7 @@ fn ui_test_duplicate_wallet_fixture_is_fixture_wallet_one() {
         .unwrap()
         .split_whitespace()
         .collect();
+
     assert_eq!(
         android_base64,
         record["base64"].as_str().unwrap(),
