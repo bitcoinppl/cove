@@ -201,7 +201,7 @@ final class ScriptedCloudStorageAccess: CloudStorageAccess, @unchecked Sendable 
     }
 }
 
-private struct CloudBackupFixture: Decodable {
+struct CloudBackupFixture: Decodable {
     struct Wallet: Decodable {
         let base64: String
         let filename: String
@@ -231,6 +231,8 @@ private struct CloudBackupFixture: Decodable {
     let wallets: [Wallet]
     /// Hot wallet holding only an extended private key, from the Rust fixture generator
     let xprvWallet: Wallet
+    /// Fixture Wallet One backed up again under another wallet id, from the Rust fixture generator
+    let duplicateWallet: Wallet
 
     var masterData: Data {
         guard let data = Data(base64Encoded: masterBase64) else {
@@ -264,5 +266,6 @@ private struct CloudBackupFixture: Decodable {
         case namespace
         case wallets
         case xprvWallet = "xprv_wallet"
+        case duplicateWallet = "duplicate_wallet"
     }
 }

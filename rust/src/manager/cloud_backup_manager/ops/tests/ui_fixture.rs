@@ -1,7 +1,9 @@
-//! Generator for the private-key wallet that the scripted Cloud Backup UI test hosts restore
+//! Generators for the private-key and duplicate wallets that the scripted Cloud Backup UI test
+//! hosts restore
 //!
-//! Run with `cargo test --lib print_ui_test_xprv_wallet_fixture -- --ignored --nocapture` and
-//! paste the printed record into the iOS `CloudBackupFixture.json` and the Android
+//! For the private-key wallet, run
+//! `cargo test --lib print_ui_test_xprv_wallet_fixture -- --ignored --nocapture` and paste the
+//! printed record into the iOS `CloudBackupFixture.json` and the Android
 //! `ScriptedCloudBackupFixture`. The wallet is encrypted under the master key already in those
 //! fixtures, so the scripted passkey unlocks it
 
@@ -156,4 +158,106 @@ fn ui_test_xprv_wallet_fixture_decrypts_to_the_test_key() {
         .split_whitespace()
         .collect();
     assert_eq!(android_base64, record["base64"].as_str().unwrap(), "android xprv wrapper is stale");
+}
+
+/// Wallet id of a second backup of Fixture Wallet One, as another install of the same wallet
+/// would upload it, so the cloud inventory has a record that duplicates a local wallet
+const UI_TEST_DUPLICATE_WALLET_ID: &str = "ui-fixture-wallet-1-copy";
+
+fn read_ui_fixture() -> serde_json::Value {
+    let fixture_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../ios/CoveCloudBackupUITestHost/CloudBackupFixture.json"
+    );
+
+    serde_json::from_slice(&std::fs::read(fixture_path).unwrap()).unwrap()
+}
+
+fn ui_fixture_master_key(fixture: &serde_json::Value) -> cove_cspp::master_key::MasterKey {
+    let base64 = base64::engine::general_purpose::STANDARD;
+    let master: EncryptedMasterKeyBackup =
+        serde_json::from_slice(&base64.decode(fixture["master_base64"].as_str().unwrap()).unwrap())
+            .unwrap();
+    let prf_key: [u8; 32] =
+        hex::decode(fixture["prf_output_hex"].as_str().unwrap()).unwrap().try_into().unwrap();
+
+    decrypt_master_key(&master, &prf_key).unwrap()
+}
+
+fn decrypt_ui_fixture_wallet(
+    fixture: &serde_json::Value,
+    record: &serde_json::Value,
+) -> cove_cspp::backup_data::WalletEntry {
+    let base64 = base64::engine::general_purpose::STANDARD;
+    let encrypted: cove_cspp::backup_data::EncryptedWalletBackup =
+        serde_json::from_slice(&base64.decode(record["base64"].as_str().unwrap()).unwrap())
+            .unwrap();
+
+    cove_cspp::wallet_crypto::decrypt_wallet_backup(
+        &encrypted,
+        &ui_fixture_master_key(fixture).critical_data_key(),
+    )
+    .unwrap()
+}
+
+/// Fixture Wallet One under the duplicate's wallet id, with nothing else about the wallet changed
+fn ui_test_duplicate_wallet_entry(
+    fixture: &serde_json::Value,
+) -> cove_cspp::backup_data::WalletEntry {
+    let mut entry = decrypt_ui_fixture_wallet(fixture, &fixture["wallets"][0]);
+    entry.wallet_id = UI_TEST_DUPLICATE_WALLET_ID.to_string();
+    entry.metadata["id"] = serde_json::json!(UI_TEST_DUPLICATE_WALLET_ID);
+    entry.content_revision_hash = "ui-fixture-duplicate-revision".to_string();
+    entry.updated_at = 5;
+
+    entry
+}
+
+/// Prints `duplicate_wallet` for the iOS `CloudBackupFixture.json`
+///
+/// Run with `cargo test --lib print_ui_test_duplicate_wallet_fixture -- --ignored --nocapture`
+#[test]
+#[ignore = "prints a fixture for the UI test hosts"]
+fn print_ui_test_duplicate_wallet_fixture() {
+    let fixture = read_ui_fixture();
+    let entry = ui_test_duplicate_wallet_entry(&fixture);
+    let namespace = fixture["namespace"].as_str().unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(UI_TEST_DUPLICATE_WALLET_ID);
+    let critical_key = zeroize::Zeroizing::new(ui_fixture_master_key(&fixture).critical_data_key());
+    let encrypted = encrypt_wallet_entry_with_remote_metadata(
+        &entry,
+        &critical_key,
+        RemotePayloadMetadata::wallet(
+            namespace,
+            &record_id,
+            UI_TEST_DUPLICATE_WALLET_ID,
+            entry.updated_at,
+        ),
+    )
+    .unwrap();
+
+    let base64 = base64::engine::general_purpose::STANDARD;
+    println!("wallet_id: {UI_TEST_DUPLICATE_WALLET_ID}");
+    println!("record_id: {record_id}");
+    println!("filename: {}", wallet_filename_from_record_id(&record_id));
+    println!("base64: {}", base64.encode(serde_json::to_vec(&encrypted).unwrap()));
+}
+
+// the restore-all dedup UI test relies on this record being the same wallet as Fixture Wallet One
+#[test]
+fn ui_test_duplicate_wallet_fixture_is_fixture_wallet_one() {
+    let fixture = read_ui_fixture();
+    let record = &fixture["duplicate_wallet"];
+    let entry = decrypt_ui_fixture_wallet(&fixture, record);
+
+    assert_eq!(entry.wallet_id, UI_TEST_DUPLICATE_WALLET_ID);
+    assert_eq!(record["wallet_id"].as_str().unwrap(), UI_TEST_DUPLICATE_WALLET_ID);
+    assert_eq!(
+        record["record_id"].as_str().unwrap(),
+        cove_cspp::backup_data::wallet_record_id(UI_TEST_DUPLICATE_WALLET_ID)
+    );
+    assert_eq!(
+        serde_json::to_value(&entry).unwrap(),
+        serde_json::to_value(ui_test_duplicate_wallet_entry(&fixture)).unwrap()
+    );
 }

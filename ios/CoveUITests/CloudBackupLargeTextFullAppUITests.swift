@@ -16,6 +16,11 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         robot = CloudBackupHostRobot(app: app)
     }
 
+    override func tearDown() {
+        CloudBackupHostControl.attachAppLogIfFailed(to: self)
+        super.tearDown()
+    }
+
     func testSetupDescriptionAcknowledgementsAndEnableAreReachable() {
         // MAN-03 starts with an empty cloud, so onboarding offers to enable Cloud Backup; the
         // native passkey it wires up is only used after Enable, which this test never taps
@@ -71,6 +76,59 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         robot.scrollToHittable(app.staticTexts["Backup verified"], initialWait: 30)
         robot.scrollToHittable(robot.button(startingWith: "Verify Again"))
         robot.scrollToHittable(app.buttons["Disable Cloud Backup"])
+    }
+
+    func testRestoreAllProgressKeepsCancelReachable() throws {
+        let control = try CloudBackupRestoreAllFullAppUITests.openDetailWithTwoCloudOnlyWallets(
+            app: app,
+            robot: robot,
+            arguments: CloudBackupHostRobot.largestContentSizeArguments
+        )
+        let screen = RestoreAllScreen(app: app, robot: robot)
+
+        try control.holdWalletDownload(
+            id: "wallet-two",
+            recordId: CloudBackupRestoreAllFullAppUITests.walletTwoRecordId,
+            skippingCalls: 1
+        )
+        screen.tapRestoreAll(count: 2)
+        control.waitForHold("wallet-two")
+
+        screen.waitForProgress(containing: ["Restoring Fixture Wallet Two", "Completed 0 of 2"])
+        robot.scrollToHittable(app.buttons["Cancel"])
+        control.release("wallet-two")
+    }
+
+    /// An interrupted setup whose staged key the keychain lost can't be resumed, so the relaunched
+    /// app shows the recovery screen with its support code and cleanup action
+    func testIncompleteSetupRecoveryActionsAreReachable() throws {
+        let control = try CloudBackupHostControl(script: .init(
+            cloud: .freshEnable,
+            namespaceResults: [.empty],
+            holds: [.init(id: "master-upload", point: .masterUploadReturn)]
+        ))
+        robot.launch(control: control, arguments: CloudBackupHostRobot.largestContentSizeArguments)
+        robot.startFreshEnableFromOnboarding()
+        control.waitForHold("master-upload")
+
+        try robot.killAndRelaunch {
+            let removed = try control.removeKeychainItems(containing: "staged_master_key")
+            XCTAssertGreaterThan(removed, 0, "the interrupted setup staged no master key")
+        }
+
+        robot.scrollToHittable(app.staticTexts["Cloud Backup Needs Recovery"], initialWait: 30)
+        robot.scrollToHittable(app.staticTexts["Support code"])
+        robot.scrollToHittable(app.descendants(matching: .any)["cloudBackup.recovery.supportCode"])
+        robot.scrollToHittable(robot.button(startingWith: "Copy Code"))
+        robot.scrollToHittable(robot.button(startingWith: "Contact Support"))
+
+        let removeSetup = app.buttons["cloudBackup.recovery.removeIncompleteSetup"]
+        robot.scrollToHittable(removeSetup)
+        removeSetup.tap()
+
+        let confirmRemoval = app.buttons["Remove Incomplete Setup"].firstMatch
+        XCTAssertTrue(confirmRemoval.waitForExistence(timeout: 10))
+        XCTAssertTrue(confirmRemoval.isHittable, "the removal confirmation is not reachable")
     }
 
     private func openCloudBackupDetail(scenario: String) {
