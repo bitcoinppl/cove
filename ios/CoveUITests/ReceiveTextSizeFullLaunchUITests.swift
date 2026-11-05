@@ -14,8 +14,10 @@ final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
     /// Every control the Receive sheet offers once its address has loaded
     private static let receiveControls = ["Done", "Copy Address", "Create New Address"]
 
-    /// How much taller Copy Address must be at the largest size, where its headline text grows from
-    /// 17pt to 53pt while the padding around it stays the same
+    /// How much taller Copy Address must be at the largest size, so a launch that ignored the text
+    /// size argument fails. Its headline text grows from 17pt to 53pt while the padding stays the
+    /// same. A view that capped its text below the largest size would still pass, which is right:
+    /// the capped layout is what someone using the largest size sees
     private static let minimumGrowth: CGFloat = 1.3
 
     private var app: XCUIApplication!
@@ -43,6 +45,7 @@ final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
         let normal = reachableReceiveControls()
 
         // equal controls prove nothing if the launch argument was ignored and both launches used the same size
+        XCTAssertGreaterThan(normal.copyAddressHeight, 0, "Copy Address had no height at the default text size")
         XCTAssertGreaterThanOrEqual(
             largest.copyAddressHeight,
             normal.copyAddressHeight * Self.minimumGrowth,
@@ -57,17 +60,22 @@ final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
     }
 
     /// Opens Receive and lists the controls that can be used, scrolling the sheet toward any that
-    /// are off screen, as a user would, along with the height Copy Address renders at
+    /// are off screen, as a user would, along with the height Copy Address renders at once usable
     private func reachableReceiveControls() -> (controls: [String], copyAddressHeight: CGFloat) {
         app.openReceive()
 
         let copyAddress = button("Copy Address")
         XCTAssertTrue(copyAddress.waitForExistence(timeout: 10), "Receive has no Copy Address button")
-        let copyAddressHeight = copyAddress.frame.height
 
+        // measured only once the button is usable, since a frame read mid-layout can be empty
+        var copyAddressHeight: CGFloat = 0
         var found = Set<String>()
         for _ in 0 ..< 6 {
             found.formUnion(Self.receiveControls.filter { isUsable(button($0)) })
+            if found.contains("Copy Address"), copyAddressHeight == 0 {
+                copyAddressHeight = copyAddress.frame.height
+            }
+
             if found.count == Self.receiveControls.count { break }
 
             scrollReceiveSheet()

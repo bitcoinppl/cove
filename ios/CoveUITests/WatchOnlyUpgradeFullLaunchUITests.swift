@@ -1,8 +1,9 @@
 import XCTest
 
 /// Imports a funded watch-only wallet by scanning its export, labels its funding transaction, then
-/// imports the matching recovery words and checks that the same wallet now signs and keeps its
-/// name, history and label instead of a second wallet appearing
+/// imports the matching recovery words and checks that the same wallet now offers View Secret Words
+/// and keeps its name, history and label instead of a second wallet appearing. It doesn't sign a
+/// spend
 ///
 /// The QR seam (`COVE_UI_TEST_QR_SCRIPT`, docs/testing.md) stands in for the camera. Needs the fake
 /// node and the hardware signer host, which `xtask ios-ui` (`just ios-ui-background`) starts for
