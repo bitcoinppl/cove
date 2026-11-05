@@ -250,8 +250,8 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         return response.parts.count
     }
 
-    /// Reveals the QR code, decodes it from a screenshot, then reveals the receiver code, checking
-    /// that the screen never shows both at once
+    /// Reads the request QR code and the receiver code off the screen, checking they show only one
+    /// at a time
     private func readReceiverRequest(checkingLayout: Bool) -> (request: String, code: String) {
         let code = receiverCode()
         if checkingLayout {
@@ -262,37 +262,15 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
             )
         }
 
-        XCTAssertTrue(app.visibleQrCodes.isEmpty, "the request QR code must be unreadable until the user reveals it")
-        XCTAssertFalse(code.exists, "the receiver code must stay hidden until the user reveals it")
-        let textWhileBothHidden = app.visibleTextWithoutSpaces
+        guard let pair = layout.readRevealPair(
+            qrHint: "Tap to show QR code",
+            codeHint: "Tap to show receiver code",
+            code: code,
+            "receive request"
+        ) else { return ("", "") }
 
-        layout.reachAndTap(button("Tap to show QR code"), "receive request: show QR code")
-        guard let request = app.waitForVisibleQrCode() else {
-            XCTFail("the revealed request QR code never decoded")
-            return ("", "")
-        }
-
-        XCTAssertTrue(request.hasPrefix("B$2R"), "the QR code should hold a KeyTeleport receiver request, got \(request.prefix(8))")
-        XCTAssertFalse(code.exists, "the receiver code must stay hidden while the QR code shows")
-        let textWhileQrShows = app.visibleTextWithoutSpaces
-
-        layout.reachAndTap(button("Tap to show receiver code"), "receive request: show receiver code")
-        XCTAssertTrue(code.waitForExistence(timeout: 5), "the receiver code never showed")
-        XCTAssertTrue(app.waitForNoVisibleQrCode(), "showing the receiver code must make the QR code unreadable again")
-        assertReadableOnlyWhenShown(code.label, hiddenIn: [textWhileBothHidden, textWhileQrShows], "the receiver code")
-
-        return (request, code.label)
-    }
-
-    /// The blurred value must not be readable off the screenshots taken while it was hidden, and
-    /// must be once shown, which proves Vision could have read it
-    private func assertReadableOnlyWhenShown(_ value: String, hiddenIn screens: [String], _ name: String) {
-        let compact = value.filter { !$0.isWhitespace }.uppercased()
-        XCTAssertTrue(app.waitForVisibleText(containing: compact), "Vision never read \(name) once shown")
-
-        for screen in screens {
-            XCTAssertFalse(screen.contains(compact), "\(name) was readable on screen while hidden")
-        }
+        XCTAssertTrue(pair.qr.hasPrefix("B$2R"), "the QR code should hold a KeyTeleport receiver request, got \(pair.qr.prefix(8))")
+        return (pair.qr, pair.code)
     }
 
     private func waitForReview(_ title: String) {
@@ -320,13 +298,29 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
             XCTAssertFalse(app.staticTexts[String(word)].exists, "the words must stay hidden until the user reveals them")
         }
 
-        XCTAssertTrue(button("Tap to reveal recovery words").firstMatch.exists)
+        let hint = "Tap to reveal recovery words"
+        layout.assertReachable(button(hint), "review: '\(hint)'", needsHit: true).assertConceals(hint: hint, "the recovery words")
     }
 
+    /// Each word must show beside its number, so a review that swaps two words, or shows one
+    /// repeated word in place of another, fails
     private func assertWordsShown() {
-        for word in Set(Self.sentWords.split(separator: " ")) {
-            XCTAssertTrue(app.staticTexts[String(word)].waitForExistence(timeout: 5), "the revealed words should include '\(word)'")
+        for (index, word) in Self.sentWords.split(separator: " ").map(String.init).enumerated() {
+            let number = app.staticTexts.matching(NSPredicate(format: "label == %@", "\(index + 1)"))
+            let words = app.staticTexts.matching(NSPredicate(format: "label == %@", word))
+            XCTAssertTrue(words.firstMatch.waitForExistence(timeout: 5), "the revealed words should include '\(word)'")
+
+            let numbered = number.allElementsBoundByIndex.contains { number in
+                words.allElementsBoundByIndex.contains { isBeside($0.frame, number.frame) }
+            }
+
+            XCTAssertTrue(numbered, "word \(index + 1) should be '\(word)'")
         }
+    }
+
+    /// Whether the word sits in the same cell as the number, just to its right
+    private func isBeside(_ word: CGRect, _ number: CGRect) -> Bool {
+        abs(word.midY - number.midY) < 4 && word.minX > number.maxX && word.minX - number.maxX < 40
     }
 
     private func revealedKey() -> XCUIElement {

@@ -44,6 +44,8 @@ env:
     CoveUITests/HardwareSigningFullLaunchUITests,
     CoveUITests/PublicKeyImportFullLaunchUITests,
     CoveUITests/TapSignerLayoutFullLaunchUITests,
+    CoveUITests/KeyTeleportReceiveFullLaunchUITests,
+    CoveUITests/KeyTeleportSendFullLaunchUITests,
     CoveCloudBackupUITests/PrivateKeyExportFullAppUITests,
     CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests
   ANDROID_FLAVOURS: Dev UiTest

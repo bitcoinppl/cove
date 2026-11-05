@@ -15,15 +15,19 @@ struct ScreenReachability {
     let app: XCUIApplication
 
     /// Every text and action must lie wholly inside the window once scrolled to, the actions must
-    /// take a tap there, and no text on screen may draw truncated
+    /// take a tap there, and no text on screen may draw truncated wherever one of them is scrolled
+    /// into view
     func assertScreenFits(_ screen: String, texts: [String], buttons: [XCUIElementQuery]) {
         for text in texts {
-            assertReachable(app.staticTexts.matching(NSPredicate(format: "label == %@", text)), "\(screen): '\(text)'", needsHit: false)
+            let element = assertReachable(app.staticTexts.matching(NSPredicate(format: "label == %@", text)), "\(screen): '\(text)'", needsHit: false)
+            assertDrawn(text, in: element, "\(screen): '\(text)'")
             assertNoTruncatedText("\(screen) at '\(text)'")
         }
 
         for button in buttons {
-            assertReachable(button, "\(screen): \(button.firstMatch.description)", needsHit: true)
+            let name = button.firstMatch.description
+            assertReachable(button, "\(screen): \(name)", needsHit: true)
+            assertNoTruncatedText("\(screen) at \(name)")
         }
     }
 
@@ -32,6 +36,16 @@ struct ScreenReachability {
     func assertNoTruncatedText(_ screen: String) {
         let truncated = app.visibleText.filter { $0.contains("…") || $0.contains("...") }
         XCTAssertTrue(truncated.isEmpty, "\(screen): text draws truncated: \(truncated)")
+    }
+
+    /// Fails unless Vision reads the start of the text where it is drawn, so the ellipsis check
+    /// above is reading the screen it is meant to and not, say, one still sliding in
+    ///
+    /// Only the start, since a longer stretch of a key or address is more likely to have one
+    /// character misread than to be missing
+    private func assertDrawn(_ text: String, in element: XCUIElement, _ name: String) {
+        let start = String(text.filter { !$0.isWhitespace }.prefix(8))
+        XCTAssertTrue(element.waitForVisibleText(containing: start, timeout: 3), "\(name): Vision never read '\(start)' where it is drawn")
     }
 
     @discardableResult
@@ -187,6 +201,4 @@ struct ScreenReachability {
         let keyboard = app.keyboards.firstMatch
         return keyboard.exists && keyboard.frame.intersects(frame)
     }
-
-    // A random 32-byte chain code as hex, as a user typing their own would enter it
 }

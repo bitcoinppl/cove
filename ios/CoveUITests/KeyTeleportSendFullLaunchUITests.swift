@@ -112,41 +112,19 @@ final class KeyTeleportSendFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Scan Receiver Request"].waitForExistence(timeout: 15), "the send screen never showed")
     }
 
-    /// Reveals the QR code and decodes it from a screenshot, then reveals the password, checking
-    /// that the screen never shows both at once
+    /// Reads the response QR code and the password off the screen, checking they show only one at
+    /// a time
     private func readSenderResponse() -> (response: String, password: String) {
-        let showQr = button("Tap to show QR code")
-        let showPassword = button("Tap to show password")
-        let password = shownPassword()
+        XCTAssertTrue(button("Tap to show QR code").firstMatch.waitForExistence(timeout: 20), "the response never showed")
+        guard let pair = layout.readRevealPair(
+            qrHint: "Tap to show QR code",
+            codeHint: "Tap to show password",
+            code: shownPassword(),
+            "response"
+        ) else { return ("", "") }
 
-        XCTAssertTrue(showQr.firstMatch.waitForExistence(timeout: 20), "the response never showed")
-        XCTAssertTrue(app.visibleQrCodes.isEmpty, "the response QR code must be unreadable until the user reveals it")
-        XCTAssertFalse(password.exists, "the password must stay hidden until the user reveals it")
-        let textWhileBothHidden = app.visibleTextWithoutSpaces
-
-        layout.reachAndTap(showQr, "response: show QR code")
-        guard let response = app.waitForVisibleQrCode() else {
-            XCTFail("the revealed response QR code never decoded")
-            return ("", "")
-        }
-
-        XCTAssertTrue(response.hasPrefix("B$2S"), "the QR code should hold a KeyTeleport sender response, got \(response.prefix(8))")
-        XCTAssertFalse(password.exists, "the password must stay hidden while the QR code shows")
-        let textWhileQrShows = app.visibleTextWithoutSpaces
-
-        layout.reachAndTap(showPassword, "response: show password")
-        XCTAssertTrue(password.waitForExistence(timeout: 5), "the password never showed")
-        XCTAssertTrue(app.waitForNoVisibleQrCode(), "showing the password must make the QR code unreadable again")
-        XCTAssertTrue(showQr.firstMatch.exists, "showing the password should conceal the QR code behind its hint")
-
-        // the blurred password must not be readable off the screenshots taken while it was hidden,
-        // and must be once shown, which proves Vision could have read it
-        let compact = password.label.filter { !$0.isWhitespace }
-        XCTAssertTrue(app.waitForVisibleText(containing: compact), "Vision never read the password once shown")
-        XCTAssertFalse(textWhileBothHidden.contains(compact), "the password was readable on screen before either was revealed")
-        XCTAssertFalse(textWhileQrShows.contains(compact), "the password was readable on screen while the QR code showed")
-
-        return (response, password.label)
+        XCTAssertTrue(pair.qr.hasPrefix("B$2S"), "the QR code should hold a KeyTeleport sender response, got \(pair.qr.prefix(8))")
+        return (pair.qr, pair.code)
     }
 
     // MARK: - Helpers
