@@ -143,9 +143,10 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/enable/restart.rs::recovery_support_codes_are_stable_and_privacy_safe",
   "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingScreenTest.kt::pendingEnableRecoveryShowsSupportCodeAndSafeCleanupAction",
   "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testPendingEnableRecoveryPresentationSeparatesSafeCleanupFromSupportOnly",
+  "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testKilledEnableRecoversThroughRelaunchWithoutNewPasskey",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# tests build the interrupted state and call recovery directly; recovery through a new manager's normal startup stays human
+# rust tests build each interrupted state and call recovery directly; on ios a relaunch after a kill once the cloud accepted the master key brings back Confirm Passkey through normal startup and finishes with the same passkey. kills during registration, confirmation and promotion stay human on both platforms
 
 [[row]]
 id = "s12-retry-interrupted-setup-without-duplicates"
@@ -172,16 +173,18 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "human",
+  "human:ios",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::registered_passkey_confirmation_session_prevents_duplicate_create",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::registered_passkey_stages_confirmation_without_duplicate_create",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::confirm_saved_passkey_reuses_original_credential_id",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable_session.rs::duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::supervisor_consumes_retry_pending_enable_upload",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::startup_resume_retries_interrupted_uploading_wallets",
+  "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testFailedSetupUploadRetriesWithoutNewPasskey",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupRetryInterruptedSetupFullLaunchTest.kt::failedSetupUploadRetriesWithoutNewPasskey",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# tests cover retry session extraction and uploads for an enabled backup; retrying a failed setup upload through the production action stays human
+# ui tests on both platforms fail a setup upload at the provider and retry it through the production Enable action with the same passkey. ios stays human until its test class runs in ci
 
 [[row]]
 id = "s12-cancel-incomplete-setup-preserves-active-data"
@@ -334,7 +337,7 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "human",
+  "human:android",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_mixed_failure_continues_through_later_success_and_settles",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restoring_one_of_three_copies_leaves_the_others_already_on_device",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_clears_its_marker_when_the_only_listed_record_duplicates_a_local_wallet",
@@ -342,9 +345,11 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/model.rs::restore_all_runtime_events_project_progress_and_cancellation",
   "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllHelpersTest.kt::runningStateProjectsBoundedDeterminateProgressAndCurrentWallet",
   "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testRestoreAllProgressCopyIncludesCurrentWalletCountsAndCancellation",
+  "ios-ui:ios/CoveUITests/CloudBackupRestoreAllFullAppUITests.swift::testRunningBatchReportsSequentialProgress",
+  "ios-ui:ios/CoveUITests/CloudBackupRestoreAllFullAppUITests.swift::testRestoreAllSkipsACloudCopyOfAWalletAlreadyOnDevice",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# tests project progress from supplied events and check batch results; progress from a running batch stays human
+# rust tests project progress from supplied events and check batch results; on ios a running batch reports each wallet in turn and skips a cloud copy of a wallet already on the device. android stays human
 
 [[row]]
 id = "s12-restore-all-navigation-and-cancel"
@@ -366,16 +371,17 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "human",
+  "human:android",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::reentering_detail_keeps_the_running_restore_all_batch",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::supplemental_inventory_does_not_cancel_restore_all",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_cancellation_finishes_the_active_wallet_and_skips_the_next",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_cancellation_keeps_claim_until_record_boundary",
   "android-unit:android/app/src/test/java/org/bitcoinppl/cove/cloudbackup/CloudBackupRestoreAllHelpersTest.kt::cancellationRequestKeepsProgressAndRemovesRepeatedCancelIntent",
   "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testRestoreAllProgressCopyIncludesCurrentWalletCountsAndCancellation",
+  "ios-ui:ios/CoveUITests/CloudBackupRestoreAllFullAppUITests.swift::testLeavingAndReenteringKeepsTheBatchAndCancelSkipsTheNextWallet",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust owns the batch and keeps it across re-entry; leaving and re-entering each native screen and tapping Cancel stay human
+# rust owns the batch and keeps it across re-entry; on ios leaving and re-entering Cloud Backup and Settings keeps the batch, and Cancel finishes the current wallet and skips the next. android stays human
 
 [[row]]
 id = "s12-restore-all-wallet-and-provider-failure"
@@ -428,9 +434,10 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_restart_marker_enters_detail_without_passkey_verification",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_keeps_its_marker_when_a_listed_record_cannot_be_read",
   "rust:rust/src/manager/cloud_backup_manager/store.rs::atomic_state_mutations_preserve_restore_marker_count_and_verification",
+  "ios-ui:ios/CoveUITests/CloudBackupRestoreAllFullAppUITests.swift::testRelaunchAfterKillOffersRetryRemainingWithoutAutomaticWork",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust tests cover the restart marker and an unreadable record; recovering a partly finished batch after a restart stays human
+# rust tests cover the restart marker and an unreadable record; on ios a relaunch after a kill partway through a batch offers Retry Remaining for the rest, and the retry restores it. ios stays human because the test counts downloads only after opening Cloud Backup, so an automatic attempt that failed before then would go unseen
 
 [[row]]
 id = "s12-onboarding-cloud-recovery-and-late-discovery"
@@ -448,7 +455,6 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/OnboardingManager.kt",
 ]
 coverage = [
-  "human:ios",
   "rust:rust/src/manager/onboarding_manager.rs::backup_found_auto_switches_on_early_screens",
   "rust:rust/src/manager/onboarding_manager.rs::cloud_check_retries_pending_metadata_until_backup_is_readable",
   "rust:rust/src/manager/onboarding_manager/flow_state.rs::late_backup_found_offers_restore_from_choice_steps",
@@ -459,9 +465,11 @@ coverage = [
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/onboarding/OnboardingLateOfferFullLaunchTest.kt::delayedDiscoveryOffersRestoreDuringHardwareImport",
   "ios-unit:ios/CoveTests/OnboardingPromptLayoutTests.swift::testSoftwareImportProjectsLateCloudRestoreOffer",
   "ios-unit:ios/CoveTests/OnboardingPromptLayoutTests.swift::testHardwareImportProjectsLateCloudRestoreOffer",
+  "ios-ui:ios/CoveUITests/CloudBackupOnboardingLateOfferFullAppUITests.swift::testLateDiscoveryOffersRestoreDuringSoftwareImport",
+  "ios-ui:ios/CoveUITests/CloudBackupOnboardingLateOfferFullAppUITests.swift::testLateDiscoveryOffersRestoreDuringHardwareImport",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# ios tests render the late offer alert from a bound flag; no ios test drives OnboardingManager reconciliation to show it, so ios stays human
+# ios ui tests hold startup discovery until the import screen is open, so OnboardingManager reconciles the late backup into the offer
 
 [[row]]
 id = "s12-icloud-local-eviction-and-delayed-discovery"

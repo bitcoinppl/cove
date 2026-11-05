@@ -185,9 +185,10 @@ coverage = [
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupLargeFontLayoutTest.kt::failedVerificationKeepsRecoveryActionsReachable",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupLargeFontLayoutTest.kt::missingPasskeyRecoveryKeepsAddPasskeyReachable",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupLargeFontLayoutTest.kt::pendingEnableRecoveryKeepsSupportCodeAndCleanupReachable",
+    "ios-ui:ios/CoveUITests/CloudBackupLargeTextFullAppUITests.swift::testRestoreAllProgressKeepsCancelReachable",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# ios still needs a person for Restore All progress and the missing-passkey and incomplete-setup recovery screens, which the scripted host can't hold on screen
+# ios still needs a person for the missing-passkey recovery screen, which nothing outside rust tests can reach, and for the incomplete-setup recovery screen
 
 [[row]]
 id = "s16-tapsigner-setup-signing-and-retry-layout"

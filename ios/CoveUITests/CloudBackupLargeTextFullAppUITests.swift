@@ -16,6 +16,11 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         robot = CloudBackupHostRobot(app: app)
     }
 
+    override func tearDown() {
+        CloudBackupHostControl.tearDown(self, app: app)
+        super.tearDown()
+    }
+
     func testSetupDescriptionAcknowledgementsAndEnableAreReachable() {
         // MAN-03 starts with an empty cloud, so onboarding offers to enable Cloud Backup; the
         // native passkey it wires up is only used after Enable, which this test never taps
@@ -71,6 +76,27 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         robot.scrollToHittable(app.staticTexts["Backup verified"], initialWait: 30)
         robot.scrollToHittable(robot.button(startingWith: "Verify Again"))
         robot.scrollToHittable(app.buttons["Disable Cloud Backup"])
+    }
+
+    func testRestoreAllProgressKeepsCancelReachable() throws {
+        let control = try CloudBackupRestoreAllFullAppUITests.openDetailWithTwoCloudOnlyWallets(
+            app: app,
+            robot: robot,
+            arguments: CloudBackupHostRobot.largestContentSizeArguments
+        )
+        let screen = RestoreAllScreen(app: app, robot: robot)
+
+        try control.holdWalletDownload(
+            id: "wallet-two",
+            recordId: CloudBackupRestoreAllFullAppUITests.walletTwoRecordId,
+            skippingCalls: 1
+        )
+        screen.tapRestoreAll(count: 2)
+        control.waitForHold("wallet-two")
+
+        screen.waitForProgress(containing: ["Restoring Fixture Wallet Two", "Completed 0 of 2"])
+        robot.scrollToHittable(app.buttons["Cancel"])
+        control.release("wallet-two")
     }
 
     private func openCloudBackupDetail(scenario: String) {

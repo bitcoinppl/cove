@@ -63,6 +63,14 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     @Volatile
     private var fixtureWalletRecordIds = listOf(ScriptedCloudBackupFixture.WALLET_RECORD_ID)
 
+    private val masterUploads = AtomicInteger(0)
+    private val walletUploads = AtomicInteger(0)
+    private val uploadFailures = CopyOnWriteArrayList<UploadFailure>()
+    private val uploads = CopyOnWriteArrayList<Upload>()
+
+    @Volatile
+    private var walletUploadBlock: WalletUploadBlock? = null
+
     enum class NamespaceResult {
         EMPTY,
         BACKUP_FOUND,
@@ -74,6 +82,38 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         VALID,
         CORRUPT,
         UNAVAILABLE,
+    }
+
+    enum class UploadKind {
+        MASTER,
+        WALLET,
+    }
+
+    enum class UploadError {
+        UPLOAD_FAILED,
+        OFFLINE,
+        NOT_AVAILABLE,
+    }
+
+    private data class UploadFailure(
+        val kind: UploadKind,
+        val attempt: Int,
+        val error: UploadError,
+    )
+
+    /** One upload the app asked the provider to store, with [recordId] null for the master key */
+    data class Upload(
+        val kind: UploadKind,
+        val namespace: String,
+        val recordId: String?,
+        val accepted: Boolean,
+    )
+
+    private class WalletUploadBlock(
+        val attempt: Int,
+    ) {
+        val entered = CountDownLatch(1)
+        val release = CompletableDeferred<Unit>()
     }
 
     fun attach(context: Context): CloudStorageAccess {
@@ -118,6 +158,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         walletListBlock = null
         walletDownloadBlock = null
         fixtureWalletRecordIds = listOf(ScriptedCloudBackupFixture.WALLET_RECORD_ID)
+        resetUploads()
     }
 
     /** Cloud holds only the private-key fixture wallet, so restore installs an xprv wallet */
@@ -220,6 +261,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     }
 
     fun configureFreshEnableWithDelayedVisibility(blockMasterUploadReturn: Boolean = false) {
+        resetUploads()
         fixtureRestoreEnabled = false
         namespaceScenario = NamespaceScenario.immediateEmpty()
         freshEnableScenario = FreshEnableScenario(blockMasterUploadReturn)
@@ -231,9 +273,69 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     ) {
         val storage = PersistentFreshEnableStorage(requireNotNull(persistentRoot))
         storage.prepare(resetStoredState)
+        resetUploads()
         fixtureRestoreEnabled = false
         namespaceScenario = NamespaceScenario.immediateEmpty()
         freshEnableScenario = FreshEnableScenario(blockMasterUploadReturn, storage = storage)
+    }
+
+    /**
+     * Fails the upload of [kind] numbered [attempt], counted from one since the scenario was
+     * configured, so a test can retry a setup whose upload the provider rejected
+     */
+    fun failUpload(
+        kind: UploadKind,
+        attempt: Int,
+        error: UploadError = UploadError.UPLOAD_FAILED,
+    ) {
+        require(attempt > 0) { "upload attempts are one-based" }
+        uploadFailures += UploadFailure(kind, attempt, error)
+    }
+
+    /** Uploads since the scenario was configured, in call order */
+    fun uploads(): List<Upload> = uploads.toList()
+
+    /**
+     * Holds the next wallet upload until [releaseBlockedWalletUpload], so a test can tell which
+     * action made it
+     */
+    fun blockNextWalletUpload() {
+        walletUploadBlock = WalletUploadBlock(attempt = walletUploads.get() + 1)
+    }
+
+    fun awaitBlockedWalletUpload(timeoutMs: Long = 20_000): Boolean =
+        walletUploadBlock?.entered?.await(timeoutMs, TimeUnit.MILLISECONDS) == true
+
+    fun releaseBlockedWalletUpload() {
+        walletUploadBlock?.release?.complete(Unit)
+    }
+
+    /** Namespaces the fresh-enable cloud holds a master key for */
+    fun freshEnableNamespaces(): List<String> = freshEnableScenario?.masterNamespaces().orEmpty()
+
+    fun freshEnableWalletRecordIds(namespace: String): List<String> =
+        freshEnableScenario?.walletRecordIds(namespace).orEmpty()
+
+    fun uploadCount(kind: UploadKind): Int =
+        when (kind) {
+            UploadKind.MASTER -> masterUploads.get()
+            UploadKind.WALLET -> walletUploads.get()
+        }
+
+    fun awaitUploadCount(
+        kind: UploadKind,
+        expected: Int,
+        timeoutMs: Long = 20_000,
+    ): Boolean {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+
+        while (System.nanoTime() < deadline) {
+            if (uploadCount(kind) >= expected) return true
+
+            Thread.sleep(NAMESPACE_REQUEST_POLL_INTERVAL_MS)
+        }
+
+        return uploadCount(kind) >= expected
     }
 
     fun awaitNamespaceRequest(timeoutMs: Long = 10_000): Boolean =
@@ -421,6 +523,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         data: ByteArray,
         policy: CloudAccessPolicy,
     ) {
+        recordUpload(UploadKind.MASTER, masterUploads.incrementAndGet(), namespace, recordId = null)
+
         if (fixtureRestoreEnabled) {
             check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
                 "unexpected fixture namespace $namespace"
@@ -446,6 +550,13 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         data: ByteArray,
         policy: CloudAccessPolicy,
     ) {
+        val attempt = walletUploads.incrementAndGet()
+        recordUpload(UploadKind.WALLET, attempt, namespace, recordId)
+        walletUploadBlock?.takeIf { it.attempt == attempt }?.let { block ->
+            block.entered.countDown()
+            block.release.await()
+        }
+
         if (fixtureRestoreEnabled) {
             check(namespace == ScriptedCloudBackupFixture.NAMESPACE) {
                 "unexpected fixture namespace $namespace"
@@ -460,6 +571,33 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         val scenario = freshEnableScenario ?: unsupported()
         scenario.storeWalletBackup(namespace, recordId, data)
         scenario.allProviderWritesAccepted.countDown()
+    }
+
+    private fun resetUploads() {
+        masterUploads.set(0)
+        walletUploads.set(0)
+        uploadFailures.clear()
+        uploads.clear()
+        walletUploadBlock?.release?.complete(Unit)
+        walletUploadBlock = null
+    }
+
+    /** Records the upload, and throws the scripted failure when one fails this attempt */
+    private fun recordUpload(
+        kind: UploadKind,
+        attempt: Int,
+        namespace: String,
+        recordId: String?,
+    ) {
+        val failure = uploadFailures.firstOrNull { it.kind == kind && it.attempt == attempt }
+        uploads += Upload(kind, namespace, recordId, accepted = failure == null)
+        if (failure == null) return
+
+        throw when (failure.error) {
+            UploadError.UPLOAD_FAILED -> CloudStorageException.UploadFailed("scripted $kind upload failure")
+            UploadError.OFFLINE -> CloudStorageException.Offline("scripted provider is offline")
+            UploadError.NOT_AVAILABLE -> CloudStorageException.NotAvailable("scripted provider is unavailable")
+        }
     }
 
     override suspend fun downloadWalletBackup(

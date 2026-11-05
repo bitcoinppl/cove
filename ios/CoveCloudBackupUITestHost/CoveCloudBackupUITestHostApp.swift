@@ -7,24 +7,38 @@ struct CoveCloudBackupUITestHostApp: App {
     private let root: CoveApplicationRoot
 
     init() {
+        Self.resetLocalStateIfRequested()
+
+        root = CoveApplicationRoot(dependencies: Self.dependencies())
+    }
+
+    private static func dependencies() -> CoveApplicationDependencies {
+        // a test that names a control directory drives cloud storage and passkeys from its script
+        // and keeps the keychain in that directory, so the app can be killed and relaunched
+        if let controller = CloudBackupUITestController.fromEnvironment() {
+            return CoveApplicationDependencies(
+                keychain: ScriptedKeychainAccess(storeURL: controller.keychainURL),
+                device: DeviceAccesor(),
+                connectivity: CloudConnectivityMonitor.shared,
+                passkey: ControlledPasskeyProvider(controller: controller),
+                cloudStorage: ControlledCloudStorageAccess(controller: controller)
+            )
+        }
+
         let scenario = CloudBackupUITestScenario.current()
-        let keychain = ScriptedKeychainAccess()
         let passkey: any PasskeyProvider =
             if scenario == .nativePasskeySmoke {
                 PasskeyProviderImpl()
             } else {
                 ScriptedPasskeyProvider(scenario: scenario)
             }
-        Self.resetLocalStateIfRequested()
 
-        root = CoveApplicationRoot(
-            dependencies: CoveApplicationDependencies(
-                keychain: keychain,
-                device: DeviceAccesor(),
-                connectivity: CloudConnectivityMonitor.shared,
-                passkey: passkey,
-                cloudStorage: ScriptedCloudStorageAccess(scenario: scenario)
-            )
+        return CoveApplicationDependencies(
+            keychain: ScriptedKeychainAccess(),
+            device: DeviceAccesor(),
+            connectivity: CloudConnectivityMonitor.shared,
+            passkey: passkey,
+            cloudStorage: ScriptedCloudStorageAccess(scenario: scenario)
         )
     }
 
@@ -34,6 +48,14 @@ struct CoveCloudBackupUITestHostApp: App {
         }
 
         try? FileManager.default.removeItem(atPath: rootDataDirPath())
+
+        // the scripted keychain is local state too, while the cloud copy in the control
+        // directory is not, so a reset wipes only the keychain
+        if let directory = ProcessInfo.processInfo.environment[CloudBackupUITestControl.environmentKey] {
+            try? FileManager.default.removeItem(
+                atPath: (directory as NSString).appendingPathComponent(CloudBackupUITestControl.keychainFileName)
+            )
+        }
     }
 
     var body: some Scene {

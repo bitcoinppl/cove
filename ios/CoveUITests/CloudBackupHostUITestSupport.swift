@@ -15,7 +15,7 @@ struct CloudBackupHostRobot {
 
     /// Launches the host into onboarding, relaunching once if the bootstrap watchdog fires on a
     /// cold simulator
-    func launch(scenario: String, arguments: [String] = []) {
+    func launch(scenario: String?, arguments: [String] = []) {
         app.launchEnvironment["COVE_CLOUD_BACKUP_UI_RESET"] = "1"
         app.launchEnvironment["COVE_CLOUD_BACKUP_UI_SCENARIO"] = scenario
         app.launchArguments += arguments
@@ -30,6 +30,117 @@ struct CloudBackupHostRobot {
         if waitForOnboardingOrStartupTimeout() == .startupTimedOut {
             XCTFail("App startup timed out on relaunch")
         }
+    }
+
+    /// Launches the host driven by `control`'s script, after wiping local data
+    func launch(control: CloudBackupHostControl, arguments: [String] = []) {
+        control.configure(app)
+        launch(scenario: nil, arguments: arguments)
+    }
+
+    /// Kills the app and starts a new process on the same data, keychain and cloud, as a person
+    /// force-quitting and reopening Cove would
+    ///
+    /// `whileStopped` runs after the app has stopped and before the new process starts
+    func killAndRelaunch(whileStopped: () throws -> Void) rethrows {
+        app.terminate()
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 10), "the app did not stop")
+        try whileStopped()
+
+        // the launch environment carries over to the next launch, and the reset would wipe the
+        // data this relaunch must keep
+        app.launchEnvironment.removeValue(forKey: "COVE_CLOUD_BACKUP_UI_RESET")
+        app.launch()
+
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 20), "the relaunched app did not start")
+        if staticText(containing: "App startup timed out").waitForExistence(timeout: 3) {
+            XCTFail("App startup timed out on relaunch")
+        }
+    }
+
+    func killAndRelaunch() {
+        killAndRelaunch(whileStopped: {})
+    }
+
+    /// Starts a fresh Cloud Backup enable as a new user from onboarding, through the passkey
+    /// acknowledgements and Enable Cloud Backup
+    func startFreshEnableFromOnboarding() {
+        let getStarted = app.buttons["Get Started"]
+        XCTAssertTrue(getStarted.waitForExistence(timeout: 15))
+        scrollToHittable(getStarted)
+        getStarted.tap()
+
+        if app.staticTexts["Terms & Conditions"].waitForExistence(timeout: 2) {
+            acceptTerms()
+        }
+
+        let newUser = button(startingWith: "No, I")
+        scrollToHittable(newUser)
+        newUser.tap()
+
+        let enableFromBackup = button(startingWith: "Enable")
+        scrollToHittable(enableFromBackup, initialWait: 20)
+        enableFromBackup.tap()
+        XCTAssertTrue(app.staticTexts["Cloud Backup"].waitForExistence(timeout: 10))
+
+        acceptCloudBackupAcknowledgements()
+        tapEnableCloudBackup()
+    }
+
+    func acceptCloudBackupAcknowledgements() {
+        [
+            "my passkey is required",
+            "access to my iCloud account",
+            "manually back up my 12 or 24 words",
+        ].forEach { fragment in
+            let acknowledgement = staticText(containing: fragment)
+            scrollToHittable(acknowledgement)
+            acknowledgement.tap()
+        }
+    }
+
+    func tapEnableCloudBackup() {
+        let enable = app.buttons["Enable Cloud Backup"]
+        scrollToHittable(enable)
+        XCTAssertTrue(enable.isEnabled, "Enable Cloud Backup is disabled")
+        enable.tap()
+    }
+
+    /// Waits for onboarding's Cloud Backup success and continues into the app
+    func finishOnboardingAfterCloudBackupEnabled() {
+        XCTAssertTrue(app.staticTexts["Cloud Backup enabled"].waitForExistence(timeout: 30))
+        let continueButton = app.buttons["Continue"]
+        scrollToHittable(continueButton)
+        continueButton.tap()
+
+        // the success step returns to the backup step, which now shows Cloud Backup as Enabled
+        // and lets a new wallet continue to the terms without saving its words first
+        let backupStep = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Back up your wallet")
+        ).firstMatch
+        XCTAssertTrue(backupStep.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Enabled"].waitForExistence(timeout: 5))
+        let continueFromBackup = app.buttons["Continue"]
+        scrollToHittable(continueFromBackup)
+        continueFromBackup.tap()
+
+        XCTAssertTrue(app.staticTexts["Terms & Conditions"].waitForExistence(timeout: 10))
+        acceptTerms()
+    }
+
+    /// Opens Cloud Backup detail from Settings, whose row title follows the backup's status
+    func openCloudBackupDetail(rowTitle: String = "Cloud Backup Enabled") {
+        let row = app.staticTexts[rowTitle]
+        scrollToHittable(row, initialWait: 15)
+        row.tap()
+        XCTAssertTrue(app.navigationBars["Cloud Backup"].waitForExistence(timeout: 10))
+    }
+
+    /// Goes back one screen with the navigation bar's back button
+    func goBack() {
+        let back = app.navigationBars.buttons.element(boundBy: 0)
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        back.tap()
     }
 
     private enum LaunchOutcome {
