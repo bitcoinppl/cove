@@ -272,13 +272,11 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewViews.kt",
 ]
 coverage = [
-    "human:android",
-    "ios-ui:ios/CoveUITests/KeyTeleportReceiveFullLaunchUITests.swift::testMnemonicReceiveScreensFitAtLargestTextSizeInDarkMode",
-    "ios-ui:ios/CoveUITests/KeyTeleportReceiveFullLaunchUITests.swift::testXprvAndMessageReviewsFitAtLargestTextSizeInDarkMode",
+    "human",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # on android, reaching the review screens needs a camera qr hand-off between two phones
-# the ios tests receive from the ui test host at the largest text size in dark mode, scroll each text and action into view and fail on an ellipsis Vision reads on screen
+# on ios, testMnemonicReceiveScreensFitAtLargestTextSizeInDarkMode and testXprvAndMessageReviewsFitAtLargestTextSizeInDarkMode in KeyTeleportReceiveFullLaunchUITests check these screens at the largest text size in dark mode, but they haven't passed on GitHub yet (Vision misses a lone recovery word and the Copy label where drawn), so a person still checks the layout
 
 [[row]]
 id = "s16-restore-normal-font-and-compare-receive-controls"
