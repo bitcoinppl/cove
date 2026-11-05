@@ -10,8 +10,8 @@ import org.bitcoinppl.cove_core.device.PasskeyRegistrationPlatform
 import org.bitcoinppl.cove_core.device.PasskeyRegistrationResult
 import org.bitcoinppl.cove_core.device.PasskeyRegistrationUser
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
