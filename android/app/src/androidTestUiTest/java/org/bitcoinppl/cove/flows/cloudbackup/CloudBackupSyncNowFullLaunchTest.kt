@@ -344,8 +344,9 @@ class CloudBackupSyncNowFullLaunchTest {
     private fun UiDevice.scrollDetail(direction: Direction): Boolean {
         repeat(5) {
             try {
-                val container =
-                    findObject(By.scrollable(true)) ?: error("the Cloud Backup detail has no scrollable container")
+                // compose marks a list scrollable only while it can scroll, so a detail that fits on
+                // screen has no scrollable node and the visible texts are all of it
+                val container = findObject(By.scrollable(true)) ?: return false
 
                 return container.scroll(direction, 0.8f)
             } catch (_: StaleObjectException) {
