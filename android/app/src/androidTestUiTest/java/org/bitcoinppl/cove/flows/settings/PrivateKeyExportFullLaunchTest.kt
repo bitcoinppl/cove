@@ -15,6 +15,7 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.AuthManager
 import org.bitcoinppl.cove.WalletManager
@@ -548,15 +549,23 @@ class PrivateKeyExportFullLaunchTest {
 
     // only one manager may hold a wallet, so read through the app's when it holds this one, and
     // otherwise through a manager of its own, since the app's cache cancels a load when the app moves
-    // to another wallet; while the app is still loading the wallet the coordinator reports busy
+    // to another wallet; while the app is still loading the wallet the coordinator reports busy, and
+    // a wallet switch can close the app's manager between fetching and reading it
     private fun readPrivateKey(id: WalletId): String {
         val deadline = SystemClock.uptimeMillis() + KEY_READ_TIMEOUT_MS
         while (true) {
             try {
                 appWalletManager(id)?.let { return it.exposeXprv() }
-                return runBlocking { WalletManager.load(id) }.use { it.exposeXprv() }
-            } catch (e: WalletManagerException.WalletLifecycle) {
-                if (e.v1 != WalletLifecycleFailure.CoordinatorBusy || SystemClock.uptimeMillis() > deadline) throw e
+
+                // load retries a closing or constructing manager on its own, so bound it by the same deadline
+                val remaining = (deadline - SystemClock.uptimeMillis()).coerceAtLeast(1L)
+                return runBlocking { withTimeout(remaining) { WalletManager.load(id) } }.use { it.exposeXprv() }
+            } catch (e: WalletManagerException) {
+                val transient =
+                    e is WalletManagerException.ManagerClosed ||
+                        (e as? WalletManagerException.WalletLifecycle)?.v1 == WalletLifecycleFailure.CoordinatorBusy
+
+                if (!transient || SystemClock.uptimeMillis() > deadline) throw e
                 Thread.sleep(SETTLE_POLL_MS)
             }
         }
@@ -572,8 +581,18 @@ class PrivateKeyExportFullLaunchTest {
 
     private fun walletsHoldingTheFixtureKey(): Int = fixtureKeyWalletIds().size
 
-    private fun fixtureKeyWalletIds(): List<WalletId> =
-        walletIds().filter { id -> runCatching { readPrivateKey(id) }.getOrNull() == FIXTURE_XPRV }
+    private fun fixtureKeyWalletIds(): List<WalletId> = walletIds().filter(::holdsFixtureKey)
+
+    // a wallet holding recovery words, or no secret at all, is not the fixture; any other failure is
+    // thrown, since an unreadable wallet could be a duplicate the count must not miss
+    private fun holdsFixtureKey(id: WalletId): Boolean =
+        try {
+            readPrivateKey(id) == FIXTURE_XPRV
+        } catch (e: WalletManagerException.SecretRetrievalException) {
+            false
+        } catch (e: WalletManagerException.WalletDoesNotExist) {
+            false
+        }
 
     private fun clipboard(): ClipboardManager =
         InstrumentationRegistry.getInstrumentation().targetContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

@@ -284,6 +284,7 @@ paths = [
 ]
 coverage = [
     "agent:ios",
+    "human:android",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/secretwords/SecretWordsLockTest.kt::wordsClearWhenTheAppReallyGoesToTheBackground",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::receivedPrivateKeyStaysHiddenUntilRevealedAndImportsAsAWallet",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportBackgroundLockTest.kt::receiverStepsShowThePinCoverAndNoSecretAfterReturning",
@@ -295,6 +296,7 @@ coverage = [
 # android tests cover the receiver request, password entry, mnemonic review and sender response, with a second manager in place of the camera
 # android tests cover a received xprv review, sent from the restored xprv fixture, and the recovery words screen
 # android tests cover a typed but unsubmitted receiver code and sender password, with a second manager in place of the camera
+# android still needs a person for the received message review, which can show a password; the test peers send only wallets
 
 [[row]]
 id = "s02-repeated-secret-reads-writes-across-supported-secret"
