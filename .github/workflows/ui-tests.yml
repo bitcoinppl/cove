@@ -40,6 +40,8 @@ env:
   # scripted cloud host only to restore a fixture wallet or reach a screen
   IOS_UI_SUITES: >-
     CoveUITests/OnboardingFullLaunchUITests,
+    CoveUITests/ReceiveTextSizeFullLaunchUITests,
+    CoveUITests/WatchOnlyUpgradeFullLaunchUITests,
     CoveUITests/UtxoLockFullLaunchUITests,
     CoveUITests/HardwareSigningFullLaunchUITests,
     CoveUITests/PublicKeyImportFullLaunchUITests,
@@ -48,8 +50,6 @@ env:
     CoveUITests/KeyTeleportReceiveFullLaunchUITests/testXprvReviewRevealHideCopyAndImport,
     CoveUITests/KeyTeleportReceiveFullLaunchUITests/testMultiPartBbqrResponseReachesTheReview,
     CoveUITests/KeyTeleportSendFullLaunchUITests,
-    CoveUITests/ReceiveTextSizeFullLaunchUITests,
-    CoveUITests/WatchOnlyUpgradeFullLaunchUITests,
     CoveCloudBackupUITests/PrivateKeyExportFullAppUITests,
     CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests
   ANDROID_FLAVOURS: Dev UiTest
