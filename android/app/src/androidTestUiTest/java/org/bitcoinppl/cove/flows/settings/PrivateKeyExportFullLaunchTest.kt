@@ -121,14 +121,15 @@ class PrivateKeyExportFullLaunchTest {
 
             bystanderId?.let(::deleteTestWallet)
 
+            if (usedClipboard) clearClipboard()
+
             // every copy of the fixture key is this test's, whether restored or received, and a
             // leftover one makes the next restore find the wallet already there; a launch that never
-            // finished bootstrap never opened the database, so it wrote no wallet
+            // finished bootstrap never opened the database, so it wrote no wallet. A wallet whose key
+            // can't be read is left alone, so it can't stop the fixture's own wallets being deleted
             if (startedRestore && bootstrapProgress() == BootstrapStep.COMPLETE) {
-                fixtureKeyWalletIds().forEach(::deleteTestWallet)
+                walletIds().filter { runCatching { holdsFixtureKey(it) }.getOrDefault(false) }.forEach(::deleteTestWallet)
             }
-
-            if (usedClipboard) clearClipboard()
         }
     }
 
@@ -568,7 +569,8 @@ class PrivateKeyExportFullLaunchTest {
                 }
 
                 // load can't be cancelled once construction starts, and a timeout here could drop a
-                // finished manager without closing it, so it is left to the runner's own test timeout
+                // finished manager without closing it, so a stalled load hangs until the CI job times
+                // out and fails rather than passing
                 return runBlocking { WalletManager.load(id) }.use { it.exposeXprv() }
             } catch (e: WalletManagerException) {
                 val transient =
@@ -589,9 +591,7 @@ class PrivateKeyExportFullLaunchTest {
 
     private fun walletIds(): List<WalletId> = Database().wallets().all().map { it.id }
 
-    private fun walletsHoldingTheFixtureKey(): Int = fixtureKeyWalletIds().size
-
-    private fun fixtureKeyWalletIds(): List<WalletId> = walletIds().filter(::holdsFixtureKey)
+    private fun walletsHoldingTheFixtureKey(): Int = walletIds().count(::holdsFixtureKey)
 
     // a wallet holding recovery words, or no secret at all, is not the fixture; any other failure is
     // thrown, since an unreadable wallet could be a duplicate the count must not miss
