@@ -104,6 +104,13 @@ final class CloudBackupUITestController: @unchecked Sendable {
         }
     }
 
+    func recordAuthenticatedCredential(_ credentialId: Data) {
+        lock.withLock {
+            state.authenticatedCredentialIds.append(credentialId.map { String(format: "%02x", $0) }.joined())
+            persistStateLocked()
+        }
+    }
+
     /// Waits on the first unclaimed hold at `point` once its skipped calls have passed
     ///
     /// `matchingCallIndex` is the zero-based index of this call among the calls the hold matches

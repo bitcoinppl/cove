@@ -30,7 +30,8 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
     ) async throws {
         let attempt = controller.record(.masterUpload) + 1
         let script = controller.script()
-        try recordUpload(script, kind: .master, attempt: attempt, namespace: namespace, recordId: nil)
+        let failure = script.uploadFailures.first { $0.kind == .master && $0.attempt == attempt }?.error
+        try recordUpload(script, kind: .master, failure: failure, namespace: namespace, recordId: nil)
         try validateWritable(namespace: namespace, script: script)
         try store.storeMaster(namespace: namespace, data: data)
 
@@ -47,7 +48,21 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
     ) async throws {
         let attempt = controller.record(.walletUpload) + 1
         let script = controller.script()
-        try recordUpload(script, kind: .wallet, attempt: attempt, namespace: namespace, recordId: recordId)
+        let isNewWallet = script.cloud == .fixture && !isFixtureWallet(recordId)
+        let failure: CloudBackupUITestScript.ProviderError? = if isNewWallet {
+            Self.failure(at: controller.record(.newWalletUpload), in: script.newWalletUploadFailures)
+        } else {
+            script.uploadFailures.first { $0.kind == .wallet && $0.attempt == attempt }?.error
+        }
+
+        try recordUpload(
+            script,
+            kind: .wallet,
+            failure: failure,
+            namespace: namespace,
+            recordId: recordId,
+            isNewWallet: isNewWallet
+        )
 
         // a hold here proves which action made the upload, since it can't return until released
         await controller.holdIfScripted(at: .walletUpload, recordId: recordId, matchingCallIndex: attempt - 1)
@@ -105,10 +120,17 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
 
         case .fixture:
             guard namespace == fixture.namespace,
-                  !store.isWalletDeleted(namespace: namespace, recordId: recordId),
-                  let wallet = fixture.walletsByRecordId[recordId]
-                  ?? [fixture.duplicateWallet].first(where: { $0.recordId == recordId })
+                  !store.isWalletDeleted(namespace: namespace, recordId: recordId)
             else { throw CloudStorageError.NotFound("cloud backup is not available") }
+
+            guard let wallet = fixtureWallet(recordId) else {
+                // a wallet added on the device is served once the cloud accepted its upload
+                guard let uploaded = store.wallet(namespace: namespace, recordId: recordId) else {
+                    throw CloudStorageError.NotFound("cloud backup is not available")
+                }
+
+                return uploaded
+            }
 
             let results = script.walletDownloadResults[recordId] ?? []
             switch results.isEmpty ? .valid : results[min(index, results.count - 1)] {
@@ -206,11 +228,14 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
             return exists ? .uploaded : .notFound
 
         case .fixture:
+            // a backup the fixture doesn't hold exists only once the cloud accepted its upload,
+            // so a rejected one is reported missing, as Google Drive does on Android
             let exists =
                 if recordId == Self.masterKeyRecordId {
                     !store.isNamespaceDeleted(namespace)
                 } else {
                     !store.isWalletDeleted(namespace: namespace, recordId: recordId)
+                        && (isFixtureWallet(recordId) || store.wallet(namespace: namespace, recordId: recordId) != nil)
                 }
 
             return namespace == fixture.namespace && exists ? .uploaded : .notFound
@@ -243,11 +268,21 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
                 throw CloudStorageError.NotFound("cloud backup is not available")
             }
 
+            // wallets added on the device are listed once the cloud accepted their uploads
             let listed = script.listedWalletRecordIds ?? fixture.wallets.map(\.recordId)
-            return listed
+            let uploaded = store.walletRecordIds(namespace: namespace).filter { !isFixtureWallet($0) }
+            return (listed + uploaded.sorted())
                 .filter { !store.isWalletDeleted(namespace: namespace, recordId: $0) }
                 .map(Self.walletFileName)
         }
+    }
+
+    private func fixtureWallet(_ recordId: String) -> CloudBackupFixture.Wallet? {
+        fixture.walletsByRecordId[recordId] ?? [fixture.duplicateWallet].first { $0.recordId == recordId }
+    }
+
+    private func isFixtureWallet(_ recordId: String) -> Bool {
+        fixtureWallet(recordId) != nil
     }
 
     /// Fails a call while the scripted network is down, as a real provider does, counting the
@@ -262,17 +297,23 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
     }
 
     /// Records the upload, and throws the script's failure or the dropped network when either
-    /// fails this attempt
+    /// fails it
     private func recordUpload(
         _ script: CloudBackupUITestScript,
         kind: CloudBackupUITestScript.UploadKind,
-        attempt: Int,
+        failure: CloudBackupUITestScript.ProviderError?,
         namespace: String,
-        recordId: String?
+        recordId: String?,
+        isNewWallet: Bool = false
     ) throws {
-        let failure = script.uploadFailures.first { $0.kind == kind && $0.attempt == attempt }
         let accepted = failure == nil && script.networkConnected
-        controller.recordUpload(.init(kind: kind, namespace: namespace, recordId: recordId, accepted: accepted))
+        controller.recordUpload(.init(
+            kind: kind,
+            namespace: namespace,
+            recordId: recordId,
+            accepted: accepted,
+            isNewWallet: isNewWallet
+        ))
 
         if !script.networkConnected {
             controller.record(.offlineRejection)
@@ -280,13 +321,15 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         }
         guard let failure else { return }
 
-        switch failure.error {
+        switch failure {
         case .uploadFailed:
             throw CloudStorageError.UploadFailed("scripted \(kind.rawValue) upload failure")
         case .offline:
             throw CloudStorageError.Offline("scripted provider is offline")
         case .notAvailable:
             throw CloudStorageError.NotAvailable("scripted provider is unavailable")
+        case .quotaExceeded:
+            throw CloudStorageError.QuotaExceeded
         }
     }
 
@@ -303,6 +346,13 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
                 throw CloudStorageError.NotFound("cloud backup is not available")
             }
         }
+    }
+
+    private static func failure(
+        at index: Int,
+        in failures: [CloudBackupUITestScript.ProviderError]
+    ) -> CloudBackupUITestScript.ProviderError? {
+        index < failures.count ? failures[index] : nil
     }
 
     private static func walletFileName(_ recordId: String) -> String {

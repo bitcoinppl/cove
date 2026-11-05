@@ -80,6 +80,19 @@ final class CloudBackupHostControl {
         }
     }
 
+    /// Answers the next passkey assertions with `results`, whether the app authenticates with a
+    /// known credential or discovers one; the last result repeats
+    ///
+    /// The host answers each call by its index across the test, so the calls made so far are
+    /// padded with successes they already got
+    func answerNextPasskeyAssertions(_ results: [CloudBackupUITestScript.PasskeyResult]) throws {
+        let current = state
+        try update {
+            $0.authenticateResults = Array(repeating: .success, count: current.count(.passkeyAuthenticate)) + results
+            $0.discoverResults = Array(repeating: .success, count: current.count(.passkeyDiscover)) + results
+        }
+    }
+
     /// Namespaces the cloud holds a master key for, read from the host's cloud directory
     var cloudNamespaces: [String] {
         cloudNames(in: "masters")

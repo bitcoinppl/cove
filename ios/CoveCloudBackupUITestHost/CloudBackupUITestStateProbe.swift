@@ -101,8 +101,46 @@ enum CloudBackupUITestStateProbe {
             inventoryComplete: manager.isDetailInventoryComplete,
             inventoryError: manager.detailError,
             restoreAll: restoreAllDescription(manager.restoreAllState),
-            verification: verificationDescription(manager.verificationState)
+            verification: verificationDescription(manager.verificationState),
+            pendingUploadVerification: manager.hasPendingUploadVerification,
+            sync: syncDescription(manager.syncState),
+            syncError: manager.syncError,
+            wallets: walletRows(manager.detail)
         )
+    }
+
+    private static func walletRows(_ detail: CloudBackupDetail?) -> [CloudBackupUITestAppState.Wallet] {
+        guard let detail else { return [] }
+
+        let upToDate = detail.upToDate.map { walletRow($0, needsSync: false) }
+        let needsSync = detail.needsSync.map { walletRow($0, needsSync: true) }
+        return upToDate + needsSync
+    }
+
+    private static func walletRow(_ item: CloudBackupWalletItem, needsSync: Bool) -> CloudBackupUITestAppState.Wallet {
+        let status = switch item.syncStatus {
+        case .dirty: "dirty"
+        case .uploading: "uploading"
+        case .uploadedPendingConfirmation: "uploadedPendingConfirmation"
+        case .confirmed: "confirmed"
+        case .failed: "failed"
+        case .deletedFromDevice: "deletedFromDevice"
+        case .alreadyOnDevice: "alreadyOnDevice"
+        case .unsupportedVersion: "unsupportedVersion"
+        case .remoteStateUnknown: "remoteStateUnknown"
+        }
+
+        return .init(recordId: item.recordId, name: item.name, status: status, needsSync: needsSync)
+    }
+
+    private static func syncDescription(_ state: CloudBackupSyncState?) -> String {
+        switch state {
+        case nil: "none"
+        case .idle: "idle"
+        case .syncing: "syncing"
+        case .blocked: "blocked"
+        case .failed: "failed"
+        }
     }
 
     private static func verificationDescription(_ state: CloudBackupVerificationState?) -> String {
