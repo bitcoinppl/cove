@@ -67,8 +67,8 @@ struct HardwareSignerControl {
         let text: String
     }
 
-    private struct ContentSizeChange: Decodable {
-        let previous: ContentSize?
+    private struct ContentSizeReading: Decodable {
+        let previous: ContentSize
     }
 
     /// The bridge the app's debug TAPSIGNER seam connects to
@@ -128,13 +128,18 @@ struct HardwareSignerControl {
         _ = try controlRequest(baseUrl, "POST", "simulator-appearance", body: body)
     }
 
+    /// The simulator's text size; fails when the simulator can't tell, since nothing could then
+    /// put it back
+    func simulatorContentSize() throws -> ContentSize {
+        let body: [String: Any] = try ["udid": Self.simulatorUdid()]
+        return try decode(ContentSizeReading.self, controlRequest(baseUrl, "POST", "simulator-content-size", body: body)).previous
+    }
+
     /// Changes the simulator's text size, which the running app gets as a live change, unlike the
-    /// `-UIPreferredContentSizeCategoryName` launch argument; returns the size it replaced, or nil
-    /// when the simulator reported none
-    @discardableResult
-    func setSimulatorContentSize(_ size: ContentSize) throws -> ContentSize? {
+    /// `-UIPreferredContentSizeCategoryName` launch argument
+    func setSimulatorContentSize(_ size: ContentSize) throws {
         let body: [String: Any] = try ["udid": Self.simulatorUdid(), "content_size": size.rawValue]
-        return try decode(ContentSizeChange.self, controlRequest(baseUrl, "POST", "simulator-content-size", body: body)).previous
+        _ = try controlRequest(baseUrl, "POST", "simulator-content-size", body: body)
     }
 
     private static func simulatorUdid() throws -> String {

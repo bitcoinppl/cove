@@ -125,16 +125,18 @@ final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
     /// Sets the simulator's text size while the app runs, and the first time puts back the size the
     /// simulator had once the test ends, whether it passes or fails
     private func setSimulatorContentSize(_ size: HardwareSignerControl.ContentSize) throws {
-        let previous = try signer.setSimulatorContentSize(size)
-        guard !restoresContentSize else { return }
+        // registered before the first change, so a change whose answer never arrives is still undone
+        if !restoresContentSize {
+            let original = try signer.simulatorContentSize()
+            let signer = signer
+            addTeardownBlock {
+                try signer.setSimulatorContentSize(original)
+            }
 
-        restoresContentSize = true
-        let signer = signer
-
-        // a simulator that reported no size gets the default, which a new simulator starts at
-        addTeardownBlock {
-            try signer.setSimulatorContentSize(previous ?? .large)
+            restoresContentSize = true
         }
+
+        try signer.setSimulatorContentSize(size)
     }
 
     /// Waits for Copy Address to lay out again at the default size, which proves the sheet took the
@@ -142,12 +144,16 @@ final class ReceiveTextSizeFullLaunchUITests: XCTestCase {
     private func waitForCopyAddressToShrink(from largestHeight: CGFloat) {
         let copyAddress = button("Copy Address")
         let deadline = Date().addingTimeInterval(10)
-        var height = copyAddress.frame.height
+        var height: CGFloat = 0
 
-        while height * Self.minimumGrowth > largestHeight, Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.25)
+        // the sheet can drop and rebuild its controls while it lays out again, so a missing or empty
+        // frame only means it isn't done yet
+        repeat {
             height = copyAddress.exists ? copyAddress.frame.height : 0
-        }
+            if height > 0, height * Self.minimumGrowth <= largestHeight { return }
+
+            Thread.sleep(forTimeInterval: 0.25)
+        } while Date() < deadline
 
         XCTAssertGreaterThan(height, 0, "Copy Address is gone after the text size changed")
         XCTAssertLessThanOrEqual(

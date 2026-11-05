@@ -14,10 +14,11 @@
 //!   plain QR and as a single-part BBQr, with the first receive address it
 //!   should import as. `/simulator-pasteboard` reads an iOS simulator's
 //!   pasteboard, `/simulator-appearance` switches it between light and
-//!   dark mode, and `/simulator-content-size` changes its text size while
-//!   the app runs, answering with the size it replaced. The `/tapsigner/...` routes start the card emulator, set up or
-//!   factory fresh, and inject dropped sessions. The `/keyteleport/...` routes
-//!   play the other phone in a KeyTeleport transfer ([`key_teleport`])
+//!   dark mode, and `/simulator-content-size` reads its text size and, given
+//!   one, changes it while the app runs. The `/tapsigner/...` routes start
+//!   the card emulator, set up or factory fresh, and inject dropped
+//!   sessions. The `/keyteleport/...` routes play the other phone in a
+//!   KeyTeleport transfer ([`key_teleport`])
 //! - [`UiTestPorts::tapsigner_bridge`]: the TAPSIGNER bridge. Each APDU arrives as a frame with a
 //!   4-byte big-endian length, goes to Coinkite's `ecard.py` emulator, and the
 //!   card's response goes back the same way. Closing the connection is how a
@@ -386,7 +387,9 @@ enum Appearance {
 #[serde(deny_unknown_fields)]
 struct ContentSizeRequest {
     udid: String,
-    content_size: ContentSize,
+    /// The size to set; without it the request only reads the current one
+    #[serde(default)]
+    content_size: Option<ContentSize>,
 }
 
 /// The preferred content size categories, named as `simctl ui content_size` takes and prints them
@@ -456,6 +459,7 @@ fn route(state: &SignerState, method: &str, path: &str, body: &[u8]) -> Result<V
         ("POST", "/simulator-content-size") => {
             simulator_content_size(serde_json::from_slice(body)?)
         }
+
         ("POST", "/tapsigner/start") => {
             let request: TapSignerStartRequest = if body.is_empty() {
                 TapSignerStartRequest::default()
@@ -641,18 +645,24 @@ fn simulator_appearance(request: AppearanceRequest) -> Result<Value> {
     Ok(json!({ "ok": true }))
 }
 
-/// Changes an iOS simulator's text size, which reaches a running app as a live
+/// Reads an iOS simulator's text size and, when the request names one, sets
+/// it, which reaches a running app as a live
 /// `UIContentSizeCategory.didChangeNotification`, unlike the launch argument
-/// a test sets per launch. Answers with the size it replaced, or null when
-/// simctl reported none, so the test can put it back
+/// a test sets per launch. Answers with the size the simulator had before
 fn simulator_content_size(request: ContentSizeRequest) -> Result<Value> {
-    let previous = simctl_ui(&request.udid, &["content_size"])?;
+    let printed = simctl_ui(&request.udid, &["content_size"])?;
+    let printed = printed.trim();
 
-    // simctl prints `unknown` or `unsupported` when it can't tell, which leaves nothing to restore
-    let previous = serde_json::from_value::<ContentSize>(json!(previous.trim())).ok();
-    simctl_ui(&request.udid, &["content_size", request.content_size.name()])?;
+    // simctl prints `unknown` or `unsupported` when it can't tell, and a test could then only
+    // restore a guess, so refuse before changing anything
+    let previous = serde_json::from_value::<ContentSize>(json!(printed))
+        .map_err(|_| eyre!("simctl ui content_size reported `{printed}`, not a text size"))?;
 
-    Ok(json!({ "previous": previous.map(ContentSize::name) }))
+    if let Some(size) = request.content_size {
+        simctl_ui(&request.udid, &["content_size", size.name()])?;
+    }
+
+    Ok(json!({ "previous": previous.name() }))
 }
 
 /// Runs `simctl ui <udid> <args>` and returns what it printed
