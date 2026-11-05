@@ -355,7 +355,9 @@ class CloudBackupInventoryActionsFullLaunchTest {
         while (System.currentTimeMillis() < deadline) {
             findObject(By.text(value))?.let { return it }
             swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
-            Thread.sleep(250)
+
+            // a tap while the list still flings only stops it, so the next tap must wait for it to settle
+            waitForIdle()
         }
 
         error("Timed out scrolling to text \"$value\"")
@@ -382,7 +384,9 @@ class CloudBackupInventoryActionsFullLaunchTest {
             val node = findObject(By.text(value))
             if (node == null) {
                 swipe(displayWidth / 2, displayHeight / 4, displayWidth / 2, displayHeight * 3 / 4, 20)
-                Thread.sleep(250)
+
+                // a tap while the list still flings only stops it, so the next tap must wait for it to settle
+                waitForIdle()
                 continue
             }
 
