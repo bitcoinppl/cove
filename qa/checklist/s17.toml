@@ -106,10 +106,10 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
 ]
 coverage = [
-    "human",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPasteRejectionTest.kt::senderRejectsARawPsbtPasteByAskingForTheReceiverRequest",
 ]
 # 1.4.0: ios N/A, android HUMAN
-# the protected screen returns no screencap over adb
+# the protected screen returns no screencap over adb; the test checks the error's text and that the sender still takes a paste after OK instead
 
 [[row]]
 id = "s17-ios-pj-uri-parses-to-ordinary-draft"

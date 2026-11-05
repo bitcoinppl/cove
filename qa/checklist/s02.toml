@@ -284,7 +284,8 @@ paths = [
 ]
 coverage = [
     "agent:ios",
-    "human:android",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/secretwords/SecretWordsLockTest.kt::wordsLoadOnlyAfterTheCorrectPinAndClearWhenTheAppLocksAgain",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::receivedPrivateKeyStaysHiddenUntilRevealedAndImportsAsAWallet",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportBackgroundLockTest.kt::receiverStepsShowThePinCoverAndNoSecretAfterReturning",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportBackgroundLockTest.kt::senderResponseShowsThePinCoverAndNoPasswordAfterReturning",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportTypedInputBackgroundTest.kt::typedReceiverCodeIsClearedAfterReturning",
@@ -292,7 +293,7 @@ coverage = [
 ]
 # 1.4.0: ios BLOCKED, android HUMAN
 # android tests cover the receiver request, password entry, mnemonic review and sender response, with a second manager in place of the camera
-# android still needs a person for a received xprv review, which needs an xprv sender, and the recovery words screen until PR 969 merges
+# android tests cover a received xprv review, sent from the restored xprv fixture, and the recovery words screen
 # android tests cover a typed but unsubmitted receiver code and sender password, with a second manager in place of the camera
 
 [[row]]
@@ -313,8 +314,8 @@ paths = [
 ]
 coverage = [
     "agent:ios",
-    "human:android",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/RepeatedSecretAccessTest.kt::repeatedReadsWritesAndKeyTeleportSendsKeepOneReadableWallet",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::repeatedPrivateKeyReadsWritesAndSendsKeepOneReadableWallet",
 ]
 # 1.4.0: ios BLOCKED, android HUMAN
-# the android test covers mnemonic wallets against the real keystore; xprv wallets still need a person, since only an xprv KeyTeleport sender can create one
+# the android tests cover mnemonic wallets and the restored xprv fixture against the real keystore

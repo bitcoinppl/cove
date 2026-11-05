@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -55,6 +56,7 @@ class KeyTeleportPasteRejectionTest {
         pasteIntoSender(BIP174_UNSIGNED_PSBT_BASE64)
 
         assertRejectionAsksForTheReceiverRequest()
+        assertOkLeavesTheSenderReadyForAnotherPaste(BIP174_UNSIGNED_PSBT_BASE64)
     }
 
     // a KeyTeleport PSBT packet is the one PSBT shape Rust recognises as KeyTeleport, through
@@ -93,6 +95,22 @@ class KeyTeleportPasteRejectionTest {
                 .onAllNodes(inDialog and hasText("response", substring = true, ignoreCase = true))
                 .fetchSemanticsNodes()
         assertTrue("sender rejection still asks for a response", mentionsResponse.isEmpty())
+    }
+
+    // the release checklist asked for a screenshot of the screen after OK, to see that the sender
+    // is still usable and not stuck behind the error
+    private fun assertOkLeavesTheSenderReadyForAnotherPaste(rejected: String) {
+        compose.onNode(hasAnyAncestor(isDialog()) and hasText("OK")).performClick()
+        compose.waitForIdle()
+
+        val dialogs = compose.onAllNodes(isDialog()).fetchSemanticsNodes()
+        assertTrue("the rejection dialog stayed open after OK", dialogs.isEmpty())
+        compose.onNodeWithText("Paste").assertIsDisplayed().assertIsEnabled()
+
+        // pasting again reaches the sender and is rejected the same way, rather than doing nothing
+        putOnClipboard(rejected)
+        compose.onNodeWithText("Paste").performClick()
+        assertRejectionAsksForTheReceiverRequest()
     }
 
     private fun putOnClipboard(text: String) {

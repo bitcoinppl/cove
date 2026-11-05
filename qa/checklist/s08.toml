@@ -5,8 +5,9 @@ title = "Mnemonic review reveal/import/finish without importing"
 platforms = ["ios", "android"]
 target = "ui"
 paths = ["rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReviewViews.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewViews.kt"]
-coverage = ["human"]
+coverage = ["human:ios", "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportMnemonicReviewTest.kt::finishWithoutImportingAddsNoWalletAndImportWalletAddsOne"]
 # 1.4.0: ios HUMAN, android HUMAN
+# the android test receives words from a second manager in place of the camera
 
 [[row]]
 id = "s08-xprv-review-reveal-hide-copy-import"
@@ -15,8 +16,9 @@ title = "xprv review reveal/hide/copy/import"
 platforms = ["ios", "android"]
 target = "ui"
 paths = ["rust/src/manager/import_wallet_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReviewViews.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewViews.kt"]
-coverage = ["human"]
+coverage = ["human:ios", "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::receivedPrivateKeyStaysHiddenUntilRevealedAndImportsAsAWallet"]
 # 1.4.0: ios HUMAN, android HUMAN
+# the android test sends the restored xprv fixture from a second manager and scans the response through the qr seam
 
 [[row]]
 id = "s08-ios-android-12-word-mnemonic"
@@ -174,5 +176,6 @@ title = "Private Key export Reveal/Copy and KeyTeleport entry consistency"
 platforms = ["ios", "android"]
 target = "ui"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/send.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSharedViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportContainer.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportToolbarMenu.kt"]
-coverage = ["human"]
+coverage = ["human:ios", "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::bothExportRoutesNeedAFreshMainPinAndCarryTheSameKey"]
 # 1.4.0: ios HUMAN, android HUMAN
+# the android test receives the KeyTeleport send on a second manager and compares it with the revealed and copied key
