@@ -187,3 +187,5 @@ Some neighboring checks don't need a person. KeyTeleport transfers between two C
 - Give every FAIL a regression test at the cheapest layer that can catch it. Record it in the manifest under `pending` with its pull request, then under `coverage` once it merges
 - Turn any agent steps that only navigate and observe into a device script in `qa/device`, so the next release runs them with a command
 - Update fixtures and this document with anything the run had to work around
+
+<!-- scratch: docs-only change for the CI path filter test on #1032, never merged -->
