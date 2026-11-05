@@ -329,8 +329,20 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
             let numbers = app.staticTexts.matching(NSPredicate(format: "label == %@", "\(index + 1)"))
             layout.scrollDown(untilExists: numbers)
             layout.assertReachable(numbers, name, needsHit: false)
-            let shown = app.staticTexts.matching(NSPredicate(format: "label == %@", word)).allElementsBoundByIndex.first { candidate in
-                numbers.allElementsBoundByIndex.contains { isBeside(candidate.frame, $0.frame) }
+            let wordBesideNumber = {
+                self.app.staticTexts.matching(NSPredicate(format: "label == %@", word)).allElementsBoundByIndex.first { candidate in
+                    numbers.allElementsBoundByIndex.contains { self.isBeside(candidate.frame, $0.frame) }
+                }
+            }
+
+            // at the largest sizes a word wraps taller than its centered number, so scroll on until
+            // the whole word fits, as a user would, finding it again since the lazy grid may rebuild
+            var shown = wordBesideNumber()
+            for _ in 0 ..< 3 {
+                guard let partly = shown, !window.contains(partly.frame) else { break }
+
+                layout.scroll(revealingContentBelow: partly.frame.maxY > window.maxY)
+                shown = wordBesideNumber()
             }
 
             guard let shown else {

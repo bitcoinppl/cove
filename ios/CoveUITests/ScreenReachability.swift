@@ -65,8 +65,13 @@ struct ScreenReachability {
     /// the screen, so `assertReachable` has one to scroll to
     func scrollDown(untilExists query: XCUIElementQuery) {
         for _ in 0 ..< 8 where !query.firstMatch.exists {
-            drag(visibleScrollView() ?? app.windows.firstMatch, revealingContentBelow: true)
+            scroll(revealingContentBelow: true)
         }
+    }
+
+    /// Drags the screen's scroll view by part of its height, as a user would
+    func scroll(revealingContentBelow: Bool) {
+        drag(visibleScrollView() ?? app.windows.firstMatch, revealingContentBelow: revealingContentBelow)
     }
 
     @discardableResult
