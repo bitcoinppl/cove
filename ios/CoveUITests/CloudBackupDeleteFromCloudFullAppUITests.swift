@@ -44,8 +44,9 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
         cloudBackup.tap()
         XCTAssertTrue(app.navigationBars["Cloud Backup"].waitForExistence(timeout: 10))
 
-        XCTAssertTrue(walletRow(recordId: keptRecordId).waitForExistence(timeout: 20))
-        XCTAssertTrue(walletRow(recordId: selectedRecordId).exists)
+        // the form builds only rows near the screen, so each row is scrolled to before it counts
+        robot.scrollToHittable(walletRow(recordId: keptRecordId), initialWait: 20)
+        robot.scrollToHittable(walletRow(recordId: selectedRecordId))
         XCTAssertTrue(inventoryChecking.waitForNonExistence(timeout: 15), "the inventory check never finished")
 
         // the second cloud-only row, so a delete that took the first row's id would remove the wrong one
@@ -59,8 +60,9 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
             XCTAssertEqual(deletedRecordIds(), [], "Cancel must not delete any backup")
             Thread.sleep(forTimeInterval: 0.2)
         }
-        XCTAssertTrue(walletRow(recordId: selectedRecordId).exists, "Cancel should keep the selected row")
-        XCTAssertTrue(walletRow(recordId: keptRecordId).exists, "Cancel should keep the other row")
+        // cancel should keep both rows
+        robot.scrollToHittable(walletRow(recordId: selectedRecordId))
+        robot.scrollToHittable(walletRow(recordId: keptRecordId))
 
         let deleteConfirmation = openDeleteConfirmation()
         deleteConfirmation.buttons["Delete Forever"].tap()
@@ -73,17 +75,55 @@ final class CloudBackupDeleteFromCloudFullAppUITests: XCTestCase {
 
         // rust drops the row before its detail refresh lands, so wait for the refresh marker row,
         // which only a listing after the delete names, to prove the refreshed inventory was applied
-        XCTAssertTrue(
-            walletRow(recordId: refreshMarkerRecordId).waitForExistence(timeout: 20),
-            "the refreshed inventory after the delete was never applied"
-        )
+        robot.scrollToHittable(walletRow(recordId: refreshMarkerRecordId), initialWait: 20)
         XCTAssertTrue(inventoryChecking.waitForNonExistence(timeout: 20), "the refresh after the delete never finished")
-        XCTAssertFalse(walletRow(recordId: selectedRecordId).exists, "the deleted wallet should leave Not on This Device")
-        XCTAssertTrue(walletRow(recordId: keptRecordId).exists, "the other cloud-only wallet should stay")
-        XCTAssertTrue(walletRow(recordId: localRecordId).exists, "the local wallet's backup row should stay")
+        assertRowAbsentFromWholeList(recordId: selectedRecordId, "the deleted wallet should leave Not on This Device")
+
+        // the other cloud-only wallet and the local wallet's backup row should stay
+        robot.scrollToHittable(walletRow(recordId: keptRecordId))
+        robot.scrollToHittable(walletRow(recordId: localRecordId))
         XCTAssertEqual(deletedRecordIds(), [selectedRecordId], "only the selected backup should be deleted")
 
         assertLocalWalletStillOnDevice()
+    }
+
+    /// Walks the whole Cloud Backup list from top to bottom and checks the row at every step, since
+    /// the form builds only rows near the screen and a row left farther down would be missing from
+    /// the tree rather than absent
+    private func assertRowAbsentFromWholeList(recordId: String, _ message: String) {
+        let list = app.collectionViews.firstMatch
+        XCTAssertTrue(list.waitForExistence(timeout: 5), "the Cloud Backup list is missing")
+
+        swipeUntilListStops(list, swipe: { list.swipeDown(velocity: .slow) }, check: {})
+        swipeUntilListStops(list, swipe: { list.swipeUp(velocity: .slow) }) {
+            XCTAssertFalse(walletRow(recordId: recordId).exists, message)
+        }
+    }
+
+    /// Swipes until the list's last built cell stops moving, running `check` before every swipe
+    /// and once more at the end
+    private func swipeUntilListStops(_ list: XCUIElement, swipe: () -> Void, check: () -> Void) {
+        func lastCellPosition() -> String {
+            let cells = list.cells.allElementsBoundByIndex
+            XCTAssertFalse(cells.isEmpty, "the Cloud Backup list has no rows to walk")
+
+            return cells.last.map { "\($0.identifier) \($0.label) \($0.frame)" } ?? ""
+        }
+
+        var position = lastCellPosition()
+        for _ in 0 ..< 30 {
+            check()
+            swipe()
+
+            let next = lastCellPosition()
+            if next == position {
+                check()
+                return
+            }
+            position = next
+        }
+
+        XCTFail("the Cloud Backup list never stopped scrolling")
     }
 
     /// Leaves Cloud Backup for the wallet list in the sidebar, which lists only wallets on this
