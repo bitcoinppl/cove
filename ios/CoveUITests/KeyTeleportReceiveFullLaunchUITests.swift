@@ -22,6 +22,11 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
     private static let sentXprv =
         "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"
 
+    /// `sentXprv` encoded for a test network, as Export Private Key shows it for the Signet wallet
+    /// the import makes
+    private static let sentXprvOnSignet =
+        "tprv8ZgxMBicQKsPeDgjzdC36fs6bMjGApWDNLR9erAXMs5skhMv36j9MV5ecvfavji5khqjWaWSFhN3YcCUUdiKH6isR4Pwy3U5y5egddBr16m"
+
     /// The master fingerprint of `sentXprv`, from BIP32 test vector 1
     private static let sentXprvFingerprint = "3442193E"
 
@@ -129,7 +134,7 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         app.tapButton(named: "Reveal and Copy")
         app.verifyIdentity(Self.pin)
         XCTAssertTrue(app.navigationBars["Private Key"].waitForExistence(timeout: 10), "the saved key never showed")
-        XCTAssertTrue(app.staticTexts[Self.sentXprv].exists, "the imported wallet saved a key other than the one sent")
+        XCTAssertTrue(app.staticTexts[Self.sentXprvOnSignet].exists, "the imported wallet saved a key other than the one sent")
     }
 
     // MARK: - Scanning
