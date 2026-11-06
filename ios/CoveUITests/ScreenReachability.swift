@@ -32,16 +32,19 @@ struct ScreenReachability {
     /// overlap, and no probed text on the screen may draw truncated
     ///
     /// `texts` match a text's whole label and `descriptions` the start of one, for a long
-    /// paragraph. `controls` are actions without a probed label, such as icon-only buttons and
-    /// fields, checked for reach only
+    /// paragraph. `fields` are selectable values drawn under their labels, such as a received
+    /// message's, checked as `texts` are. `controls` are actions without a probed label, such as
+    /// icon-only buttons and fields, checked for reach only
     func assertScreenFits(
         _ screen: String,
         texts: [String],
         descriptions: [String] = [],
+        fields: [(label: String, value: String)] = [],
         buttons: [XCUIElementQuery],
         controls: [XCUIElementQuery] = []
     ) {
-        let textQueries = texts.map { ("'\($0)'", app.staticTexts.matching(NSPredicate(format: "label == %@", $0))) }
+        let textQueries = (texts + fields.flatMap { [$0.label, $0.value] })
+            .map { ("'\($0)'", app.staticTexts.matching(NSPredicate(format: "label == %@", $0))) }
             + descriptions.map { ("'\($0)…'", app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", $0))) }
 
         var shown: [(name: String, element: XCUIElement)] = []
@@ -66,7 +69,7 @@ struct ScreenReachability {
             shown.append((name, element))
         }
 
-        assertNoOverlap(shown)
+        assertNoOverlap(shown, fields: fields.map { ("\(screen): '\($0.label)'", "\(screen): '\($0.value)'") })
 
         for control in controls {
             assertReachable(control, "\(screen): \(control.firstMatch.description)", needsHit: true)
@@ -97,8 +100,21 @@ struct ScreenReachability {
     /// inside a shorter parent that clips it still reports that it fits. Its accessibility frame
     /// keeps the full height, though, and runs into whatever follows the parent. Scrolling moves
     /// every frame, so they're all read at one scroll position
-    private func assertNoOverlap(_ elements: [(name: String, element: XCUIElement)]) {
-        let frames = elements.map { ($0.name, $0.element.frame) }
+    ///
+    /// Some iOS versions report a selectable text's frame standing out the same distance past the
+    /// text on every side, so each field's value is first inset by how far its leading edge sits
+    /// before its label's, which the view aligns with it. Where iOS adds nothing that measures 0
+    private func assertNoOverlap(_ elements: [(name: String, element: XCUIElement)], fields: [(label: String, value: String)]) {
+        var frames = elements.map { ($0.name, $0.element.frame) }
+        for field in fields {
+            guard let label = frames.first(where: { $0.0 == field.label })?.1,
+                  let value = frames.firstIndex(where: { $0.0 == field.value })
+            else { continue }
+
+            let outset = max(0, label.minX - frames[value].1.minX)
+            frames[value].1 = frames[value].1.insetBy(dx: outset, dy: outset)
+        }
+
         for (index, (name, frame)) in frames.enumerated() {
             for (otherName, otherFrame) in frames[(index + 1)...] where otherFrame != frame {
                 let shared = frame.intersection(otherFrame)

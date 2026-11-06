@@ -226,8 +226,11 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
             texts: [
                 "Messages received",
                 "This transfer contains text, not a wallet. Cove has displayed it exactly as received.",
-                "Quick Note", "Personal", "MESSAGE", "Attack at dawn.",
-                "Exchange", "Work", "USERNAME", "satoshi", "PASSWORD", "hunter2", "WEBSITE", "example.com", "NOTES", "Rotate yearly",
+                "Quick Note", "Personal", "Exchange", "Work",
+            ],
+            fields: [
+                ("MESSAGE", "Attack at dawn."),
+                ("USERNAME", "satoshi"), ("PASSWORD", "hunter2"), ("WEBSITE", "example.com"), ("NOTES", "Rotate yearly"),
             ],
             buttons: [button("Done")]
         )
