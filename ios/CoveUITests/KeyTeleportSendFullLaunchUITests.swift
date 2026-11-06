@@ -48,18 +48,7 @@ final class KeyTeleportSendFullLaunchUITests: XCTestCase {
         openSecretWords()
         startKeyTeleportSend()
 
-        let receiver = try peer.startReceiving()
-        layout.reachAndTap(app.buttons.matching(NSPredicate(format: "label == %@", "Scan QR")), "send: Scan QR")
-        try qr.show([receiver.bbqr])
-
-        let codeField = app.textFields["Receiver Code"]
-        XCTAssertTrue(codeField.waitForExistence(timeout: 20), "the scanned request never asked for the receiver code")
-        codeField.tap()
-        codeField.typeText(receiver.code)
-        layout.reachAndTap(button("Continue"), "receiver code: Continue")
-
-        let (response, password) = readSenderResponse()
-        let received = try peer.decode(response, session: receiver.session, password: password)
+        let received = try layout.receiveSend(with: peer, scanner: qr, "send")
         XCTAssertEqual(received.kind, "mnemonic")
         XCTAssertEqual(received.mnemonic, XCUIApplication.testMnemonic, "the receiver should get this wallet's words")
 
@@ -112,21 +101,6 @@ final class KeyTeleportSendFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Scan Receiver Request"].waitForExistence(timeout: 15), "the send screen never showed")
     }
 
-    /// Reads the response QR code and the password off the screen, checking they show only one at
-    /// a time
-    private func readSenderResponse() -> (response: String, password: String) {
-        XCTAssertTrue(button("Tap to show QR code").firstMatch.waitForExistence(timeout: 20), "the response never showed")
-        guard let pair = layout.readRevealPair(
-            qrHint: "Tap to show QR code",
-            codeHint: "Tap to show password",
-            code: shownPassword(),
-            "response"
-        ) else { return ("", "") }
-
-        XCTAssertTrue(pair.qr.hasPrefix("B$2S"), "the QR code should hold a KeyTeleport sender response, got \(pair.qr.prefix(8))")
-        return (pair.qr, pair.code)
-    }
-
     // MARK: - Helpers
 
     /// Enters the PIN on the prompt a secret asks for
@@ -143,11 +117,6 @@ final class KeyTeleportSendFullLaunchUITests: XCTestCase {
             XCTAssertTrue(key.waitForExistence(timeout: 5), "number pad key \(digit) is missing")
             key.tap()
         }
-    }
-
-    /// The Teleport Password, eight Base32 characters grouped in pairs
-    private func shownPassword() -> XCUIElement {
-        app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^[A-Z2-7]{2}( [A-Z2-7]{2}){3}$")).firstMatch
     }
 
     private func button(_ label: String) -> XCUIElementQuery {
