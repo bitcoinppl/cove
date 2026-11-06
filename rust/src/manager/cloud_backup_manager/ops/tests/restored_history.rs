@@ -10,6 +10,7 @@ use bitcoin::{Amount, Network as BitcoinNetwork, OutPoint, ScriptBuf};
 use cove_types::psbt::Psbt;
 
 use super::*;
+use crate::database::test_support::RestoreWalletTarget;
 use crate::manager::cloud_backup_manager::CloudOnlyState;
 use crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl;
 use crate::manager::deferred_sender::SingleOrMany;
@@ -36,28 +37,34 @@ const FAR_RECEIVE_LABEL: &str = "far receive";
 
 const SCAN_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// A fake node selected as the wallets' Bitcoin node, put back to the default node on drop
-struct SelectedFakeNode(FakeNode);
+/// A fake node selected as the wallets' Bitcoin node, which puts back the network, wallet mode
+/// and Bitcoin node it found when it drops, since later tests share these settings
+struct SelectedFakeNode {
+    node: FakeNode,
+    previous_bitcoin_node: Node,
+
+    // dropped after `drop` restores the node, which restores the network and mode
+    _previous_target: RestoreWalletTarget,
+}
 
 impl SelectedFakeNode {
     fn start() -> Self {
-        Database::global()
-            .global_config
-            .set_selected_network(Network::Bitcoin)
-            .expect("select the Bitcoin network");
+        let config = &Database::global().global_config;
+        let previous_target = RestoreWalletTarget::capture();
+        let previous_bitcoin_node = config.selected_node_for_network(Network::Bitcoin);
+        config.set_selected_network(Network::Bitcoin).expect("select the Bitcoin network");
 
         let node = FakeNode::start(BitcoinNetwork::Bitcoin);
         node.chain().mine(5);
         node.select_esplora();
 
-        Self(node)
+        Self { node, previous_bitcoin_node, _previous_target: previous_target }
     }
 }
 
 impl Drop for SelectedFakeNode {
     fn drop(&mut self) {
-        let _ =
-            Database::global().global_config.set_selected_node(&Node::default(Network::Bitcoin));
+        let _ = Database::global().global_config.set_selected_node(&self.previous_bitcoin_node);
     }
 }
 
@@ -100,6 +107,7 @@ impl From<&Transaction> for HistoryEntry {
                 sent_and_received: confirmed.sent_and_received,
                 labels: confirmed.labels.clone(),
             },
+
             Transaction::Unconfirmed(pending) => Self::Pending {
                 txid: pending.txid.0,
                 sent_and_received: pending.sent_and_received,
@@ -307,10 +315,12 @@ impl OriginalWallet {
             [first_txid, far_txid, send_txid, pending_txid].into_iter().collect(),
             "the original wallet must hold every transaction the test made"
         );
+
         assert!(
             history.last_used_indices.contains_key(&KeychainKind::Internal),
             "the send must have left change on the wallet's change chain"
         );
+
         assert!(
             history
                 .labels_of(far_txid)
@@ -364,10 +374,12 @@ impl OriginalWallet {
             screen.reported_full_scan_progress(),
             "the restored wallet's first scan must be a full scan"
         );
+
         assert!(
             !node.history_requests_for(&self.far_receive).is_empty(),
             "the restored wallet's scan must have looked up the address at index {FAR_RECEIVE_INDEX}"
         );
+
         assert!(
             manager.wallet_metadata().internal.performed_full_scan_at.is_some(),
             "finishing the full scan must be recorded"
@@ -455,7 +467,7 @@ async fn restored_wallet_full_scan_recovers_the_original_history() {
     let node = SelectedFakeNode::start();
 
     let original =
-        OriginalWallet::create_and_use(&node.0, globals, "Restored History", ABANDON_MNEMONIC)
+        OriginalWallet::create_and_use(&node.node, globals, "Restored History", ABANDON_MNEMONIC)
             .await;
     original.delete_locally().await;
 
@@ -464,7 +476,7 @@ async fn restored_wallet_full_scan_recovers_the_original_history() {
         .dispatch(CloudBackupManagerAction::RestoreCloudWallet(original.record_id.clone().into()));
     wait_for_restore_to_finish(&manager, &[&original]).await;
 
-    original.assert_restored_history_matches(&node.0).await;
+    original.assert_restored_history_matches(&node.node).await;
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -476,10 +488,15 @@ async fn restore_all_full_scans_recover_each_original_history() {
     let node = SelectedFakeNode::start();
 
     let first =
-        OriginalWallet::create_and_use(&node.0, globals, "Restore All One", ABANDON_MNEMONIC).await;
-    let second =
-        OriginalWallet::create_and_use(&node.0, globals, "Restore All Two", LEGAL_WINNER_MNEMONIC)
+        OriginalWallet::create_and_use(&node.node, globals, "Restore All One", ABANDON_MNEMONIC)
             .await;
+    let second = OriginalWallet::create_and_use(
+        &node.node,
+        globals,
+        "Restore All Two",
+        LEGAL_WINNER_MNEMONIC,
+    )
+    .await;
     first.delete_locally().await;
     second.delete_locally().await;
 
@@ -492,6 +509,6 @@ async fn restore_all_full_scans_recover_each_original_history() {
     manager.dispatch(CloudBackupManagerAction::StartRestoreAll);
     wait_for_restore_to_finish(&manager, &[&first, &second]).await;
 
-    first.assert_restored_history_matches(&node.0).await;
-    second.assert_restored_history_matches(&node.0).await;
+    first.assert_restored_history_matches(&node.node).await;
+    second.assert_restored_history_matches(&node.node).await;
 }
