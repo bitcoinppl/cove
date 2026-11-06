@@ -112,8 +112,13 @@ class KeyTeleportReviewLayoutTest {
                 assertShowsWhole(chip, name)
 
                 val chipId = chip.fetchSemanticsNode("revealed words: chip $position is missing").id
-                assertTextFits(compose.onNode(hasText("$position.") and isInside(chipId), useUnmergedTree = true), "revealed words: number $position")
-                assertTextFits(compose.onNode(hasText(word) and isInside(chipId), useUnmergedTree = true), name)
+                val number = compose.onNode(hasText("$position.") and isInside(chipId), useUnmergedTree = true)
+                val text = compose.onNode(hasText(word) and isInside(chipId), useUnmergedTree = true)
+                assertTextFits(number, "revealed words: number $position")
+                assertTextFits(text, name)
+
+                // the chip merges its number and word, so the screen's check sees only the chip
+                assertNoOverlap("revealed words", listOf(CheckedNode("number $position", number), CheckedNode("word $position", text)))
                 CheckedNode(name, chip)
             }
 
