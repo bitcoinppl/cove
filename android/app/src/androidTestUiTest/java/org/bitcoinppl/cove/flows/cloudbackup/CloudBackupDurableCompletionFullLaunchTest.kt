@@ -87,8 +87,10 @@ class CloudBackupDurableCompletionFullLaunchTest {
         onboarding.assertCloudBackupSuccess()
 
         val manager = CloudBackupManager.getInstance()
-        waitUntil("the verifier never polled the hidden writes") {
-            ScriptedCloudStorageAccess.uploadStatusCheckCount() >= 2
+        // one pass checks the master key and the wallet separately, so only a record checked twice
+        // shows the verifier came back to a hidden write
+        waitUntil("the verifier never polled a hidden write twice") {
+            ScriptedCloudStorageAccess.mostUploadStatusChecksOfOneRecord() >= 2
         }
         waitUntil("Settings should show the backup as confirming while its writes stay hidden") {
             manager.hasPendingUploadVerification &&

@@ -27,9 +27,10 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         robot.startFreshEnableFromOnboarding()
         robot.finishOnboardingAfterCloudBackupEnabled()
 
-        // the verifier polls the hidden writes more than once
-        control.waitUntil("the verifier never polled the pending uploads") {
-            $0.count(.uploadStatus) >= 2
+        // the verifier comes back to a hidden write; one pass checks the master key and the wallet
+        // separately, so only a record checked twice shows a second pass
+        control.waitUntil("the verifier never polled a pending upload twice") {
+            $0.mostUploadStatusChecksOfOneRecord >= 2
         }
         control.waitForAppState("Settings should show the backup as confirming while its writes stay hidden") {
             $0.settingsRow == "confirming" && $0.pendingUploadVerification

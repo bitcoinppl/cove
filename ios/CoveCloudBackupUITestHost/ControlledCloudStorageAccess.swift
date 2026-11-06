@@ -213,7 +213,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         policy _: CloudAccessPolicy
     ) async throws -> CloudBackupUploadStatus {
         try throwIfOffline()
-        controller.record(.uploadStatus)
+        controller.record(.uploadStatus(recordId: recordId))
 
         switch controller.script().cloud {
         case .freshEnable:

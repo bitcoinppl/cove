@@ -191,6 +191,12 @@ struct CloudBackupUITestHostState: Codable, Equatable {
         launches.last?.calls[call.key] ?? 0
     }
 
+    /// Upload confirmation checks of the record checked most often, across every launch, so one
+    /// verifier pass over several records never reads as polling twice
+    var mostUploadStatusChecksOfOneRecord: Int {
+        calls.filter { $0.key.hasPrefix("uploadStatus.") }.values.max() ?? 0
+    }
+
     /// Downloads of every wallet record, across every launch
     var walletDownloadCount: Int {
         calls.filter { $0.key.hasPrefix("walletDownload.") }.values.reduce(0, +)
@@ -208,7 +214,7 @@ enum CloudBackupUITestCall: Equatable {
     case walletUpload
     /// A fixture-cloud wallet upload of a wallet the fixture doesn't hold, also counted as `walletUpload`
     case newWalletUpload
-    case uploadStatus
+    case uploadStatus(recordId: String)
     /// A namespace deletion, which disabling Cloud Backup makes once its writes have drained
     case namespaceDelete
     case passkeyCreate
@@ -227,7 +233,7 @@ enum CloudBackupUITestCall: Equatable {
         case .masterUpload: "masterUpload"
         case .walletUpload: "walletUpload"
         case .newWalletUpload: "newWalletUpload"
-        case .uploadStatus: "uploadStatus"
+        case let .uploadStatus(recordId): "uploadStatus.\(recordId)"
         case .namespaceDelete: "namespaceDelete"
         case .passkeyCreate: "passkeyCreate"
         case .passkeyAuthenticate: "passkeyAuthenticate"
