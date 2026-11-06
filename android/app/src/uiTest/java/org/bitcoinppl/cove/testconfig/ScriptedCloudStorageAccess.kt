@@ -68,6 +68,11 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     @Volatile
     private var walletListBlock: WalletListBlock? = null
 
+    // unlike walletListBlock, parks every plain listing until released, so concurrent readers such
+    // as discovery, sync health and passkey verification can't confirm an inventory around a hold
+    @Volatile
+    private var walletListGate: WalletListBlock? = null
+
     // held apart from walletListBlock because a detail refresh also starts a sync-health check,
     // whose plain listing could otherwise take the hold meant for the refresh's snapshot
     @Volatile
@@ -184,6 +189,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         fixtureWalletDownloadResults.clear()
         fixtureWalletDownloadDefaults.clear()
         walletListBlock = null
+        walletListGate?.release?.complete(Unit)
+        walletListGate = null
         walletSnapshotListBlock = null
         walletDownloadBlock = null
         releaseAllWalletDownloadHolds()
@@ -295,6 +302,22 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     fun releaseBlockedWalletList() {
         walletListBlock?.release?.complete(Unit)
+    }
+
+    /** Holds every plain wallet listing from now until [releaseWalletListGate] */
+    fun closeWalletListGate() {
+        check(walletListGate == null) { "the wallet-list gate is already closed" }
+        walletListGate = WalletListBlock()
+    }
+
+    /** Waits until a listing reaches the closed gate */
+    fun awaitWalletListAtGate(timeoutMs: Long = 10_000): Boolean =
+        walletListGate?.entered?.await(timeoutMs, TimeUnit.MILLISECONDS) == true
+
+    /** Lets every listing parked at the gate, and every later one, through */
+    fun releaseWalletListGate() {
+        walletListGate?.release?.complete(Unit)
+        walletListGate = null
     }
 
     /** Holds the next inventory snapshot listing, which only a Cloud Backup detail refresh makes */
@@ -574,6 +597,11 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
                 block.entered.countDown()
                 block.release.await()
             }
+        }
+
+        walletListGate?.let { gate ->
+            gate.entered.countDown()
+            gate.release.await()
         }
 
         return currentWalletFilenames(namespace)

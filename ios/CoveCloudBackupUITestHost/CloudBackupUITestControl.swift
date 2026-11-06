@@ -86,6 +86,9 @@ struct CloudBackupUITestScript: Codable, Equatable {
         case namespaceList
         /// Before `listWalletFiles` answers
         case walletList
+        /// Before `listWalletFilesSnapshot` answers, the inventory snapshot a detail refresh reads
+        /// first
+        case walletListSnapshot
         /// Before `downloadWalletBackup` answers for `recordId`
         case walletDownload
         /// After `uploadMasterKeyBackup` stored the master key and before it returns

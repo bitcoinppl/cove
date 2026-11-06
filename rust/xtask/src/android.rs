@@ -58,6 +58,8 @@ const RESTORE_ALL_RELAUNCH_TEST_CLASS: &str =
     "org.bitcoinppl.cove.flows.cloudbackup.CloudBackupRestoreAllProcessDeathFullLaunchTest";
 const ENABLE_INTERRUPTION_TEST_CLASS: &str =
     "org.bitcoinppl.cove.flows.cloudbackup.CloudBackupEnableInterruptionFullLaunchTest";
+const FIRST_INVENTORY_TEST_CLASS: &str =
+    "org.bitcoinppl.cove.flows.cloudbackup.CloudBackupFirstInventoryFullLaunchTest";
 
 // Android bundle constants (store flavor for Play Store)
 const AAB_OUTPUT_PATH: &str = "app/build/outputs/bundle/storeRelease/app-store-release.aab";
@@ -965,7 +967,8 @@ pub fn run_manual_ui_tests() -> Result<()> {
     run_independent_manual_ui_tests()?;
     durable_relaunch_ui_test()?;
     restore_all_relaunch_ui_test()?;
-    enable_interruption_ui_test(None)
+    enable_interruption_ui_test(None)?;
+    first_inventory_ui_test()
 }
 
 /// Points every plain `adb` and Gradle call this process makes at the UI test emulator, so the
@@ -1028,6 +1031,24 @@ fn restore_all_relaunch_ui_test() -> Result<()> {
         &[
             "scU09ProcessStage1NavigationKeepsSameRunningBatchAndLeavesDurableMarker",
             "scU09ProcessStage2FreshProcessShowsAuthoritativeRetryWithoutAutomaticWork",
+        ],
+    )
+}
+
+pub fn run_first_inventory_ui_test() -> Result<()> {
+    let _emulator = lock_ui_test_emulator()?;
+    first_inventory_ui_test()
+}
+
+/// Restores the fixture, then holds the relaunched process's first inventory listings, which
+/// one process can't do since finishing onboarding starts discovery before a test can hold it
+fn first_inventory_ui_test() -> Result<()> {
+    run_staged_process_ui_test(
+        "first inventory",
+        FIRST_INVENTORY_TEST_CLASS,
+        &[
+            "stage1RestoreTheFixtureAndConfirmBothCloudOnlyRows",
+            "stage2RelaunchKeepsActionsDisabledUntilTheFirstListingAnswers",
         ],
     )
 }
