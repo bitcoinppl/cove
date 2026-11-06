@@ -147,24 +147,12 @@ enum CloudBackupUITestStateProbe {
     }
 
     private static func settingsRowDescription(_ status: CloudBackupSettingsRowStatus) -> String {
+        // payload-free cases describe themselves by their case name, which keeps this switch
+        // under the lint's complexity limit; the two message-carrying cases drop the message
         switch status {
-        case .disabled: "disabled"
-        case .disabling: "disabling"
-        case .settingUp: "settingUp"
-        case .restoring: "restoring"
-        case .active: "active"
-        case .passkeyMissing: "passkeyMissing"
-        case .passkeyProviderUnsupported: "passkeyProviderUnsupported"
-        case .unverified: "unverified"
-        case .confirming: "confirming"
-        case .verificationRecommended: "verificationRecommended"
-        case .checkingSync: "checkingSync"
-        case .syncing: "syncing"
-        case .noFiles: "noFiles"
-        case .driveUnavailable: "driveUnavailable"
-        case .recoveryRequired: "recoveryRequired"
         case .error: "error"
         case .authorizationRequired: "authorizationRequired"
+        default: String(describing: status)
         }
     }
 
