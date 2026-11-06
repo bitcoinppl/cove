@@ -15,9 +15,15 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
     /// A BIP39 test vector, a different wallet from the one onboarding imports
     private static let sentWords = "legal winner thank year wave sausage worth useful legal winner thank yellow"
 
+    /// The master fingerprint of `sentWords` with no passphrase, as Wallet Settings shows it
+    private static let sentWordsFingerprint = "B8688DF1"
+
     /// The master key of BIP32 test vector 1
     private static let sentXprv =
         "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"
+
+    /// The master fingerprint of `sentXprv`, from BIP32 test vector 1
+    private static let sentXprvFingerprint = "3442193E"
 
     /// A note and a password record in the shape COLDCARD's Secure Notes send them
     private static let sentNotes: [[String: String]] = [
@@ -74,7 +80,7 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         waitForReview("Recovery words received")
         assertWordsConcealed()
         layout.reachAndTap(button("Import Wallet"), "mnemonic review: Import Wallet")
-        try openImportedWallet()
+        try openImportedWallet(fingerprint: Self.sentWordsFingerprint)
     }
 
     /// The key needs Reveal, Hide conceals it again, Copy copies it, and Import opens the new wallet
@@ -102,7 +108,7 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         XCTAssertEqual(try waitForPasteboard(Self.sentXprv), Self.sentXprv, "Copy should copy the shown key")
 
         layout.reachAndTap(button("Import Wallet"), "xprv review: Import Wallet")
-        try openImportedWallet()
+        try openImportedWallet(fingerprint: Self.sentXprvFingerprint)
     }
 
     // MARK: - Scanning
@@ -295,8 +301,13 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 30), "the review '\(title)' never showed")
     }
 
-    /// Opens the wallet the review imported from the Wallet imported screen
-    private func openImportedWallet() throws {
+    /// Opens the wallet the review imported from the Wallet imported screen, and checks it holds
+    /// the key that was sent
+    ///
+    /// Cove derives the fingerprint Wallet Settings shows from the key it saved, so a wallet that
+    /// saved other words or another key shows another fingerprint, as does the launch wallet if
+    /// Done left it selected
+    private func openImportedWallet(fingerprint: String) throws {
         let imported = app.staticTexts["Wallet imported"]
         XCTAssertTrue(imported.waitForExistence(timeout: 30), "Import Wallet should import a new wallet")
 
@@ -306,7 +317,24 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
 
         layout.reachAndTap(button("Done"), "imported: Done")
         XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30), "Done should open the imported wallet")
-        XCTAssertTrue(app.staticText(containing: name).waitForExistence(timeout: 10), "Done should open '\(name)', the imported wallet")
+
+        // the closed sidebar also lists the wallet off screen, so only a hittable name counts
+        let names = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", name))
+        let deadline = Date().addingTimeInterval(10)
+        var nameShown = false
+        while !nameShown, Date() < deadline {
+            nameShown = names.allElementsBoundByIndex.contains(where: \.isHittable)
+        }
+
+        XCTAssertTrue(nameShown, "Done should open '\(name)', the imported wallet")
+
+        app.tapButton(named: "selectedWallet.more")
+        app.tapButton(named: "Wallet Settings")
+        XCTAssertTrue(app.staticTexts["Fingerprint"].waitForExistence(timeout: 10), "Wallet Settings showed no fingerprint")
+        XCTAssertTrue(
+            app.staticTexts[fingerprint].exists,
+            "the imported wallet's fingerprint isn't \(fingerprint), so it holds a key other than the one sent"
+        )
     }
 
     // MARK: - Secrets on screen
