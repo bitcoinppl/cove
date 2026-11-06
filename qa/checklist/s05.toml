@@ -32,16 +32,18 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
-    "human",
+    "ios-ui:ios/CoveUITests/CloudBackupNetworkFullAppUITests.swift::testHeldReconnectCheckKeepsKnownRowsDisabledUntilTheProviderConfirmsThem",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupFirstInventoryFullLaunchTest.kt::stage2RelaunchKeepsActionsDisabledUntilTheFirstListingAnswers",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupInventoryActionsFullLaunchTest.kt::cloudOnlyRowActionsStayDisabledWhileAKnownInventoryIsCheckedAgain",
     "rust:rust/src/manager/cloud_backup_manager/model.rs::provisional_detail_is_visible_without_becoming_complete",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::trusted_local_snapshot_is_confirmed_by_provider_in_background",
     "rust:rust/src/manager/cloud_backup_manager/model.rs::retained_restore_all_count_stays_enabled_until_inventory_becomes_incomplete",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust tests cover inventory staying incomplete until the provider confirms it; the ios per-row restore and delete buttons read isDetailInventoryReady and no ios ui test asserts they stay disabled
-# the android test is partial coverage: it holds the provider listing while a known inventory is checked again after a failed refresh, and checks that no listed cloud-only row, open action sheet or delete forever confirmation can restore or delete until the provider confirms the inventory
-# the first inventory load still needs a person on android, since onboarding can start inventory discovery before a test can hold the listing, so a regression that treats cached rows as confirmed during first-launch discovery would go uncaught
+# rust tests cover inventory staying incomplete until the provider confirms it; the cloud-only fetch starts only once the inventory is ready, so neither app lists cloud-only rows during a first load
+# the ios test holds the snapshot and listings of the check that follows a reconnect, checks each known row it still lists opens no restore or delete action and restore all stays unavailable, then releases them and checks a confirmed row opens both actions
+# the android staged test holds every listing and the first detail snapshot of a relaunched process before it starts, checks the inventory stays checking and not ready with no cloud-only row listed, and that restore and delete intents sent straight to the manager change no wallet, download or delete, then releases them and checks both actions open
+# the other android test holds a recheck after a failed refresh and checks listed rows, action sheets and delete forever confirmation stay disabled until the provider confirms
 
 [[row]]
 id = "s05-offline-inventory-keeps-existing-rows-and-disables"
