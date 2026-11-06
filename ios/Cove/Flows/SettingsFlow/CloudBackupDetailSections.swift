@@ -131,12 +131,14 @@ struct MissingPasskeyContent: View {
 
                 Text("Cloud Backup Passkey Missing")
                     .font(.headline)
+                    .uiTestTruncationProbe()
                     .foregroundStyle(Color.statusError)
 
                 Text(
                     "Your cloud backup is not accessible until you use an existing passkey or add a new one. Without it, your backups can't be restored."
                 )
                 .font(.subheadline)
+                .uiTestTruncationProbe()
                 .foregroundStyle(Color.statusError.opacity(0.85))
                 .multilineTextAlignment(.center)
             }
@@ -153,21 +155,23 @@ struct MissingPasskeyContent: View {
                         ProgressView()
                             .padding(.trailing, 4)
                         Text("Opening Passkey Options...")
+                            .uiTestTruncationProbe()
                     }
                 } else {
-                    Label("Add Passkey", systemImage: "person.badge.key")
+                    ProbedLabel("Add Passkey", systemImage: "person.badge.key")
                 }
             }
             .disabled(isRepairing)
 
             Text("Use an existing passkey or add a new one to make your cloud backup accessible again")
                 .font(.caption)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
         }
 
         if let repairError {
             Section {
-                Label(repairError, systemImage: "exclamationmark.triangle.fill")
+                ProbedLabel(repairError, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Color.statusError)
                     .font(.caption)
             }
@@ -261,6 +265,7 @@ private struct DisableCloudBackupRequestButton: View {
         Button(role: .destructive, action: requestDisable) {
             Text("Disable Cloud Backup")
                 .font(.footnote)
+                .uiTestTruncationProbe()
         }
         .disabled(manager.isDisablingCloudBackup || !manager.isDetailInventoryComplete)
         .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }

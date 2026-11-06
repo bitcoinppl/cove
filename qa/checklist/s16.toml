@@ -178,8 +178,10 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupScreen.kt",
 ]
 coverage = [
-    "human:ios",
     "ios-ui:ios/CoveUITests/CloudBackupLargeTextFullAppUITests.swift::testInventoryCloudOnlyRowsAndVerificationActionsAreReachable",
+    "ios-ui:ios/CoveUITests/CloudBackupLargeTextFullAppUITests.swift::testFailedVerificationKeepsRecoveryActionsReachable",
+    "ios-ui:ios/CoveUITests/CloudBackupLargeTextFullAppUITests.swift::testMissingPasskeyRecoveryKeepsAddPasskeyReachable",
+    "ios-ui:ios/CoveUITests/CloudBackupLargeTextFullAppUITests.swift::testIncompleteSetupRecoveryActionsAreReachable",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupLargeFontLayoutTest.kt::inventoryWithCloudOnlyRowsKeepsRestoreAllAndRowsReachable",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupLargeFontLayoutTest.kt::restoreAllProgressKeepsCancelReachable",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupLargeFontLayoutTest.kt::failedVerificationKeepsRecoveryActionsReachable",
@@ -188,7 +190,7 @@ coverage = [
     "ios-ui:ios/CoveUITests/CloudBackupLargeTextFullAppUITests.swift::testRestoreAllProgressKeepsCancelReachable",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# ios still needs a person for the missing-passkey recovery screen, which nothing outside rust tests can reach, and for the incomplete-setup recovery screen
+# ios runs the scriptable host at the largest text size: the missing-passkey screen comes from a failed passkey repair, and the incomplete-setup screen from an enable killed after its master key upload
 
 [[row]]
 id = "s16-tapsigner-setup-signing-and-retry-layout"

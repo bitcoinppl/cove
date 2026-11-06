@@ -12,10 +12,12 @@ struct HeaderSection: View {
 
                 Text(cloudBackupDetailHeaderTitle(syncHealth: syncHealth))
                     .fontWeight(.semibold)
+                    .uiTestTruncationProbe()
 
                 if let lastSync {
                     Text("Last synced \(Date.formattedTimestamp(lastSync))")
                         .font(.caption)
+                        .uiTestTruncationProbe()
                         .foregroundStyle(.secondary)
                 }
 
@@ -60,25 +62,25 @@ private struct CloudBackupSyncHealthLabel: View {
         case .unknown:
             CloudBackupSyncProgressLabel(title: "Checking iCloud sync status...")
         case .allUploaded:
-            Label("All files synced to iCloud", systemImage: "checkmark.circle.fill")
+            ProbedLabel("All files synced to iCloud", systemImage: "checkmark.circle.fill")
                 .font(.caption)
                 .foregroundStyle(Color.statusSuccess)
         case .uploading:
             CloudBackupSyncProgressLabel(title: "Syncing to iCloud...")
         case let .failed(message):
-            Label("Sync error: \(message)", systemImage: "exclamationmark.triangle.fill")
+            ProbedLabel("Sync error: \(message)", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(Color.statusError)
         case .authorizationRequired:
-            Label("iCloud Drive access needs to be reconnected", systemImage: "exclamationmark.triangle.fill")
+            ProbedLabel("iCloud Drive access needs to be reconnected", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(Color.statusWarning)
         case .noFiles:
-            Label("No iCloud backup files uploaded yet", systemImage: "icloud.slash")
+            ProbedLabel("No iCloud backup files uploaded yet", systemImage: "icloud.slash")
                 .font(.caption)
                 .foregroundStyle(Color.statusWarning)
         case .unavailable:
-            Label("iCloud Drive is unavailable", systemImage: "exclamationmark.triangle.fill")
+            ProbedLabel("iCloud Drive is unavailable", systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(Color.statusWarning)
         }
@@ -93,6 +95,7 @@ private struct CloudBackupSyncProgressLabel: View {
             ProgressView()
                 .controlSize(.mini)
             Text(title)
+                .uiTestTruncationProbe()
         }
         .font(.caption)
         .foregroundStyle(.secondary)

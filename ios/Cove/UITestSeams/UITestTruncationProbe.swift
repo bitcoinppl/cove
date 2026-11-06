@@ -57,6 +57,53 @@ import SwiftUI
                         .onGeometryChange(for: CGFloat.self, of: \.size.height) { fullHeight = $0 }
                 }
                 .accessibilityValue(value)
+                .preference(
+                    key: UITestTruncationReportKey.self,
+                    value: UITestTruncationReport(probed: 1, truncated: value == UITestTruncationProbe.fits ? 0 : 1)
+                )
+        }
+    }
+
+    /// How many probed texts a view holds and how many of them draw truncated, or are not yet
+    /// measured
+    struct UITestTruncationReport: Equatable {
+        var probed = 0
+        var truncated = 0
+
+        /// `fits` only when the view holds a probed text and every one of them draws whole, so a
+        /// view whose probes were dropped reads as truncated
+        var value: String {
+            probed > 0 && truncated == 0 ? UITestTruncationProbe.fits : UITestTruncationProbe.truncated
+        }
+    }
+
+    private struct UITestTruncationReportKey: PreferenceKey {
+        static let defaultValue = UITestTruncationReport()
+
+        static func reduce(value: inout UITestTruncationReport, nextValue: () -> UITestTruncationReport) {
+            let next = nextValue()
+            value.probed += next.probed
+            value.truncated += next.truncated
+        }
+    }
+
+    /// An invisible accessibility element behind the view whose value sums up the probed texts
+    /// inside it
+    ///
+    /// It lies behind rather than over the view, since XCUITest finds an element under a tap
+    /// point by hit testing, and an element over a row would take the row's taps
+    private struct TruncationReportOverlay: ViewModifier {
+        let identifier: String
+
+        func body(content: Content) -> some View {
+            content.backgroundPreferenceValue(UITestTruncationReportKey.self) { report in
+                Color.clear
+                    .allowsHitTesting(false)
+                    .accessibilityElement()
+                    .accessibilityLabel("Truncation report")
+                    .accessibilityIdentifier(identifier)
+                    .accessibilityValue(report.value)
+            }
         }
     }
 #endif
@@ -79,5 +126,55 @@ extension Text {
         #else
             self
         #endif
+    }
+}
+
+extension View {
+    /// Lets UI tests tell whether every probed text inside this view draws whole, for a view
+    /// that merges its texts into one accessibility element, such as a wallet row, so their own
+    /// values never reach the UI tree
+    ///
+    /// With the debug seam turned on, it lays an invisible element with `identifier` behind the
+    /// view, whose value is `fits` when the view holds a probed text and all of them draw whole,
+    /// and `truncated` otherwise. Apply it outside any button that holds the view, since a
+    /// button merges the elements of its label. Without the seam, and in every release build, it
+    /// returns the view unchanged
+    @ViewBuilder
+    func uiTestTruncationReport(_ identifier: String) -> some View {
+        #if DEBUG
+            if UITestTruncationProbe.isEnabled {
+                modifier(TruncationReportOverlay(identifier: identifier))
+            } else {
+                self
+            }
+        #else
+            self
+        #endif
+    }
+}
+
+/// A `Label` whose title carries the truncation probe, so a UI test can tell whether it draws
+/// whole, from its own value or from that of the button it labels
+struct ProbedLabel: View {
+    private let title: Text
+    private let systemImage: String
+
+    init(_ title: LocalizedStringKey, systemImage: String) {
+        self.title = Text(title)
+        self.systemImage = systemImage
+    }
+
+    @_disfavoredOverload
+    init(_ title: some StringProtocol, systemImage: String) {
+        self.title = Text(title)
+        self.systemImage = systemImage
+    }
+
+    var body: some View {
+        Label {
+            title.uiTestTruncationProbe()
+        } icon: {
+            Image(systemName: systemImage)
+        }
     }
 }

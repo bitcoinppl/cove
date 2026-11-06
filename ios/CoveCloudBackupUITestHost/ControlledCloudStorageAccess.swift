@@ -76,9 +76,13 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         policy _: CloudAccessPolicy
     ) async throws -> Data {
         try throwIfOffline()
-        controller.record(.masterDownload)
+        let index = controller.record(.masterDownload)
+        let script = controller.script()
+        if let failure = script.masterDownloadFailure, index >= failure.callsToSkip {
+            throw Self.storageError(failure.error, operation: "master key download")
+        }
 
-        switch controller.script().cloud {
+        switch script.cloud {
         case .freshEnable:
             guard isVisible, let master = store.master(namespace: namespace) else {
                 throw CloudStorageError.NotFound("master key backup is not visible yet")
@@ -327,15 +331,18 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         }
         guard let failure else { return }
 
+        throw Self.storageError(failure, operation: "\(kind.rawValue) upload")
+    }
+
+    private static func storageError(
+        _ failure: CloudBackupUITestScript.ProviderError,
+        operation: String
+    ) -> CloudStorageError {
         switch failure {
-        case .uploadFailed:
-            throw CloudStorageError.UploadFailed("scripted \(kind.rawValue) upload failure")
-        case .offline:
-            throw CloudStorageError.Offline("scripted provider is offline")
-        case .notAvailable:
-            throw CloudStorageError.NotAvailable("scripted provider is unavailable")
-        case .quotaExceeded:
-            throw CloudStorageError.QuotaExceeded
+        case .uploadFailed: .UploadFailed("scripted \(operation) failure")
+        case .offline: .Offline("scripted provider is offline")
+        case .notAvailable: .NotAvailable("scripted provider is unavailable")
+        case .quotaExceeded: .QuotaExceeded
         }
     }
 
