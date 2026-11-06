@@ -108,7 +108,10 @@ class KeyTeleportReviewLayoutTest {
             val position = index + 1
             val chip = compose.onNode(isChipFor(position, word), useUnmergedTree = false)
             assertShowsWhole(chip, "revealed words: word $position")
-            assertTextFits(compose.onNode(hasText("$position.") and hasTextLayout(), useUnmergedTree = true), "revealed words: number $position")
+
+            val chipId = chip.fetchSemanticsNode("revealed words: chip $position is missing").id
+            assertTextFits(compose.onNode(hasText("$position.") and isInside(chipId), useUnmergedTree = true), "revealed words: number $position")
+            assertTextFits(compose.onNode(hasText(word) and isInside(chipId), useUnmergedTree = true), "revealed words: word $position")
         }
 
         assertEveryTextDrawsWhole("revealed words")
@@ -256,12 +259,20 @@ class KeyTeleportReviewLayoutTest {
         assertTrue("$name doesn't draw whole: $problem", problem == null)
     }
 
-    /** Every text in the screen, named or not, must lay out whole; text fields scroll their own entry by design */
+    /**
+     * Every text in the screen, named or not, must lay out whole; text fields scroll their own entry by design
+     *
+     * Texts are found by their text rather than their layout action, so one that stops reporting
+     * its layout fails instead of dropping out of the check
+     */
     private fun assertEveryTextDrawsWhole(screen: String) {
         val texts =
             compose
-                .onAllNodes(hasTextLayout() and !SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText), useUnmergedTree = true)
-                .fetchSemanticsNodes()
+                .onAllNodes(
+                    SemanticsMatcher.keyIsDefined(SemanticsProperties.Text) and
+                        !SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText),
+                    useUnmergedTree = true,
+                ).fetchSemanticsNodes()
 
         assertTrue("$screen has no texts to check", texts.isNotEmpty())
         val problems =
@@ -276,6 +287,12 @@ class KeyTeleportReviewLayoutTest {
     }
 
     private fun hasTextLayout(): SemanticsMatcher = SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult)
+
+    // a merged node keeps the id of the node it merges into, so unmerged nodes find it among their parents
+    private fun isInside(ancestorId: Int): SemanticsMatcher =
+        SemanticsMatcher("is inside node $ancestorId") { node ->
+            generateSequence(node.parent) { it.parent }.any { it.id == ancestorId }
+        }
 
     // a chip merges its number and word into one node
     private fun isChipFor(

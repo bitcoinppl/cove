@@ -19,14 +19,17 @@ struct ScreenReachability {
     /// Taller than the keyboard's suggestion bar and shorter than any screen's scroll area
     private static let rowHeight: CGFloat = 100
 
+    /// Frames are in points with fractional edges, and adjacent views can share a rounded edge
+    private static let overlapTolerance: CGFloat = 1
+
     /// Room for one line of a text at the largest text size, about 50 points, with margin
     private static let endLineHeight: CGFloat = 80
 
     let app: XCUIApplication
 
     /// Every text and action must lie wholly inside the window once scrolled to, the actions must
-    /// take a tap there, each text and each button's label must draw whole, and no probed text on
-    /// the screen may draw truncated
+    /// take a tap there, each text and each button's label must draw whole, no two of them may
+    /// overlap, and no probed text on the screen may draw truncated
     ///
     /// `texts` match a text's whole label and `descriptions` the start of one, for a long
     /// paragraph. `controls` are actions without a probed label, such as icon-only buttons and
@@ -41,21 +44,29 @@ struct ScreenReachability {
         let textQueries = texts.map { ("'\($0)'", app.staticTexts.matching(NSPredicate(format: "label == %@", $0))) }
             + descriptions.map { ("'\($0)…'", app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", $0))) }
 
+        var shown: [(name: String, element: XCUIElement)] = []
         for (label, query) in textQueries {
             let name = "\(screen): \(label)"
             if let tall = tallerThanItsScrollArea(query) {
                 assertBothEndsFit(tall, name)
                 assertDrawsWhole(tall, name)
+                shown.append((name, tall))
                 continue
             }
 
-            assertDrawsWhole(assertReachable(query, name, needsHit: false), name)
+            let text = assertReachable(query, name, needsHit: false)
+            assertDrawsWhole(text, name)
+            shown.append((name, text))
         }
 
         for button in buttons {
             let name = "\(screen): \(button.firstMatch.description)"
-            assertDrawsWhole(assertReachable(button, name, needsHit: true), name)
+            let element = assertReachable(button, name, needsHit: true)
+            assertDrawsWhole(element, name)
+            shown.append((name, element))
         }
+
+        assertNoOverlap(shown)
 
         for control in controls {
             assertReachable(control, "\(screen): \(control.firstMatch.description)", needsHit: true)
@@ -78,6 +89,25 @@ struct ScreenReachability {
         }
 
         XCTAssertEqual(value(), Self.fitsValue, "\(name) doesn't draw whole: its truncation probe reports '\(value())'")
+    }
+
+    /// Fails when two of the elements' frames overlap
+    ///
+    /// The probe compares a text with its own laid-out size, so a text that keeps its full height
+    /// inside a shorter parent that clips it still reports that it fits. Its accessibility frame
+    /// keeps the full height, though, and runs into whatever follows the parent. Scrolling moves
+    /// every frame, so they're all read at one scroll position
+    private func assertNoOverlap(_ elements: [(name: String, element: XCUIElement)]) {
+        let frames = elements.map { ($0.name, $0.element.frame) }
+        for (index, (name, frame)) in frames.enumerated() {
+            for (otherName, otherFrame) in frames[(index + 1)...] where otherFrame != frame {
+                let shared = frame.intersection(otherFrame)
+                XCTAssertFalse(
+                    shared.width > Self.overlapTolerance && shared.height > Self.overlapTolerance,
+                    "\(name) at \(frame) overlaps \(otherName) at \(otherFrame)"
+                )
+            }
+        }
     }
 
     /// Fails when any probed text or button label in the app reports that it draws truncated, so a
