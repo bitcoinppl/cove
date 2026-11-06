@@ -8,7 +8,7 @@ import Foundation
 /// can unlock what an earlier process created
 final class ControlledPasskeyProvider: PasskeyProvider, @unchecked Sendable {
     private let controller: CloudBackupUITestController
-    private let credentialId = Data("cove-cloud-backup-ui-test".utf8)
+    private static let credentialId = Data(CloudBackupUITestControl.passkeyCredentialId.utf8)
     private let prfOutput = Data((1 ... 32).map(UInt8.init))
 
     init(controller: CloudBackupUITestController) {
@@ -24,7 +24,7 @@ final class ControlledPasskeyProvider: PasskeyProvider, @unchecked Sendable {
         try Self.throwIfFailed(controller.script().createResults, index: index, operation: .registration)
 
         return PasskeyRegistrationResult(
-            credentialId: credentialId,
+            credentialId: Self.credentialId,
             providerAaguid: "00000000-0000-0000-0000-000000000000",
             registeredPlatform: .ios
         )
@@ -32,11 +32,12 @@ final class ControlledPasskeyProvider: PasskeyProvider, @unchecked Sendable {
 
     func authenticateWithPrf(
         rpId _: String,
-        credentialId _: Data,
+        credentialId requestedCredentialId: Data,
         prfSalt _: Data,
         challenge _: Data
     ) throws -> Data {
         let index = controller.record(.passkeyAuthenticate)
+        controller.recordAuthenticatedCredential(requestedCredentialId)
         try Self.throwIfFailed(
             controller.script().authenticateResults,
             index: index,
@@ -54,7 +55,7 @@ final class ControlledPasskeyProvider: PasskeyProvider, @unchecked Sendable {
         let index = controller.record(.passkeyDiscover)
         try Self.throwIfFailed(controller.script().discoverResults, index: index, operation: .discoverAssertion)
 
-        return DiscoveredPasskeyResult(prfOutput: prfOutput, credentialId: credentialId)
+        return DiscoveredPasskeyResult(prfOutput: prfOutput, credentialId: Self.credentialId)
     }
 
     func isPrfSupported() -> Bool {

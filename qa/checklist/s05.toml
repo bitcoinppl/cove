@@ -136,7 +136,8 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
-    "human:ios",
+    "ios-ui:ios/CoveUITests/CloudBackupLocalDeleteFullAppUITests.swift::testDeletingARestoredWalletKeepsARestorableCloudOnlyCopy",
+    "ios-ui:ios/CoveUITests/CloudBackupLocalDeleteFullAppUITests.swift::testDeletingAFreshlyBackedUpWalletKeepsItsCloudCopyRestorable",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupLocalDeleteFullLaunchTest.kt::deletingAFreshlyBackedUpWalletKeepsItsProviderCopyRestorable",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupLocalDeleteFullLaunchTest.kt::deletingTheLocalWalletKeepsARestorableCloudOnlyCopy",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::deleting_the_matching_local_wallet_makes_its_cloud_duplicate_restorable",
@@ -144,9 +145,9 @@ coverage = [
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/round_trip.rs::cloud_round_trip_restores_labels_locks_and_seed_without_scan_state",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust tests remove wallet data directly and send the change notification themselves; the ios production delete path stays human
-# the android tests delete the wallet through wallet settings and every confirmation dialog its count calls for, then restore it from its cloud-only row; in the fresh-enable test the scripted provider drops deleted backups, so a stray cloud delete would fail it
-# the android tests reopen cloud backup after the delete, so they don't show that an already-open cloud backup updates without the change notification
+# rust tests remove wallet data directly and send the change notification themselves
+# ui tests on both platforms delete the wallet through wallet settings and every confirmation dialog its count calls for, two for the restored watch-only fixture wallet and three with the final warning's cloud recovery text for a new unverified hot wallet, then restore it from its cloud-only row; both scripted clouds drop deleted backups, so a stray cloud delete would fail them
+# the ui tests reopen cloud backup after the delete, so they don't show that an already-open cloud backup updates without the change notification
 
 [[row]]
 id = "s05-cloud-restored-wallet-performs-full-rescan"

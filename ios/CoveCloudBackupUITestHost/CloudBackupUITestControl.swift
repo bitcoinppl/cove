@@ -24,6 +24,10 @@ enum CloudBackupUITestControl {
     /// Gate that keeps fresh-enable uploads unreadable until the test creates its release file
     static let visibilityGate = "visibility"
 
+    /// The credential id of the one passkey the controlled provider holds, which the fixture's
+    /// master key is wrapped with
+    static let passkeyCredentialId = "cove-cloud-backup-ui-test"
+
     static func releaseFileName(_ id: String) -> String {
         "release-\(id)"
     }
@@ -63,6 +67,8 @@ struct CloudBackupUITestScript: Codable, Equatable {
         case uploadFailed
         case offline
         case notAvailable
+        /// The one upload error Cove doesn't retry on its own, so the wallet waits for Sync Now
+        case quotaExceeded
     }
 
     enum PasskeyResult: String, Codable {
@@ -137,6 +143,11 @@ struct CloudBackupUITestScript: Codable, Equatable {
     var holds: [Hold] = []
     var uploadFailures: [UploadFailure] = []
 
+    /// Failures for the fixture cloud's uploads of wallets the fixture doesn't hold, such as one
+    /// added on the device after a restore, in upload order across every launch; later uploads
+    /// are accepted
+    var newWalletUploadFailures: [ProviderError] = []
+
     /// Answers to each passkey call in call order; the last one repeats
     var createResults: [PasskeyResult] = [.success]
     var authenticateResults: [PasskeyResult] = [.success]
@@ -158,6 +169,8 @@ struct CloudBackupUITestHostState: Codable, Equatable {
         var recordId: String?
         /// False when the script failed it
         var accepted: Bool
+        /// Whether it was a fixture-cloud upload of a wallet the fixture doesn't hold
+        var isNewWallet = false
     }
 
     var launches: [Launch] = []
@@ -166,6 +179,8 @@ struct CloudBackupUITestHostState: Codable, Equatable {
     var uploads: [Upload] = []
     /// The connectivity the host last reported to Rust, nil before the app started reporting
     var reportedNetworkConnected: Bool?
+    /// Hex credential ids the app asked the passkey provider to authenticate, in call order
+    var authenticatedCredentialIds: [String] = []
 
     func count(_ call: CloudBackupUITestCall) -> Int {
         calls[call.key] ?? 0
@@ -186,6 +201,8 @@ enum CloudBackupUITestCall: Equatable {
     case walletDownload(recordId: String)
     case masterUpload
     case walletUpload
+    /// A fixture-cloud wallet upload of a wallet the fixture doesn't hold, also counted as `walletUpload`
+    case newWalletUpload
     case uploadStatus
     case passkeyCreate
     case passkeyAuthenticate
@@ -202,6 +219,7 @@ enum CloudBackupUITestCall: Equatable {
         case let .walletDownload(recordId): "walletDownload.\(recordId)"
         case .masterUpload: "masterUpload"
         case .walletUpload: "walletUpload"
+        case .newWalletUpload: "newWalletUpload"
         case .uploadStatus: "uploadStatus"
         case .passkeyCreate: "passkeyCreate"
         case .passkeyAuthenticate: "passkeyAuthenticate"
@@ -233,4 +251,19 @@ struct CloudBackupUITestAppState: Codable, Equatable {
     var restoreAll: String
     /// The verification case, such as `verified` or `awaitingUploadConfirmation`, or `none`
     var verification: String
+    /// Whether verification waits for the provider to confirm uploads
+    var pendingUploadVerification: Bool
+    /// `idle`, `syncing`, `blocked`, `failed` or `none`
+    var sync: String
+    var syncError: String?
+    /// The on-device wallets the detail lists, up to date first, then those that need a sync
+    var wallets: [Wallet]
+
+    struct Wallet: Codable, Equatable {
+        var recordId: String
+        var name: String
+        /// The sync status, such as `confirmed`, `failed` or `dirty`
+        var status: String
+        var needsSync: Bool
+    }
 }

@@ -54,7 +54,7 @@ final class WatchOnlyUpgradeFullLaunchUITests: XCTestCase {
         let name = walletNameInSidebar()
         XCTAssertFalse(hasSecretWordsInWalletSettings(), "the watch-only wallet already offers recovery words")
 
-        importTestMnemonicFromAddWallet()
+        app.importTestMnemonicFromAddWallet()
 
         // the import lands on the wallet it upgraded, with the history and label it had
         app.assertBalance(sats: Self.fundedSats, timeout: 60)
@@ -90,18 +90,6 @@ final class WatchOnlyUpgradeFullLaunchUITests: XCTestCase {
         XCTAssertTrue(imported.waitForExistence(timeout: 15), "the scanned label was not imported")
         imported.buttons.firstMatch.tap()
         XCTAssertTrue(app.staticTexts[Self.label].waitForExistence(timeout: 15), "the transaction doesn't show its label")
-    }
-
-    /// Walks Add Wallet to the 12-word import and enters the test mnemonic
-    private func importTestMnemonicFromAddWallet() {
-        app.tapButton(named: "app.sidebar.open")
-        app.tapButton(named: "Add Wallet")
-        app.tapButton(startingWith: "On This Device", until: app.buttons["Import existing wallet"])
-        app.tapButton(startingWith: "Import existing wallet", until: app.buttons["12 Words"])
-        app.tapButton(startingWith: "12 Words", until: app.navigationBars["Import Wallet"])
-        app.enterTestMnemonicAndImport()
-
-        XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
     }
 
     /// The name of the only wallet the sidebar lists, failing when it lists none or several
