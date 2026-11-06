@@ -327,12 +327,13 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 30), "the review '\(title)' never showed")
     }
 
-    /// Opens the wallet the review imported from the Wallet imported screen, and checks it holds
-    /// the key that was sent
+    /// Opens the wallet the review imported from the Wallet imported screen, and checks its
+    /// fingerprint is the sent key's
     ///
-    /// Cove derives the fingerprint Wallet Settings shows from the key it saved, so a wallet that
-    /// saved other words or another key shows another fingerprint, as does the launch wallet if
-    /// Done left it selected
+    /// Wallet Settings shows the fingerprint the import recorded in the wallet's metadata, so a
+    /// wallet made from other words or another key shows another one, as does the launch wallet
+    /// if Done left it selected. The metadata doesn't show which secret the keychain saved, so
+    /// each test reads that back separately
     private func openImportedWallet(fingerprint: String) throws {
         let imported = app.staticTexts["Wallet imported"]
         XCTAssertTrue(imported.waitForExistence(timeout: 30), "Import Wallet should import a new wallet")
