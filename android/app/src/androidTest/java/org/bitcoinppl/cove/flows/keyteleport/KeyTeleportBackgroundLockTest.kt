@@ -9,12 +9,14 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.Lifecycle
 import androidx.test.platform.app.InstrumentationRegistry
@@ -45,7 +47,9 @@ import org.junit.Test
 
 /**
  * Leaving Cove at each secret-bearing KeyTeleport step and coming back must show the PIN cover
- * first, with no secret in the UI tree until the user unlocks and reveals it again
+ * first, with no secret in the UI tree until the user unlocks. Secrets behind a reveal control
+ * also stay hidden until revealed again, while a received message, which has no reveal step,
+ * shows again on unlocking
  *
  * Hosts the real KeyTeleport screen under the real app lock, switches to the system Settings app
  * so the process really stops, stays away past the grace period, and returns with Back. A second
@@ -220,7 +224,15 @@ class KeyTeleportBackgroundLockTest {
         )
         compose.waitUntil(REVEAL_TIMEOUT_MILLIS) { MESSAGE_SECRETS.all { compose.containsText(it, substring = true) } }
 
-        compose.onNodeWithText("Done").performClick()
+        // two message cards can push Done below the screen, and a click there would miss it
+        compose
+            .onNodeWithText("Done")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        // Done finishes the review, which deletes the stored receive session
+        awaitOnMain("Done to end the receive") { (!hasStoredReceiveSession()).takeIf { it } }
     }
 
     private fun showKeyTeleport(route: KeyTeleportRoute) {
