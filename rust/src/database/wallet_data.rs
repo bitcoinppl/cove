@@ -153,6 +153,10 @@ pub struct PayjoinSenderSession {
     pub created_at_secs: Option<u64>,
     #[serde(default)]
     pub pending_action: Option<PendingAction>,
+    /// OHTTP relay sticky for this session. `None` on records written before sticky-relay
+    /// support; resume picks a new relay in that case. Serde-default keeps old JSON readable.
+    #[serde(default)]
+    pub relay: Option<String>,
 }
 
 #[derive(Debug, Clone, uniffi::Object)]
@@ -938,11 +942,26 @@ mod tests {
             fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
             created_at_secs: None,
             pending_action: None,
+            relay: Some("https://relay.payjoin.org".to_string()),
         };
 
         db.set_payjoin_sender_session(session.clone()).unwrap();
 
         assert_eq!(db.get_payjoin_sender_session().unwrap(), Some(session));
+    }
+
+    #[test]
+    fn payjoin_sender_session_deserializes_without_relay_field() {
+        // records written before sticky-relay support omit `relay`; serde default keeps them loadable
+        let json = r#"{
+            "events": [],
+            "fallback_tx": [2, 0, 0, 0],
+            "created_at_secs": null,
+            "pending_action": null
+        }"#;
+        let session: PayjoinSenderSession =
+            serde_json::from_str(json).expect("legacy payjoin session JSON must deserialize");
+        assert_eq!(session.relay, None);
     }
 
     #[test]
@@ -954,6 +973,7 @@ mod tests {
             fallback_tx: vec![0x02, 0x00, 0x00, 0x00].into(),
             created_at_secs: None,
             pending_action: None,
+            relay: None,
         };
 
         db.set_payjoin_sender_session(session).unwrap();
