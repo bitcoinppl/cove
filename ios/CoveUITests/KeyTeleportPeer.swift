@@ -99,16 +99,6 @@ extension XCUIElement {
         recognizedText.compactMap { $0.topCandidates(1).first?.string }
     }
 
-    /// The lines whose middle sits below `top`, a screen y in points
-    func visibleText(below top: CGFloat) -> [String] {
-        let frame = frame
-
-        // Vision boxes are fractions of the screenshot measured up from its bottom edge
-        return recognizedText
-            .filter { frame.maxY - $0.boundingBox.midY * frame.height >= top }
-            .compactMap { $0.topCandidates(1).first?.string }
-    }
-
     private var recognizedText: [VNRecognizedTextObservation] {
         guard let image = screenshot().image.cgImage else {
             XCTFail("the screenshot of \(self) has no image to read")

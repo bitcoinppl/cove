@@ -11,6 +11,7 @@ import XCTest
 final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
     private static let esploraUrl = UITestHostPorts.esploraUrl
     private static let largestContentSize = "UICTContentSizeCategoryAccessibilityXXXL"
+    private static let receiveHeader = ["Receive by KeyTeleport", "Show this request to the sending wallet, then scan the sender response."]
 
     /// A BIP39 test vector, a different wallet from the one onboarding imports
     private static let sentWords = "legal winner thank year wave sausage worth useful legal winner thank yellow"
@@ -243,12 +244,15 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
     }
 
     /// Finishes onboarding at the default size, since only the KeyTeleport screens are under test,
-    /// then relaunches at the largest size in dark mode
+    /// then relaunches at the largest size in dark mode, with the truncation probe the fit checks
+    /// read
     private func launchWithWalletAtLargestTextSizeInDarkMode() throws {
         try launchWithWallet()
         app.terminate()
 
         try signer.setSimulatorAppearance(dark: true)
+        let (probeKey, probeValue) = ScreenReachability.truncationProbeEnvironment
+        app.launchEnvironment[probeKey] = probeValue
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", Self.largestContentSize]
         app.launch(expecting: app.element("selectedWallet.balance"))
     }
@@ -287,11 +291,10 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         if checkingLayout {
             layout.assertScreenFits(
                 "password",
-                texts: [],
+                texts: Self.receiveHeader,
                 buttons: [button("Unlock")],
                 controls: [app.secureTextFields.matching(identifier: "Teleport Password"), button("Show password")]
             )
-            layout.assertNoTruncatedText("password")
         }
 
         layout.reachAndTap(app.secureTextFields.matching(identifier: "Teleport Password"), "password: field").typeText(response.password)
@@ -307,7 +310,8 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         if checkingLayout {
             layout.assertScreenFits(
                 "receive request",
-                texts: ["Receive by KeyTeleport"],
+                texts: Self.receiveHeader,
+                descriptions: ["Have the sending wallet scan the QR code"],
                 buttons: [button("Tap to show QR code"), button("Tap to show receiver code"), button("Scan Sender Response")]
             )
         }
@@ -411,7 +415,11 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
 
             let visible = layout.visibleArea(of: shown)
             XCTAssertTrue(visible.contains(shown.frame), "\(name), '\(word)', runs out of view at \(shown.frame) in \(visible)")
-            layout.assertDrawn(word, in: shown, name)
+            layout.assertDrawsWhole(shown, name)
+            for number in numbers.allElementsBoundByIndex where isBeside(shown.frame, number.frame) {
+                layout.assertDrawsWhole(number, "\(name): its number")
+            }
+
             layout.assertNoTruncatedText(name)
         }
     }

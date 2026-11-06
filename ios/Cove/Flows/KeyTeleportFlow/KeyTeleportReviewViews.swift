@@ -10,11 +10,11 @@ struct KeyTeleportMnemonicReviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Label("Recovery words received", systemImage: "key.horizontal.fill")
-                .font(.headline)
+            KeyTeleportReviewTitle("Recovery words received", systemImage: "key.horizontal.fill")
 
             Text("Cove found a \(review.wordCount)-word wallet. Review it below or import it directly.")
                 .font(.subheadline)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.coveLightGray.opacity(0.74))
 
             if let words = disclosure.displayedWords {
@@ -33,11 +33,7 @@ struct KeyTeleportMnemonicReviewView: View {
                     .padding(.vertical, 24)
             }
 
-            Button("Import Wallet", action: importWords)
-                .buttonStyle(OnboardingPrimaryButtonStyle())
-
-            Button("Finish Without Importing", action: finish)
-                .buttonStyle(OnboardingSecondaryButtonStyle())
+            KeyTeleportImportChoices(importWallet: importWords, finish: finish)
         }
     }
 
@@ -46,8 +42,9 @@ struct KeyTeleportMnemonicReviewView: View {
             ForEach(Array(words.enumerated()), id: \.offset) { index, word in
                 HStack {
                     Text("\(index + 1)")
+                        .uiTestTruncationProbe()
                         .foregroundStyle(.coveLightGray.opacity(0.6))
-                    Text(word)
+                    Text(word).uiTestTruncationProbe()
                     Spacer()
                 }
                 .font(.system(.subheadline, design: .monospaced))
@@ -69,49 +66,101 @@ struct KeyTeleportXprvReviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("Extended private key received", systemImage: "key.horizontal.fill")
-                .font(.headline)
+            KeyTeleportReviewTitle("Extended private key received", systemImage: "key.horizontal.fill")
 
             Text("Import this key as a hot wallet, or reveal it only when you are ready to handle the private key.")
                 .font(.subheadline)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.coveLightGray.opacity(0.74))
 
             if review.revealed, let xprv {
-                Text(xprv)
-                    .font(.system(.caption, design: .monospaced))
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.midnightBlue.opacity(0.48))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                HStack {
-                    Button { keyTeleportCopySensitiveText(xprv) } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.white)
-
-                    Button("Hide", action: hide)
-                        .buttonStyle(.bordered)
-                        .tint(.white)
-                }
+                KeyTeleportRevealedXprv(xprv: xprv, hide: hide)
             } else {
                 Text("Reveal only if you are ready to handle this private key.")
                     .font(.subheadline)
+                    .uiTestTruncationProbe()
                     .foregroundStyle(.secondary)
 
                 Button(action: reveal) {
                     Text("Reveal XPRV")
+                        .uiTestTruncationProbe()
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(OnboardingSecondaryButtonStyle())
             }
 
-            Button("Import Wallet", action: importWallet)
-                .buttonStyle(OnboardingPrimaryButtonStyle())
+            KeyTeleportImportChoices(importWallet: importWallet, finish: finish)
+        }
+    }
+}
 
-            Button("Finish Without Importing", action: finish)
-                .buttonStyle(OnboardingSecondaryButtonStyle())
+/// A review's title, whose text carries the truncation probe
+struct KeyTeleportReviewTitle: View {
+    let title: LocalizedStringKey
+    let systemImage: String
+
+    init(_ title: LocalizedStringKey, systemImage: String) {
+        self.title = title
+        self.systemImage = systemImage
+    }
+
+    var body: some View {
+        Label {
+            Text(title).uiTestTruncationProbe()
+        } icon: {
+            Image(systemName: systemImage)
+        }
+        .font(.headline)
+    }
+}
+
+/// The two ways out of a wallet review: import the wallet, or end the transfer without it
+struct KeyTeleportImportChoices: View {
+    let importWallet: () -> Void
+    let finish: () -> Void
+
+    var body: some View {
+        Button(action: importWallet) {
+            Text("Import Wallet").uiTestTruncationProbe()
+        }
+        .buttonStyle(OnboardingPrimaryButtonStyle())
+
+        Button(action: finish) {
+            Text("Finish Without Importing").uiTestTruncationProbe()
+        }
+        .buttonStyle(OnboardingSecondaryButtonStyle())
+    }
+}
+
+struct KeyTeleportRevealedXprv: View {
+    let xprv: String
+    let hide: () -> Void
+
+    var body: some View {
+        Text(xprv)
+            .font(.system(.caption, design: .monospaced))
+            .uiTestTruncationProbe()
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.midnightBlue.opacity(0.48))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+        HStack {
+            Button { keyTeleportCopySensitiveText(xprv) } label: {
+                Label {
+                    Text("Copy").uiTestTruncationProbe()
+                } icon: {
+                    Image(systemName: "doc.on.doc")
+                }
+            }
+            .buttonStyle(.bordered)
+            .tint(.white)
+
+            Button(action: hide) {
+                Text("Hide").uiTestTruncationProbe()
+            }
+            .buttonStyle(.bordered)
+            .tint(.white)
         }
     }
 }
@@ -132,19 +181,21 @@ struct KeyTeleportMessageReviewView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Label(review.items.count == 1 ? "Message received" : "Messages received", systemImage: "note.text")
-                .font(.headline)
+            KeyTeleportReviewTitle(review.items.count == 1 ? "Message received" : "Messages received", systemImage: "note.text")
 
             Text("This transfer contains text, not a wallet. Cove has displayed it exactly as received.")
                 .font(.subheadline)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.coveLightGray.opacity(0.74))
 
             ForEach(Array(review.items.enumerated()), id: \.offset) { _, item in
                 KeyTeleportMessageItemView(item: item)
             }
 
-            Button("Done", action: finish)
-                .buttonStyle(OnboardingPrimaryButtonStyle())
+            Button(action: finish) {
+                Text("Done").uiTestTruncationProbe()
+            }
+            .buttonStyle(OnboardingPrimaryButtonStyle())
         }
     }
 }
@@ -187,14 +238,19 @@ struct KeyTeleportMessageHeader: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            Label(title, systemImage: systemImage)
-                .font(.headline)
+            Label {
+                Text(title).uiTestTruncationProbe()
+            } icon: {
+                Image(systemName: systemImage)
+            }
+            .font(.headline)
 
             Spacer()
 
             if !group.isEmpty {
                 Text(group)
                     .font(.caption)
+                    .uiTestTruncationProbe()
                     .foregroundStyle(.coveLightGray.opacity(0.7))
             }
         }
@@ -210,10 +266,12 @@ struct KeyTeleportMessageField: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(label.uppercased())
                     .font(.caption2.weight(.semibold))
+                    .uiTestTruncationProbe()
                     .foregroundStyle(.coveLightGray.opacity(0.58))
 
                 Text(value)
                     .font(.body)
+                    .uiTestTruncationProbe()
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
