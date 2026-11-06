@@ -256,17 +256,28 @@ struct KeyTeleportMessageHeader: View {
     }
 }
 
+/// A received message's title, shown without its icon at accessibility sizes
 struct KeyTeleportMessageTitle: View {
     let title: String
     let systemImage: String
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        Label {
-            Text(title).uiTestTruncationProbe()
-        } icon: {
-            Image(systemName: systemImage)
+        // at the largest sizes the icon left too little room for a word such as "Exchange", which
+        // then broke mid-word, so the title takes the card's full width instead
+        if dynamicTypeSize.isAccessibilitySize {
+            Text(title)
+                .font(.headline)
+                .uiTestTruncationProbe()
+        } else {
+            Label {
+                Text(title).uiTestTruncationProbe()
+            } icon: {
+                Image(systemName: systemImage)
+            }
+            .font(.headline)
         }
-        .font(.headline)
     }
 }
 
