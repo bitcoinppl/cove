@@ -127,13 +127,13 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         control.waitForHold("passkey-create")
         XCTAssertEqual(control.state.count(.masterUpload), 0)
         let journal = CloudBackupUITestControl.pendingEnableJournalKey
-        XCTAssertTrue(control.keychainContains(journal), "the enable never claimed its staged key")
+        XCTAssertTrue(try control.keychainContains(journal), "the enable never claimed its staged key")
 
         robot.killAndRelaunch()
 
         // the lifecycle reads disabled before restart recovery runs, so the journal's removal is
         // what shows the staged key was discarded
-        control.waitForKeychainItemRemoved(journal, "relaunch kept the interrupted enable's staged key")
+        try control.waitForKeychainItemRemoved(journal, "relaunch kept the interrupted enable's staged key")
         control.waitForAppState("relaunch should discard the interrupted enable") { $0.lifecycle == "disabled" }
 
         // with no passkey to confirm, onboarding resumes either on the Cloud Backup details or on

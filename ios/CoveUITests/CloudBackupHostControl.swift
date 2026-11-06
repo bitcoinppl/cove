@@ -203,12 +203,11 @@ final class CloudBackupHostControl {
         XCTAssertTrue(condition(state), "\(message); host state \(state)", file: file, line: line)
     }
 
-    /// Whether the host's persisted keychain holds an item under `key`
-    func keychainContains(_ key: String) -> Bool {
+    /// Whether the host's persisted keychain holds an item under `key`, throwing when the keychain
+    /// can't be read so an unreadable file never reads as a removed item
+    func keychainContains(_ key: String) throws -> Bool {
         let url = directory.appendingPathComponent(CloudBackupUITestControl.keychainFileName)
-        guard let data = try? Data(contentsOf: url),
-              let values = try? JSONDecoder().decode([String: String].self, from: data)
-        else { return false }
+        let values = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: url))
 
         return values[key] != nil
     }
@@ -220,13 +219,13 @@ final class CloudBackupHostControl {
         timeout: TimeInterval = 30,
         file: StaticString = #filePath,
         line: UInt = #line
-    ) {
+    ) throws {
         let deadline = Date().addingTimeInterval(timeout)
-        while keychainContains(key), Date() < deadline {
+        while try keychainContains(key), Date() < deadline {
             Thread.sleep(forTimeInterval: 0.1)
         }
 
-        XCTAssertFalse(keychainContains(key), message, file: file, line: line)
+        XCTAssertFalse(try keychainContains(key), message, file: file, line: line)
     }
 
     /// Removes keychain items whose keys contain `fragment`, as if the keychain lost them while the
