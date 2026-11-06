@@ -243,19 +243,24 @@ struct KeyTeleportMessageHeader: View {
         // line, so a title such as "Exchange" broke mid-word; the group goes under it instead
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: 4) {
-                titleLabel
-                groupText
+                KeyTeleportMessageTitle(title: title, systemImage: systemImage)
+                KeyTeleportMessageGroup(group: group)
             }
         } else {
             HStack(alignment: .firstTextBaseline) {
-                titleLabel
+                KeyTeleportMessageTitle(title: title, systemImage: systemImage)
                 Spacer()
-                groupText
+                KeyTeleportMessageGroup(group: group)
             }
         }
     }
+}
 
-    private var titleLabel: some View {
+struct KeyTeleportMessageTitle: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
         Label {
             Text(title).uiTestTruncationProbe()
         } icon: {
@@ -263,9 +268,13 @@ struct KeyTeleportMessageHeader: View {
         }
         .font(.headline)
     }
+}
 
-    @ViewBuilder
-    private var groupText: some View {
+/// A received message's group, such as a password's folder, shown only when it has one
+struct KeyTeleportMessageGroup: View {
+    let group: String
+
+    var body: some View {
         if !group.isEmpty {
             Text(group)
                 .font(.caption)
