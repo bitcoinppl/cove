@@ -29,7 +29,6 @@ import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.textLayoutProblem
 import org.bitcoinppl.cove.ui.theme.CoveTheme
-import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
 import org.bitcoinppl.cove_core.KeyTeleportRoute
 import org.junit.After
@@ -48,7 +47,7 @@ import org.junit.Test
  * never sends an xprv it holds no wallet for, or a message
  *
  * Each named text must lay out whole and, once scrolled to, lie whole inside the screen, and each
- * action must also take a click. Every other text on the screen must lay out whole too, so a text
+ * action must also take a click. No two of them may overlap. Every other text on the screen must lay out whole too, so a text
  * the test doesn't name is checked as well. The reveal hint's own text is hidden from the
  * semantics tree, so only the reveal control around it is checked
  */
@@ -95,9 +94,10 @@ class KeyTeleportReviewLayoutTest {
         compose.waitUntil(STATE_TIMEOUT_MILLIS) { receiver().state is KeyTeleportManagerState.ReceiveMnemonicReview }
         compose.waitForIdle()
 
-        assertTextsFit("mnemonic review", "Recovery words received", "Cove found a 12-word wallet. Review it below or import it directly.")
-        assertControlFits("mnemonic review: reveal", hasContentDescription(RECOVERY_WORDS_HINT) and hasClickAction())
-        assertActionsFit("mnemonic review", "Import Wallet", "Finish Without Importing")
+        val reviewTexts = assertTextsFit("mnemonic review", "Recovery words received", "Cove found a 12-word wallet. Review it below or import it directly.")
+        val reveal = assertControlFits("mnemonic review: reveal", hasContentDescription(RECOVERY_WORDS_HINT) and hasClickAction())
+        val reviewActions = assertActionsFit("mnemonic review", "Import Wallet", "Finish Without Importing")
+        assertNoOverlap("mnemonic review", reviewTexts + reveal + reviewActions)
         assertEveryTextDrawsWhole("mnemonic review")
 
         compose.onNodeWithContentDescription(RECOVERY_WORDS_HINT).performClick()
@@ -123,18 +123,21 @@ class KeyTeleportReviewLayoutTest {
         compose.waitUntil(STATE_TIMEOUT_MILLIS) { receiver().state is KeyTeleportManagerState.ReceiveXprvReview }
         compose.waitForIdle()
 
-        assertTextsFit(
-            "xprv review",
-            "Extended private key received",
-            "Import this key as a hot wallet, or reveal it only when you are ready to handle it.",
-        )
-        assertActionsFit("xprv review", "Reveal", "Import Wallet", "Finish Without Importing")
+        val reviewTexts =
+            assertTextsFit(
+                "xprv review",
+                "Extended private key received",
+                "Import this key as a hot wallet, or reveal it only when you are ready to handle it.",
+            )
+        val reviewActions = assertActionsFit("xprv review", "Reveal", "Import Wallet", "Finish Without Importing")
+        assertNoOverlap("xprv review", reviewTexts + reviewActions)
         assertEveryTextDrawsWhole("xprv review")
 
         compose.onNodeWithText("Reveal").performClick()
         compose.waitUntil(STATE_TIMEOUT_MILLIS) { compose.onAllNodes(hasText(SENT_XPRV)).fetchSemanticsNodes().isNotEmpty() }
-        assertTextsFit("revealed xprv", SENT_XPRV)
-        assertActionsFit("revealed xprv", "Copy", "Hide")
+        val revealedTexts = assertTextsFit("revealed xprv", SENT_XPRV)
+        val revealedActions = assertActionsFit("revealed xprv", "Copy", "Hide")
+        assertNoOverlap("revealed xprv", revealedTexts + revealedActions)
         assertEveryTextDrawsWhole("revealed xprv")
     }
 
@@ -144,26 +147,28 @@ class KeyTeleportReviewLayoutTest {
         compose.waitUntil(STATE_TIMEOUT_MILLIS) { receiver().state is KeyTeleportManagerState.ReceiveMessageReview }
         compose.waitForIdle()
 
-        assertTextsFit(
-            "message review",
-            "Messages received",
-            "This transfer contains text, not a wallet. Cove displays it exactly as received.",
-            "Quick Note",
-            "Personal",
-            "MESSAGE",
-            "Attack at dawn.",
-            "Exchange",
-            "Work",
-            "USERNAME",
-            "satoshi",
-            "PASSWORD",
-            "hunter2",
-            "WEBSITE",
-            "example.com",
-            "NOTES",
-            "Rotate yearly",
-        )
-        assertActionsFit("message review", "Done")
+        val texts =
+            assertTextsFit(
+                "message review",
+                "Messages received",
+                "This transfer contains text, not a wallet. Cove displays it exactly as received.",
+                "Quick Note",
+                "Personal",
+                "MESSAGE",
+                "Attack at dawn.",
+                "Exchange",
+                "Work",
+                "USERNAME",
+                "satoshi",
+                "PASSWORD",
+                "hunter2",
+                "WEBSITE",
+                "example.com",
+                "NOTES",
+                "Rotate yearly",
+            )
+        val actions = assertActionsFit("message review", "Done")
+        assertNoOverlap("message review", texts + actions)
         assertEveryTextDrawsWhole("message review")
     }
 
@@ -191,32 +196,61 @@ class KeyTeleportReviewLayoutTest {
     private fun assertTextsFit(
         screen: String,
         vararg texts: String,
-    ) {
-        texts.forEach { text ->
+    ): List<CheckedNode> =
+        texts.map { text ->
+            val name = "$screen: \"${text.take(TEXT_IN_MESSAGE)}\""
             val node = compose.onNode(hasText(text) and hasTextLayout(), useUnmergedTree = true)
-            assertShowsWhole(node, "$screen: \"${text.take(TEXT_IN_MESSAGE)}\"")
-            assertTextFits(node, "$screen: \"${text.take(TEXT_IN_MESSAGE)}\"")
+            assertShowsWhole(node, name)
+            assertTextFits(node, name)
+            CheckedNode(name, node)
         }
-    }
 
     /** Each action must show whole once scrolled to, take a click, be enabled, and lay its label out whole */
     private fun assertActionsFit(
         screen: String,
         vararg labels: String,
-    ) {
-        labels.forEach { label ->
-            assertControlFits("$screen: \"$label\"", hasText(label) and hasClickAction())
+    ): List<CheckedNode> =
+        labels.map { label ->
+            val action = assertControlFits("$screen: \"$label\"", hasText(label) and hasClickAction())
             assertTextFits(compose.onNode(hasText(label) and hasTextLayout(), useUnmergedTree = true), "$screen: \"$label\" label")
+            action
         }
-    }
 
     private fun assertControlFits(
         name: String,
         matcher: SemanticsMatcher,
-    ) {
+    ): CheckedNode {
         val control = compose.onNode(matcher, useUnmergedTree = false)
         assertShowsWhole(control, name)
         control.assertIsEnabled()
+        return CheckedNode(name, control)
+    }
+
+    /**
+     * Fails when two of the nodes overlap, so a text or control drawn over another, which hides it
+     * or takes its touches, fails even though each lies whole inside the screen
+     *
+     * Bounds are read unclipped and all at one scroll position, since scrolling moves them all
+     */
+    private fun assertNoOverlap(
+        screen: String,
+        nodes: List<CheckedNode>,
+    ) {
+        val bounds =
+            nodes.map { (name, node) ->
+                val semantics = node.fetchSemanticsNode("$name is missing")
+                name to Rect(semantics.positionInRoot, semantics.size.toSize())
+            }
+
+        bounds.forEachIndexed { index, (name, rect) ->
+            bounds.drop(index + 1).forEach { (otherName, other) ->
+                val shared = rect.intersect(other)
+                assertTrue(
+                    "$screen: $name at $rect overlaps $otherName at $other",
+                    shared.width <= CLIP_TOLERANCE_PX || shared.height <= CLIP_TOLERANCE_PX,
+                )
+            }
+        }
     }
 
     /**
@@ -303,11 +337,17 @@ class KeyTeleportReviewLayoutTest {
             node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } == listOf("$position.", word)
         }
 
+    /** A text or control a screen's checks found, kept for the overlap check */
+    private data class CheckedNode(
+        val name: String,
+        val node: SemanticsNodeInteraction,
+    )
+
     private companion object {
         const val STATE_TIMEOUT_MILLIS = 15_000L
         const val RECOVERY_WORDS_HINT = "Tap to reveal recovery words"
 
-        // Compose positions are floats, and a box rounds its edges to whole pixels
+        // positions in Compose are floats, and a box rounds its edges to whole pixels
         const val CLIP_TOLERANCE_PX = 1f
 
         // enough of a text to tell which one a failure names
