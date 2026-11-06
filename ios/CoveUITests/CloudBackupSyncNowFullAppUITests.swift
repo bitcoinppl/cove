@@ -43,13 +43,28 @@ final class CloudBackupSyncNowFullAppUITests: XCTestCase {
         let (control, pending) = try restoreFixtureWithPendingWallet()
 
         try control.setNetworkConnected(false)
+        let beforeOfflineSync = control.state
         tapSyncNow()
 
         control.waitForAppState("Sync Now offline should fail with the offline error") {
             $0.sync == "failed" && $0.syncError?.contains("Reconnect to the internet") == true
         }
         robot.scrollToHittable(robot.staticText(containing: "Reconnect to the internet"))
-        XCTAssertEqual(acceptedNewWalletUploads(control.state), 0, "nothing may be uploaded while offline")
+
+        // the host counts every upload call, even one it refuses offline, while iCloud would
+        // accept a write offline and stage it, so offline Sync Now must not try one at all
+        let afterOfflineSync = control.state
+        XCTAssertEqual(
+            afterOfflineSync.count(.walletUpload),
+            beforeOfflineSync.count(.walletUpload),
+            "Sync Now tried a wallet upload offline"
+        )
+        XCTAssertEqual(
+            afterOfflineSync.count(.masterUpload),
+            beforeOfflineSync.count(.masterUpload),
+            "Sync Now tried a master key upload offline"
+        )
+        XCTAssertEqual(acceptedNewWalletUploads(afterOfflineSync), 0, "nothing may be uploaded while offline")
 
         try control.setNetworkConnected(true)
         tapSyncNow()
