@@ -167,6 +167,7 @@ struct IconLabel: View {
         HStack(spacing: 4) {
             Image(systemName: icon)
                 .frame(width: iconWidth)
+
             // a list row offered less height than the wrapped text needed, which cut a backup
             // timestamp short at accessibility sizes
             Text(text)
