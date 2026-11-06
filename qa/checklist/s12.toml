@@ -275,7 +275,9 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "human",
+  "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testBackgroundVerificationWaitsForVisibilityThenVerifiesOnItsOwn",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupDurableCompletionFullLaunchTest.kt::backgroundVerificationWaitsForVisibilityThenVerifiesOnItsOwn",
+  "rust:rust/src/manager/cloud_backup_manager/model.rs::releasing_the_enable_claim_republishes_the_settings_row",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/pending_upload.rs::pending_upload_verification_retries_until_expected_revision_is_readable",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/pending_upload.rs::pending_upload_verification_survives_restart",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/deep_verify.rs::deep_verify_awaits_upload_confirmation_when_remote_revision_is_stale",
@@ -283,7 +285,7 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/pending/queue_processor.rs::apply_blob_result_keeps_pending_blob_when_remote_revision_is_stale",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# tests run the verifier directly once the revision is readable; the background loop reaching Verified on its own stays human
+# ui tests on both platforms enable against a cloud that accepts writes but hides them: the verifier keeps polling, reads nothing and Settings shows Confirming, then once the writes become readable it reaches Verified and an active row on its own, with nothing tapped and no passkey prompt
 
 [[row]]
 id = "s12-repair-verification-and-sync-now"

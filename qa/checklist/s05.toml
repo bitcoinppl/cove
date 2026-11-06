@@ -220,14 +220,15 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
-    "human",
+    "ios-ui:ios/CoveUITests/CloudBackupDisableFullAppUITests.swift::testDisableWaitsForAHeldUploadThenDeletesTheWholeBackup",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupDisableFullLaunchTest.kt::disableWaitsForAHeldUploadThenDeletesTheWholeBackup",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/upload.rs::backup_wallets_defers_remaining_writes_when_disable_starts_after_upload",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/upload.rs::upload_wallet_if_dirty_completes_inside_disable_transition_when_already_started",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/disable.rs::persisted_disabling_on_restart_resumes_to_disabled",
     "rust:rust/src/manager/cloud_backup_manager/actors/write/supervisor.rs::block_until_drained_waits_for_in_flight_write",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# tests set the disabling state directly and drain writes in isolation; disabling during a held upload through the production path stays human
+# ui tests on both platforms hold a new wallet's upload in the scripted cloud, then disable through the detail's Disable action and both confirmations: the backup stays in the cloud and the app stays disabling while the write is held, and once it is released the disable deletes the whole backup once, leaving no master key or wallet record behind
 
 [[row]]
 id = "s05-delete-from-cloud-confirmation-and-selected-backup"
