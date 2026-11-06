@@ -78,7 +78,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
 
         layout.assertTextFits(layout.headerTitle, "inventory header title")
         // an on-device row only shows details, so it takes no taps
-        layout.assertRowFits(recordId: firstRecordId, "on-device row", needsHit: false)
+        layout.assertRowFits(recordId: firstRecordId, "on-device row", isAction: false)
 
         // the cloud-only rows appear once the inventory check finishes listing the cloud
         layout.assertTextFits(app.staticTexts["Not on This Device"], "cloud-only section header", initialWait: 20)
@@ -316,11 +316,15 @@ private struct LargeTextLayout {
         return element
     }
 
-    /// Scrolls a wallet row wholly into view, checks a row that is an action takes a tap there,
-    /// and fails unless every text in it draws whole
-    func assertRowFits(recordId: String, _ name: String, needsHit: Bool = true, initialWait: TimeInterval = 10) {
+    /// Scrolls a wallet row wholly into view, checks a row that is an action takes a tap there and
+    /// is enabled, and fails unless every text in it draws whole
+    func assertRowFits(recordId: String, _ name: String, isAction: Bool = true, initialWait: TimeInterval = 10) {
         let row = app.descendants(matching: .any)["cloudBackup.wallet.\(recordId)"]
-        scrollWhollyIntoView(row, name, needsHit: needsHit, initialWait: initialWait)
+        scrollWhollyIntoView(row, name, needsHit: isAction, initialWait: initialWait)
+        if isAction {
+            XCTAssertTrue(row.isEnabled, "\(name) is disabled")
+        }
+
         assertProbeFits(app.descendants(matching: .any)["cloudBackup.wallet.\(recordId).truncation"], name)
     }
 
