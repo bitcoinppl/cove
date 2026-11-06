@@ -104,16 +104,20 @@ class KeyTeleportReviewLayoutTest {
         compose.waitUntil(STATE_TIMEOUT_MILLIS) { compose.onAllNodes(hasText("1."), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
 
         // the test words repeat, so each word is found inside its own numbered chip
-        SENT_WORDS.forEachIndexed { index, word ->
-            val position = index + 1
-            val chip = compose.onNode(isChipFor(position, word), useUnmergedTree = false)
-            assertShowsWhole(chip, "revealed words: word $position")
+        val chips =
+            SENT_WORDS.mapIndexed { index, word ->
+                val position = index + 1
+                val name = "revealed words: word $position"
+                val chip = compose.onNode(isChipFor(position, word), useUnmergedTree = false)
+                assertShowsWhole(chip, name)
 
-            val chipId = chip.fetchSemanticsNode("revealed words: chip $position is missing").id
-            assertTextFits(compose.onNode(hasText("$position.") and isInside(chipId), useUnmergedTree = true), "revealed words: number $position")
-            assertTextFits(compose.onNode(hasText(word) and isInside(chipId), useUnmergedTree = true), "revealed words: word $position")
-        }
+                val chipId = chip.fetchSemanticsNode("revealed words: chip $position is missing").id
+                assertTextFits(compose.onNode(hasText("$position.") and isInside(chipId), useUnmergedTree = true), "revealed words: number $position")
+                assertTextFits(compose.onNode(hasText(word) and isInside(chipId), useUnmergedTree = true), name)
+                CheckedNode(name, chip)
+            }
 
+        assertNoOverlap("revealed words", reviewTexts + chips + reviewActions)
         assertEveryTextDrawsWhole("revealed words")
     }
 
@@ -129,15 +133,19 @@ class KeyTeleportReviewLayoutTest {
                 "Extended private key received",
                 "Import this key as a hot wallet, or reveal it only when you are ready to handle it.",
             )
-        val reviewActions = assertActionsFit("xprv review", "Reveal", "Import Wallet", "Finish Without Importing")
-        assertNoOverlap("xprv review", reviewTexts + reviewActions)
+
+        val reveal = assertActionsFit("xprv review", "Reveal")
+        val choices = assertActionsFit("xprv review", "Import Wallet", "Finish Without Importing")
+        assertNoOverlap("xprv review", reviewTexts + reveal + choices)
         assertEveryTextDrawsWhole("xprv review")
 
         compose.onNodeWithText("Reveal").performClick()
         compose.waitUntil(STATE_TIMEOUT_MILLIS) { compose.onAllNodes(hasText(SENT_XPRV)).fetchSemanticsNodes().isNotEmpty() }
         val revealedTexts = assertTextsFit("revealed xprv", SENT_XPRV)
         val revealedActions = assertActionsFit("revealed xprv", "Copy", "Hide")
-        assertNoOverlap("revealed xprv", revealedTexts + revealedActions)
+
+        // the review's own texts and choices stay on screen under the revealed key
+        assertNoOverlap("revealed xprv", reviewTexts + revealedTexts + revealedActions + choices)
         assertEveryTextDrawsWhole("revealed xprv")
     }
 
@@ -167,6 +175,7 @@ class KeyTeleportReviewLayoutTest {
                 "NOTES",
                 "Rotate yearly",
             )
+
         val actions = assertActionsFit("message review", "Done")
         assertNoOverlap("message review", texts + actions)
         assertEveryTextDrawsWhole("message review")
