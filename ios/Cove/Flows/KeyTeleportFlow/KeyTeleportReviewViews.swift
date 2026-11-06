@@ -236,23 +236,41 @@ struct KeyTeleportMessageHeader: View {
     let group: String
     let systemImage: String
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Label {
-                Text(title).uiTestTruncationProbe()
-            } icon: {
-                Image(systemName: systemImage)
+        // at accessibility sizes the group beside the title left it room for a few letters a
+        // line, so a title such as "Exchange" broke mid-word; the group goes under it instead
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                titleLabel
+                groupText
             }
-            .font(.headline)
-
-            Spacer()
-
-            if !group.isEmpty {
-                Text(group)
-                    .font(.caption)
-                    .uiTestTruncationProbe()
-                    .foregroundStyle(.coveLightGray.opacity(0.7))
+        } else {
+            HStack(alignment: .firstTextBaseline) {
+                titleLabel
+                Spacer()
+                groupText
             }
+        }
+    }
+
+    private var titleLabel: some View {
+        Label {
+            Text(title).uiTestTruncationProbe()
+        } icon: {
+            Image(systemName: systemImage)
+        }
+        .font(.headline)
+    }
+
+    @ViewBuilder
+    private var groupText: some View {
+        if !group.isEmpty {
+            Text(group)
+                .font(.caption)
+                .uiTestTruncationProbe()
+                .foregroundStyle(.coveLightGray.opacity(0.7))
         }
     }
 }
