@@ -133,7 +133,6 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "human",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_restart_discards_only_unregistered_staged_material",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_restart_hydrates_registered_passkey_for_manual_confirmation",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::pending_enable_restart_finishes_promoted_state_with_matching_completion",
@@ -144,9 +143,16 @@ coverage = [
   "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingScreenTest.kt::pendingEnableRecoveryShowsSupportCodeAndSafeCleanupAction",
   "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testPendingEnableRecoveryPresentationSeparatesSafeCleanupFromSupportOnly",
   "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testKilledEnableRecoversThroughRelaunchWithoutNewPasskey",
+  "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testKilledPasskeyRegistrationStartsOverOnRelaunch",
+  "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testKilledPasskeyConfirmationRecoversWithoutNewPasskey",
+  "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testKilledFinalPromotionFinishesOnRelaunch",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupEnableInterruptionFullLaunchTest.kt::registrationStage2RelaunchStartsOver",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupEnableInterruptionFullLaunchTest.kt::confirmationStage2RelaunchConfirmsTheSamePasskey",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupEnableInterruptionFullLaunchTest.kt::promotionStage2RelaunchFinishesTheEnable",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupDurableCompletionFullLaunchTest.kt::processStage2RelaunchFailsClosedThenCompletesAcceptedWrites",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust tests build each interrupted state and call recovery directly; on ios a relaunch after a kill once the cloud accepted the master key brings back Confirm Passkey through normal startup and finishes with the same passkey. kills during registration, confirmation and promotion stay human on both platforms
+# ui tests on both platforms hold a fresh enable at each phase, kill the app there and relaunch it through normal startup against the same cloud and keychain. killed during passkey registration, the relaunch discards the staged key and a fresh enable leaves one backup. killed during passkey confirmation or once the cloud accepted the master key, the relaunch offers Confirm Passkey and finishes the enable; every test except android's upload kill also checks that no second passkey is registered. killed as local promotion ends, the relaunch finishes the enable with no prompt and no new upload. android runs its staged tests through `cargo xtask android-ui-enable-interruption` and `cargo xtask android-ui-durable-relaunch`, outside the default instrumented run
 
 [[row]]
 id = "s12-retry-interrupted-setup-without-duplicates"

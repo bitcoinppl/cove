@@ -18,6 +18,7 @@ import org.bitcoinppl.cove_core.device.CloudStorageAccess
 import org.bitcoinppl.cove_core.device.Connectivity
 import org.bitcoinppl.cove_core.device.Device
 import org.bitcoinppl.cove_core.device.Keychain
+import org.bitcoinppl.cove_core.device.KeychainAccess
 import org.bitcoinppl.cove_core.device.PasskeyAccess
 import org.bitcoinppl.cove_core.device.PasskeyProvider
 import org.bitcoinppl.cove_core.initializeApp
@@ -54,7 +55,7 @@ open class CoveApplication : Application() {
 
         // initialize keychain and device before any FFI calls that might use them
         try {
-            keychain = Keychain(KeychainAccessor(this))
+            keychain = Keychain(createKeychainAccess())
             device = Device(DeviceAccessor())
             val createdConnectivityAccess = createConnectivityAccess()
             connectivityAccess = createdConnectivityAccess
@@ -83,6 +84,9 @@ open class CoveApplication : Application() {
 
         // bootstrap and AppManager init deferred to MainActivity via onBootstrapComplete()
     }
+
+    protected open fun createKeychainAccess(): KeychainAccess =
+        KeychainAccessor(this)
 
     protected open fun createCloudStorageAccess(): CloudStorageAccess =
         AndroidCloudStorageAccess(this)

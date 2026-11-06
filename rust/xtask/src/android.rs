@@ -56,6 +56,8 @@ const DURABLE_RELAUNCH_TEST_CLASS: &str =
     "org.bitcoinppl.cove.flows.cloudbackup.CloudBackupDurableCompletionFullLaunchTest";
 const RESTORE_ALL_RELAUNCH_TEST_CLASS: &str =
     "org.bitcoinppl.cove.flows.cloudbackup.CloudBackupRestoreAllProcessDeathFullLaunchTest";
+const ENABLE_INTERRUPTION_TEST_CLASS: &str =
+    "org.bitcoinppl.cove.flows.cloudbackup.CloudBackupEnableInterruptionFullLaunchTest";
 
 // Android bundle constants (store flavor for Play Store)
 const AAB_OUTPUT_PATH: &str = "app/build/outputs/bundle/storeRelease/app-store-release.aab";
@@ -962,7 +964,8 @@ pub fn run_manual_ui_tests() -> Result<()> {
     // the host holds the emulator's lock for the whole run, so the stages run without taking it
     run_independent_manual_ui_tests()?;
     durable_relaunch_ui_test()?;
-    restore_all_relaunch_ui_test()
+    restore_all_relaunch_ui_test()?;
+    enable_interruption_ui_test(None)
 }
 
 /// Points every plain `adb` and Gradle call this process makes at the UI test emulator, so the
@@ -1027,6 +1030,61 @@ fn restore_all_relaunch_ui_test() -> Result<()> {
             "scU09ProcessStage2FreshProcessShowsAuthoritativeRetryWithoutAutomaticWork",
         ],
     )
+}
+
+/// Where a staged enable-interruption scenario kills the app
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum EnableInterruption {
+    /// While the new passkey is registered
+    Registration,
+    /// While the new passkey is confirmed
+    Confirmation,
+    /// As local promotion ends
+    Promotion,
+}
+
+/// Runs the staged enable-interruption scenarios, or only the one given
+pub fn run_enable_interruption_ui_test(only: Option<EnableInterruption>) -> Result<()> {
+    let _emulator = lock_ui_test_emulator()?;
+    enable_interruption_ui_test(only)
+}
+
+/// Kills a fresh Cloud Backup enable at passkey registration, passkey confirmation and the end of
+/// local promotion, each in its own staged scenario
+fn enable_interruption_ui_test(only: Option<EnableInterruption>) -> Result<()> {
+    let scenarios = [
+        (
+            EnableInterruption::Registration,
+            "enable registration kill",
+            [
+                "registrationStage1KillWhileThePasskeyIsRegistered",
+                "registrationStage2RelaunchStartsOver",
+            ],
+        ),
+        (
+            EnableInterruption::Confirmation,
+            "enable confirmation kill",
+            [
+                "confirmationStage1KillWhileTheNewPasskeyIsConfirmed",
+                "confirmationStage2RelaunchConfirmsTheSamePasskey",
+            ],
+        ),
+        (
+            EnableInterruption::Promotion,
+            "enable promotion kill",
+            ["promotionStage1KillAsPromotionEnds", "promotionStage2RelaunchFinishesTheEnable"],
+        ),
+    ];
+
+    for (kind, scenario, methods) in scenarios {
+        if only.is_some_and(|only| only != kind) {
+            continue;
+        }
+
+        run_staged_process_ui_test(scenario, ENABLE_INTERRUPTION_TEST_CLASS, &methods)?;
+    }
+
+    Ok(())
 }
 
 fn run_staged_process_ui_test(scenario: &str, test_class: &str, methods: &[&str]) -> Result<()> {

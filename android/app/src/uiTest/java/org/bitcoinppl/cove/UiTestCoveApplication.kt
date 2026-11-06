@@ -1,12 +1,17 @@
 package org.bitcoinppl.cove
 
+import org.bitcoinppl.cove.testconfig.HoldableKeychainAccess
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedConnectivityAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove_core.device.CloudStorageAccess
+import org.bitcoinppl.cove_core.device.KeychainAccess
 import org.bitcoinppl.cove_core.device.PasskeyProvider
 
 class UiTestCoveApplication : CoveApplication() {
+    override fun createKeychainAccess(): KeychainAccess =
+        HoldableKeychainAccess.attach(this)
+
     override fun createCloudStorageAccess(): CloudStorageAccess =
         ScriptedCloudStorageAccess.attach(this)
 

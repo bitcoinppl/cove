@@ -39,6 +39,15 @@ object ScriptedPasskeyProvider : PasskeyProvider {
     // the credentials Cove asked to authenticate with, so a test can check it reused the restored one
     private val authenticatedCredentialIds = CopyOnWriteArrayList<String>()
 
+    /** Held when `createPasskey` is called, before the passkey is registered */
+    val creationHold = TestHold()
+
+    /**
+     * Held when `authenticateWithPrf` is called, before the passkey answers, such as while a
+     * fresh enable confirms the passkey it just registered
+     */
+    val authenticationHold = TestHold()
+
     enum class Result {
         SUCCESS,
         PRE_PRESENTATION_FAILURE,
@@ -54,6 +63,8 @@ object ScriptedPasskeyProvider : PasskeyProvider {
     }
 
     fun reset() {
+        creationHold.release()
+        authenticationHold.release()
         creation = CountDownLatch(1)
         createResults = ResultQueue.success()
         authenticationResults = ResultQueue.success()
@@ -116,6 +127,7 @@ object ScriptedPasskeyProvider : PasskeyProvider {
     ): PasskeyRegistrationResult {
         createCalls.incrementAndGet()
         creation.countDown()
+        creationHold.enterIfHeld()
         createResults.next().throwIfFailed(PasskeyOperation.REGISTRATION)
 
         return PasskeyRegistrationResult(
@@ -133,6 +145,7 @@ object ScriptedPasskeyProvider : PasskeyProvider {
     ): ByteArray {
         authenticationCalls.incrementAndGet()
         authenticatedCredentialIds += credentialId.toHex()
+        authenticationHold.enterIfHeld()
         authenticationResults.next().throwIfFailed(PasskeyOperation.AUTHENTICATE_ASSERTION)
 
         return prfOutput.copyOf()
