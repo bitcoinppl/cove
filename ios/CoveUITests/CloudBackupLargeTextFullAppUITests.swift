@@ -7,7 +7,7 @@ import XCTest
 /// action labels carry the debug truncation probe (docs/testing.md), and rows and progress that
 /// merge their texts into one element carry its report. The checks fail when a text or action
 /// never lies wholly inside the window below the navigation bar, when an action takes no tap or
-/// stays disabled, and when a probe reports its text truncated
+/// stays disabled, and when a probe reports its text truncated or past the side of the window
 final class CloudBackupLargeTextFullAppUITests: XCTestCase {
     private let firstRecordId = "24a462de41c1dcbfba825e87674d526b4fc0b7811fb0cee65232cb4f8209c11d"
     private let secondRecordId = "b1089e1017cd2b2a2e0085048b346f2e1c4a850a65b69a43b8d839cd60bd3f6b"

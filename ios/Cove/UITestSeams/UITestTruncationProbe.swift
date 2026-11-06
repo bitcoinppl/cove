@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 #if DEBUG
     /// Whether UI tests asked texts to report truncation
@@ -13,7 +14,8 @@ import SwiftUI
     /// XCUITest reports a text's whole label even when it draws truncated or
     /// clipped, so a test can't see an ellipsis. When
     /// `COVE_UI_TEST_TRUNCATION_PROBE` is `1` in the launch environment, each
-    /// probed text sets its accessibility value to `fits` or `truncated`
+    /// probed text sets its accessibility value to `fits`, `truncated`, or
+    /// `offscreen` when it lies partly past the window's leading or trailing edge
     enum UITestTruncationProbe {
         static let environmentKey = "COVE_UI_TEST_TRUNCATION_PROBE"
 
@@ -22,30 +24,52 @@ import SwiftUI
 
         static let fits = "fits"
         static let truncated = "truncated"
+        static let offscreen = "offscreen"
 
         /// text heights are fractional and can differ in the last bits between two layouts
         static let tolerance: CGFloat = 0.5
+
+        /// The key window's width, which a text's window frame must stay inside
+        @MainActor
+        static var windowWidth: CGFloat? {
+            UIApplication.shared.connectedScenes
+                .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+                .first?.bounds.width
+        }
     }
 
     /// Draws the text and a hidden copy with no line limit at the same width,
     /// and reports `truncated` when the copy is taller than the drawn text
+    ///
+    /// It also reports `offscreen` when the text's frame in the window runs past
+    /// either side of it. XCUITest can't see that, since UIKit clips an element's
+    /// accessibility frame to its list cell, so a label pushed off the screen
+    /// still reads as on it
     private struct TruncationProbedText: View {
         let text: Text
 
-        @State private var drawnHeight: CGFloat?
+        @State private var drawnFrame: CGRect?
         @State private var fullHeight: CGFloat?
 
         private var value: String {
-            guard let drawnHeight, let fullHeight else { return UITestTruncationProbe.truncated }
+            guard let drawnFrame, let fullHeight else { return UITestTruncationProbe.truncated }
 
-            return fullHeight - drawnHeight > UITestTruncationProbe.tolerance
-                ? UITestTruncationProbe.truncated
-                : UITestTruncationProbe.fits
+            let tolerance = UITestTruncationProbe.tolerance
+            if fullHeight - drawnFrame.height > tolerance {
+                return UITestTruncationProbe.truncated
+            }
+
+            let windowWidth = UITestTruncationProbe.windowWidth ?? .infinity
+            if drawnFrame.minX < -tolerance || drawnFrame.maxX > windowWidth + tolerance {
+                return UITestTruncationProbe.offscreen
+            }
+
+            return UITestTruncationProbe.fits
         }
 
         var body: some View {
             text
-                .onGeometryChange(for: CGFloat.self, of: \.size.height) { drawnHeight = $0 }
+                .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { drawnFrame = $0 }
                 .background(alignment: .top) {
                     // the innermost line limit wins, so a limit applied outside the probe can't
                     // cut the copy short too
@@ -64,8 +88,8 @@ import SwiftUI
         }
     }
 
-    /// How many probed texts a view holds and how many of them draw truncated, or are not yet
-    /// measured
+    /// How many probed texts a view holds and how many of them draw truncated or offscreen, or
+    /// are not yet measured
     struct UITestTruncationReport: Equatable {
         var probed = 0
         var truncated = 0
