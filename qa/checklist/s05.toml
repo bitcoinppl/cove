@@ -114,13 +114,15 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
-    "human",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/restored_history.rs::restored_wallet_full_scan_recovers_the_original_history",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/restored_history.rs::restore_all_full_scans_recover_each_original_history",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/round_trip.rs::cloud_round_trip_restores_labels_locks_and_seed_without_scan_state",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_downloaded_wallet_restores_labels_without_marking_cloud_backup_dirty",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_all_matches_individual_restore_for_the_same_record",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# round trip checks name, seed, first receive address, labels and locks without scanning; the restored wallet's transactions matching the original stays human
+# round trip checks name, seed, first receive address, labels and locks without scanning
+# restored_history uses a wallet with confirmed, pending, far-index and change history on the fake node, backed up as created and labelled, deleted, restored through the restore button's action and through Restore All, and scanned as opening it does: transactions, labels, balance, unspent coins and last used addresses must match the original's
 
 [[row]]
 id = "s05-local-deletion-keeps-restorable-cloud-only-wallet"
@@ -167,14 +169,15 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
-    "human",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/restored_history.rs::restored_wallet_full_scan_recovers_the_original_history",
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/restored_history.rs::restore_all_full_scans_recover_each_original_history",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/round_trip.rs::cloud_round_trip_restores_labels_locks_and_seed_without_scan_state",
     "rust:rust/src/backup/import.rs::restored_metadata_store_clears_local_scan_state",
     "rust:rust/src/wallet/metadata.rs::backup_metadata_clone_clears_local_scan_state_without_mutating_original",
     "rust:rust/src/manager/wallet_manager/actor.rs::incomplete_scan_routes_to_full_scan_even_with_last_scan_finished",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# tests check cleared scan state and the scan routing helpers; a restored wallet's production full scan recovering its history stays human
+# restored_history opens each restored wallet through the wallet manager and asks for a scan as the wallet screen does: the scan must report full scan progress, look up a receive at index 40, past an incremental sync's 30-address gap, record the full scan, and recover the original's whole history
 
 [[row]]
 id = "s05-passkey-cancel-leaves-active-state-intact"
