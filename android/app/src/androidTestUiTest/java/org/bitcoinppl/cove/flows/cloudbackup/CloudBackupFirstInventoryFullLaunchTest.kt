@@ -21,6 +21,7 @@ import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove_core.BootstrapStep
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
+import org.bitcoinppl.cove_core.CloudBackupVerificationState
 import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
@@ -139,15 +140,20 @@ class CloudBackupFirstInventoryFullLaunchTest {
 
         ScriptedCloudStorageAccess.releaseWalletListGate()
         ScriptedCloudStorageAccess.releaseBlockedWalletListSnapshot()
+        // the gate also held passkey verification, which finishes after the release and can
+        // redraw the detail, so the rows are tapped only once it has settled
         waitUntil("the provider's answer should confirm both cloud-only rows") {
             val manager = CloudBackupManager.getInstance()
 
             manager.isDetailInventoryComplete &&
                 manager.isDetailInventoryReady &&
+                !manager.isDetailInventoryChecking &&
+                manager.verificationState is CloudBackupVerificationState.Verified &&
                 cloudOnlyRecordIds() == FIXTURE_CLOUD_ONLY_RECORD_IDS &&
                 manager.restoreAllState == CloudBackupRestoreAllState.StartAvailable(2u)
         }
 
+        device.waitForIdle()
         assertRowOpensEnabledActions(WALLET_TWO)
     }
 
@@ -214,7 +220,14 @@ class CloudBackupFirstInventoryFullLaunchTest {
             device.findObject(By.text(name))?.let { device.clickableAncestor(it).isEnabled } == true
         }
 
-        device.clickableAncestor(device.waitForText(name)).click()
+        // a detail update landing with the tap can close the sheet it opened, so the tap is retried
+        val opened =
+            (1..ROW_TAP_ATTEMPTS).any {
+                device.clickableAncestor(device.scrollUntilText(name)).click()
+                device.wait(Until.hasObject(By.text(RESTORE_ACTION)), 5_000L)
+            }
+
+        assertTrue("$name should open its actions once the inventory is complete", opened)
         for (action in listOf(RESTORE_ACTION, DELETE_ACTION)) {
             assertTrue(
                 "$action should be enabled once the inventory is complete",
@@ -305,7 +318,8 @@ class CloudBackupFirstInventoryFullLaunchTest {
         val diagnostics =
             "lifecycle=${manager.state.lifecycle}, ready=${manager.isDetailInventoryReady}, " +
                 "complete=${manager.isDetailInventoryComplete}, cloudOnly=${cloudOnlyRecordIds()}, " +
-                "restoreAll=${manager.restoreAllState}, walletLists=${ScriptedCloudStorageAccess.walletListCount()}"
+                "restoreAll=${manager.restoreAllState}, verification=${manager.verificationState}, " +
+                "walletLists=${ScriptedCloudStorageAccess.walletListCount()}"
 
         assertTrue("$message; $diagnostics", condition())
     }
@@ -317,6 +331,7 @@ class CloudBackupFirstInventoryFullLaunchTest {
 
         // long enough for a dispatched action to reach Rust and start its first provider call
         const val ACTION_SETTLE_MS = 2_000L
+        const val ROW_TAP_ATTEMPTS = 3
 
         val FIXTURE_CLOUD_ONLY_RECORD_IDS =
             listOf(
