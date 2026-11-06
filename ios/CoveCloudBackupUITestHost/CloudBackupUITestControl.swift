@@ -223,6 +223,11 @@ enum CloudBackupUITestCall: Equatable {
     case walletListSnapshot
     case masterDownload
     case walletDownload(recordId: String)
+    /// A wallet download made with consent allowed, also counted as `walletDownload`
+    ///
+    /// Restoring a cloud-only wallet, alone or in Restore All, reads it this way, while the
+    /// automatic reads of a cloud-only record at startup are silent, so this counts restore attempts
+    case consentWalletDownload(recordId: String)
     case masterUpload
     case walletUpload
     /// A fixture-cloud wallet upload of a wallet the fixture doesn't hold, also counted as `walletUpload`
@@ -243,6 +248,7 @@ enum CloudBackupUITestCall: Equatable {
         case .walletListSnapshot: "walletListSnapshot"
         case .masterDownload: "masterDownload"
         case let .walletDownload(recordId): "walletDownload.\(recordId)"
+        case let .consentWalletDownload(recordId): "consentWalletDownload.\(recordId)"
         case .masterUpload: "masterUpload"
         case .walletUpload: "walletUpload"
         case .newWalletUpload: "newWalletUpload"

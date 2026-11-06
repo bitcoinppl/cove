@@ -103,10 +103,14 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         namespace: String,
         recordId: String,
         locations _: [RemoteBackupLocation],
-        policy _: CloudAccessPolicy
+        policy: CloudAccessPolicy
     ) async throws -> Data {
         try throwIfOffline()
         let index = controller.record(.walletDownload(recordId: recordId))
+        if policy == .consentAllowed {
+            controller.record(.consentWalletDownload(recordId: recordId))
+        }
+
         await controller.holdIfScripted(at: .walletDownload, recordId: recordId, matchingCallIndex: index)
         let script = controller.script()
 

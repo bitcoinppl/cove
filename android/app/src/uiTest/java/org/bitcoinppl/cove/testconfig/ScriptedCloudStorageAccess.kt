@@ -54,6 +54,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     private val walletDownloads = AtomicInteger(0)
     private val fixtureWalletDownloadRequests = CopyOnWriteArrayList<String>()
 
+    // restoring a cloud-only wallet reads it with consent allowed, while startup's automatic reads
+    // of a cloud-only record are silent, so these count restore attempts, finished or not
+    private val consentWalletDownloadRequests = CopyOnWriteArrayList<String>()
+
     // fixture wallets the app deleted, in call order, so tests can assert exactly which backup went
     private val deletedFixtureWalletRecordIds = CopyOnWriteArrayList<String>()
 
@@ -184,6 +188,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         rejectedNewWalletUploads.set(0)
         rejectNextNewWalletUpload.set(false)
         fixtureWalletDownloadRequests.clear()
+        consentWalletDownloadRequests.clear()
         deletedFixtureWalletRecordIds.clear()
         deleteLocationErrors.clear()
         fixtureWalletDownloadResults.clear()
@@ -283,6 +288,16 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         fixtureWalletDownloadRequests.count { it == recordId }
 
     fun walletDownloadRecordIds(): List<String> = fixtureWalletDownloadRequests.toList()
+
+    /**
+     * Downloads of [recordId] made with consent allowed in this process, including reads of a
+     * backup Cove uploaded during the test
+     *
+     * Restoring a cloud-only wallet, alone or in Restore All, reads it this way, and the automatic
+     * reads of a cloud-only record are silent, so a count above zero shows a restore was attempted
+     */
+    fun consentWalletDownloadCount(recordId: String): Int =
+        consentWalletDownloadRequests.count { it == recordId }
 
     /** Fixture wallet record ids the app deleted from the cloud, one entry per delete call */
     fun deletedWalletRecordIds(): List<String> = deletedFixtureWalletRecordIds.toList()
@@ -798,6 +813,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     ): ByteArray {
         ScriptedConnectivityAccess.throwIfOffline()
         walletDownloads.incrementAndGet()
+        if (policy == CloudAccessPolicy.CONSENT_ALLOWED) {
+            consentWalletDownloadRequests += recordId
+        }
+
         val scenario = freshEnableScenario
         if (scenario == null) {
             if (fixtureRestoreEnabled && namespace == ScriptedCloudBackupFixture.NAMESPACE) {

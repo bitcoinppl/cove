@@ -40,6 +40,11 @@ class CloudBackupRestoreAllProcessDeathFullLaunchTest {
     private companion object {
         const val AUTOMATIC_RESTORE_SETTLE_MS = 1_000L
         const val EXPECTED_REMAINING_WALLETS = 2u
+        val REMAINING_RECORD_IDS =
+            listOf(
+                ScriptedCloudBackupFixture.WALLET_TWO_RECORD_ID,
+                ScriptedCloudBackupFixture.WALLET_THREE_RECORD_ID,
+            )
     }
 
     private lateinit var device: UiDevice
@@ -157,6 +162,30 @@ class CloudBackupRestoreAllProcessDeathFullLaunchTest {
             CloudBackupRestoreAllState.RetryAvailable(EXPECTED_REMAINING_WALLETS),
             CloudBackupManager.getInstance().restoreAllState,
         )
+
+        // the provider's counts start with this process, and startup reads a cloud-only record only
+        // silently, so a consent read of either remaining wallet can only be a restore attempt, even
+        // one that failed before Cloud Backup opened
+        for (recordId in REMAINING_RECORD_IDS) {
+            assertEquals(
+                "the relaunch must not try to restore $recordId on its own",
+                0,
+                ScriptedCloudStorageAccess.consentWalletDownloadCount(recordId),
+            )
+        }
+
+        device.findTextByScrolling("Retry Remaining (2)").clickClickableAncestor()
+        waitUntil("Retry Remaining should restore both remaining wallets", timeoutMs = 60_000L) {
+            AppManager.getInstance().wallets.size == 3 &&
+                CloudBackupManager.getInstance().restoreAllState == CloudBackupRestoreAllState.NotShown
+        }
+
+        for (recordId in REMAINING_RECORD_IDS) {
+            assertTrue(
+                "the retry restored $recordId without a consent read, so the zero count above proves nothing",
+                ScriptedCloudStorageAccess.consentWalletDownloadCount(recordId) > 0,
+            )
+        }
     }
 
     private fun restoreInitialFixtureAndFinishOnboarding() {
