@@ -135,6 +135,10 @@ enum Commands {
         only: Option<android::EnableInterruption>,
     },
 
+    /// Run the staged Android scenario that holds a relaunched app's first Cloud Backup inventory
+    #[command(name = "android-ui-first-inventory")]
+    AndroidUiFirstInventory,
+
     /// Start a headless emulator like the UI tests workflow's, creating its AVD first if needed, and wait for it to boot
     #[command(name = "android-ci-emulator")]
     AndroidCiEmulator {
@@ -462,6 +466,8 @@ fn run(cli: Cli) -> Result<()> {
         Commands::AndroidUiEnableInterruption { only } => {
             android::run_enable_interruption_ui_test(only)
         }
+
+        Commands::AndroidUiFirstInventory => android::run_first_inventory_ui_test(),
 
         Commands::AndroidCiEmulator { port } => android_ci_emulator::start(port),
 
