@@ -114,7 +114,7 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         layout.reachAndTap(button("Reveal XPRV"), "xprv review: Reveal XPRV again")
         XCTAssertTrue(key.waitForExistence(timeout: 5))
         layout.reachAndTap(button(startingWith: "Copy"), "xprv review: Copy")
-        XCTAssertEqual(try waitForPasteboard(Self.sentXprv), Self.sentXprv, "Copy should copy the shown key")
+        XCTAssertEqual(try signer.simulatorPasteboard(awaiting: Self.sentXprv), Self.sentXprv, "Copy should copy the shown key")
 
         layout.reachAndTap(button("Import Wallet"), "xprv review: Import Wallet")
         try openImportedWallet(fingerprint: Self.sentXprvFingerprint)
@@ -438,20 +438,6 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
 
     private func receiverCode() -> XCUIElement {
         app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^[0-9]{2}( [0-9]{2}){3}$")).firstMatch
-    }
-
-    /// The app sets the pasteboard asynchronously from the tap, so read until it holds the key
-    private func waitForPasteboard(_ expected: String) throws -> String {
-        let deadline = Date().addingTimeInterval(5)
-        var text = ""
-        while Date() < deadline {
-            text = try signer.simulatorPasteboard().trimmingCharacters(in: .whitespacesAndNewlines)
-            if text == expected { return text }
-
-            Thread.sleep(forTimeInterval: 0.3)
-        }
-
-        return text
     }
 
     // MARK: - Queries

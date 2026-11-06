@@ -89,7 +89,7 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
 
         app.buttons["Copy for 2 Minutes"].tap()
         XCTAssertTrue(app.buttons["Copied for 2 Minutes"].waitForExistence(timeout: 5))
-        let copied = try signer.simulatorPasteboard().trimmingCharacters(in: .whitespacesAndNewlines)
+        let copied = try signer.simulatorPasteboard(awaiting: revealed)
         XCTAssertEqual(copied, revealed, "Copy put something other than the revealed key on the pasteboard")
         app.buttons["Done"].tap()
         XCTAssertTrue(app.navigationBars["Private Key"].waitForNonExistence(timeout: 5))
