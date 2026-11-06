@@ -27,6 +27,9 @@ import org.bitcoinppl.cove_core.setRootDataDir
 // auto-unlock time thresholds (in seconds) - matches iOS behavior
 // TODO: make these configurable and store in database
 
+// the keychain, cloud storage, passkey and connectivity services each have their own factory so
+// the UI test build can replace any one of them, and the class grows by one function per seam
+@Suppress("TooManyFunctions")
 open class CoveApplication : Application() {
     // hold references to FFI objects for proper cleanup
     private var keychain: Keychain? = null
