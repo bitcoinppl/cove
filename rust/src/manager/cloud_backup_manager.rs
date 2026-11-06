@@ -497,17 +497,6 @@ impl RustCloudBackupManager {
             || Self::has_in_flight_lifecycle(&self.current_status())
     }
 
-    /// Whether the lifecycle shows recovery for an incomplete enable whose local evidence remains
-    ///
-    /// Restart recovery projects that phase from the keychain, which the persisted state can't
-    /// see, so re-deriving the status from the persisted state would replace it with Disabled
-    /// while the incomplete setup still needs cleanup. Cleanup deletes the evidence and then syncs,
-    /// which is how the lifecycle leaves recovery
-    fn holds_pending_enable_recovery(&self) -> bool {
-        matches!(self.state().lifecycle, CloudBackupLifecycle::PendingEnableRecovery(_))
-            && Self::pending_enable_evidence_remains()
-    }
-
     /// Whether the keychain holds an enable journal or staged master key material, counting an
     /// unreadable keychain as holding them, since unknown state must not look like no setup
     fn pending_enable_evidence_remains() -> bool {
@@ -1100,10 +1089,7 @@ impl RustCloudBackupManager {
             }));
         }
         if !self.has_in_flight_operation() {
-            if !self.holds_pending_enable_recovery() {
-                self.reconcile_runtime_status(Self::runtime_status_for(&db_state));
-            }
-
+            self.reconcile_runtime_status(Self::runtime_status_for(&db_state));
             self.reconcile_persisted_restore_all(&db_state);
         }
 

@@ -30,7 +30,7 @@ pub(crate) use self::events::{
     CloudBackupAcceptedEnablePrompt, CloudBackupExclusiveOperation,
     CloudBackupExclusiveOperationClaim, CloudBackupLifecycleEffect,
     CloudBackupRestoreAllRuntimeState, CloudBackupStateReducerEffects,
-    CloudBackupStateReducerEvent,
+    CloudBackupStateReducerEvent, PendingEnableEvidence,
 };
 pub use self::state_types::{
     CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupDetailState,
@@ -1486,6 +1486,11 @@ impl CloudBackupStateReducer {
         self.state.status()
     }
 
+    /// Whether the lifecycle shows recovery for an incomplete enable
+    pub(crate) fn shows_pending_enable_recovery(&self) -> bool {
+        matches!(self.state.phase, CloudBackupLifecyclePhase::PendingEnableRecovery(_))
+    }
+
     pub(crate) fn verification(&self) -> VerificationState {
         self.state.verification()
     }
@@ -1564,8 +1569,24 @@ impl CloudBackupStateReducer {
             CloudBackupStateReducerEvent::EnableContextStarted(context) => {
                 self.state.active_enable_context = Some(context);
             }
-            CloudBackupStateReducerEvent::RuntimeStatusReconciled(status) => {
-                self.state.apply_status(status);
+            CloudBackupStateReducerEvent::RuntimeStatusReconciled {
+                status,
+                pending_enable_evidence,
+            } => {
+                // a status read before the recovery was projected, or while its evidence remains,
+                // is older than the recovery; an operation that now owns the lifecycle still wins
+                let keeps_recovery = self.shows_pending_enable_recovery()
+                    && pending_enable_evidence != PendingEnableEvidence::Gone
+                    && !matches!(
+                        status,
+                        CloudBackupStatus::Enabling
+                            | CloudBackupStatus::Disabling
+                            | CloudBackupStatus::Restoring
+                    );
+
+                if !keeps_recovery {
+                    self.state.apply_status(status);
+                }
             }
             CloudBackupStateReducerEvent::PendingEnableRecoveryProjected(recovery) => {
                 self.state.active_enable_context = None;
@@ -1960,6 +1981,14 @@ mod tests {
         CloudBackupStateReducerEvent::ExclusiveOperationStarted(
             CloudBackupExclusiveOperationClaim::new(operation, generation),
         )
+    }
+
+    /// A status reconcile from a caller that found no recovery to check evidence for
+    fn runtime_status_event(status: CloudBackupStatus) -> CloudBackupStateReducerEvent {
+        CloudBackupStateReducerEvent::RuntimeStatusReconciled {
+            status,
+            pending_enable_evidence: PendingEnableEvidence::NotChecked,
+        }
     }
 
     fn effect_lifecycle(effects: &CloudBackupStateReducerEffects) -> Option<&CloudBackupLifecycle> {
@@ -2754,9 +2783,7 @@ mod tests {
     fn enable_operation_enters_enabling_and_clears_restore_progress() {
         let mut model = CloudBackupStateReducer::default();
         model.apply_event(operation_event(CloudBackupExclusiveOperation::Restore, 1));
-        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::Enabled,
-        ));
+        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(
             CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Restore, 1),
         ));
@@ -2787,9 +2814,8 @@ mod tests {
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
         model.apply_event(CloudBackupStateReducerEvent::EnableContextStarted(context));
 
-        let configured_effects = model.apply_event(
-            CloudBackupStateReducerEvent::RuntimeStatusReconciled(CloudBackupStatus::Enabled),
-        );
+        let configured_effects =
+            model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
 
         assert_eq!(configured_effects.enable_completed, None);
         assert!(matches!(
@@ -2825,9 +2851,8 @@ mod tests {
 
         // the enable reports itself configured before it releases its claim, so the row
         // published with that lifecycle still says the backup is being set up
-        let configured_effects = model.apply_event(
-            CloudBackupStateReducerEvent::RuntimeStatusReconciled(CloudBackupStatus::Enabled),
-        );
+        let configured_effects =
+            model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         assert_eq!(
             configured_effects.lifecycle.map(|effect| effect.settings_row_status),
             Some(CloudBackupSettingsRowStatus::SettingUp)
@@ -2891,8 +2916,7 @@ mod tests {
             cases.into_iter().enumerate()
         {
             let mut model = CloudBackupStateReducer::default();
-            model
-                .apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(initial_status));
+            model.apply_event(runtime_status_event(initial_status));
 
             let effects = model.apply_event(operation_event(operation, index as u64));
 
@@ -2931,9 +2955,7 @@ mod tests {
         let mut model = CloudBackupStateReducer::default();
         model.apply_event(operation_event(CloudBackupExclusiveOperation::Disable, 1));
 
-        let effects = model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::Disabled,
-        ));
+        let effects = model.apply_event(runtime_status_event(CloudBackupStatus::Disabled));
 
         assert_eq!(model.public_state().lifecycle, CloudBackupLifecycle::Disabled);
         assert_eq!(effect_lifecycle(&effects), Some(&CloudBackupLifecycle::Disabled));
@@ -2959,9 +2981,7 @@ mod tests {
     #[test]
     fn configured_model_events_emit_effects_and_refresh_lifecycle() {
         let mut model = CloudBackupStateReducer::default();
-        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::Enabled,
-        ));
+        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
 
         let effects =
             model.apply_event(CloudBackupStateReducerEvent::PendingUploadVerificationReconciled(
@@ -2997,9 +3017,7 @@ mod tests {
     #[test]
     fn blocked_pending_upload_authorization_survives_sync_resolution() {
         let mut model = CloudBackupStateReducer::default();
-        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::Enabled,
-        ));
+        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(CloudBackupStateReducerEvent::PendingUploadVerificationReconciled(
             PendingUploadVerificationState::BlockedOnAuthorization,
         ));
@@ -3023,9 +3041,7 @@ mod tests {
             CloudBackupExclusiveOperationClaim::new(CloudBackupExclusiveOperation::Enable, 1);
         model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
 
-        let runtime_effects = model.apply_event(
-            CloudBackupStateReducerEvent::RuntimeStatusReconciled(CloudBackupStatus::Enabled),
-        );
+        let runtime_effects = model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         let effects =
             model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim));
 
@@ -3040,16 +3056,12 @@ mod tests {
     #[test]
     fn runtime_enabled_preserves_disable_failed_signal() {
         let mut model = CloudBackupStateReducer::default();
-        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::Enabled,
-        ));
+        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
             CloudBackupDisableOutcome::Failed { message: "blocked".into(), can_keep_enabled: true },
         ));
 
-        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::Enabled,
-        ));
+        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
 
         let CloudBackupLifecycle::Configured(state) = model.public_state().lifecycle else {
             panic!("enabled backup should project configured lifecycle");
@@ -3066,9 +3078,7 @@ mod tests {
     #[test]
     fn returned_to_idle_clears_disable_failed_signal() {
         let mut model = CloudBackupStateReducer::default();
-        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::Enabled,
-        ));
+        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(CloudBackupStateReducerEvent::DisableStateResolved(
             CloudBackupDisableOutcome::Failed { message: "blocked".into(), can_keep_enabled: true },
         ));
@@ -3086,9 +3096,7 @@ mod tests {
     #[test]
     fn disable_started_clears_configured_prompt() {
         let mut model = CloudBackupStateReducer::default();
-        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::Enabled,
-        ));
+        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(CloudBackupStateReducerEvent::PasskeyChoicePromptSet(
             CloudBackupPasskeyChoiceIntent::RepairPasskey,
         ));
@@ -3173,9 +3181,7 @@ mod tests {
         };
         let mut model = CloudBackupStateReducer::default();
 
-        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::Enabled,
-        ));
+        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(CloudBackupStateReducerEvent::VerificationStateResolved(
             VerificationState::Verified(report),
         ));
@@ -3196,9 +3202,7 @@ mod tests {
     #[test]
     fn passkey_missing_projects_missing_or_repairing() {
         let mut missing = CloudBackupStateReducer::default();
-        missing.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::PasskeyMissing,
-        ));
+        missing.apply_event(runtime_status_event(CloudBackupStatus::PasskeyMissing));
 
         let CloudBackupLifecycle::Configured(state) = missing.public_state().lifecycle else {
             panic!("passkey-missing backup should still be configured");
@@ -3225,9 +3229,7 @@ mod tests {
     #[test]
     fn verification_flags_event_opens_decision_prompt() {
         let mut model = CloudBackupStateReducer::default();
-        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::Enabled,
-        ));
+        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(CloudBackupStateReducerEvent::VerificationPresentationReconciled(
             CloudBackupVerificationPresentation::Hidden {
                 source: Some(CloudBackupVerificationSource::Settings),
@@ -3257,9 +3259,7 @@ mod tests {
     #[test]
     fn verification_flags_event_dismisses_stale_decision_prompt() {
         let mut model = CloudBackupStateReducer::default();
-        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::Enabled,
-        ));
+        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(CloudBackupStateReducerEvent::VerificationFlagsReconciled {
             metadata: CloudBackupVerificationMetadata::NeedsVerification,
             should_prompt: true,
@@ -3289,9 +3289,7 @@ mod tests {
     #[test]
     fn pending_upload_refresh_tracks_decision_pending_without_duplicate_presentation() {
         let mut model = CloudBackupStateReducer::default();
-        model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::Enabled,
-        ));
+        model.apply_event(runtime_status_event(CloudBackupStatus::Enabled));
         model.apply_event(CloudBackupStateReducerEvent::VerificationFlagsReconciled {
             metadata: CloudBackupVerificationMetadata::NeedsVerification,
             should_prompt: true,
@@ -3427,14 +3425,53 @@ mod tests {
     fn root_prompt_is_derived_from_configured_state() {
         let mut model = CloudBackupStateReducer::default();
 
-        let effects = model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled(
-            CloudBackupStatus::PasskeyMissing,
-        ));
+        let effects = model.apply_event(runtime_status_event(CloudBackupStatus::PasskeyMissing));
 
         assert_eq!(model.snapshot().root_prompt, CloudBackupRootPrompt::MissingPasskeyReminder);
         assert!(matches!(
             effects.lifecycle,
             Some(effect) if matches!(effect.lifecycle, CloudBackupLifecycle::Configured(_))
+        ));
+    }
+
+    #[test]
+    fn persisted_status_replaces_pending_enable_recovery_only_once_its_evidence_is_gone() {
+        let recovering = || {
+            let mut model = CloudBackupStateReducer::default();
+            model.apply_event(CloudBackupStateReducerEvent::PendingEnableRecoveryProjected(
+                CloudBackupPendingEnableRecovery {
+                    support_code: "CB-PE-001".into(),
+                    cleanup: CloudBackupPendingEnableCleanupState::Available,
+                },
+            ));
+            model
+        };
+        let reconcile = |status, pending_enable_evidence| {
+            let mut model = recovering();
+            model.apply_event(CloudBackupStateReducerEvent::RuntimeStatusReconciled {
+                status,
+                pending_enable_evidence,
+            });
+            model.public_state().lifecycle
+        };
+
+        // not checked means the status was read before the recovery was projected
+        for evidence in [PendingEnableEvidence::NotChecked, PendingEnableEvidence::Remains] {
+            for status in [CloudBackupStatus::Disabled, CloudBackupStatus::Enabled] {
+                assert!(matches!(
+                    reconcile(status.clone(), evidence),
+                    CloudBackupLifecycle::PendingEnableRecovery(_)
+                ));
+            }
+        }
+
+        assert_eq!(
+            reconcile(CloudBackupStatus::Disabled, PendingEnableEvidence::Gone),
+            CloudBackupLifecycle::Disabled
+        );
+        assert!(matches!(
+            reconcile(CloudBackupStatus::Enabling, PendingEnableEvidence::Remains),
+            CloudBackupLifecycle::Enabling(_)
         ));
     }
 }
