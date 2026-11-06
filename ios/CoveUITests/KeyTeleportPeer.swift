@@ -336,7 +336,7 @@ extension ScreenReachability {
         cover(qrHint, name).assertConceals(hint: qrHint, "\(name): the QR code while the code shows")
         let shownCode = code.label
 
-        // Vision misreads a character or two of some codes on every try, so this allows the two
+        // some codes have a character or two Vision misreads on every try, so this allows the two
         // misreads `assertConceals` allows the hint: a reading that close still shows Vision
         // would have read the code had the cover leaked it
         XCTAssertTrue(
