@@ -11,7 +11,8 @@ struct ScreenReachability {
     static let truncationProbeEnvironment = ("COVE_UI_TEST_TRUNCATION_PROBE", "1")
 
     private static let fitsValue = "fits"
-    private static let truncatedValue = "truncated"
+    /// What a probe reports for a text that doesn't draw whole: cut short, or past a side of the window
+    private static let notWholeValues: Set<String> = ["truncated", "offscreen"]
 
     /// Inside the screens' 16 to 20 point side padding, so a drag there lands on no field
     private static let dragMargin: CGFloat = 8
@@ -126,26 +127,27 @@ struct ScreenReachability {
         }
     }
 
-    /// Fails when any probed text or button label in the app reports that it draws truncated, so a
-    /// text the caller didn't list is checked too
+    /// Fails when any probed text or button label in the app reports that it draws truncated or
+    /// past a side of the window, so a text the caller didn't list is checked too
     ///
     /// A probe reports truncated until it has measured, so the sweep gets a moment to settle
     func assertNoTruncatedText(_ screen: String) {
         var truncated: [String] = []
         let settled = Date().addingTimeInterval(3)
         repeat {
-            truncated = (try? app.snapshot()).map(truncatedLabels(in:)) ?? ["the app's accessibility tree could not be read"]
+            truncated = (try? app.snapshot()).map(labelsNotDrawnWhole(in:)) ?? ["the app's accessibility tree could not be read"]
             if truncated.isEmpty { return }
 
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         } while Date() < settled
 
-        XCTFail("\(screen): text draws truncated: \(truncated)")
+        XCTFail("\(screen): text doesn't draw whole: \(truncated)")
     }
 
-    private func truncatedLabels(in snapshot: XCUIElementSnapshot) -> [String] {
-        let own = snapshot.value as? String == Self.truncatedValue ? [snapshot.label] : []
-        return own + snapshot.children.flatMap(truncatedLabels(in:))
+    private func labelsNotDrawnWhole(in snapshot: XCUIElementSnapshot) -> [String] {
+        let value = snapshot.value as? String ?? ""
+        let own = Self.notWholeValues.contains(value) ? ["\(snapshot.label) (\(value))"] : []
+        return own + snapshot.children.flatMap(labelsNotDrawnWhole(in:))
     }
 
     /// A match too tall to scroll wholly into view by dragging, such as a revealed private key
