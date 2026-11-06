@@ -1,7 +1,8 @@
 import XCTest
 
-/// Drops and restores the scripted network around Cloud Backup detail, with Fixture Wallet One
-/// restored from onboarding and wallets two and three left in the cloud
+/// Drops and restores the scripted network, or holds the provider's inventory reads, around Cloud
+/// Backup detail, with Fixture Wallet One restored from onboarding and wallets two and three left
+/// in the cloud
 ///
 /// The host's network switch fails every provider call while it is down and tells Rust the device
 /// is offline, as a real dropped connection would, without touching the simulator's network
@@ -100,6 +101,43 @@ final class CloudBackupNetworkFullAppUITests: XCTestCase {
         XCTAssertLessThanOrEqual(control.cloudNamespaces.count, 1, "the reconnect made a second backup namespace")
     }
 
+    /// Reconnecting after an offline check checks the known inventory again, and while the
+    /// provider holds that check every row the app still lists stays disabled; once the provider
+    /// answers, a row opens both actions
+    ///
+    /// A check of a confirmed inventory keeps it ready while it runs, so the check starts from the
+    /// failed offline one, which leaves the known rows retained but unconfirmed
+    func testHeldReconnectCheckKeepsKnownRowsDisabledUntilTheProviderConfirmsThem() throws {
+        let control = try openSettledDetail()
+
+        robot.goBack()
+        try control.setNetworkConnected(false)
+        robot.openCloudBackupDetail()
+        waitForOfflineInventory(control)
+
+        // the refresh reads its snapshot first, and the sync-health check and any verification
+        // list the cloud alongside it, so every one of them waits
+        let holds = ["snapshot", "listing-1", "listing-2"]
+        try control.holdNextWalletListSnapshot(id: "snapshot")
+        try control.holdNextWalletList(id: "listing-1")
+        try control.holdNextWalletList(id: "listing-2")
+        try control.setNetworkConnected(true)
+        control.waitForHold("snapshot")
+
+        control.waitForAppState("the held check should keep both known rows without making them ready") {
+            $0.detail == "checking" && !$0.inventoryReady && !$0.inventoryComplete
+                && $0.cloudOnly == Self.cloudOnlyRecordIds
+        }
+
+        assertRowsWaitForTheInventory(control, phase: "while the reconnect check was held")
+
+        for hold in holds {
+            control.release(hold)
+        }
+
+        assertRowsOpenTheirActionsOnceConfirmed(control)
+    }
+
     // MARK: - Setup
 
     /// Provider and passkey calls counted once the offline inventory settled
@@ -143,6 +181,52 @@ final class CloudBackupNetworkFullAppUITests: XCTestCase {
 
     // MARK: - Assertions
 
+    /// Restore All and every cloud-only row the app lists stay unavailable, and tapping them
+    /// starts no passkey prompt, download or cloud-only operation
+    private func assertRowsWaitForTheInventory(_ control: CloudBackupHostControl, phase: String) {
+        let before = control.state
+        let listed = control.appState?.cloudOnly ?? []
+        XCTAssertFalse(listed.isEmpty, "no cloud-only row was listed \(phase)")
+        XCTAssertFalse(
+            robot.button(startingWith: "Restore All").exists && robot.button(startingWith: "Restore All").isEnabled,
+            "Restore All was available \(phase)"
+        )
+
+        for recordId in listed {
+            assertRowOpensNoActions(recordId, phase: phase)
+        }
+
+        let after = control.state
+        XCTAssertEqual(passkeyCalls(after), passkeyCalls(before), "a disabled row asked for a passkey \(phase)")
+        XCTAssertEqual(walletDownloads(after), walletDownloads(before), "a disabled row downloaded a backup \(phase)")
+        XCTAssertEqual(control.appState?.operation, "idle", "a disabled row started a cloud-only operation \(phase)")
+    }
+
+    /// Once the provider confirms the inventory, a cloud-only row is enabled and opens Restore
+    /// and Delete as available actions; cancelling starts nothing
+    private func assertRowsOpenTheirActionsOnceConfirmed(_ control: CloudBackupHostControl) {
+        control.waitForAppState("the provider's answer should confirm both cloud-only rows") {
+            $0.detail == "complete" && $0.inventoryComplete && $0.inventoryReady
+                && $0.cloudOnly == Self.cloudOnlyRecordIds && $0.restoreAll == "startAvailable(2)"
+        }
+
+        let before = control.state
+        let row = walletRow(Self.cloudOnlyRecordIds[0])
+        robot.scrollToHittable(row)
+        XCTAssertTrue(row.isEnabled, "the confirmed row is still disabled")
+        row.tap()
+
+        let restore = app.buttons["Restore to This Device"]
+        XCTAssertTrue(restore.waitForExistence(timeout: 10), "the confirmed row opened no actions")
+        XCTAssertTrue(restore.isEnabled, "Restore is disabled on a confirmed row")
+        XCTAssertTrue(app.buttons["Delete from iCloud"].isEnabled, "Delete is disabled on a confirmed row")
+
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(restore.waitForNonExistence(timeout: 10))
+        XCTAssertEqual(walletDownloads(control.state), walletDownloads(before), "cancelling downloaded a backup")
+        XCTAssertEqual(control.appState?.operation, "idle", "cancelling started a cloud-only operation")
+    }
+
     /// Restore All shows its count as a disabled label, never as a button
     private func assertRestoreAllUnavailable(file: StaticString = #filePath, line: UInt = #line) {
         let label = robot.staticText(containing: "Restore All (2)")
@@ -152,20 +236,25 @@ final class CloudBackupNetworkFullAppUITests: XCTestCase {
     }
 
     /// The row is disabled, and tapping it opens no Restore or Delete action
-    private func assertRowOpensNoActions(_ recordId: String, file: StaticString = #filePath, line: UInt = #line) {
+    private func assertRowOpensNoActions(
+        _ recordId: String,
+        phase: String = "offline",
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
         let row = walletRow(recordId)
         robot.scrollToHittable(row)
         XCTAssertTrue(row.label.contains("Not on device"), "\(recordId) is not a cloud-only row", file: file, line: line)
-        XCTAssertFalse(row.isEnabled, "\(recordId) is enabled offline", file: file, line: line)
+        XCTAssertFalse(row.isEnabled, "\(recordId) is enabled \(phase)", file: file, line: line)
 
         row.tap()
         XCTAssertFalse(
             app.buttons["Restore to This Device"].waitForExistence(timeout: 2),
-            "\(recordId) opened Restore offline",
+            "\(recordId) opened Restore \(phase)",
             file: file,
             line: line
         )
-        XCTAssertFalse(app.buttons["Delete from iCloud"].exists, "\(recordId) opened Delete offline", file: file, line: line)
+        XCTAssertFalse(app.buttons["Delete from iCloud"].exists, "\(recordId) opened Delete \(phase)", file: file, line: line)
     }
 
     // MARK: - Elements and counts

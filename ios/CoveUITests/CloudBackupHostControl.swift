@@ -80,6 +80,25 @@ final class CloudBackupHostControl {
         }
     }
 
+    /// Holds the next full wallet listing until `release(id)`
+    ///
+    /// Holds set together share the count they start from, so concurrent listings each take one
+    /// whichever reaches the host first
+    func holdNextWalletList(id: String) throws {
+        let listingsSoFar = state.count(.walletList)
+        try update {
+            $0.holds.append(.init(id: id, point: .walletList, matchingCallsToSkip: listingsSoFar))
+        }
+    }
+
+    /// Holds the next inventory snapshot, which only a detail refresh reads, until `release(id)`
+    func holdNextWalletListSnapshot(id: String) throws {
+        let snapshotsSoFar = state.count(.walletListSnapshot)
+        try update {
+            $0.holds.append(.init(id: id, point: .walletListSnapshot, matchingCallsToSkip: snapshotsSoFar))
+        }
+    }
+
     /// Answers the next passkey assertions with `results`, whether the app authenticates with a
     /// known credential or discovers one; the last result repeats
     ///

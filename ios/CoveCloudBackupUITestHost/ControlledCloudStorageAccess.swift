@@ -201,7 +201,8 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         policy _: CloudAccessPolicy
     ) async throws -> CloudStorageInventorySnapshot {
         try throwIfOffline()
-        controller.record(.walletListSnapshot)
+        let index = controller.record(.walletListSnapshot)
+        await controller.holdIfScripted(at: .walletListSnapshot, matchingCallIndex: index)
 
         return try CloudStorageInventorySnapshot(names: walletFileNames(namespace: namespace), isComplete: true)
     }
