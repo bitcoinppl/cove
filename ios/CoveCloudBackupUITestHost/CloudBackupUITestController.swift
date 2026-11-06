@@ -119,7 +119,36 @@ final class CloudBackupUITestController: @unchecked Sendable {
         recordId: String? = nil,
         matchingCallIndex: Int
     ) async {
-        let hold = lock.withLock { () -> CloudBackupUITestScript.Hold? in
+        guard let hold = claimHold(at: point, recordId: recordId, matchingCallIndex: matchingCallIndex) else {
+            return
+        }
+
+        while !isReleased(hold.id) {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
+    /// Like `holdIfScripted`, for the synchronous passkey and keychain calls, which Rust makes on
+    /// a thread it lets block
+    func holdIfScriptedBlocking(
+        at point: CloudBackupUITestScript.HoldPoint,
+        matchingCallIndex: Int
+    ) {
+        guard let hold = claimHold(at: point, recordId: nil, matchingCallIndex: matchingCallIndex) else {
+            return
+        }
+
+        while !isReleased(hold.id) {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+    }
+
+    private func claimHold(
+        at point: CloudBackupUITestScript.HoldPoint,
+        recordId: String?,
+        matchingCallIndex: Int
+    ) -> CloudBackupUITestScript.Hold? {
+        lock.withLock {
             let candidate = script().holds.first { hold in
                 hold.point == point
                     && (hold.recordId == nil || hold.recordId == recordId)
@@ -133,11 +162,6 @@ final class CloudBackupUITestController: @unchecked Sendable {
             persistStateLocked()
 
             return candidate
-        }
-        guard let hold else { return }
-
-        while !isReleased(hold.id) {
-            try? await Task.sleep(for: .milliseconds(50))
         }
     }
 

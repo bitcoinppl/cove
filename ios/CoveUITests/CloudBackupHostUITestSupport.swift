@@ -78,13 +78,17 @@ struct CloudBackupHostRobot {
         scrollToHittable(newUser)
         newUser.tap()
 
+        openCloudBackupFromBackupStep()
+        acceptCloudBackupAcknowledgements()
+        tapEnableCloudBackup()
+    }
+
+    /// Opens the Cloud Backup details from onboarding's backup step through its Enable button
+    func openCloudBackupFromBackupStep() {
         let enableFromBackup = button(startingWith: "Enable")
         scrollToHittable(enableFromBackup, initialWait: 20)
         enableFromBackup.tap()
         XCTAssertTrue(app.staticTexts["Cloud Backup"].waitForExistence(timeout: 10))
-
-        acceptCloudBackupAcknowledgements()
-        tapEnableCloudBackup()
     }
 
     func acceptCloudBackupAcknowledgements() {

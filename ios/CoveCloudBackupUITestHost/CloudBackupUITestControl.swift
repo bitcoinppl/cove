@@ -15,6 +15,8 @@ enum CloudBackupUITestControl {
     static let scriptFileName = "script.json"
     static let stateFileName = "state.json"
     static let keychainFileName = "keychain.json"
+    /// Rust's `CSPP_PENDING_ENABLE_JOURNAL_KEY`, the keychain item that owns an unfinished enable
+    static let pendingEnableJournalKey = "cspp::v1::pending_enable_journal"
     static let cloudDirectoryName = "cloud"
     /// The app's stdout and stderr, Rust logs included, appended across launches
     static let appLogFileName = "app.log"
@@ -91,6 +93,14 @@ struct CloudBackupUITestScript: Codable, Equatable {
         /// When `uploadWalletBackup` is called, before the cloud stores it; skipped calls count
         /// every wallet upload, whichever record it is for
         case walletUpload
+        /// When `createPasskey` is called, before the passkey is registered
+        case passkeyCreate
+        /// When `authenticateWithPrf` is called, before the passkey answers, such as while a
+        /// fresh enable confirms the passkey it just registered
+        case passkeyAuthenticate
+        /// Before the keychain deletes the pending enable journal, the last step of an enable's
+        /// local promotion, after the new master key and passkey are committed
+        case pendingEnableJournalDelete
     }
 
     /// A call that waits until the test creates `release-<id>`
