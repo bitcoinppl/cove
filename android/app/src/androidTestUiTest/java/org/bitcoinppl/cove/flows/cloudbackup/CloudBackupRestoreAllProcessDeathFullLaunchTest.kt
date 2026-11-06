@@ -179,6 +179,7 @@ class CloudBackupRestoreAllProcessDeathFullLaunchTest {
             AppManager.getInstance().wallets.size == 3 &&
                 CloudBackupManager.getInstance().restoreAllState == CloudBackupRestoreAllState.NotShown
         }
+
         for (recordId in REMAINING_RECORD_IDS) {
             assertTrue(
                 "the retry restored $recordId without a consent read, so the zero count above proves nothing",

@@ -132,6 +132,7 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
             0,
             "the retry restored the wallet without a consent read, so the count above proves nothing"
         )
+
         XCTAssertTrue(screen.progress.waitForNonExistence(timeout: 30), "the retried batch never finished")
         XCTAssertFalse(robot.button(startingWith: "Retry Remaining").exists)
         XCTAssertEqual(control.state.count(.passkeyCreate), 0)

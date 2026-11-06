@@ -110,6 +110,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         if policy == .consentAllowed {
             controller.record(.consentWalletDownload(recordId: recordId))
         }
+
         await controller.holdIfScripted(at: .walletDownload, recordId: recordId, matchingCallIndex: index)
         let script = controller.script()
 
