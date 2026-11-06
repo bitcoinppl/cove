@@ -7,29 +7,22 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import org.bitcoinppl.cove.cloudbackup.AndroidCloudStorageAccess
-import org.bitcoinppl.cove.cloudbackup.AndroidPasskeyProvider
 import org.bitcoinppl.cove.cloudbackup.CloudBackupManager
 import org.bitcoinppl.cove.cloudbackup.clearCloudBackupDriveAccountBinding
 import org.bitcoinppl.cove.flows.keyteleport.SENSITIVE_CLIPBOARD_LIFETIME_MILLIS
 import org.bitcoinppl.cove.flows.keyteleport.clearExpiredSensitiveClipboard
 import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.device.CloudStorage
-import org.bitcoinppl.cove_core.device.CloudStorageAccess
 import org.bitcoinppl.cove_core.device.Connectivity
 import org.bitcoinppl.cove_core.device.Device
 import org.bitcoinppl.cove_core.device.Keychain
-import org.bitcoinppl.cove_core.device.KeychainAccess
 import org.bitcoinppl.cove_core.device.PasskeyAccess
-import org.bitcoinppl.cove_core.device.PasskeyProvider
 import org.bitcoinppl.cove_core.initializeApp
 import org.bitcoinppl.cove_core.setRootDataDir
 
 // auto-unlock time thresholds (in seconds) - matches iOS behavior
 // TODO: make these configurable and store in database
 
-// the keychain, cloud storage, passkey and connectivity services each have their own factory so
-// the UI test build can replace any one of them, and the class grows by one function per seam
-@Suppress("TooManyFunctions")
 open class CoveApplication : Application() {
     // hold references to FFI objects for proper cleanup
     private var keychain: Keychain? = null
@@ -58,13 +51,14 @@ open class CoveApplication : Application() {
 
         // initialize keychain and device before any FFI calls that might use them
         try {
-            keychain = Keychain(createKeychainAccess())
+            val services = createPlatformServices()
+            keychain = Keychain(services.keychainAccess())
             device = Device(DeviceAccessor())
-            val createdConnectivityAccess = createConnectivityAccess()
+            val createdConnectivityAccess = services.connectivityAccess()
             connectivityAccess = createdConnectivityAccess
             connectivity = Connectivity(createdConnectivityAccess)
-            passkeyAccess = PasskeyAccess(createPasskeyProvider())
-            val createdCloudStorageAccess = createCloudStorageAccess()
+            passkeyAccess = PasskeyAccess(services.passkeyProvider())
+            val createdCloudStorageAccess = services.cloudStorageAccess()
             cloudStorageAccess = createdCloudStorageAccess as? AndroidCloudStorageAccess
             cloudStorage = CloudStorage(createdCloudStorageAccess)
             CloudBackupManager.setOnCloudBackupDisabled {
@@ -88,17 +82,8 @@ open class CoveApplication : Application() {
         // bootstrap and AppManager init deferred to MainActivity via onBootstrapComplete()
     }
 
-    protected open fun createKeychainAccess(): KeychainAccess =
-        KeychainAccessor(this)
-
-    protected open fun createCloudStorageAccess(): CloudStorageAccess =
-        AndroidCloudStorageAccess(this)
-
-    protected open fun createPasskeyProvider(): PasskeyProvider =
-        AndroidPasskeyProvider(this)
-
-    protected open fun createConnectivityAccess(): LifecycleConnectivityAccess =
-        ConnectivityMonitor(this)
+    /** The platform services this process uses, which the UI test build replaces */
+    protected open fun createPlatformServices(): PlatformServices = PlatformServices(this)
 
     /**
      * How long a clip Cove marks sensitive stays on the clipboard before Cove clears it
