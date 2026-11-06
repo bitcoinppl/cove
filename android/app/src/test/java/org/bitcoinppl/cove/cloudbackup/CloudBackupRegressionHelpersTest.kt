@@ -304,21 +304,8 @@ class CloudBackupRegressionHelpersTest {
 
     @Test
     fun trustedRetainedInventoryKeepsRowsAndActionsAvailableAfterFailure() {
-        val detail =
-            CloudBackupDetail(
-                lastSync = null,
-                upToDate = emptyList(),
-                needsSync = emptyList(),
-                cloudOnlyCount = 1u,
-            )
-        val loaded =
-            LoadedCloudBackupDetail(
-                detail = detail,
-                inventoryAuthority = CloudBackupInventoryAuthority.PROVIDER_CONFIRMED,
-                cloudOnly = CloudOnlyState.NotFetched,
-                cloudOnlyOperation = CloudOnlyOperation.Idle,
-                otherBackupsOperation = OtherBackupsOperation.Idle,
-            )
+        val loaded = providerConfirmedDetail()
+        val detail = loaded.detail
 
         val notLoaded = cloudBackupManager()
         assertNull(notLoaded.detail)
@@ -332,6 +319,30 @@ class CloudBackupRegressionHelpersTest {
         assertFalse(checking.isDetailInventoryComplete)
         assertFalse(checking.isDetailInventoryReady)
 
+        val unavailable =
+            cloudBackupManager(
+                detail =
+                    CloudBackupDetailState.Failed(
+                        reason = CloudBackupInventoryIncompleteReason.PROVIDER_UNAVAILABLE,
+                        error = "Drive inventory is unavailable",
+                        retained = loaded,
+                    ),
+            )
+        assertEquals(detail, unavailable.detail)
+        assertFalse(unavailable.isDetailInventoryChecking)
+        assertFalse(unavailable.isDetailInventoryComplete)
+        assertTrue(unavailable.isDetailInventoryReady)
+
+        val complete = cloudBackupManager(detail = CloudBackupDetailState.Complete(state = loaded))
+        assertEquals(detail, complete.detail)
+        assertFalse(complete.isDetailInventoryChecking)
+        assertTrue(complete.isDetailInventoryComplete)
+        assertTrue(complete.isDetailInventoryReady)
+    }
+
+    @Test
+    fun offlineFailureKeepsTrustedRowsButDisablesTheirActions() {
+        val loaded = providerConfirmedDetail()
         val failed =
             cloudBackupManager(
                 detail =
@@ -341,20 +352,18 @@ class CloudBackupRegressionHelpersTest {
                         retained = loaded,
                     ),
             )
-        assertEquals(detail, failed.detail)
+
+        assertEquals(loaded.detail, failed.detail)
         assertEquals(
             "This device is offline. Connect to the internet, then check Google Drive again.",
             failed.detailError,
         )
         assertFalse(failed.isDetailInventoryChecking)
         assertFalse(failed.isDetailInventoryComplete)
-        assertTrue(failed.isDetailInventoryReady)
-
-        val complete = cloudBackupManager(detail = CloudBackupDetailState.Complete(state = loaded))
-        assertEquals(detail, complete.detail)
-        assertFalse(complete.isDetailInventoryChecking)
-        assertTrue(complete.isDetailInventoryComplete)
-        assertTrue(complete.isDetailInventoryReady)
+        assertFalse(
+            "an offline device keeps the known rows but can't restore or delete them",
+            failed.isDetailInventoryReady,
+        )
     }
 
     @Test
@@ -620,6 +629,21 @@ class CloudBackupRegressionHelpersTest {
         CloudBackupEnableContext(
             savedPasskeyConfirmation = SavedPasskeyConfirmationMode.MANUAL,
             verificationSource = CloudBackupVerificationSource.SETTINGS,
+        )
+
+    private fun providerConfirmedDetail() =
+        LoadedCloudBackupDetail(
+            detail =
+                CloudBackupDetail(
+                    lastSync = null,
+                    upToDate = emptyList(),
+                    needsSync = emptyList(),
+                    cloudOnlyCount = 1u,
+                ),
+            inventoryAuthority = CloudBackupInventoryAuthority.PROVIDER_CONFIRMED,
+            cloudOnly = CloudOnlyState.NotFetched,
+            cloudOnlyOperation = CloudOnlyOperation.Idle,
+            otherBackupsOperation = OtherBackupsOperation.Idle,
         )
 
     private fun cloudBackupManager(

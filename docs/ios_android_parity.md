@@ -214,8 +214,13 @@ to Rust and regenerate both platform bindings.
 ### Inventory parity
 
 Both detail screens project `Checking`, `Complete`, and `Failed` without dropping
-known wallet rows. Only `Complete` enables restore or destructive actions that
-depend on an authoritative set. Retry requests are Rust-coordinated: one refresh
+known wallet rows. Only `Complete` enables Restore All and the destructive actions
+that depend on an authoritative set. A single cloud-only row may restore or
+delete its wallet from `Complete`, or from `Failed` when the retained rows were
+provider-confirmed or a trusted local snapshot, unless the failure was offline:
+an offline device keeps the rows listed with their actions disabled until a check
+succeeds. Rust's `detail_inventory_is_ready` owns that rule, and each app's
+`isDetailInventoryReady` mirrors it. Retry requests are Rust-coordinated: one refresh
 may run, one trailing request is retained, starts are at least five seconds
 apart, and stale or closed-owner results are ignored.
 

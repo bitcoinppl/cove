@@ -18,6 +18,8 @@ enum CloudBackupUITestControl {
     static let cloudDirectoryName = "cloud"
     /// The app's stdout and stderr, Rust logs included, appended across launches
     static let appLogFileName = "app.log"
+    /// The cloud backup manager's state as the app holds it, a `CloudBackupUITestAppState`
+    static let appStateFileName = "app-state.json"
 
     /// Gate that keeps fresh-enable uploads unreadable until the test creates its release file
     static let visibilityGate = "visibility"
@@ -111,6 +113,13 @@ struct CloudBackupUITestScript: Codable, Equatable {
 
     var cloud: Cloud = .fixture
 
+    /// Whether the scripted network is up
+    ///
+    /// While it is down every provider call fails as offline and the host reports the device as
+    /// disconnected, so a test can drop the network without touching the simulator's, which the
+    /// fake node needs
+    var networkConnected = true
+
     /// Answers to `listNamespaces` in call order; the last one repeats
     var namespaceResults: [NamespaceResult] = [.backupFound]
 
@@ -155,6 +164,8 @@ struct CloudBackupUITestHostState: Codable, Equatable {
     var calls: [String: Int] = [:]
     var enteredHolds: [String] = []
     var uploads: [Upload] = []
+    /// The connectivity the host last reported to Rust, nil before the app started reporting
+    var reportedNetworkConnected: Bool?
 
     func count(_ call: CloudBackupUITestCall) -> Int {
         calls[call.key] ?? 0
@@ -179,6 +190,8 @@ enum CloudBackupUITestCall: Equatable {
     case passkeyCreate
     case passkeyAuthenticate
     case passkeyDiscover
+    /// A provider call refused because the scripted network is down; the call itself is not counted
+    case offlineRejection
 
     var key: String {
         switch self {
@@ -193,6 +206,31 @@ enum CloudBackupUITestCall: Equatable {
         case .passkeyCreate: "passkeyCreate"
         case .passkeyAuthenticate: "passkeyAuthenticate"
         case .passkeyDiscover: "passkeyDiscover"
+        case .offlineRejection: "offlineRejection"
         }
     }
+}
+
+/// The cloud backup manager's state as the app holds it, which the host writes to
+/// `app-state.json` whenever it changes
+///
+/// The Cloud Backup form builds only the rows near the screen, so a test checks what the app holds
+/// here and what a person sees on screen
+struct CloudBackupUITestAppState: Codable, Equatable {
+    /// `none`, `notLoaded`, `checking`, `complete` (provider confirmed), `completeUnconfirmed` or `failed`
+    var detail: String
+    /// `idle`, `operating`, `warning` or `failed`
+    var operation: String
+    /// Cloud-only wallet record ids, empty unless the cloud-only list is loaded
+    var cloudOnly: [String]
+    var cloudOnlyIncomplete: Bool
+    /// Whether a cloud-only row may restore or delete its wallet
+    var inventoryReady: Bool
+    /// Whether the provider confirmed the whole inventory, which Restore All needs
+    var inventoryComplete: Bool
+    var inventoryError: String?
+    /// The Restore All state, such as `startAvailable(2)` or `running(1/2)`
+    var restoreAll: String
+    /// The verification case, such as `verified` or `awaitingUploadConfirmation`, or `none`
+    var verification: String
 }

@@ -72,6 +72,7 @@
 		C0F300042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift */; };
 		C0F300052F80000000000001 /* CloudBackupOnboardingLateOfferFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200052F80000000000001 /* CloudBackupOnboardingLateOfferFullAppUITests.swift */; };
 		C0F300062F80000000000001 /* CloudBackupIncompleteSetupFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200062F80000000000001 /* CloudBackupIncompleteSetupFullAppUITests.swift */; };
+		C0F300072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -164,6 +165,7 @@
 		C0F000042F40000000000001 /* WalletSettingsPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletSettingsPresentationTests.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0F200012F80000000000001 /* CloudBackupUITestControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../CoveCloudBackupUITestHost/CloudBackupUITestControl.swift; sourceTree = "<group>"; };
+		C0F200072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupNetworkFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F200022F80000000000001 /* CloudBackupHostControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupHostControl.swift; sourceTree = "<group>"; };
 		C0F200032F80000000000001 /* CloudBackupEnableRecoveryFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupEnableRecoveryFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F200042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupRestoreAllFullAppUITests.swift; sourceTree = "<group>"; };
@@ -254,6 +256,7 @@
 				C0F200052F80000000000001 /* CloudBackupOnboardingLateOfferFullAppUITests.swift */,
 				C0F200042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift */,
 				C0F200032F80000000000001 /* CloudBackupEnableRecoveryFullAppUITests.swift */,
+				C0F200072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift */,
 				C0F200022F80000000000001 /* CloudBackupHostControl.swift */,
 				C0F200012F80000000000001 /* CloudBackupUITestControl.swift */,
 				C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */,
@@ -646,6 +649,7 @@
 				C0F300052F80000000000001 /* CloudBackupOnboardingLateOfferFullAppUITests.swift in Sources */,
 				C0F300042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift in Sources */,
 				C0F300032F80000000000001 /* CloudBackupEnableRecoveryFullAppUITests.swift in Sources */,
+				C0F300072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift in Sources */,
 				C0F300022F80000000000001 /* CloudBackupHostControl.swift in Sources */,
 				C0F300012F80000000000001 /* CloudBackupUITestControl.swift in Sources */,
 				C0E000012F20000000000001 /* OnboardingFullLaunchUITests.swift in Sources */,

@@ -21,6 +21,7 @@ import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider.Invocation
 import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupVerificationState
+import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
@@ -41,6 +42,9 @@ class CloudBackupReconnectFullLaunchTest {
         const val OFFLINE_DETAIL_MESSAGE =
             "This device is offline. Connect to the internet, then check Google Drive again."
         const val RESTORE_ALL_TITLE = "Restore All (2)"
+        const val RESTORE_ACTION = "Restore to this device"
+        const val DELETE_ACTION = "Delete from Cloud Backup"
+        val CLOUD_ONLY_WALLET_NAMES = listOf("Fixture Wallet Two", "Fixture Wallet Three")
     }
 
     private lateinit var device: UiDevice
@@ -58,6 +62,54 @@ class CloudBackupReconnectFullLaunchTest {
     @After
     fun restoreConnectivity() {
         ScriptedConnectivityAccess.reset()
+    }
+
+    @Test
+    fun offlineInventoryKeepsKnownRowsAndDisablesTheirActions() {
+        restoreFixtureAndOpenCloudBackupDetail()
+        val expectedRecordIds = cloudOnlyRecordIds()
+        val passkeyCallsBeforeOffline = passkeyCallCounts()
+
+        ScriptedConnectivityAccess.setConnected(false)
+        device.openSettings()
+        device.openCloudBackup()
+
+        waitUntil("reopening the detail offline should fail the refresh and keep the known rows") {
+            val manager = CloudBackupManager.getInstance()
+
+            manager.detailError == OFFLINE_DETAIL_MESSAGE &&
+                !manager.isDetailInventoryComplete &&
+                !manager.isDetailInventoryReady &&
+                manager.restoreAllState == CloudBackupRestoreAllState.StartDisabled(2u) &&
+                cloudOnlyRecordIds() == expectedRecordIds
+        }
+        device.scrollUntilText(OFFLINE_DETAIL_MESSAGE)
+        assertFalse(
+            "Restore All must stay disabled offline",
+            device.scrollUntilText(RESTORE_ALL_TITLE).clickableAncestor().isEnabled,
+        )
+
+        // a disabled Compose row stays in the tree and reports isEnabled false, and a tap on it
+        // must open neither action
+        val walletDownloadsOffline = ScriptedCloudStorageAccess.walletDownloadCount()
+        for (name in CLOUD_ONLY_WALLET_NAMES) {
+            val row = device.scrollUntilText(name).clickableAncestor()
+            assertFalse("$name must be disabled offline", row.isEnabled)
+
+            row.click()
+            assertFalse(
+                "$name must not open Restore or Delete offline",
+                device.wait(Until.hasObject(By.text(RESTORE_ACTION)), 2_000L) ||
+                    device.hasObject(By.text(DELETE_ACTION)),
+            )
+        }
+
+        val manager = CloudBackupManager.getInstance()
+        assertEquals("the known rows must stay listed offline", expectedRecordIds, cloudOnlyRecordIds())
+        assertEquals(CloudOnlyOperation.Idle, manager.cloudOnlyOperation)
+        assertEquals(walletDownloadsOffline, ScriptedCloudStorageAccess.walletDownloadCount())
+        assertEquals(passkeyCallsBeforeOffline, passkeyCallCounts())
+        assertEquals(1, AppManager.getInstance().wallets.size)
     }
 
     @Test

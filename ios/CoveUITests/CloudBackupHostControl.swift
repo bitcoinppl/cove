@@ -108,6 +108,55 @@ final class CloudBackupHostControl {
         release(CloudBackupUITestControl.visibilityGate)
     }
 
+    /// Drops or restores the scripted network, and waits until the host has told Rust
+    ///
+    /// The provider follows the script on its next call, so only Rust's view needs the wait
+    func setNetworkConnected(
+        _ isConnected: Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        try update { $0.networkConnected = isConnected }
+        waitUntil(
+            "the host never reported the network \(isConnected ? "up" : "down")",
+            timeout: 10,
+            file: file,
+            line: line
+        ) { $0.reportedNetworkConnected == isConnected }
+    }
+
+    /// The cloud backup manager's state as the app last wrote it, nil before it first did
+    var appState: CloudBackupUITestAppState? {
+        let url = directory.appendingPathComponent(CloudBackupUITestControl.appStateFileName)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+
+        return try? JSONDecoder().decode(CloudBackupUITestAppState.self, from: data)
+    }
+
+    /// Waits until the app's cloud backup state satisfies `condition`
+    func waitForAppState(
+        _ message: String,
+        timeout: TimeInterval = 30,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ condition: (CloudBackupUITestAppState) -> Bool
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let appState, condition(appState) { return }
+
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+
+        let last = appState
+        XCTAssertTrue(
+            last.map(condition) ?? false,
+            "\(message); app state \(String(describing: last)); host state \(state)",
+            file: file,
+            line: line
+        )
+    }
+
     var state: CloudBackupUITestHostState {
         let url = directory.appendingPathComponent(CloudBackupUITestControl.stateFileName)
         guard let data = try? Data(contentsOf: url),

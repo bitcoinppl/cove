@@ -88,6 +88,15 @@ final class CloudBackupUITestController: @unchecked Sendable {
         }
     }
 
+    /// Records the connectivity the host reported to Rust, so a test can wait until Rust heard a
+    /// network change before it checks what the change did
+    func recordReportedConnectivity(_ isConnected: Bool) {
+        lock.withLock {
+            state.reportedNetworkConnected = isConnected
+            persistStateLocked()
+        }
+    }
+
     func recordUpload(_ upload: CloudBackupUITestHostState.Upload) {
         lock.withLock {
             state.uploads.append(upload)
