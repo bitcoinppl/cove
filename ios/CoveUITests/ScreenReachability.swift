@@ -117,7 +117,7 @@ struct ScreenReachability {
         }
 
         for (index, (name, frame)) in frames.enumerated() {
-            for (otherName, otherFrame) in frames[(index + 1)...] where otherFrame != frame {
+            for (otherName, otherFrame) in frames[(index + 1)...] {
                 let shared = frame.intersection(otherFrame)
                 XCTAssertFalse(
                     shared.width > Self.overlapTolerance && shared.height > Self.overlapTolerance,
