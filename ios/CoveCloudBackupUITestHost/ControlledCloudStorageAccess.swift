@@ -158,6 +158,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
 
     func deleteNamespace(namespace: String, policy _: CloudAccessPolicy) async throws {
         try throwIfOffline()
+        controller.record(.namespaceDelete)
         store.deleteNamespace(namespace)
     }
 
@@ -212,7 +213,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
         policy _: CloudAccessPolicy
     ) async throws -> CloudBackupUploadStatus {
         try throwIfOffline()
-        controller.record(.uploadStatus)
+        controller.record(.uploadStatus(recordId: recordId))
 
         switch controller.script().cloud {
         case .freshEnable:

@@ -14,6 +14,9 @@ import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.test.recreateFullAppActivity
 import org.bitcoinppl.cove.testconfig.ScriptedCloudStorageAccess
 import org.bitcoinppl.cove.testconfig.ScriptedPasskeyProvider
+import org.bitcoinppl.cove_core.CloudBackupSettingsRowStatus
+import org.bitcoinppl.cove_core.CloudBackupVerificationState
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -67,6 +70,53 @@ class CloudBackupDurableCompletionFullLaunchTest {
         waitUntil("expected background confirmation to clear the pending state") {
             !CloudBackupManager.getInstance().hasPendingUploadVerification
         }
+    }
+
+    // nothing nudges the verifier here, unlike the test above: it has to keep polling the hidden
+    // writes and reach Verified on its own once they become readable
+    @Test
+    fun backgroundVerificationWaitsForVisibilityThenVerifiesOnItsOwn() {
+        ScriptedCloudStorageAccess.configureFreshEnableWithDelayedVisibility()
+        launchFullApp()
+
+        val onboarding = startFreshCloudBackupEnable()
+        assertTrue(
+            "expected the cloud provider to accept the master and wallet writes",
+            ScriptedCloudStorageAccess.awaitAllProviderWritesAccepted(),
+        )
+        onboarding.assertCloudBackupSuccess()
+
+        val manager = CloudBackupManager.getInstance()
+        // one pass checks the master key and the wallet separately, so only a record checked twice
+        // shows the verifier came back to a hidden write
+        waitUntil("the verifier never polled a hidden write twice") {
+            ScriptedCloudStorageAccess.mostUploadStatusChecksOfOneRecord() >= 2
+        }
+        waitUntil("Settings should show the backup as confirming while its writes stay hidden") {
+            manager.hasPendingUploadVerification &&
+                manager.settingsRowStatus is CloudBackupSettingsRowStatus.Confirming
+        }
+        assertEquals("verification read the master key while it was hidden", 0, ScriptedCloudStorageAccess.masterDownloadCount())
+        assertEquals("verification read a wallet while it was hidden", 0, ScriptedCloudStorageAccess.walletDownloadCount())
+        assertFalse("verified before the backup was visible", manager.verificationState is CloudBackupVerificationState.Verified)
+        assertOnlyTheEnablesPasskeyCalls("a passkey prompt came from outside the enable")
+
+        ScriptedCloudStorageAccess.releaseVisibility()
+
+        waitUntil("the verifier should verify the backup on its own once it is visible", timeoutMs = 60_000) {
+            !manager.hasPendingUploadVerification &&
+                manager.verificationState is CloudBackupVerificationState.Verified &&
+                manager.settingsRowStatus is CloudBackupSettingsRowStatus.Active
+        }
+        assertTrue("verification never read the visible backup", ScriptedCloudStorageAccess.masterDownloadCount() > 0)
+        assertOnlyTheEnablesPasskeyCalls("background confirmation asked for the passkey")
+    }
+
+    // a fresh enable registers one passkey and confirms it once, and nothing else may prompt
+    private fun assertOnlyTheEnablesPasskeyCalls(message: String) {
+        assertEquals(message, 1, ScriptedPasskeyProvider.callCount(ScriptedPasskeyProvider.Invocation.CREATE))
+        assertEquals(message, 1, ScriptedPasskeyProvider.callCount(ScriptedPasskeyProvider.Invocation.AUTHENTICATE))
+        assertEquals(message, 0, ScriptedPasskeyProvider.callCount(ScriptedPasskeyProvider.Invocation.DISCOVER))
     }
 
     @Test

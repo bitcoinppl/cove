@@ -105,7 +105,9 @@ enum CloudBackupUITestStateProbe {
             pendingUploadVerification: manager.hasPendingUploadVerification,
             sync: syncDescription(manager.syncState),
             syncError: manager.syncError,
-            wallets: walletRows(manager.detail)
+            wallets: walletRows(manager.detail),
+            lifecycle: lifecycleDescription(manager.lifecycle),
+            settingsRow: settingsRowDescription(manager.settingsRowStatus)
         )
     }
 
@@ -131,6 +133,27 @@ enum CloudBackupUITestStateProbe {
         }
 
         return .init(recordId: item.recordId, name: item.name, status: status, needsSync: needsSync)
+    }
+
+    private static func lifecycleDescription(_ lifecycle: CloudBackupLifecycle) -> String {
+        switch lifecycle {
+        case .disabled: "disabled"
+        case .enabling: "enabling"
+        case .restoring: "restoring"
+        case .pendingEnableRecovery: "pendingEnableRecovery"
+        case .failed: "failed"
+        case .configured: "configured"
+        }
+    }
+
+    private static func settingsRowDescription(_ status: CloudBackupSettingsRowStatus) -> String {
+        // payload-free cases describe themselves by their case name, which keeps this switch
+        // under the lint's complexity limit; the two message-carrying cases drop the message
+        switch status {
+        case .error: "error"
+        case .authorizationRequired: "authorizationRequired"
+        default: String(describing: status)
+        }
     }
 
     private static func syncDescription(_ state: CloudBackupSyncState?) -> String {

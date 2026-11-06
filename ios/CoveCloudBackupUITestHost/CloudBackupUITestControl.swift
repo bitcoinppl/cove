@@ -190,6 +190,17 @@ struct CloudBackupUITestHostState: Codable, Equatable {
     func countInLatestLaunch(_ call: CloudBackupUITestCall) -> Int {
         launches.last?.calls[call.key] ?? 0
     }
+
+    /// Upload confirmation checks of the record checked most often, across every launch, so one
+    /// verifier pass over several records never reads as polling twice
+    var mostUploadStatusChecksOfOneRecord: Int {
+        calls.filter { $0.key.hasPrefix("uploadStatus.") }.values.max() ?? 0
+    }
+
+    /// Downloads of every wallet record, across every launch
+    var walletDownloadCount: Int {
+        calls.filter { $0.key.hasPrefix("walletDownload.") }.values.reduce(0, +)
+    }
 }
 
 /// Provider calls the host counts
@@ -203,7 +214,9 @@ enum CloudBackupUITestCall: Equatable {
     case walletUpload
     /// A fixture-cloud wallet upload of a wallet the fixture doesn't hold, also counted as `walletUpload`
     case newWalletUpload
-    case uploadStatus
+    case uploadStatus(recordId: String)
+    /// A namespace deletion, which disabling Cloud Backup makes once its writes have drained
+    case namespaceDelete
     case passkeyCreate
     case passkeyAuthenticate
     case passkeyDiscover
@@ -220,7 +233,8 @@ enum CloudBackupUITestCall: Equatable {
         case .masterUpload: "masterUpload"
         case .walletUpload: "walletUpload"
         case .newWalletUpload: "newWalletUpload"
-        case .uploadStatus: "uploadStatus"
+        case let .uploadStatus(recordId): "uploadStatus.\(recordId)"
+        case .namespaceDelete: "namespaceDelete"
         case .passkeyCreate: "passkeyCreate"
         case .passkeyAuthenticate: "passkeyAuthenticate"
         case .passkeyDiscover: "passkeyDiscover"
@@ -258,6 +272,11 @@ struct CloudBackupUITestAppState: Codable, Equatable {
     var syncError: String?
     /// The on-device wallets the detail lists, up to date first, then those that need a sync
     var wallets: [Wallet]
+    /// The lifecycle case, such as `configured`, `enabling` or `pendingEnableRecovery`
+    var lifecycle: String
+    /// The Settings row status case without its message, such as `confirming`, `active` or
+    /// `settingUp`
+    var settingsRow: String
 
     struct Wallet: Codable, Equatable {
         var recordId: String

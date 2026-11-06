@@ -1551,9 +1551,7 @@ impl CloudBackupStateReducer {
         &mut self,
         event: CloudBackupStateReducerEvent,
     ) -> CloudBackupStateReducerEffects {
-        let previous_status = self.state.status();
-        let previous_lifecycle = self.state.public_lifecycle();
-        let previous_presentation = self.state.verification_presentation.clone();
+        let previous = PublishedProjection::capture(&self.state);
         let mut effects = CloudBackupStateReducerEffects::default();
 
         match event {
@@ -1782,12 +1780,7 @@ impl CloudBackupStateReducer {
             }
         }
 
-        self.resolve_effects(
-            previous_status,
-            previous_lifecycle,
-            previous_presentation,
-            &mut effects,
-        );
+        self.resolve_effects(previous, &mut effects);
 
         effects
     }
@@ -1796,45 +1789,56 @@ impl CloudBackupStateReducer {
         &mut self,
         choice: CloudBackupEnablePromptChoice,
     ) -> (Option<CloudBackupAcceptedEnablePrompt>, CloudBackupStateReducerEffects) {
-        let previous_status = self.state.status();
-        let previous_lifecycle = self.state.public_lifecycle();
-        let previous_presentation = self.state.verification_presentation.clone();
+        let previous = PublishedProjection::capture(&self.state);
         let mut effects = CloudBackupStateReducerEffects::default();
         let accepted = self.state.accept_enable_prompt(choice);
 
-        self.resolve_effects(
-            previous_status,
-            previous_lifecycle,
-            previous_presentation,
-            &mut effects,
-        );
+        self.resolve_effects(previous, &mut effects);
 
         (accepted, effects)
     }
 
     fn resolve_effects(
         &mut self,
-        previous_status: CloudBackupStatus,
-        previous_lifecycle: CloudBackupLifecycle,
-        previous_presentation: CloudBackupVerificationPresentation,
+        previous: PublishedProjection,
         effects: &mut CloudBackupStateReducerEffects,
     ) {
+        // the row also follows the active operation, upload confirmation and sync health, which
+        // can change while the lifecycle stays the same, such as when the enable claim is released
+        // after the lifecycle already became Configured
         let lifecycle = self.state.public_lifecycle();
-        if lifecycle != previous_lifecycle {
-            effects.lifecycle = Some(CloudBackupLifecycleEffect {
-                lifecycle,
-                settings_row_status: self.state.settings_row_status(),
-            });
+        let settings_row_status = self.state.settings_row_status();
+        if lifecycle != previous.lifecycle || settings_row_status != previous.settings_row_status {
+            effects.lifecycle = Some(CloudBackupLifecycleEffect { lifecycle, settings_row_status });
         }
 
         let status = self.state.status();
-        if previous_status == CloudBackupStatus::Enabling && status == CloudBackupStatus::Enabled {
+        if previous.status == CloudBackupStatus::Enabling && status == CloudBackupStatus::Enabled {
             effects.enable_completed = self.state.active_enable_context.take();
         }
 
-        effects.status_changed = status != previous_status;
+        effects.status_changed = status != previous.status;
         effects.verification_presentation_changed =
-            self.state.verification_presentation != previous_presentation;
+            self.state.verification_presentation != previous.verification_presentation;
+    }
+}
+
+/// What the reducer last published, captured before an event so it can tell what changed
+struct PublishedProjection {
+    status: CloudBackupStatus,
+    lifecycle: CloudBackupLifecycle,
+    settings_row_status: CloudBackupSettingsRowStatus,
+    verification_presentation: CloudBackupVerificationPresentation,
+}
+
+impl PublishedProjection {
+    fn capture(state: &CloudBackupReducerState) -> Self {
+        Self {
+            status: state.status(),
+            lifecycle: state.public_lifecycle(),
+            settings_row_status: state.settings_row_status(),
+            verification_presentation: state.verification_presentation.clone(),
+        }
     }
 }
 
@@ -2805,6 +2809,41 @@ mod tests {
             model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim));
 
         assert_eq!(repeated_effects.enable_completed, None);
+    }
+
+    #[test]
+    fn releasing_the_enable_claim_republishes_the_settings_row() {
+        let claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::EnableNoDiscovery,
+            1,
+        );
+        let mut model = CloudBackupStateReducer::default();
+        model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationStarted(claim));
+        model.apply_event(CloudBackupStateReducerEvent::PendingUploadVerificationReconciled(
+            PendingUploadVerificationState::Confirming,
+        ));
+
+        // the enable reports itself configured before it releases its claim, so the row
+        // published with that lifecycle still says the backup is being set up
+        let configured_effects = model.apply_event(
+            CloudBackupStateReducerEvent::RuntimeStatusReconciled(CloudBackupStatus::Enabled),
+        );
+        assert_eq!(
+            configured_effects.lifecycle.map(|effect| effect.settings_row_status),
+            Some(CloudBackupSettingsRowStatus::SettingUp)
+        );
+
+        let finished_effects =
+            model.apply_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim));
+
+        assert!(matches!(
+            effect_lifecycle(&finished_effects),
+            Some(CloudBackupLifecycle::Configured(_))
+        ));
+        assert_eq!(
+            finished_effects.lifecycle.map(|effect| effect.settings_row_status),
+            Some(CloudBackupSettingsRowStatus::Confirming)
+        );
     }
 
     #[test]

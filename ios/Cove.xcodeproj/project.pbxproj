@@ -72,6 +72,7 @@
 		C0F300042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift */; };
 		C0F300052F80000000000001 /* CloudBackupOnboardingLateOfferFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200052F80000000000001 /* CloudBackupOnboardingLateOfferFullAppUITests.swift */; };
 		C0F300062F80000000000001 /* CloudBackupIncompleteSetupFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200062F80000000000001 /* CloudBackupIncompleteSetupFullAppUITests.swift */; };
+		C0F3000A2F80000000000001 /* CloudBackupDisableFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F2000A2F80000000000001 /* CloudBackupDisableFullAppUITests.swift */; };
 		C0F300092F80000000000001 /* CloudBackupSyncNowFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200092F80000000000001 /* CloudBackupSyncNowFullAppUITests.swift */; };
 		C0F300082F80000000000001 /* CloudBackupLocalDeleteFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200082F80000000000001 /* CloudBackupLocalDeleteFullAppUITests.swift */; };
 		C0F300072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift */; };
@@ -167,6 +168,7 @@
 		C0F000042F40000000000001 /* WalletSettingsPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletSettingsPresentationTests.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0F200012F80000000000001 /* CloudBackupUITestControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../CoveCloudBackupUITestHost/CloudBackupUITestControl.swift; sourceTree = "<group>"; };
+		C0F2000A2F80000000000001 /* CloudBackupDisableFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupDisableFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F200092F80000000000001 /* CloudBackupSyncNowFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupSyncNowFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F200082F80000000000001 /* CloudBackupLocalDeleteFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupLocalDeleteFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F200072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupNetworkFullAppUITests.swift; sourceTree = "<group>"; };
@@ -260,6 +262,7 @@
 				C0F200052F80000000000001 /* CloudBackupOnboardingLateOfferFullAppUITests.swift */,
 				C0F200042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift */,
 				C0F200032F80000000000001 /* CloudBackupEnableRecoveryFullAppUITests.swift */,
+				C0F2000A2F80000000000001 /* CloudBackupDisableFullAppUITests.swift */,
 				C0F200092F80000000000001 /* CloudBackupSyncNowFullAppUITests.swift */,
 				C0F200082F80000000000001 /* CloudBackupLocalDeleteFullAppUITests.swift */,
 				C0F200072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift */,
@@ -655,6 +658,7 @@
 				C0F300052F80000000000001 /* CloudBackupOnboardingLateOfferFullAppUITests.swift in Sources */,
 				C0F300042F80000000000001 /* CloudBackupRestoreAllFullAppUITests.swift in Sources */,
 				C0F300032F80000000000001 /* CloudBackupEnableRecoveryFullAppUITests.swift in Sources */,
+				C0F3000A2F80000000000001 /* CloudBackupDisableFullAppUITests.swift in Sources */,
 				C0F300092F80000000000001 /* CloudBackupSyncNowFullAppUITests.swift in Sources */,
 				C0F300082F80000000000001 /* CloudBackupLocalDeleteFullAppUITests.swift in Sources */,
 				C0F300072F80000000000001 /* CloudBackupNetworkFullAppUITests.swift in Sources */,

@@ -27,31 +27,46 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         robot.startFreshEnableFromOnboarding()
         robot.finishOnboardingAfterCloudBackupEnabled()
 
-        // the verifier has polled the hidden writes more than once and read none of them
-        control.waitUntil("the verifier never polled the pending uploads") {
-            $0.count(.uploadStatus) >= 2
+        // the verifier comes back to a hidden write; one pass checks the master key and the wallet
+        // separately, so only a record checked twice shows a second pass
+        control.waitUntil("the verifier never polled a pending upload twice") {
+            $0.mostUploadStatusChecksOfOneRecord >= 2
         }
-        XCTAssertEqual(control.state.count(.masterDownload), 0)
-        XCTAssertEqual(control.state.count(.passkeyCreate), 1)
+        control.waitForAppState("Settings should show the backup as confirming while its writes stay hidden") {
+            $0.settingsRow == "confirming" && $0.pendingUploadVerification
+        }
 
         robot.openSettings()
         XCTAssertTrue(app.staticTexts["Cloud Backup Confirming"].waitForExistence(timeout: 15))
-        let authenticationsBeforeVisibility = control.state.count(.passkeyAuthenticate)
+
+        // up to the release, the verifier has read none of the hidden backups, and the only passkey
+        // calls are the enable's registration and its one confirmation
+        let hidden = control.state
+        XCTAssertEqual(hidden.count(.masterDownload), 0, "verification read the master key while it was hidden")
+        XCTAssertEqual(hidden.walletDownloadCount, 0, "verification read a wallet while it was hidden")
+        assertOnlyTheEnablesPasskeyCalls(hidden)
 
         control.releaseVisibility()
 
         // nothing is tapped here: the Settings row follows the background verifier
         XCTAssertTrue(app.staticTexts["Cloud Backup Enabled"].waitForExistence(timeout: 45))
         XCTAssertGreaterThan(control.state.count(.masterDownload), 0)
-        XCTAssertEqual(
-            control.state.count(.passkeyAuthenticate),
-            authenticationsBeforeVisibility,
-            "background confirmation must not ask for the passkey"
-        )
 
         robot.openCloudBackupDetail()
         robot.scrollToHittable(app.staticTexts["Backup verified"], initialWait: 15)
-        XCTAssertEqual(control.state.count(.passkeyCreate), 1)
+        assertOnlyTheEnablesPasskeyCalls(control.state, "background confirmation asked for the passkey")
+    }
+
+    /// A fresh enable registers one passkey and confirms it once, and nothing else may prompt
+    private func assertOnlyTheEnablesPasskeyCalls(
+        _ state: CloudBackupUITestHostState,
+        _ message: String = "a passkey prompt came from outside the enable",
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(state.count(.passkeyCreate), 1, message, file: file, line: line)
+        XCTAssertEqual(state.count(.passkeyAuthenticate), 1, message, file: file, line: line)
+        XCTAssertEqual(state.count(.passkeyDiscover), 0, message, file: file, line: line)
     }
 
     /// Killing the app after the cloud accepted the master key, before the upload returned, leaves

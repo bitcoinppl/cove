@@ -85,6 +85,10 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
 
     private val masterUploads = AtomicInteger(0)
     private val walletUploads = AtomicInteger(0)
+
+    // fresh-enable reads and deletes a test checks happen, or wait, without holding them
+    private val uploadStatusChecks = ConcurrentHashMap<String, AtomicInteger>()
+    private val namespaceDeletes = AtomicInteger(0)
     private val uploadFailures = CopyOnWriteArrayList<UploadFailure>()
     private val uploads = CopyOnWriteArrayList<Upload>()
 
@@ -252,6 +256,15 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     fun rejectedNewWalletUploadCount(): Int = rejectedNewWalletUploads.get()
 
     fun masterDownloadCount(): Int = masterDownloads.get()
+
+    /**
+     * Upload confirmation checks the fresh-enable cloud answered for the record checked most
+     * often, visible or not, so one verifier pass over several records never reads as polling twice
+     */
+    fun mostUploadStatusChecksOfOneRecord(): Int = uploadStatusChecks.values.maxOfOrNull { it.get() } ?: 0
+
+    /** Namespaces the fresh-enable cloud was asked to delete */
+    fun namespaceDeleteCount(): Int = namespaceDeletes.get()
 
     fun walletListCount(): Int = walletLists.get()
 
@@ -623,6 +636,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
         }
 
         val scenario = freshEnableScenario ?: return CloudBackupUploadStatus.NOT_FOUND
+        uploadStatusChecks.getOrPut(recordId) { AtomicInteger(0) }.incrementAndGet()
         if (!scenario.isVisibilityReleased()) return CloudBackupUploadStatus.PENDING
 
         val exists = if (recordId == MASTER_KEY_RECORD_ID) {
@@ -722,6 +736,8 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     private fun resetUploads() {
         masterUploads.set(0)
         walletUploads.set(0)
+        uploadStatusChecks.clear()
+        namespaceDeletes.set(0)
         uploadFailures.clear()
         uploads.clear()
         walletUploadBlock?.release?.complete(Unit)
@@ -861,6 +877,7 @@ object ScriptedCloudStorageAccess : CloudStorageAccess {
     ) {
         ScriptedConnectivityAccess.throwIfOffline()
         val scenario = freshEnableScenario ?: unsupported()
+        namespaceDeletes.incrementAndGet()
         scenario.deleteNamespace(namespace)
     }
 
