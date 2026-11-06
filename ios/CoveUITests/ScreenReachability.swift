@@ -127,12 +127,13 @@ struct ScreenReachability {
         }
     }
 
-    /// Fails when the text overlaps any other text on screen labeled one of `labels`, for a text
-    /// checked on its own rather than with its whole screen, such as one word of a grid built lazily
+    /// Fails when the text overlaps any other text or button on screen labeled one of `labels`,
+    /// for a text checked on its own rather than with its whole screen, such as one word of a grid
+    /// built lazily
     ///
     /// A text its parent clips at full height still reports that it fits, but its frame runs into
     /// whatever follows. The text itself is told apart from the others by its label and frame
-    func assertNoOverlap(_ element: XCUIElement, _ name: String, withTextsLabeled labels: Set<String>) {
+    func assertNoOverlap(_ element: XCUIElement, _ name: String, withElementsLabeled labels: Set<String>) {
         guard let snapshot = try? app.snapshot() else {
             XCTFail("\(name): the app's accessibility tree could not be read")
             return
@@ -140,7 +141,7 @@ struct ScreenReachability {
 
         let frame = element.frame
         let label = element.label
-        for other in textFrames(in: snapshot, labeled: labels) where other.label != label || other.frame != frame {
+        for other in frames(in: snapshot, labeled: labels) where other.label != label || !isSameFrame(other.frame, frame) {
             let shared = frame.intersection(other.frame)
             XCTAssertFalse(
                 shared.width > Self.overlapTolerance && shared.height > Self.overlapTolerance,
@@ -149,9 +150,10 @@ struct ScreenReachability {
         }
     }
 
-    private func textFrames(in snapshot: XCUIElementSnapshot, labeled labels: Set<String>) -> [(label: String, frame: CGRect)] {
-        let own = snapshot.elementType == .staticText && labels.contains(snapshot.label) ? [(snapshot.label, snapshot.frame)] : []
-        return own + snapshot.children.flatMap { textFrames(in: $0, labeled: labels) }
+    private func frames(in snapshot: XCUIElementSnapshot, labeled labels: Set<String>) -> [(label: String, frame: CGRect)] {
+        let checked = [.staticText, .button].contains(snapshot.elementType) && labels.contains(snapshot.label)
+        let own = checked ? [(snapshot.label, snapshot.frame)] : []
+        return own + snapshot.children.flatMap { frames(in: $0, labeled: labels) }
     }
 
     /// Fails when any probed text or button label in the app reports that it draws truncated or

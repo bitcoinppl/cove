@@ -164,14 +164,16 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         try receive(.mnemonic(Self.sentWords), checkingLayout: true)
         waitForReview("Recovery words received")
         assertWordsConcealed()
+        let reviewTexts = ["Recovery words received", "Cove found a 12-word wallet. Review it below or import it directly."]
+        let choices = ["Import Wallet", "Finish Without Importing"]
         layout.assertScreenFits(
             "mnemonic review",
-            texts: ["Recovery words received", "Cove found a 12-word wallet. Review it below or import it directly."],
-            buttons: [button("Tap to reveal recovery words"), button("Import Wallet"), button("Finish Without Importing")]
+            texts: reviewTexts,
+            buttons: [button("Tap to reveal recovery words")] + choices.map(button(_:))
         )
 
         layout.reachAndTap(button("Tap to reveal recovery words"), "mnemonic review: reveal")
-        assertNumberedWordsFit()
+        assertNumberedWordsFit(besides: Set(reviewTexts + choices))
         layout.reachAndTap(button("Import Wallet"), "mnemonic review: Import Wallet")
 
         XCTAssertTrue(app.staticTexts["Wallet imported"].waitForExistence(timeout: 30))
@@ -383,10 +385,11 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
     }
 
     /// Each word fits on screen beside its number, found by position since the test words repeat,
-    /// so a clipped second 'legal' can't pass on the first
-    private func assertNumberedWordsFit() {
+    /// so a clipped second 'legal' can't pass on the first, and overlaps no other word or number,
+    /// nor the review's other texts and buttons labeled `screenLabels`
+    private func assertNumberedWordsFit(besides screenLabels: Set<String>) {
         let words = Self.sentWords.split(separator: " ").map(String.init)
-        let gridLabels = Set(words + words.indices.map { "\($0 + 1)" })
+        let checkedLabels = screenLabels.union(words + words.indices.map { "\($0 + 1)" })
         for (index, word) in words.enumerated() {
             let name = "revealed words: word \(index + 1)"
             let numbers = app.staticTexts.matching(NSPredicate(format: "label == %@", "\(index + 1)"))
@@ -423,10 +426,11 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
             layout.assertDrawsWhole(shown, name)
 
             // a word its chip clips at full height still reports that it fits, but runs into the
-            // next row, so no other word or number may overlap it
-            layout.assertNoOverlap(shown, name, withTextsLabeled: gridLabels)
+            // next row, so it and its number may overlap no other checked text or button
+            layout.assertNoOverlap(shown, name, withElementsLabeled: checkedLabels)
             for number in numbers.allElementsBoundByIndex where isBeside(shown.frame, number.frame) {
                 layout.assertDrawsWhole(number, "\(name): its number")
+                layout.assertNoOverlap(number, "\(name): its number", withElementsLabeled: checkedLabels)
             }
 
             layout.assertNoTruncatedText(name)
