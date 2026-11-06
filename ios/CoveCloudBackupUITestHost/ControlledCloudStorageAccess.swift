@@ -158,6 +158,7 @@ final class ControlledCloudStorageAccess: CloudStorageAccess, @unchecked Sendabl
 
     func deleteNamespace(namespace: String, policy _: CloudAccessPolicy) async throws {
         try throwIfOffline()
+        controller.record(.namespaceDelete)
         store.deleteNamespace(namespace)
     }
 

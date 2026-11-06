@@ -105,7 +105,9 @@ enum CloudBackupUITestStateProbe {
             pendingUploadVerification: manager.hasPendingUploadVerification,
             sync: syncDescription(manager.syncState),
             syncError: manager.syncError,
-            wallets: walletRows(manager.detail)
+            wallets: walletRows(manager.detail),
+            lifecycle: lifecycleDescription(manager.lifecycle),
+            settingsRow: settingsRowDescription(manager.settingsRowStatus)
         )
     }
 
@@ -131,6 +133,39 @@ enum CloudBackupUITestStateProbe {
         }
 
         return .init(recordId: item.recordId, name: item.name, status: status, needsSync: needsSync)
+    }
+
+    private static func lifecycleDescription(_ lifecycle: CloudBackupLifecycle) -> String {
+        switch lifecycle {
+        case .disabled: "disabled"
+        case .enabling: "enabling"
+        case .restoring: "restoring"
+        case .pendingEnableRecovery: "pendingEnableRecovery"
+        case .failed: "failed"
+        case .configured: "configured"
+        }
+    }
+
+    private static func settingsRowDescription(_ status: CloudBackupSettingsRowStatus) -> String {
+        switch status {
+        case .disabled: "disabled"
+        case .disabling: "disabling"
+        case .settingUp: "settingUp"
+        case .restoring: "restoring"
+        case .active: "active"
+        case .passkeyMissing: "passkeyMissing"
+        case .passkeyProviderUnsupported: "passkeyProviderUnsupported"
+        case .unverified: "unverified"
+        case .confirming: "confirming"
+        case .verificationRecommended: "verificationRecommended"
+        case .checkingSync: "checkingSync"
+        case .syncing: "syncing"
+        case .noFiles: "noFiles"
+        case .driveUnavailable: "driveUnavailable"
+        case .recoveryRequired: "recoveryRequired"
+        case .error: "error"
+        case .authorizationRequired: "authorizationRequired"
+        }
     }
 
     private static func syncDescription(_ state: CloudBackupSyncState?) -> String {

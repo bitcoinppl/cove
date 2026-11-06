@@ -63,8 +63,8 @@ env:
     CoveCloudBackupUITests/CloudBackupNetworkFullAppUITests,
     CoveCloudBackupUITests/CloudBackupLocalDeleteFullAppUITests,
     CoveCloudBackupUITests/CloudBackupSyncNowFullAppUITests,
-    CoveCloudBackupUITests/CloudBackupEnableRecoveryFullAppUITests/testFailedSetupUploadRetriesWithoutNewPasskey,
-    CoveCloudBackupUITests/CloudBackupEnableRecoveryFullAppUITests/testKilledEnableRecoversThroughRelaunchWithoutNewPasskey
+    CoveCloudBackupUITests/CloudBackupEnableRecoveryFullAppUITests,
+    CoveCloudBackupUITests/CloudBackupDisableFullAppUITests
   ANDROID_FLAVOURS: Dev UiTest
   # tests a manual run names, read by tools/ui-test-plan.sh; empty on every other trigger
   IOS_TESTS: ${{ inputs.ios_tests }}

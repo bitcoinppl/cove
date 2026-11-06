@@ -33,6 +33,9 @@ final class CloudBackupEnableRecoveryFullAppUITests: XCTestCase {
         }
         XCTAssertEqual(control.state.count(.masterDownload), 0)
         XCTAssertEqual(control.state.count(.passkeyCreate), 1)
+        control.waitForAppState("Settings should show the backup as confirming while its writes stay hidden") {
+            $0.settingsRow == "confirming" && $0.pendingUploadVerification
+        }
 
         robot.openSettings()
         XCTAssertTrue(app.staticTexts["Cloud Backup Confirming"].waitForExistence(timeout: 15))

@@ -204,6 +204,8 @@ enum CloudBackupUITestCall: Equatable {
     /// A fixture-cloud wallet upload of a wallet the fixture doesn't hold, also counted as `walletUpload`
     case newWalletUpload
     case uploadStatus
+    /// A namespace deletion, which disabling Cloud Backup makes once its writes have drained
+    case namespaceDelete
     case passkeyCreate
     case passkeyAuthenticate
     case passkeyDiscover
@@ -221,6 +223,7 @@ enum CloudBackupUITestCall: Equatable {
         case .walletUpload: "walletUpload"
         case .newWalletUpload: "newWalletUpload"
         case .uploadStatus: "uploadStatus"
+        case .namespaceDelete: "namespaceDelete"
         case .passkeyCreate: "passkeyCreate"
         case .passkeyAuthenticate: "passkeyAuthenticate"
         case .passkeyDiscover: "passkeyDiscover"
@@ -258,6 +261,11 @@ struct CloudBackupUITestAppState: Codable, Equatable {
     var syncError: String?
     /// The on-device wallets the detail lists, up to date first, then those that need a sync
     var wallets: [Wallet]
+    /// The lifecycle case, such as `configured`, `enabling` or `pendingEnableRecovery`
+    var lifecycle: String
+    /// The Settings row status case without its message, such as `confirming`, `active` or
+    /// `settingUp`
+    var settingsRow: String
 
     struct Wallet: Codable, Equatable {
         var recordId: String
