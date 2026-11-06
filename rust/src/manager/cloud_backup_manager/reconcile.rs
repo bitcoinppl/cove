@@ -4,7 +4,9 @@ use cove_device::cloud_storage::CloudSyncHealth;
 use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 
-use super::model::{CloudBackupStateReducerEffects, CloudBackupStateReducerEvent};
+use super::model::{
+    CloudBackupStateReducerEffects, CloudBackupStateReducerEvent, PendingEnableEvidence,
+};
 use super::verify::coordinator::{
     CloudBackupVerificationCoordinator, CloudBackupVerificationEffect,
 };
@@ -109,7 +111,21 @@ impl RustCloudBackupManager {
             self.clear_runtime_passkey_authorization();
         }
 
-        let event = CloudBackupStateReducerEvent::RuntimeStatusReconciled(status);
+        // the keychain is read outside the state lock, and only when recovery shows; the reducer
+        // keeps a recovery projected after this check, since this status was read before it
+        let shows_recovery = self.state.read().shows_pending_enable_recovery();
+        let pending_enable_evidence = if !shows_recovery {
+            PendingEnableEvidence::NotChecked
+        } else if Self::pending_enable_evidence_remains() {
+            PendingEnableEvidence::Remains
+        } else {
+            PendingEnableEvidence::Gone
+        };
+
+        let event = CloudBackupStateReducerEvent::RuntimeStatusReconciled {
+            status,
+            pending_enable_evidence,
+        };
         let effects = self.state.write().apply_event(event);
         let status_changed = effects.status_changed;
         self.send_model_effects(effects);

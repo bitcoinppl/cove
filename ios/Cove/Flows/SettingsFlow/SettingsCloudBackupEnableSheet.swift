@@ -426,9 +426,11 @@ private struct CloudBackupRecoveryHeader: View {
                 .foregroundStyle(Color.statusWarning)
             Text("Cloud Backup Needs Recovery")
                 .font(.largeTitle.weight(.semibold))
+                .uiTestTruncationProbe()
                 .foregroundStyle(.white)
             Text("Cloud Backup setup was interrupted and its local recovery records do not match.")
                 .font(.footnote)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.coveLightGray.opacity(0.75))
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -445,6 +447,7 @@ private struct CloudBackupRecoveryExplanation: View {
                 : "Contact support and include the code below. Don’t change Cloud Backup settings until the recovery state has been reviewed."
         )
         .font(.callout)
+        .uiTestTruncationProbe()
         .foregroundStyle(.white.opacity(0.85))
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -462,18 +465,20 @@ private struct CloudBackupRecoverySupportCodeCard: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Support code")
                 .font(.caption)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.coveLightGray)
             Text(supportCode)
                 .font(.title3.monospaced().weight(.semibold))
+                .uiTestTruncationProbe()
                 .foregroundStyle(.white)
                 .accessibilityIdentifier("cloudBackup.recovery.supportCode")
             HStack {
                 Button(action: copy) {
-                    Label("Copy Code", systemImage: "doc.on.doc")
+                    ProbedLabel("Copy Code", systemImage: "doc.on.doc")
                 }
                 Spacer()
                 Button(action: contactSupport) {
-                    Label("Contact Support", systemImage: "envelope")
+                    ProbedLabel("Contact Support", systemImage: "envelope")
                 }
             }
             .buttonStyle(.bordered)
@@ -521,6 +526,7 @@ private struct CloudBackupRecoveryCleanupButton: View {
             showConfirmation = true
         } label: {
             Text("Remove Incomplete Setup")
+                .uiTestTruncationProbe()
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(OnboardingSecondaryButtonStyle(

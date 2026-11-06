@@ -151,6 +151,10 @@ private struct BackupVerifySettingsSection: View {
 }
 
 struct IconLabel: View {
+    /// Grows with the text, since at accessibility sizes a fixed 14 point column let the icon
+    /// draw over the text beside it
+    @ScaledMetric(relativeTo: .caption) private var iconWidth: CGFloat = 14
+
     let icon: String
     let text: String
 
@@ -162,8 +166,13 @@ struct IconLabel: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
-                .frame(width: 14)
+                .frame(width: iconWidth)
+
+            // a list row offered less height than the wrapped text needed, which cut a backup
+            // timestamp short at accessibility sizes
             Text(text)
+                .uiTestTruncationProbe()
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

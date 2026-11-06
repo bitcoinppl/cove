@@ -99,7 +99,7 @@ private struct CloudOnlyFormSection: View {
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     var body: some View {
-        Section(header: Text("Not on This Device")) {
+        Section(header: Text("Not on This Device").uiTestTruncationProbe()) {
             CloudOnlySectionContent(
                 wallets: wallets,
                 manager: manager,
@@ -138,10 +138,12 @@ private struct CloudOnlySectionContent: View {
         if case let .failed(error) = manager.cloudOnlyOperation {
             Text(error)
                 .font(.caption)
+                .uiTestTruncationProbe()
                 .foregroundStyle(Color.statusError)
         } else if case let .warning(message: message, error: _) = manager.cloudOnlyOperation {
             Text(message)
                 .font(.caption)
+                .uiTestTruncationProbe()
                 .foregroundStyle(Color.statusWarning)
         }
     }
@@ -154,10 +156,13 @@ private struct CloudOnlyIncompleteNotice: View {
     var body: some View {
         Text("Some backups could not be read.")
             .font(.caption)
+            .uiTestTruncationProbe()
             .foregroundStyle(Color.statusWarning)
 
-        Button("Check Again") {
+        Button {
             manager.dispatch(action: .refreshDetail)
+        } label: {
+            Text("Check Again").uiTestTruncationProbe()
         }
     }
 }
@@ -204,7 +209,7 @@ private struct CloudOnlyRestoreAllDisabledControl: View {
     let title: String
 
     var body: some View {
-        Label(title, systemImage: "icloud.and.arrow.down")
+        ProbedLabel(title, systemImage: "icloud.and.arrow.down")
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .accessibilityLabel("\(title), unavailable while Cloud Backup is checking")
@@ -224,7 +229,7 @@ private struct CloudOnlyRestoreAllActionControl: View {
 
     var body: some View {
         Button(action: performAction) {
-            Label(presentation.title, systemImage: systemImage)
+            ProbedLabel(presentation.title, systemImage: systemImage)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
         }
         .accessibilityHint("Restores eligible wallets sequentially to this device")
@@ -249,9 +254,11 @@ private struct CloudOnlyRestoreAllProgressControl: View {
             CloudOnlyRestoreAllProgressDetails(presentation: presentation)
 
             if presentation.canCancel {
-                Button("Cancel", action: onCancel)
-                    .frame(minHeight: 44)
-                    .accessibilityHint("Stops after the current wallet finishes")
+                Button(action: onCancel) {
+                    Text("Cancel").uiTestTruncationProbe()
+                }
+                .frame(minHeight: 44)
+                .accessibilityHint("Stops after the current wallet finishes")
             } else {
                 CloudOnlyRestoreAllCancellationPending()
             }
@@ -273,22 +280,25 @@ private struct CloudOnlyRestoreAllProgressDetails: View {
 
             Text(presentation.title)
                 .font(.body.weight(.medium))
+                .uiTestTruncationProbe()
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(presentation.detail)
                 .font(.caption)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Restore All progress")
         .accessibilityValue(presentation.accessibilityValue)
         .accessibilityAddTraits(.updatesFrequently)
+        .uiTestTruncationReport("cloudBackup.restoreAll.progress.truncation")
     }
 }
 
 private struct CloudOnlyRestoreAllCancellationPending: View {
     var body: some View {
-        Label(
+        ProbedLabel(
             "Cancel requested. Finishing the current wallet...",
             systemImage: "hourglass"
         )
@@ -317,12 +327,13 @@ private struct CloudOnlyWalletRows: View {
                     isCurrentOperation: operatingRecordId == item.recordId,
                     presentationCoordinator: presentationCoordinator
                 )
+                .uiTestTruncationReport("cloudBackup.wallet.\(item.recordId).truncation")
 
                 if item.restoreFailure != nil {
                     Button {
                         onRetryWallet(item)
                     } label: {
-                        Label("Restore", systemImage: "arrow.clockwise")
+                        ProbedLabel("Restore", systemImage: "arrow.clockwise")
                             .frame(minHeight: 44)
                     }
                     .buttonStyle(.borderless)

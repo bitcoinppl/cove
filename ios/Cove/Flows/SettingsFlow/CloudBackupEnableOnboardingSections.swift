@@ -8,11 +8,13 @@ struct CloudBackupEnableCancelButton: View {
         HStack {
             Spacer()
 
-            Button("Cancel", action: onCancel)
-                .foregroundStyle(.white)
-                .font(.headline)
-                .frame(minWidth: 44, minHeight: 44)
-                .disabled(isBusy)
+            Button(action: onCancel) {
+                Text("Cancel").uiTestTruncationProbe()
+            }
+            .foregroundStyle(.white)
+            .font(.headline)
+            .frame(minWidth: 44, minHeight: 44)
+            .disabled(isBusy)
         }
         .padding(.horizontal)
         .padding(.top)

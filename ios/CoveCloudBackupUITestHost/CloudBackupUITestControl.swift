@@ -130,6 +130,13 @@ struct CloudBackupUITestScript: Codable, Equatable {
         var error: ProviderError
     }
 
+    /// Fails every master key backup download after the first `callsToSkip` across every
+    /// launch, so a restore can read the key and a later verification can't
+    struct MasterDownloadFailure: Codable, Equatable {
+        var callsToSkip: Int
+        var error: ProviderError
+    }
+
     var cloud: Cloud = .fixture
 
     /// Whether the scripted network is up
@@ -155,6 +162,7 @@ struct CloudBackupUITestScript: Codable, Equatable {
 
     var holds: [Hold] = []
     var uploadFailures: [UploadFailure] = []
+    var masterDownloadFailure: MasterDownloadFailure?
 
     /// Failures for the fixture cloud's uploads of wallets the fixture doesn't hold, such as one
     /// added on the device after a restore, in upload order across every launch; later uploads

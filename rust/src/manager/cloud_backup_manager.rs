@@ -497,6 +497,29 @@ impl RustCloudBackupManager {
             || Self::has_in_flight_lifecycle(&self.current_status())
     }
 
+    /// Whether the keychain holds an enable journal or staged master key material, counting an
+    /// unreadable keychain as holding them, since unknown state must not look like no setup
+    fn pending_enable_evidence_remains() -> bool {
+        match CloudBackupKeychain::global().load_pending_enable_journal() {
+            Ok(Some(_)) => return true,
+            Ok(None) => {}
+            Err(error) => {
+                error!("Failed to inspect pending Cloud Backup enable journal: {error}");
+                return true;
+            }
+        }
+
+        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+        match cspp.master_key_promotion_status() {
+            Ok(MasterKeyPromotionStatus::None) => false,
+            Ok(_) => true,
+            Err(error) => {
+                error!("Failed to inspect staged Cloud Backup enable material: {error}");
+                true
+            }
+        }
+    }
+
     pub(crate) fn cloud_backup_writes_blocked(&self) -> bool {
         if self.local_reset_in_progress.load(Ordering::Acquire) {
             return true;
@@ -1167,25 +1190,8 @@ impl RustCloudBackupManager {
     pub fn onboarding_enable_completion_readiness(
         &self,
     ) -> CloudBackupOnboardingCompletionReadiness {
-        match CloudBackupKeychain::global().load_pending_enable_journal() {
-            Ok(Some(_)) => {
-                return CloudBackupOnboardingCompletionReadiness::PendingEnableRecovery;
-            }
-            Ok(None) => {}
-            Err(error) => {
-                error!("Failed to inspect pending Cloud Backup enable journal: {error}");
-                return CloudBackupOnboardingCompletionReadiness::PendingEnableRecovery;
-            }
-        }
-
-        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
-        match cspp.master_key_promotion_status() {
-            Ok(MasterKeyPromotionStatus::None) => {}
-            Ok(_) => return CloudBackupOnboardingCompletionReadiness::PendingEnableRecovery,
-            Err(error) => {
-                error!("Failed to inspect staged Cloud Backup enable material: {error}");
-                return CloudBackupOnboardingCompletionReadiness::PendingEnableRecovery;
-            }
+        if Self::pending_enable_evidence_remains() {
+            return CloudBackupOnboardingCompletionReadiness::PendingEnableRecovery;
         }
 
         match self.state().lifecycle {

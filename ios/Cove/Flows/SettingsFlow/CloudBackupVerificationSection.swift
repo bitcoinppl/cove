@@ -144,10 +144,11 @@ private struct CloudBackupVerificationStartSection: View {
         Section {
             Text("Run verification to confirm your cloud backup can be decrypted and restored")
                 .font(.caption)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
 
             Button(action: onVerify) {
-                Label("Verify Now", systemImage: "checkmark.shield")
+                ProbedLabel("Verify Now", systemImage: "checkmark.shield")
             }
             .disabled(isBusy)
         }
@@ -162,7 +163,7 @@ private struct CloudBackupVerificationCancelledSection: View {
 
     var body: some View {
         Section {
-            Label(
+            ProbedLabel(
                 "Cloud Backup Not Verified",
                 systemImage: "exclamationmark.shield.fill"
             )
@@ -172,10 +173,11 @@ private struct CloudBackupVerificationCancelledSection: View {
                 "If your passkey was deleted, add a new one. Otherwise, verify again with your current passkey."
             )
             .font(.caption)
+            .uiTestTruncationProbe()
             .foregroundStyle(.secondary)
 
             Button(action: onVerify) {
-                Label("Verify Now", systemImage: "checkmark.shield")
+                ProbedLabel("Verify Now", systemImage: "checkmark.shield")
             }
             .disabled(isBusy)
 
@@ -220,13 +222,14 @@ private struct CloudBackupVerifiedSection: View {
 
     var body: some View {
         Section {
-            Label("Backup verified", systemImage: "checkmark.shield.fill")
+            ProbedLabel("Backup verified", systemImage: "checkmark.shield.fill")
                 .foregroundStyle(Color.statusSuccess)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
 
             if let summary {
                 Text(summary)
                     .font(.caption)
+                    .uiTestTruncationProbe()
                     .foregroundStyle(.secondary)
             }
         }
@@ -253,12 +256,13 @@ private struct CloudBackupNeedsAttentionSection: View {
 
     var body: some View {
         Section {
-            Label("Backup needs attention", systemImage: "exclamationmark.shield.fill")
+            ProbedLabel("Backup needs attention", systemImage: "exclamationmark.shield.fill")
                 .foregroundStyle(Color.statusWarning)
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
 
             Text("The backup key is valid. \(report.walletsVerified) wallet backup(s) passed verification.")
                 .font(.caption)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
 
             CloudBackupWalletIssueRows(
@@ -311,7 +315,7 @@ private struct CloudBackupWalletIssueRows: View {
         )
 
         if case let .failed(error) = deletionState {
-            Label(error, systemImage: "xmark.circle.fill")
+            ProbedLabel(error, systemImage: "xmark.circle.fill")
                 .foregroundStyle(Color.statusError)
                 .font(.caption)
         }
@@ -324,7 +328,7 @@ private struct CloudBackupWalletIssueLabel: View {
 
     var body: some View {
         if count > 0 {
-            Label("\(count) \(message)", systemImage: "exclamationmark.triangle.fill")
+            ProbedLabel("\(count) \(message)", systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(Color.statusError)
                 .font(.caption)
         }
@@ -347,6 +351,7 @@ private struct CloudBackupUndecryptableWalletIssue: View {
                     }
 
                     Text("\(count) wallet backup(s) could not be decrypted with this backup key")
+                        .uiTestTruncationProbe()
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.caption)
@@ -424,13 +429,13 @@ private struct CloudBackupRetryFailureContent: View {
     let onRepairPasskey: () -> Void
 
     var body: some View {
-        Label(message, systemImage: "exclamationmark.triangle.fill")
+        ProbedLabel(message, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(Color.statusWarning)
 
         Button {
             onRetry(retryAction)
         } label: {
-            Label("Try Again", systemImage: "arrow.clockwise")
+            ProbedLabel("Try Again", systemImage: "arrow.clockwise")
         }
         .disabled(isBusy)
 
@@ -451,11 +456,12 @@ private struct CloudBackupRecreateManifestFailureContent: View {
     let confirmationIsPresented: Binding<Bool>
 
     var body: some View {
-        Label(message, systemImage: "exclamationmark.triangle.fill")
+        ProbedLabel(message, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(Color.statusError)
 
         Text(warning)
             .font(.caption)
+            .uiTestTruncationProbe()
             .foregroundStyle(.secondary)
 
         CloudBackupDestructiveActionButton(
@@ -480,11 +486,12 @@ private struct CloudBackupReinitializeFailureContent: View {
     let confirmationIsPresented: Binding<Bool>
 
     var body: some View {
-        Label(message, systemImage: "exclamationmark.triangle.fill")
+        ProbedLabel(message, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(Color.statusError)
 
         Text(warning)
             .font(.caption)
+            .uiTestTruncationProbe()
             .foregroundStyle(.secondary)
 
         CloudBackupDestructiveActionButton(
@@ -504,11 +511,12 @@ private struct CloudBackupUnsupportedVersionFailureContent: View {
     let message: String
 
     var body: some View {
-        Label(message, systemImage: "exclamationmark.triangle.fill")
+        ProbedLabel(message, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(Color.statusWarning)
 
         Text("Please update the app to the latest version")
             .font(.caption)
+            .uiTestTruncationProbe()
             .foregroundStyle(.secondary)
     }
 }
@@ -534,9 +542,10 @@ private struct CloudBackupDestructiveActionButton: View {
                     ProgressView()
                         .padding(.trailing, 4)
                     Text(progressTitle)
+                        .uiTestTruncationProbe()
                 }
             } else {
-                Label(title, systemImage: systemImage)
+                ProbedLabel(title, systemImage: systemImage)
             }
         }
         .disabled(isBusy || !isDetailInventoryComplete)
@@ -549,7 +558,7 @@ private struct CloudBackupPasskeyRepairErrorSection: View {
     var body: some View {
         if let error {
             Section {
-                Label(error, systemImage: "xmark.circle.fill")
+                ProbedLabel(error, systemImage: "xmark.circle.fill")
                     .foregroundStyle(Color.statusError)
                     .font(.caption)
             }
@@ -560,11 +569,12 @@ private struct CloudBackupPasskeyRepairErrorSection: View {
 private struct CloudBackupUploadConfirmationPendingSection: View {
     var body: some View {
         Section {
-            Label("Cloud Backup enabled", systemImage: "icloud.and.arrow.up.fill")
+            ProbedLabel("Cloud Backup enabled", systemImage: "icloud.and.arrow.up.fill")
                 .foregroundStyle(Color.statusSuccess)
 
             Text("Cove is still confirming that your encrypted backup is visible in iCloud. You can leave this screen while confirmation continues in the background.")
                 .font(.caption)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
         }
     }
@@ -576,15 +586,16 @@ private struct CloudBackupPasskeyConfirmedSection: View {
 
     var body: some View {
         Section {
-            Label("Passkey verified", systemImage: "checkmark.shield.fill")
+            ProbedLabel("Passkey verified", systemImage: "checkmark.shield.fill")
                 .foregroundStyle(Color.statusSuccess)
 
             Text("Your stored passkey is valid. Run a full verification to confirm wallet backups can be decrypted.")
                 .font(.caption)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
 
             Button(action: onVerify) {
-                Label("Run Full Verification", systemImage: "checkmark.shield")
+                ProbedLabel("Run Full Verification", systemImage: "checkmark.shield")
             }
             .disabled(isBusy)
         }
@@ -608,7 +619,7 @@ private struct CloudBackupVerificationActionButtons: View {
             }
 
             Button(action: onVerify) {
-                Label("Verify Again", systemImage: "checkmark.shield")
+                ProbedLabel("Verify Again", systemImage: "checkmark.shield")
             }
             .disabled(isBusy)
         }
@@ -626,9 +637,11 @@ private struct CloudBackupVerificationSyncButton: View {
                     ProgressView()
                         .padding(.trailing, 8)
                     Text("Syncing...")
+                        .uiTestTruncationProbe()
                 } else {
                     Image(systemName: "arrow.triangle.2.circlepath")
                     Text("Sync Now")
+                        .uiTestTruncationProbe()
                 }
             }
         }
@@ -637,6 +650,7 @@ private struct CloudBackupVerificationSyncButton: View {
         if case let .failed(error) = syncState {
             Text(error)
                 .font(.caption)
+                .uiTestTruncationProbe()
                 .foregroundStyle(Color.statusError)
         }
     }
@@ -654,9 +668,10 @@ private struct CloudBackupRepairPasskeyButton: View {
                     ProgressView()
                         .padding(.trailing, 4)
                     Text("Creating Passkey...")
+                        .uiTestTruncationProbe()
                 }
             } else {
-                Label("Add New Passkey", systemImage: "person.badge.key")
+                ProbedLabel("Add New Passkey", systemImage: "person.badge.key")
             }
         }
         .disabled(isBusy)

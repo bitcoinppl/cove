@@ -2645,6 +2645,60 @@ async fn pending_enable_restart_projects_privacy_safe_recovery_lifecycle() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn pending_enable_recovery_survives_platform_persisted_state_sync() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.resume_pending_enable_after_restart().await.unwrap();
+
+    // both platforms sync persisted state after bootstrap, which can land after the projection
+    manager.sync_persisted_state();
+
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::PendingEnableRecovery(CloudBackupPendingEnableRecovery {
+            support_code,
+            cleanup: CloudBackupPendingEnableCleanupState::Available,
+        }) if support_code == "CB-PE-001"
+    ));
+    assert_eq!(manager.state().settings_row_status, CloudBackupSettingsRowStatus::RecoveryRequired);
+
+    supervisor.confirm_pending_enable_cleanup().await.unwrap();
+
+    assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
+    assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Disabled));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn pending_enable_recovery_survives_persisted_state_reconcile() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    cspp.save_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
+    cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.resume_pending_enable_after_restart().await.unwrap();
+
+    // a configured backup's verifier persists its result while the orphaned stage remains
+    manager.reconcile_persisted_state(&persisted_enabled_cloud_backup_state(Some(0)));
+
+    assert!(matches!(
+        manager.state().lifecycle,
+        CloudBackupLifecycle::PendingEnableRecovery(_)
+    ));
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn no_journal_staged_cleanup_preserves_active_key_and_metadata_without_remote_delete() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();

@@ -14,6 +14,20 @@ use crate::manager::cloud_backup_manager::{
 use super::cloud_only_inventory::{CloudOnlyFetch, CloudOnlyListingUpdate};
 use super::{CloudBackupLifecycle, CloudBackupPendingEnableRecovery, CloudBackupRestoreFlow};
 
+/// What a status reconcile knew of an incomplete enable's local evidence, a pending enable
+/// journal or staged master key material
+///
+/// Restart recovery is projected from that evidence, which the persisted status can't see, so a
+/// persisted status replaces the recovery only once the evidence is known to be gone
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PendingEnableEvidence {
+    /// The lifecycle showed no recovery when the status was read, so nothing was checked
+    NotChecked,
+    /// The evidence remains, or the keychain couldn't be read
+    Remains,
+    Gone,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CloudBackupAcceptedEnablePrompt {
     Enable(CloudBackupEnableContext),
@@ -103,7 +117,10 @@ pub(crate) enum CloudBackupStateReducerEvent {
     ExclusiveOperationStarted(CloudBackupExclusiveOperationClaim),
     ExclusiveOperationFinished(CloudBackupExclusiveOperationClaim),
     EnableContextStarted(CloudBackupEnableContext),
-    RuntimeStatusReconciled(CloudBackupStatus),
+    RuntimeStatusReconciled {
+        status: CloudBackupStatus,
+        pending_enable_evidence: PendingEnableEvidence,
+    },
     PendingEnableRecoveryProjected(CloudBackupPendingEnableRecovery),
     ExistingBackupFoundPromptSet {
         context: CloudBackupEnableContext,

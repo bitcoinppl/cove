@@ -12,6 +12,7 @@ struct WalletSections: View {
             Section(header: WalletSectionHeader(key: group.key)) {
                 ForEach(group.items, id: \.recordId) { item in
                     WalletItemRow(item: item)
+                        .uiTestTruncationReport("cloudBackup.wallet.\(item.recordId).truncation")
                 }
             }
         }
@@ -23,10 +24,13 @@ private struct WalletSectionHeader: View {
 
     var body: some View {
         Text(key.title)
+            .uiTestTruncationProbe()
     }
 }
 
 struct WalletItemRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let item: CloudBackupWalletItem
     var accessibilityAction: String?
 
@@ -37,17 +41,23 @@ struct WalletItemRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(item.name)
-                    .fontWeight(.medium)
-                Spacer()
+            // at accessibility sizes the badge beside the name broke words such as Confirmed
+            // across lines, so it goes under the name instead
+            if dynamicTypeSize.isAccessibilitySize {
+                name
                 StatusBadge(status: item.syncStatus)
+            } else {
+                HStack {
+                    name
+                    Spacer()
+                    StatusBadge(status: item.syncStatus)
+                }
             }
 
             WalletItemMetadata(item: item)
 
             if let failure = item.restoreFailure {
-                Label(failure.message, systemImage: "exclamationmark.circle")
+                ProbedLabel(failure.message, systemImage: "exclamationmark.circle")
                     .font(.caption)
                     .foregroundStyle(Color.statusError)
                     .fixedSize(horizontal: false, vertical: true)
@@ -61,6 +71,12 @@ struct WalletItemRow: View {
         ))
         .accessibilityIdentifier("cloudBackup.wallet.\(item.recordId)")
     }
+
+    private var name: some View {
+        Text(item.name)
+            .fontWeight(.medium)
+            .uiTestTruncationProbe()
+    }
 }
 
 private struct WalletItemMetadata: View {
@@ -72,11 +88,30 @@ private struct WalletItemMetadata: View {
     }
 }
 
+/// Metadata items side by side, or one under another at accessibility sizes, where side by side
+/// each item wrapped into a column a word or two wide
+private struct WalletMetadataLayout<Content: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 12))
+
+        layout {
+            content
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+}
+
 private struct WalletIdentityMetadata: View {
     let item: CloudBackupWalletItem
 
     var body: some View {
-        HStack(spacing: 12) {
+        WalletMetadataLayout {
             if let network = item.network {
                 IconLabel("globe", network.displayName())
             }
@@ -87,8 +122,6 @@ private struct WalletIdentityMetadata: View {
                 IconLabel("touchid", fingerprint)
             }
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
     }
 }
 
@@ -96,7 +129,7 @@ private struct WalletBackupMetadata: View {
     let item: CloudBackupWalletItem
 
     var body: some View {
-        HStack(spacing: 12) {
+        WalletMetadataLayout {
             if let labelCount = item.labelCount {
                 IconLabel("tag", "\(labelCount) labels")
             }
@@ -104,8 +137,6 @@ private struct WalletBackupMetadata: View {
                 IconLabel("clock", Date.formattedTimestamp(backupUpdatedAt))
             }
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
     }
 }
 
@@ -174,6 +205,7 @@ private struct StatusBadge: View {
         Text(status.accessibilityLabel)
             .font(.caption)
             .fontWeight(.medium)
+            .uiTestTruncationProbe()
             .foregroundColor(color)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
