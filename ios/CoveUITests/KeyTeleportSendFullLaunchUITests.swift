@@ -44,7 +44,7 @@ final class KeyTeleportSendFullLaunchUITests: XCTestCase {
         try signer.requireHealthy()
         app.launch(expecting: app.staticTexts["Welcome to Cove"])
         app.importTestMnemonic()
-        enablePin()
+        app.enablePin(Self.pin)
         openSecretWords()
         startKeyTeleportSend()
 
@@ -58,32 +58,13 @@ final class KeyTeleportSendFullLaunchUITests: XCTestCase {
 
     // MARK: - Steps
 
-    private func enablePin() {
-        app.tapButton(named: "app.sidebar.open")
-        app.tapButton(named: "Settings")
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
-
-        // the row is a switch wrapping the control itself, which is what takes the tap
-        let pinToggle = layout.assertReachable(app.switches.matching(identifier: "Enable PIN"), "settings: Enable PIN", needsHit: true)
-        pinToggle.switches.firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["Enter New PIN"].waitForExistence(timeout: 10))
-        enterPin()
-        XCTAssertTrue(app.staticTexts["Confirm New PIN"].waitForExistence(timeout: 5))
-        enterPin()
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
-        XCTAssertEqual(pinToggle.value as? String, "1", "the PIN was not saved")
-
-        app.goBack()
-        XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 10))
-    }
-
     /// Opens the wallet's recovery words, entering the PIN they ask for
     private func openSecretWords() {
         app.tapButton(named: "selectedWallet.more")
         app.tapButton(named: "Wallet Settings")
         layout.reachAndTap(button("View Secret Words"), "wallet settings: View Secret Words")
         app.tapButton(named: "Show Me")
-        verifyIdentity()
+        app.verifyIdentity(Self.pin)
 
         XCTAssertTrue(app.buttons["Secret words options"].waitForExistence(timeout: 10), "the recovery words never showed")
     }
@@ -96,28 +77,12 @@ final class KeyTeleportSendFullLaunchUITests: XCTestCase {
         let confirm = app.buttons["Continue"]
         XCTAssertTrue(confirm.waitForExistence(timeout: 5), "KeyTeleport never asked to confirm")
         confirm.tap()
-        verifyIdentity()
+        app.verifyIdentity(Self.pin)
 
         XCTAssertTrue(app.staticTexts["Scan Receiver Request"].waitForExistence(timeout: 15), "the send screen never showed")
     }
 
     // MARK: - Helpers
-
-    /// Enters the PIN on the prompt a secret asks for
-    private func verifyIdentity() {
-        let prompt = app.staticTexts["Enter Cove PIN"]
-        XCTAssertTrue(prompt.waitForExistence(timeout: 10), "the PIN prompt never showed")
-        enterPin()
-        XCTAssertTrue(prompt.waitForNonExistence(timeout: 10), "the PIN was not accepted")
-    }
-
-    private func enterPin() {
-        for digit in Self.pin {
-            let key = app.buttons[String(digit)]
-            XCTAssertTrue(key.waitForExistence(timeout: 5), "number pad key \(digit) is missing")
-            key.tap()
-        }
-    }
 
     private func button(_ label: String) -> XCUIElementQuery {
         app.buttons.matching(NSPredicate(format: "label == %@", label))

@@ -25,6 +25,9 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
     /// The master fingerprint of `sentXprv`, from BIP32 test vector 1
     private static let sentXprvFingerprint = "3442193E"
 
+    /// Export Private Key needs an app lock, so the xprv test sets this PIN
+    private static let pin = "135791"
+
     /// A note and a password record in the shape COLDCARD's Secure Notes send them
     private static let sentNotes: [[String: String]] = [
         ["title": "Quick Note", "misc": "Attack at dawn.", "group": "Personal"],
@@ -81,6 +84,12 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         assertWordsConcealed()
         layout.reachAndTap(button("Import Wallet"), "mnemonic review: Import Wallet")
         try openImportedWallet(fingerprint: Self.sentWordsFingerprint)
+
+        // the words the wallet saved, read back from Wallet Settings
+        layout.reachAndTap(button("View Secret Words"), "wallet settings: View Secret Words")
+        app.tapButton(named: "Show Me")
+        XCTAssertTrue(app.buttons["Secret words options"].waitForExistence(timeout: 10), "the saved words never showed")
+        assertWordsShown(numbered: { "\($0)." })
     }
 
     /// The key needs Reveal, Hide conceals it again, Copy copies it, and Import opens the new wallet
@@ -109,6 +118,18 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
 
         layout.reachAndTap(button("Import Wallet"), "xprv review: Import Wallet")
         try openImportedWallet(fingerprint: Self.sentXprvFingerprint)
+
+        // the key the wallet saved, read back through Export Private Key, which needs an app lock
+        app.goBack()
+        XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 10))
+        app.enablePin(Self.pin)
+        app.tapButton(named: "selectedWallet.more")
+        app.tapButton(named: "Wallet Settings")
+        layout.reachAndTap(button("Export Private Key"), "wallet settings: Export Private Key")
+        app.tapButton(named: "Reveal and Copy")
+        app.verifyIdentity(Self.pin)
+        XCTAssertTrue(app.navigationBars["Private Key"].waitForExistence(timeout: 10), "the saved key never showed")
+        XCTAssertTrue(app.staticTexts[Self.sentXprv].exists, "the imported wallet saved a key other than the one sent")
     }
 
     // MARK: - Scanning
@@ -389,11 +410,12 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         }
     }
 
-    /// Each word must show beside its number, so a review that swaps two words, or shows one
-    /// repeated word in place of another, fails
-    private func assertWordsShown() {
+    /// Each sent word must show beside its number, so a screen that swaps two words, or shows one
+    /// repeated word in place of another, fails. The review labels the numbers "1" and the saved
+    /// words screen "1."
+    private func assertWordsShown(numbered label: (Int) -> String = { "\($0)" }) {
         for (index, word) in Self.sentWords.split(separator: " ").map(String.init).enumerated() {
-            let number = app.staticTexts.matching(NSPredicate(format: "label == %@", "\(index + 1)"))
+            let number = app.staticTexts.matching(NSPredicate(format: "label == %@", label(index + 1)))
             let words = app.staticTexts.matching(NSPredicate(format: "label == %@", word))
             XCTAssertTrue(words.firstMatch.waitForExistence(timeout: 5), "the revealed words should include '\(word)'")
 

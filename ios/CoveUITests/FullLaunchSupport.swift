@@ -216,6 +216,45 @@ extension XCUIApplication {
         XCTAssertTrue(checkingHistory.waitForNonExistence(timeout: timeout), "the initial scan didn't finish")
     }
 
+    // MARK: - App lock
+
+    /// Turns on the app PIN from Settings, then returns to the selected wallet
+    func enablePin(_ pin: String) {
+        tapButton(named: "app.sidebar.open")
+        tapButton(named: "Settings")
+        XCTAssertTrue(navigationBars["Settings"].waitForExistence(timeout: 10))
+
+        // the row is a switch wrapping the control itself, which is what takes the tap
+        let pinToggle = ScreenReachability(app: self)
+            .assertReachable(switches.matching(identifier: "Enable PIN"), "settings: Enable PIN", needsHit: true)
+        pinToggle.switches.firstMatch.tap()
+        XCTAssertTrue(staticTexts["Enter New PIN"].waitForExistence(timeout: 10))
+        enterPin(pin)
+        XCTAssertTrue(staticTexts["Confirm New PIN"].waitForExistence(timeout: 5))
+        enterPin(pin)
+        XCTAssertTrue(navigationBars["Settings"].waitForExistence(timeout: 10))
+        XCTAssertEqual(pinToggle.value as? String, "1", "the PIN was not saved")
+
+        goBack()
+        XCTAssertTrue(element("selectedWallet.balance").waitForExistence(timeout: 10))
+    }
+
+    /// Enters the PIN on the prompt a secret asks for
+    func verifyIdentity(_ pin: String) {
+        let prompt = staticTexts["Enter Cove PIN"]
+        XCTAssertTrue(prompt.waitForExistence(timeout: 10), "the PIN prompt never showed")
+        enterPin(pin)
+        XCTAssertTrue(prompt.waitForNonExistence(timeout: 10), "the PIN was not accepted")
+    }
+
+    func enterPin(_ pin: String) {
+        for digit in pin {
+            let key = buttons[String(digit)]
+            XCTAssertTrue(key.waitForExistence(timeout: 5), "number pad key \(digit) is missing")
+            key.tap()
+        }
+    }
+
     // MARK: - Queries
 
     func element(_ identifier: String) -> XCUIElement {
