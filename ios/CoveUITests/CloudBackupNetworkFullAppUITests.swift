@@ -187,10 +187,17 @@ final class CloudBackupNetworkFullAppUITests: XCTestCase {
         let before = control.state
         let listed = control.appState?.cloudOnly ?? []
         XCTAssertFalse(listed.isEmpty, "no cloud-only row was listed \(phase)")
+
+        // the form builds only rows near the screen, so a shown Restore All is scrolled to first
+        let restoreAll = control.appState?.restoreAll ?? ""
         XCTAssertFalse(
-            robot.button(startingWith: "Restore All").exists && robot.button(startingWith: "Restore All").isEnabled,
-            "Restore All was available \(phase)"
+            restoreAll.hasPrefix("startAvailable") || restoreAll.hasPrefix("retryAvailable"),
+            "Restore All was available \(phase): \(restoreAll)"
         )
+
+        if restoreAll.hasPrefix("startDisabled") {
+            assertRestoreAllUnavailable(phase: phase)
+        }
 
         for recordId in listed {
             assertRowOpensNoActions(recordId, phase: phase)
@@ -228,11 +235,15 @@ final class CloudBackupNetworkFullAppUITests: XCTestCase {
     }
 
     /// Restore All shows its count as a disabled label, never as a button
-    private func assertRestoreAllUnavailable(file: StaticString = #filePath, line: UInt = #line) {
+    private func assertRestoreAllUnavailable(
+        phase: String = "offline",
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
         let label = robot.staticText(containing: "Restore All (2)")
         robot.scrollToHittable(label)
         let button = robot.button(startingWith: "Restore All")
-        XCTAssertFalse(button.exists && button.isEnabled, "Restore All is available offline", file: file, line: line)
+        XCTAssertFalse(button.exists && button.isEnabled, "Restore All is available \(phase)", file: file, line: line)
     }
 
     /// The row is disabled, and tapping it opens no Restore or Delete action
@@ -254,6 +265,7 @@ final class CloudBackupNetworkFullAppUITests: XCTestCase {
             file: file,
             line: line
         )
+
         XCTAssertFalse(app.buttons["Delete from iCloud"].exists, "\(recordId) opened Delete \(phase)", file: file, line: line)
     }
 
