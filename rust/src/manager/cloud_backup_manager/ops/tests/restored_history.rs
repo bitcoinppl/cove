@@ -433,7 +433,8 @@ async fn open_detail_with_cloud_only(manager: &RustCloudBackupManager, record_id
         let state = manager.state.read();
         let CloudOnlyState::Loaded { wallets, .. } = state.cloud_only() else { return false };
 
-        manager.detail_inventory_is_ready()
+        // read through the held guard, since a second read can wait behind a queued writer forever
+        state.detail_inventory_is_ready()
             && record_ids.iter().all(|record_id| {
                 wallets.iter().any(|wallet| {
                     wallet.record_id == *record_id
