@@ -260,7 +260,11 @@ impl InternalState {
             && matches!(self.flow, FlowState::CloudBackup(_))
         {
             self.cloud_backup_enable_intent = CloudBackupEnableIntent::WaitingForDiscovery;
-            return TransitionCommand::None;
+
+            // onboarding restored from saved progress, such as after the app was killed during an
+            // enable, never started discovery, so the enable starts it rather than waiting on a
+            // check that would never finish
+            return self.request_cloud_check();
         }
 
         // ids are only compared for equality, so allocating one per action is harmless
@@ -1391,6 +1395,35 @@ mod tests {
             }
         );
         assert_eq!(state.cloud_check, CloudCheckState::Idle);
+    }
+
+    #[test]
+    fn enable_from_restored_progress_starts_the_discovery_it_waits_for() {
+        let mut state =
+            InternalState::new(FlowState::CloudBackup(CloudBackupFlow::SoftwareImport {
+                wallet_id: WalletId::preview_new(),
+            }));
+
+        assert_eq!(
+            apply_action(&mut state, OnboardingAction::BeginCloudBackupEnable).0,
+            TransitionCommand::StartCloudCheck
+        );
+        assert_eq!(state.cloud_check, CloudCheckState::InFlight);
+
+        let (command, _) = apply_event(
+            &mut state,
+            InternalEvent::CloudCheckFinished {
+                outcome: CloudCheckOutcome::NoBackupConfirmed,
+                connected: true,
+            },
+        );
+
+        assert_eq!(
+            command,
+            TransitionCommand::BeginCloudBackupEnable {
+                discovery: CloudRestoreDiscovery::NoBackupFound,
+            }
+        );
     }
 
     #[test]

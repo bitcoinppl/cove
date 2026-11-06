@@ -127,6 +127,14 @@ enum Commands {
     #[command(name = "android-ui-restore-all-relaunch")]
     AndroidUiRestoreAllRelaunch,
 
+    /// Run the staged Android scenarios that kill a fresh Cloud Backup enable partway
+    #[command(name = "android-ui-enable-interruption")]
+    AndroidUiEnableInterruption {
+        /// Run only this scenario
+        #[arg(long, value_enum)]
+        only: Option<android::EnableInterruption>,
+    },
+
     /// Start a headless emulator like the UI tests workflow's, creating its AVD first if needed, and wait for it to boot
     #[command(name = "android-ci-emulator")]
     AndroidCiEmulator {
@@ -450,6 +458,10 @@ fn run(cli: Cli) -> Result<()> {
         Commands::AndroidUiDurableRelaunch => android::run_durable_relaunch_ui_test(),
 
         Commands::AndroidUiRestoreAllRelaunch => android::run_restore_all_relaunch_ui_test(),
+
+        Commands::AndroidUiEnableInterruption { only } => {
+            android::run_enable_interruption_ui_test(only)
+        }
 
         Commands::AndroidCiEmulator { port } => android_ci_emulator::start(port),
 

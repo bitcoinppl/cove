@@ -17,7 +17,7 @@ struct CoveCloudBackupUITestHostApp: App {
         // its script and keeps the keychain in that directory, so the app can be killed and relaunched
         if let controller = CloudBackupUITestController.fromEnvironment() {
             return CoveApplicationDependencies(
-                keychain: ScriptedKeychainAccess(storeURL: controller.keychainURL),
+                keychain: ScriptedKeychainAccess(storeURL: controller.keychainURL, controller: controller),
                 device: DeviceAccesor(),
                 connectivity: ControlledConnectivityAccess(controller: controller),
                 passkey: ControlledPasskeyProvider(controller: controller),

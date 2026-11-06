@@ -21,6 +21,7 @@ final class ControlledPasskeyProvider: PasskeyProvider, @unchecked Sendable {
         user _: PasskeyRegistrationUser
     ) throws -> PasskeyRegistrationResult {
         let index = controller.record(.passkeyCreate)
+        controller.holdIfScriptedBlocking(at: .passkeyCreate, matchingCallIndex: index)
         try Self.throwIfFailed(controller.script().createResults, index: index, operation: .registration)
 
         return PasskeyRegistrationResult(
@@ -38,6 +39,7 @@ final class ControlledPasskeyProvider: PasskeyProvider, @unchecked Sendable {
     ) throws -> Data {
         let index = controller.record(.passkeyAuthenticate)
         controller.recordAuthenticatedCredential(requestedCredentialId)
+        controller.holdIfScriptedBlocking(at: .passkeyAuthenticate, matchingCallIndex: index)
         try Self.throwIfFailed(
             controller.script().authenticateResults,
             index: index,
