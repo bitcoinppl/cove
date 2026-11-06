@@ -228,8 +228,15 @@ final class CloudBackupNetworkFullAppUITests: XCTestCase {
         XCTAssertTrue(restore.isEnabled, "Restore is disabled on a confirmed row")
         XCTAssertTrue(app.buttons["Delete from iCloud"].isEnabled, "Delete is disabled on a confirmed row")
 
-        app.buttons["Cancel"].tap()
-        XCTAssertTrue(restore.waitForNonExistence(timeout: 10))
+        // an iPhone action sheet can leave out its cancel button, and a tap outside it cancels
+        let cancel = app.buttons["Cancel"]
+        if cancel.exists {
+            cancel.tap()
+        } else {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap()
+        }
+
+        XCTAssertTrue(restore.waitForNonExistence(timeout: 10), "the action sheet never closed")
         XCTAssertEqual(walletDownloads(control.state), walletDownloads(before), "cancelling downloaded a backup")
         XCTAssertEqual(control.appState?.operation, "idle", "cancelling started a cloud-only operation")
     }
