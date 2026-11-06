@@ -335,7 +335,14 @@ extension ScreenReachability {
         XCTAssertTrue(app.waitForNoVisibleQrCode(), "\(name): showing the code must make the QR code unreadable again")
         cover(qrHint, name).assertConceals(hint: qrHint, "\(name): the QR code while the code shows")
         let shownCode = code.label
-        XCTAssertTrue(code.waitForVisibleText(containing: shownCode), "\(name): Vision never read the code once shown")
+
+        // Vision misreads a character or two of some codes on every try, so this allows the two
+        // misreads `assertConceals` allows the hint: a reading that close still shows Vision
+        // would have read the code had the cover leaked it
+        XCTAssertTrue(
+            code.waitForVisibleText(containing: shownCode, misreads: 2),
+            "\(name): Vision never read the code '\(shownCode)' once shown, it read '\(code.visibleTextWithoutSpaces)'"
+        )
 
         // and back, so revealing the QR code again conceals the code it replaces
         cover(qrHint, name).tap()
