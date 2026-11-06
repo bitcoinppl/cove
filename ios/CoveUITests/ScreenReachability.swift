@@ -127,6 +127,33 @@ struct ScreenReachability {
         }
     }
 
+    /// Fails when the text overlaps any other text on screen labeled one of `labels`, for a text
+    /// checked on its own rather than with its whole screen, such as one word of a grid built lazily
+    ///
+    /// A text its parent clips at full height still reports that it fits, but its frame runs into
+    /// whatever follows. The text itself is told apart from the others by its label and frame
+    func assertNoOverlap(_ element: XCUIElement, _ name: String, withTextsLabeled labels: Set<String>) {
+        guard let snapshot = try? app.snapshot() else {
+            XCTFail("\(name): the app's accessibility tree could not be read")
+            return
+        }
+
+        let frame = element.frame
+        let label = element.label
+        for other in textFrames(in: snapshot, labeled: labels) where other.label != label || other.frame != frame {
+            let shared = frame.intersection(other.frame)
+            XCTAssertFalse(
+                shared.width > Self.overlapTolerance && shared.height > Self.overlapTolerance,
+                "\(name) at \(frame) overlaps '\(other.label)' at \(other.frame)"
+            )
+        }
+    }
+
+    private func textFrames(in snapshot: XCUIElementSnapshot, labeled labels: Set<String>) -> [(label: String, frame: CGRect)] {
+        let own = snapshot.elementType == .staticText && labels.contains(snapshot.label) ? [(snapshot.label, snapshot.frame)] : []
+        return own + snapshot.children.flatMap { textFrames(in: $0, labeled: labels) }
+    }
+
     /// Fails when any probed text or button label in the app reports that it draws truncated or
     /// past a side of the window, so a text the caller didn't list is checked too
     ///

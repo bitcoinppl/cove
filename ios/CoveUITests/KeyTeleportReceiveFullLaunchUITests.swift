@@ -385,7 +385,9 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
     /// Each word fits on screen beside its number, found by position since the test words repeat,
     /// so a clipped second 'legal' can't pass on the first
     private func assertNumberedWordsFit() {
-        for (index, word) in Self.sentWords.split(separator: " ").map(String.init).enumerated() {
+        let words = Self.sentWords.split(separator: " ").map(String.init)
+        let gridLabels = Set(words + words.indices.map { "\($0 + 1)" })
+        for (index, word) in words.enumerated() {
             let name = "revealed words: word \(index + 1)"
             let numbers = app.staticTexts.matching(NSPredicate(format: "label == %@", "\(index + 1)"))
             layout.scrollDown(untilExists: numbers)
@@ -419,6 +421,10 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
             let visible = layout.visibleArea(of: shown)
             XCTAssertTrue(visible.contains(shown.frame), "\(name), '\(word)', runs out of view at \(shown.frame) in \(visible)")
             layout.assertDrawsWhole(shown, name)
+
+            // a word its chip clips at full height still reports that it fits, but runs into the
+            // next row, so no other word or number may overlap it
+            layout.assertNoOverlap(shown, name, withTextsLabeled: gridLabels)
             for number in numbers.allElementsBoundByIndex where isBeside(shown.frame, number.frame) {
                 layout.assertDrawsWhole(number, "\(name): its number")
             }
