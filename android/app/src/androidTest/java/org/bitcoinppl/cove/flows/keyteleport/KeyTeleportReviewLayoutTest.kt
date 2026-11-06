@@ -97,7 +97,7 @@ class KeyTeleportReviewLayoutTest {
         val reviewTexts = assertTextsFit("mnemonic review", "Recovery words received", "Cove found a 12-word wallet. Review it below or import it directly.")
         val reveal = assertControlFits("mnemonic review: reveal", hasContentDescription(RECOVERY_WORDS_HINT) and hasClickAction())
         val reviewActions = assertActionsFit("mnemonic review", "Import Wallet", "Finish Without Importing")
-        assertNoOverlap("mnemonic review", reviewTexts + reveal + reviewActions)
+        assertNoOverlap(reviewTexts + reveal + reviewActions)
         assertEveryTextDrawsWhole("mnemonic review")
 
         compose.onNodeWithContentDescription(RECOVERY_WORDS_HINT).performClick()
@@ -118,11 +118,11 @@ class KeyTeleportReviewLayoutTest {
                 assertTextFits(text, name)
 
                 // the chip merges its number and word, so the screen's check sees only the chip
-                assertNoOverlap("revealed words", listOf(CheckedNode("number $position", number), CheckedNode("word $position", text)))
+                assertNoOverlap(listOf(CheckedNode("revealed words: number $position", number), CheckedNode(name, text)))
                 CheckedNode(name, chip)
             }
 
-        assertNoOverlap("revealed words", reviewTexts + chips + reviewActions)
+        assertNoOverlap(reviewTexts + chips + reviewActions)
         assertEveryTextDrawsWhole("revealed words")
     }
 
@@ -141,7 +141,7 @@ class KeyTeleportReviewLayoutTest {
 
         val reveal = assertActionsFit("xprv review", "Reveal")
         val choices = assertActionsFit("xprv review", "Import Wallet", "Finish Without Importing")
-        assertNoOverlap("xprv review", reviewTexts + reveal + choices)
+        assertNoOverlap(reviewTexts + reveal + choices)
         assertEveryTextDrawsWhole("xprv review")
 
         compose.onNodeWithText("Reveal").performClick()
@@ -150,7 +150,7 @@ class KeyTeleportReviewLayoutTest {
         val revealedActions = assertActionsFit("revealed xprv", "Copy", "Hide")
 
         // the review's own texts and choices stay on screen under the revealed key
-        assertNoOverlap("revealed xprv", reviewTexts + revealedTexts + revealedActions + choices)
+        assertNoOverlap(reviewTexts + revealedTexts + revealedActions + choices)
         assertEveryTextDrawsWhole("revealed xprv")
     }
 
@@ -182,7 +182,7 @@ class KeyTeleportReviewLayoutTest {
             )
 
         val actions = assertActionsFit("message review", "Done")
-        assertNoOverlap("message review", texts + actions)
+        assertNoOverlap(texts + actions)
         assertEveryTextDrawsWhole("message review")
     }
 
@@ -246,10 +246,7 @@ class KeyTeleportReviewLayoutTest {
      *
      * Bounds are read unclipped and all at one scroll position, since scrolling moves them all
      */
-    private fun assertNoOverlap(
-        screen: String,
-        nodes: List<CheckedNode>,
-    ) {
+    private fun assertNoOverlap(nodes: List<CheckedNode>) {
         val bounds =
             nodes.map { (name, node) ->
                 val semantics = node.fetchSemanticsNode("$name is missing")
@@ -260,7 +257,7 @@ class KeyTeleportReviewLayoutTest {
             bounds.drop(index + 1).forEach { (otherName, other) ->
                 val shared = rect.intersect(other)
                 assertTrue(
-                    "$screen: $name at $rect overlaps $otherName at $other",
+                    "$name at $rect overlaps $otherName at $other",
                     shared.width <= CLIP_TOLERANCE_PX || shared.height <= CLIP_TOLERANCE_PX,
                 )
             }
