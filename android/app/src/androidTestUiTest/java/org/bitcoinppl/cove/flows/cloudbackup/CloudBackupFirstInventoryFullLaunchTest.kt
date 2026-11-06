@@ -140,6 +140,7 @@ class CloudBackupFirstInventoryFullLaunchTest {
 
         ScriptedCloudStorageAccess.releaseWalletListGate()
         ScriptedCloudStorageAccess.releaseBlockedWalletListSnapshot()
+
         // the gate also held passkey verification, which finishes after the release and can
         // redraw the detail, so the rows are tapped only once it has settled
         waitUntil("the provider's answer should confirm both cloud-only rows") {
@@ -220,14 +221,7 @@ class CloudBackupFirstInventoryFullLaunchTest {
             device.findObject(By.text(name))?.let { device.clickableAncestor(it).isEnabled } == true
         }
 
-        // a detail update landing with the tap can close the sheet it opened, so the tap is retried
-        val opened =
-            (1..ROW_TAP_ATTEMPTS).any {
-                device.clickableAncestor(device.scrollUntilText(name)).click()
-                device.wait(Until.hasObject(By.text(RESTORE_ACTION)), 5_000L)
-            }
-
-        assertTrue("$name should open its actions once the inventory is complete", opened)
+        device.clickableAncestor(device.waitForText(name)).click()
         for (action in listOf(RESTORE_ACTION, DELETE_ACTION)) {
             assertTrue(
                 "$action should be enabled once the inventory is complete",
@@ -331,7 +325,6 @@ class CloudBackupFirstInventoryFullLaunchTest {
 
         // long enough for a dispatched action to reach Rust and start its first provider call
         const val ACTION_SETTLE_MS = 2_000L
-        const val ROW_TAP_ATTEMPTS = 3
 
         val FIXTURE_CLOUD_ONLY_RECORD_IDS =
             listOf(
