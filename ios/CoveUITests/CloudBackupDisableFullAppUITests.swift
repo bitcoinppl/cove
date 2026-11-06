@@ -53,11 +53,12 @@ final class CloudBackupDisableFullAppUITests: XCTestCase {
         }
         disableThroughBothConfirmations()
 
+        // a disable that didn't wait for the write would already be gone, with the backup deleted
         XCTAssertTrue(
             app.staticTexts["Deleting cloud backups..."].waitForExistence(timeout: 10),
-            "the disable never started"
+            "the disable should be waiting on the held write"
         )
-        control.waitForAppState("Cloud Backup should be disabling while the write is held") {
+        control.waitForAppState("the disable should be waiting on the held write") {
             $0.settingsRow == "disabling"
         }
         assertBackupKeptWhileWriteIsHeld(control, namespace: namespace)

@@ -94,9 +94,10 @@ class CloudBackupDurableCompletionFullLaunchTest {
             manager.hasPendingUploadVerification &&
                 manager.settingsRowStatus is CloudBackupSettingsRowStatus.Confirming
         }
-        assertEquals("nothing may read the backup while it is hidden", 0, ScriptedCloudStorageAccess.masterDownloadCount())
+        assertEquals("verification read the master key while it was hidden", 0, ScriptedCloudStorageAccess.masterDownloadCount())
+        assertEquals("verification read a wallet while it was hidden", 0, ScriptedCloudStorageAccess.walletDownloadCount())
         assertFalse("verified before the backup was visible", manager.verificationState is CloudBackupVerificationState.Verified)
-        val assertionsBeforeVisibility = passkeyAssertionCount()
+        assertOnlyTheEnablesPasskeyCalls("a passkey prompt came from outside the enable")
 
         ScriptedCloudStorageAccess.releaseVisibility()
 
@@ -106,12 +107,14 @@ class CloudBackupDurableCompletionFullLaunchTest {
                 manager.settingsRowStatus is CloudBackupSettingsRowStatus.Active
         }
         assertTrue("verification never read the visible backup", ScriptedCloudStorageAccess.masterDownloadCount() > 0)
-        assertEquals(
-            "background confirmation must not ask for the passkey",
-            assertionsBeforeVisibility,
-            passkeyAssertionCount(),
-        )
-        assertEquals(1, ScriptedPasskeyProvider.callCount(ScriptedPasskeyProvider.Invocation.CREATE))
+        assertOnlyTheEnablesPasskeyCalls("background confirmation asked for the passkey")
+    }
+
+    // a fresh enable registers one passkey and confirms it once, and nothing else may prompt
+    private fun assertOnlyTheEnablesPasskeyCalls(message: String) {
+        assertEquals(message, 1, ScriptedPasskeyProvider.callCount(ScriptedPasskeyProvider.Invocation.CREATE))
+        assertEquals(message, 1, ScriptedPasskeyProvider.callCount(ScriptedPasskeyProvider.Invocation.AUTHENTICATE))
+        assertEquals(message, 0, ScriptedPasskeyProvider.callCount(ScriptedPasskeyProvider.Invocation.DISCOVER))
     }
 
     @Test
@@ -240,10 +243,6 @@ class CloudBackupDurableCompletionFullLaunchTest {
             .assertCloudBackupDetails()
             .enableCloudBackupFromDetails()
     }
-
-    private fun passkeyAssertionCount(): Int =
-        ScriptedPasskeyProvider.callCount(ScriptedPasskeyProvider.Invocation.AUTHENTICATE) +
-            ScriptedPasskeyProvider.callCount(ScriptedPasskeyProvider.Invocation.DISCOVER)
 
     private fun waitUntil(
         message: String,

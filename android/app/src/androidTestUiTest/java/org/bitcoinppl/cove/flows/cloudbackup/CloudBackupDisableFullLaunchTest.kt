@@ -94,7 +94,8 @@ class CloudBackupDisableFullLaunchTest {
         waitUntil("the detail never confirmed its inventory, which Disable needs") { manager.isDetailInventoryComplete }
         disableThroughBothConfirmations()
 
-        waitUntil("the disable never started") { manager.isDisablingCloudBackup }
+        // a disable that didn't wait for the write would already be gone, with the backup deleted
+        waitUntil("the disable should be waiting on the held write") { manager.isDisablingCloudBackup }
         assertBackupKeptWhileWriteIsHeld(namespace)
 
         ScriptedCloudStorageAccess.releaseBlockedWalletUpload()

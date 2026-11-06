@@ -190,6 +190,11 @@ struct CloudBackupUITestHostState: Codable, Equatable {
     func countInLatestLaunch(_ call: CloudBackupUITestCall) -> Int {
         launches.last?.calls[call.key] ?? 0
     }
+
+    /// Downloads of every wallet record, across every launch
+    var walletDownloadCount: Int {
+        calls.filter { $0.key.hasPrefix("walletDownload.") }.values.reduce(0, +)
+    }
 }
 
 /// Provider calls the host counts
