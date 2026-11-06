@@ -22,6 +22,8 @@
 		C0F100072F60000000000001 /* FullLaunchSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0000F2EF0000000000001 /* FullLaunchSupport.swift */; };
 		C0F100082F60000000000001 /* FakeNodeControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000112EF0000000000001 /* FakeNodeControl.swift */; };
 		C0F100092F60000000000001 /* HardwareSignerControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000132EF0000000000001 /* HardwareSignerControl.swift */; };
+		C0F1000A2F60000000000001 /* KeyTeleportPeer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100012F30000000000001 /* KeyTeleportPeer.swift */; };
+		C0F1000B2F60000000000001 /* ScreenReachability.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100052F30000000000001 /* ScreenReachability.swift */; };
 		C0A000162EF0000000000001 /* HardwareSigningFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000152EF0000000000001 /* HardwareSigningFullLaunchUITests.swift */; };
 		C0A000182EF0000000000001 /* HardwareWalletScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000172EF0000000000001 /* HardwareWalletScreens.swift */; };
 		C0A0001A2EF0000000000001 /* PublicKeyImportFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000192EF0000000000001 /* PublicKeyImportFullLaunchUITests.swift */; };
@@ -646,6 +648,8 @@
 				C0F100072F60000000000001 /* FullLaunchSupport.swift in Sources */,
 				C0F100082F60000000000001 /* FakeNodeControl.swift in Sources */,
 				C0F100092F60000000000001 /* HardwareSignerControl.swift in Sources */,
+				C0F1000A2F60000000000001 /* KeyTeleportPeer.swift in Sources */,
+				C0F1000B2F60000000000001 /* ScreenReachability.swift in Sources */,
 				C0E0000C2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift in Sources */,
 				C0F100052F60000000000001 /* CloudBackupLargeTextFullAppUITests.swift in Sources */,
 				C0F5D0012F70000000000001 /* CloudBackupDeleteFromCloudFullAppUITests.swift in Sources */,

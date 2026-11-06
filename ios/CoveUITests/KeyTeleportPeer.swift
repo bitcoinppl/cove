@@ -278,6 +278,36 @@ private extension [VNRecognizedTextObservation] {
 }
 
 extension ScreenReachability {
+    /// Plays the receiving phone for a send the app shows on its Scan Receiver Request screen:
+    /// shows the app a fresh receiver request, types its receiver code, reads the response QR code
+    /// and Teleport Password off the screen one at a time, and decrypts what the app sent
+    ///
+    /// It leaves the response showing, so the caller ends the send with Done
+    func receiveSend(with peer: KeyTeleportPeer, scanner qr: QrScript, _ name: String) throws -> KeyTeleportPeer.Received {
+        let receiver = try peer.startReceiving()
+        reachAndTap(app.buttons.matching(NSPredicate(format: "label == %@", "Scan QR")), "\(name): Scan QR")
+        try qr.show([receiver.bbqr])
+
+        let codeField = app.textFields["Receiver Code"]
+        XCTAssertTrue(codeField.waitForExistence(timeout: 20), "\(name): the scanned request never asked for the receiver code")
+        codeField.tap()
+        codeField.typeText(receiver.code)
+        reachAndTap(app.buttons.matching(NSPredicate(format: "label == %@", "Continue")), "\(name): receiver code Continue")
+
+        let hint = app.buttons.matching(NSPredicate(format: "label == %@", "Tap to show QR code")).firstMatch
+        XCTAssertTrue(hint.waitForExistence(timeout: 20), "\(name): the response never showed")
+
+        // the Teleport Password, eight Base32 characters grouped in pairs
+        let password = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^[A-Z2-7]{2}( [A-Z2-7]{2}){3}$")).firstMatch
+        let pair = try XCTUnwrap(
+            readRevealPair(qrHint: "Tap to show QR code", codeHint: "Tap to show password", code: password, "\(name): response"),
+            "\(name): the response QR code never decoded"
+        )
+
+        XCTAssertTrue(pair.qr.hasPrefix("B$2S"), "\(name): the QR code should hold a KeyTeleport sender response, got \(pair.qr.prefix(8))")
+        return try peer.decode(pair.qr, session: receiver.session, password: pair.code)
+    }
+
     /// Reveals a KeyTeleport QR code and decodes it from a screenshot, then reveals the code or
     /// password beside it, as the other phone's user would; returns both, or nil if the QR code
     /// never decoded
@@ -305,7 +335,14 @@ extension ScreenReachability {
         XCTAssertTrue(app.waitForNoVisibleQrCode(), "\(name): showing the code must make the QR code unreadable again")
         cover(qrHint, name).assertConceals(hint: qrHint, "\(name): the QR code while the code shows")
         let shownCode = code.label
-        XCTAssertTrue(code.waitForVisibleText(containing: shownCode), "\(name): Vision never read the code once shown")
+
+        // some codes have a character or two Vision misreads on every try, so this allows the two
+        // misreads `assertConceals` allows the hint: a reading that close still shows Vision
+        // would have read the code had the cover leaked it
+        XCTAssertTrue(
+            code.waitForVisibleText(containing: shownCode, misreads: 2),
+            "\(name): Vision never read the code '\(shownCode)' once shown, it read '\(code.visibleTextWithoutSpaces)'"
+        )
 
         // and back, so revealing the QR code again conceals the code it replaces
         cover(qrHint, name).tap()
