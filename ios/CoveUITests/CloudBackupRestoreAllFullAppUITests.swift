@@ -89,6 +89,9 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
     /// Killing the app partway through a batch, after one wallet finished, leaves Retry Remaining
     /// for only the wallet still in the cloud after a normal restart, without restoring anything or
     /// asking for the passkey on its own, and Retry Remaining then restores it
+    ///
+    /// Restore attempts are counted from the relaunch itself, not from opening Cloud Backup, so an
+    /// automatic attempt that failed before the detail opened still fails the test
     func testRelaunchAfterKillOffersRetryRemainingWithoutAutomaticWork() throws {
         let control = try openDetailWithTwoCloudOnlyWallets()
         let screen = RestoreAllScreen(app: app, robot: robot)
@@ -105,23 +108,30 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
         robot.scrollToHittable(robot.button(startingWith: "Retry Remaining (1)"), initialWait: 30)
         screen.waitUntilOnDevice(Self.walletTwoRecordId)
         XCTAssertTrue(screen.isNotOnDevice(Self.walletThreeRecordId))
-        let downloadsAtRetry = walletDownloads(control.state)
 
         // give any automatic restore or passkey prompt time to start
         Thread.sleep(forTimeInterval: 3)
 
+        // inventory refreshes read the remaining wallet silently, so a consent read in this launch
+        // can only be a restore attempt, finished or not
+        let restoreAttempt = CloudBackupUITestCall.consentWalletDownload(recordId: Self.walletThreeRecordId)
         let state = control.state
         XCTAssertEqual(state.launches.count, 2, "expected one relaunch")
         XCTAssertEqual(state.countInLatestLaunch(.passkeyDiscover), 0, "relaunch asked for the passkey")
         XCTAssertEqual(state.countInLatestLaunch(.passkeyAuthenticate), 0, "relaunch asked for the passkey")
         XCTAssertEqual(state.countInLatestLaunch(.passkeyCreate), 0, "relaunch created a passkey")
-        XCTAssertEqual(walletDownloads(state), downloadsAtRetry, "relaunch restored wallets on its own")
+        XCTAssertEqual(state.countInLatestLaunch(restoreAttempt), 0, "relaunch tried to restore the remaining wallet")
         XCTAssertFalse(screen.progress.exists, "relaunch resumed the batch on its own")
 
         let retry = robot.button(startingWith: "Retry Remaining (1)")
         robot.scrollToHittable(retry)
         retry.tap()
         screen.waitUntilOnDevice(Self.walletThreeRecordId, timeout: 30)
+        XCTAssertGreaterThan(
+            control.state.countInLatestLaunch(restoreAttempt),
+            0,
+            "the retry restored the wallet without a consent read, so the count above proves nothing"
+        )
         XCTAssertTrue(screen.progress.waitForNonExistence(timeout: 30), "the retried batch never finished")
         XCTAssertFalse(robot.button(startingWith: "Retry Remaining").exists)
         XCTAssertEqual(control.state.count(.passkeyCreate), 0)
@@ -155,12 +165,6 @@ final class CloudBackupRestoreAllFullAppUITests: XCTestCase {
         robot.scrollToHittable(screen.row(duplicate))
         XCTAssertTrue(screen.row(duplicate).label.contains("Already on this device"), "the copy was restored")
         XCTAssertFalse(robot.button(startingWith: "Retry Remaining").exists)
-    }
-
-    private func walletDownloads(_ state: CloudBackupUITestHostState) -> [Int] {
-        [Self.walletTwoRecordId, Self.walletThreeRecordId].map {
-            state.count(.walletDownload(recordId: $0))
-        }
     }
 
     /// Restores Fixture Wallet One from onboarding while the cloud lists only it, then lists all
