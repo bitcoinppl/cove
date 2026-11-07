@@ -6,6 +6,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -24,6 +25,7 @@ import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.test.TestWalletWords
+import org.bitcoinppl.cove.test.TextReferenceMatch
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.deleteTestWallet
@@ -97,7 +99,7 @@ class KeyTeleportRevealCaptureTest {
             }
         val secondWalk = walkRevealPair("the second receiver request", second.packet.bbqrPart(), second.groupedNumericCode, RECEIVER_CODE_HINT)
 
-        assertHiddenCodeCarriesAlmostNothing("receiver code", firstWalk, secondWalk)
+        assertOneValueReadableAtATime("receiver code", firstWalk, secondWalk)
         endReceive(receiver)
     }
 
@@ -120,7 +122,7 @@ class KeyTeleportRevealCaptureTest {
             val second = sendTo(sender, wallet, request, previousPassword = first.password)
             val secondWalk = walkRevealPair("the second sender response", second.packetText, second.password, SENDER_PASSWORD_HINT)
 
-            assertHiddenCodeCarriesAlmostNothing("password", firstWalk, secondWalk)
+            assertOneValueReadableAtATime("password", firstWalk, secondWalk)
             sender.dispatch(KeyTeleportManagerAction.Clear)
         }
     }
@@ -167,8 +169,10 @@ class KeyTeleportRevealCaptureTest {
     }
 
     /**
-     * Walk the reveal pair from its first state through showing the code and back to the QR code,
-     * checking at each step that exactly one value can be read from the capture
+     * Capture the reveal pair before anything is revealed, with the code shown, and with the QR code
+     * shown again
+     *
+     * Checks come after both walks, so a failing run still logs every measurement
      */
     private fun walkRevealPair(
         screen: String,
@@ -179,17 +183,13 @@ class KeyTeleportRevealCaptureTest {
         compose.waitForIdle()
         assertTrue("$screen is not protected with FLAG_SECURE", windowIsSecure())
 
-        val codeRegion =
-            compose
-                .onNodeWithContentDescription(codeHint)
-                .fetchSemanticsNode()
-                .boundsInRoot
-                .roundToIntRect()
+        val codeRegion = compose.onNodeWithContentDescription(codeHint).regionInRoot()
         val qrFirst = capture()
 
         compose.onNodeWithContentDescription(codeHint).performClick()
         compose.waitForIdle()
         val codeShown = capture()
+        val qrRegion = compose.onNodeWithContentDescription(QR_HINT).regionInRoot()
         val codeNode = compose.onNode(hasText(code), useUnmergedTree = true).fetchSemanticsNode()
         val codeText = ShownText(codeNode.textLayouts().single(), codeNode.positionInRoot)
 
@@ -197,55 +197,61 @@ class KeyTeleportRevealCaptureTest {
         compose.waitForIdle()
         val qrAgain = capture()
 
-        listOf("before anything is revealed" to qrFirst, "after showing the QR code again" to qrAgain).forEach { (moment, image) ->
-            val reading = image.readQr()
-            assertTrue("the QR code of $screen reads as ${reading.kind}, not its packet, $moment", reading.text == packet)
-            val match = image.matchCode(codeText)
-            Log.i(TAG, "$screen $moment hidden code: $match")
-            assertTrue("the hidden code of $screen matches its own text $moment: $match", !match.matches)
-        }
-
-        val hiddenQr = codeShown.readQr()
-        Log.i(TAG, "$screen hidden QR code: ${hiddenQr.kind}")
-        assertTrue("the hidden QR code of $screen still decodes while the code is shown", hiddenQr.text == null)
-        val match = codeShown.matchCode(codeText)
-        Log.i(TAG, "$screen shown code: $match")
-        assertTrue("the shown code of $screen is not drawn as its own text: $match", match.matches)
-
-        return RevealWalk(code, codeRegion, hidden = qrFirst, shown = codeShown)
+        return RevealWalk(screen, packet, code, codeRegion, qrRegion, codeText, qrFirst = qrFirst, codeShown = codeShown, qrAgain = qrAgain)
     }
 
     /**
-     * A hidden code is unreadable when it tells two codes apart much less than the shown codes do
-     *
-     * Both captures of each state come from the same screen layout, so outside the code itself
-     * they are the same pixels
+     * Before anything is revealed and after each switch, exactly one of the QR code and the code
+     * must be readable, and a hidden code must carry almost nothing of what tells two codes apart
      */
-    private fun assertHiddenCodeCarriesAlmostNothing(
+    private fun assertOneValueReadableAtATime(
         what: String,
         first: RevealWalk,
         second: RevealWalk,
     ) {
+        val readings = listOf(first, second).map(::readWalk)
+        val codeSeparation = separation(first, second, first.codeRegion, hidden = { it.qrFirst }, shown = { it.codeShown })
+        val qrSeparation = separation(first, second, first.qrRegion, hidden = { it.codeShown }, shown = { it.qrFirst })
+        Log.i(TAG, "$what: $codeSeparation")
+        Log.i(TAG, "QR code beside the $what: $qrSeparation")
+
+        readings.forEach(WalkReading::assertExactlyOneReadable)
+
         assertEquals("the two ${what}s have different lengths", first.code.length, second.code.length)
         assertTrue("the two ${what}s are the same", first.code != second.code)
-        assertEquals("the $what moved between the two captures", first.region, second.region)
-
-        val shownMean = first.shown.meanDifference(second.shown, first.region)
-        val hiddenMean = first.hidden.meanDifference(second.hidden, first.region)
-        val shown = first.shown.detailDifference(second.shown, first.region)
-        val hidden = first.hidden.detailDifference(second.hidden, first.region)
-        Log.i(
-            TAG,
-            "$what: mean difference shown $shownMean hidden $hiddenMean ratio ${hiddenMean / shownMean}; " +
-                "detail difference shown $shown hidden $hidden ratio ${hidden / shown}",
-        )
-
-        assertTrue("the two shown ${what}s look the same: $shown", shown >= MIN_SHOWN_DETAIL)
+        assertEquals("the $what moved between the two transfers", first.codeRegion, second.codeRegion)
+        assertTrue("the two shown ${what}s look the same: $codeSeparation", codeSeparation.shown >= MIN_SHOWN_DETAIL)
         assertTrue(
-            "the hidden ${what}s differ in detail by ${"%.3f".format(hidden / shown)} of how much the shown ones do",
-            hidden <= MAX_HIDDEN_DETAIL_SHARE * shown,
+            "the hidden ${what}s differ in detail by ${"%.3f".format(codeSeparation.ratio)} of how much the shown ones do",
+            codeSeparation.ratio <= MAX_HIDDEN_DETAIL_SHARE,
         )
     }
+
+    private fun readWalk(walk: RevealWalk): WalkReading {
+        val qrStates =
+            listOf("before anything is revealed" to walk.qrFirst, "after showing the QR code again" to walk.qrAgain).map { (moment, image) ->
+                QrState(moment, image.readQr(), image.matchCode(walk.codeText))
+            }
+        val reading = WalkReading(walk, qrStates, hiddenQr = walk.codeShown.readQr(), shownCode = walk.codeShown.matchCode(walk.codeText))
+
+        qrStates.forEach { Log.i(TAG, "${walk.screen} ${it.moment}: QR code reads as ${it.qr.kind}, hidden code ${it.code}") }
+        Log.i(TAG, "${walk.screen} with the code shown: hidden QR code reads as ${reading.hiddenQr.kind}, shown code ${reading.shownCode}")
+        return reading
+    }
+
+    // how much two walks' captures differ over a region, while the value there is hidden and shown
+    private fun separation(
+        first: RevealWalk,
+        second: RevealWalk,
+        region: IntRect,
+        hidden: (RevealWalk) -> Bitmap,
+        shown: (RevealWalk) -> Bitmap,
+    ) = Separation(
+        hiddenMean = hidden(first).meanDifference(hidden(second), region),
+        shownMean = shown(first).meanDifference(shown(second), region),
+        hidden = hidden(first).detailDifference(hidden(second), region),
+        shown = shown(first).detailDifference(shown(second), region),
+    )
 
     private fun windowIsSecure(): Boolean {
         var secure = false
@@ -353,12 +359,57 @@ class KeyTeleportRevealCaptureTest {
         val topLeft: Offset,
     )
 
+    private fun SemanticsNodeInteraction.regionInRoot(): IntRect = fetchSemanticsNode().boundsInRoot.roundToIntRect()
+
     private class RevealWalk(
+        val screen: String,
+        val packet: String,
         val code: String,
-        val region: IntRect,
-        val hidden: Bitmap,
-        val shown: Bitmap,
+        val codeRegion: IntRect,
+        val qrRegion: IntRect,
+        val codeText: ShownText,
+        val qrFirst: Bitmap,
+        val codeShown: Bitmap,
+        val qrAgain: Bitmap,
     )
+
+    private class QrState(
+        val moment: String,
+        val qr: QrReading,
+        val code: TextReferenceMatch,
+    )
+
+    private class WalkReading(
+        val walk: RevealWalk,
+        val qrStates: List<QrState>,
+        val hiddenQr: QrReading,
+        val shownCode: TextReferenceMatch,
+    ) {
+        fun assertExactlyOneReadable() {
+            val screen = walk.screen
+            qrStates.forEach {
+                assertTrue("the QR code of $screen reads as ${it.qr.kind}, not its packet, ${it.moment}", it.qr.text == walk.packet)
+                assertTrue("the hidden code of $screen matches its own text ${it.moment}: ${it.code}", !it.code.matches)
+            }
+
+            assertTrue("the hidden QR code of $screen reads as ${hiddenQr.kind} while the code is shown", hiddenQr.text == null)
+            assertTrue("the shown code of $screen is not drawn as its own text: $shownCode", shownCode.matches)
+        }
+    }
+
+    /** Mean and fine-detail differences between two walks' captures of one region, hidden and shown */
+    private class Separation(
+        val hiddenMean: Double,
+        val shownMean: Double,
+        val hidden: Double,
+        val shown: Double,
+    ) {
+        val ratio: Double get() = hidden / shown
+
+        override fun toString(): String =
+            "detail difference hidden ${"%.3f".format(hidden)} / shown ${"%.3f".format(shown)} = ${"%.4f".format(ratio)}, " +
+                "mean difference hidden ${"%.3f".format(hiddenMean)} / shown ${"%.3f".format(shownMean)} = ${"%.4f".format(hiddenMean / shownMean)}"
+    }
 
     private companion object {
         const val TAG = "KeyTeleportRevealCapture"
