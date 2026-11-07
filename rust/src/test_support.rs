@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 
 use cove_device::keychain::{Keychain, KeychainAccess, KeychainError};
 use parking_lot::Mutex;
@@ -12,6 +13,43 @@ pub(crate) mod tap_signer_emulator;
 
 use crate::wallet::fingerprint::Fingerprint;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
+
+/// The shortest deadline a test gives a condition to become true
+///
+/// CI and local machines run several heavy suites at once: simulator and emulator UI tests,
+/// builds and other Rust suites. At load averages of 100 to 470, waits that finish in well under
+/// a second on an idle machine have missed 1 to 10 second deadlines. A longer deadline on a wait
+/// for something to become true cannot fail a correct test, it only makes a broken one fail later
+///
+/// Never use it for checks that something stays true or stays false for a while, or where the
+/// deadline is itself the assertion, such as proving something happens before a retry timer fires
+pub(crate) const LOADED_HOST_WAIT_FLOOR: Duration = Duration::from_secs(30);
+
+/// The deadline for a wait until something becomes true
+///
+/// `expected` is how long the wait may take on an idle machine. It documents the caller's
+/// expectation and only takes effect when it is longer than [`LOADED_HOST_WAIT_FLOOR`]
+pub(crate) fn loaded_host_wait(expected: Duration) -> Duration {
+    expected.max(LOADED_HOST_WAIT_FLOOR)
+}
+
+/// A wall-clock deadline for a hand-rolled poll until something becomes true
+///
+/// It reads the wall clock, not tokio's, because some of these polls run in paused-time tests
+/// while the work they wait for runs in real time on the global runtime. A paused clock skips
+/// ahead on every sleep, so a tokio deadline there only bounds the number of polls
+pub(crate) struct LoadedHostDeadline(std::time::Instant);
+
+impl LoadedHostDeadline {
+    /// A deadline [`loaded_host_wait`] of `expected` from now
+    pub(crate) fn after(expected: Duration) -> Self {
+        Self(std::time::Instant::now() + loaded_host_wait(expected))
+    }
+
+    pub(crate) fn has_passed(&self) -> bool {
+        std::time::Instant::now() >= self.0
+    }
+}
 
 static FAIL_KEYCHAIN_DELETES: AtomicBool = AtomicBool::new(false);
 type AfterSaveHook = Arc<dyn Fn(&str) + Send + Sync>;
