@@ -101,17 +101,17 @@ id = "s17-sender-psbt-error-physical-screenshot"
 section = "17"
 title = "Sender PSBT error physical screenshot"
 platforms = ["android"]
-target = "manual"
+target = "ui"
 paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
 ]
 coverage = [
-    "human",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPasteRejectionTest.kt::senderRejectsARawPsbtPasteByAskingForTheReceiverRequest",
 ]
 # 1.4.0: ios N/A, android HUMAN
-# the protected screen returns no screencap over adb, so the test captures the error dialog and the sender after OK from inside the app (Pictures/cove-layout-screenshots), checks each dialog text is drawn, unclipped, inside the dialog and not overlapping, and that the sender still takes a paste after OK
-# still a person: one strong pixel per text and a multicolor capture after OK do not prove the whole dialog and sender are readable
+# the protected screen returns no screencap over adb, so the test captures the error dialog and the sender after OK from inside the app (Pictures/cove-layout-screenshots) and checks that the sender still takes a paste after OK
+# every text in the dialog and on the sender after OK must match a reference rendering of its own text layout, drawn in its own colour over the background beside it, on all but 2% of its glyph pixels, and every glyph pixel must reach WCAG AA contrast (4.5:1, or 3:1 for large text); a clipped, covered, overdrawn, wrong or faint text fails
+# dialog texts must also keep their laid-out size, stay inside the dialog and not overlap
 
 [[row]]
 id = "s17-ios-pj-uri-parses-to-ordinary-draft"
