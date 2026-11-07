@@ -188,8 +188,11 @@ class TapSignerLayoutFullLaunchTest {
         scrollAboveKeyboard(By.res("sendFlow.address"), "send: address field")
         wallet.enterAddress()
         wallet.tapMax()
-        wallet.clickNext(expecting = By.text("Sign using TAPSIGNER"))
-        device.scrollTo(By.text("Sign using TAPSIGNER")).click()
+
+        // at this scale the hardware send screen ends its first screenful at its Sign Transaction
+        // heading, with the signing options below the fold
+        wallet.clickNext(expecting = By.text("Sign Transaction"))
+        reachable(By.text("Sign using TAPSIGNER"), "hardware send: \"Sign using TAPSIGNER\"", usable = true).click()
 
         val title = "Enter TAPSIGNER CVC"
         assertCvcScreenFits(title, "Cancel")
@@ -206,7 +209,7 @@ class TapSignerLayoutFullLaunchTest {
 
         reachable(By.text("Cancel"), "$title: Cancel", usable = true).click()
         assertTrue("Cancel didn't close the signing CVC screen", device.wait(Until.gone(By.text(title)), 15_000L))
-        device.waitFor(By.text("Sign using TAPSIGNER"))
+        device.scrollTo(By.text("Sign using TAPSIGNER"), timeoutMs = 15_000L)
     }
 
     /**
