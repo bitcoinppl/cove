@@ -530,15 +530,19 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         while reachableMatch(query, needsHit: needsHit) == nil, drags < Self.maxDrags, stillDrags < 2 {
             let candidate = scrollCandidate(query)
             let before = candidate.frame
-            let target = scrollContainers(holding: candidate).last ?? visibleScrollView() ?? app.windows.firstMatch
-            let area = readableArea(of: candidate)
+            let containers = scrollContainers(holding: candidate)
+            let target = containers.last ?? visibleScrollView() ?? app.windows.firstMatch
+            let area = readableArea(of: candidate, in: containers)
             let nudge = before.midY > area.midY ? Self.rowHeight : -Self.rowHeight
             let distance = scrollDistance(showing: before, in: area)
             drag(target, by: distance != 0 ? distance : nudge)
             drags += 1
 
-            let after = candidate.frame
-            let isStill = abs(after.minX - before.minX) <= Self.stillTolerance && abs(after.minY - before.minY) <= Self.stillTolerance
+            // a frame that can't be read says nothing of whether the content moved, so it breaks
+            // the run of drags that left the match in place
+            let after = candidate.exists ? candidate.frame : .null
+            let isKnown = !before.isEmpty && !after.isEmpty
+            let isStill = isKnown && abs(after.minX - before.minX) <= Self.stillTolerance && abs(after.minY - before.minY) <= Self.stillTolerance
             stillDrags = isStill ? stillDrags + 1 : 0
         }
 
@@ -591,7 +595,8 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
         let showsVertically = { () -> Bool in
             let area = self.readableArea(of: element)
-            return line().minY >= area.minY - 0.5 && line().maxY <= area.maxY + 0.5
+            let shown = line()
+            return shown.minY >= area.minY - 0.5 && shown.maxY <= area.maxY + 0.5
         }
 
         let showsAcross = { () -> Bool in
@@ -601,8 +606,9 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         }
 
         for _ in 0 ..< 12 where !showsVertically() {
-            let target = scrollContainers(holding: element).last ?? visibleScrollView() ?? app.windows.firstMatch
-            drag(target, by: scrollDistance(showing: line(), in: readableArea(of: element)))
+            let containers = scrollContainers(holding: element)
+            let target = containers.last ?? visibleScrollView() ?? app.windows.firstMatch
+            drag(target, by: scrollDistance(showing: line(), in: readableArea(of: element, in: containers)))
         }
 
         XCTAssertTrue(
@@ -621,9 +627,10 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         return 0
     }
 
-    /// The part of the window the element can show in and read, above the keyboard
-    private func readableArea(of element: XCUIElement) -> CGRect {
-        var area = visibleArea(of: element)
+    /// The part of the window the element can show in and read, above the keyboard, given the
+    /// scroll areas that hold it where the caller has already looked them up
+    private func readableArea(of element: XCUIElement, in containers: [XCUIElement]? = nil) -> CGRect {
+        var area = visibleArea(of: element, in: containers)
         if let cover = keyboardCover(), cover.minY < area.maxY {
             area.size.height = max(0, cover.minY - area.minY)
         }
@@ -663,7 +670,8 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// the send screen's address editor scrolls its own text instead of the screen
     private func drag(_ container: XCUIElement, by distance: CGFloat) {
         let window = app.windows.firstMatch.frame
-        var area = container.frame.intersection(window)
+        let frame = container.frame
+        var area = frame.intersection(window)
         if area.isNull { area = window }
 
         if let cover = keyboardCover(), cover.minY > area.minY {
@@ -675,8 +683,8 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         let x = area.minX + Self.dragMargin
         let point = { (y: CGFloat) in
             container.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
-                dx: x - container.frame.minX,
-                dy: y - container.frame.minY
+                dx: x - frame.minX,
+                dy: y - frame.minY
             ))
         }
 
@@ -752,8 +760,8 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     ///
     /// XCUITest reports an element's whole frame, not the part its scroll view clips, so a title
     /// scrolled half under a sheet's edge still lies inside the window
-    private func visibleArea(of element: XCUIElement) -> CGRect {
-        scrollContainers(holding: element).reduce(app.windows.firstMatch.frame) { $0.intersection($1.frame) }
+    private func visibleArea(of element: XCUIElement, in containers: [XCUIElement]? = nil) -> CGRect {
+        (containers ?? scrollContainers(holding: element)).reduce(app.windows.firstMatch.frame) { $0.intersection($1.frame) }
     }
 
     /// The scroll views, lists and tables that hold the element, outermost first
@@ -768,7 +776,9 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
                 guard let snapshot = try? container.snapshot() else { return false }
                 return snapshot.children.contains { holds($0, type: type, label: label, frame: frame) }
             }
+            .map { (container: $0, frame: $0.frame) }
             .sorted { $0.frame.width * $0.frame.height > $1.frame.width * $1.frame.height }
+            .map(\.container)
     }
 
     private func holds(_ snapshot: XCUIElementSnapshot, type: XCUIElement.ElementType, label: String, frame: CGRect) -> Bool {
