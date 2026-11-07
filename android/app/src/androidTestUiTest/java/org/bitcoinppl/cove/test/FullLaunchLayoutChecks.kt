@@ -258,6 +258,7 @@ class FullLaunchLayoutChecks(
         var root: RootForTest? = null
         var texts = emptyList<Pair<Int, TextIdentity>>()
         val claimed = mutableSetOf<Int>()
+        var shared = emptySet<TextIdentity>()
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             root = semanticsNodeAt(titleVisible)?.first
@@ -270,6 +271,14 @@ class FullLaunchLayoutChecks(
 
             // a replacement is a text made after the scan starts, so none of these can be one
             claimed += nodes.map { it.id }
+
+            // a scroll can replace one of these with the other, so neither is told apart once it goes
+            shared =
+                nodes
+                    .groupingBy { it.textIdentity() }
+                    .eachCount()
+                    .filterValues { it > 1 }
+                    .keys
             texts =
                 nodes
                     .filter { it.size.height > 0 && it.size.width > 0 }
@@ -280,7 +289,7 @@ class FullLaunchLayoutChecks(
         val owner = checkNotNull(root) { "$screen: its title matches no Compose semantics node" }
         val problems =
             texts.mapNotNull { (id, identity) ->
-                textShowWholeProblem(owner, id, identity, claimed)?.let { "\"${identity.text.take(TEXT_IN_MESSAGE)}\": $it" }
+                textShowWholeProblem(owner, id, identity, identity in shared, claimed)?.let { "\"${identity.text.take(TEXT_IN_MESSAGE)}\": $it" }
             }
 
         assertTrue("$screen has texts that never show whole: $problems", problems.isEmpty())
@@ -344,12 +353,16 @@ class FullLaunchLayoutChecks(
      * A scroll can replace the text's subtree, which gives it a new semantics id, so a text that
      * goes missing is looked for again by its [identity] among the texts no other text in the scan
      * has [claimed], see [replacementText]. It fails when none or more than one is found, since
-     * measuring a text that reads the same elsewhere would pass the missing one unchecked
+     * measuring a text that reads the same elsewhere would pass the missing one unchecked. For the
+     * same reason a missing text whose identity another text [shared] when the scan began fails
+     * outright: the same scroll can remove it and replace the other, which then looks like its
+     * only replacement
      */
     private fun textShowWholeProblem(
         root: RootForTest,
         id: Int,
         identity: TextIdentity,
+        shared: Boolean,
         claimed: MutableSet<Int>,
     ): String? {
         val edges = mutableListOf("whole")
@@ -360,8 +373,12 @@ class FullLaunchLayoutChecks(
 
         repeat(MAX_NUDGES * 2) {
             val placement =
-                textPlacement(root, nodeId)
-                    ?: when (val replacement = replacementText(root, identity, claimed)) {
+                textPlacement(root, nodeId) ?: run {
+                    if (shared) {
+                        return "it was replaced, and which text replaced it is ambiguous: another text there read the same under the same anchor when the check began"
+                    }
+
+                    when (val replacement = replacementText(root, identity, claimed)) {
                         is Replacement.Found -> {
                             nodeId = replacement.id
                             claimed += replacement.id
@@ -372,6 +389,7 @@ class FullLaunchLayoutChecks(
                         is Replacement.Ambiguous ->
                             return "it was replaced, and which text replaced it is ambiguous: ${replacement.count} new texts there read the same under the same anchor after $STALE_READS reads"
                     }
+                }
 
             val (shown, whole, firstLine, lastLine, viewport, scrollBy) = placement
             if (viewport != null && whole.height() > viewport.height() + CLIP_TOLERANCE_PX && edges == listOf("whole")) {
