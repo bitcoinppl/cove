@@ -380,7 +380,7 @@ class TapSignerLayoutFullLaunchTest {
         // the sheet slides in, and a node read while its content moves goes stale, so the checks
         // start once the content holds still, then scroll back to the top in case it opened lower,
         // and scroll to the field explicitly at the end
-        awaitScrollContentAtRest("the $title screen")
+        awaitContentAtRest("the $title screen", By.text(title), By.text("CVC"))
         scrollBackTo(By.text(back), "$title: \"$back\"")
         assertScreenFits(title, back, title)
         reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
@@ -992,29 +992,39 @@ class TapSignerLayoutFullLaunchTest {
     }
 
     /**
-     * Waits until the content of the largest scroll area on screen lies in the same place on two
-     * reads in a row, each taken once the app is idle, and fails if it never does
+     * Waits until the screen's content lies in the same place on two reads in a row, each taken
+     * once the app is idle, and fails if it never does
+     *
+     * The first of [anchors] on screen marks the content, which is measured with the anchor's
+     * nearest scrollable ancestor, so a screen behind a sheet doesn't count, or with the root of
+     * the anchor's window when nothing scrolls, since Compose marks an area scrollable only while
+     * its content overflows it
      */
-    private fun awaitScrollContentAtRest(name: String) {
+    private fun awaitContentAtRest(
+        name: String,
+        vararg anchors: BySelector,
+    ) {
         var was: List<Rect>? = null
 
         wallet.waitUntil("$name never came to rest", timeoutMs = 15_000L) {
             device.waitForIdle()
-            val content = scrollContentBounds()
+            val content = contentBounds(anchors)
             (content != null && content == was).also { was = content }
         }
     }
 
     /**
-     * Where the largest scroll area and each node directly inside it lie, or null when the screen
-     * has none or a node went stale while it was read
+     * Where the anchor, its container and each node directly inside that container lie, or null
+     * when no anchor shows or a node went stale while it was read
      */
-    private fun scrollContentBounds(): List<Rect>? =
+    private fun contentBounds(anchors: Array<out BySelector>): List<Rect>? =
         try {
-            device
-                .findObjects(By.scrollable(true))
-                .maxByOrNull { it.visibleBounds.width() * it.visibleBounds.height() }
-                ?.let { area -> listOf(area.visibleBounds) + area.children.map { it.visibleBounds } }
+            anchors.firstNotNullOfOrNull { device.findObject(it) }?.let { anchor ->
+                val ancestors = generateSequence(anchor) { it.parent }.toList()
+                val container = ancestors.firstOrNull { it.isScrollable } ?: ancestors.last()
+
+                listOf(anchor.visibleBounds, container.visibleBounds) + container.children.map { it.visibleBounds }
+            }
         } catch (_: StaleObjectException) {
             null
         }
