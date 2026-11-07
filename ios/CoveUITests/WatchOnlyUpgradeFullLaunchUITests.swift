@@ -60,10 +60,7 @@ final class WatchOnlyUpgradeFullLaunchUITests: XCTestCase {
         let name = assertWatchOnly()
 
         app.importTestMnemonicFromAddWallet()
-
-        // the import lands on the wallet it upgraded, with the history and label it had
-        app.assertBalance(sats: Self.fundedSats, timeout: 60)
-        XCTAssertTrue(app.staticTexts[Self.label].waitForExistence(timeout: 15), "the transaction label was lost")
+        assertKeepsHistoryAndLabel()
 
         assertUpgraded(name)
         try assertSendsMax(spending: funding)
@@ -71,6 +68,7 @@ final class WatchOnlyUpgradeFullLaunchUITests: XCTestCase {
 
     func testKeyTeleportWordsTurnTheWatchOnlyWalletIntoASigningWallet() throws {
         let funding = try fundAndImportWatchOnlyWallet()
+        try labelTransaction(funding.txid)
         let name = assertWatchOnly()
 
         openKeyTeleportReceive()
@@ -82,7 +80,7 @@ final class WatchOnlyUpgradeFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Wallet imported"].waitForExistence(timeout: 30), "Import Wallet never finished")
         XCTAssertTrue(app.staticTexts["\(name) is ready to use in Cove."].exists, "the words didn't land on '\(name)'")
         layout.reachAndTap(button("Done"), "imported: Done")
-        app.assertBalance(sats: Self.fundedSats, timeout: 60)
+        assertKeepsHistoryAndLabel()
 
         assertUpgraded(name)
         try assertSendsMax(spending: funding)
@@ -116,6 +114,12 @@ final class WatchOnlyUpgradeFullLaunchUITests: XCTestCase {
         let name = walletNameInSidebar()
         XCTAssertFalse(hasSecretWordsInWalletSettings(), "the watch-only wallet already offers recovery words")
         return name
+    }
+
+    /// Checks the import landed on the wallet it upgraded, with the balance, history and label it had
+    private func assertKeepsHistoryAndLabel() {
+        app.assertBalance(sats: Self.fundedSats, timeout: 60)
+        XCTAssertTrue(app.staticTexts[Self.label].waitForExistence(timeout: 15), "the transaction label was lost")
     }
 
     /// Checks the wallet the words reached is the one that was watched, now holding its words
@@ -170,8 +174,8 @@ final class WatchOnlyUpgradeFullLaunchUITests: XCTestCase {
     /// Reads the request off the screen as the sending phone's camera would, has the host answer
     /// it with the payload, scans the answer and unlocks it with the password
     private func receive(_ payload: KeyTeleportPeer.Payload) throws {
-        // KeyTeleportReceiveFullLaunchUITests checks the request's concealment; this test only
-        // needs its contents, so it reads the code from the UI tree instead of with Vision
+        // the KeyTeleportReceiveFullLaunchUITests suite checks the request's concealment; this test
+        // only needs its contents, so it reads the code from the UI tree instead of with Vision
         layout.reachAndTap(button("Tap to show QR code"), "receive request: show QR code")
         let request = try XCTUnwrap(app.waitForVisibleQrCode(), "the receive request QR code never decoded")
 
