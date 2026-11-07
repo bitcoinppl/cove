@@ -1,9 +1,11 @@
-//! Reads hardware wallet exports from ISO 15693 tag images the way `ios/Cove/NFCReader.swift`
-//! reads a tag block by block, through the same `FfiNfcReader` and `NfcConst` calls
+//! Checks the reader contract `ios/Cove/NFCReader.swift` relies on for ISO 15693 tags: chunk
+//! parsing of `NfcConst`-sized block reads through `FfiNfcReader`, the resume check after a lost
+//! read and the reset on a different tag
 //!
 //! The fixtures are tag images as they sit in tag memory: the capability container, the NDEF TLV
-//! and its records, then the rest of the memory. The Swift block loop itself, CoreNFC and a real
-//! tag aren't reached from here
+//! and its records, then the rest of the memory. The driver below is not a model of the Swift
+//! loop: the order of its resume check against the next read and its reset aren't checked here,
+//! nor are CoreNFC and a real tag
 
 use cove_nfc::{
     NfcReaderError, ParseResult,
@@ -48,8 +50,9 @@ enum SessionEnd {
     Lost,
 }
 
-/// The state `NFCReader.swift` keeps across tag sessions, driven the way its `readBlocks`,
-/// `prepareToResumeReading`, `handleSuccessfulBlockRead` and `parseAndHandleResult` drive it
+/// The state `NFCReader.swift` keeps across tag sessions, fed to the reader with the same calls
+/// its `readBlocks`, `prepareToResumeReading`, `handleSuccessfulBlockRead` and
+/// `parseAndHandleResult` make
 struct IosBlockReader {
     consts: NfcConst,
     reader: FfiNfcReader,
@@ -77,7 +80,8 @@ impl IosBlockReader {
         }
     }
 
-    /// `resetReader()`, which keeps `messageInfo`
+    /// `resetReader()`; like it, this keeps `message_info`, so after a reset the next tag is read
+    /// until the bytes reach the previous message's length before anything is parsed
     fn reset(&mut self) {
         self.reader = FfiNfcReader::new();
         self.read_bytes.clear();
@@ -104,7 +108,9 @@ impl IosBlockReader {
         self.reads = 0;
         self.last_resume = None;
 
-        // a started reader holding bytes is the same tag held again or a different one
+        // a started reader holding bytes is the same tag held again or a different one. unlike
+        // Swift, which starts the next block read without waiting for this check, the check
+        // decides resume or reset before any further read
         if self.reader.is_started() && !self.read_bytes.is_empty() {
             let first_chunk = self.read_chunk(tag, 0);
             let resume = self.reader.is_resumeable(first_chunk);

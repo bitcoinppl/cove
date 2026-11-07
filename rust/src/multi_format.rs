@@ -794,10 +794,10 @@ mod tests {
         assert_eq!(original_bytes, path1_bytes, "Parsed PSBT differs from original bytes");
     }
 
-    /// Reads a tag image 32 blocks at a time as `ios/Cove/NFCReader.swift` does on an ISO 15693
-    /// tag, parsing the first chunk and then each time the bytes read reach the message's length,
-    /// and builds the `NfcMessage` it hands the app. Resuming a lost read is covered in
-    /// `cove-nfc`'s `iso15693_tag_image` tests
+    /// Feeds a tag image to the reader in the `NfcConst` chunks `ios/Cove/NFCReader.swift` reads
+    /// from an ISO 15693 tag, parsing the first chunk and then once the bytes read reach the
+    /// message's length, and builds an `NfcMessage` from the record. The resume check is covered
+    /// in `cove-nfc`'s `iso15693_tag_image` tests
     fn read_iso15693_tag(image: &[u8]) -> NfcMessage {
         let chunk_bytes = usize::from(cove_nfc::ffi::NfcConst::new().total_bytes_per_chunk());
         let reader = cove_nfc::ffi::FfiNfcReader::new();
