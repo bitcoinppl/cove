@@ -105,7 +105,11 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         app.launch(expecting: app.element("selectedWallet.balance"))
         app.assertBalance(sats: Self.fundedSats, timeout: 60)
 
-        app.startSend(to: XCUIApplication.externalAddress)
+        // at this size the send screen opens with the address focused just under the keyboard,
+        // where only a drag brings it into reach
+        reachAndTap(app.buttons.matching(NSPredicate(format: "label == 'Send' OR label ENDSWITH ', Send'")), "wallet: Send")
+        reachAndTap(app.textViews.matching(identifier: "sendFlow.address"), "send: address").typeText(XCUIApplication.externalAddress)
+        reachAndTap(app.textFields.matching(identifier: "sendFlow.amount"), "send: amount")
         app.tapMax()
 
         // Next shows once fee rates load, and the larger text can push it below the fold
