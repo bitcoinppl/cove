@@ -22,6 +22,9 @@ use cove_types::redb::Json;
 use ahash::AHashMap as HashMap;
 use cove_util::result_ext::ResultExt as _;
 
+#[cfg(debug_assertions)]
+use crate::manager::wallet_manager::receive_address::ui_test_refresh_failure;
+
 pub static DATABASE_CONNECTIONS: Lazy<RwLock<HashMap<WalletId, Arc<redb::Database>>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
@@ -314,6 +317,13 @@ impl WalletDataDb {
     }
 
     pub fn set_receive_address_cache(&self, cache: ReceiveAddressCache) -> Result<()> {
+        #[cfg(debug_assertions)]
+        if ui_test_refresh_failure::save_fails() {
+            return Err(Error::Save(
+                "the UI test seam failed the receive address refresh's save".into(),
+            ));
+        }
+
         self.set(WalletDataKey::ReceiveAddressCache, WalletData::ReceiveAddressCache(cache))
     }
 

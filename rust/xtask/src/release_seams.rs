@@ -4,10 +4,10 @@
 //! and NFC for test seams, and on iOS to have texts report truncation. On iOS
 //! the seams are under `#if DEBUG`, which only the Debug configuration defines;
 //! on Android they live in the `debug` source set, and the `release` source set
-//! has inert stubs. In Rust, the trust in the card emulator's certificates is
-//! under `cfg(debug_assertions)`, which no release profile enables. Every seam
-//! starts by reading its variable, so a release build without those names has
-//! no way to turn one on
+//! has inert stubs. In Rust, the trust in the card emulator's certificates and
+//! the receive address refresh failure are under `cfg(debug_assertions)`, which
+//! no release profile enables. Every seam starts by reading its variable, so a
+//! release build without those names has no way to turn one on
 //!
 //! The check builds each layer's release code and fails when a marker is in it:
 //! the Swift objects of the iOS app, the shrunk dex of the Android app, and the
@@ -42,7 +42,7 @@ const APP_MARKERS: &[&str] =
 /// Seam variables only the iOS app has, which the Android debug control can't contain
 const IOS_APP_MARKERS: &[&str] = &["COVE_UI_TEST_TRUNCATION_PROBE"];
 
-/// Strings only the Rust seam contains, its variable and the emulator's root key, one per
+/// Strings only the Rust seams contain, their variables and the emulator's root key, one per
 /// line; the Xcode and Gradle release checks read the same file
 const RUST_MARKERS: &str = include_str!("../../../tools/release-seams/rust-markers.txt");
 

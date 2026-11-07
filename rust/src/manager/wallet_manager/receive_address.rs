@@ -3,7 +3,20 @@ use std::time::Duration;
 
 use cove_types::address::AddressInfoWithDerivation;
 
-pub const CACHE_WINDOW: Duration = Duration::from_secs(5 * 60);
+#[cfg(debug_assertions)]
+pub(crate) mod ui_test_refresh_failure;
+
+const CACHE_WINDOW: Duration = Duration::from_secs(5 * 60);
+
+/// How long a shown receive address stays before Receive replaces it with a new one
+pub fn cache_window() -> Duration {
+    #[cfg(debug_assertions)]
+    if let Some(window) = ui_test_refresh_failure::cache_window() {
+        return window;
+    }
+
+    CACHE_WINDOW
+}
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, uniffi::Enum)]
 pub enum ReceiveAddressStatus {
@@ -62,7 +75,7 @@ impl ReceiveAddressState {
             address: Arc::new(address),
             status,
             first_shown_at_secs,
-            expires_at_secs: Some(first_shown_at_secs + CACHE_WINDOW.as_secs()),
+            expires_at_secs: Some(first_shown_at_secs + cache_window().as_secs()),
         }
     }
 
