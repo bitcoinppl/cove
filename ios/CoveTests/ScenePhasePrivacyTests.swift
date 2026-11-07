@@ -63,23 +63,35 @@ final class ScenePhasePrivacyTests: XCTestCase {
         }
     }
 
-    /// Each NFC owner the app holds counts as an active operation on its own
-    func testEveryAppNfcOwnerCountsAsAnActiveOperation() async throws {
+    /// A tag read or write counts as an active operation whoever owns its reader or writer, such
+    /// as a screen holding its own, and one that is released stops counting
+    func testEveryNfcReaderAndWriterCountsAsAnActiveOperation() async throws {
         try await bootstrapIfNeeded()
         let app = AppManager.shared
-
-        XCTAssertNil(app.tapSignerNfc, "the test host should hold no TAPSIGNER session")
         XCTAssertFalse(app.isNfcOperationActive, "the test host should hold no NFC scan")
 
         app.nfcReader.isScanning = true
-        XCTAssertTrue(app.isNfcOperationActive, "a tag read is an NFC operation")
+        XCTAssertTrue(app.isNfcOperationActive, "the app's own tag read is an NFC operation")
         app.nfcReader.isScanning = false
 
-        app.nfcWriter.isScanning = true
-        XCTAssertTrue(app.isNfcOperationActive, "a tag write is an NFC operation")
-        app.nfcWriter.isScanning = false
-
+        let screenReader = NFCReader()
+        screenReader.isScanning = true
+        XCTAssertTrue(app.isNfcOperationActive, "a screen's own tag read is an NFC operation")
+        screenReader.isScanning = false
         XCTAssertFalse(app.isNfcOperationActive)
+
+        let screenWriter = NFCWriter()
+        screenWriter.isScanning = true
+        XCTAssertTrue(app.isNfcOperationActive, "a tag write is an NFC operation")
+        screenWriter.isScanning = false
+        XCTAssertFalse(app.isNfcOperationActive)
+
+        // a reader released mid-scan must not hold the cover and the lock off for good
+        var releasedReader: NFCReader? = NFCReader()
+        releasedReader?.isScanning = true
+        XCTAssertTrue(app.isNfcOperationActive)
+        releasedReader = nil
+        XCTAssertFalse(app.isNfcOperationActive, "a released reader still counted as scanning")
     }
 
     // MARK: - Helpers
