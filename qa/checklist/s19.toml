@@ -59,4 +59,6 @@ coverage = [
     "human",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# needs a hardware signer over qr and nfc
+# needs a strict physical hardware signer over qr and nfc. over qr, its camera reads the animated ur
+# and bbqr exports off the phone's screen and the phone's camera reads the signed ur and bbqr back;
+# the s13 rows' ui tests decide the drawn frames and the signed import without a camera
