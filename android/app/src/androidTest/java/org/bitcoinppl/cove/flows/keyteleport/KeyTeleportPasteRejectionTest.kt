@@ -144,7 +144,11 @@ class KeyTeleportPasteRejectionTest {
     private fun assertDialogTextFitsInsideTheDialog(capture: Bitmap) {
         val dialog = compose.onNode(isDialog()).fetchSemanticsNode().boundsInWindow
         val inDialog = hasAnyAncestor(isDialog())
-        val required = listOf(DIALOG_TITLE, KeyTeleportFlowDirection.SEND.rejectedInputMessage, DIALOG_OK).map { requiredText(inDialog, it) }
+        val required =
+            listOf(DIALOG_TITLE, KeyTeleportFlowDirection.SEND.rejectedInputMessage, DIALOG_OK).map {
+                requiredText("the rejection dialog", inDialog, it)
+            }
+
         val texts = (required + drawnTexts(inDialog)).distinctBy { it.id }
 
         assertTextsMatchTheirReferences(
@@ -173,10 +177,14 @@ class KeyTeleportPasteRejectionTest {
         }
     }
 
-    // once the dialog closes the sender is the only window, and every text on it must still be drawn whole
+    // once the dialog closes the sender is the only window, and every text on it must still be drawn
+    // whole; its title and instructions are looked up by name first, since without them the header
+    // and buttons alone would still give the check something to compare
     private fun assertSenderTextIsDrawnAsLaidOut(capture: Bitmap) {
         val root = compose.onRoot().fetchSemanticsNode().boundsInWindow
-        val texts = drawnTexts(SemanticsMatcher("anywhere") { true })
+        val anywhere = SemanticsMatcher("anywhere") { true }
+        val required = listOf(SENDER_TITLE, SENDER_INSTRUCTIONS).map { requiredText("the sender after OK", anywhere, it) }
+        val texts = (required + drawnTexts(anywhere)).distinctBy { it.id }
 
         assertTextsMatchTheirReferences(
             "the sender after OK",
@@ -186,11 +194,12 @@ class KeyTeleportPasteRejectionTest {
 
     // the one node in [matcher] showing exactly [label], which must lay out that text
     private fun requiredText(
+        where: String,
         matcher: SemanticsMatcher,
         label: String,
     ): SemanticsNode {
         val nodes = compose.onAllNodes(matcher and hasText(label), useUnmergedTree = true).fetchSemanticsNodes()
-        assertEquals("the rejection dialog shows \"$label\" the wrong number of times", 1, nodes.size)
+        assertEquals("$where shows \"$label\" the wrong number of times", 1, nodes.size)
 
         val node = nodes.single()
         assertEquals("\"$label\" lays out other text than it shows", label, node.textLayouts().singleOrNull()?.layoutInput?.text?.text)
@@ -253,6 +262,10 @@ class KeyTeleportPasteRejectionTest {
         // the title and button KeyTeleportMessageDialog shows over every message
         const val DIALOG_TITLE = "KeyTeleport"
         const val DIALOG_OK = "OK"
+
+        // the title and instructions SendIdleView shows above Scan and Paste
+        const val SENDER_TITLE = "Send a wallet"
+        const val SENDER_INSTRUCTIONS = "Scan or paste the receiver code, then choose a hot wallet to send."
 
         // bounds are floats from the same layout, so allow rounding but not a clipped line of text
         const val CLIP_TOLERANCE_PX = 1f
