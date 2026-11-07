@@ -16,6 +16,8 @@ import androidx.compose.ui.unit.toSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.StaleObjectException
@@ -171,8 +173,7 @@ class TapSignerLayoutFullLaunchTest {
         node.fund(screens.copyReceiveAddress(), listOf(FUNDED_SATS))
         screens.refreshUntilBalance(FUNDED_SATS)
 
-        device.executeShellCommand("settings put system font_scale $LARGEST_SYSTEM_FONT_SCALE")
-        device.waitForIdle()
+        setLargestFontScaleAndWaitForRecreation()
         wallet.waitForBalance(FUNDED_SATS)
 
         wallet.startSend()
@@ -301,6 +302,30 @@ class TapSignerLayoutFullLaunchTest {
             "the $title screen didn't accept the CVC",
             device.wait(Until.gone(By.text(title)), 15_000L),
         )
+    }
+
+    /**
+     * Sets the largest system font scale and waits until the app's resumed activity has it
+     *
+     * The change recreates the activity, and a click that lands on the one it replaces is lost,
+     * so the wallet screen must be the new activity's before the test opens Send
+     */
+    private fun setLargestFontScaleAndWaitForRecreation() {
+        device.executeShellCommand("settings put system font_scale $LARGEST_SYSTEM_FONT_SCALE")
+        wallet.waitUntil("expected the app to recreate its activity at font scale $LARGEST_SYSTEM_FONT_SCALE", timeoutMs = 30_000L) {
+            var applied = false
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                applied =
+                    ActivityLifecycleMonitorRegistry
+                        .getInstance()
+                        .getActivitiesInStage(Stage.RESUMED)
+                        .any { it.resources.configuration.fontScale == LARGEST_SYSTEM_FONT_SCALE }
+            }
+
+            applied
+        }
+
+        device.waitForIdle()
     }
 
     /** Checks the CVC screen titled [title] fits, before any CVC is entered */
