@@ -171,6 +171,7 @@ class KeyTeleportAppScannerFullLaunchTest {
                 .put("code", request.numericCode)
                 .put("payload", JSONObject().put("mnemonic", SENT_WORDS))
                 .put("min_parts", RESPONSE_PARTS)
+
         val response = JSONObject(sender.request("POST", "/keyteleport/send", body))
         val parts: JSONArray = response.getJSONArray("parts")
 
