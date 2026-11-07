@@ -4688,7 +4688,7 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
     assert_eq!(configured_cloud_backup_state(&manager).destructive_operation, Destructive::Idle);
     assert_eq!(drained_drive_account_commit_requests(&manager, transition_id.value()), 0);
 
-    // Try Again on the recovery prompt restarts the same switch, not a plain reinitialize
+    // try again on the recovery prompt restarts the same switch, not a plain reinitialize
     supervisor.begin_recovery_operation(RecoveryAction::ReinitializeBackup);
 
     assert_eq!(

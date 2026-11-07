@@ -106,7 +106,7 @@ coverage = [
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # payloads are built by a port of coldcard's encode_payload checked against the firmware vector;
-# one send from a real COLDCARD stays human so firmware changes the port doesn't track still get caught.
+# one send from a real COLDCARD stays human so firmware changes the port doesn't track still get caught
 # the port follows firmware a772156d but the vector came from bcc2c382, so regenerating it at the
 # port's commit is the cheap next step; a coldcard simulator in place of the device would need its
 # firmware, a micropython build and a new ci job

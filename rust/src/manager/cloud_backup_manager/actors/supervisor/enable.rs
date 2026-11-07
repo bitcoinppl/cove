@@ -165,6 +165,7 @@ impl CloudBackupSupervisor {
         let runtime_status = RustCloudBackupManager::runtime_status_for(
             &RustCloudBackupManager::load_persisted_state(),
         );
+
         if matches!(runtime_status, CloudBackupStatus::Enabled) {
             self.start_verification_with_context(
                 manager,
