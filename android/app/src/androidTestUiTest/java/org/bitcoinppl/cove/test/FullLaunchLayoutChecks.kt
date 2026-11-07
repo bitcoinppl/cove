@@ -101,6 +101,7 @@ class FullLaunchLayoutChecks(
                 "$name is cut off at the side: its control spans $whole but shows only $shown",
                 whole.left >= shown.left - CLIP_TOLERANCE_PX && whole.right <= shown.right + CLIP_TOLERANCE_PX,
             )
+
             assertTrue("$name's control spans $whole, taller than the $shown it can show in", !(cutTop && cutBottom))
 
             if (!cutTop && !cutBottom && shown.bottom <= gestureStripTop) {
