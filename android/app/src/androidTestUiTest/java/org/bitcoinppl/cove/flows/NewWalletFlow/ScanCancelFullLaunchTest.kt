@@ -142,6 +142,7 @@ class ScanCancelFullLaunchTest {
         device.waitFor(By.text("Ready to Scan"))
         device.pressBack()
         assertTrue("Back should close the NFC sheet", device.wait(Until.gone(By.text("Ready to Scan")), 10_000L))
+        device.waitFor(By.text("Add New Wallet"))
 
         // the seam polls every 200 ms while a scan runs, so a scan still running takes the tag
         // well within this
@@ -150,7 +151,9 @@ class ScanCancelFullLaunchTest {
         assertTrue("the dismissed NFC scan read the tag", nfc.isWaiting)
         assertFalse("a tag imported after the NFC sheet closed", device.hasObject(By.text("Wallet imported successfully")))
 
-        screens.scanNfcFromAddWallet()
+        // Back closed only the sheet, so Add Wallet is still open to start the scan again
+        device.waitFor(By.desc("More wallet options")).click()
+        device.waitFor(By.text("NFC")).click()
         device.waitFor(By.text("Wallet imported successfully"), timeoutMs = 30_000L)
         device.waitFor(By.text("OK")).click()
         wallet.waitForBalance(0L)
