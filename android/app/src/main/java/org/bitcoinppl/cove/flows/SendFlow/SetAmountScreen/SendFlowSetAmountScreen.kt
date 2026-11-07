@@ -243,6 +243,8 @@ fun SendFlowSetAmountScreen(
                 val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
                 val showsKeyboardToolbar = isKeyboardVisible && focusedField == SendFocusField.Amount
                 var keyboardToolbarHeight by remember { mutableIntStateOf(0) }
+                val keyboardToolbarPadding =
+                    if (showsKeyboardToolbar) with(density) { keyboardToolbarHeight.toDp() } else 0.dp
 
                 Box(
                     modifier =
@@ -260,7 +262,7 @@ fun SendFlowSetAmountScreen(
                             Modifier
                                 .fillMaxSize()
                                 .imePadding()
-                                .padding(bottom = if (showsKeyboardToolbar) with(density) { keyboardToolbarHeight.toDp() } else 0.dp)
+                                .padding(bottom = keyboardToolbarPadding)
                                 .verticalScroll(rememberScrollState())
                                 .padding(horizontal = 16.dp),
                     ) {
