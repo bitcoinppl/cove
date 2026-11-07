@@ -256,25 +256,31 @@ class FullLaunchLayoutChecks(
         titleVisible: Rect,
     ) {
         var root: RootForTest? = null
-        var texts = emptyList<Pair<Int, String>>()
+        var texts = emptyList<Pair<Int, TextIdentity>>()
+        val claimed = mutableSetOf<Int>()
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             root = semanticsNodeAt(titleVisible)?.first
-            texts =
+            val nodes =
                 root
                     ?.semanticsOwner
                     ?.getAllSemanticsNodes(mergingEnabled = false)
                     ?.filter { SemanticsProperties.Text in it.config && SemanticsProperties.EditableText !in it.config }
-                    ?.filter { it.size.height > 0 && it.size.width > 0 }
-                    ?.sortedByDescending { it.positionOnScreen.y }
-                    ?.map { node -> node.id to node.config[SemanticsProperties.Text].joinToString(" ") { it.text } }
                     .orEmpty()
+
+            // a replacement is a text made after the scan starts, so none of these can be one
+            claimed += nodes.map { it.id }
+            texts =
+                nodes
+                    .filter { it.size.height > 0 && it.size.width > 0 }
+                    .sortedByDescending { it.positionOnScreen.y }
+                    .map { node -> node.id to node.textIdentity() }
         }
 
         val owner = checkNotNull(root) { "$screen: its title matches no Compose semantics node" }
         val problems =
-            texts.mapNotNull { (id, text) ->
-                textShowWholeProblem(owner, id, text)?.let { "\"${text.take(TEXT_IN_MESSAGE)}\": $it" }
+            texts.mapNotNull { (id, identity) ->
+                textShowWholeProblem(owner, id, identity, claimed)?.let { "\"${identity.text.take(TEXT_IN_MESSAGE)}\": $it" }
             }
 
         assertTrue("$screen has texts that never show whole: $problems", problems.isEmpty())
@@ -294,6 +300,41 @@ class FullLaunchLayoutChecks(
     )
 
     /**
+     * What tells a text from others that read the same: its string, and the test tag or the texts
+     * of its nearest ancestor that has a test tag or takes a click, or null when none does
+     */
+    private data class TextIdentity(
+        val text: String,
+        val anchor: String?,
+    )
+
+    // read on the main thread, as every semantics read is
+    private fun SemanticsNode.textIdentity(): TextIdentity {
+        val anchor =
+            generateSequence(this) { it.parent }.firstNotNullOfOrNull { node ->
+                node.config.getOrNull(SemanticsProperties.TestTag)?.let { "tag $it" }
+                    ?: node.takeIf { SemanticsActions.OnClick in it.config }?.let { control ->
+                        "control " + control.selfAndDescendants().mapNotNull { it.config.getOrNull(SemanticsProperties.Text) }.flatten().joinToString(" ") { it.text }
+                    }
+            }
+
+        return TextIdentity(config[SemanticsProperties.Text].joinToString(" ") { it.text }, anchor)
+    }
+
+    /** The text that took a missing text's place, or why none did */
+    private sealed interface Replacement {
+        data class Found(
+            val id: Int,
+        ) : Replacement
+
+        data object Gone : Replacement
+
+        data class Ambiguous(
+            val count: Int,
+        ) : Replacement
+    }
+
+    /**
      * Why the text with semantics [id] never shows whole, or null when it does
      *
      * Its scroll area is scrolled just far enough to bring the part under check inside it. A text
@@ -301,30 +342,37 @@ class FullLaunchLayoutChecks(
      * line bounds its layout measures, so an area too short for a line fails
      *
      * A scroll can replace the text's subtree, which gives it a new semantics id, so a text that
-     * goes missing is looked for again by its [text] in the same window, see [replacementTextId],
-     * and fails if it can't be found
+     * goes missing is looked for again by its [identity] among the texts no other text in the scan
+     * has [claimed], see [replacementText]. It fails when none or more than one is found, since
+     * measuring a text that reads the same elsewhere would pass the missing one unchecked
      */
     private fun textShowWholeProblem(
         root: RootForTest,
         id: Int,
-        text: String,
+        identity: TextIdentity,
+        claimed: MutableSet<Int>,
     ): String? {
         val edges = mutableListOf("whole")
         var checked = 0
         var scrolledFrom: Rect? = null
         var nodeId = id
-        var lastWhole: Rect? = null
+        val gone = "it left its window: no new text there reads the same under the same anchor after $STALE_READS reads"
 
         repeat(MAX_NUDGES * 2) {
             val placement =
                 textPlacement(root, nodeId)
-                    ?: replacementTextId(root, text, lastWhole)?.let { replacement ->
-                        nodeId = replacement
-                        textPlacement(root, replacement)
-                    }
-                    ?: return "it left its window, and no text there read the same after $STALE_READS reads"
+                    ?: when (val replacement = replacementText(root, identity, claimed)) {
+                        is Replacement.Found -> {
+                            nodeId = replacement.id
+                            claimed += replacement.id
+                            textPlacement(root, replacement.id) ?: return gone
+                        }
 
-            lastWhole = placement.whole
+                        Replacement.Gone -> return gone
+                        is Replacement.Ambiguous ->
+                            return "it was replaced, and which text replaced it is ambiguous: ${replacement.count} new texts there read the same under the same anchor after $STALE_READS reads"
+                    }
+
             val (shown, whole, firstLine, lastLine, viewport, scrollBy) = placement
             if (viewport != null && whole.height() > viewport.height() + CLIP_TOLERANCE_PX && edges == listOf("whole")) {
                 edges.clear()
@@ -378,32 +426,32 @@ class FullLaunchLayoutChecks(
     }
 
     /**
-     * The semantics id of the text in [root] that reads [text], nearest [near] when several do, or
-     * null when none does after [STALE_READS] reads, each once the app is idle
+     * The one text in [root] with [identity] that no text in the scan has [claimed], read up to
+     * [STALE_READS] times, each once the app is idle, until exactly one is found
      */
-    private fun replacementTextId(
+    private fun replacementText(
         root: RootForTest,
-        text: String,
-        near: Rect?,
-    ): Int? {
+        identity: TextIdentity,
+        claimed: Set<Int>,
+    ): Replacement {
+        var candidates = emptyList<Int>()
+
         repeat(STALE_READS) {
             device.waitForIdle()
-            var found: Int? = null
 
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
-                found =
+                candidates =
                     root.semanticsOwner
                         .getAllSemanticsNodes(mergingEnabled = false)
                         .filter { SemanticsProperties.Text in it.config && SemanticsProperties.EditableText !in it.config }
-                        .filter { node -> node.config[SemanticsProperties.Text].joinToString(" ") { it.text } == text }
-                        .minByOrNull { node -> near?.let { edgeDistance(node.fullOnScreen(), it) } ?: 0 }
-                        ?.id
+                        .filter { it.id !in claimed && it.textIdentity() == identity }
+                        .map { it.id }
             }
 
-            if (found != null) return found
+            candidates.singleOrNull()?.let { return Replacement.Found(it) }
         }
 
-        return null
+        return if (candidates.isEmpty()) Replacement.Gone else Replacement.Ambiguous(candidates.size)
     }
 
     /** The on-screen bounds of the text with semantics [id] and its nearest vertical scroll area */
