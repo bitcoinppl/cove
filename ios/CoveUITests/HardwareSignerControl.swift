@@ -179,6 +179,24 @@ struct HardwareSignerControl {
         _ = try controlRequest(baseUrl, "POST", "tapsigner/drop", body: ["after_exchanges": count])
     }
 
+    /// The UR or BBQr frames read off an export so far, joined: the PSBT as hex once every part is
+    /// in, or how many parts are still missing
+    struct JoinedExport: Decodable {
+        let psbt: String?
+        let partsLeft: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case psbt
+            case partsLeft = "parts_left"
+        }
+    }
+
+    /// Joins the frames a test decoded off the app's PSBT export, as a hardware wallet's camera
+    /// would; a frame that doesn't join the others fails the request
+    func joinExportFrames(_ frames: [String]) throws -> JoinedExport {
+        try decode(JoinedExport.self, controlRequest(baseUrl, "POST", "join-export-frames", body: ["frames": frames]))
+    }
+
     private func decode<T: Decodable>(_ type: T.Type, _ data: Data) throws -> T {
         try JSONDecoder().decode(type, from: data)
     }

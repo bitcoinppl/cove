@@ -502,3 +502,139 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
         try app.copyReceiveAddress(using: signer)
     }
 }
+
+// MARK: - Drawn export frames
+
+/// Reads the unsigned export off the screen as a hardware wallet's camera would, instead of from
+/// Copy, so a frame the sheet never draws or draws unreadably fails the send
+extension HardwareSigningFullLaunchUITests {
+    /// The fewest frames an export should cycle through, so the test reads an animated QR
+    private static let drawnExportMinParts = 3
+
+    /// Bounds the screenshots taken to see every part; a part that never shows fails within it
+    private static let drawnExportTimeout: TimeInterval = 90
+
+    private struct DrawnExport {
+        let psbt: String
+        let frames: Int
+        let captures: Int
+        let duration: TimeInterval
+    }
+
+    func testDrawnUrExportJoinsToTheDraftAndItsSignatureBroadcasts() throws {
+        try signDrawnExportAndBroadcast(.ur)
+    }
+
+    func testDrawnBbqrExportJoinsToTheDraftAndItsSignatureBroadcasts() throws {
+        try signDrawnExportAndBroadcast(.bbqr)
+    }
+
+    private func signDrawnExportAndBroadcast(_ format: QrFormat) throws {
+        let funded = try fundTestWallet()
+        importWatchOnlyWallet()
+        app.assertBalance(sats: Self.fundedSats.reduce(0, +), timeout: 120)
+
+        app.startSend(to: XCUIApplication.externalAddress)
+        app.tapMax()
+        app.tapNext()
+
+        let copied = exportUnsignedPsbt(showing: format)
+
+        openExportSheet(showing: format)
+        let shownParts = lowerDensityUntilAnimated()
+        let drawn = try readDrawnExport(format)
+        closeExportSheet()
+
+        print("drawn \(format.rawValue) export: \(drawn.frames) of \(shownParts) frames in \(drawn.captures) captures over \(String(format: "%.1f", drawn.duration)) s")
+        XCTAssertEqual(drawn.frames, shownParts, "the frame counter and the drawn frames disagree on the part count")
+        XCTAssertEqual(drawn.psbt, copied.lowercased(), "the drawn frames carry a different PSBT than Copy")
+
+        let signed = try signer.sign(drawn.psbt, minParts: Self.animatedParts)
+        openSignatureScanner()
+        try qr.show(Array(signed.frames(format).reversed()))
+
+        assertConfirmationScreen()
+        app.swipeToSend()
+
+        let broadcast = try node.waitForBroadcasts(count: 1)[0]
+        XCTAssertEqual(Set(broadcast.inputs), Set(funded.map(\.outpoint)), "a Max send spends every UTXO")
+        XCTAssertEqual(broadcast.outputs.map(\.address), [XCUIApplication.externalAddress])
+    }
+
+    private func openExportSheet(showing format: QrFormat) {
+        app.tapButton(named: "Export Transaction")
+        app.tapButton(named: "QR Code")
+        XCTAssertTrue(app.staticTexts["Scan this QR"].waitForExistence(timeout: 15))
+
+        let formatButton = app.segmentedControls.buttons[format.rawValue]
+        XCTAssertTrue(formatButton.waitForExistence(timeout: 5))
+        formatButton.tap()
+        XCTAssertTrue(formatButton.isSelected)
+    }
+
+    /// Lowers the density until the export cycles through at least `drawnExportMinParts` frames,
+    /// and returns how many the frame counter shows
+    ///
+    /// A small PSBT fits in one BBQr frame at the default density, which shows no frame counter
+    private func lowerDensityUntilAnimated() -> Int {
+        let counter = app.descendants(matching: .any)["QR frame"]
+        let decrease = app.buttons["Decrease density"]
+        XCTAssertTrue(decrease.waitForExistence(timeout: 10))
+
+        var shown = counter.waitForExistence(timeout: 3) ? frameCount(counter) : 1
+        for _ in 0 ..< 6 where shown < Self.drawnExportMinParts && decrease.isEnabled {
+            decrease.tap()
+
+            // the sheet regenerates its frames, and frames drawn before then would join a different
+            // split, so wait until the counter shows the new count
+            let previous = shown
+            let deadline = Date().addingTimeInterval(5)
+            while Date() < deadline, shown == previous {
+                Thread.sleep(forTimeInterval: 0.2)
+                shown = counter.exists ? frameCount(counter) : 1
+            }
+        }
+
+        XCTAssertGreaterThanOrEqual(shown, Self.drawnExportMinParts, "the export never became an animated QR")
+        return shown
+    }
+
+    /// The N of the counter's "i of N"
+    private func frameCount(_ counter: XCUIElement) -> Int {
+        let value = counter.value as? String ?? ""
+        return value.split(separator: " ").last.flatMap { Int($0) } ?? 0
+    }
+
+    /// Screenshots the sheet and decodes its QR until the host can join every distinct frame seen
+    private func readDrawnExport(_ format: QrFormat) throws -> DrawnExport {
+        let prefix = switch format {
+        case .ur: "ur:"
+        case .bbqr: "B$"
+        }
+
+        let started = Date()
+        var frames: [String] = []
+        var captures = 0
+        var partsLeft: Int?
+
+        while Date().timeIntervalSince(started) < Self.drawnExportTimeout {
+            captures += 1
+            for code in app.visibleQrCodes where code.lowercased().hasPrefix(prefix.lowercased()) && !frames.contains(code) {
+                frames.append(code)
+
+                let joined = try signer.joinExportFrames(frames)
+                if let psbt = joined.psbt {
+                    return DrawnExport(psbt: psbt, frames: frames.count, captures: captures, duration: Date().timeIntervalSince(started))
+                }
+
+                partsLeft = joined.partsLeft
+            }
+
+            // a random pause keeps the screenshots from falling into step with the frame timer
+            Thread.sleep(forTimeInterval: .random(in: 0.05 ... 0.25))
+        }
+
+        XCTFail("decoded \(frames.count) distinct \(format.rawValue) frames in \(captures) captures, and \(partsLeft.map(String.init) ?? "some") parts never showed")
+        return DrawnExport(psbt: "", frames: frames.count, captures: captures, duration: Date().timeIntervalSince(started))
+    }
+}
