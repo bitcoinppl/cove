@@ -636,7 +636,8 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// container's center, which on a sheet with the number pad up lands on the keyboard's
     /// backdrop; that backdrop sits above the frame XCUITest reports for the keyboard, takes the
     /// drag, and the content never moves. The margin keeps the drag off the multi-line chain code
-    /// field, which scrolls its own text instead of the screen
+    /// field, and `dragStart` keeps it from starting on any other field, since a text view such as
+    /// the send screen's address editor scrolls its own text instead of the screen
     private func drag(_ container: XCUIElement, by distance: CGFloat) {
         let window = app.windows.firstMatch.frame
         var area = container.frame.intersection(window)
@@ -648,14 +649,16 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
         let step = max(-area.height * 0.4, min(area.height * 0.4, distance))
         let travel = step + (step < 0 ? -Self.touchSlop : Self.touchSlop)
+        let x = area.minX + Self.dragMargin
         let point = { (y: CGFloat) in
             container.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
-                dx: area.minX + Self.dragMargin - container.frame.minX,
+                dx: x - container.frame.minX,
                 dy: y - container.frame.minY
             ))
         }
 
-        point(area.midY + travel / 2).press(forDuration: 0.05, thenDragTo: point(area.midY - travel / 2), withVelocity: .slow, thenHoldForDuration: 0.1)
+        let start = dragStart(in: area, x: x, travel: travel)
+        point(start).press(forDuration: 0.05, thenDragTo: point(start - travel), withVelocity: .slow, thenHoldForDuration: 0.1)
 
         guard var watch = numberPad else { return }
 
@@ -663,6 +666,35 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         numberPad = watch
         assertNumberPadInPlace(after: "drag \(watch.drags)")
     }
+
+    /// Where a drag of `travel` points down the column at `x` starts: as near the middle of `area`
+    /// as it can, with both ends inside `area`, and at least `fieldClearance` away from every text
+    /// field and text view across that column
+    ///
+    /// The view under the first touch takes the whole drag, so only the start must miss them; where
+    /// no point does, the drag starts at the middle as before
+    private func dragStart(in area: CGRect, x: CGFloat, travel: CGFloat) -> CGFloat {
+        let ideal = area.midY + travel / 2
+        let low = area.minY + max(0, travel) + Self.fieldClearance
+        let high = area.maxY + min(0, travel) - Self.fieldClearance
+        let clamp = { (y: CGFloat) in min(high, max(low, y)) }
+
+        let fields = [app.textViews, app.textFields, app.secureTextFields]
+            .flatMap(\.allElementsBoundByIndex)
+            .map(\.frame)
+            .filter { !$0.isEmpty && $0.minX <= x && x <= $0.maxX }
+
+        let isClear = { (y: CGFloat) in
+            !fields.contains { $0.minY - Self.fieldClearance < y && y < $0.maxY + Self.fieldClearance }
+        }
+
+        // the nearest clear point to the middle is the middle itself or lies just past a field's edge
+        let candidates = ([ideal] + fields.flatMap { [$0.minY - Self.fieldClearance, $0.maxY + Self.fieldClearance] }).map(clamp)
+        return candidates.filter(isClear).min { abs($0 - ideal) < abs($1 - ideal) } ?? clamp(ideal)
+    }
+
+    /// How far a drag starts from a field's edge, and from the edges of the space it drags in
+    private static let fieldClearance: CGFloat = 4
 
     // MARK: - Queries
 
