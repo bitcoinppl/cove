@@ -253,8 +253,8 @@ fun SendFlowSetAmountScreen(
                             .background(MaterialTheme.colorScheme.surface),
                 ) {
                     // edge to edge, the window doesn't shrink for the keyboard, so the scroll area
-                    // stops above it and above the toolbar on it; otherwise a large font scale
-                    // leaves the address field under the keyboard, where no scroll reaches
+                    // stops above it and above the toolbar on it; otherwise the end of the form,
+                    // such as Next, stays under the keyboard, where no scroll reaches
                     Column(
                         modifier =
                             Modifier
