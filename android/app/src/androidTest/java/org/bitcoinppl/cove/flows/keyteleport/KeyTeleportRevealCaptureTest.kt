@@ -219,6 +219,7 @@ class KeyTeleportRevealCaptureTest {
         assertTrue("$screen is not protected with FLAG_SECURE", windowIsSecure())
 
         val qrFirst = capture()
+        val qrImage = compose.onNodeWithContentDescription(QR_IMAGE).regionInRoot()
 
         // a hidden code has no text in the tree, so a code that has one is judged by its pixels
         // before the hint it should carry is looked for
@@ -244,7 +245,7 @@ class KeyTeleportRevealCaptureTest {
         compose.waitForIdle()
         val qrAgain = capture()
 
-        return RevealWalk(screen, packet, code, codeRegion, qrRegion, codeText, qrFirst = qrFirst, codeShown = codeShown, qrAgain = qrAgain)
+        return RevealWalk(screen, packet, code, codeRegion, qrRegion, qrImage, codeText, qrFirst = qrFirst, codeShown = codeShown, qrAgain = qrAgain)
     }
 
     /**
@@ -341,10 +342,10 @@ class KeyTeleportRevealCaptureTest {
     private fun readWalk(walk: RevealWalk): WalkReading {
         val qrStates =
             listOf("before anything is revealed" to walk.qrFirst, "after showing the QR code again" to walk.qrAgain).map { (moment, image) ->
-                QrState(moment, image.readQr(walk.qrRegion), image.matchCode(walk.codeText))
+                QrState(moment, image.readQr(walk.qrRegion, walk.qrImage), image.matchCode(walk.codeText))
             }
 
-        val reading = WalkReading(walk, qrStates, hiddenQr = walk.codeShown.readQr(walk.qrRegion), shownCode = walk.codeShown.matchCode(walk.codeText))
+        val reading = WalkReading(walk, qrStates, hiddenQr = walk.codeShown.readQr(walk.qrRegion, walk.qrImage), shownCode = walk.codeShown.matchCode(walk.codeText))
 
         qrStates.forEach { Log.i(TAG, "${walk.screen} ${it.moment}: QR code reads as ${it.qr.kind}, hidden code ${it.code}") }
         Log.i(TAG, "${walk.screen} with the code shown: hidden QR code reads as ${reading.hiddenQr.kind}, shown code ${reading.shownCode}")
@@ -379,24 +380,37 @@ class KeyTeleportRevealCaptureTest {
     private fun Bitmap.matchCode(text: ShownText) = matchTextReference(text.layout, text.topLeft, compose.density, "code")
 
     /**
-     * Read the QR code in [region] of this capture as a camera app might, trying the region alone
-     * and the whole capture with both of zxing's binarizers
+     * Read the QR code in [region] of this capture as a camera app might: the drawn [image] alone
+     * as the upright code it is, then the region and the whole capture with zxing's detector, each
+     * with both of zxing's binarizers
      *
      * The same reading serves both checks: a shown code must decode in some attempt and a hidden
      * one in none, so the hidden check gets every chance a scanner would have
      */
-    private fun Bitmap.readQr(region: IntRect): QrReading {
-        val crop = Bitmap.createBitmap(this, region.left, region.top, region.width, region.height)
+    private fun Bitmap.readQr(
+        region: IntRect,
+        image: IntRect,
+    ): QrReading {
+        // zxing's detector takes a run of random modules for a finder pattern and samples the wrong
+        // grid in about 1 sharp random code in 100, where a camera gets another frame from another
+        // angle, so the drawn image is also read straight, as a scanner held square to the screen sees it
+        val attempts =
+            listOf(
+                crop(image) to mapOf(DecodeHintType.PURE_BARCODE to true),
+                crop(region) to mapOf(DecodeHintType.TRY_HARDER to true),
+                this to mapOf(DecodeHintType.TRY_HARDER to true),
+            )
+
         var closest = QrReading(null, "no QR code")
 
-        for (image in listOf(crop, this)) {
-            val pixels = IntArray(image.width * image.height)
-            image.getPixels(pixels, 0, image.width, 0, 0, image.width, image.height)
-            val source = RGBLuminanceSource(image.width, image.height, pixels)
+        for ((bitmap, hints) in attempts) {
+            val pixels = IntArray(bitmap.width * bitmap.height)
+            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+            val source = RGBLuminanceSource(bitmap.width, bitmap.height, pixels)
 
             for (binarizer in listOf(HybridBinarizer(source), GlobalHistogramBinarizer(source))) {
                 try {
-                    val text = QRCodeReader().decode(BinaryBitmap(binarizer), mapOf(DecodeHintType.TRY_HARDER to true)).text
+                    val text = QRCodeReader().decode(BinaryBitmap(binarizer), hints).text
                     return QrReading(text, "a decoded QR code")
                 } catch (_: NotFoundException) {
                     // nothing found here, try the next attempt
@@ -408,6 +422,8 @@ class KeyTeleportRevealCaptureTest {
 
         return closest
     }
+
+    private fun Bitmap.crop(region: IntRect): Bitmap = Bitmap.createBitmap(this, region.left, region.top, region.width, region.height)
 
     /** What zxing read from a capture, with [kind] safe for messages since it never holds the text */
     private class QrReading(
@@ -496,6 +512,7 @@ class KeyTeleportRevealCaptureTest {
         val code: String,
         val codeRegion: IntRect,
         val qrRegion: IntRect,
+        val qrImage: IntRect,
         val codeText: ShownText,
         val qrFirst: Bitmap,
         val codeShown: Bitmap,
@@ -543,6 +560,7 @@ class KeyTeleportRevealCaptureTest {
     private companion object {
         const val TAG = "KeyTeleportRevealCapture"
         const val QR_HINT = "Tap to show QR code"
+        const val QR_IMAGE = "KeyTeleport QR"
         const val RECEIVER_CODE_HINT = "Tap to show receiver code"
         const val SENDER_PASSWORD_HINT = "Tap to show password"
 
