@@ -13,9 +13,19 @@ paths = [
 ]
 coverage = [
     "human",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::twelve_word_mnemonic_transfer_imports_the_sender_wallet",
+    "ios-ui:ios/CoveUITests/KeyTeleportSendFullLaunchUITests.swift::testSentWordsShowTheQrCodeAndPasswordOneAtATime",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportMnemonicReviewTest.kt::finishWithoutImportingAddsNoWalletAndImportWalletAddsOne",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# needs two phones
+# round_trip.rs runs the sending and receiving rust managers against each other and checks the
+# received wallet's fingerprint and first address. ios sends the wallet's words to the host playing
+# the android phone, which decodes ios's response qr from a screenshot with core image. android
+# receives words from an in-process rust peer, whose response text the test hands to the receive
+# manager directly, and imports them. no test has one platform's camera read the other's qr
+# rendering, so that stays human: android's ml kit scanner reading the core image qr codes ios
+# shows, and ios's avfoundation scanner reading the zxing qr codes android shows, in both the
+# request and the response direction, along with android's wiring from its scanner to the manager
 
 [[row]]
 id = "s20-android-to-ios-private-key-migration"
@@ -32,6 +42,15 @@ paths = [
 ]
 coverage = [
     "human",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::master_private_key_transfer_imports_an_xprv_wallet_with_the_same_first_address",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/settings/PrivateKeyExportFullLaunchTest.kt::bothExportRoutesNeedAFreshMainPinAndCarryTheSameKey",
+    "ios-ui:ios/CoveUITests/KeyTeleportReceiveFullLaunchUITests.swift::testXprvReviewRevealHideCopyAndImport",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# needs two phones
+# round_trip.rs sends a master xprv between the two rust managers and checks the imported wallet's
+# first address. android sends its wallet's xprv to an in-process rust peer, pasting the request
+# and reading the response from the manager, and checks the peer gets the key reveal showed. ios
+# receives an xprv from the host playing the android phone through the qr seam and imports it. no
+# test has one platform's camera read the other's qr rendering, so that stays human: ios's
+# avfoundation scanner reading the zxing qr codes android shows, and android's ml kit scanner
+# reading the core image qr codes ios shows, in both the request and the response direction
