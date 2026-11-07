@@ -52,10 +52,11 @@ import kotlin.math.abs
  *
  * Hosts the real KeyTeleport screen, whose window is protected with FLAG_SECURE, and reads what it
  * drew from in-app captures, as the iOS tests do from screenshots. zxing must decode the shown QR
- * code to the exact packet and find no QR code while it is hidden. The shown code must match a
- * reference rendering of its own text and the hidden one must not. Without OCR, the hidden code
- * must also carry almost nothing of what tells two secrets apart: two transfers' hidden codes may
- * differ by only a small share of how much the same codes differ once shown
+ * code to the exact packet and must not decode it while it is hidden. The shown code must match a
+ * reference rendering of its own text and the hidden one must not. Without OCR, the hidden values
+ * must also carry almost nothing of what tells two secrets apart: over each character, and over
+ * the QR code, transfers' hidden captures may differ by only a small share of how much the same
+ * values differ once shown
  *
  * Secrets never go into assertion messages, which end up in test reports
  */
@@ -93,17 +94,25 @@ class KeyTeleportRevealCaptureTest {
         showKeyTeleport(KeyTeleportRoute.RECEIVE)
         val receiver = app.getKeyTeleportManager()
 
-        val first = awaitRequest(receiver)
-        val firstWalk = walkRevealPair("the first receiver request", first.packetText, first.groupedNumericCode, RECEIVER_CODE_HINT)
+        val walks =
+            walkUntilEveryPositionDiffers { previous ->
+                val request =
+                    if (previous.isEmpty()) {
+                        awaitRequest(receiver).let { it.packetText to it.groupedNumericCode }
+                    } else {
+                        receiver.dispatch(KeyTeleportManagerAction.RestartReceive)
+                        awaitOnMain("a new receiver request") {
+                            (receiver.state as? KeyTeleportManagerState.ReceiveReady)
+                                ?.v1
+                                ?.let { it.packet.bbqrPart() to it.groupedNumericCode }
+                                ?.takeIf { (packet, _) -> previous.none { it.packet == packet } }
+                        }
+                    }
 
-        receiver.dispatch(KeyTeleportManagerAction.RestartReceive)
-        val second =
-            awaitOnMain("a new receiver request") {
-                (receiver.state as? KeyTeleportManagerState.ReceiveReady)?.v1?.takeIf { it.packet.bbqrPart() != first.packetText }
+                walkRevealPair("receiver request ${previous.size + 1}", request.first, request.second, RECEIVER_CODE_HINT)
             }
-        val secondWalk = walkRevealPair("the second receiver request", second.packet.bbqrPart(), second.groupedNumericCode, RECEIVER_CODE_HINT)
 
-        assertOneValueReadableAtATime("receiver code", firstWalk, secondWalk)
+        assertOneValueReadableAtATime("receiver code", walks)
         endReceive(receiver)
     }
 
@@ -119,16 +128,37 @@ class KeyTeleportRevealCaptureTest {
 
         KeyTeleportTestPeer().use { receiver ->
             val request = receiver.startReceive()
+            val walks =
+                walkUntilEveryPositionDiffers { previous ->
+                    val response = sendTo(sender, wallet, request, previousPassword = previous.lastOrNull()?.code)
+                    walkRevealPair("sender response ${previous.size + 1}", response.packetText, response.password, SENDER_PASSWORD_HINT)
+                }
 
-            val first = sendTo(sender, wallet, request, previousPassword = null)
-            val firstWalk = walkRevealPair("the first sender response", first.packetText, first.password, SENDER_PASSWORD_HINT)
-
-            val second = sendTo(sender, wallet, request, previousPassword = first.password)
-            val secondWalk = walkRevealPair("the second sender response", second.packetText, second.password, SENDER_PASSWORD_HINT)
-
-            assertOneValueReadableAtATime("password", firstWalk, secondWalk)
+            assertOneValueReadableAtATime("password", walks)
             sender.dispatch(KeyTeleportManagerAction.Clear)
         }
+    }
+
+    /**
+     * Walk new transfers from [next] until every character position of the code has differed
+     * between two of them, or [MAX_TRANSFERS] have been walked
+     *
+     * Two random codes share a character in about one place in ten for digits, and a place no two
+     * transfers differ in tells nothing about whether that character leaks
+     */
+    private fun walkUntilEveryPositionDiffers(next: (previous: List<RevealWalk>) -> RevealWalk): List<RevealWalk> {
+        val walks = mutableListOf<RevealWalk>()
+        while (walks.size < 2 || (unchangedPositions(walks).isNotEmpty() && walks.size < MAX_TRANSFERS)) {
+            walks += next(walks)
+        }
+
+        return walks
+    }
+
+    // character positions that hold the same character in every walk
+    private fun unchangedPositions(walks: List<RevealWalk>): List<Int> {
+        val code = walks.first().code
+        return code.indices.filter { index -> !code[index].isWhitespace() && walks.all { it.code.getOrNull(index) == code[index] } }
     }
 
     private fun showKeyTeleport(route: KeyTeleportRoute) {
@@ -219,31 +249,39 @@ class KeyTeleportRevealCaptureTest {
     /**
      * Before anything is revealed and after each switch, exactly one of the QR code and the code
      * must be readable, no character of a hidden code may carry much of what tells it apart from
-     * the other transfer's character in the same place, and a hidden QR code may carry little of
-     * what tells the two transfers' QR codes apart
+     * another transfer's character in the same place, and a hidden QR code may carry little of
+     * what tells two transfers' QR codes apart
      */
     private fun assertOneValueReadableAtATime(
         what: String,
-        first: RevealWalk,
-        second: RevealWalk,
+        walks: List<RevealWalk>,
     ) {
-        val readings = listOf(first, second).map(::readWalk)
-        val codeSeparation = separation(first, second, first.codeRegion, hidden = { it.qrFirst }, shown = { it.codeShown })
-        val qrSeparation = separation(first, second, first.qrRegion, hidden = { it.codeShown }, shown = { it.qrFirst })
-        val characterRatios = characterSeparations(first, second)
-        Log.i(TAG, "$what: $codeSeparation")
+        val readings = walks.map(::readWalk)
+        val pairs = walks.indices.flatMap { i -> (i + 1 until walks.size).map { j -> walks[i] to walks[j] } }
+        val codeSeparation = pairs.map { (a, b) -> separation(a, b, a.codeRegion, hidden = { it.qrFirst }, shown = { it.codeShown }) }.maxBy { it.ratio }
+        val qrSeparation = pairs.map { (a, b) -> separation(a, b, a.qrRegion, hidden = { it.codeShown }, shown = { it.qrFirst }) }.maxBy { it.ratio }
+        val beforeReveal = characterSeparations(pairs) { it.qrFirst }
+        val afterSwitch = characterSeparations(pairs) { it.qrAgain }
+        val worstByPosition = beforeReveal.mapIndexed { index, share -> maxOf(share, afterSwitch[index]) }
+        Log.i(TAG, "$what over ${walks.size} transfers: $codeSeparation")
         Log.i(TAG, "QR code beside the $what: $qrSeparation")
-        Log.i(TAG, "$what by character: ${characterRatios.joinToString { "%.3f".format(it) }}")
+        Log.i(TAG, "$what by character: ${worstByPosition.filterNot { it.isNaN() }.joinToString { "%.3f".format(it) }}")
+        Log.i(TAG, "$what by character, before anything is revealed: ${beforeReveal.joinToString { "%.3f".format(it) }}")
+        Log.i(TAG, "$what by character, after showing the QR code again: ${afterSwitch.joinToString { "%.3f".format(it) }}")
 
         readings.forEach(WalkReading::assertExactlyOneReadable)
 
-        assertEquals("the two ${what}s have different lengths", first.code.length, second.code.length)
-        assertTrue("the two ${what}s are the same", first.code != second.code)
-        assertEquals("the $what moved between the two transfers", first.codeRegion, second.codeRegion)
-        assertEquals("the $what text moved between the two transfers", first.codeText.topLeft, second.codeText.topLeft)
-        assertTrue("the two ${what}s differ in fewer than $MIN_DIFFERING_CHARACTERS places", characterRatios.size >= MIN_DIFFERING_CHARACTERS)
+        val first = walks.first()
+        walks.drop(1).forEach { walk ->
+            assertEquals("two ${what}s have different lengths", first.code.length, walk.code.length)
+            assertEquals("the $what moved between transfers", first.codeRegion, walk.codeRegion)
+            assertEquals("the $what text moved between transfers", first.codeText.topLeft, walk.codeText.topLeft)
+        }
 
-        val mostExposed = characterRatios.max()
+        val unchanged = unchangedPositions(walks)
+        assertTrue("${unchanged.size} places of the $what held the same character in all ${walks.size} transfers", unchanged.isEmpty())
+
+        val mostExposed = worstByPosition.filterNot { it.isNaN() }.max()
         assertTrue(
             "a hidden $what character differs in detail by ${"%.3f".format(mostExposed)} of how much it does shown",
             mostExposed <= MAX_HIDDEN_CHARACTER_SHARE,
@@ -258,31 +296,45 @@ class KeyTeleportRevealCaptureTest {
     }
 
     /**
-     * For each place where the two codes hold different characters, how much the hidden captures
-     * differ in detail over that character's glyph box, as a share of how much the shown ones do
+     * For each character position, the most any pair of transfers holding different characters
+     * there differs in detail over that character's glyph box while [hidden], as a share of how
+     * much the same pair differs with the code shown; NaN where no pair differs or for a space
      *
      * One readable character is a leak even when the rest of the code is hidden, which a single
      * share over the whole code would average away
      */
     private fun characterSeparations(
-        first: RevealWalk,
-        second: RevealWalk,
+        pairs: List<Pair<RevealWalk, RevealWalk>>,
+        hidden: (RevealWalk) -> Bitmap,
     ): List<Double> {
+        val first = pairs.first().first
         val layout = first.codeText.layout
         val bounds = IntRect(0, 0, first.codeShown.width, first.codeShown.height)
 
-        return first.code.indices
-            .filter { first.code[it] != second.code[it] && !first.code[it].isWhitespace() && !second.code[it].isWhitespace() }
-            .map { index ->
-                val box =
-                    layout
-                        .getBoundingBox(index)
-                        .translate(first.codeText.topLeft)
-                        .roundToIntRect()
-                        .intersect(bounds)
+        return first.code.indices.map { index ->
+            val box =
+                layout
+                    .getBoundingBox(index)
+                    .translate(first.codeText.topLeft)
+                    .roundToIntRect()
+                    .intersect(bounds)
 
-                first.qrFirst.detailDifference(second.qrFirst, box) / first.codeShown.detailDifference(second.codeShown, box)
-            }
+            pairs
+                .filter { (a, b) -> differAt(a.code, b.code, index) }
+                .maxOfOrNull { (a, b) -> hidden(a).detailDifference(hidden(b), box) / a.codeShown.detailDifference(b.codeShown, box) }
+                ?: Double.NaN
+        }
+    }
+
+    // a length mismatch fails its own assertion later, so here it only counts as no difference
+    private fun differAt(
+        first: String,
+        second: String,
+        index: Int,
+    ): Boolean {
+        val a = first.getOrNull(index)
+        val b = second.getOrNull(index)
+        return a != null && b != null && a != b && !a.isWhitespace() && !b.isWhitespace()
     }
 
     private fun readWalk(walk: RevealWalk): WalkReading {
@@ -502,8 +554,9 @@ class KeyTeleportRevealCaptureTest {
         // rounded down
         const val MAX_HIDDEN_QR_SHARE = 0.17
 
-        // random digits differ in nine places in ten, so even two short codes differ in several
-        const val MIN_DIFFERING_CHARACTERS = 4
+        // a digit stays the same over six random receiver codes one time in 100,000, so all eight
+        // places differ somewhere about 99.992% of the time, and Base32 password characters more often
+        const val MAX_TRANSFERS = 6
 
         // about a glyph stroke at the code's size, so the neighbourhood mean keeps a blur's smooth shading
         const val DETAIL_RADIUS_PX = 4
