@@ -1,0 +1,148 @@
+{
+  "cove_version": "1.3.0",
+  "files": [
+    {
+      "path": "master-key/masterkey-63614d1802ec82bed9a65929eb3aa887bcc1b907eaa3720e90f3b24a1315bf80.json",
+      "record_id": "cspp-master-key-v1"
+    },
+    {
+      "path": "wallets/wallet-3b58d7ec6f687fd252b8ad618bd528bc0bd0ce47f7a26fa3acba1cca8150f5e5.json",
+      "record_id": "3b58d7ec6f687fd252b8ad618bd528bc0bd0ce47f7a26fa3acba1cca8150f5e5"
+    },
+    {
+      "path": "wallets/wallet-73bc3f629e4df522835851a125f7b7f5f782b8a9e042bea2a31c61970a0e630d.json",
+      "record_id": "73bc3f629e4df522835851a125f7b7f5f782b8a9e042bea2a31c61970a0e630d"
+    },
+    {
+      "path": "wallets/wallet-a12cdd3d72a2ad835cc0ccae0559f43c81d951d3ce7abc75034fa4a1aea9905a.json",
+      "record_id": "a12cdd3d72a2ad835cc0ccae0559f43c81d951d3ce7abc75034fa4a1aea9905a"
+    },
+    {
+      "path": "wallets/wallet-d25f77f5c7e13cb801a103b4a3c96e43d8b96e0d86012a109a4dec6f09e6ea01.json",
+      "record_id": "d25f77f5c7e13cb801a103b4a3c96e43d8b96e0d86012a109a4dec6f09e6ea01"
+    },
+    {
+      "path": "wallets/wallet-da05abe0490ddad92c603393dfa808e3eba1346d2862efacce7bd93357d9a100.json",
+      "record_id": "da05abe0490ddad92c603393dfa808e3eba1346d2862efacce7bd93357d9a100"
+    }
+  ],
+  "generated_by": "rust/src/manager/cloud_backup_manager/ops/tests/golden_v1_3_0.rs at tag v1.3.0",
+  "namespace_id": "c59acfaedb5aabb55e2b95c190a1fff1",
+  "passkey": {
+    "credential_id_hex": "636f76652d76312e332e302d676f6c64656e2d63726564656e7469616c",
+    "prf_output_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "prf_salt_hex": "980c5869856bfabe8098284e39d08cc42cdd987f5d9474f77090e27c44d0564d",
+    "requests": [
+      {
+        "credential_id_hex": "",
+        "operation": "discover",
+        "prf_salt_hex": "e7e7738ac4eb3876e26dd4f772c3a8137c3b861f62e5979705d09da9294a4c69",
+        "rp_id": "covebitcoinwallet.com"
+      },
+      {
+        "credential_id_hex": "",
+        "operation": "create",
+        "prf_salt_hex": "",
+        "rp_id": "covebitcoinwallet.com"
+      },
+      {
+        "credential_id_hex": "636f76652d76312e332e302d676f6c64656e2d63726564656e7469616c",
+        "operation": "authenticate",
+        "prf_salt_hex": "980c5869856bfabe8098284e39d08cc42cdd987f5d9474f77090e27c44d0564d",
+        "rp_id": "covebitcoinwallet.com"
+      }
+    ]
+  },
+  "wallets": [
+    {
+      "address_type": "NativeSegwit",
+      "color": "Blue",
+      "external_descriptor": "wpkh([73c5da0a/84'/0'/0']xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V/0/*)#wc3n3van",
+      "fingerprint": "73C5DA0A",
+      "id": "golden-hot-wallet",
+      "internal_descriptor": "wpkh([73c5da0a/84'/0'/0']xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V/1/*)#lv5jvedt",
+      "labels_jsonl": "{\"type\":\"tx\",\"ref\":\"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290\",\"label\":\"last txn received\",\"origin\":\"wpkh([73c5da0a/84h/0h/0h])\"}\n{\"type\":\"addr\",\"ref\":\"bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu\",\"label\":\"golden first receive\"}\n{\"type\":\"output\",\"ref\":\"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:1\",\"spendable\":false}",
+      "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "name": "Golden Hot",
+      "network": "Bitcoin",
+      "origin": null,
+      "record_id": "3b58d7ec6f687fd252b8ad618bd528bc0bd0ce47f7a26fa3acba1cca8150f5e5",
+      "tap_signer_backup_hex": null,
+      "wallet_mode": "Main",
+      "wallet_type": "Hot",
+      "xpub": "xpub661MyMwAqRbcFkPHucMnrGNzDwb6teAX1RbKQmqtEF8kK3Z7LZ59qafCjB9eCRLiTVG3uxBxgKvRgbubRhqSKXnGGb1aoaqLrpMBDrVxga8"
+    },
+    {
+      "address_type": "NativeSegwit",
+      "color": "Green",
+      "external_descriptor": "wpkh([b8688df1/84'/0'/0']xpub6DNfJehqF1LUs9kwaqDu12Ajpz9psYVtbGhTykQo1CYdkkqV2vAyR4DiWXSTTDujWHzVy1AtV6ENGKWgwbLWqa4wXMZR4ZmdpRjQBG5EgTV/0/*)#xw5azh4c",
+      "fingerprint": "B8688DF1",
+      "id": "golden-xpub-wallet",
+      "internal_descriptor": "wpkh([b8688df1/84'/0'/0']xpub6DNfJehqF1LUs9kwaqDu12Ajpz9psYVtbGhTykQo1CYdkkqV2vAyR4DiWXSTTDujWHzVy1AtV6ENGKWgwbLWqa4wXMZR4ZmdpRjQBG5EgTV/1/*)#h63ulz9q",
+      "labels_jsonl": "{\"type\":\"tx\",\"ref\":\"f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16\",\"label\":\"golden watch payment\"}",
+      "mnemonic": null,
+      "name": "Golden Watch",
+      "network": "Bitcoin",
+      "origin": null,
+      "record_id": "73bc3f629e4df522835851a125f7b7f5f782b8a9e042bea2a31c61970a0e630d",
+      "tap_signer_backup_hex": null,
+      "wallet_mode": "Main",
+      "wallet_type": "XpubOnly",
+      "xpub": "xpub661MyMwAqRbcFS99u1xBNnVxPAryKPgzZkXXUngFVKHWRx6uJMCLsz4U56FN7PxTSeVqL8tPJpiCrs1KZh1dV2Bh6QyAbmNmjFRPnkrZP52"
+    },
+    {
+      "address_type": "NativeSegwit",
+      "color": "Red",
+      "external_descriptor": "wpkh([28645006/84'/0'/0']xpub6DBbzvudcQg2nS4tHSkrm7FGkXL6arWxEYoZ1g1GWbaNdWRobcJmxH8KQdjuzTZJtwDveibGd83eGzdGCR6NjSqpU8p2Xx4wWQK7iGBycAm/0/*)#5k9klnfk",
+      "fingerprint": "28645006",
+      "id": "golden-hardware-wallet",
+      "internal_descriptor": "wpkh([28645006/84'/0'/0']xpub6DBbzvudcQg2nS4tHSkrm7FGkXL6arWxEYoZ1g1GWbaNdWRobcJmxH8KQdjuzTZJtwDveibGd83eGzdGCR6NjSqpU8p2Xx4wWQK7iGBycAm/1/*)#9zqhzxew",
+      "labels_jsonl": null,
+      "mnemonic": null,
+      "name": "Golden Hardware",
+      "network": "Bitcoin",
+      "origin": "wpkh([28645006/84'/0'/0'])",
+      "record_id": "da05abe0490ddad92c603393dfa808e3eba1346d2862efacce7bd93357d9a100",
+      "tap_signer_backup_hex": null,
+      "wallet_mode": "Main",
+      "wallet_type": "Cold",
+      "xpub": "xpub661MyMwAqRbcGYK6ARxU2GyrYN259h9aaesSRk8TnhgHx54RCAXbcnsvqVPbTcfcR96ucYohYYsu7j3GrowCcrtQ7EjoUDPGjmj4apw3wCk"
+    },
+    {
+      "address_type": "NativeSegwit",
+      "color": "Yellow",
+      "external_descriptor": "wpkh([3f635a63/84'/0'/0']xpub6CYYYw6h668PkCSXxH9yxBG32zCMEb6N9DuVY8Ax8U7RSV86qKrrhjJfS6nL5jSoikLpd1Qw9qgHv5vyRi7V4nfV3ymLfGpFShsYsFmQiT8/0/*)#k299ph9k",
+      "fingerprint": "3F635A63",
+      "id": "golden-tapsigner-wallet",
+      "internal_descriptor": "wpkh([3f635a63/84'/0'/0']xpub6CYYYw6h668PkCSXxH9yxBG32zCMEb6N9DuVY8Ax8U7RSV86qKrrhjJfS6nL5jSoikLpd1Qw9qgHv5vyRi7V4nfV3ymLfGpFShsYsFmQiT8/1/*)#87qyuz4w",
+      "labels_jsonl": null,
+      "mnemonic": null,
+      "name": "Golden TAPSIGNER",
+      "network": "Bitcoin",
+      "origin": "wpkh([3f635a63/84'/0'/0'])",
+      "record_id": "a12cdd3d72a2ad835cc0ccae0559f43c81d951d3ce7abc75034fa4a1aea9905a",
+      "tap_signer_backup_hex": "636f76652d76312e332e302d676f6c64656e2d66616b652d7461707369676e65722d6261636b7570",
+      "wallet_mode": "Main",
+      "wallet_type": "Cold",
+      "xpub": "xpub661MyMwAqRbcEsjq2muW5PYkDikFgHuWJGzu1WrZiQgHUsgEeKMtGducsZe1iRsGAGNGDzmWYDM69ya24LMyR7mDhtzqQsc286XEQfM2kkV"
+    },
+    {
+      "address_type": "NativeSegwit",
+      "color": "Blue",
+      "external_descriptor": "wpkh([5436d724/84'/1'/0']tpubDCWivZp6qaqCALCt8MyLqAb3awnWm4hfbBPjdZqirYFXYeZ5YsfbWVaPacULZTGtK1RPBSZ92UWNjnhL4fB9UVrF2FjgW8cgmBjxPBmB4iB/0/*)#yuev2yk3",
+      "fingerprint": "5436D724",
+      "id": "golden-decoy-testnet-wallet",
+      "internal_descriptor": "wpkh([5436d724/84'/1'/0']tpubDCWivZp6qaqCALCt8MyLqAb3awnWm4hfbBPjdZqirYFXYeZ5YsfbWVaPacULZTGtK1RPBSZ92UWNjnhL4fB9UVrF2FjgW8cgmBjxPBmB4iB/1/*)#4gudh3xf",
+      "labels_jsonl": null,
+      "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+      "name": "Golden Decoy Testnet",
+      "network": "Testnet",
+      "origin": null,
+      "record_id": "d25f77f5c7e13cb801a103b4a3c96e43d8b96e0d86012a109a4dec6f09e6ea01",
+      "tap_signer_backup_hex": null,
+      "wallet_mode": "Decoy",
+      "wallet_type": "Hot",
+      "xpub": "tpubD6NzVbkrYhZ4YmYyinubzX3ATxDJxYXCpePTiPsanfQtsXTR3VLcDRNSqhpK6dgP7Qe517E4JdMsN48oxpvBax2YrciB6L8BvM8i32ZXg2k"
+    }
+  ]
+}

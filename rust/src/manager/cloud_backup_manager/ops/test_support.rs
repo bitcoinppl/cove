@@ -176,6 +176,15 @@ struct MockCloudState {
     changed_wallet_on_next_upload: Option<WalletId>,
     dirty_wallet_on_next_backup_check: Option<WalletId>,
     disabling_on_next_upload: Option<PersistedDisablingCloudBackup>,
+    download_requests: Vec<MockCloudDownloadRequest>,
+}
+
+/// A download as the provider received it, with the paths it was asked to read
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MockCloudDownloadRequest {
+    pub(crate) namespace: String,
+    pub(crate) record_id: String,
+    pub(crate) relative_paths: Vec<String>,
 }
 
 #[derive(Debug, Default)]
@@ -460,6 +469,10 @@ impl MockCloudStorage {
         self.state.lock().uploaded_master_key_pending_confirmation = enabled;
     }
 
+    pub(crate) fn download_requests(&self) -> Vec<MockCloudDownloadRequest> {
+        self.state.lock().download_requests.clone()
+    }
+
     pub(crate) fn uploaded_wallet_backup_count(&self) -> usize {
         self.state.lock().uploaded_wallet_backups.len()
     }
@@ -644,11 +657,19 @@ impl CloudStorageAccess for MockCloudStorage {
     async fn download_master_key_backup(
         &self,
         namespace: String,
-        _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
+        locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         let gate = {
             let mut state = self.state.lock();
+            state.download_requests.push(MockCloudDownloadRequest {
+                namespace: namespace.clone(),
+                record_id: MASTER_KEY_RECORD_ID.to_string(),
+                relative_paths: locations
+                    .into_iter()
+                    .map(|location| location.relative_path)
+                    .collect(),
+            });
             state.master_key_download_attempts += 1;
             state.master_key_download_active += 1;
             state.master_key_download_max_active =
@@ -681,12 +702,20 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
-        _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
+        locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         let override_key = (namespace.clone(), record_id.clone());
         let (dirty_wallet, deferred_error, gate) = {
             let mut state = self.state.lock();
+            state.download_requests.push(MockCloudDownloadRequest {
+                namespace: namespace.clone(),
+                record_id: record_id.clone(),
+                relative_paths: locations
+                    .into_iter()
+                    .map(|location| location.relative_path)
+                    .collect(),
+            });
             state.wallet_backup_download_attempts += 1;
             let attempt = {
                 let attempts = state
@@ -944,7 +973,15 @@ pub(crate) struct MockPasskeyProviderImpl {
     authenticate_count: Arc<Mutex<usize>>,
     discover_count: Arc<Mutex<usize>>,
     authenticated_requests: Arc<Mutex<Vec<MockPasskeyAuthenticationRequest>>>,
+    discovered_requests: Arc<Mutex<Vec<MockPasskeyDiscoveryRequest>>>,
     authenticate_gate: Arc<Mutex<Option<Arc<MockPasskeyCallGate>>>>,
+}
+
+/// A discoverable-credential request as the platform passkey received it
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MockPasskeyDiscoveryRequest {
+    pub(crate) rp_id: String,
+    pub(crate) prf_salt: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -965,6 +1002,7 @@ impl MockPasskeyProviderImpl {
         *self.authenticate_count.lock() = 0;
         *self.discover_count.lock() = 0;
         self.authenticated_requests.lock().clear();
+        self.discovered_requests.lock().clear();
         *self.authenticate_gate.lock() = None;
     }
 
@@ -1025,6 +1063,10 @@ impl MockPasskeyProviderImpl {
 
     pub(crate) fn authenticated_requests(&self) -> Vec<MockPasskeyAuthenticationRequest> {
         self.authenticated_requests.lock().clone()
+    }
+
+    pub(crate) fn discovered_requests(&self) -> Vec<MockPasskeyDiscoveryRequest> {
+        self.discovered_requests.lock().clone()
     }
 
     pub(crate) fn gate_next_authenticate(&self) -> Arc<MockPasskeyCallGate> {
@@ -1092,11 +1134,12 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
 
     fn discover_and_authenticate_with_prf(
         &self,
-        _rp_id: String,
-        _prf_salt: Vec<u8>,
+        rp_id: String,
+        prf_salt: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<DiscoveredPasskeyResult, PasskeyError> {
         *self.discover_count.lock() += 1;
+        self.discovered_requests.lock().push(MockPasskeyDiscoveryRequest { rp_id, prf_salt });
         self.discover_results
             .lock()
             .pop_front()
