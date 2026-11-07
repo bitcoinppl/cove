@@ -209,8 +209,10 @@ coverage = [
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/TapSignerFlow/TapSignerLayoutFullLaunchTest.kt::tapSignerSetupScreensFitAtLargestFontScale",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/TapSignerFlow/TapSignerLayoutFullLaunchTest.kt::tapSignerImportScreensFitAtLargestFontScale",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/TapSignerFlow/TapSignerLayoutFullLaunchTest.kt::tapSignerSigningCvcScreenFitsAtLargestFontScale",
+    "human",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
+# a person still checks these screens until the ui tests below have passed on both platforms
 # the ui tests walk the choose, advanced, cvc, retry and success screens at the largest text size
 # through the tapsigner seam, and open the signing cvc screen from a funded card's draft, and check
 # titles, descriptions and actions draw whole, each title, description and action scrolls fully on
@@ -218,7 +220,9 @@ coverage = [
 # ellipsis or overflow and scrolls each text until no ancestor clips it, and ios probes compare each
 # probed text with an unlimited copy, including the descriptions inside the automatic setup and
 # download backup buttons through a report beside each button; a description taller than the space
-# it shows in, above any keyboard, must scroll its first and then its last line into view
+# it shows in, above any keyboard, must scroll its first and then its last line into view; on ios cvc
+# screens each description must show above the number pad, or in the whole window once a drag has
+# closed the pad, and the test logs which and fails if the pad closes without a drag
 
 [[row]]
 id = "s16-keyteleport-request-and-code-layout-at-largest"
