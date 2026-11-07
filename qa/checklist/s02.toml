@@ -201,17 +201,21 @@ target = "ui"
 paths = [
     "ios/Cove/Flows/KeyTeleportFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportRevealPair.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportComponents.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportSendViews.kt",
 ]
 coverage = [
-    "human:android",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportRevealCaptureTest.kt::receiverRequestShowsOnlyOneOfItsQrCodeAndReceiverCode",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportRevealCaptureTest.kt::senderResponseShowsOnlyOneOfItsQrCodeAndPassword",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportRevealPairTest.kt::revealActionSwapsTheOnlyExposedValue",
     "ios-ui:ios/CoveUITests/KeyTeleportReceiveFullLaunchUITests.swift::testMnemonicReviewRevealsOnTapAndOnlyImportAddsTheWallet",
     "ios-ui:ios/CoveUITests/KeyTeleportSendFullLaunchUITests.swift::testSentWordsShowTheQrCodeAndPasswordOneAtATime",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# the compose test covers android one-at-a-time exposure; the visual judgement stays human on android
+# the compose test covers android one-at-a-time exposure in the semantics tree
+# the android capture tests read the real receiver request and sender response, FLAG_SECURE set, from in-app captures: zxing must decode the shown QR code to its packet and find none while it is hidden, the shown code or password must match a reference rendering of its own text and the hidden one must not, before anything is revealed and after each switch
+# without OCR on android, a hidden code or password must also carry almost none of what tells two secrets apart: two transfers' hidden codes may differ in fine detail by at most a tenth of how much the same codes differ once shown
 # the ios tests read the receiver request and sender response off screenshots: a hidden QR code must not decode and a hidden code or password must not read with Vision, and each must once shown
 
 [[row]]
