@@ -5,6 +5,7 @@ import android.system.Os
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
+import android.view.WindowInsetsAnimation
 import android.view.inspector.WindowInspector
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.node.RootForTest
@@ -103,6 +104,7 @@ class TapSignerLayoutFullLaunchTest {
     private val signer = HardwareSignerControl()
     private var previousShowImeWithHardKeyboard: String? = null
     private var previousFontScale: String? = null
+    private var imeAnimations: ImeAnimationProbe? = null
 
     @Before
     fun prepareDevice() {
@@ -180,6 +182,9 @@ class TapSignerLayoutFullLaunchTest {
         // onboarding is done, so the soft keyboard can show beside the emulator's hardware one,
         // as it does on a phone, which is the keyboard the address field must stay above
         device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 1")
+
+        // the probe goes on before Send, so it hears every keyboard animation the send screen starts
+        imeAnimations = ImeAnimationProbe.attach()
 
         // the send screen opens with the amount focused and the keyboard up, and at this scale
         // every field must still scroll into reach above the keyboard: the address field below
@@ -655,10 +660,10 @@ class TapSignerLayoutFullLaunchTest {
      * matching [selector] shows whole there, and fails if it never does
      *
      * With [toolbar], the space ends at the top of that bar on the keyboard, or at the keyboard's
-     * top if that is higher, so a control behind the bar fails too. Every measurement waits for the
-     * keyboard, the bar and the control to hold still, so a keyboard still sliding open can't pass
-     * or fail the check. The drags stay in that space, where a drag on the keys would type instead
-     * of scroll
+     * top if that is higher, so a control behind the bar fails too. Every measurement is taken once
+     * the window's keyboard animations have ended, see [settledPlacement], so a keyboard still
+     * sliding open can't pass or fail the check. The drags stay in that space, where a drag on the
+     * keys would type instead of scroll
      */
     private fun scrollAboveKeyboard(
         selector: BySelector,
@@ -687,11 +692,15 @@ class TapSignerLayoutFullLaunchTest {
         error("$name never showed whole above the $cover after $MAX_NUDGES drags: ${last ?: "not found"}")
     }
 
-    /** Where the keyboard, the toolbar on it if any, and a control lie at one moment */
+    /**
+     * Where the keyboard, the toolbar on it if any, and a control lie at one moment, and how many
+     * keyboard animations had ended by then
+     */
     private data class KeyboardPlacement(
         val keyboardTop: Int,
         val toolbar: Rect?,
         val control: ControlBounds?,
+        val animationsEnded: Int,
     ) {
         /** The top of whatever covers the screen from below, the toolbar or the keyboard */
         val coverTop: Int get() = minOf(keyboardTop, toolbar?.top ?: keyboardTop)
@@ -699,7 +708,14 @@ class TapSignerLayoutFullLaunchTest {
 
     /**
      * Reads the keyboard, the [toolbar] and the control matching [selector] until two reads in a row
-     * agree, with the keyboard open and the toolbar, if one is asked for, laid out
+     * agree and no keyboard animation started or ended between them
+     *
+     * The window takes the keyboard's final insets as its animation starts, so [keyboardTop] already
+     * holds its final value while the screen still slides with the keyboard. A read counts only
+     * once [ImeAnimationProbe] has heard every animation it saw start end, with the keyboard open,
+     * and with the toolbar, if one is asked for, laid out with its bottom on the keyboard's final
+     * top, within [KEYBOARD_EDGE_ROUNDING_PX]. The agreeing second read lets the frame that applies
+     * the final insets land first
      */
     private fun settledPlacement(
         selector: BySelector,
@@ -723,9 +739,20 @@ class TapSignerLayoutFullLaunchTest {
         selector: BySelector,
         toolbar: BySelector?,
     ): KeyboardPlacement? {
+        val animations = imeAnimations ?: error("the keyboard animation probe must go on before the screen opens the keyboard")
+        val ended = animations.endedIfIdle() ?: return null
         val keyboard = keyboardTop() ?: return null
-        val bar = toolbar?.let { device.findObject(it)?.visibleBounds?.takeIf { bounds -> !bounds.isEmpty } ?: return null }
-        return KeyboardPlacement(keyboard, bar, device.findObject(selector)?.visibleBounds?.let(::controlBounds))
+
+        val bar =
+            toolbar?.let {
+                device
+                    .findObject(it)
+                    ?.visibleBounds
+                    ?.takeIf { bounds -> !bounds.isEmpty && abs(bounds.bottom - keyboard) <= KEYBOARD_EDGE_ROUNDING_PX }
+                    ?: return null
+            }
+
+        return KeyboardPlacement(keyboard, bar, device.findObject(selector)?.visibleBounds?.let(::controlBounds), ended)
     }
 
     /** The top of the keyboard on screen, or null while it is closed */
@@ -929,4 +956,81 @@ class TapSignerLayoutFullLaunchTest {
     }
 
     private fun randomChainCode(): String = ByteArray(32).also(SecureRandom()::nextBytes).joinToString("") { "%02x".format(it) }
+}
+
+/** How far, in pixels, rounding can put the toolbar's bottom from the keyboard's top */
+private const val KEYBOARD_EDGE_ROUNDING_PX = 2
+
+/**
+ * Hears the keyboard's inset animations on the resumed activity's window
+ *
+ * It sits on the activity's content view, which holds no callback of its own, and passes every
+ * event on to the views below, so the app's own insets handling sees them unchanged. It counts
+ * only the animations it saw start, so it must go on before the screen opens the keyboard
+ */
+private class ImeAnimationProbe private constructor(
+    private val host: View,
+) : WindowInsetsAnimation.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+    private var running = 0
+    private var ended = 0
+
+    override fun onStart(
+        animation: WindowInsetsAnimation,
+        bounds: WindowInsetsAnimation.Bounds,
+    ): WindowInsetsAnimation.Bounds {
+        if (animation.isIme()) running++
+        return bounds
+    }
+
+    override fun onProgress(
+        insets: WindowInsets,
+        runningAnimations: MutableList<WindowInsetsAnimation>,
+    ): WindowInsets = insets
+
+    override fun onEnd(animation: WindowInsetsAnimation) {
+        if (!animation.isIme()) return
+
+        running = maxOf(0, running - 1)
+        ended++
+    }
+
+    /**
+     * How many keyboard animations have ended, or null while one is still running, and fails if
+     * the resumed activity is no longer the one the probe is on
+     */
+    fun endedIfIdle(): Int? {
+        var result: Int? = null
+        var onResumedWindow = false
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            onResumedWindow = resumedContentView() === host
+            if (running == 0) result = ended
+        }
+
+        check(onResumedWindow) { "the app replaced the window the keyboard animation probe is on" }
+        return result
+    }
+
+    private fun WindowInsetsAnimation.isIme(): Boolean = typeMask and WindowInsets.Type.ime() != 0
+
+    companion object {
+        /** Puts a probe on the resumed activity's content view */
+        fun attach(): ImeAnimationProbe {
+            var probe: ImeAnimationProbe? = null
+
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                val host = resumedContentView() ?: return@runOnMainSync
+                probe = ImeAnimationProbe(host).also(host::setWindowInsetsAnimationCallback)
+            }
+
+            return probe ?: error("expected a resumed activity to put the keyboard animation probe on")
+        }
+
+        private fun resumedContentView(): View? =
+            ActivityLifecycleMonitorRegistry
+                .getInstance()
+                .getActivitiesInStage(Stage.RESUMED)
+                .firstOrNull()
+                ?.findViewById(android.R.id.content)
+    }
 }
