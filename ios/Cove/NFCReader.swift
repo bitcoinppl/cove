@@ -271,8 +271,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         switch Result(catching: { try self.reader.parse(data: self.readBytes) }) {
         case let .success(.incomplete(result)):
             Log.debug("succesfully scanned incomplete record")
-            isScanning = false
 
+            // the read goes on to the next blocks under the same NFC sheet, so the scan stays open
             messageInfo = result.messageInfo
             readBytes = result.leftOverBytes
             return .incomplete
