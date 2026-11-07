@@ -15,7 +15,7 @@ use crate::manager::cloud_backup_manager::CloudBackupRestoreReport;
 use crate::manager::cloud_backup_manager::PASSKEY_RP_ID;
 use crate::network::Network;
 use crate::wallet::WalletAddressType;
-use crate::wallet::metadata::{WalletColor, WalletId};
+use crate::wallet::metadata::{HardwareWalletMetadata, WalletColor, WalletId};
 
 #[derive(Debug, Deserialize)]
 struct GoldenManifest {
@@ -173,7 +173,7 @@ async fn assert_wallet_restored(expected: &GoldenWallet) {
         "{name} fingerprint"
     );
     assert_eq!(
-        restored.hardware_metadata.as_ref().is_some_and(|hardware| hardware.is_tap_signer()),
+        restored.hardware_metadata.as_ref().is_some_and(HardwareWalletMetadata::is_tap_signer),
         expected.tap_signer_backup_hex.is_some(),
         "{name} TAPSIGNER metadata"
     );
