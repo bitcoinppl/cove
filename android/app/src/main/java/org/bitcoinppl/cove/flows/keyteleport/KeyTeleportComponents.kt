@@ -140,6 +140,7 @@ internal fun ActionRow(
             Spacer(Modifier.size(8.dp))
             Text("Scan")
         }
+
         // the theme's outlined content colour drew Paste at about 1.3:1 on the dark card
         OutlinedButton(
             onClick = onPaste,
