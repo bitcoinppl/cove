@@ -43,9 +43,17 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private var app: XCUIApplication!
     private var signer: HardwareSignerControl!
 
-    /// The CVC screen under check and where its number pad came to rest, which every drag on the
-    /// screen must leave in place, so all its texts are checked in the space above the number pad
+    /// The screen under check, a CVC screen or the send screen while Next is checked, and where
+    /// its number pad came to rest, which every drag on the screen must leave in place, so all its
+    /// texts are checked in the space above the number pad
     private var numberPad: NumberPadWatch?
+
+    /// While set, the identifier of a button on the toolbar the screen puts on the keyboard, so the
+    /// toolbar covers the content as the keyboard does
+    private var keyboardToolbarButton: String?
+
+    /// The Max button on the toolbar the send screen puts on the amount's number pad
+    private static let amountToolbarButton = "sendFlow.max"
 
     private struct NumberPadWatch {
         let screen: String
@@ -104,8 +112,9 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// A funded card's Sign using TAPSIGNER opens the CVC screen with signing's own message
     ///
     /// That screen shows before the app contacts the card, so signing failing on the card
-    /// (#965) doesn't stop the check; the test cancels instead of submitting a CVC. The card is
-    /// imported and funded at the default size, since only the signing screen is under test
+    /// (#965) doesn't stop the check; the test enters a CVC and checks Continue, then cancels
+    /// instead of submitting it. The card is imported and funded at the default size, since only
+    /// the signing screen is under test
     func testTapSignerSigningCvcScreenFitsAtLargestTextSize() throws {
         let node = FakeNodeControl()
         try node.requireHealthy()
@@ -143,6 +152,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         // the Next button shows once fee rates load, and the larger text can push it below the fold
         let next = app.buttons.matching(identifier: "sendFlow.next")
         XCTAssertTrue(next.firstMatch.waitForExistence(timeout: 60), "Next never showed on the send screen")
+        assertNextAboveAmountNumberPad(next)
         reachAndTap(next, "send: Next")
         reachAndTap(button("Sign using TAPSIGNER"), "hardware send: Sign using TAPSIGNER")
 
@@ -152,6 +162,12 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             description: "For security purposes, you must enter your TAPSIGNER PIN before you can sign",
             cancel: "Cancel"
         )
+
+        // a CVC screen may hold Continue back until it has a whole CVC, so Continue is checked
+        // once one is in; it is never submitted
+        reachAndTap(app.secureTextFields.matching(identifier: "Enter CVC"), "signing CVC: CVC field").typeText(HardwareSignerControl.tapSignerCvc)
+        let submit = assertReachable(button("Continue"), "signing CVC: Continue", needsHit: true)
+        XCTAssertTrue(submit.isEnabled, "signing CVC: Continue is disabled with a whole CVC entered")
 
         reachAndTap(button("Cancel"), "signing CVC: Cancel")
         XCTAssertTrue(app.staticTexts["Enter TAPSIGNER CVC"].waitForNonExistence(timeout: 15), "Cancel didn't close the signing CVC screen")
@@ -267,6 +283,28 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
         reachAndTap(button("Continue"), "import success: Continue")
         XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
+    }
+
+    // MARK: - Send screen
+
+    /// Max clears the focus once the address is valid, which closes the number pad, so this opens
+    /// it again from the amount field, as a user changing the amount would. Next must then scroll
+    /// whole into the space above the number pad and the toolbar on it, and the number pad must
+    /// stay where it came to rest through every drag and the check
+    private func assertNextAboveAmountNumberPad(_ next: XCUIElementQuery) {
+        reachAndTap(app.textFields.matching(identifier: "sendFlow.amount"), "send: amount after Max")
+        numberPad = NumberPadWatch(screen: "send", frame: settledNumberPad(on: "send"))
+        XCTAssertTrue(app.buttons[Self.amountToolbarButton].waitForExistence(timeout: 15), "the send screen's number pad opened without its toolbar")
+        keyboardToolbarButton = Self.amountToolbarButton
+        defer {
+            numberPad = nil
+            keyboardToolbarButton = nil
+        }
+
+        let element = assertReachable(next, "send: Next", needsHit: true)
+        XCTAssertTrue(element.isEnabled, "send: Next is disabled")
+        assertNumberPadInPlace(after: "checking Next")
+        note("Next on the send screen showed above the number pad and its toolbar, \(keyboardCover().map { "\($0)" } ?? "none"), after \(numberPad?.drags ?? 0) drags")
     }
 
     // MARK: - CVC screens
@@ -487,9 +525,9 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         }
 
         let matches = query.allElementsBoundByIndex.map { "\($0.frame) hittable \($0.isHittable)" }
-        let keyboard = app.keyboards.firstMatch
+        let cover = keyboardCover().map { "\($0)" } ?? "none"
         XCTFail(
-            "\(name) never fit on screen: matches \(matches) in window \(app.windows.firstMatch.frame), keyboard \(keyboard.exists ? "\(keyboard.frame)" : "none")"
+            "\(name) never fit on screen: matches \(matches) in window \(app.windows.firstMatch.frame), keyboard \(keyboardToolbarButton == nil ? "" : "and its toolbar ")\(cover)"
         )
 
         return query.firstMatch
@@ -563,17 +601,35 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// The part of the window the element can show in and read, above the keyboard
     private func readableArea(of element: XCUIElement) -> CGRect {
         var area = visibleArea(of: element)
-        let keyboard = app.keyboards.firstMatch
-        if keyboard.exists, keyboard.frame.minY < area.maxY {
-            area.size.height = max(0, keyboard.frame.minY - area.minY)
+        if let cover = keyboardCover(), cover.minY < area.maxY {
+            area.size.height = max(0, cover.minY - area.minY)
         }
 
         return area
     }
 
+    /// The part of the window the keyboard covers, joined by the toolbar on it while
+    /// `keyboardToolbarButton` names one, or nil while no keyboard is up
+    ///
+    /// Whether XCUITest counts a toolbar SwiftUI puts on the keyboard in the keyboard's frame isn't
+    /// documented, so the toolbar holding the button, or failing that the button itself, joins it
+    private func keyboardCover() -> CGRect? {
+        let keyboard = app.keyboards.firstMatch
+        guard keyboard.exists else { return nil }
+
+        guard let identifier = keyboardToolbarButton else { return keyboard.frame }
+
+        let button = app.buttons[identifier]
+        let toolbar = app.toolbars.containing(.button, identifier: identifier).firstMatch
+        if toolbar.exists { return keyboard.frame.union(toolbar.frame) }
+
+        return button.exists ? keyboard.frame.union(button.frame) : keyboard.frame
+    }
+
     /// Drags the container's content by about `distance` points, positive to bring content below
     /// into view, along its leading margin within the part of it showing above the keyboard, as a
-    /// user would, and on a CVC screen checks the drag left the number pad in place
+    /// user would, and while `numberPad` watches a screen checks the drag left the number pad in
+    /// place
     ///
     /// A drag moves at most 40% of that part, and the caller drags again to go further, so a text
     /// that fits only partway through a short scroll range isn't swung past. `swipeUp` starts at the
@@ -586,9 +642,8 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         var area = container.frame.intersection(window)
         if area.isNull { area = window }
 
-        let keyboard = app.keyboards.firstMatch
-        if keyboard.exists, keyboard.frame.minY > area.minY {
-            area.size.height = min(area.height, keyboard.frame.minY - area.minY)
+        if let cover = keyboardCover(), cover.minY > area.minY {
+            area.size.height = min(area.height, cover.minY - area.minY)
         }
 
         let step = max(-area.height * 0.4, min(area.height * 0.4, distance))
@@ -725,8 +780,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     }
 
     private func isUnderKeyboard(_ frame: CGRect) -> Bool {
-        let keyboard = app.keyboards.firstMatch
-        return keyboard.exists && keyboard.frame.intersects(frame)
+        keyboardCover()?.intersects(frame) ?? false
     }
 
     /// A random 32-byte chain code as hex, as a user typing their own would enter it
