@@ -74,6 +74,9 @@ class HardwareSigningFullLaunchTest {
         // what the TAPSIGNER sheet shows when signing fails for any reason but the CVC
         const val SIGNING_FAILED = "Connection failed, please try again"
 
+        // what the clipboard holds until the export's Copy replaces it
+        const val CLIPBOARD_SENTINEL = "cove-test-clipboard-sentinel"
+
         // the fewest frames a drawn export should cycle through, so the test reads an animated QR
         const val DRAWN_EXPORT_MIN_PARTS = 3
 
@@ -376,7 +379,15 @@ class HardwareSigningFullLaunchTest {
         device.waitFor(By.text(formatLabel)).click()
         device.waitFor(By.desc("QR code for transaction signing"))
 
+        // the test copied the receive address earlier and the app handles the tap asynchronously, so
+        // a read right after it can still see that address; a sentinel shows when Copy has written,
+        // even when it writes the same text again
+        setClipboard(CLIPBOARD_SENTINEL)
         device.waitFor(By.desc("Copy")).click()
+        wallet.waitUntil("the export's Copy never reached the clipboard", timeoutMs = 5_000L) {
+            clipboardText() != CLIPBOARD_SENTINEL
+        }
+
         val psbt = clipboardText().trim()
         assertTrue("the Copy button copied nothing", psbt.isNotEmpty())
 
