@@ -368,21 +368,16 @@ class TapSignerLayoutFullLaunchTest {
         title: String,
         back: String,
     ) {
-        // the CVC field takes the focus as the screen opens, and the screen scrolls it into view,
-        // which with a long message takes the title and the back action above the top, so the
-        // screen counts as open once its title or its field shows, and the checks start at its top
+        // the screen requests no focus and opens at its top, but a tall message can leave the title
+        // or the field as the only one of the two on screen, so either marks it open
         wallet.waitUntil("the $title screen never showed", timeoutMs = 15_000L) {
             device.hasObject(By.text(title)) || device.hasObject(By.text("CVC"))
         }
 
-        // that scroll runs on its own after the screen shows and takes nodes out of the tree, so
-        // the checks start once the field lies in the same place on two reads in a row
-        var fieldWas: Rect? = null
-        wallet.waitUntil("the $title screen never came to rest", timeoutMs = 15_000L) {
-            val field = visibleBoundsOrNull(By.clazz("android.widget.EditText"))
-            (field != null && field == fieldWas).also { fieldWas = field }
-        }
-
+        // the sheet slides in, and a node read while its content moves goes stale, so the checks
+        // start once the content holds still, then scroll back to the top in case it opened lower,
+        // and scroll to the field explicitly at the end
+        awaitScrollContentAtRest("the $title screen")
         scrollBackTo(By.text(back), "$title: \"$back\"")
         assertScreenFits(title, back, title)
         reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
@@ -964,10 +959,30 @@ class TapSignerLayoutFullLaunchTest {
         error("$name: the scroll area kept changing under each read")
     }
 
-    /** The bounds of the first match for [selector], or null when none shows or it went stale */
-    private fun visibleBoundsOrNull(selector: BySelector): Rect? =
+    /**
+     * Waits until the content of the largest scroll area on screen lies in the same place on two
+     * reads in a row, each taken once the app is idle, and fails if it never does
+     */
+    private fun awaitScrollContentAtRest(name: String) {
+        var was: List<Rect>? = null
+
+        wallet.waitUntil("$name never came to rest", timeoutMs = 15_000L) {
+            device.waitForIdle()
+            val content = scrollContentBounds()
+            (content != null && content == was).also { was = content }
+        }
+    }
+
+    /**
+     * Where the largest scroll area and each node directly inside it lie, or null when the screen
+     * has none or a node went stale while it was read
+     */
+    private fun scrollContentBounds(): List<Rect>? =
         try {
-            device.findObject(selector)?.visibleBounds
+            device
+                .findObjects(By.scrollable(true))
+                .maxByOrNull { it.visibleBounds.width() * it.visibleBounds.height() }
+                ?.let { area -> listOf(area.visibleBounds) + area.children.map { it.visibleBounds } }
         } catch (_: StaleObjectException) {
             null
         }
