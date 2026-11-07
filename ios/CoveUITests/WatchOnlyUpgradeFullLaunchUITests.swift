@@ -170,13 +170,16 @@ final class WatchOnlyUpgradeFullLaunchUITests: XCTestCase {
     /// Reads the request off the screen as the sending phone's camera would, has the host answer
     /// it with the payload, scans the answer and unlocks it with the password
     private func receive(_ payload: KeyTeleportPeer.Payload) throws {
-        let code = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^[0-9]{2}( [0-9]{2}){3}$")).firstMatch
-        let request = try XCTUnwrap(
-            layout.readRevealPair(qrHint: "Tap to show QR code", codeHint: "Tap to show receiver code", code: code, "receive request"),
-            "the receive request QR code never decoded"
-        )
+        // KeyTeleportReceiveFullLaunchUITests checks the request's concealment; this test only
+        // needs its contents, so it reads the code from the UI tree instead of with Vision
+        layout.reachAndTap(button("Tap to show QR code"), "receive request: show QR code")
+        let request = try XCTUnwrap(app.waitForVisibleQrCode(), "the receive request QR code never decoded")
 
-        let response = try peer.send(payload, to: request.qr, code: request.code)
+        layout.reachAndTap(button("Tap to show receiver code"), "receive request: show receiver code")
+        let code = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^[0-9]{2}( [0-9]{2}){3}$")).firstMatch
+        XCTAssertTrue(code.waitForExistence(timeout: 5), "the receiver code never showed")
+
+        let response = try peer.send(payload, to: request, code: code.label)
         layout.reachAndTap(button("Scan Sender Response"), "receive request: Scan Sender Response")
         try qr.show(response.parts)
 
