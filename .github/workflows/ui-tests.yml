@@ -60,6 +60,7 @@ env:
     CoveUITests/KeyTeleportReceiveFullLaunchUITests,
     CoveUITests/KeyTeleportSendFullLaunchUITests,
     CoveUITests/LargeTextWordBreakFullLaunchUITests,
+    CoveUITests/KeyTeleportAppScannerFullLaunchUITests,
     CoveCloudBackupUITests/CloudBackupRestoreAllFullAppUITests,
     CoveCloudBackupUITests/CloudBackupOnboardingLateOfferFullAppUITests,
     CoveCloudBackupUITests/PrivateKeyExportFullAppUITests,
