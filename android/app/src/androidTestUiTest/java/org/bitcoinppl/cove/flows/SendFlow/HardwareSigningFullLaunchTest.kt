@@ -82,7 +82,13 @@ class HardwareSigningFullLaunchTest {
 
         // bounds the screenshots taken to see every part; a part that never shows fails within it
         const val DRAWN_EXPORT_TIMEOUT_MS = 90_000L
+
+        // bounds the wait for the first frame of the split the frame counter shows
+        const val DRAWN_EXPORT_SETTLE_MS = 5_000L
         const val TAG = "HardwareSigningTest"
+
+        // a multi-part UR's `ur:type/i-N/` path, whose N is the part count
+        val UR_SEQUENCE = Regex("^ur:[^/]+/\\d+-(\\d+)/", RegexOption.IGNORE_CASE)
     }
 
     @get:Rule
@@ -549,11 +555,16 @@ class HardwareSigningFullLaunchTest {
 
         openExportSheet(formatLabel)
         val shownParts = lowerDensityUntilAnimated()
+        val stale = dropStaleFrames(framePrefix, shownParts)
         val drawn = readDrawnExport(framePrefix)
         device.pressBack()
         device.waitFor(By.text("Import Signature"))
 
-        Log.i(TAG, "drawn $formatLabel export: ${drawn.frames} of $shownParts frames in ${drawn.captures} captures over ${drawn.durationMs} ms")
+        Log.i(
+            TAG,
+            "drawn $formatLabel export: ${drawn.frames} of $shownParts frames in ${drawn.captures} captures over " +
+                "${drawn.durationMs} ms, after dropping $stale stale frames",
+        )
         assertEquals("the frame counter and the drawn frames disagree on the part count", shownParts, drawn.frames)
         assertEquals("the drawn frames carry a different PSBT than Copy", copied.lowercase(), drawn.psbt)
 
@@ -612,6 +623,42 @@ class HardwareSigningFullLaunchTest {
 
         assertTrue("the export never became an animated QR, it shows $shown frames", shown >= DRAWN_EXPORT_MIN_PARTS)
         return shown
+    }
+
+    /**
+     * Decodes the sheet's QR until it shows a frame of the split the frame counter reports, and
+     * returns how many decoded frames of an earlier split it dropped first
+     */
+    private fun dropStaleFrames(
+        framePrefix: String,
+        shownParts: Int,
+    ): Int {
+        // the counter can update before the image is redrawn, so the first frames after a density
+        // change can still belong to the split it replaced, which the host rightly won't join
+        val deadline = System.currentTimeMillis() + DRAWN_EXPORT_SETTLE_MS
+        var stale = 0
+
+        while (System.currentTimeMillis() < deadline) {
+            val code = visibleQrCode()
+            if (code != null && code.startsWith(framePrefix, ignoreCase = true)) {
+                if (partCount(code) == shownParts) return stale
+                stale++
+            }
+
+            Thread.sleep(Random.nextLong(50, 250))
+        }
+
+        error("no drawn frame showed the $shownParts parts the frame counter reports within $DRAWN_EXPORT_SETTLE_MS ms, after $stale stale frames")
+    }
+
+    /** The part count in a frame's header: a BBQr's base 36 total, or the N of a UR's `i-N` */
+    private fun partCount(frame: String): Int? {
+        if (frame.startsWith("B$")) {
+            return if (frame.length >= 6) frame.substring(4, 6).toIntOrNull(36) else null
+        }
+
+        val match = UR_SEQUENCE.find(frame) ?: return null
+        return match.groupValues[1].toIntOrNull()
     }
 
     /** Screenshots the sheet and decodes its QR until the host can join every distinct frame seen */

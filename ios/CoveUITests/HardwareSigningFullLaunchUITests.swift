@@ -514,6 +514,9 @@ extension HardwareSigningFullLaunchUITests {
     /// Bounds the screenshots taken to see every part; a part that never shows fails within it
     private static let drawnExportTimeout: TimeInterval = 90
 
+    /// Bounds the wait for the first frame of the split the frame counter shows
+    private static let drawnExportSettleTimeout: TimeInterval = 5
+
     private struct DrawnExport {
         let psbt: String
         let frames: Int
@@ -542,10 +545,11 @@ extension HardwareSigningFullLaunchUITests {
 
         openExportSheet(showing: format)
         let shownParts = lowerDensityUntilAnimated()
+        let stale = dropStaleFrames(format, shownParts: shownParts)
         let drawn = try readDrawnExport(format)
         closeExportSheet()
 
-        print("drawn \(format.rawValue) export: \(drawn.frames) of \(shownParts) frames in \(drawn.captures) captures over \(String(format: "%.1f", drawn.duration)) s")
+        print("drawn \(format.rawValue) export: \(drawn.frames) of \(shownParts) frames in \(drawn.captures) captures over \(String(format: "%.1f", drawn.duration)) s, after dropping \(stale) stale frames")
         XCTAssertEqual(drawn.frames, shownParts, "the frame counter and the drawn frames disagree on the part count")
         XCTAssertEqual(drawn.psbt, copied.lowercased(), "the drawn frames carry a different PSBT than Copy")
 
@@ -605,12 +609,52 @@ extension HardwareSigningFullLaunchUITests {
         return value.split(separator: " ").last.flatMap { Int($0) } ?? 0
     }
 
-    /// Screenshots the sheet and decodes its QR until the host can join every distinct frame seen
-    private func readDrawnExport(_ format: QrFormat) throws -> DrawnExport {
-        let prefix = switch format {
+    /// Decodes the sheet's QR until it shows a frame of the split the frame counter reports, and
+    /// returns how many decoded frames of an earlier split it dropped first
+    private func dropStaleFrames(_ format: QrFormat, shownParts: Int) -> Int {
+        // the counter can update before the image is redrawn, so the first frames after a density
+        // change can still belong to the split it replaced, which the host rightly won't join
+        let prefix = Self.framePrefix(format)
+        let deadline = Date().addingTimeInterval(Self.drawnExportSettleTimeout)
+        var stale = 0
+
+        while Date() < deadline {
+            for code in app.visibleQrCodes where code.lowercased().hasPrefix(prefix.lowercased()) {
+                if Self.partCount(code) == shownParts { return stale }
+                stale += 1
+            }
+
+            Thread.sleep(forTimeInterval: .random(in: 0.05 ... 0.25))
+        }
+
+        XCTFail("no drawn frame showed the \(shownParts) parts the frame counter reports within \(Int(Self.drawnExportSettleTimeout)) s, after \(stale) stale frames")
+        return stale
+    }
+
+    private static func framePrefix(_ format: QrFormat) -> String {
+        switch format {
         case .ur: "ur:"
         case .bbqr: "B$"
         }
+    }
+
+    /// The part count in a frame's header: a BBQr's base 36 total, or the N of a UR's `i-N`
+    private static func partCount(_ frame: String) -> Int? {
+        if frame.hasPrefix("B$") {
+            let header = Array(frame)
+            guard header.count >= 6 else { return nil }
+            return Int(String(header[4 ..< 6]), radix: 36)
+        }
+
+        // a multi-part UR's path is `ur:type/i-N/fragment`
+        let path = frame.split(separator: "/")
+        guard path.count == 3, let total = path[1].split(separator: "-").last else { return nil }
+        return Int(total)
+    }
+
+    /// Screenshots the sheet and decodes its QR until the host can join every distinct frame seen
+    private func readDrawnExport(_ format: QrFormat) throws -> DrawnExport {
+        let prefix = Self.framePrefix(format)
 
         let started = Date()
         var frames: [String] = []
