@@ -12,9 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.core.app.ActivityOptionsCompat
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
@@ -23,6 +21,7 @@ import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.flows.SettingsFlow.FullScreenSettingsModal
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.enterPinAndAwaitUnlock
 import org.bitcoinppl.cove.test.restoreNoAppLock
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.AppLockReason
@@ -98,7 +97,7 @@ class LockAwareActivityResultTest {
         // picked for the main wallets, unlocked into decoy mode
         returnFromPickerLocked()
         restoration.emulateSavedInstanceStateRestore()
-        unlockWith(DECOY_PIN)
+        compose.enterPinAndAwaitUnlock(DECOY_PIN)
         compose.runOnIdle {
             assertTrue(Auth.isInDecoyMode())
             assertEquals(emptyList<Uri?>(), handled)
@@ -107,7 +106,7 @@ class LockAwareActivityResultTest {
         // picked for the decoy wallets, unlocked back into main mode
         returnFromPickerLocked()
         restoration.emulateSavedInstanceStateRestore()
-        unlockWith(PIN)
+        compose.enterPinAndAwaitUnlock(PIN)
         compose.runOnIdle {
             assertFalse(Auth.isInDecoyMode())
             assertEquals(emptyList<Uri?>(), handled)
@@ -142,13 +141,8 @@ class LockAwareActivityResultTest {
         compose.runOnIdle { assertEquals(emptyList<Uri?>(), handled) }
     }
 
-    private fun unlockWith(pin: String) {
-        pin.forEach { digit -> compose.onNodeWithTag("numberPadPin.digit.$digit").performClick() }
-        compose.waitUntil(timeoutMillis = 5_000) { !Auth.isLocked }
-    }
-
     private fun enterPinAndExpectTheResult() {
-        unlockWith(PIN)
+        compose.enterPinAndAwaitUnlock(PIN)
         compose.waitUntil(timeoutMillis = 5_000) { handled.isNotEmpty() }
         compose.runOnIdle { assertEquals(listOf<Uri?>(pickedFile), handled) }
     }

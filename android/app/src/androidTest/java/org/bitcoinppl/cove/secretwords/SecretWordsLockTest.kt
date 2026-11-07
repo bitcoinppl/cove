@@ -4,9 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.lifecycle.Lifecycle
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
@@ -17,6 +15,8 @@ import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
 import org.bitcoinppl.cove.test.deleteTestWallet
+import org.bitcoinppl.cove.test.enterPinAndAwaitUnlock
+import org.bitcoinppl.cove.test.enterPinDigits
 import org.bitcoinppl.cove.test.importTestWalletOrNull
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove.views.LockView
@@ -85,7 +85,7 @@ class SecretWordsLockTest {
         compose.waitForIdle()
         assertNoRecoveryWordsInTree("while the PIN cover is up")
 
-        enterPin(WRONG_PIN)
+        compose.enterPinDigits(WRONG_PIN)
         waitForPinPadToFinishSubmitting()
         assertTrue("a wrong PIN must keep the app locked", Auth.isLocked)
         assertNoRecoveryWordsInTree("after a wrong PIN")
@@ -162,16 +162,8 @@ class SecretWordsLockTest {
     }
 
     private fun unlockAndWaitForWords() {
-        enterPin(TEST_PIN)
-        waitForPinPadToFinishSubmitting()
-        compose.waitUntil(timeoutMillis = 15_000) { !Auth.isLocked }
+        compose.enterPinAndAwaitUnlock(TEST_PIN)
         compose.waitUntil(timeoutMillis = 5_000) { TEST_WORDS.all { compose.hasWordNode(it) } }
-    }
-
-    private fun enterPin(pin: String) {
-        pin.forEach { digit ->
-            compose.onNodeWithTag("numberPadPin.digit.$digit").performClick()
-        }
     }
 
     // the pad checks a full PIN after coroutine delays that run on the test's virtual clock, and

@@ -63,9 +63,7 @@ fun restoreNoAppLock() {
  * PIN. The pad clears a rejected PIN, so zero digits can also mean a full PIN was entered and refused
  */
 fun ComposeTestRule.enterPinAndAwaitUnlock(pin: String) {
-    pin.forEach { digit ->
-        onNodeWithTag("numberPadPin.digit.$digit").performClick()
-    }
+    val retapped = enterPinDigits(pin)
 
     // the pad checks a full PIN after coroutine delays on the test's virtual clock
     mainClock.advanceTimeBy(PIN_SUBMIT_SETTLE_MILLIS)
@@ -73,11 +71,10 @@ fun ComposeTestRule.enterPinAndAwaitUnlock(pin: String) {
     try {
         waitUntil(UNLOCK_TIMEOUT_MILLIS) { !AuthManager.getInstance().isLocked }
     } catch (timeout: ComposeTimeoutException) {
-        val showing = onAllNodesWithText(PIN_DOT, useUnmergedTree = true).fetchSemanticsNodes().size
         val hiddenKeys = ('0'..'9').filterNot { onNodeWithTag("numberPadPin.digit.$it").isDisplayed() }
         throw AssertionError(
-            "the app stayed locked after the PIN: the pad shows $showing of ${pin.length} digits, " +
-                "keys not displayed: $hiddenKeys",
+            "the app stayed locked after the PIN: the pad shows ${shownPinDigits()} of ${pin.length} digits, " +
+                "keys not displayed: $hiddenKeys, keys tapped twice: $retapped",
             timeout,
         )
     }
@@ -85,6 +82,50 @@ fun ComposeTestRule.enterPinAndAwaitUnlock(pin: String) {
     waitForIdle()
 }
 
+/**
+ * Types [pin] on a number pad hosted by this rule, one confirmed digit at a time, and returns how
+ * many keys needed a second tap
+ *
+ * Each tap reaches the pad's window as separate injected events, so a relayout between them, such
+ * as the lock window settling after it opens or the app returning to the foreground, can cancel a
+ * tap before the pad sees it. Typing on regardless leaves the pad one digit short and the app
+ * locked, so each key waits for its dot and is tapped once more if the dot never came. It returns
+ * without failing, so the caller's own check reports what the pad ended up with
+ */
+fun ComposeTestRule.enterPinDigits(pin: String): Int {
+    var retapped = 0
+    pin.forEach { digit ->
+        val before = shownPinDigits()
+        if (!tapPinDigit(digit, before)) {
+            retapped++
+            tapPinDigit(digit, before)
+        }
+    }
+
+    return retapped
+}
+
+// a tap the pad took always changes its dot count: one more dot, or none once a full PIN is checked
+// and cleared or the lock closes. The pad appends the digit inside the click, and every semantics
+// read waits for idle, so a count still unchanged after the wait means the tap never reached the
+// pad and a second tap cannot type the digit twice
+private fun ComposeTestRule.tapPinDigit(
+    digit: Char,
+    before: Int,
+): Boolean {
+    onNodeWithTag("numberPadPin.digit.$digit").performClick()
+
+    return try {
+        waitUntil(DIGIT_TIMEOUT_MILLIS) { shownPinDigits() != before || !AuthManager.getInstance().isLocked }
+        true
+    } catch (_: ComposeTimeoutException) {
+        false
+    }
+}
+
+private fun ComposeTestRule.shownPinDigits(): Int = onAllNodesWithText(PIN_DOT, useUnmergedTree = true).fetchSemanticsNodes().size
+
 private const val PIN_DOT = "\u25CF"
 private const val PIN_SUBMIT_SETTLE_MILLIS = 1_000L
 private const val UNLOCK_TIMEOUT_MILLIS = 15_000L
+private const val DIGIT_TIMEOUT_MILLIS = 5_000L

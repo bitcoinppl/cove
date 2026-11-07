@@ -9,12 +9,11 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import org.bitcoinppl.cove.Auth
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.enterPinAndAwaitUnlock
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.AppLockReason
 import org.bitcoinppl.cove_core.AuthManagerAction
@@ -78,9 +77,7 @@ class LockViewAccessibilityTest {
         }
 
         // unlocked, the content is reachable, so the locked checks below are not vacuous
-        if (Auth.isLocked) enterPin(TEST_PIN)
-        compose.waitUntil(STATE_TIMEOUT_MILLIS) { !Auth.isLocked }
-        compose.waitForIdle()
+        if (Auth.isLocked) compose.enterPinAndAwaitUnlock(TEST_PIN)
         assertEquals(1, readableNodeCount())
         assertEquals(1, actionableNodeCount())
 
@@ -92,16 +89,10 @@ class LockViewAccessibilityTest {
         assertEquals("content under the PIN cover was actionable", 0, actionableNodeCount())
         assertEquals(0, clicks)
 
-        enterPin(TEST_PIN)
-        compose.waitUntil(STATE_TIMEOUT_MILLIS) { !Auth.isLocked }
-        compose.waitForIdle()
+        // unlock the way a user does, through the PIN pad on the cover
+        compose.enterPinAndAwaitUnlock(TEST_PIN)
         assertEquals("content stayed hidden after unlocking", 1, readableNodeCount())
         assertEquals("content stayed inert after unlocking", 1, actionableNodeCount())
-    }
-
-    // unlock the way a user does, through the PIN pad on the cover
-    private fun enterPin(pin: String) {
-        pin.forEach { digit -> compose.onNodeWithTag("numberPadPin.digit.$digit").performClick() }
     }
 
     // text and actions are checked apart, so dropping only one of them from the cover still fails
