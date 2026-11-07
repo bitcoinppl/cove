@@ -105,7 +105,8 @@ impl Observed {
     }
 
     async fn until(&mut self, what: &str, done: impl Fn(&Msg) -> bool) {
-        tokio::time::timeout(Duration::from_secs(20), async {
+        let timeout = crate::test_support::loaded_host_wait(Duration::from_secs(20));
+        tokio::time::timeout(timeout, async {
             loop {
                 if self.seen.iter().any(&done) {
                     return;

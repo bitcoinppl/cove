@@ -136,7 +136,10 @@ impl<M: DebugSend> ReconcileChannel<M> {
 mod tests {
     use std::time::Duration;
 
-    use crate::{manager::deferred_sender::SingleOrMany, test_support::ensure_tokio_runtime};
+    use crate::{
+        manager::deferred_sender::SingleOrMany,
+        test_support::{ensure_tokio_runtime, loaded_host_wait},
+    };
 
     use super::ReconcileChannel;
 
@@ -164,7 +167,9 @@ mod tests {
         let drain = std::thread::spawn(move || {
             (0..COUNT)
                 .map(|_| {
-                    let message = receiver.recv_timeout(Duration::from_secs(10)).expect("message");
+                    let message = receiver
+                        .recv_timeout(loaded_host_wait(Duration::from_secs(10)))
+                        .expect("message");
                     std::thread::yield_now();
                     message
                 })
