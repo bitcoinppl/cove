@@ -16,12 +16,15 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.graphics.ColorUtils
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertTrue
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -81,6 +84,31 @@ class TextReferenceMatch(
 }
 
 private const val TEXT_REFERENCE_TAG = "TextReferenceMatch"
+
+// the exact message compose's window capture fails with when PixelCopy does not answer in time
+private const val PIXEL_COPY_TIMEOUT = "Failed waiting for PixelCopy!"
+private const val MAX_CAPTURE_ATTEMPTS = 3
+
+/**
+ * Capture [this] node like [captureToImage], trying again when PixelCopy times out
+ *
+ * Compose gives PixelCopy a fixed time to answer, which a busy emulator now and then misses. That
+ * timeout says nothing about what the screen draws, so it is retried after the app goes idle, up
+ * to [MAX_CAPTURE_ATTEMPTS] times; any other failure is thrown at once
+ */
+fun SemanticsNodeInteraction.captureToImageWithRetry(): Bitmap {
+    for (attempt in 1 until MAX_CAPTURE_ATTEMPTS) {
+        try {
+            return captureToImage().asAndroidBitmap()
+        } catch (error: AssertionError) {
+            if (error.message != PIXEL_COPY_TIMEOUT) throw error
+            Log.w(TEXT_REFERENCE_TAG, "capture retry: PixelCopy timed out on attempt $attempt of $MAX_CAPTURE_ATTEMPTS")
+            InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        }
+    }
+
+    return captureToImage().asAndroidBitmap()
+}
 
 // WCAG AA, for body text and for large text
 private const val MIN_BODY_TEXT_CONTRAST = 4.5

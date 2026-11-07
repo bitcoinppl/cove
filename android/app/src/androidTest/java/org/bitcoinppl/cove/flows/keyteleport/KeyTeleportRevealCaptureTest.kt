@@ -5,9 +5,7 @@ import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -29,6 +27,7 @@ import org.bitcoinppl.cove.test.TestWalletWords
 import org.bitcoinppl.cove.test.TextReferenceMatch
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.captureToImageWithRetry
 import org.bitcoinppl.cove.test.deleteTestWallet
 import org.bitcoinppl.cove.test.importTestWalletOrNull
 import org.bitcoinppl.cove.test.matchTextReference
@@ -296,7 +295,7 @@ class KeyTeleportRevealCaptureTest {
         return secure
     }
 
-    private fun capture(): Bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+    private fun capture(): Bitmap = compose.onRoot().captureToImageWithRetry()
 
     private fun Bitmap.matchCode(text: ShownText) = matchTextReference(text.layout, text.topLeft, compose.density, "code")
 
