@@ -4,6 +4,7 @@ import android.graphics.Rect
 import android.system.Os
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.view.inspector.WindowInspector
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.node.RootForTest
@@ -176,11 +177,11 @@ class TapSignerLayoutFullLaunchTest {
         setLargestFontScaleAndWaitForRecreation()
         wallet.waitForBalance(FUNDED_SATS)
 
-        // the send screen opens with the amount focused, and at this scale the keyboard covers
-        // the address field below it, where no scroll reaches
+        // the send screen opens with the amount focused and the keyboard up, and at this scale
+        // the address field below it must still scroll into reach above the keyboard
         device.waitFor(By.text("Send")).click()
         device.waitFor(By.res("sendFlow.amount"))
-        wallet.dismissKeyboard()
+        scrollAboveKeyboard(By.res("sendFlow.address"), "send: address field")
         wallet.enterAddress()
         wallet.tapMax()
         wallet.clickNext(expecting = By.text("Sign using TAPSIGNER"))
@@ -195,6 +196,7 @@ class TapSignerLayoutFullLaunchTest {
         wallet.typeInto(By.clazz("android.widget.EditText"), TAPSIGNER_CVC) {
             device.hasObject(By.text("Digits: ${TAPSIGNER_CVC.length}"))
         }
+
         wallet.dismissKeyboard()
         reachable(By.text("Submit").enabled(true), "$title: Submit", drawsWhole = "Submit", usable = true)
 
@@ -428,6 +430,58 @@ class TapSignerLayoutFullLaunchTest {
         }
 
         error("$name never showed whole after $MAX_NUDGES drags: ${control ?: "no control found"}")
+    }
+
+    /**
+     * Waits for the keyboard, then drags the scroll area above it until the control matching
+     * [selector] shows whole there, and fails if it never does
+     *
+     * The drags stay above the keyboard, where a drag on the keys would type instead of scroll
+     */
+    private fun scrollAboveKeyboard(
+        selector: BySelector,
+        name: String,
+    ) {
+        wallet.waitUntil("expected the keyboard to open before $name") { keyboardTop() != null }
+        var last: String? = null
+
+        repeat(MAX_NUDGES) {
+            val keyboard = keyboardTop() ?: error("the keyboard closed before $name showed above it")
+            val bounds = device.findObject(selector)?.visibleBounds?.let(::controlBounds)
+            if (bounds != null && bounds.whole.bottom <= keyboard && bounds.shown.contains(bounds.whole)) return
+
+            last = "$bounds with the keyboard from $keyboard"
+            val viewport =
+                device
+                    .findObjects(By.scrollable(true))
+                    .map { it.visibleBounds }
+                    .maxByOrNull { it.width() * it.height() }
+                    ?: error("$name: the screen has no scroll area")
+
+            nudge(Rect(viewport.left, viewport.top, viewport.right, minOf(viewport.bottom, keyboard)), towardsTop = true)
+        }
+
+        error("$name never showed whole above the keyboard after $MAX_NUDGES drags: ${last ?: "not found"}")
+    }
+
+    /** The top of the keyboard on screen, or null while it is closed */
+    private fun keyboardTop(): Int? {
+        var top: Int? = null
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val decor =
+                ActivityLifecycleMonitorRegistry
+                    .getInstance()
+                    .getActivitiesInStage(Stage.RESUMED)
+                    .firstOrNull()
+                    ?.window
+                    ?.decorView
+            val insets = decor?.rootWindowInsets?.takeIf { it.isVisible(WindowInsets.Type.ime()) } ?: return@runOnMainSync
+            val location = IntArray(2).also(decor::getLocationOnScreen)
+            top = location[1] + decor.height - insets.getInsets(WindowInsets.Type.ime()).bottom
+        }
+
+        return top
     }
 
     /** Where a control shows on screen after every clip, and where it would lie unclipped */
