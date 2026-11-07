@@ -355,9 +355,41 @@ class TapSignerLayoutFullLaunchTest {
         title: String,
         back: String,
     ) {
-        device.waitFor(By.text(title), timeoutMs = 15_000L)
+        // the CVC field takes the focus as the screen opens, and the screen scrolls it into view,
+        // which with a long message takes the title and the back action above the top, so the
+        // screen counts as open once its title or its field shows, and the checks start at its top
+        wallet.waitUntil("the $title screen never showed", timeoutMs = 15_000L) {
+            device.hasObject(By.text(title)) || device.hasObject(By.text("CVC"))
+        }
+
+        scrollBackTo(By.text(back), "$title: \"$back\"")
         assertScreenFits(title, back, title)
         reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
+    }
+
+    /**
+     * Drags the screen's scroll area down, above any keyboard, until a match for [selector] shows,
+     * for content above the top, which [reachable] never scrolls back to
+     */
+    private fun scrollBackTo(
+        selector: BySelector,
+        name: String,
+    ) {
+        repeat(MAX_NUDGES * 3) {
+            if (device.hasObject(selector)) return
+
+            val viewport =
+                device
+                    .findObjects(By.scrollable(true))
+                    .map { it.visibleBounds }
+                    .maxByOrNull { it.width() * it.height() }
+                    ?: error("$name: the screen has no scroll area")
+
+            val bottom = minOf(viewport.bottom, keyboardTop() ?: viewport.bottom)
+            nudge(Rect(viewport.left, viewport.top, viewport.right, bottom), towardsTop = false)
+        }
+
+        assertTrue("$name never scrolled back into view", device.hasObject(selector))
     }
 
     // MARK: layout checks
