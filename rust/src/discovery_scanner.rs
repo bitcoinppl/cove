@@ -1087,7 +1087,7 @@ mod tests {
         drop(worker_addr);
 
         call!(scanner.shutdown())
-            .with_timeout(std::time::Duration::from_secs(1))
+            .with_timeout(crate::test_support::loaded_host_wait(std::time::Duration::from_secs(1)))
             .await
             .expect("scanner shutdown waits for the worker task")
             .expect("scanner shutdown responds");
@@ -1096,7 +1096,7 @@ mod tests {
         assert_eq!(Arc::strong_count(&db_ref), 1);
 
         worker_termination
-            .with_timeout(std::time::Duration::from_secs(1))
+            .with_timeout(crate::test_support::loaded_host_wait(std::time::Duration::from_secs(1)))
             .await
             .expect("worker actor terminates");
         assert_eq!(Arc::strong_count(&db_ref), 1);

@@ -2049,7 +2049,7 @@ mod tests {
                 }
             }
         }
-        .with_timeout(Duration::from_secs(5))
+        .with_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(5)))
         .await
         .expect("address-type switch restarts wallet scan");
     }
@@ -2080,7 +2080,7 @@ mod tests {
                 }
             }
         }
-        .with_timeout(Duration::from_secs(2))
+        .with_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(2)))
         .await
         .expect("transaction details update is reconciled")
     }
@@ -2243,7 +2243,7 @@ mod tests {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         }
-        .with_timeout(Duration::from_secs(2))
+        .with_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(2)))
         .await
         .expect("height request count is reached");
     }
@@ -2268,7 +2268,7 @@ mod tests {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         }
-        .with_timeout(Duration::from_secs(2))
+        .with_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(2)))
         .await
         .expect("height refresh persists");
     }
@@ -2382,7 +2382,7 @@ mod tests {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
         }
-        .with_timeout(Duration::from_secs(2))
+        .with_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(2)))
         .await
         .expect("broadcast request count is reached");
     }
@@ -3118,8 +3118,10 @@ mod tests {
 
         let (authority, preparation) =
             crate::wallet_lifecycle::test_support::begin_wallet_deletion(db.id.clone());
+        // a quiesce that waited on the held broadcast would end at cove-http's 30 second request
+        // timeout, so this bound stays well under it rather than taking the loaded-host floor
         async { actor_value(actor.quiesce_for_terminal_shutdown(authority).await).await }
-            .with_timeout(Duration::from_secs(1))
+            .with_timeout(Duration::from_secs(10))
             .await
             .expect("destructive quiesce does not wait for a pending node request");
         wait_for_broadcast_request_count(&pending_server.broadcast_requests, 1).await;
@@ -3472,6 +3474,13 @@ mod tests {
                 }
                 tokio::task::yield_now().await;
             }
+        }
+
+        // the advances above bound the retry on the paused clock, while the request it makes is
+        // real IO, so this gives it time to land on the wall clock
+        let deadline = crate::test_support::LoadedHostDeadline::after(Duration::from_secs(1));
+        while server.requests.load(Ordering::SeqCst) == 0 && !deadline.has_passed() {
+            tokio::task::yield_now().await;
         }
 
         call!(watcher.stop_watching()).await.expect("transaction watcher stops");
@@ -4596,7 +4605,8 @@ mod tests {
 
         call!(addr.handle_payjoin_proposal_broadcast(terminal_tx)).await.expect("actor responds");
 
-        for _ in 0..50 {
+        let deadline = crate::test_support::LoadedHostDeadline::after(Duration::from_millis(500));
+        while !deadline.has_passed() {
             let session = db.get_payjoin_sender_session().expect("db query succeeded");
             if session.is_none() {
                 return;

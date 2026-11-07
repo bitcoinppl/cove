@@ -13,6 +13,14 @@ j0ygowH8+9FglyHR6PVLIHVq41ahRANCAAQ7vkWoz3MlWICekj51h5HziO7hSgeW
 sje31mu8zpQ44ib5q2hHTcTG/T8A4GKUvCILYf92wwyPkMtQn+GYSHhZ
 -----END PRIVATE KEY-----";
 
+/// How long the mock API and the processing poll wait for something that should happen
+///
+/// Local CI runs this suite while simulator, emulator and build workloads share the machine, and
+/// under that load a request can take seconds to arrive. A longer wait cannot fail a correct test,
+/// it only makes a broken one fail later. The same policy as the cove crate's
+/// `test_support::LOADED_HOST_WAIT_FLOOR`
+const LOADED_HOST_WAIT: Duration = Duration::from_secs(30);
+
 struct Request {
     method: String,
     url: Url,
@@ -33,7 +41,7 @@ impl Server {
             let mut requests = Vec::new();
 
             for response in responses {
-                let deadline = Instant::now() + Duration::from_secs(5);
+                let deadline = Instant::now() + LOADED_HOST_WAIT;
                 let mut stream = loop {
                     match listener.accept() {
                         Ok((stream, _)) => break stream,
@@ -49,7 +57,7 @@ impl Server {
                 // macOS accepted sockets inherit the listener's non-blocking mode, so a read
                 // before the request bytes arrive would fail with WouldBlock
                 stream.set_nonblocking(false).unwrap();
-                stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+                stream.set_read_timeout(Some(LOADED_HOST_WAIT)).unwrap();
                 let mut bytes = Vec::new();
                 let header_end = loop {
                     let mut buffer = [0; 1024];
@@ -174,9 +182,7 @@ fn copies_snapshot_for_each_locale_before_adding_exact_build_to_group() {
         json!({}),
     ]);
     let distribution = Distribution::prepare_with_api(server.api(), "org.bitcoinppl.cove").unwrap();
-    distribution
-        .distribute_with_timeout(&identity(), Duration::from_secs(2), Duration::ZERO)
-        .unwrap();
+    distribution.distribute_with_timeout(&identity(), LOADED_HOST_WAIT, Duration::ZERO).unwrap();
     let requests = server.handle.join().unwrap();
     let previous_query = query(&requests[2]);
     assert_eq!(previous_query["filter[preReleaseVersion.platform]"], "IOS");
@@ -302,9 +308,7 @@ fn previous_build_without_notes_still_adds_the_new_build_to_the_group() {
         json!({}),
     ]);
     let distribution = Distribution::prepare_with_api(server.api(), "org.bitcoinppl.cove").unwrap();
-    distribution
-        .distribute_with_timeout(&identity(), Duration::from_secs(2), Duration::ZERO)
-        .unwrap();
+    distribution.distribute_with_timeout(&identity(), LOADED_HOST_WAIT, Duration::ZERO).unwrap();
 
     let requests = server.handle.join().unwrap();
     assert!(!requests
