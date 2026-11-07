@@ -221,8 +221,8 @@ coverage = [
 # probed text with an unlimited copy, including the descriptions inside the automatic setup and
 # download backup buttons through a report beside each button; a description taller than the space
 # it shows in, above any keyboard, must scroll its first and then its last line into view; on ios cvc
-# screens each description must show above the number pad, or in the whole window once a drag has
-# closed the pad, and the test logs which and fails if the pad closes without a drag
+# screens every text and action must show above the number pad, and the test fails if a drag or
+# anything else before the checks end closes or moves the pad
 
 [[row]]
 id = "s16-keyteleport-request-and-code-layout-at-largest"
