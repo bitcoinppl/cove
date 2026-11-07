@@ -6,6 +6,9 @@ platforms = ["ios", "android"]
 target = "manual"
 paths = [
     "rust/src/key_teleport.rs",
+    "rust/src/qr_scanner.rs",
+    "ios/Cove/QrCodeScanView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/QrCodeScanView.kt",
     "rust/src/manager/key_teleport_manager.rs",
     "rust/src/manager/key_teleport_manager/**",
     "ios/Cove/Flows/KeyTeleportFlow/**",
@@ -35,6 +38,9 @@ platforms = ["ios", "android"]
 target = "manual"
 paths = [
     "rust/src/key_teleport.rs",
+    "rust/src/qr_scanner.rs",
+    "ios/Cove/QrCodeScanView.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/QrCodeScanView.kt",
     "rust/src/manager/key_teleport_manager.rs",
     "rust/src/manager/key_teleport_manager/**",
     "ios/Cove/Flows/KeyTeleportFlow/**",
