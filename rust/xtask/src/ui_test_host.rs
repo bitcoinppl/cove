@@ -705,13 +705,16 @@ fn simulator_biometrics(request: BiometricsRequest) -> Result<Value> {
             simctl_notifyutil(udid, &["-s", ENROLLMENT, "1"])?;
             simctl_notifyutil(udid, &["-p", ENROLLMENT])?;
         }
+
         BiometricsAction::Unenroll => {
             simctl_notifyutil(udid, &["-s", ENROLLMENT, "0"])?;
             simctl_notifyutil(udid, &["-p", ENROLLMENT])?;
         }
+
         BiometricsAction::Match => {
             simctl_notifyutil(udid, &["-p", "com.apple.BiometricKit_Sim.pearl.match"])?;
         }
+
         BiometricsAction::Nomatch => {
             simctl_notifyutil(udid, &["-p", "com.apple.BiometricKit_Sim.pearl.nomatch"])?;
         }
