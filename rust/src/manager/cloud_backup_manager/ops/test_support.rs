@@ -621,6 +621,7 @@ impl CloudStorageAccess for MockCloudStorage {
             relative_path: location.relative_path,
             data: data.clone(),
         });
+
         state.master_key_backups.insert(namespace, data);
         Ok(())
     }
@@ -660,6 +661,7 @@ impl CloudStorageAccess for MockCloudStorage {
                 relative_path: location.relative_path,
                 data: data.clone(),
             });
+
             state.wallet_backups.insert((namespace.clone(), record_id.clone()), data);
             state.uploaded_wallet_backups.push((namespace, record_id));
             state.wallet_backup_success_count += 1;
