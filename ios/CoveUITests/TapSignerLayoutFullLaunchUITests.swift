@@ -36,6 +36,14 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// Room left between an element scrolled into view and the edge of the space it shows in
     private static let scrollRoom: CGFloat = 8
 
+    /// The most drags `assertReachable` makes for one match. With the number pad and its toolbar
+    /// up, the send screen drags in about 220 points, so a drag moves its form under 90 points and
+    /// Next lies about 13 drags down at the largest text size
+    private static let maxDrags = 24
+
+    /// How far a match may move in a drag that still counts as leaving it in place
+    private static let stillTolerance: CGFloat = 1
+
     /// Drops the card's session once the operation has started on it, so the app offers to continue
     /// instead of failing outright
     private static let exchangesBeforeDrop = 3
@@ -388,12 +396,15 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// returns how it was left
     ///
     /// A keyboard sliding away still exists until it has gone, so a frame read once can't tell it
-    /// from one that stays
+    /// from one that stays. Reading goes on past the deadline until two frames have been read, since
+    /// under heavy load one query can take longer than the whole timeout, and only two reads that
+    /// differ show the keyboard moving
     private func keyboardState(within timeout: TimeInterval) -> KeyboardState {
         let keyboard = app.keyboards.firstMatch
         let window = app.windows.firstMatch.frame
         let deadline = Date().addingTimeInterval(timeout)
         var last = CGRect.null
+        var reads = 0
 
         repeat {
             guard keyboard.exists else { return .gone }
@@ -402,8 +413,9 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             if isSameFrame(frame, last), !frame.isEmpty, frame.minY < window.maxY { return .settled(frame) }
 
             last = frame
+            reads += 1
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
-        } while Date() < deadline
+        } while Date() < deadline || reads < 2
 
         return keyboard.exists ? .moving(last) : .gone
     }
@@ -510,24 +522,35 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         // scroll a match that scrolling could bring on screen by about as far as it lies outside the
         // space above any keyboard, so content with less scroll range than a drag stops partway
         // instead of swinging between its ends; a match inside that space but covered, as by the
-        // keyboard's toolbar, moves a row toward the middle
-        for _ in 0 ..< 8 where reachableMatch(query, needsHit: needsHit) == nil {
+        // keyboard's toolbar, moves a row toward the middle. Dragging goes on while the match moves:
+        // only two drags in a row that leave it in place mean the content has reached its end, so
+        // one slow frame or missed gesture doesn't end the scroll early
+        var drags = 0
+        var stillDrags = 0
+        while reachableMatch(query, needsHit: needsHit) == nil, drags < Self.maxDrags, stillDrags < 2 {
             let candidate = scrollCandidate(query)
+            let before = candidate.frame
             let target = scrollContainers(holding: candidate).last ?? visibleScrollView() ?? app.windows.firstMatch
             let area = readableArea(of: candidate)
-            let nudge = candidate.frame.midY > area.midY ? Self.rowHeight : -Self.rowHeight
-            let distance = scrollDistance(showing: candidate.frame, in: area)
+            let nudge = before.midY > area.midY ? Self.rowHeight : -Self.rowHeight
+            let distance = scrollDistance(showing: before, in: area)
             drag(target, by: distance != 0 ? distance : nudge)
+            drags += 1
+
+            let after = candidate.frame
+            let isStill = abs(after.minX - before.minX) <= Self.stillTolerance && abs(after.minY - before.minY) <= Self.stillTolerance
+            stillDrags = isStill ? stillDrags + 1 : 0
         }
 
         if let element = reachableMatch(query, needsHit: needsHit) {
             return element
         }
 
+        let limit = stillDrags >= 2 ? "the content reached its end after \(drags) drags" : "the content still moved after \(drags) drags, the most allowed"
         let matches = query.allElementsBoundByIndex.map { "\($0.frame) hittable \($0.isHittable)" }
         let cover = keyboardCover().map { "\($0)" } ?? "none"
         XCTFail(
-            "\(name) never fit on screen: matches \(matches) in window \(app.windows.firstMatch.frame), keyboard \(keyboardToolbarButton == nil ? "" : "and its toolbar ")\(cover)"
+            "\(name) never fit on screen, \(limit): matches \(matches) in window \(app.windows.firstMatch.frame), keyboard \(keyboardToolbarButton == nil ? "" : "and its toolbar ")\(cover)"
         )
 
         return query.firstMatch
