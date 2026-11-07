@@ -8,10 +8,10 @@
 //!
 //! The UI tests stand in for a strict signer here, so the join is at least as
 //! strict as one: every frame must parse and decode on its own, every UR part
-//! must agree on the message it belongs to and the reassembled message must
-//! match its checksum, BBQr parts must be split as the spec says and a
-//! compressed one must hold a whole deflate stream, and the result must be a
-//! PSBT. The `bbqr` and `foundation-ur` crates skip some of these checks, so
+//! must be a valid fountain part that agrees on the message it belongs to and
+//! matches the reassembled message, which must match its checksum, BBQr parts
+//! must be split as the spec says and a compressed one must hold a whole
+//! deflate stream, and the result must be one PSBT with nothing after it. The `bbqr` and `foundation-ur` crates skip some of these checks, so
 //! this module makes them itself, following
 //! <https://github.com/coinkite/BBQr/blob/master/BBQr.md> for BBQr
 
@@ -23,14 +23,15 @@ use color_eyre::{
     eyre::{bail, eyre, Context},
     Result,
 };
-use cove_ur::CryptoPsbt;
+use cove_ur::registry::CRYPTO_PSBT;
 use data_encoding::{BASE32_NOPAD, HEXUPPER};
 use flate2::{Decompress, FlushDecompress, Status};
 use foundation_ur::{
     bytewords::{self, Style},
-    fountain::part::Part,
+    fountain::{chooser::Alloc, part::Part},
     Decoder, UR,
 };
+use minicbor::data::{Tag, Type};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -70,61 +71,139 @@ pub fn join(request: JoinRequest) -> Result<Value> {
 }
 
 fn join_ur(frames: &[String]) -> Result<Value> {
-    let frames: Vec<String> = frames.iter().map(|frame| frame.to_ascii_lowercase()).collect();
+    // the tests send every capture of a frame, and a UR is case-insensitive
+    let mut seen = BTreeSet::new();
+    let frames: Vec<String> = frames
+        .iter()
+        .map(|frame| frame.to_ascii_lowercase())
+        .filter(|frame| seen.insert(frame.clone()))
+        .collect();
 
     if let [single] = frames.as_slice() {
         if UR::parse(single).is_ok_and(|ur| ur.is_single_part()) {
-            let psbt = CryptoPsbt::from_ur_string(single)
-                .map_err(|error| eyre!("Invalid single-part crypto-psbt: {error}"))?;
-            return Ok(complete("ur", &psbt.to_psbt_bytes()));
+            return join_single_ur(single);
         }
     }
 
     let mut decoder = Decoder::default();
-    let mut sequences = BTreeSet::new();
+    let mut parts = BTreeMap::new();
     let mut message: Option<MessageId> = None;
 
     for frame in &frames {
-        let ur = UR::parse(frame).map_err(|error| eyre!("`{frame}` is not a UR: {error}"))?;
-        if ur.as_type() != "crypto-psbt" {
-            bail!("`{frame}` is a {}, not a crypto-psbt", ur.as_type());
-        }
+        let ur = crypto_psbt_ur(frame)?;
+        let part = FountainPart::of(&ur).wrap_err_with(|| format!("`{frame}`"))?;
 
         // the decoder stops checking parts once it has the message, so a part that names another
         // message would pass if it came late; each one is checked against the first here instead
-        let id = MessageId::of(&ur).wrap_err_with(|| format!("`{frame}`"))?;
-        let expected = *message.get_or_insert(id);
-        if id != expected {
-            bail!("`{frame}` belongs to {id:?}, but the first part to {expected:?}");
+        let expected = *message.get_or_insert(part.message);
+        if part.message != expected {
+            bail!("`{frame}` belongs to {:?}, but the first part to {expected:?}", part.message);
         }
 
-        sequences.insert(ur.sequence().unwrap_or_default());
+        if let Some(seen) = parts.get(&part.sequence) {
+            if seen != &part {
+                bail!("`{frame}` is a second part {} with other data", part.sequence);
+            }
+
+            continue;
+        }
+
         decoder.receive(ur).map_err(|error| eyre!("`{frame}` doesn't join the others: {error}"))?;
+        parts.insert(part.sequence, part);
     }
 
-    let Some(MessageId { sequence_count: total, checksum: expected, .. }) = message else {
+    let Some(message) = message else {
         bail!("No UR frames to join");
     };
 
     let Some(cbor) = decoder.message().map_err(|error| eyre!("UR decoding failed: {error}"))?
     else {
         // the export shows only the plain fragments 1 to N, so each one missing is a part left
-        let parts_left = (1..=total).filter(|sequence| !sequences.contains(sequence)).count();
+        let parts_left =
+            (1..=message.sequence_count).filter(|sequence| !parts.contains_key(sequence)).count();
         return Ok(json!({ "complete": false, "parts_left": parts_left.max(1) }));
     };
 
     // foundation-ur reassembles the message without checking it against the checksum its parts
     // carry, which every part was checked to agree on above
     let actual = CRC32.checksum(cbor);
-    if actual != expected {
+    if actual != message.checksum {
         bail!(
-            "The joined UR message has checksum {actual:08x}, but its parts carry {expected:08x}"
+            "The joined UR message has checksum {actual:08x}, but its parts carry {:08x}",
+            message.checksum
         );
     }
 
-    let psbt = CryptoPsbt::decode(cbor.to_vec())
-        .map_err(|error| eyre!("The UR is not a crypto-psbt: {error}"))?;
-    Ok(complete("ur", &psbt.to_psbt_bytes()))
+    // the decoder ignores the parts that come after it has the message, and a part it took may
+    // carry fragments that a reduction never read, so each part is checked against the message
+    let fragments = message.fragments(cbor);
+    for part in parts.values() {
+        if part.expected_data(&fragments) != part.data {
+            bail!("Part {} doesn't carry the message the other parts join to", part.sequence);
+        }
+    }
+
+    let psbt = psbt_from_cbor(cbor)?;
+    Ok(complete("ur", psbt))
+}
+
+fn crypto_psbt_ur(frame: &str) -> Result<UR<'_>> {
+    let ur = UR::parse(frame).map_err(|error| eyre!("`{frame}` is not a UR: {error}"))?;
+    if ur.as_type() != "crypto-psbt" {
+        bail!("`{frame}` is a {}, not a crypto-psbt", ur.as_type());
+    }
+
+    Ok(ur)
+}
+
+fn join_single_ur(frame: &str) -> Result<Value> {
+    let ur = crypto_psbt_ur(frame)?;
+    let Some(message) = ur.as_bytewords() else {
+        bail!("`{frame}` has no Bytewords payload");
+    };
+
+    let cbor = bytewords::decode(message, Style::Minimal)
+        .map_err(|error| eyre!("`{frame}` has invalid Bytewords: {error}"))?;
+
+    let psbt = psbt_from_cbor(&cbor)?;
+    Ok(complete("ur", psbt))
+}
+
+/// The PSBT in a `crypto-psbt` message, which must be one CBOR byte string, tagged or not, with
+/// nothing after it
+///
+/// `cove-ur` reads the byte string and ignores anything after it
+fn psbt_from_cbor(cbor: &[u8]) -> Result<&[u8]> {
+    let mut decoder = minicbor::Decoder::new(cbor);
+    let invalid = |error: minicbor::decode::Error| eyre!("The UR is not a crypto-psbt: {error}");
+
+    if decoder.datatype().map_err(invalid)? == Type::Tag {
+        let tag = decoder.tag().map_err(invalid)?;
+        if tag != Tag::new(CRYPTO_PSBT) {
+            bail!("The UR message has tag {}, not crypto-psbt's {CRYPTO_PSBT}", tag.as_u64());
+        }
+    }
+
+    let psbt = decoder.bytes().map_err(invalid)?;
+    if decoder.position() != cbor.len() {
+        bail!("The UR message has {} bytes after its PSBT", cbor.len() - decoder.position());
+    }
+
+    check_psbt("UR", psbt)?;
+    Ok(psbt)
+}
+
+/// Checks the bytes are one PSBT with nothing after it, which `Psbt::deserialize` doesn't check
+fn check_psbt(format: &str, bytes: &[u8]) -> Result<()> {
+    let mut rest = bytes;
+    Psbt::deserialize_from_reader(&mut rest)
+        .wrap_err_with(|| format!("The joined {format} is not a valid PSBT"))?;
+
+    if !rest.is_empty() {
+        bail!("The joined {format} has {} bytes after the PSBT", rest.len());
+    }
+
+    Ok(())
 }
 
 /// What a multi-part UR's fountain part says about the whole message, which every part of one
@@ -134,9 +213,31 @@ struct MessageId {
     sequence_count: u32,
     message_length: usize,
     checksum: u32,
+    fragment_length: usize,
 }
 
 impl MessageId {
+    /// The message, zero-padded to whole fragments, cut into its fragments
+    fn fragments(&self, message: &[u8]) -> Vec<Vec<u8>> {
+        let mut padded = message.to_vec();
+        padded.resize(self.fragment_length * self.sequence_count as usize, 0);
+
+        padded.chunks(self.fragment_length).map(<[u8]>::to_vec).collect()
+    }
+}
+
+/// One multi-part UR's fountain part, checked on its own
+#[derive(Debug, PartialEq, Eq)]
+struct FountainPart {
+    sequence: u32,
+    message: MessageId,
+    data: Vec<u8>,
+}
+
+impl FountainPart {
+    /// Decodes the part a UR carries, failing on one a strict decoder would reject
+    ///
+    /// foundation-ur checks a part is valid only until it has the message, so this checks every one
     fn of(ur: &UR) -> Result<Self> {
         let Some(fragment) = ur.as_bytewords() else {
             bail!("The UR has no Bytewords payload");
@@ -144,14 +245,56 @@ impl MessageId {
 
         let cbor = bytewords::decode(fragment, Style::Minimal)
             .map_err(|error| eyre!("Invalid Bytewords: {error}"))?;
+
+        let mut decoder = minicbor::Decoder::new(&cbor);
         let part: Part =
-            minicbor::decode(&cbor).map_err(|error| eyre!("Invalid fountain part: {error}"))?;
+            decoder.decode().map_err(|error| eyre!("Invalid fountain part: {error}"))?;
+
+        if decoder.position() != cbor.len() {
+            bail!("The fountain part has {} bytes after it", cbor.len() - decoder.position());
+        }
+
+        if !part.is_valid() {
+            bail!(
+                "Invalid fountain part: sequence {} of {}, {} bytes of a {}-byte message",
+                part.sequence,
+                part.sequence_count,
+                part.data.len(),
+                part.message_length
+            );
+        }
 
         Ok(Self {
-            sequence_count: part.sequence_count,
-            message_length: part.message_length,
-            checksum: part.checksum,
+            sequence: part.sequence,
+            message: MessageId {
+                sequence_count: part.sequence_count,
+                message_length: part.message_length,
+                checksum: part.checksum,
+                fragment_length: part.data.len(),
+            },
+            data: part.data.to_vec(),
         })
+    }
+
+    /// The data this part carries for the message: one fragment for a plain part, the XOR of the
+    /// fragments the fountain chooser picks for a mixed one
+    fn expected_data(&self, fragments: &[Vec<u8>]) -> Vec<u8> {
+        let part = Part {
+            sequence: self.sequence,
+            sequence_count: self.message.sequence_count,
+            message_length: self.message.message_length,
+            checksum: self.message.checksum,
+            data: &self.data,
+        };
+
+        let mut data = vec![0; self.message.fragment_length];
+        for index in part.indexes::<Alloc, BTreeSet<usize>>() {
+            for (byte, fragment_byte) in data.iter_mut().zip(&fragments[index]) {
+                *byte ^= fragment_byte;
+            }
+        }
+
+        data
     }
 }
 
@@ -257,7 +400,7 @@ fn join_bbqr(frames: &[String]) -> Result<Value> {
         Encoding::Zlib => inflate(&encoded)?,
     };
 
-    Psbt::deserialize(&psbt).wrap_err("The joined BBQr is not a valid PSBT")?;
+    check_psbt("BBQr", &psbt)?;
     Ok(complete("bbqr", &psbt))
 }
 
@@ -347,6 +490,7 @@ mod tests {
         absolute::LockTime, hashes::Hash as _, transaction, Amount, OutPoint, ScriptBuf,
         Transaction, TxIn, TxOut, Txid,
     };
+    use cove_ur::CryptoPsbt;
     use data_encoding::Encoding as TextEncoding;
     use foundation_ur::Encoder;
 
@@ -410,15 +554,52 @@ mod tests {
         (0..count).map(|_| encoder.next_part().to_string()).collect()
     }
 
-    /// The UR fountain part with its message checksum changed, re-encoded as valid Bytewords
-    fn with_wrong_checksum(frame: &str) -> String {
+    /// The UR fountain part after `edit`, re-encoded as valid Bytewords
+    fn edited_part(frame: &str, edit: impl FnOnce(&mut Part, &mut Vec<u8>)) -> String {
         let ur = UR::parse(frame).unwrap();
         let cbor = bytewords::decode(ur.as_bytewords().unwrap(), Style::Minimal).unwrap();
         let mut part: Part = minicbor::decode(&cbor).unwrap();
-        part.checksum ^= 1;
+        let mut data = part.data.to_vec();
+        edit(&mut part, &mut data);
 
+        let part = Part { data: &data, ..part };
         let fragment = bytewords::encode(&minicbor::to_vec(&part).unwrap(), Style::Minimal);
         format!("ur:crypto-psbt/{}-{}/{fragment}", part.sequence, part.sequence_count)
+    }
+
+    /// The UR fountain part with a byte after its CBOR, inside valid Bytewords
+    fn with_bytes_after_the_part(frame: &str) -> String {
+        let ur = UR::parse(frame).unwrap();
+        let mut cbor = bytewords::decode(ur.as_bytewords().unwrap(), Style::Minimal).unwrap();
+        cbor.push(0);
+
+        let fragment = bytewords::encode(&cbor, Style::Minimal);
+        format!(
+            "ur:crypto-psbt/{}-{}/{fragment}",
+            ur.sequence().unwrap(),
+            ur.sequence_count().unwrap()
+        )
+    }
+
+    fn with_wrong_checksum(frame: &str) -> String {
+        edited_part(frame, |part, _| part.checksum ^= 1)
+    }
+
+    /// A single-part `crypto-psbt` UR of the CBOR message
+    fn single_part_ur(cbor: &[u8]) -> String {
+        UR::new("crypto-psbt", cbor).to_string()
+    }
+
+    /// The PSBT's `crypto-psbt` message with `extra` after its byte string, and the byte string
+    /// itself holding the PSBT with `extra` after it
+    fn cbor_with_extra_bytes(extra: &[u8]) -> [Vec<u8>; 2] {
+        let cbor = CryptoPsbt::from_psbt_bytes(psbt_bytes()).unwrap().encode().unwrap();
+        let after_cbor = [cbor.as_slice(), extra].concat();
+
+        let mut after_psbt = minicbor::Encoder::new(Vec::new());
+        after_psbt.bytes(&[psbt_bytes().as_slice(), extra].concat()).unwrap();
+
+        [after_cbor, after_psbt.into_writer()]
     }
 
     #[test]
@@ -564,5 +745,67 @@ mod tests {
 
         let error = join_frames(parts_of_chunks('2', &BASE32_NOPAD, &chunks)).unwrap_err();
         assert!(format!("{error:#}").contains("not a multiple of 8"), "{error:#}");
+    }
+
+    #[test]
+    fn an_invalid_ur_part_fails_the_join_before_or_after_completion() {
+        let frames = ur_frames(3);
+
+        for (bad, after_completion) in [
+            (edited_part(&frames[1], |_, data| data.clear()), "Invalid fountain part"),
+            (edited_part(&frames[1], |_, data| data.push(0)), "but the first part to"),
+            (edited_part(&frames[1], |part, _| part.sequence = 0), "Invalid fountain part"),
+            (with_bytes_after_the_part(&frames[1]), "bytes after it"),
+        ] {
+            let mut first = vec![bad.clone()];
+            first.extend(frames.iter().cloned());
+            assert!(join_frames(first).is_err(), "`{bad}` joined as the first part");
+
+            let mut last = frames.clone();
+            last.push(bad.clone());
+            let error = join_frames(last).unwrap_err();
+            assert!(format!("{error:#}").contains(after_completion), "{error:#}");
+        }
+    }
+
+    #[test]
+    fn a_ur_part_with_the_wrong_data_fails_even_after_completion() {
+        let frames = ur_frames(6);
+        let flip_first_byte = |_: &mut Part, data: &mut Vec<u8>| data[0] ^= 1;
+
+        // a plain part repeated with other data, and a mixed part the decoder no longer reads
+        for (bad, expected) in [
+            (edited_part(&frames[1], flip_first_byte), "a second part 2 with other data"),
+            (edited_part(&frames[5], flip_first_byte), "doesn't carry the message"),
+        ] {
+            let mut late = frames[..3].to_vec();
+            late.push(bad);
+
+            let error = join_frames(late).unwrap_err();
+            assert!(format!("{error:#}").contains(expected), "{error:#}");
+        }
+    }
+
+    #[test]
+    fn a_repeated_single_part_ur_joins() {
+        let single = CryptoPsbt::from_psbt_bytes(psbt_bytes()).unwrap().to_ur_string().unwrap();
+
+        let joined = join_frames(vec![single.clone(), single.clone(), single.to_uppercase()]);
+        assert_eq!(joined.unwrap()["psbt"], hex::encode(psbt_bytes()));
+    }
+
+    #[test]
+    fn bytes_after_the_psbt_fail_the_join() {
+        let [after_cbor, after_psbt] = cbor_with_extra_bytes(&[0]);
+
+        let error = join_frames(vec![single_part_ur(&after_cbor)]).unwrap_err();
+        assert!(format!("{error:#}").contains("bytes after its PSBT"), "{error:#}");
+
+        let error = join_frames(vec![single_part_ur(&after_psbt)]).unwrap_err();
+        assert!(format!("{error:#}").contains("bytes after the PSBT"), "{error:#}");
+
+        let frames = base32_parts(&[psbt_bytes().as_slice(), &[0]].concat(), 2);
+        let error = join_frames(frames).unwrap_err();
+        assert!(format!("{error:#}").contains("bytes after the PSBT"), "{error:#}");
     }
 }
