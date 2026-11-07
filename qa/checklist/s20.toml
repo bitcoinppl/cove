@@ -21,10 +21,11 @@ coverage = [
 # round_trip.rs runs the sending and receiving rust managers against each other and checks the
 # received wallet's fingerprint and first address. ios sends the wallet's words to the host playing
 # the android phone, which decodes ios's response qr from a screenshot with core image. android
-# receives words from an in-process rust peer through the qr seam and imports them. no test has one
-# platform's camera read the other's qr rendering, so that stays human: android's ml kit scanner
-# reading the core image qr codes ios shows, and ios's avfoundation scanner reading the zxing qr
-# codes android shows, in both the request and the response direction
+# receives words from an in-process rust peer, whose response text the test hands to the receive
+# manager directly, and imports them. no test has one platform's camera read the other's qr
+# rendering, so that stays human: android's ml kit scanner reading the core image qr codes ios
+# shows, and ios's avfoundation scanner reading the zxing qr codes android shows, in both the
+# request and the response direction, along with android's wiring from its scanner to the manager
 
 [[row]]
 id = "s20-android-to-ios-private-key-migration"
