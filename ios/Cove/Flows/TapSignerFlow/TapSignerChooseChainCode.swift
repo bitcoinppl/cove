@@ -124,6 +124,7 @@ private struct TapSignerAutomaticSetupButton: View {
                     Text("Let the app create a chain code for you")
                         .font(.footnote)
                         .foregroundStyle(.primary)
+                        .uiTestTruncationProbe()
 
                     Spacer()
                 }
@@ -133,6 +134,9 @@ private struct TapSignerAutomaticSetupButton: View {
             .cornerRadius(10)
             .padding(.horizontal, 20)
         }
+        // the button merges its title and description into one element, so their probes report
+        // through an element beside it
+        .uiTestTruncationReport("tapSigner.automaticSetup.truncation")
     }
 }
 
