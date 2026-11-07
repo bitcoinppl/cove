@@ -108,6 +108,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         scriptedScan = nil
         reader = FfiNfcReader()
         readBytes = Data()
+        messageInfo = nil
         currentBlock = 0
     }
 
@@ -154,11 +155,14 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         // when readBlocks is called if the old one is in started status then this might be the user trying to scan the same tag again
         if reader.isStarted(), !readBytes.isEmpty {
             prepareToResumeReading(tag: tag, session: session)
+            return
         }
 
         readNextBlock(tag: tag, session: session)
     }
 
+    /// Decides between resuming and starting over before reading on, since a block read already in
+    /// flight when the reader resets would be taken as the start of the new tag's message
     private func prepareToResumeReading(tag: NFCISO15693Tag, session: NFCTagReaderSession) {
         // read the first block chunk
         tag.readMultipleBlocks(
@@ -166,12 +170,15 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             blockRange: NSRange(location: 0, length: blocksToRead)
         ) { data, error in
             if let error {
-                self.retries += 1
                 if self.retries < 10 {
-                    Log.error("Error reading block: \(error.localizedDescription)")
-                    self.readBlocks(tag: tag, session: session)
+                    Log.warn("resume check read error: \(error.localizedDescription), retrying")
+                    self.retries += 1
+                    self.prepareToResumeReading(tag: tag, session: session)
+                    return
                 }
 
+                Log.error("resume check read error, retries exhausted: \(error.localizedDescription)")
+                self.tagReaderSession(session, didInvalidateWithError: error)
                 return
             }
 
@@ -187,6 +194,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 Log.warn("Trying to scan a different NFC message, resetting")
                 self.resetReader()
             }
+
+            self.readNextBlock(tag: tag, session: session)
         }
     }
 
