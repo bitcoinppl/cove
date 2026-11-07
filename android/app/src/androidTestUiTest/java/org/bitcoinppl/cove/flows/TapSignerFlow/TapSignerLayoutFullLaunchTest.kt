@@ -1,8 +1,11 @@
 package org.bitcoinppl.cove.flows.TapSignerFlow
 
 import android.graphics.Rect
+import android.system.Os
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
+import android.view.WindowInsetsAnimation
 import android.view.inspector.WindowInspector
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.node.RootForTest
@@ -16,6 +19,8 @@ import androidx.compose.ui.unit.toSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.StaleObjectException
@@ -23,6 +28,7 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.test.AndroidDeviceStayAwakeRule
+import org.bitcoinppl.cove.test.FAKE_NODE_ESPLORA_URL
 import org.bitcoinppl.cove.test.FakeNodeControl
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchStartupRobot
@@ -46,22 +52,26 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Walks every TAPSIGNER setup and import screen at the largest system font scale and checks that
- * each screen's text and actions fit the display or scroll into it, through the debug TAPSIGNER seam
- * and an emulated card (docs/testing.md)
+ * Walks every TAPSIGNER setup and import screen, and the CVC screen signing opens, at the largest
+ * system font scale and checks that each screen's text and actions fit the display or scroll into
+ * it, through the debug TAPSIGNER seam and an emulated card (docs/testing.md)
  *
  * The TAPSIGNER sheet is its own window, which ignores a Compose test font scale, so this sets the
  * system font scale and restores it afterwards. Each node's full bounds and text layout come from
  * the Compose semantics tree, so the checks catch text and actions pushed off screen, cut off by
  * their container or squeezed, and text that lays out ellipsized or cut short inside its own bounds.
- * Runs in the uiTest flavour; needs the hardware signer host up and forwarded, which
- * `just android-instrumented-ci` does
+ * Runs in the uiTest flavour; needs the hardware signer host, and the fake node for the signing
+ * test, up and forwarded, which `just android-instrumented-ci` does
  */
 @LargeTest
 @RunWith(AndroidJUnit4::class)
 class TapSignerLayoutFullLaunchTest {
     private companion object {
         const val NEW_CVC = "246810"
+        const val FUNDED_SATS = 100_000L
+
+        // where signing's CVC message differs from import's
+        const val SIGNING_MESSAGE_START = "For security purposes, you must enter your TAPSIGNER PIN before you can sign"
 
         // drops the card's session once the operation has started on it, so the app offers to
         // continue instead of failing outright
@@ -97,6 +107,7 @@ class TapSignerLayoutFullLaunchTest {
     private val signer = HardwareSignerControl()
     private var previousShowImeWithHardKeyboard: String? = null
     private var previousFontScale: String? = null
+    private var imeAnimations: ImeAnimationProbe? = null
 
     @Before
     fun prepareDevice() {
@@ -144,6 +155,81 @@ class TapSignerLayoutFullLaunchTest {
     }
 
     /**
+     * A funded card's Sign using TAPSIGNER opens the CVC screen with signing's own message
+     *
+     * That screen shows before the app contacts the card, so signing failing on the card (#965)
+     * doesn't stop the check; the test cancels instead of submitting the CVC. The card is imported
+     * and funded at the default scale, since only the signing screen is under test, and the scale
+     * changes on the wallet screen, which the activity the change recreates opens again
+     */
+    @Test
+    fun tapSignerSigningCvcScreenFitsAtLargestFontScale() {
+        signer.requireHealthy()
+
+        // debug builds read this on every fee fetch, so the draft prices its fee from the fake node
+        Os.setenv("COVE_FEE_URL", "$FAKE_NODE_ESPLORA_URL/api/v1/fees/recommended", true)
+        launchPastOnboarding(needsSetup = false)
+
+        screens.scanTapSignerFromAddWallet("Import TAPSIGNER?")
+        screens.enterTapSignerCvc(TAPSIGNER_CVC)
+        device.waitFor(By.text("Import Complete"), timeoutMs = 30_000L)
+        device.waitFor(By.text("Continue")).click()
+        device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
+
+        node.fund(screens.copyReceiveAddress(), listOf(FUNDED_SATS))
+        screens.refreshUntilBalance(FUNDED_SATS)
+
+        setLargestFontScaleAndWaitForRecreation()
+        wallet.waitForBalance(FUNDED_SATS)
+
+        // onboarding is done, so the soft keyboard can show beside the emulator's hardware one,
+        // as it does on a phone, which is the keyboard the address field must stay above
+        device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 1")
+
+        // the probe goes on before Send, so it hears every keyboard animation the send screen starts
+        imeAnimations = ImeAnimationProbe.attach()
+
+        // the send screen opens with the amount focused and the keyboard up, and at this scale
+        // every field must still scroll into reach above the keyboard: the address field below
+        // the amount, and Next at the end of the form, which only stops under the keyboard when
+        // the scroll area runs on beneath it
+        device.waitFor(By.text("Send")).click()
+        device.waitFor(By.res("sendFlow.amount"))
+        scrollAboveKeyboard(By.res("sendFlow.address"), "send: address field")
+        wallet.enterAddress()
+        wallet.tapMax()
+
+        // with an address in, Max clears the focus and closes the keyboard, so the amount field
+        // opens it again, with the toolbar the form must also stop above. The tag sits on the box
+        // around the text field, so the focus shows on a node inside it
+        device.scrollTo(By.res("sendFlow.amount")).click()
+        device.waitFor(By.res("sendFlow.amount").hasDescendant(By.focused(true)))
+        scrollAboveKeyboard(By.res("sendFlow.next"), "send: Next", toolbar = By.res("sendFlow.keyboardToolbar"))
+
+        // at this scale the hardware send screen ends its first screenful at its Sign Transaction
+        // heading, with the signing options below the fold
+        wallet.clickNext(expecting = By.text("Sign Transaction"))
+        reachable(By.text("Sign using TAPSIGNER"), "hardware send: \"Sign using TAPSIGNER\"", usable = true).click()
+
+        val title = "Enter TAPSIGNER CVC"
+        assertCvcScreenFits(title, "Cancel")
+        device.waitFor(By.textStartsWith(SIGNING_MESSAGE_START))
+
+        // the submit action stays disabled until the field holds a whole CVC, which is typed but
+        // never submitted
+        wallet.typeInto(By.clazz("android.widget.EditText"), TAPSIGNER_CVC) {
+            device.hasObject(By.text("Digits: ${TAPSIGNER_CVC.length}"))
+        }
+
+        wallet.dismissKeyboard()
+        reachable(By.text("Submit").enabled(true), "$title: Submit", drawsWhole = "Submit", usable = true)
+
+        reachable(By.text("Cancel"), "$title: Cancel", usable = true).click()
+        assertTrue("Cancel didn't close the signing CVC screen", device.wait(Until.gone(By.text(title)), 15_000L))
+        device.scrollTo(By.text("Sign using TAPSIGNER"), timeoutMs = 15_000L)
+    }
+
+    /**
      * Finishes onboarding at the default scale, since Add Wallet needs a wallet and only the
      * TAPSIGNER screens are under test, then sets the largest scale and scans the card
      */
@@ -151,6 +237,15 @@ class TapSignerLayoutFullLaunchTest {
         needsSetup: Boolean,
         alert: String,
     ) {
+        launchPastOnboarding(needsSetup)
+
+        device.executeShellCommand("settings put system font_scale $LARGEST_SYSTEM_FONT_SCALE")
+        device.waitForIdle()
+        screens.scanTapSignerFromAddWallet(alert)
+    }
+
+    /** Starts the card and a fresh app on the fake node, and imports a software wallet to finish onboarding */
+    private fun launchPastOnboarding(needsSetup: Boolean) {
         node.reset()
         signer.startTapSigner(needsSetup)
         HardwareSignerControl.useTapSignerBridge()
@@ -167,10 +262,6 @@ class TapSignerLayoutFullLaunchTest {
             .skipCloudBackupAfterImport()
             .acceptTermsAfterImport()
         device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
-
-        device.executeShellCommand("settings put system font_scale $LARGEST_SYSTEM_FONT_SCALE")
-        device.waitForIdle()
-        screens.scanTapSignerFromAddWallet(alert)
     }
 
     // MARK: setup
@@ -187,14 +278,12 @@ class TapSignerLayoutFullLaunchTest {
         wallet.dismissKeyboard()
         reachable(By.text("Continue").enabled(true), "advanced setup: Continue", drawsWhole = "Continue", usable = true).click()
 
-        enterCvc(TAPSIGNER_CVC, "Enter Factory CVC", "Back", "Continue")
-        enterCvc(NEW_CVC, "Create New CVC", "Back", "Continue")
+        enterCvc(TAPSIGNER_CVC, "Enter Factory CVC", "Back", "Continue", next = "Create New CVC")
+        enterCvc(NEW_CVC, "Create New CVC", "Back", "Continue", next = "Confirm New CVC")
 
         // the card leaves the field once setup has started on it
         signer.dropNextTapSignerSession(afterExchanges = EXCHANGES_BEFORE_DROP)
-        enterCvc(NEW_CVC, "Confirm New CVC", "Back", "Confirm and continue")
-
-        device.waitFor(By.text("Continue Setup"), timeoutMs = 30_000L)
+        enterCvc(NEW_CVC, "Confirm New CVC", "Back", "Confirm and continue", next = "Continue Setup")
         assertScreenFits("setup retry", "Cancel", "Setup in Progress", "Continue Setup")
 
         // each scan can stop at another stage, which offers to continue again
@@ -214,9 +303,7 @@ class TapSignerLayoutFullLaunchTest {
 
     private fun importCardThroughEveryScreen() {
         signer.dropNextTapSignerSession(afterExchanges = EXCHANGES_BEFORE_DROP)
-        enterCvc(TAPSIGNER_CVC, "Enter TAPSIGNER CVC", "Cancel", "Submit")
-
-        device.waitFor(By.text("Continue Import"), timeoutMs = 30_000L)
+        enterCvc(TAPSIGNER_CVC, "Enter TAPSIGNER CVC", "Cancel", "Submit", next = "Continue Import")
         assertScreenFits("import retry", "Cancel", "Import needs to continue", "Continue Import")
         reachable(By.text("Continue Import"), "Continue Import", usable = true).click()
 
@@ -228,22 +315,94 @@ class TapSignerLayoutFullLaunchTest {
 
     // MARK: CVC screens
 
-    /** Checks the CVC screen fits, then enters the CVC and submits it */
+    /**
+     * Checks the CVC screen fits, then enters the CVC, submits it and waits for the screen after it,
+     * which shows the text [next]
+     *
+     * The title alone can't mark either screen: the field scrolls a tall message's title above the
+     * top. So the CVC goes in once the field shows, the check above having said which screen it is,
+     * and the next screen counts as open only once [next] shows, dragging back to the top for it if
+     * that screen opened at its field. A CVC screen that stays open never shows [next], so it fails
+     */
     private fun enterCvc(
         cvc: String,
         title: String,
         back: String,
         submit: String,
+        next: String,
     ) {
-        device.waitFor(By.text(title), timeoutMs = 15_000L)
+        assertCvcScreenFits(title, back)
+
+        screens.enterTapSignerCvc(cvc, title, submit, opened = By.clazz("android.widget.EditText")) {
+            reachable(it, "$title: $submit", drawsWhole = submit, usable = true)
+        }
+
+        if (!device.wait(Until.hasObject(By.text(next)), 30_000L)) {
+            scrollBackTo(By.text(next), "after $title accepted the CVC, \"$next\"")
+        }
+    }
+
+    /**
+     * Sets the largest system font scale and waits until the app's resumed activity has it
+     *
+     * The change recreates the activity, and a click that lands on the one it replaces is lost,
+     * so the wallet screen must be the new activity's before the test opens Send
+     */
+    private fun setLargestFontScaleAndWaitForRecreation() {
+        device.executeShellCommand("settings put system font_scale $LARGEST_SYSTEM_FONT_SCALE")
+        wallet.waitUntil("expected the app to recreate its activity at font scale $LARGEST_SYSTEM_FONT_SCALE", timeoutMs = 30_000L) {
+            var applied = false
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                applied =
+                    ActivityLifecycleMonitorRegistry
+                        .getInstance()
+                        .getActivitiesInStage(Stage.RESUMED)
+                        .any { it.resources.configuration.fontScale == LARGEST_SYSTEM_FONT_SCALE }
+            }
+
+            applied
+        }
+
+        device.waitForIdle()
+    }
+
+    /** Checks the CVC screen titled [title] fits, before any CVC is entered */
+    private fun assertCvcScreenFits(
+        title: String,
+        back: String,
+    ) {
+        // the screen requests no focus and opens at its top, but a tall message can leave the title
+        // or the field as the only one of the two on screen, so either marks it open
+        wallet.waitUntil("the $title screen never showed", timeoutMs = 15_000L) {
+            device.hasObject(By.text(title)) || device.hasObject(By.text("CVC"))
+        }
+
+        // the sheet slides in, and a node read while its content moves goes stale, so the checks
+        // start once the content holds still, then scroll back to the top in case it opened lower,
+        // and scroll to the field explicitly at the end
+        awaitContentAtRest("the $title screen", By.text(title), By.text("CVC"))
+        scrollBackTo(By.text(back), "$title: \"$back\"")
         assertScreenFits(title, back, title)
         reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
+    }
 
-        screens.enterTapSignerCvc(cvc, title, submit) { reachable(it, "$title: $submit", drawsWhole = submit, usable = true) }
-        assertTrue(
-            "the $title screen didn't accept the CVC",
-            device.wait(Until.gone(By.text(title)), 15_000L),
-        )
+    /**
+     * Drags the screen's scroll area down, above any keyboard, until a match for [selector] shows,
+     * for content above the top, which [reachable] never scrolls back to
+     */
+    private fun scrollBackTo(
+        selector: BySelector,
+        name: String,
+    ) {
+        repeat(MAX_NUDGES * 3) {
+            if (device.hasObject(selector)) return
+
+            val viewport = largestScrollArea(name)
+            val bottom = minOf(viewport.bottom, keyboardTop() ?: viewport.bottom)
+            nudge(Rect(viewport.left, viewport.top, viewport.right, bottom), towardsTop = false)
+        }
+
+        assertTrue("$name never scrolled back into view", device.hasObject(selector))
     }
 
     // MARK: layout checks
@@ -265,8 +424,179 @@ class TapSignerLayoutFullLaunchTest {
 
         val titleNode = reachable(By.text(title), "$screen: \"$title\"", drawsWhole = title)
         assertWindowTextsDrawWhole(screen, titleNode.visibleBounds)
+        assertWindowTextsShowWhole(screen, titleNode.visibleBounds)
 
         actions.forEach { reachable(By.text(it), "$screen: \"$it\"", drawsWhole = it, usable = true) }
+    }
+
+    /**
+     * Fails unless every Compose text in the window that shows [titleVisible] can be scrolled to
+     * show whole, with no ancestor clipping it
+     *
+     * A text keeps its whole layout inside a smaller container that clips it, which the layout
+     * check can't see, so this compares each text's clipped bounds with its full bounds once it is
+     * scrolled into its scroll area. A text taller than its scroll area must show its whole first
+     * line and then its whole last line. Text fields are left out, as in [assertWindowTextsDrawWhole]
+     *
+     * The texts are checked from the bottom up, so the scroll areas end near their top, where the
+     * later downward scroll to each action starts
+     */
+    private fun assertWindowTextsShowWhole(
+        screen: String,
+        titleVisible: Rect,
+    ) {
+        var root: RootForTest? = null
+        var texts = emptyList<Pair<Int, String>>()
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            root = semanticsNodeAt(titleVisible)?.first
+            texts =
+                root
+                    ?.semanticsOwner
+                    ?.getAllSemanticsNodes(mergingEnabled = false)
+                    ?.filter { SemanticsProperties.Text in it.config && SemanticsProperties.EditableText !in it.config }
+                    ?.filter { it.size.height > 0 && it.size.width > 0 }
+                    ?.sortedByDescending { it.positionOnScreen.y }
+                    ?.map { node -> node.id to node.config[SemanticsProperties.Text].joinToString(" ") { it.text } }
+                    .orEmpty()
+        }
+
+        val owner = checkNotNull(root) { "$screen: its title matches no Compose semantics node" }
+        val problems =
+            texts.mapNotNull { (id, text) ->
+                textShowWholeProblem(owner, id)?.let { "\"${text.take(TEXT_IN_MESSAGE)}\": $it" }
+            }
+
+        assertTrue("$screen has texts that never show whole: $problems", problems.isEmpty())
+    }
+
+    /**
+     * Where a text lies on screen, where its first and last lines lie across its width, and the
+     * scroll area that can move it
+     */
+    private data class TextPlacement(
+        val shown: Rect,
+        val whole: Rect,
+        val firstLine: Rect?,
+        val lastLine: Rect?,
+        val viewport: Rect?,
+        val scrollBy: ((Float, Float) -> Boolean)?,
+    )
+
+    /**
+     * Why the text with semantics [id] never shows whole, or null when it does
+     *
+     * Its scroll area is scrolled just far enough to bring the part under check inside it. A text
+     * taller than the area must show its whole first line and then its whole last line, from the
+     * line bounds its layout measures, so an area too short for a line fails
+     */
+    private fun textShowWholeProblem(
+        root: RootForTest,
+        id: Int,
+    ): String? {
+        val edges = mutableListOf("whole")
+        var checked = 0
+        var scrolledFrom: Rect? = null
+
+        repeat(MAX_NUDGES * 2) {
+            val placement = textPlacement(root, id) ?: return null
+            val (shown, whole, firstLine, lastLine, viewport, scrollBy) = placement
+            if (viewport != null && whole.height() > viewport.height() + CLIP_TOLERANCE_PX && edges == listOf("whole")) {
+                edges.clear()
+                edges += listOf("first line", "last line")
+            }
+
+            val edge = edges[checked]
+            val part =
+                when (edge) {
+                    "first line" -> firstLine ?: return "its text reports no layout for its first line"
+                    "last line" -> lastLine ?: return "its text reports no layout for its last line"
+                    else -> whole
+                }
+
+            if (viewport != null && part.height() > viewport.height() + CLIP_TOLERANCE_PX) {
+                return "its $edge is ${part.height()}px tall but its scroll area shows only ${viewport.height()}px"
+            }
+
+            // a part outside the area scrolls to its nearer edge, and the last line to the bottom
+            val outside = viewport != null && (part.top < viewport.top || part.bottom > viewport.bottom)
+            val delta =
+                when {
+                    viewport == null || !outside -> 0
+                    edge == "last line" || part.top >= viewport.top -> part.bottom - viewport.bottom
+                    else -> part.top - viewport.top
+                }
+
+            // a scroll that didn't move the text has reached the end of its area, so check it there
+            if (abs(delta) > CLIP_TOLERANCE_PX && scrollBy != null && whole != scrolledFrom) {
+                scrolledFrom = whole
+                InstrumentationRegistry.getInstrumentation().runOnMainSync { scrollBy(0f, delta.toFloat()) }
+                device.waitForIdle()
+                Thread.sleep(300)
+                return@repeat
+            }
+
+            val shows =
+                shown.left - CLIP_TOLERANCE_PX <= part.left &&
+                    shown.top - CLIP_TOLERANCE_PX <= part.top &&
+                    shown.right + CLIP_TOLERANCE_PX >= part.right &&
+                    shown.bottom + CLIP_TOLERANCE_PX >= part.bottom
+
+            if (!shows) return "its ${if (edge == "whole") "text" else edge} spans $part but it shows only $shown"
+
+            checked += 1
+            scrolledFrom = null
+            if (checked == edges.size) return null
+        }
+
+        return "it never scrolled to show its ${edges.getOrNull(checked)?.takeIf { it != "whole" } ?: "text"} whole"
+    }
+
+    /** The on-screen bounds of the text with semantics [id] and its nearest vertical scroll area */
+    private fun textPlacement(
+        root: RootForTest,
+        id: Int,
+    ): TextPlacement? {
+        var placement: TextPlacement? = null
+        val display = Rect(0, 0, device.displayWidth, device.displayHeight)
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val node = root.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false).firstOrNull { it.id == id } ?: return@runOnMainSync
+            val scroller =
+                generateSequence(node.parent) { it.parent }
+                    .firstOrNull { SemanticsProperties.VerticalScrollAxisRange in it.config && SemanticsActions.ScrollBy in it.config }
+
+            // boundsInWindow isn't clipped to the display, which a window can extend past
+            val shown = node.clippedOnScreen().also { if (!it.intersect(display)) it.setEmpty() }
+            val viewport = scroller?.clippedOnScreen()?.also { if (!it.intersect(display)) it.setEmpty() }
+            val whole = node.fullOnScreen()
+            val layout = node.textLayout()
+
+            // line tops and bottoms match the drawn text, as layoutProblem explains
+            val line = { index: Int ->
+                layout?.let { Rect(whole.left, whole.top + it.getLineTop(index).roundToInt(), whole.right, whole.top + it.getLineBottom(index).roundToInt()) }
+            }
+
+            placement =
+                TextPlacement(
+                    shown = shown,
+                    whole = whole,
+                    firstLine = line(0),
+                    lastLine = layout?.let { line(it.lineCount - 1) },
+                    viewport = viewport,
+                    scrollBy = scroller?.config?.getOrNull(SemanticsActions.ScrollBy)?.action,
+                )
+        }
+
+        return placement
+    }
+
+    /** The text's single layout, as the accessibility service reads it, or null when it has none */
+    private fun SemanticsNode.textLayout(): TextLayoutResult? {
+        val action = config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action ?: return null
+        val layouts = mutableListOf<TextLayoutResult>()
+
+        return layouts.takeIf { action(it) }?.singleOrNull()?.takeIf { it.lineCount > 0 }
     }
 
     /**
@@ -326,11 +656,141 @@ class TapSignerLayoutFullLaunchTest {
             }
 
             // below the gesture strip counts as cut off at the bottom, since the content must move up
-            nudge(node.scrollViewport() ?: Rect(0, 0, device.displayWidth, device.displayHeight), towardsTop = !cutTop)
+            val viewport =
+                try {
+                    node.scrollViewport()
+                } catch (_: StaleObjectException) {
+                    device.waitFor(selector, timeoutMs = 5_000L).scrollViewport()
+                }
+
+            nudge(viewport ?: Rect(0, 0, device.displayWidth, device.displayHeight), towardsTop = !cutTop)
             node = device.waitFor(selector, timeoutMs = 5_000L)
         }
 
         error("$name never showed whole after $MAX_NUDGES drags: ${control ?: "no control found"}")
+    }
+
+    /**
+     * Waits for the keyboard to come to rest, then drags the scroll area above it until the control
+     * matching [selector] shows whole there, and fails if it never does
+     *
+     * With [toolbar], the space ends at the top of that bar on the keyboard, or at the keyboard's
+     * top if that is higher, so a control behind the bar fails too. Every measurement is taken once
+     * the window's keyboard animations have ended, see [settledPlacement], so a keyboard still
+     * sliding open can't pass or fail the check. The drags stay in that space, where a drag on the
+     * keys would type instead of scroll, and each moves the content only a short way, so a control
+     * at the end of a long form gets as many drags as [scrollBackTo] gives one at its top
+     */
+    private fun scrollAboveKeyboard(
+        selector: BySelector,
+        name: String,
+        toolbar: BySelector? = null,
+    ) {
+        val cover = if (toolbar == null) "keyboard" else "keyboard and its toolbar"
+        val drags = MAX_NUDGES * 3
+        var last: String? = null
+
+        repeat(drags) {
+            val placement = settledPlacement(selector, toolbar, "expected the $cover to come to rest before $name")
+            val bounds = placement.control
+            if (bounds != null && bounds.whole.bottom <= placement.coverTop && bounds.shown.contains(bounds.whole)) return
+
+            val viewport = largestScrollArea(name)
+            last = "$bounds with the $cover from ${placement.coverTop}, dragging in $viewport"
+
+            nudge(Rect(viewport.left, viewport.top, viewport.right, minOf(viewport.bottom, placement.coverTop)), towardsTop = true)
+        }
+
+        error("$name never showed whole above the $cover after $drags drags: ${last ?: "not found"}")
+    }
+
+    /**
+     * Where the keyboard, the toolbar on it if any, and a control lie at one moment, and how many
+     * keyboard animations had ended by then
+     */
+    private data class KeyboardPlacement(
+        val keyboardTop: Int,
+        val toolbar: Rect?,
+        val control: ControlBounds?,
+        val animationsEnded: Int,
+    ) {
+        /** The top of whatever covers the screen from below, the toolbar or the keyboard */
+        val coverTop: Int get() = minOf(keyboardTop, toolbar?.top ?: keyboardTop)
+    }
+
+    /**
+     * Reads the keyboard, the [toolbar] and the control matching [selector] until two reads in a row
+     * agree and no keyboard animation started or ended between them
+     *
+     * The window takes the keyboard's final insets as its animation starts, so [keyboardTop] already
+     * holds its final value while the screen still slides with the keyboard. A read counts only
+     * once [ImeAnimationProbe] has heard every animation it saw start end, with the keyboard open,
+     * and with the toolbar, if one is asked for, laid out with its bottom on the keyboard's final
+     * top, within [KEYBOARD_EDGE_ROUNDING_PX], and with no node going stale while it was read. The
+     * agreeing second read lets the frame that applies the final insets land first
+     */
+    private fun settledPlacement(
+        selector: BySelector,
+        toolbar: BySelector?,
+        message: String,
+    ): KeyboardPlacement {
+        var previous: KeyboardPlacement? = null
+        var settled: KeyboardPlacement? = null
+
+        wallet.waitUntil(message) {
+            val read = readPlacement(selector, toolbar)
+            if (read != null && read == previous) settled = read
+            previous = read
+            settled != null
+        }
+
+        return settled ?: error(message)
+    }
+
+    private fun readPlacement(
+        selector: BySelector,
+        toolbar: BySelector?,
+    ): KeyboardPlacement? {
+        val animations = imeAnimations ?: error("the keyboard animation probe must go on before the screen opens the keyboard")
+        val ended = animations.endedIfIdle() ?: return null
+        val keyboard = keyboardTop() ?: return null
+
+        // a node replaced between finding and reading it makes this read count as not yet at rest
+        return try {
+            val bar =
+                toolbar?.let {
+                    device
+                        .findObject(it)
+                        ?.visibleBounds
+                        ?.takeIf { bounds -> !bounds.isEmpty && abs(bounds.bottom - keyboard) <= KEYBOARD_EDGE_ROUNDING_PX }
+                        ?: return null
+                }
+
+            KeyboardPlacement(keyboard, bar, device.findObject(selector)?.visibleBounds?.let(::controlBounds), ended)
+        } catch (_: StaleObjectException) {
+            null
+        }
+    }
+
+    /** The top of the keyboard on screen, or null while it is closed */
+    private fun keyboardTop(): Int? {
+        var top: Int? = null
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val decor =
+                ActivityLifecycleMonitorRegistry
+                    .getInstance()
+                    .getActivitiesInStage(Stage.RESUMED)
+                    .firstOrNull()
+                    ?.window
+                    ?.decorView
+
+            val insets = decor?.rootWindowInsets?.takeIf { it.isVisible(WindowInsets.Type.ime()) } ?: return@runOnMainSync
+            val location = IntArray(2).also(decor::getLocationOnScreen)
+            top = location[1] + decor.height - insets.getInsets(WindowInsets.Type.ime()).bottom
+        }
+
+        return top
     }
 
     /** Where a control shows on screen after every clip, and where it would lie unclipped */
@@ -516,6 +976,64 @@ class TapSignerLayoutFullLaunchTest {
         b: Rect,
     ): Int = abs(a.left - b.left) + abs(a.top - b.top) + abs(a.right - b.right) + abs(a.bottom - b.bottom)
 
+    /**
+     * The bounds of the largest scroll area on screen, read again when a recomposition replaces a
+     * node between finding it and reading it
+     */
+    private fun largestScrollArea(name: String): Rect {
+        repeat(STALE_READS) {
+            try {
+                return device
+                    .findObjects(By.scrollable(true))
+                    .map { it.visibleBounds }
+                    .maxByOrNull { it.width() * it.height() }
+                    ?: error("$name: the screen has no scroll area")
+            } catch (_: StaleObjectException) {
+                device.waitForIdle()
+            }
+        }
+
+        error("$name: the scroll area kept changing under each read")
+    }
+
+    /**
+     * Waits until the screen's content lies in the same place on two reads in a row, each taken
+     * once the app is idle, and fails if it never does
+     *
+     * The first of [anchors] on screen marks the content, which is measured with the anchor's
+     * nearest scrollable ancestor, so a screen behind a sheet doesn't count, or with the root of
+     * the anchor's window when nothing scrolls, since Compose marks an area scrollable only while
+     * its content overflows it
+     */
+    private fun awaitContentAtRest(
+        name: String,
+        vararg anchors: BySelector,
+    ) {
+        var was: List<Rect>? = null
+
+        wallet.waitUntil("$name never came to rest", timeoutMs = 15_000L) {
+            device.waitForIdle()
+            val content = contentBounds(anchors)
+            (content != null && content == was).also { was = content }
+        }
+    }
+
+    /**
+     * Where the anchor, its container and each node directly inside that container lie, or null
+     * when no anchor shows or a node went stale while it was read
+     */
+    private fun contentBounds(anchors: Array<out BySelector>): List<Rect>? =
+        try {
+            anchors.firstNotNullOfOrNull { device.findObject(it) }?.let { anchor ->
+                val ancestors = generateSequence(anchor) { it.parent }.toList()
+                val container = ancestors.firstOrNull { it.isScrollable } ?: ancestors.last()
+
+                listOf(anchor.visibleBounds, container.visibleBounds) + container.children.map { it.visibleBounds }
+            }
+        } catch (_: StaleObjectException) {
+            null
+        }
+
     // the nearest scrollable ancestor's visible bounds, which is where a drag scrolls the node
     private fun UiObject2.scrollViewport(): Rect? =
         generateSequence(parent) { it.parent }
@@ -542,4 +1060,84 @@ class TapSignerLayoutFullLaunchTest {
     }
 
     private fun randomChainCode(): String = ByteArray(32).also(SecureRandom()::nextBytes).joinToString("") { "%02x".format(it) }
+}
+
+/** How many times a read retries after a recomposition replaces the node it read */
+private const val STALE_READS = 5
+
+/** How far, in pixels, rounding can put the toolbar's bottom from the keyboard's top */
+private const val KEYBOARD_EDGE_ROUNDING_PX = 2
+
+/**
+ * Hears the keyboard's inset animations on the resumed activity's window
+ *
+ * It sits on the activity's content view, which holds no callback of its own, and passes every
+ * event on to the views below, so the app's own insets handling sees them unchanged. It counts
+ * only the animations it saw start, so it must go on before the screen opens the keyboard
+ */
+private class ImeAnimationProbe private constructor(
+    private val host: View,
+) : WindowInsetsAnimation.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+    private var running = 0
+    private var ended = 0
+
+    override fun onStart(
+        animation: WindowInsetsAnimation,
+        bounds: WindowInsetsAnimation.Bounds,
+    ): WindowInsetsAnimation.Bounds {
+        if (animation.isIme()) running++
+        return bounds
+    }
+
+    override fun onProgress(
+        insets: WindowInsets,
+        runningAnimations: MutableList<WindowInsetsAnimation>,
+    ): WindowInsets = insets
+
+    override fun onEnd(animation: WindowInsetsAnimation) {
+        if (!animation.isIme()) return
+
+        running = maxOf(0, running - 1)
+        ended++
+    }
+
+    /**
+     * How many keyboard animations have ended, or null while one is still running, and fails if
+     * the resumed activity is no longer the one the probe is on
+     */
+    fun endedIfIdle(): Int? {
+        var result: Int? = null
+        var onResumedWindow = false
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            onResumedWindow = resumedContentView() === host
+            if (running == 0) result = ended
+        }
+
+        check(onResumedWindow) { "the app replaced the window the keyboard animation probe is on" }
+        return result
+    }
+
+    private fun WindowInsetsAnimation.isIme(): Boolean = typeMask and WindowInsets.Type.ime() != 0
+
+    companion object {
+        /** Puts a probe on the resumed activity's content view */
+        fun attach(): ImeAnimationProbe {
+            var probe: ImeAnimationProbe? = null
+
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                val host = resumedContentView() ?: return@runOnMainSync
+                probe = ImeAnimationProbe(host).also(host::setWindowInsetsAnimationCallback)
+            }
+
+            return probe ?: error("expected a resumed activity to put the keyboard animation probe on")
+        }
+
+        private fun resumedContentView(): View? =
+            ActivityLifecycleMonitorRegistry
+                .getInstance()
+                .getActivitiesInStage(Stage.RESUMED)
+                .firstOrNull()
+                ?.findViewById(android.R.id.content)
+    }
 }

@@ -54,6 +54,23 @@ extension XCUIApplication {
         return try signer.simulatorPasteboard().trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// The wallet only looks for new transactions on its own now and then, so pull to refresh
+    /// until the funding shows
+    func refreshUntilBalance(sats: UInt64) {
+        let balance = element("selectedWallet.balance")
+        XCTAssertTrue(balance.waitForExistence(timeout: 15))
+
+        let deadline = Date().addingTimeInterval(90)
+        while Date() < deadline, satsFromAmountLabel(balance.label) != sats {
+            let top = coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
+            let bottom = coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9))
+            top.press(forDuration: 0.1, thenDragTo: bottom)
+            Thread.sleep(forTimeInterval: 3)
+        }
+
+        assertBalance(sats: sats, timeout: 5)
+    }
+
     // MARK: - TAPSIGNER
 
     /// Scans a TAPSIGNER from Add Wallet in the sidebar; the NFC seam answers from the emulated

@@ -176,7 +176,7 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
         finishTapSignerImport()
 
         let funded = try node.fund(address: receiveAddress(), sats: [100_000])
-        refreshUntilBalance(sats: 100_000)
+        app.refreshUntilBalance(sats: 100_000)
 
         app.startSend(to: XCUIApplication.externalAddress)
         app.tapMax()
@@ -448,23 +448,6 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Import Complete"].waitForExistence(timeout: 30))
         app.tapButton(named: "Continue")
         XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
-    }
-
-    /// The wallet only looks for new transactions on its own now and then, so pull to refresh
-    /// until the funding shows
-    private func refreshUntilBalance(sats: UInt64) {
-        let balance = app.element("selectedWallet.balance")
-        XCTAssertTrue(balance.waitForExistence(timeout: 15))
-
-        let deadline = Date().addingTimeInterval(90)
-        while Date() < deadline, satsFromAmountLabel(balance.label) != sats {
-            let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4))
-            let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9))
-            top.press(forDuration: 0.1, thenDragTo: bottom)
-            Thread.sleep(forTimeInterval: 3)
-        }
-
-        app.assertBalance(sats: sats, timeout: 5)
     }
 
     private func receiveAddress() throws -> String {
