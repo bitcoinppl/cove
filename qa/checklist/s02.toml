@@ -267,17 +267,19 @@ paths = [
     "ios/Cove/CoverView.swift",
     "ios/Cove/CoveMainView.swift",
     "ios/Cove/ScenePhasePrivacy.swift",
+    "ios/Cove/NfcScanRegistry.swift",
     "ios/Cove/AppManager.swift",
 ]
 coverage = [
     "ios-unit:ios/CoveTests/ScenePhasePrivacyTests.swift::testNfcScanKeepsTheAppUncoveredUnlockedAndItsSheetsUp",
     "ios-unit:ios/CoveTests/ScenePhasePrivacyTests.swift::testLeavingTheForegroundWithoutNfcCoversLocksAndDismisses",
-    "ios-unit:ios/CoveTests/ScenePhasePrivacyTests.swift::testEveryAppNfcOwnerCountsAsAnActiveOperation",
+    "ios-unit:ios/CoveTests/ScenePhasePrivacyTests.swift::testEveryNfcReaderAndWriterCountsAsAnActiveOperation",
     "ios-ui:ios/CoveUITests/NfcScanPrivacyCoverFullLaunchUITests.swift::testLeavingDuringAnNfcScanKeepsTheAppUnlockedAndTheScanOpen",
 ]
 # 1.4.0: ios HUMAN, android N/A
-# the unit tests decide when leaving the foreground covers the app, locks it and dismisses its sheets, and that an open tag read or write holds all three off; the ui test goes to the home screen and back mid-scan with a pin set, past the foreground grace, and checks the app stays unlocked, the scan's screen stays up and the tag still imports
-# the real CoreNFC sheet making the app inactive is the os's job, and no test holds a TAPSIGNER session open, so a physical tag or card read in a real session stays with s19-hardware-journey-qr-and-nfc-legs and s13-nfc-and-tapsigner-setup-retry-and-signing
+# the unit tests decide when leaving the foreground covers the app, locks it and dismisses its sheets, and that any open tag read or write holds all three off, whoever owns the reader or writer; the ui test goes to the home screen and back mid-scan with a pin set, past the foreground grace, and checks the app stays unlocked, the scan's screen stays up and the tag still imports
+# TAPSIGNER sessions report their scan through the same registry, but no test catches a dropped TAPSIGNER check, since the card emulator can't hold a session open; real card scans stay with s13-nfc-and-tapsigner-setup-retry-and-signing
+# the real CoreNFC sheet making the app inactive is the os's job, and a physical tag read in a real session stays with s19-hardware-journey-qr-and-nfc-legs
 
 [[row]]
 id = "s02-background-every-secret-bearing-keyteleport-state"

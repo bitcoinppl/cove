@@ -25,7 +25,10 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     var readingMessage = ""
     var currentBlock = 0
 
-    var isScanning = false
+    /// Reported to `NfcScanRegistry`, which the privacy cover and app lock consult
+    var isScanning = false {
+        didSet { NfcScanRegistry.set(ObjectIdentifier(self), isScanning: isScanning) }
+    }
 
     /// The UI test NFC seam's pending read, which stands in for an NFC session in debug builds
     @ObservationIgnored private var scriptedScan: Task<Void, Never>?
@@ -39,7 +42,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     }
 
     deinit {
-        isScanning = false
+        NfcScanRegistry.set(ObjectIdentifier(self), isScanning: false)
     }
 
     func scan() {
