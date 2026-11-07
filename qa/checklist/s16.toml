@@ -200,7 +200,20 @@ platforms = ["ios", "android"]
 target = "ui"
 paths = [
     "ios/Cove/Flows/TapSignerFlow/**",
+    "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/AddressTextEditor.swift",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAmountView.swift",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/SendFlowSetAmountSections.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowHardwareScreen.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowHardwareSections.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/TapSignerFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/SendFlowSetAmountScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAddressView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAmountView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/AutoSizeText.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/SendFlowHardwareScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/SendFlowHardwareSections.kt",
 ]
 coverage = [
     "ios-ui:ios/CoveUITests/TapSignerLayoutFullLaunchUITests.swift::testTapSignerSetupScreensFitAtLargestTextSize",
@@ -225,10 +238,17 @@ coverage = [
 # descriptions inside the automatic setup and download backup buttons, through a report beside each
 # on ios cvc screens every text and action must show above the number pad, and after each drag and
 # at the end of the screen's checks the test fails if the pad has closed or moved
-# the signing test fills in the send screen with the soft keyboard up: on ios the address, amount
-# and next must each scroll whole into the space above the keyboard; on android the address field
-# and then next must, with next also above the keyboard's toolbar, each measured once the keyboard's
-# animations have ended
+# the signing test fills in the send screen with the soft keyboard up, and the address field must
+# scroll whole into the space above the keyboard, as on ios must the amount field; max closes the
+# keyboard once an address is in, so the test focuses the amount field again, and next must then
+# scroll whole above the keyboard and the toolbar on it; on ios the amount's number pad must stay
+# where it came to rest through that check, and android measures once the keyboard's animations
+# have ended
+# sign using tapsigner on the hardware send screen must scroll into reach and take a tap, and on the
+# signing cvc screen the test enters a whole cvc and checks the submit action is enabled and takes a
+# tap, then cancels without submitting it
+# the send screen is checked only along this path: the address, the amount, max and next at the
+# largest text size, not its other sheets, alerts or coin control
 # nothing here needs a person; the tests use the simulator's and the emulator's default keyboard
 # and screen size, so other keyboards, such as third-party ones with taller toolbars, and other
 # screen sizes aren't covered
