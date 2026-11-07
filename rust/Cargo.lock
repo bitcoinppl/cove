@@ -6553,6 +6553,7 @@ dependencies = [
  "crc",
  "ctr 0.10.1",
  "data-encoding",
+ "flate2",
  "foundation-ur",
  "gif",
  "glob",
