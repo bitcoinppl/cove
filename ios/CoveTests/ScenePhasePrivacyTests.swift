@@ -120,6 +120,16 @@ final class ScenePhasePrivacyTests: XCTestCase {
         }
 
         let tapSigner = TapSignerNFC(tapSignerPreviewNew(preview: true))
+
+        // the scan is the private TapCardNFC's, and a cancel that fails would leave it counted for
+        // every later test in this host, so take it out of the registry on the way out whatever
+        // happened
+        let scanOwner = try XCTUnwrap(
+            Mirror(reflecting: tapSigner).descendant("nfc") as? NSObject,
+            "TapSignerNFC should keep its NFC session in `nfc`"
+        )
+        defer { NfcScanRegistry.set(ObjectIdentifier(scanOwner), isScanning: false) }
+
         let derived = DeriveOutcome()
         let derive = Task {
             derived.result = await tapSigner.derive(pin: "123456")
@@ -141,11 +151,12 @@ final class ScenePhasePrivacyTests: XCTestCase {
         tapSigner.cancel()
         XCTAssertFalse(app.isNfcOperationActive, "a cancelled TAPSIGNER operation still counted")
 
-        // well under the bridge's 30 second receive timeout, so only the cancel can end it in time.
-        // The test reads the outcome rather than awaiting the task, so a derive that never returns
-        // can't hold it past the limit, and one that returns late only fills a box no one reads
-        let returnBy = Date().addingTimeInterval(5)
-        while derived.result == nil, Date() < returnBy {
+        // well under the bridge's 30 second receive timeout, so only the cancel can end it in time,
+        // and the test reads the outcome rather than awaiting the task, so a derive that never
+        // returns can't hold it past the limit and one that returns late only fills a box no one reads
+        let clock = ContinuousClock()
+        let returnBy = clock.now.advanced(by: .seconds(5))
+        while derived.result == nil, clock.now < returnBy {
             try await Task.sleep(for: .milliseconds(20))
         }
 
