@@ -227,7 +227,7 @@ Keep screenshots, UI trees and logs next to the results, and never include secre
 These still need hands and eyes:
 
 - QR camera scans: PSBT UR and BBQr, SeedQR, KeyTeleport responses, watch-only import. The [hardware signer tests](#hardware-signer-tests) cover the PSBT frames and their import; the camera and a strict external signer still need a person
-- NFC: TAPSIGNER setup and signing, reading a hardware wallet or tag, removing a card mid-operation. The emulator tests cover Cove's card logic and the NFC tag seam covers what the app does with a tag's NDEF records, and Rust tests cover the parser iOS uses for ISO 15693 tags. The Swift loop that reads those tags' blocks (its CoreNFC calls, the order of its resume check against the next read, its reset, retries and NDEF fallback), a physical card or tag, the NFC session and card removal still need a person
+- NFC: TAPSIGNER setup and signing, reading a hardware wallet or tag, removing a card mid-operation. The emulator tests cover Cove's card logic and the NFC tag seam covers what the app does with a tag's NDEF records, and Rust tests cover the parser iOS uses for ISO 15693 tags. The Swift loop that reads those tags' blocks (its CoreNFC calls, the order of its resume check against the next read, its reset, retries and NDEF fallback), a physical card or tag, the NFC session and card removal still need a person. The TAPSIGNER screens' layout at the largest text size doesn't: the TAPSIGNER layout tests run against the card emulator and decide it on both platforms
 - Biometric success, and the strength of PIN keypad haptics
 - Spoken VoiceOver and TalkBack output and natural focus order
 - COLDCARD and other hardware signers
