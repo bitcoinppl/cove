@@ -24,6 +24,10 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// Taller than the keyboard's suggestion bar and shorter than any screen's scroll area
     private static let rowHeight: CGFloat = 100
 
+    /// About one line of body text at the largest accessibility size, the most of a description
+    /// taller than its scroll area that must show to count its first or last line as on screen
+    private static let lineHeight: CGFloat = 72
+
     /// Drops the card's session once the operation has started on it, so the app offers to continue
     /// instead of failing outright
     private static let exchangesBeforeDrop = 3
@@ -112,7 +116,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         reachAndTap(app.textFields.matching(identifier: "sendFlow.amount"), "send: amount")
         app.tapMax()
 
-        // Next shows once fee rates load, and the larger text can push it below the fold
+        // the Next button shows once fee rates load, and the larger text can push it below the fold
         let next = app.buttons.matching(identifier: "sendFlow.next")
         XCTAssertTrue(next.firstMatch.waitForExistence(timeout: 60), "Next never showed on the send screen")
         reachAndTap(next, "send: Next")
@@ -139,6 +143,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             descriptions: ["A chain code works", "You can provide your own chain code"],
             buttons: [button("Cancel"), button(startingWith: "Automatic Setup"), button("Advanced Setup")]
         )
+
         assertReportFits("tapSigner.automaticSetup.truncation", "choose chain code: Automatic Setup", probes: 2)
         reachAndTap(button("Advanced Setup"), "choose chain code: Advanced Setup")
 
@@ -157,6 +162,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             buttons: [button("Back"), chainCodeField, button("Generate new string for me"), advancedContinue],
             awaitingInput: [advancedContinue]
         )
+
         reachAndTap(chainCodeField, "advanced setup: chain code field").typeText(Self.randomChainCode())
         reachAndTap(button("Continue"), "advanced setup: Continue")
 
@@ -167,6 +173,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             description: "The factory code is the 6 digit",
             cancel: "Back"
         )
+
         try enterCvc(Self.newCvc, on: "new CVC", title: "Create New CVC", description: "The CVC prevents unauthorized access", cancel: "Back")
 
         // the card leaves the field once setup has started on it
@@ -178,6 +185,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             button("Continue Setup").firstMatch.waitForExistence(timeout: 30),
             "the dropped session should leave setup in progress"
         )
+
         assertScreenFits(
             "setup retry",
             texts: ["Setup in Progress"],
@@ -197,6 +205,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             descriptions: ["Your TAPSIGNER ready to use", "If you haven"],
             buttons: [button("Cancel"), button(startingWith: "Download Backup"), button("Continue")]
         )
+
         assertReportFits("tapSigner.downloadBackup.truncation", "setup success: Download Backup", probes: 2)
         reachAndTap(button("Continue"), "setup success: Continue")
         XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
@@ -221,6 +230,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             descriptions: ["Please try again and hold your TAPSIGNER steady"],
             buttons: [button("Cancel"), button("Retry")]
         )
+
         reachAndTap(button("Retry"), "import retry: Retry")
 
         XCTAssertTrue(app.staticTexts["Import Complete"].waitForExistence(timeout: 30))
@@ -230,6 +240,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             descriptions: ["Your TAPSIGNER ready to use"],
             buttons: [button("Cancel"), button("Continue")]
         )
+
         reachAndTap(button("Continue"), "import success: Continue")
         XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
     }
@@ -265,8 +276,9 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// be enabled and take a tap there, and every text, description and button label must draw
     /// whole
     ///
-    /// Descriptions are matched by the start of their text and only checked for truncation, since a
-    /// long one can be taller than the window. Text fields carry no probe, so only buttons among the
+    /// Descriptions are matched by the start of their text. One that fits the space it shows in
+    /// must scroll wholly into it, and a taller one must scroll its first and then its last line
+    /// into it, as `assertReadable` checks. Text fields carry no probe, so only buttons among the
     /// actions are checked for truncation. Actions in `awaitingInput` stay disabled until the screen
     /// gets its input, and `reachAndTap` checks them enabled when the test taps them
     private func assertScreenFits(
@@ -284,8 +296,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
         for prefix in descriptions {
             let name = "\(screen): '\(prefix)…'"
-            let element = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
-            XCTAssertTrue(element.waitForExistence(timeout: 15), "\(name) is missing")
+            let element = assertReadable(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)), name)
             assertDrawsWhole(element, name)
         }
 
@@ -375,7 +386,60 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         XCTFail(
             "\(name) never fit on screen: matches \(matches) in window \(app.windows.firstMatch.frame), keyboard \(keyboard.exists ? "\(keyboard.frame)" : "none")"
         )
+
         return query.firstMatch
+    }
+
+    /// Scrolls a description wholly on screen, or for one taller than the space it shows in, its
+    /// first line and then its last, as a user reading it would, and fails if any never shows
+    @discardableResult
+    private func assertReadable(_ query: XCUIElementQuery, _ name: String) -> XCUIElement {
+        let element = query.firstMatch
+        XCTAssertTrue(element.waitForExistence(timeout: 15), "\(name) is missing")
+        guard element.frame.height > readableArea(of: element).height else {
+            return assertReachable(query, name, needsHit: false)
+        }
+
+        assertLineReachable(element, name, first: true)
+        assertLineReachable(element, name, first: false)
+        return element
+    }
+
+    /// Scrolls until the first or last line of a description taller than its readable area lies
+    /// inside that area, and fails if it never does
+    private func assertLineReachable(_ element: XCUIElement, _ name: String, first: Bool) {
+        let line = first ? "first" : "last"
+        let shows = { () -> Bool in
+            let frame = element.frame
+            let area = self.readableArea(of: element)
+            let edge = first ? frame.minY : frame.maxY
+            let lineEnd = first ? edge + Self.lineHeight : edge - Self.lineHeight
+            return min(edge, lineEnd) >= area.minY - 0.5 && max(edge, lineEnd) <= area.maxY + 0.5
+        }
+
+        // each drag moves the content less than the area less a line, so it can't skip past the line
+        for _ in 0 ..< 12 where !shows() {
+            let frame = element.frame
+            let area = readableArea(of: element)
+            let target = scrollContainers(holding: element).last ?? visibleScrollView() ?? app.windows.firstMatch
+            drag(target, revealingContentBelow: (first ? frame.minY : frame.maxY) > area.midY)
+        }
+
+        XCTAssertTrue(
+            shows(),
+            "\(name)'s \(line) line never showed: it spans \(element.frame) but can show only in \(readableArea(of: element))"
+        )
+    }
+
+    /// The part of the window the element can show in and read, above the keyboard
+    private func readableArea(of element: XCUIElement) -> CGRect {
+        var area = visibleArea(of: element)
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.exists, keyboard.frame.minY < area.maxY {
+            area.size.height = max(0, keyboard.frame.minY - area.minY)
+        }
+
+        return area
     }
 
     /// Drags the container's content along its leading margin, within the part of it showing
