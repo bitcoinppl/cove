@@ -137,7 +137,7 @@ struct KeyTeleportRevealedXprv: View {
     let hide: () -> Void
 
     var body: some View {
-        Text(xprv)
+        Text(unhyphenated: xprv)
             .font(.system(.caption, design: .monospaced))
             .uiTestTruncationProbe()
             .padding()
@@ -307,7 +307,7 @@ struct KeyTeleportMessageField: View {
                     .uiTestTruncationProbe()
                     .foregroundStyle(.coveLightGray.opacity(0.58))
 
-                Text(value)
+                Text(unhyphenated: value)
                     .font(.body)
                     .uiTestTruncationProbe()
                     .textSelection(.enabled)
