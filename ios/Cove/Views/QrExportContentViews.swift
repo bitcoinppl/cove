@@ -54,6 +54,7 @@ private struct QrExportAnimatedQrView: View {
                 HStack(alignment: .center, spacing: 8) {
                     QrExportDensityButton(
                         systemImage: "minus",
+                        label: "Decrease density",
                         size: 44,
                         isEnabled: canDecreaseDensity,
                         action: decreaseDensity
@@ -63,6 +64,7 @@ private struct QrExportAnimatedQrView: View {
 
                     QrExportDensityButton(
                         systemImage: "plus",
+                        label: "Increase density",
                         size: 44,
                         isEnabled: canIncreaseDensity,
                         action: increaseDensity
@@ -141,6 +143,8 @@ struct QrExportProgressIndicator: View {
 
 private struct QrExportDensityButton: View {
     let systemImage: String
+    /// Named as Android names it, since VoiceOver would otherwise read the symbol's own name
+    let label: String
     let size: CGFloat
     let isEnabled: Bool
     let action: () -> Void
@@ -153,6 +157,7 @@ private struct QrExportDensityButton: View {
                 .frame(width: size, height: size)
                 .contentShape(Rectangle())
         }
+        .accessibilityLabel(label)
         .disabled(!isEnabled)
     }
 }
@@ -167,6 +172,7 @@ private struct QrExportDensityButtons: View {
         HStack(spacing: 0) {
             QrExportDensityButton(
                 systemImage: "minus",
+                label: "Decrease density",
                 size: 32,
                 isEnabled: canDecrease,
                 action: decrease
@@ -177,6 +183,7 @@ private struct QrExportDensityButtons: View {
 
             QrExportDensityButton(
                 systemImage: "plus",
+                label: "Increase density",
                 size: 32,
                 isEnabled: canIncrease,
                 action: increase

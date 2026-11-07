@@ -22,6 +22,12 @@ data class SignedFrames(
     val bbqr: List<String>,
 )
 
+/** The frames read off an export so far, joined: the PSBT as hex once complete, else how many parts are missing */
+data class JoinedExport(
+    val psbt: String?,
+    val partsLeft: Int,
+)
+
 /** An account's bare public key as a hardware wallet shows it, and where an import of it should start receiving */
 data class PublicKeyExport(
     /** The SLIP-132 key, such as a vpub or upub, for a plain QR */
@@ -111,6 +117,16 @@ class HardwareSignerControl(
     /** Ends the next TAPSIGNER session after this many APDU exchanges, as a card pulled out of the NFC field would */
     fun dropNextTapSignerSession(afterExchanges: Int) {
         http.request("POST", "/tapsigner/drop", JSONObject().put("after_exchanges", afterExchanges))
+    }
+
+    /**
+     * Joins the frames a test decoded off the app's PSBT export, as a hardware wallet's camera
+     * would: the PSBT as hex once every part is in, or null while parts are missing. A frame that
+     * doesn't join the others fails the request
+     */
+    fun joinExportFrames(frames: List<String>): JoinedExport {
+        val json = JSONObject(http.request("POST", "/join-export-frames", JSONObject().put("frames", JSONArray(frames))))
+        return JoinedExport(json.optString("psbt").ifEmpty { null }, json.optInt("parts_left"))
     }
 
     private fun signedFrames(response: String): SignedFrames {
