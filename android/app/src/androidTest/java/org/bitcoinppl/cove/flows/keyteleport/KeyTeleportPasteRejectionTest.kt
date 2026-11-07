@@ -186,6 +186,12 @@ class KeyTeleportPasteRejectionTest {
         val required = listOf(SENDER_TITLE, SENDER_INSTRUCTIONS).map { requiredText("the sender after OK", anywhere, it) }
         val texts = (required + drawnTexts(anywhere)).distinctBy { it.id }
 
+        // semantics keep the whole string and the reference draws the same shortened layout, so only
+        // the layout itself shows a line left out or ellipsized
+        texts.forEach { node ->
+            node.overflow()?.let { reason -> fail("\"${node.textLabel()}\" on the sender after OK is cut off: $reason") }
+        }
+
         assertTextsMatchTheirReferences(
             "the sender after OK",
             texts.map { capture.matchTextReference(it, root.topLeft, compose.density) },
@@ -234,9 +240,11 @@ class KeyTeleportPasteRejectionTest {
         return textLayouts().firstNotNullOfOrNull { layout ->
             val paragraph = layout.multiParagraph
             val widestLine = (0 until paragraph.lineCount).maxOfOrNull { paragraph.getLineRight(it) - paragraph.getLineLeft(it) } ?: 0f
+            val ellipsized = (0 until layout.lineCount).firstOrNull { layout.isLineEllipsized(it) }
 
             when {
                 paragraph.didExceedMaxLines -> "it has more lines than it may show"
+                ellipsized != null -> "line ${ellipsized + 1} of ${layout.lineCount} is ellipsized"
                 widestLine - layout.size.width > CLIP_TOLERANCE_PX ->
                     "its widest line is ${widestLine}px in a ${layout.size.width}px layout"
                 paragraph.height - layout.size.height > CLIP_TOLERANCE_PX ->
