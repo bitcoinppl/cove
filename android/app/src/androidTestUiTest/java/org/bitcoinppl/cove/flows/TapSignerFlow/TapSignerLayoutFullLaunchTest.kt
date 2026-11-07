@@ -726,8 +726,8 @@ class TapSignerLayoutFullLaunchTest {
      * holds its final value while the screen still slides with the keyboard. A read counts only
      * once [ImeAnimationProbe] has heard every animation it saw start end, with the keyboard open,
      * and with the toolbar, if one is asked for, laid out with its bottom on the keyboard's final
-     * top, within [KEYBOARD_EDGE_ROUNDING_PX]. The agreeing second read lets the frame that applies
-     * the final insets land first
+     * top, within [KEYBOARD_EDGE_ROUNDING_PX], and with no node going stale while it was read. The
+     * agreeing second read lets the frame that applies the final insets land first
      */
     private fun settledPlacement(
         selector: BySelector,
@@ -755,16 +755,21 @@ class TapSignerLayoutFullLaunchTest {
         val ended = animations.endedIfIdle() ?: return null
         val keyboard = keyboardTop() ?: return null
 
-        val bar =
-            toolbar?.let {
-                device
-                    .findObject(it)
-                    ?.visibleBounds
-                    ?.takeIf { bounds -> !bounds.isEmpty && abs(bounds.bottom - keyboard) <= KEYBOARD_EDGE_ROUNDING_PX }
-                    ?: return null
-            }
+        // a node replaced between finding and reading it makes this read count as not yet at rest
+        return try {
+            val bar =
+                toolbar?.let {
+                    device
+                        .findObject(it)
+                        ?.visibleBounds
+                        ?.takeIf { bounds -> !bounds.isEmpty && abs(bounds.bottom - keyboard) <= KEYBOARD_EDGE_ROUNDING_PX }
+                        ?: return null
+                }
 
-        return KeyboardPlacement(keyboard, bar, device.findObject(selector)?.visibleBounds?.let(::controlBounds), ended)
+            KeyboardPlacement(keyboard, bar, device.findObject(selector)?.visibleBounds?.let(::controlBounds), ended)
+        } catch (_: StaleObjectException) {
+            null
+        }
     }
 
     /** The top of the keyboard on screen, or null while it is closed */
