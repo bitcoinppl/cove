@@ -1560,8 +1560,10 @@ async fn fresh_enable_on_empty_cloud_uploads_every_wallet_readable_and_verifies(
             assert_eq!(report.wallets_verified, 2);
             assert!(report.wallet_issues.is_empty(), "{:?}", report.wallet_issues);
         }
+
         other => panic!("expected Verified after a fresh enable, got {other:?}"),
     }
+
     assert_eq!(globals.passkey.create_count(), 1, "verification registered another passkey");
 
     reset_cloud_backup_test_state(&manager, globals);
