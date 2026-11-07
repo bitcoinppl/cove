@@ -47,6 +47,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,6 +58,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -208,7 +210,8 @@ fun SendFlowSetAmountScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .consumeWindowInsets(padding),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.image_chain_code_pattern_horizontal),
@@ -238,6 +241,10 @@ fun SendFlowSetAmountScreen(
 
                 val density = LocalDensity.current
                 val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
+                val showsKeyboardToolbar = isKeyboardVisible && focusedField == SendFocusField.Amount
+                var keyboardToolbarHeight by remember { mutableIntStateOf(0) }
+                val keyboardToolbarPadding =
+                    if (showsKeyboardToolbar) with(density) { keyboardToolbarHeight.toDp() } else 0.dp
 
                 Box(
                     modifier =
@@ -247,10 +254,15 @@ fun SendFlowSetAmountScreen(
                             .clip(RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp))
                             .background(MaterialTheme.colorScheme.surface),
                 ) {
+                    // edge to edge, the window doesn't shrink for the keyboard, so the scroll area
+                    // stops above it and above the toolbar on it; otherwise the end of the form,
+                    // such as Next, stays under the keyboard, where no scroll reaches
                     Column(
                         modifier =
                             Modifier
                                 .fillMaxSize()
+                                .imePadding()
+                                .padding(bottom = keyboardToolbarPadding)
                                 .verticalScroll(rememberScrollState())
                                 .padding(horizontal = 16.dp),
                     ) {
@@ -345,7 +357,7 @@ fun SendFlowSetAmountScreen(
                     }
 
                     // Keyboard toolbar - only show for amount field
-                    if (isKeyboardVisible && focusedField == SendFocusField.Amount) {
+                    if (showsKeyboardToolbar) {
                         KeyboardToolbar(
                             onMaxSelected = {
                                 sendFlowManager.dispatch(SendFlowManagerAction.SelectMaxSend)
@@ -365,7 +377,8 @@ fun SendFlowSetAmountScreen(
                                 Modifier
                                     .align(Alignment.BottomCenter)
                                     .consumeWindowInsets(WindowInsets.navigationBars)
-                                    .imePadding(),
+                                    .imePadding()
+                                    .onSizeChanged { keyboardToolbarHeight = it.height },
                         )
                     }
                 }
@@ -464,7 +477,7 @@ private fun KeyboardToolbar(
     val buttonText = if (!hasAddress) "Next" else "Done"
 
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().testTag("sendFlow.keyboardToolbar"),
         color = MaterialTheme.colorScheme.surface,
     ) {
         Row(

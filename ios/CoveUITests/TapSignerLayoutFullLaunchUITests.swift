@@ -1,18 +1,19 @@
 import XCTest
 
-/// Walks every TAPSIGNER setup and import screen at the largest accessibility text size and checks
-/// that each screen's text and actions fit the window or scroll into it, through the debug
-/// TAPSIGNER seam and an emulated card (docs/testing.md)
+/// Walks every TAPSIGNER setup and import screen, and the CVC screen signing opens, at the largest
+/// accessibility text size and checks that each screen's text and actions fit the window or scroll
+/// into it, through the debug TAPSIGNER seam and an emulated card (docs/testing.md)
 ///
 /// The checks catch text and actions pushed off screen, cut off by their scroll view or out of
 /// reach. XCUITest reports a text's whole label even when it draws truncated, so each title and
 /// button label also carries the debug truncation probe, which reports whether it draws whole.
-/// Needs the hardware signer host, which `xtask ios-ui` (`just ios-ui-background`) starts for
-/// every run
+/// Needs the hardware signer host, and the fake node for the signing test, which `xtask ios-ui`
+/// (`just ios-ui-background`) starts for every run
 final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private static let esploraUrl = UITestHostPorts.esploraUrl
     private static let largestContentSize = "UICTContentSizeCategoryAccessibilityXXXL"
     private static let newCvc = "246810"
+    private static let fundedSats: UInt64 = 100_000
 
     /// The value a probed text reports when it draws whole, from `UITestTruncationProbe` in the app
     private static let fitsValue = "fits"
@@ -20,8 +21,28 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// Inside the screens' 16 to 20 point side padding, so a drag there lands on no field
     private static let dragMargin: CGFloat = 8
 
-    /// Taller than the keyboard's suggestion bar and shorter than any screen's scroll area
+    /// Taller than the keyboard's suggestion bar and shorter than any screen's scroll area, and the
+    /// drag that moves a covered match toward the middle of the screen
     private static let rowHeight: CGFloat = 100
+
+    /// About one line of body text at the largest accessibility size, the most of a description
+    /// taller than its scroll area that must show to count its first or last line as on screen
+    private static let lineHeight: CGFloat = 72
+
+    /// About how far a touch moves before a scroll view takes it as a drag, added to each drag so
+    /// the content moves about as far as asked
+    private static let touchSlop: CGFloat = 10
+
+    /// Room left between an element scrolled into view and the edge of the space it shows in
+    private static let scrollRoom: CGFloat = 8
+
+    /// The most drags `assertReachable` makes for one match. With the number pad and its toolbar
+    /// up, the send screen drags in about 220 points, so a drag moves its form under 90 points and
+    /// Next lies about 13 drags down at the largest text size
+    private static let maxDrags = 24
+
+    /// How far a match may move in a drag that still counts as leaving it in place
+    private static let stillTolerance: CGFloat = 1
 
     /// Drops the card's session once the operation has started on it, so the app offers to continue
     /// instead of failing outright
@@ -29,6 +50,30 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
     private var app: XCUIApplication!
     private var signer: HardwareSignerControl!
+
+    /// The screen under check, a CVC screen or the send screen while Next is checked, and where
+    /// its number pad came to rest, which every drag on the screen must leave in place, so all its
+    /// texts are checked in the space above the number pad
+    private var numberPad: NumberPadWatch?
+
+    /// While set, the identifier of a button on the toolbar the screen puts on the keyboard, so the
+    /// toolbar covers the content as the keyboard does
+    private var keyboardToolbarButton: String?
+
+    /// The Max button on the toolbar the send screen puts on the amount's number pad
+    private static let amountToolbarButton = "sendFlow.max"
+
+    private struct NumberPadWatch {
+        let screen: String
+        let frame: CGRect
+        var drags = 0
+    }
+
+    private enum KeyboardState {
+        case gone
+        case settled(CGRect)
+        case moving(CGRect)
+    }
 
     override func setUp() {
         super.setUp()
@@ -72,6 +117,71 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         app.scanTapSignerFromAddWallet(expectingAlert: alert)
     }
 
+    /// A funded card's Sign using TAPSIGNER opens the CVC screen with signing's own message
+    ///
+    /// That screen shows before the app contacts the card, so signing failing on the card
+    /// (#965) doesn't stop the check; the test enters a CVC and checks Continue, then cancels
+    /// instead of submitting it. The card is imported and funded at the default size, since only
+    /// the signing screen is under test
+    func testTapSignerSigningCvcScreenFitsAtLargestTextSize() throws {
+        let node = FakeNodeControl()
+        try node.requireHealthy()
+        try node.reset()
+        try signer.requireHealthy()
+        try signer.startTapSigner()
+
+        // the draft prices its fee from the fake node
+        app.launchEnvironment["COVE_FEE_URL"] = "\(Self.esploraUrl)/api/v1/fees/recommended"
+        app.launch(expecting: app.staticTexts["Welcome to Cove"])
+        app.importTestMnemonic()
+
+        app.scanTapSignerFromAddWallet(expectingAlert: "Import TAPSIGNER?")
+        app.enterTapSignerCvc(HardwareSignerControl.tapSignerCvc)
+        XCTAssertTrue(app.staticTexts["Import Complete"].waitForExistence(timeout: 30))
+        app.tapButton(named: "Continue")
+        XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
+
+        _ = try node.fund(address: app.copyReceiveAddress(using: signer), sats: [Self.fundedSats])
+        app.refreshUntilBalance(sats: Self.fundedSats)
+        app.terminate()
+
+        // the app reopens the card's wallet, the one last selected
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", Self.largestContentSize]
+        app.launch(expecting: app.element("selectedWallet.balance"))
+        app.assertBalance(sats: Self.fundedSats, timeout: 60)
+
+        // at this size the send screen opens with the address focused just under the keyboard,
+        // where only a drag brings it into reach
+        reachAndTap(app.buttons.matching(NSPredicate(format: "label == 'Send' OR label ENDSWITH ', Send'")), "wallet: Send")
+        reachAndTap(app.textViews.matching(identifier: "sendFlow.address"), "send: address").typeText(XCUIApplication.externalAddress)
+        reachAndTap(app.textFields.matching(identifier: "sendFlow.amount"), "send: amount")
+        app.tapMax()
+
+        // the Next button shows once fee rates load, and the larger text can push it below the fold
+        let next = app.buttons.matching(identifier: "sendFlow.next")
+        XCTAssertTrue(next.firstMatch.waitForExistence(timeout: 60), "Next never showed on the send screen")
+        assertNextAboveAmountNumberPad(next)
+        reachAndTap(next, "send: Next")
+        reachAndTap(button("Sign using TAPSIGNER"), "hardware send: Sign using TAPSIGNER")
+
+        assertCvcScreenFits(
+            on: "signing CVC",
+            title: "Enter TAPSIGNER CVC",
+            description: "For security purposes, you must enter your TAPSIGNER PIN before you can sign",
+            cancel: "Cancel"
+        )
+
+        // a CVC screen may hold Continue back until it has a whole CVC, so Continue is checked
+        // once one is in; it is never submitted
+        reachAndTap(app.secureTextFields.matching(identifier: "Enter CVC"), "signing CVC: CVC field").typeText(HardwareSignerControl.tapSignerCvc)
+        let submit = assertReachable(button("Continue"), "signing CVC: Continue", needsHit: true)
+        XCTAssertTrue(submit.isEnabled, "signing CVC: Continue is disabled with a whole CVC entered")
+
+        reachAndTap(button("Cancel"), "signing CVC: Cancel")
+        XCTAssertTrue(app.staticTexts["Enter TAPSIGNER CVC"].waitForNonExistence(timeout: 15), "Cancel didn't close the signing CVC screen")
+        XCTAssertTrue(button("Sign using TAPSIGNER").firstMatch.waitForExistence(timeout: 15), "Cancel should leave the draft open")
+    }
+
     // MARK: - Setup
 
     private func setUpCardThroughEveryScreen() throws {
@@ -81,6 +191,8 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             descriptions: ["A chain code works", "You can provide your own chain code"],
             buttons: [button("Cancel"), button(startingWith: "Automatic Setup"), button("Advanced Setup")]
         )
+
+        assertReportFits("tapSigner.automaticSetup.truncation", "choose chain code: Automatic Setup", probes: 2)
         reachAndTap(button("Advanced Setup"), "choose chain code: Advanced Setup")
 
         // the field grows vertically, which XCUITest can report as a text view rather than a text field
@@ -98,6 +210,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             buttons: [button("Back"), chainCodeField, button("Generate new string for me"), advancedContinue],
             awaitingInput: [advancedContinue]
         )
+
         reachAndTap(chainCodeField, "advanced setup: chain code field").typeText(Self.randomChainCode())
         reachAndTap(button("Continue"), "advanced setup: Continue")
 
@@ -108,6 +221,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             description: "The factory code is the 6 digit",
             cancel: "Back"
         )
+
         try enterCvc(Self.newCvc, on: "new CVC", title: "Create New CVC", description: "The CVC prevents unauthorized access", cancel: "Back")
 
         // the card leaves the field once setup has started on it
@@ -119,6 +233,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             button("Continue Setup").firstMatch.waitForExistence(timeout: 30),
             "the dropped session should leave setup in progress"
         )
+
         assertScreenFits(
             "setup retry",
             texts: ["Setup in Progress"],
@@ -138,6 +253,8 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             descriptions: ["Your TAPSIGNER ready to use", "If you haven"],
             buttons: [button("Cancel"), button(startingWith: "Download Backup"), button("Continue")]
         )
+
+        assertReportFits("tapSigner.downloadBackup.truncation", "setup success: Download Backup", probes: 2)
         reachAndTap(button("Continue"), "setup success: Continue")
         XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
     }
@@ -161,6 +278,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             descriptions: ["Please try again and hold your TAPSIGNER steady"],
             buttons: [button("Cancel"), button("Retry")]
         )
+
         reachAndTap(button("Retry"), "import retry: Retry")
 
         XCTAssertTrue(app.staticTexts["Import Complete"].waitForExistence(timeout: 30))
@@ -170,28 +288,136 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             descriptions: ["Your TAPSIGNER ready to use"],
             buttons: [button("Cancel"), button("Continue")]
         )
+
         reachAndTap(button("Continue"), "import success: Continue")
         XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
+    }
+
+    // MARK: - Send screen
+
+    /// Max clears the focus once the address is valid, which closes the number pad, so this opens
+    /// it again from the amount field, as a user changing the amount would. Next must then scroll
+    /// whole into the space above the number pad and the toolbar on it, and the number pad must
+    /// stay where it came to rest through every drag and the check
+    private func assertNextAboveAmountNumberPad(_ next: XCUIElementQuery) {
+        reachAndTap(app.textFields.matching(identifier: "sendFlow.amount"), "send: amount after Max")
+        numberPad = NumberPadWatch(screen: "send", frame: settledNumberPad(on: "send"))
+        XCTAssertTrue(app.buttons[Self.amountToolbarButton].waitForExistence(timeout: 15), "the send screen's number pad opened without its toolbar")
+        keyboardToolbarButton = Self.amountToolbarButton
+        defer {
+            numberPad = nil
+            keyboardToolbarButton = nil
+        }
+
+        let element = assertReachable(next, "send: Next", needsHit: true)
+        XCTAssertTrue(element.isEnabled, "send: Next is disabled")
+        assertNumberPadInPlace(after: "checking Next")
+        note("Next on the send screen showed above the number pad and its toolbar, \(keyboardCover().map { "\($0)" } ?? "none"), after \(numberPad?.drags ?? 0) drags")
     }
 
     // MARK: - CVC screens
 
     /// Checks the CVC screen fits with the number pad up, then enters the CVC and submits it
     private func enterCvc(_ cvc: String, on screen: String, title: String, description: String, cancel: String) throws {
+        assertCvcScreenFits(on: screen, title: title, description: description, cancel: cancel)
+
         let field = app.secureTextFields.matching(identifier: "Enter CVC")
+        reachAndTap(field, "\(screen): CVC field").typeText(cvc)
+        reachAndTap(button("Continue"), "\(screen): Continue")
+        XCTAssertTrue(app.staticTexts[title].waitForNonExistence(timeout: 15), "the \(screen) screen didn't accept the CVC")
+    }
+
+    /// Checks the CVC screen fits with the number pad up, before any CVC is entered
+    private func assertCvcScreenFits(on screen: String, title: String, description: String, cancel: String) {
         let submit = button("Continue")
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 15), "the \(screen) screen never showed")
+        numberPad = NumberPadWatch(screen: screen, frame: settledNumberPad(on: screen))
+        defer { numberPad = nil }
+
         assertScreenFits(
             screen,
             texts: [title],
             descriptions: [description],
-            buttons: [button(cancel), field, submit],
+            buttons: [button(cancel), app.secureTextFields.matching(identifier: "Enter CVC"), submit],
             awaitingInput: [submit]
         )
 
-        reachAndTap(field, "\(screen): CVC field").typeText(cvc)
-        reachAndTap(button("Continue"), "\(screen): Continue")
-        XCTAssertTrue(app.staticTexts[title].waitForNonExistence(timeout: 15), "the \(screen) screen didn't accept the CVC")
+        // every drag checked the number pad, but a text that showed with no drag was checked
+        // against the space above it too, so it must still be in place now
+        assertNumberPadInPlace(after: "checking the screen")
+        note("number pad on the \(screen) screen stayed in place through \(numberPad?.drags ?? 0) drags")
+    }
+
+    /// Waits for the number pad a CVC screen opens with to come to rest on screen, so its texts are
+    /// checked against the space a user reads them in rather than the larger one before it opens,
+    /// and returns where it rests
+    private func settledNumberPad(on screen: String) -> CGRect {
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 15), "the \(screen) screen opened without its number pad")
+
+        // the number pad slides in from below the window
+        switch keyboardState(within: 10) {
+        case let .settled(frame):
+            return frame
+
+        case let .moving(frame):
+            XCTFail("the \(screen) screen's number pad never came to rest: it was last at \(frame) in window \(app.windows.firstMatch.frame)")
+
+        case .gone:
+            XCTFail("the \(screen) screen's number pad closed before it came to rest")
+        }
+
+        return .null
+    }
+
+    /// On a CVC screen, fails unless the number pad is still where it came to rest, so no text was
+    /// checked against the larger space a closed or moved number pad leaves
+    ///
+    /// The screen's scroll view keeps its default keyboard dismissal, and drags on every CVC screen
+    /// have left the number pad in place, so one that closes or moves it is a change to look at
+    private func assertNumberPadInPlace(after action: String) {
+        guard let watch = numberPad else { return }
+
+        switch keyboardState(within: 3) {
+        case let .settled(frame) where isSameFrame(frame, watch.frame):
+            return
+
+        case let .settled(frame):
+            XCTFail("\(action) on the \(watch.screen) screen moved its number pad from \(watch.frame) to \(frame)")
+
+        case let .moving(frame):
+            XCTFail("\(action) on the \(watch.screen) screen left its number pad moving, last at \(frame)")
+
+        case .gone:
+            XCTFail("\(action) on the \(watch.screen) screen closed its number pad")
+        }
+    }
+
+    /// Waits up to `timeout` for the keyboard to close, or to hold still inside the window, and
+    /// returns how it was left
+    ///
+    /// A keyboard sliding away still exists until it has gone, so a frame read once can't tell it
+    /// from one that stays. Reading goes on past the deadline until two frames have been read, since
+    /// under heavy load one query can take longer than the whole timeout, and only two reads that
+    /// differ show the keyboard moving
+    private func keyboardState(within timeout: TimeInterval) -> KeyboardState {
+        let keyboard = app.keyboards.firstMatch
+        let window = app.windows.firstMatch.frame
+        let deadline = Date().addingTimeInterval(timeout)
+        var last = CGRect.null
+        var reads = 0
+
+        repeat {
+            guard keyboard.exists else { return .gone }
+
+            let frame = keyboard.frame
+            if isSameFrame(frame, last), !frame.isEmpty, frame.minY < window.maxY { return .settled(frame) }
+
+            last = frame
+            reads += 1
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        } while Date() < deadline || reads < 2
+
+        return keyboard.exists ? .moving(last) : .gone
     }
 
     // MARK: - Layout checks
@@ -200,8 +426,9 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// be enabled and take a tap there, and every text, description and button label must draw
     /// whole
     ///
-    /// Descriptions are matched by the start of their text and only checked for truncation, since a
-    /// long one can be taller than the window. Text fields carry no probe, so only buttons among the
+    /// Descriptions are matched by the start of their text. One that fits the space it shows in
+    /// must scroll wholly into it, and a taller one must scroll its first and then its last line
+    /// into it, as `assertReadable` checks. Text fields carry no probe, so only buttons among the
     /// actions are checked for truncation. Actions in `awaitingInput` stay disabled until the screen
     /// gets its input, and `reachAndTap` checks them enabled when the test taps them
     private func assertScreenFits(
@@ -219,8 +446,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
         for prefix in descriptions {
             let name = "\(screen): '\(prefix)…'"
-            let element = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
-            XCTAssertTrue(element.waitForExistence(timeout: 15), "\(name) is missing")
+            let element = assertReadable(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)), name)
             assertDrawsWhole(element, name)
         }
 
@@ -240,17 +466,32 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// Fails unless the truncation probe of the text, or of the button's label, reports it draws
     /// whole
     ///
-    /// A button takes its label's accessibility value. A text without the probe has no value, so
-    /// dropping the probe fails here too. The probe measures after layout, so its value gets a
-    /// moment to settle
+    /// A button joins the values of the texts in its label, so one holding a probed title and a
+    /// probed description reads `fits, fits`, and every part must say `fits`. A text without the
+    /// probe has no value, so dropping the probe fails here too. The probe measures after layout,
+    /// so its value gets a moment to settle
     private func assertDrawsWhole(_ element: XCUIElement, _ name: String) {
         let value = { element.value as? String ?? "" }
+        let fits = { value().components(separatedBy: ", ").allSatisfy { $0 == Self.fitsValue } }
         let settled = Date().addingTimeInterval(3)
-        while value() != Self.fitsValue, Date() < settled {
+        while !fits(), Date() < settled {
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         }
 
-        XCTAssertEqual(value(), Self.fitsValue, "\(name) doesn't draw whole: its truncation probe reports '\(value())'")
+        XCTAssertTrue(fits(), "\(name) doesn't draw whole: its truncation probe reports '\(value())'")
+    }
+
+    /// Fails unless the truncation report beside a button holds `probes` probed texts and reads
+    /// `fits`
+    ///
+    /// A button merges the texts of its label into one element, so a button holding a title and a
+    /// description sums up both probes through an element beside it. The count catches one probe
+    /// of the two dropped, which the summed value alone wouldn't
+    private func assertReportFits(_ identifier: String, _ name: String, probes: Int) {
+        let report = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+        XCTAssertTrue(report.waitForExistence(timeout: 15), "\(name)'s truncation report is missing")
+        XCTAssertEqual(report.label, "Truncation report of \(probes) texts", "\(name) should probe its title and its description")
+        assertDrawsWhole(report, "\(name) title or description")
     }
 
     @discardableResult
@@ -278,53 +519,215 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         }
 
-        // scroll toward a match that scrolling could bring on screen; dragging content down only
-        // scrolls it back, since it runs only when that match sits above the top
-        for _ in 0 ..< 8 where reachableMatch(query, needsHit: needsHit) == nil {
+        // scroll a match that scrolling could bring on screen by about as far as it lies outside the
+        // space above any keyboard, so content with less scroll range than a drag stops partway
+        // instead of swinging between its ends; a match inside that space but covered, as by the
+        // keyboard's toolbar, moves a row toward the middle. Dragging goes on while the match moves:
+        // only two drags in a row that leave it in place mean the content has reached its end, so
+        // one slow frame or missed gesture doesn't end the scroll early
+        var drags = 0
+        var stillDrags = 0
+        while reachableMatch(query, needsHit: needsHit) == nil, drags < Self.maxDrags, stillDrags < 2 {
             let candidate = scrollCandidate(query)
-            let target = scrollContainers(holding: candidate).last ?? visibleScrollView() ?? app.windows.firstMatch
-            drag(target, revealingContentBelow: candidate.frame.minY >= visibleArea(of: candidate).minY)
+            let before = candidate.frame
+            let containers = scrollContainers(holding: candidate)
+            let target = containers.last ?? visibleScrollView() ?? app.windows.firstMatch
+            let area = readableArea(of: candidate, in: containers)
+            let nudge = before.midY > area.midY ? Self.rowHeight : -Self.rowHeight
+            let distance = scrollDistance(showing: before, in: area)
+            drag(target, by: distance != 0 ? distance : nudge)
+            drags += 1
+
+            // a frame that can't be read says nothing of whether the content moved, so it breaks
+            // the run of drags that left the match in place
+            let after = candidate.exists ? candidate.frame : .null
+            let isKnown = !before.isEmpty && !after.isEmpty
+            let isStill = isKnown && abs(after.minX - before.minX) <= Self.stillTolerance && abs(after.minY - before.minY) <= Self.stillTolerance
+            stillDrags = isStill ? stillDrags + 1 : 0
         }
 
         if let element = reachableMatch(query, needsHit: needsHit) {
             return element
         }
 
+        let limit = stillDrags >= 2 ? "the content reached its end after \(drags) drags" : "the content still moved after \(drags) drags, the most allowed"
         let matches = query.allElementsBoundByIndex.map { "\($0.frame) hittable \($0.isHittable)" }
-        let keyboard = app.keyboards.firstMatch
+        let cover = keyboardCover().map { "\($0)" } ?? "none"
         XCTFail(
-            "\(name) never fit on screen: matches \(matches) in window \(app.windows.firstMatch.frame), keyboard \(keyboard.exists ? "\(keyboard.frame)" : "none")"
+            "\(name) never fit on screen, \(limit): matches \(matches) in window \(app.windows.firstMatch.frame), keyboard \(keyboardToolbarButton == nil ? "" : "and its toolbar ")\(cover)"
         )
+
         return query.firstMatch
     }
 
-    /// Drags the container's content along its leading margin, within the part of it showing
-    /// above the keyboard, as a user would
-    ///
-    /// `swipeUp` starts at the container's center, which on a sheet with the number pad up lands
-    /// on the keyboard's backdrop; that backdrop sits above the frame XCUITest reports for the
-    /// keyboard, takes the drag, and the content never moves. The margin keeps the drag off the
-    /// multi-line chain code field, which scrolls its own text instead of the screen
-    private func drag(_ container: XCUIElement, revealingContentBelow: Bool) {
-        let window = app.windows.firstMatch.frame
-        var area = container.frame.intersection(window)
-        if area.isNull { area = window }
-
-        let keyboard = app.keyboards.firstMatch
-        if keyboard.exists, keyboard.frame.minY > area.minY {
-            area.size.height = min(area.height, keyboard.frame.minY - area.minY)
+    /// Scrolls a description wholly on screen, or for one taller than the space it shows in, its
+    /// first line and then its last, as a user reading it would, and fails if any never shows
+    @discardableResult
+    private func assertReadable(_ query: XCUIElementQuery, _ name: String) -> XCUIElement {
+        let element = query.firstMatch
+        XCTAssertTrue(element.waitForExistence(timeout: 15), "\(name) is missing")
+        guard element.frame.height > readableArea(of: element).height else {
+            return assertReachable(query, name, needsHit: false)
         }
 
-        let point = { (fraction: CGFloat) in
+        assertLineReachable(element, name, first: true)
+        assertLineReachable(element, name, first: false)
+        return element
+    }
+
+    /// Records a finding in the test log and the result bundle
+    private func note(_ message: String) {
+        print("TapSignerLayout: \(message)")
+        XCTContext.runActivity(named: message) { _ in }
+    }
+
+    /// Scrolls until the first or last line of a description taller than its readable area lies
+    /// inside that area, and fails if it never does
+    ///
+    /// A scroll moves the line only up or down, so it must also lie across the area from side to
+    /// side, as one moved off the window sideways doesn't
+    private func assertLineReachable(_ element: XCUIElement, _ name: String, first: Bool) {
+        let which = first ? "first" : "last"
+        let line = { () -> CGRect in
+            let frame = element.frame
+            return CGRect(x: frame.minX, y: first ? frame.minY : frame.maxY - Self.lineHeight, width: frame.width, height: Self.lineHeight)
+        }
+
+        let showsVertically = { () -> Bool in
+            let area = self.readableArea(of: element)
+            let shown = line()
+            return shown.minY >= area.minY - 0.5 && shown.maxY <= area.maxY + 0.5
+        }
+
+        let showsAcross = { () -> Bool in
+            let frame = element.frame
+            let area = self.readableArea(of: element)
+            return !frame.isEmpty && frame.minX >= area.minX - 0.5 && frame.maxX <= area.maxX + 0.5
+        }
+
+        for _ in 0 ..< 12 where !showsVertically() {
+            let containers = scrollContainers(holding: element)
+            let target = containers.last ?? visibleScrollView() ?? app.windows.firstMatch
+            drag(target, by: scrollDistance(showing: line(), in: readableArea(of: element, in: containers)))
+        }
+
+        XCTAssertTrue(
+            showsVertically() && showsAcross(),
+            "\(name)'s \(which) line never showed: it spans \(element.frame) but can show only in \(readableArea(of: element)), with the keyboard \(app.keyboards.firstMatch.exists ? "up" : "closed")"
+        )
+    }
+
+    /// How far to scroll so `frame` lies inside `area`, positive to bring content below into view,
+    /// or zero when it already lies there from top to bottom
+    private func scrollDistance(showing frame: CGRect, in area: CGRect) -> CGFloat {
+        let room = max(0, min(Self.scrollRoom, (area.height - frame.height) / 2))
+        if frame.maxY > area.maxY { return frame.maxY - area.maxY + room }
+        if frame.minY < area.minY { return frame.minY - area.minY - room }
+
+        return 0
+    }
+
+    /// The part of the window the element can show in and read, above the keyboard, given the
+    /// scroll areas that hold it where the caller has already looked them up
+    private func readableArea(of element: XCUIElement, in containers: [XCUIElement]? = nil) -> CGRect {
+        var area = visibleArea(of: element, in: containers)
+        if let cover = keyboardCover(), cover.minY < area.maxY {
+            area.size.height = max(0, cover.minY - area.minY)
+        }
+
+        return area
+    }
+
+    /// The part of the window the keyboard covers, joined by the toolbar on it while
+    /// `keyboardToolbarButton` names one, or nil while no keyboard is up
+    ///
+    /// Whether XCUITest counts a toolbar SwiftUI puts on the keyboard in the keyboard's frame isn't
+    /// documented, so the toolbar holding the button, or failing that the button itself, joins it
+    private func keyboardCover() -> CGRect? {
+        let keyboard = app.keyboards.firstMatch
+        guard keyboard.exists else { return nil }
+
+        guard let identifier = keyboardToolbarButton else { return keyboard.frame }
+
+        let button = app.buttons[identifier]
+        let toolbar = app.toolbars.containing(.button, identifier: identifier).firstMatch
+        if toolbar.exists { return keyboard.frame.union(toolbar.frame) }
+
+        return button.exists ? keyboard.frame.union(button.frame) : keyboard.frame
+    }
+
+    /// Drags the container's content by about `distance` points, positive to bring content below
+    /// into view, along its leading margin within the part of it showing above the keyboard, as a
+    /// user would, and while `numberPad` watches a screen checks the drag left the number pad in
+    /// place
+    ///
+    /// A drag moves at most 40% of that part, and the caller drags again to go further, so a text
+    /// that fits only partway through a short scroll range isn't swung past. `swipeUp` starts at the
+    /// container's center, which on a sheet with the number pad up lands on the keyboard's
+    /// backdrop; that backdrop sits above the frame XCUITest reports for the keyboard, takes the
+    /// drag, and the content never moves. The margin keeps the drag off the multi-line chain code
+    /// field, and `dragStart` keeps it from starting on any other field, since a text view such as
+    /// the send screen's address editor scrolls its own text instead of the screen
+    private func drag(_ container: XCUIElement, by distance: CGFloat) {
+        let window = app.windows.firstMatch.frame
+        let frame = container.frame
+        var area = frame.intersection(window)
+        if area.isNull { area = window }
+
+        if let cover = keyboardCover(), cover.minY > area.minY {
+            area.size.height = min(area.height, cover.minY - area.minY)
+        }
+
+        let step = max(-area.height * 0.4, min(area.height * 0.4, distance))
+        let travel = step + (step < 0 ? -Self.touchSlop : Self.touchSlop)
+        let x = area.minX + Self.dragMargin
+        let point = { (y: CGFloat) in
             container.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
-                dx: area.minX + Self.dragMargin - container.frame.minX,
-                dy: area.minY + area.height * fraction - container.frame.minY
+                dx: x - frame.minX,
+                dy: y - frame.minY
             ))
         }
 
-        let (start, end) = revealingContentBelow ? (point(0.7), point(0.3)) : (point(0.3), point(0.7))
-        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+        let start = dragStart(in: area, x: x, travel: travel)
+        point(start).press(forDuration: 0.05, thenDragTo: point(start - travel), withVelocity: .slow, thenHoldForDuration: 0.1)
+
+        guard var watch = numberPad else { return }
+
+        watch.drags += 1
+        numberPad = watch
+        assertNumberPadInPlace(after: "drag \(watch.drags)")
     }
+
+    /// Where a drag of `travel` points down the column at `x` starts: as near the middle of `area`
+    /// as it can, with both ends inside `area`, and at least `fieldClearance` away from every text
+    /// field and text view across that column
+    ///
+    /// The view under the first touch takes the whole drag, so only the start must miss them; where
+    /// no point does, the drag is centred in `area` as before, within its start limits
+    private func dragStart(in area: CGRect, x: CGFloat, travel: CGFloat) -> CGFloat {
+        let ideal = area.midY + travel / 2
+        let low = area.minY + max(0, travel) + Self.fieldClearance
+        let high = area.maxY + min(0, travel) - Self.fieldClearance
+        let clamp = { (y: CGFloat) in min(high, max(low, y)) }
+
+        // each field widened by the clearance on every side, so one that starts just beside the
+        // column keeps the drag as far away as one across it
+        let fields = [app.textViews, app.textFields, app.secureTextFields]
+            .flatMap(\.allElementsBoundByIndex)
+            .map(\.frame)
+            .filter { !$0.isEmpty }
+            .map { $0.insetBy(dx: -Self.fieldClearance, dy: -Self.fieldClearance) }
+            .filter { $0.minX < x && x < $0.maxX }
+
+        let isClear = { (y: CGFloat) in !fields.contains { $0.minY < y && y < $0.maxY } }
+
+        // the nearest clear point to the middle is the middle itself or lies on a widened field's edge
+        let candidates = ([ideal] + fields.flatMap { [$0.minY, $0.maxY] }).map(clamp)
+        return candidates.filter(isClear).min { abs($0 - ideal) < abs($1 - ideal) } ?? clamp(ideal)
+    }
+
+    /// How far a drag starts from a field's edge, and from the edges of the space it drags in
+    private static let fieldClearance: CGFloat = 4
 
     // MARK: - Queries
 
@@ -357,8 +760,8 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     ///
     /// XCUITest reports an element's whole frame, not the part its scroll view clips, so a title
     /// scrolled half under a sheet's edge still lies inside the window
-    private func visibleArea(of element: XCUIElement) -> CGRect {
-        scrollContainers(holding: element).reduce(app.windows.firstMatch.frame) { $0.intersection($1.frame) }
+    private func visibleArea(of element: XCUIElement, in containers: [XCUIElement]? = nil) -> CGRect {
+        (containers ?? scrollContainers(holding: element)).reduce(app.windows.firstMatch.frame) { $0.intersection($1.frame) }
     }
 
     /// The scroll views, lists and tables that hold the element, outermost first
@@ -373,7 +776,9 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
                 guard let snapshot = try? container.snapshot() else { return false }
                 return snapshot.children.contains { holds($0, type: type, label: label, frame: frame) }
             }
+            .map { (container: $0, frame: $0.frame) }
             .sorted { $0.frame.width * $0.frame.height > $1.frame.width * $1.frame.height }
+            .map(\.container)
     }
 
     private func holds(_ snapshot: XCUIElementSnapshot, type: XCUIElement.ElementType, label: String, frame: CGRect) -> Bool {
@@ -410,14 +815,39 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         guard element.exists else { return false }
 
         let frame = element.frame
-        guard !frame.isEmpty, visibleArea(of: element).contains(frame), !isUnderKeyboard(frame) else { return false }
+        guard !frame.isEmpty, shows(element, frame, in: visibleArea(of: element)), !isUnderKeyboard(frame) else { return false }
 
         return !needsHit || element.isHittable
     }
 
+    /// The send screen's address editor, the one element allowed to start left of its scroll area
+    private static let addressEditor = "sendFlow.address"
+
+    /// How far left of its scroll area the address editor's frame may start:
+    /// `ios/Cove/Flows/SendFlow/SetAmountScreen/AddressTextEditor.swift` draws the editor
+    /// `.offset(x: -4)`, which moves 4 of its 5 points of line padding past the scroll view's side
+    /// padding, so none of its text is cut off
+    private static let addressEditorLeftOverhang: CGFloat = 4
+
+    /// Slack for a frame XCUITest reports a fraction of a point off, as in `isSameFrame`
+    private static let frameRounding: CGFloat = 0.5
+
+    /// Whether the frame lies inside the area, or for the send screen's address editor, inside it
+    /// but for starting up to `addressEditorLeftOverhang` plus `frameRounding` left of it
+    ///
+    /// XCUITest reports no bounds for a field's text, only its frame, so every other field, like
+    /// every other element, must lie wholly inside the area
+    private func shows(_ element: XCUIElement, _ frame: CGRect, in area: CGRect) -> Bool {
+        guard element.elementType == .textView, element.identifier == Self.addressEditor else { return area.contains(frame) }
+
+        // only the left edge moves, so the editor's right edge, top and bottom stay strict
+        let overhang = Self.addressEditorLeftOverhang + Self.frameRounding
+        let widened = CGRect(x: area.minX - overhang, y: area.minY, width: area.width + overhang, height: area.height)
+        return widened.contains(frame) && app.windows.firstMatch.frame.contains(frame)
+    }
+
     private func isUnderKeyboard(_ frame: CGRect) -> Bool {
-        let keyboard = app.keyboards.firstMatch
-        return keyboard.exists && keyboard.frame.intersects(frame)
+        keyboardCover()?.intersects(frame) ?? false
     }
 
     /// A random 32-byte chain code as hex, as a user typing their own would enter it

@@ -151,6 +151,7 @@ private struct TapSignerBackupButton: View {
                     HStack {
                         Text("You need this backup to restore your wallet.")
                             .foregroundStyle(Color.secondary)
+                            .uiTestTruncationProbe()
                         Spacer()
                     }
                 }
@@ -166,6 +167,9 @@ private struct TapSignerBackupButton: View {
         }
         .font(.footnote)
         .fontWeight(.semibold)
+        // the button merges its title and description into one element, so their probes report
+        // through an element beside it
+        .uiTestTruncationReport("tapSigner.downloadBackup.truncation")
     }
 }
 
