@@ -57,13 +57,14 @@ final class BiometricLockFullLaunchUITests: XCTestCase {
         let cancel = try failFaceId()
         cancelFaceId(cancel)
 
-        // gives an unlock that would follow the cancel time to happen before asserting it didn't
-        _ = tapToUnlock.waitForNonExistence(timeout: 3)
+        // gives an unlock that would follow the cancel time to happen, and catches one that the lock
+        // covers again before the checks below
+        XCTAssertFalse(tapToUnlock.waitForNonExistence(timeout: 3), "the lock screen went after Face ID was cancelled")
         attachScreenshot("after Face ID was cancelled")
         XCTAssertTrue(tapToUnlock.exists && tapToUnlock.isHittable, "the lock screen should stay after Face ID was cancelled")
 
-        // XCUITest still finds the wallet beneath the lock screen, so only a hittable balance means
-        // the wallet is showing
+        // XCUITest still finds the wallet beneath the lock screen, so this checks only that the
+        // balance can't take a tap, not that every part of the wallet is hidden
         XCTAssertFalse(balance.exists && balance.isHittable, "the wallet showed after Face ID was cancelled")
 
         // the app must have let go of the cancelled prompt, or this tap asks for nothing

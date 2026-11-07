@@ -115,6 +115,7 @@ class ScanCancelFullLaunchTest {
             "the app should stay on its camera screen",
             device.wait(Until.gone(By.text("Camera Access Required")), 3_000L),
         )
+
         assertFalse("the camera should still be denied", cameraGranted())
         assertTrue("Grant Permission should stay to ask again", device.hasObject(By.text("Grant Permission")))
 
