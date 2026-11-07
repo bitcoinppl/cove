@@ -2126,6 +2126,15 @@ mod tests {
         num_backups: Option<u32>,
         card_identity: String,
     ) -> (TapSignerReader, Arc<SyncMutex<Vec<Vec<u8>>>>, MockMessageLog) {
+        let (transport, calls, messages) = mock_transport(responses);
+        let reader = reader_with_transport(transport, path, num_backups, card_identity);
+
+        (reader, calls, messages)
+    }
+
+    fn mock_transport(
+        responses: Vec<Result<Vec<u8>, TransportError>>,
+    ) -> (TapcardTransport, Arc<SyncMutex<Vec<Vec<u8>>>>, MockMessageLog) {
         let calls = Arc::new(SyncMutex::new(Vec::new()));
         let messages = MockMessageLog::default();
         let callback = MockStatusTransport {
@@ -2133,10 +2142,8 @@ mod tests {
             calls: calls.clone(),
             messages: messages.clone(),
         };
-        let transport = TapcardTransport(Arc::new(Box::new(callback)));
-        let reader = reader_with_transport(transport, path, num_backups, card_identity);
 
-        (reader, calls, messages)
+        (TapcardTransport(Arc::new(Box::new(callback))), calls, messages)
     }
 
     fn delay_message(seconds: u8) -> String {
@@ -2149,6 +2156,22 @@ mod tests {
         num_backups: Option<u32>,
         card_identity: String,
     ) -> TapSignerReader {
+        TapSignerReader {
+            id: "test-reader".to_string(),
+            card_identity,
+            reader: Mutex::new(mock_card(&transport, path, num_backups, None)),
+            cmd: RwLock::new(None),
+            transport,
+            network: Network::Bitcoin,
+        }
+    }
+
+    fn mock_card(
+        transport: &TapcardTransport,
+        path: Option<Vec<u32>>,
+        num_backups: Option<u32>,
+        auth_delay: Option<u8>,
+    ) -> VerifiedTapSigner {
         let secp = Secp256k1::new();
         let secret_key = SecretKey::from_slice(&[1; 32]).expect("valid test secret key");
         let pubkey = bitcoin::PublicKey::new(bitcoin::secp256k1::PublicKey::from_secret_key(
@@ -2165,16 +2188,10 @@ mod tests {
             num_backups,
             pubkey,
             card_nonce: [0; 16],
-            auth_delay: None,
+            auth_delay,
         };
-        TapSignerReader {
-            id: "test-reader".to_string(),
-            card_identity,
-            reader: Mutex::new(VerifiedTapSigner(card)),
-            cmd: RwLock::new(None),
-            transport,
-            network: Network::Bitcoin,
-        }
+
+        VerifiedTapSigner(card)
     }
 
     fn reader_for_pending_transport(started: Arc<AtomicBool>) -> TapSignerReader {
@@ -2841,18 +2858,18 @@ mod tests {
 
     #[tokio::test]
     async fn connect_waits_out_auth_delay_before_any_command() {
+        // with_card reads the selected network from the database, which needs its keychain
+        crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
+
         let responses = vec![Ok(wait_response(2)), Ok(wait_response(1)), Ok(wait_response(0))];
-        let (reader, calls, messages) = reader_with_message_log(
-            responses,
-            Some(vec![84, 0, 0]),
-            Some(0),
-            "TEST-CARD".to_string(),
-        );
+        let (transport, calls, messages) = mock_transport(responses);
 
         // the status the card answered on connect reported three seconds of delay left
-        reader.reader.lock().await.auth_delay = Some(3);
-
-        reader.wait_if_needed().await.expect("reader waits out the delay");
+        let card = mock_card(&transport, Some(vec![84, 0, 0]), Some(0), Some(3));
+        let reader = TapSignerReader::with_card(card, transport, None)
+            .await
+            .expect("reader waits out the delay");
 
         assert_eq!(command_names(&calls), vec!["wait", "wait", "wait"]);
         assert_eq!(
