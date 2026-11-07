@@ -2178,6 +2178,7 @@ mod tests {
             &secp,
             &secret_key,
         ));
+
         let card = rust_cktap::TapSigner {
             transport: Arc::new(transport.clone()),
             secp,

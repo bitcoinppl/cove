@@ -101,12 +101,14 @@ async fn drive_account_switch_commit_releases_its_claim_on_a_running_supervisor(
         transition_id.into(),
         PersistedDriveAccountSwitchPhase::AwaitingAccountCommitSucceeded,
     ));
+
     Database::global().cloud_backup_state.set(&persisted).unwrap();
 
     manager.confirm_drive_account_switch_committed(transition_id).await.unwrap();
 
-    // the commit hands its claim to the verification it schedules, and only that scheduled
-    // work can release it, so a commit that drops the claim or never schedules leaves it held
+    // the commit hands its claim to the verification it schedules, so a commit that never
+    // schedules it leaves the claim held here; the supervisor test checks the commit keeps the
+    // claim rather than dropping it, and together they cover the hand-off
     wait_for_test_condition(
         Duration::from_secs(8),
         "the running supervisor releases the switch's claim after the commit",
@@ -117,6 +119,7 @@ async fn drive_account_switch_commit_releases_its_claim_on_a_running_supervisor(
     let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
         panic!("expected configured cloud backup lifecycle");
     };
+
     assert_eq!(configured.destructive_operation, CloudBackupDestructiveOperationState::Idle);
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;

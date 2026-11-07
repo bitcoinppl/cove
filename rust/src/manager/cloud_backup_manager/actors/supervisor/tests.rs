@@ -4712,8 +4712,8 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
     assert_eq!(drained_drive_account_commit_requests(&manager, transition_id.value()), 1);
     assert_eq!(supervisor.active_operation.claim(), Some(claim));
 
-    // once the platform commits, the switch ends like any reinitialize: the new account's
-    // backup is verified under the same claim
+    // once the platform commits, the switch ends like any reinitialize: verification of the new
+    // account's backup is scheduled under the same claim, and its terminal result releases it
     supervisor
         .confirm_drive_account_switch_committed(transition_id)
         .await
