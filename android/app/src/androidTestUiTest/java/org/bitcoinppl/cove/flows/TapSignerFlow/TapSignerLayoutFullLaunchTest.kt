@@ -382,8 +382,8 @@ class TapSignerLayoutFullLaunchTest {
      *
      * A text keeps its whole layout inside a smaller container that clips it, which the layout
      * check can't see, so this compares each text's clipped bounds with its full bounds once it is
-     * scrolled into its scroll area. A text taller than its scroll area must show its top edge and
-     * then its bottom edge. Text fields are left out, as in [assertWindowTextsDrawWhole]
+     * scrolled into its scroll area. A text taller than its scroll area must show its whole first
+     * line and then its whole last line. Text fields are left out, as in [assertWindowTextsDrawWhole]
      *
      * The texts are checked from the bottom up, so the scroll areas end near their top, where the
      * later downward scroll to each action starts
@@ -417,10 +417,15 @@ class TapSignerLayoutFullLaunchTest {
         assertTrue("$screen has texts that never show whole: $problems", problems.isEmpty())
     }
 
-    /** Where a text lies on screen, and the scroll area that can move it */
+    /**
+     * Where a text lies on screen, where its first and last lines lie across its width, and the
+     * scroll area that can move it
+     */
     private data class TextPlacement(
         val shown: Rect,
         val whole: Rect,
+        val firstLine: Rect?,
+        val lastLine: Rect?,
         val viewport: Rect?,
         val scrollBy: ((Float, Float) -> Boolean)?,
     )
@@ -428,8 +433,9 @@ class TapSignerLayoutFullLaunchTest {
     /**
      * Why the text with semantics [id] never shows whole, or null when it does
      *
-     * Its scroll area is scrolled just far enough to bring the edge under check inside it, the
-     * top first for a text taller than the area
+     * Its scroll area is scrolled just far enough to bring the part under check inside it. A text
+     * taller than the area must show its whole first line and then its whole last line, from the
+     * line bounds its layout measures, so an area too short for a line fails
      */
     private fun textShowWholeProblem(
         root: RootForTest,
@@ -437,50 +443,60 @@ class TapSignerLayoutFullLaunchTest {
     ): String? {
         val edges = mutableListOf("whole")
         var checked = 0
+        var scrolledFrom: Rect? = null
 
         repeat(MAX_NUDGES * 2) {
             val placement = textPlacement(root, id) ?: return null
-            val (shown, whole, viewport, scrollBy) = placement
+            val (shown, whole, firstLine, lastLine, viewport, scrollBy) = placement
             if (viewport != null && whole.height() > viewport.height() + CLIP_TOLERANCE_PX && edges == listOf("whole")) {
                 edges.clear()
-                edges += listOf("top", "bottom")
+                edges += listOf("first line", "last line")
             }
 
             val edge = edges[checked]
-            val delta =
-                when {
-                    viewport == null -> 0
-                    edge == "bottom" -> maxOf(0, whole.bottom - viewport.bottom)
-                    whole.top < viewport.top -> whole.top - viewport.top
-                    edge == "top" && whole.top >= viewport.bottom - CLIP_TOLERANCE_PX -> whole.top - viewport.top
-                    edge == "whole" && whole.bottom > viewport.bottom -> whole.bottom - viewport.bottom
-                    else -> 0
+            val part =
+                when (edge) {
+                    "first line" -> firstLine ?: return "its text reports no layout for its first line"
+                    "last line" -> lastLine ?: return "its text reports no layout for its last line"
+                    else -> whole
                 }
 
-            if (abs(delta) > CLIP_TOLERANCE_PX && scrollBy != null) {
+            if (viewport != null && part.height() > viewport.height() + CLIP_TOLERANCE_PX) {
+                return "its $edge is ${part.height()}px tall but its scroll area shows only ${viewport.height()}px"
+            }
+
+            // a part outside the area scrolls to its nearer edge, and the last line to the bottom
+            val outside = viewport != null && (part.top < viewport.top || part.bottom > viewport.bottom)
+            val delta =
+                when {
+                    viewport == null || !outside -> 0
+                    edge == "last line" || part.top >= viewport.top -> part.bottom - viewport.bottom
+                    else -> part.top - viewport.top
+                }
+
+            // a scroll that didn't move the text has reached the end of its area, so check it there
+            if (abs(delta) > CLIP_TOLERANCE_PX && scrollBy != null && whole != scrolledFrom) {
+                scrolledFrom = whole
                 InstrumentationRegistry.getInstrumentation().runOnMainSync { scrollBy(0f, delta.toFloat()) }
                 device.waitForIdle()
                 Thread.sleep(300)
                 return@repeat
             }
 
-            val sides = abs(shown.left - whole.left) <= CLIP_TOLERANCE_PX && abs(shown.right - whole.right) <= CLIP_TOLERANCE_PX
-            val top = abs(shown.top - whole.top) <= CLIP_TOLERANCE_PX
-            val bottom = abs(shown.bottom - whole.bottom) <= CLIP_TOLERANCE_PX
             val shows =
-                when (edge) {
-                    "top" -> sides && top
-                    "bottom" -> sides && bottom
-                    else -> sides && top && bottom
-                }
+                shown.left - CLIP_TOLERANCE_PX <= part.left &&
+                    shown.top - CLIP_TOLERANCE_PX <= part.top &&
+                    shown.right + CLIP_TOLERANCE_PX >= part.right &&
+                    shown.bottom + CLIP_TOLERANCE_PX >= part.bottom
 
-            if (!shows) return "its $edge spans $whole but shows only $shown"
+            if (!shows) return "its ${if (edge == "whole") "text" else edge} spans $part but it shows only $shown"
 
             checked += 1
+            scrolledFrom = null
             if (checked == edges.size) return null
         }
 
-        return "it never scrolled to show its ${edges.getOrNull(checked) ?: "whole"} edge"
+        return "it never scrolled to show its ${edges.getOrNull(checked)?.takeIf { it != "whole" } ?: "text"} whole"
     }
 
     /** The on-screen bounds of the text with semantics [id] and its nearest vertical scroll area */
@@ -500,10 +516,34 @@ class TapSignerLayoutFullLaunchTest {
             // boundsInWindow isn't clipped to the display, which a window can extend past
             val shown = node.clippedOnScreen().also { if (!it.intersect(display)) it.setEmpty() }
             val viewport = scroller?.clippedOnScreen()?.also { if (!it.intersect(display)) it.setEmpty() }
-            placement = TextPlacement(shown, node.fullOnScreen(), viewport, scroller?.config?.getOrNull(SemanticsActions.ScrollBy)?.action)
+            val whole = node.fullOnScreen()
+            val layout = node.textLayout()
+
+            // line tops and bottoms match the drawn text, as layoutProblem explains
+            val line = { index: Int ->
+                layout?.let { Rect(whole.left, whole.top + it.getLineTop(index).roundToInt(), whole.right, whole.top + it.getLineBottom(index).roundToInt()) }
+            }
+
+            placement =
+                TextPlacement(
+                    shown = shown,
+                    whole = whole,
+                    firstLine = line(0),
+                    lastLine = layout?.let { line(it.lineCount - 1) },
+                    viewport = viewport,
+                    scrollBy = scroller?.config?.getOrNull(SemanticsActions.ScrollBy)?.action,
+                )
         }
 
         return placement
+    }
+
+    /** The text's single layout, as the accessibility service reads it, or null when it has none */
+    private fun SemanticsNode.textLayout(): TextLayoutResult? {
+        val action = config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action ?: return null
+        val layouts = mutableListOf<TextLayoutResult>()
+
+        return layouts.takeIf { action(it) }?.singleOrNull()?.takeIf { it.lineCount > 0 }
     }
 
     /**
