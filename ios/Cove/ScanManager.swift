@@ -105,7 +105,14 @@ import SwiftUI
             return
         }
 
-        // FileHandler takes a file system path, and absoluteString would hand it a file:// URL
+        // a document opened in place from Files lives outside the container and is readable only
+        // while security-scoped access is held; copies in the app's Inbox need none and return false
+        let isAccessingScopedResource = url.startAccessingSecurityScopedResource()
+        defer {
+            if isAccessingScopedResource { url.stopAccessingSecurityScopedResource() }
+        }
+
+        // the file handler takes a file system path, and absoluteString would hand it a file:// URL
         let fileHandler = FileHandler(filePath: url.path)
 
         do {

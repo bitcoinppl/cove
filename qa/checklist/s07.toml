@@ -66,6 +66,7 @@ paths = [
     "android/app/src/main/AndroidManifest.xml",
 ]
 coverage = [
+    "human:ios",
     "ios-ui:ios/CoveUITests/KeyTeleportAppScannerFullLaunchUITests.swift::testResponseScannedFromTheAppScannerReopensTheReceiveAtThePassword",
     "ios-unit:ios/CoveTests/KeyTeleportFileOpenTests.swift::testOpenedSenderResponseFileReopensTheStoredReceiveAtThePassword",
     "ios-unit:ios/CoveTests/KeyTeleportFileOpenTests.swift::testOpenedReceiverRequestFileStartsAKeyTeleportSend",
@@ -77,9 +78,13 @@ coverage = [
 # from the app-wide scanner through the qr seam: scanmanager must reopen the stored receive at the
 # teleport password, and the password must unlock it to the review
 # ios has no KeyTeleport app link or url scheme, only open-with for text and json files; the ios
-# unit tests hand scanmanager's onopenurl handler a text file: a sender response, made in-process
-# for a receive that was started and left, must reopen that stored receive at the teleport
-# password, and a receiver request must start a send
+# unit tests hand scanmanager's onopenurl handler a text file in the app's container: a sender
+# response, made in-process for a receive that was started and left, must reopen that stored
+# receive at the teleport password, and a receiver request must start a send through to the code
+# the app opens documents in place, and no test can hand it a files url outside its container
+# that needs security-scoped access, so the person's ios check is to open a KeyTeleport response
+# file in place from the files app (on my iphone or icloud drive) during a receive and see it
+# reopen the receive at the teleport password
 # android ships the KeyTeleport link and share filters disabled, and the android test checks a
 # keyteleport.com link and shared text still resolve to no Cove activity
 # the camera decoding the other phone's response qr is the person's check in
