@@ -27,16 +27,16 @@
     }
   ],
   "generated_by": "rust/src/manager/cloud_backup_manager/ops/tests/golden_v1_3_0.rs at tag v1.3.0",
-  "namespace_id": "c59acfaedb5aabb55e2b95c190a1fff1",
+  "namespace_id": "5287cc923f7f8c780a11ff05ea445d2e",
   "passkey": {
     "credential_id_hex": "636f76652d76312e332e302d676f6c64656e2d63726564656e7469616c",
     "prf_output_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
-    "prf_salt_hex": "980c5869856bfabe8098284e39d08cc42cdd987f5d9474f77090e27c44d0564d",
+    "prf_salt_hex": "925d37c3d5511ee6c06db224a9f3d5534a0e43f62355dd9858475eea970d6d1b",
     "requests": [
       {
         "credential_id_hex": "",
         "operation": "discover",
-        "prf_salt_hex": "e7e7738ac4eb3876e26dd4f772c3a8137c3b861f62e5979705d09da9294a4c69",
+        "prf_salt_hex": "cc5fd0a2b775f43483d3c8fc7e58a5e312f09df9ff19a2476780e0b368559106",
         "rp_id": "covebitcoinwallet.com"
       },
       {
@@ -48,7 +48,7 @@
       {
         "credential_id_hex": "636f76652d76312e332e302d676f6c64656e2d63726564656e7469616c",
         "operation": "authenticate",
-        "prf_salt_hex": "980c5869856bfabe8098284e39d08cc42cdd987f5d9474f77090e27c44d0564d",
+        "prf_salt_hex": "925d37c3d5511ee6c06db224a9f3d5534a0e43f62355dd9858475eea970d6d1b",
         "rp_id": "covebitcoinwallet.com"
       }
     ]
