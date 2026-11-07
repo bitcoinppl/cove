@@ -679,17 +679,19 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         let high = area.maxY + min(0, travel) - Self.fieldClearance
         let clamp = { (y: CGFloat) in min(high, max(low, y)) }
 
+        // each field widened by the clearance on every side, so one that starts just beside the
+        // column keeps the drag as far away as one across it
         let fields = [app.textViews, app.textFields, app.secureTextFields]
             .flatMap(\.allElementsBoundByIndex)
             .map(\.frame)
-            .filter { !$0.isEmpty && $0.minX <= x && x <= $0.maxX }
+            .filter { !$0.isEmpty }
+            .map { $0.insetBy(dx: -Self.fieldClearance, dy: -Self.fieldClearance) }
+            .filter { $0.minX <= x && x <= $0.maxX }
 
-        let isClear = { (y: CGFloat) in
-            !fields.contains { $0.minY - Self.fieldClearance < y && y < $0.maxY + Self.fieldClearance }
-        }
+        let isClear = { (y: CGFloat) in !fields.contains { $0.minY < y && y < $0.maxY } }
 
-        // the nearest clear point to the middle is the middle itself or lies just past a field's edge
-        let candidates = ([ideal] + fields.flatMap { [$0.minY - Self.fieldClearance, $0.maxY + Self.fieldClearance] }).map(clamp)
+        // the nearest clear point to the middle is the middle itself or lies on a widened field's edge
+        let candidates = ([ideal] + fields.flatMap { [$0.minY, $0.maxY] }).map(clamp)
         return candidates.filter(isClear).min { abs($0 - ideal) < abs($1 - ideal) } ?? clamp(ideal)
     }
 
