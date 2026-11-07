@@ -32,6 +32,7 @@
 		C0F100042F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100032F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift */; };
 		C0F100082F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */; };
 		C0F400022F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F400012F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift */; };
+		C0F600012F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F600022F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift */; };
 		C0F100062F30000000000001 /* ScreenReachability.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100052F30000000000001 /* ScreenReachability.swift */; };
 		C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */; };
 		C0B000022F00000000000001 /* Fixtures/wallet_2_descriptors.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */; };
@@ -135,6 +136,7 @@
 		C0F100032F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportReceiveFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportSendFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F400012F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LargeTextWordBreakFullLaunchUITests.swift; sourceTree = "<group>"; };
+		C0F600022F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportAppScannerFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F100052F30000000000001 /* ScreenReachability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenReachability.swift; sourceTree = "<group>"; };
 		C0A000022EF0000000000001 /* CoveUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPromptLayoutTests.swift; sourceTree = "<group>"; };
@@ -286,6 +288,7 @@
 				C0F100032F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift */,
 				C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */,
 				C0F400012F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift */,
+				C0F600022F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift */,
 				C0F100052F30000000000001 /* ScreenReachability.swift */,
 			);
 			path = CoveUITests;
@@ -605,6 +608,7 @@
 				C0F100042F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift in Sources */,
 				C0F100082F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift in Sources */,
 				C0F400022F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift in Sources */,
+				C0F600012F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift in Sources */,
 				C0F100062F30000000000001 /* ScreenReachability.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
