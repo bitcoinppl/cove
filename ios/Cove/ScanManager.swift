@@ -105,7 +105,8 @@ import SwiftUI
             return
         }
 
-        let fileHandler = FileHandler(filePath: url.absoluteString)
+        // FileHandler takes a file system path, and absoluteString would hand it a file:// URL
+        let fileHandler = FileHandler(filePath: url.path)
 
         do {
             let readResult = try fileHandler.read()
