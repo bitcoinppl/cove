@@ -10,6 +10,7 @@ import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.AppSheetState
 import org.bitcoinppl.cove.test.AndroidDeviceStayAwakeRule
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchStartupRobot
@@ -33,7 +34,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Receives a KeyTeleport response through the wallet screen's QR scanner rather than the receive
@@ -115,10 +116,10 @@ class KeyTeleportAppScannerFullLaunchTest {
         assertTrue("the response must be a BBQr of at least 3 parts", frames.size >= 3)
 
         // leaving the receive screen keeps its request, so a later scan can still answer it
-        leaveReceiveScreen(app)
+        tapUntil("Back", "Back should leave the receive screen") { app.router.routes.none { it is Route.KeyTeleport } }
 
         // the camera can catch an animated QR at any frame, so two arrive out of order
-        retryingStale { device.waitFor(By.desc("QR Code"), timeoutMs = 20_000L).click() }
+        tapUntil("QR Code", "QR Code should open the wallet's scanner") { app.sheetState?.item == AppSheetState.Qr }
         qr.show(listOf(frames[2], frames[0]))
         waitForScanProgress("Scanned 2 of ${frames.size}")
 
@@ -184,34 +185,42 @@ class KeyTeleportAppScannerFullLaunchTest {
         return (0 until parts.length()).map(parts::getString) to response.getString("password")
     }
 
-    // on a slow emulator the receive screen can still be recomposing after its request appears,
-    // and Back went stale on all three quick tries, so this taps whichever Back is current until
-    // the route is gone, for up to 20 s
-    private fun leaveReceiveScreen(app: AppManager) {
+    /**
+     * Taps the node described as [description] until [done] holds, for up to 20 s
+     *
+     * On a slow emulator a node can go stale on every quick retry while its screen recomposes, and
+     * a tap that lands while a screen is still coming in can be dropped. So this taps whichever
+     * node is current and checks the app's state instead of trusting one tap, and after a tap that
+     * lands it waits up to 3 s for [done] before tapping again
+     */
+    private fun tapUntil(
+        description: String,
+        what: String,
+        done: () -> Boolean,
+    ) {
         val deadline = SystemClock.uptimeMillis() + 20_000L
 
-        while (onReceiveScreen(app)) {
-            if (SystemClock.uptimeMillis() > deadline) error("Back should leave the receive screen\n${device.hierarchy()}")
+        while (!readOnMain(done)) {
+            if (SystemClock.uptimeMillis() > deadline) error("$what\n${device.hierarchy()}")
 
-            val back = device.wait(Until.findObject(By.desc("Back")), 2_000L) ?: continue
+            val node = device.wait(Until.findObject(By.desc(description)), 2_000L) ?: continue
 
             try {
-                back.click()
+                node.click()
             } catch (_: StaleObjectException) {
                 continue
             }
 
-            // a tap that landed pops the route, so wait for that before looking for Back again
             val settled = SystemClock.uptimeMillis() + 3_000L
-            while (onReceiveScreen(app) && SystemClock.uptimeMillis() < settled) Thread.sleep(100)
+            while (!readOnMain(done) && SystemClock.uptimeMillis() < settled) Thread.sleep(100)
         }
     }
 
-    private fun onReceiveScreen(app: AppManager): Boolean {
-        val on = AtomicBoolean()
-        onMain { on.set(app.router.routes.any { it is Route.KeyTeleport }) }
+    private fun <T> readOnMain(read: () -> T): T {
+        val value = AtomicReference<T>()
+        onMain { value.set(read()) }
 
-        return on.get()
+        return value.get()
     }
 
     // compose can replace a node between its lookup and the click or edit that follows, which
