@@ -100,7 +100,7 @@ extension XCUIElement {
     }
 
     private var recognizedText: [VNRecognizedTextObservation] {
-        guard let image = screenshot().image.cgImage else {
+        guard let image = screenshot().image.cgImage?.withVisionMargin() else {
             XCTFail("the screenshot of \(self) has no image to read")
             return []
         }
@@ -239,6 +239,52 @@ private extension [Character] {
         }
 
         return (previous.min() ?? needle.count) <= edits
+    }
+}
+
+private extension CGImage {
+    /// The image on a margin filled with its top-left pixel's color
+    ///
+    /// Vision drops text drawn against an image's edge, and an element's screenshot is cropped to
+    /// its frame. Cropped that tight, a shown receiver code such as "41 08 54 30" read as "4108", and
+    /// 11 of 200 random codes missed more than two characters, against none with this margin. The
+    /// margin repeats the edge's color rather than taking in more of the screen, so no neighboring
+    /// text joins what Vision reads
+    func withVisionMargin(_ margin: Int = 24) -> CGImage? {
+        let width = width + 2 * margin
+        let height = height + 2 * margin
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let pixels = context.data?.assumingMemoryBound(to: UInt8.self) else { return nil }
+
+        let drawn = CGRect(x: margin, y: margin, width: self.width, height: self.height)
+        context.draw(self, in: drawn)
+
+        // the buffer's first row is the image's top, so the drawn image's top-left pixel sits a
+        // margin down and a margin in
+        let corner = (margin * width + margin) * 4
+        let edge = CGColor(
+            red: CGFloat(pixels[corner]) / 255,
+            green: CGFloat(pixels[corner + 1]) / 255,
+            blue: CGFloat(pixels[corner + 2]) / 255,
+            alpha: 1
+        )
+
+        context.setFillColor(edge)
+        context.fill([
+            CGRect(x: 0, y: 0, width: width, height: margin),
+            CGRect(x: 0, y: height - margin, width: width, height: margin),
+            CGRect(x: 0, y: margin, width: margin, height: self.height),
+            CGRect(x: width - margin, y: margin, width: margin, height: self.height),
+        ])
+
+        return context.makeImage()
     }
 }
 
