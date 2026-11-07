@@ -100,16 +100,14 @@ fn join_ur(frames: &[String]) -> Result<Value> {
             bail!("`{frame}` belongs to {:?}, but the first part to {expected:?}", part.message);
         }
 
-        if let Some(seen) = parts.get(&part.sequence) {
-            if seen != &part {
-                bail!("`{frame}` is a second part {} with other data", part.sequence);
-            }
-
-            continue;
+        if parts.get(&part.sequence).is_some_and(|seen| seen != &part) {
+            bail!("`{frame}` is a second part {} with other data", part.sequence);
         }
 
+        // every frame goes to the decoder, a repeated part too, so none skips its checks; it
+        // ignores a part it already has
         decoder.receive(ur).map_err(|error| eyre!("`{frame}` doesn't join the others: {error}"))?;
-        parts.insert(part.sequence, part);
+        parts.entry(part.sequence).or_insert(part);
     }
 
     let Some(message) = message else {
@@ -239,6 +237,10 @@ impl FountainPart {
     ///
     /// foundation-ur checks a part is valid only until it has the message, so this checks every one
     fn of(ur: &UR) -> Result<Self> {
+        let (Some(sequence), Some(sequence_count)) = (ur.sequence(), ur.sequence_count()) else {
+            bail!("A single-part UR doesn't join a multi-part one");
+        };
+
         let Some(fragment) = ur.as_bytewords() else {
             bail!("The UR has no Bytewords payload");
         };
@@ -252,6 +254,15 @@ impl FountainPart {
 
         if decoder.position() != cbor.len() {
             bail!("The fountain part has {} bytes after it", cbor.len() - decoder.position());
+        }
+
+        if (part.sequence, part.sequence_count) != (sequence, sequence_count) {
+            bail!(
+                "The UR says it is part {sequence} of {sequence_count}, but its fountain part is {} \
+                 of {}",
+                part.sequence,
+                part.sequence_count
+            );
         }
 
         if !part.is_valid() {
@@ -581,6 +592,25 @@ mod tests {
         )
     }
 
+    /// The UR fountain part's payload unchanged, behind another URI path: `n-m` for a multi-part
+    /// UR, or none for a single-part one
+    fn with_uri_sequence(frame: &str, sequence: Option<&str>) -> String {
+        let fragment = UR::parse(frame).unwrap().as_bytewords().unwrap().to_string();
+        match sequence {
+            Some(sequence) => format!("ur:crypto-psbt/{sequence}/{fragment}"),
+            None => format!("ur:crypto-psbt/{fragment}"),
+        }
+    }
+
+    /// The fragment indexes a multi-part UR's fountain part mixes
+    fn part_indexes(frame: &str) -> BTreeSet<usize> {
+        let ur = UR::parse(frame).unwrap();
+        let cbor = bytewords::decode(ur.as_bytewords().unwrap(), Style::Minimal).unwrap();
+        let part: Part = minicbor::decode(&cbor).unwrap();
+
+        part.indexes::<Alloc, BTreeSet<usize>>()
+    }
+
     fn with_wrong_checksum(frame: &str) -> String {
         edited_part(frame, |part, _| part.checksum ^= 1)
     }
@@ -770,13 +800,17 @@ mod tests {
 
     #[test]
     fn a_ur_part_with_the_wrong_data_fails_even_after_completion() {
-        let frames = ur_frames(6);
+        let frames = ur_frames(30);
         let flip_first_byte = |_: &mut Part, data: &mut Vec<u8>| data[0] ^= 1;
 
-        // a plain part repeated with other data, and a mixed part the decoder no longer reads
+        // a part past the plain ones that XORs at least two fragments, which the decoder no longer
+        // reads once it has the message
+        let mixed = frames[3..].iter().find(|frame| part_indexes(frame).len() >= 2).unwrap();
+
+        // a plain part repeated with other data, and that mixed part with other data
         for (bad, expected) in [
             (edited_part(&frames[1], flip_first_byte), "a second part 2 with other data"),
-            (edited_part(&frames[5], flip_first_byte), "doesn't carry the message"),
+            (edited_part(mixed, flip_first_byte), "doesn't carry the message"),
         ] {
             let mut late = frames[..3].to_vec();
             late.push(bad);
@@ -807,5 +841,28 @@ mod tests {
         let frames = base32_parts(&[psbt_bytes().as_slice(), &[0]].concat(), 2);
         let error = join_frames(frames).unwrap_err();
         assert!(format!("{error:#}").contains("bytes after the PSBT"), "{error:#}");
+    }
+
+    #[test]
+    fn a_ur_whose_uri_doesnt_match_its_part_fails_the_join_before_or_after_completion() {
+        let frames = ur_frames(3);
+
+        // each carries part 1's payload unchanged, so after completion it matches the stored part
+        for (bad, expected) in [
+            (with_uri_sequence(&frames[0], Some("0-0")), "but its fountain part is 1 of 3"),
+            (with_uri_sequence(&frames[0], Some("2-3")), "but its fountain part is 1 of 3"),
+            (with_uri_sequence(&frames[0], None), "single-part UR doesn't join"),
+        ] {
+            let mut first = vec![bad.clone()];
+            first.extend(frames.iter().cloned());
+
+            let mut last = frames.clone();
+            last.push(bad.clone());
+
+            for order in [first, last] {
+                let error = join_frames(order).unwrap_err();
+                assert!(format!("{error:#}").contains(expected), "{error:#}");
+            }
+        }
     }
 }
