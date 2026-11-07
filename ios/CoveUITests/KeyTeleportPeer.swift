@@ -100,7 +100,7 @@ extension XCUIElement {
     }
 
     private var recognizedText: [VNRecognizedTextObservation] {
-        guard let image = screenshot().image.cgImage else {
+        guard let image = screenshot().image.cgImage?.withVisionMargin() else {
             XCTFail("the screenshot of \(self) has no image to read")
             return []
         }
@@ -124,13 +124,17 @@ extension XCUIElement {
         visibleText.joined().withoutSpaces
     }
 
-    /// Waits for Vision to read the text, compared without whitespace and case, allowing up to
-    /// `misreads` characters misread, missed or added
+    /// Waits for Vision to read the text, compared without whitespace and case and with zero and
+    /// the letter O as one, allowing up to `misreads` characters misread, missed or added
+    ///
+    /// Vision reads one as the other in these monospaced codes, so "OO OO XY Q4" read as "0000XYQ4".
+    /// No code mixes them: receiver codes are digits, and Teleport Passwords are Base32, which has
+    /// no zero
     func waitForVisibleText(containing text: String, misreads: Int = 0, timeout: TimeInterval = 5) -> Bool {
-        let compact = Array(text.withoutSpaces)
+        let compact = Array(text.withoutSpaces.zeroAsO)
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if Array(visibleTextWithoutSpaces).contains(compact, allowingEdits: misreads) { return true }
+            if Array(visibleTextWithoutSpaces.zeroAsO).contains(compact, allowingEdits: misreads) { return true }
 
             Thread.sleep(forTimeInterval: 0.3)
         }
@@ -179,6 +183,10 @@ extension XCUIElement {
 private extension String {
     var withoutSpaces: String {
         filter { !$0.isWhitespace }.uppercased().latinized
+    }
+
+    var zeroAsO: String {
+        String(map { $0 == "0" ? "O" : $0 })
     }
 
     /// Latin capitals in place of the Cyrillic and Greek ones drawn the same, which Vision
@@ -239,6 +247,52 @@ private extension [Character] {
         }
 
         return (previous.min() ?? needle.count) <= edits
+    }
+}
+
+private extension CGImage {
+    /// The image on a margin filled with its top-left pixel's color
+    ///
+    /// Vision drops text drawn against an image's edge, and an element's screenshot is cropped to
+    /// its frame. Cropped that tight, a shown receiver code such as "41 08 54 30" read as "4108", and
+    /// 11 of 200 random codes missed more than two characters, against none with this margin. The
+    /// margin repeats the edge's color rather than taking in more of the screen, so no neighboring
+    /// text joins what Vision reads
+    func withVisionMargin(_ margin: Int = 24) -> CGImage? {
+        let width = width + 2 * margin
+        let height = height + 2 * margin
+        let space = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: space,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let pixels = context.data?.assumingMemoryBound(to: UInt8.self) else { return nil }
+
+        let drawn = CGRect(x: margin, y: margin, width: self.width, height: self.height)
+        context.draw(self, in: drawn)
+
+        // the buffer's first row is the image's top, so the drawn image's top-left pixel sits a
+        // margin down and a margin in
+        let corner = (margin * width + margin) * 4
+
+        // the fill keeps the buffer's own color space, so it lands as the same pixel values
+        // instead of being converted from generic RGB
+        let components = (0 ..< 3).map { CGFloat(pixels[corner + $0]) / 255 } + [1]
+        guard let edge = CGColor(colorSpace: space, components: components) else { return nil }
+
+        context.setFillColor(edge)
+        context.fill([
+            CGRect(x: 0, y: 0, width: width, height: margin),
+            CGRect(x: 0, y: height - margin, width: width, height: margin),
+            CGRect(x: 0, y: margin, width: margin, height: self.height),
+            CGRect(x: width - margin, y: margin, width: margin, height: self.height),
+        ])
+
+        return context.makeImage()
     }
 }
 
