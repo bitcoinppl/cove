@@ -693,28 +693,35 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         guard element.exists else { return false }
 
         let frame = element.frame
-        guard !frame.isEmpty, shows(frame, ofField: Self.fieldTypes.contains(element.elementType), in: visibleArea(of: element)),
-              !isUnderKeyboard(frame) else { return false }
+        guard !frame.isEmpty, shows(element, frame, in: visibleArea(of: element)), !isUnderKeyboard(frame) else { return false }
 
         return !needsHit || element.isHittable
     }
 
-    private static let fieldTypes: Set<XCUIElement.ElementType> = [.textField, .secureTextField, .textView, .searchField]
+    /// The send screen's address editor, the one element allowed to start left of its scroll area
+    private static let addressEditor = "sendFlow.address"
 
-    /// How far a text field's frame may reach past the side of the area it shows in: the send
-    /// screen's address editor is drawn `.offset(x: -4)` in `AddressTextEditor`, which moves 4 of
-    /// its 5 points of line padding past its scroll view's side padding, so no text is cut off
-    private static let fieldSideOverhang: CGFloat = 4
+    /// How far left of its scroll area the address editor's frame may start:
+    /// `ios/Cove/Flows/SendFlow/SetAmountScreen/AddressTextEditor.swift` draws the editor
+    /// `.offset(x: -4)`, which moves 4 of its 5 points of line padding past the scroll view's side
+    /// padding, so none of its text is cut off
+    private static let addressEditorLeftOverhang: CGFloat = 4
 
-    /// Whether the frame lies inside the area, or for a text field, inside it from top to bottom and
-    /// inside it across but for `fieldSideOverhang`
+    /// Slack for a frame XCUITest reports a fraction of a point off, as in `isSameFrame`
+    private static let frameRounding: CGFloat = 0.5
+
+    /// Whether the frame lies inside the area, or for the send screen's address editor, inside it
+    /// but for starting up to `addressEditorLeftOverhang` plus `frameRounding` left of it
     ///
-    /// XCUITest reports no bounds for a field's text, only its frame, which takes in its text insets
-    private func shows(_ frame: CGRect, ofField isField: Bool, in area: CGRect) -> Bool {
-        guard isField else { return area.contains(frame) }
+    /// XCUITest reports no bounds for a field's text, only its frame, so every other field, like
+    /// every other element, must lie wholly inside the area
+    private func shows(_ element: XCUIElement, _ frame: CGRect, in area: CGRect) -> Bool {
+        guard element.elementType == .textView, element.identifier == Self.addressEditor else { return area.contains(frame) }
 
-        let overhang = Self.fieldSideOverhang + 0.5
-        return area.insetBy(dx: -overhang, dy: 0).contains(frame) && app.windows.firstMatch.frame.contains(frame)
+        // only the left edge moves, so the editor's right edge, top and bottom stay strict
+        let overhang = Self.addressEditorLeftOverhang + Self.frameRounding
+        let widened = CGRect(x: area.minX - overhang, y: area.minY, width: area.width + overhang, height: area.height)
+        return widened.contains(frame) && app.windows.firstMatch.frame.contains(frame)
     }
 
     private func isUnderKeyboard(_ frame: CGRect) -> Bool {
