@@ -197,7 +197,7 @@ id = "s16-tapsigner-setup-signing-and-retry-layout"
 section = "16"
 title = "TAPSIGNER setup signing and retry layout"
 platforms = ["ios", "android"]
-target = "manual"
+target = "ui"
 paths = [
     "ios/Cove/Flows/TapSignerFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/TapSignerFlow/**",
@@ -213,10 +213,12 @@ coverage = [
 # 1.4.0: ios HUMAN, android HUMAN
 # the ui tests walk the choose, advanced, cvc, retry and success screens at the largest text size
 # through the tapsigner seam, and open the signing cvc screen from a funded card's draft, and check
-# titles, descriptions and actions draw whole, each action scrolls fully on screen and is enabled
-# and clickable; android reads every text's compose layout for an ellipsis or overflow, and ios
-# probes compare each probed text with an unlimited copy, including the descriptions inside the
-# automatic setup and download backup buttons through a report beside each button
+# titles, descriptions and actions draw whole, each title, description and action scrolls fully on
+# screen and each action is enabled and clickable; android reads every text's compose layout for an
+# ellipsis or overflow and scrolls each text until no ancestor clips it, and ios probes compare each
+# probed text with an unlimited copy, including the descriptions inside the automatic setup and
+# download backup buttons through a report beside each button, and scroll a description taller than
+# the screen to its first and then its last line
 
 [[row]]
 id = "s16-keyteleport-request-and-code-layout-at-largest"
