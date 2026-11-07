@@ -6,9 +6,7 @@ import android.graphics.Bitmap
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.SemanticsNodeInteraction
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.platform.app.InstrumentationRegistry
@@ -35,7 +33,7 @@ fun saveNodeScreenshotToLayoutAudit(
     screenshotDir.mkdirs()
 
     val screenshotFile = File(screenshotDir, name)
-    val bitmap = node.captureToImage().asAndroidBitmap()
+    val bitmap = node.captureToImageWithRetry()
 
     FileOutputStream(screenshotFile).use { output ->
         check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
