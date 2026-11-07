@@ -26,6 +26,8 @@ pub struct TransactionWatcher {
     network: Network,
     client: Option<NodeClient>,
     keep_watching: bool,
+    // polls that failed since the node last answered, so the log shows a node that keeps failing
+    consecutive_failures: u32,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -85,6 +87,7 @@ impl TransactionWatcher {
             network,
             client: None,
             keep_watching: true,
+            consecutive_failures: 0,
         }
     }
 
@@ -122,16 +125,22 @@ impl TransactionWatcher {
         let kind = match result {
             TransactionWatcherPollResult::Pending(client) => {
                 self.client = Some(client);
+                self.consecutive_failures = 0;
                 TransactionWatcherPollKind::Pending
             }
 
             TransactionWatcherPollResult::Confirmed(client) => {
                 self.client = Some(client);
+                self.consecutive_failures = 0;
                 TransactionWatcherPollKind::Confirmed
             }
 
             TransactionWatcherPollResult::Failed(error) => {
-                error!("failed to check txn {}: {error:?}", self.tx_id);
+                self.consecutive_failures = self.consecutive_failures.saturating_add(1);
+                error!(
+                    "failed to check txn {} ({} in a row): {error:?}",
+                    self.tx_id, self.consecutive_failures
+                );
                 self.client = None;
                 TransactionWatcherPollKind::Failed
             }
@@ -186,6 +195,11 @@ mod test_support {
     impl TransactionWatcher {
         pub(crate) async fn probe(&mut self) -> ActorResult<()> {
             Produces::ok(())
+        }
+
+        /// Polls that failed since the node last answered; nonzero once a failure scheduled its retry
+        pub(crate) async fn consecutive_failures_for_test(&mut self) -> ActorResult<u32> {
+            Produces::ok(self.consecutive_failures)
         }
 
         pub(crate) async fn block_for_test(

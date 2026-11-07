@@ -3118,6 +3118,7 @@ mod tests {
 
         let (authority, preparation) =
             crate::wallet_lifecycle::test_support::begin_wallet_deletion(db.id.clone());
+
         // a quiesce that waited on the held broadcast would end at cove-http's 30 second request
         // timeout, so this bound stays well under it rather than taking the loaded-host floor
         async { actor_value(actor.quiesce_for_terminal_shutdown(authority).await).await }
@@ -3465,7 +3466,27 @@ mod tests {
         call!(watcher.probe()).await.expect("transaction watcher starts");
         call!(watcher.probe()).await.expect("initial watcher poll starts");
 
+        // the initial poll already took the invalid node, so only the retry can reach this one
         let server = set_height_esplora_node(1, Duration::ZERO).await;
+
+        // the initial client build runs on the global blocking pool in real time, so the paused
+        // clock may only move once its failure has scheduled the retry
+        let deadline = crate::test_support::LoadedHostDeadline::after(Duration::from_secs(1));
+        let mut failures = 0;
+        while failures == 0 && !deadline.has_passed() {
+            tokio::task::yield_now().await;
+            failures = call!(watcher.consecutive_failures_for_test())
+                .await
+                .expect("transaction watcher responds");
+        }
+
+        assert_eq!(failures, 1, "the initial node client build must fail");
+
+        // let the retry's sleep start before the clock moves past it
+        for _ in 0..10 {
+            tokio::task::yield_now().await;
+        }
+
         for _ in 0..10 {
             tokio::time::advance(Duration::from_secs(31)).await;
             for _ in 0..100 {

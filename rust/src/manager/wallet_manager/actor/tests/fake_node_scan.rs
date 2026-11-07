@@ -466,7 +466,8 @@ async fn pending_transaction_refreshes_to_confirmed_when_the_node_confirms_it() 
     fx.node.select_esplora();
 
     // hold the watcher's first status poll so the confirmation lands while it is in flight
-    let (gate, _rule) = fx.node.on(&format!("/tx/{txid}/status")).hold();
+    let status_path = format!("/tx/{txid}/status");
+    let (gate, _rule) = fx.node.on(&status_path).hold();
 
     send!(fx.addr.wallet_scan_and_notify(false));
     fx.observed.until("the scan to complete", is_scan_complete).await;
@@ -492,6 +493,11 @@ async fn pending_transaction_refreshes_to_confirmed_when_the_node_confirms_it() 
         )),
         "nothing may report a confirmation before the node has confirmed the transaction"
     );
+
+    // only the watcher asks for this status, and its next poll comes 20 seconds later, inside the
+    // loaded-host wait below, so stalling every later poll keeps a lost first result from passing
+    fx.node.clear_rules();
+    fx.node.on(&status_path).stall();
 
     let height = fx.node.chain().confirm(txid);
     gate.open();

@@ -915,6 +915,7 @@ mod tests {
         reset_cloud_backup_test_state, sample_xpub, test_globals, test_lock,
         xpub_only_wallet_metadata,
     };
+    use crate::test_support::loaded_host_wait;
     use cove_tokio::FutureTimeoutExt as _;
 
     #[tokio::test(flavor = "current_thread")]
@@ -997,8 +998,9 @@ mod tests {
             }
         };
 
+        // the gates and attempt counts prove the order, so this bound only has to outlast load
         let (downloaded, ()) = async { tokio::join!(download, release_downloads) }
-            .with_timeout(Duration::from_secs(5))
+            .with_timeout(loaded_host_wait(Duration::from_secs(5)))
             .await
             .expect("later downloads must start while the first file is blocked");
         let downloaded = downloaded.unwrap();
