@@ -58,8 +58,7 @@ final class BiometricLockFullLaunchUITests: XCTestCase {
         let readableUnderLock = balance.exists
 
         let cancel = try failFaceId()
-        cancel.tap()
-        XCTAssertTrue(cancel.waitForNonExistence(timeout: 10), "Cancel should close the Face ID prompt")
+        cancelFaceId(cancel)
 
         // gives an unlock that would follow the cancel time to happen before asserting it didn't
         _ = tapToUnlock.waitForNonExistence(timeout: 3)
@@ -133,6 +132,17 @@ final class BiometricLockFullLaunchUITests: XCTestCase {
 
         attachSystemUi("face id prompt after match")
         XCTFail("a matching face never got past the Face ID prompt")
+    }
+
+    /// Taps the Face ID alert's Cancel until the alert goes, since a tap while the alert is still
+    /// animating in does nothing
+    private func cancelFaceId(_ cancel: XCUIElement) {
+        for _ in 0 ..< 3 {
+            if cancel.exists, cancel.isHittable { cancel.tap() }
+            if cancel.waitForNonExistence(timeout: 3) { return }
+        }
+
+        XCTFail("Cancel should close the Face ID prompt")
     }
 
     /// The first Face ID request asks whether Cove may use Face ID
