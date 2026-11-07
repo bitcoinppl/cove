@@ -21,6 +21,7 @@ import com.google.zxing.DecodeHintType
 import com.google.zxing.NotFoundException
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.ReaderException
+import com.google.zxing.common.GlobalHistogramBinarizer
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
 import org.bitcoinppl.cove.AppManager
@@ -202,7 +203,8 @@ class KeyTeleportRevealCaptureTest {
 
     /**
      * Before anything is revealed and after each switch, exactly one of the QR code and the code
-     * must be readable, and a hidden code must carry almost nothing of what tells two codes apart
+     * must be readable, and no character of a hidden code may carry much of what tells it apart
+     * from the other transfer's character in the same place
      */
     private fun assertOneValueReadableAtATime(
         what: String,
@@ -212,27 +214,60 @@ class KeyTeleportRevealCaptureTest {
         val readings = listOf(first, second).map(::readWalk)
         val codeSeparation = separation(first, second, first.codeRegion, hidden = { it.qrFirst }, shown = { it.codeShown })
         val qrSeparation = separation(first, second, first.qrRegion, hidden = { it.codeShown }, shown = { it.qrFirst })
+        val characterRatios = characterSeparations(first, second)
         Log.i(TAG, "$what: $codeSeparation")
         Log.i(TAG, "QR code beside the $what: $qrSeparation")
+        Log.i(TAG, "$what by character: ${characterRatios.joinToString { "%.3f".format(it) }}")
 
         readings.forEach(WalkReading::assertExactlyOneReadable)
 
         assertEquals("the two ${what}s have different lengths", first.code.length, second.code.length)
         assertTrue("the two ${what}s are the same", first.code != second.code)
         assertEquals("the $what moved between the two transfers", first.codeRegion, second.codeRegion)
-        assertTrue("the two shown ${what}s look the same: $codeSeparation", codeSeparation.shown >= MIN_SHOWN_DETAIL)
+        assertEquals("the $what text moved between the two transfers", first.codeText.topLeft, second.codeText.topLeft)
+        assertTrue("the two ${what}s differ in fewer than $MIN_DIFFERING_CHARACTERS places", characterRatios.size >= MIN_DIFFERING_CHARACTERS)
+
+        val mostExposed = characterRatios.max()
         assertTrue(
-            "the hidden ${what}s differ in detail by ${"%.3f".format(codeSeparation.ratio)} of how much the shown ones do",
-            codeSeparation.ratio <= MAX_HIDDEN_DETAIL_SHARE,
+            "a hidden $what character differs in detail by ${"%.3f".format(mostExposed)} of how much it does shown",
+            mostExposed <= MAX_HIDDEN_CHARACTER_SHARE,
         )
+    }
+
+    /**
+     * For each place where the two codes hold different characters, how much the hidden captures
+     * differ in detail over that character's glyph box, as a share of how much the shown ones do
+     *
+     * One readable character is a leak even when the rest of the code is hidden, which a single
+     * share over the whole code would average away
+     */
+    private fun characterSeparations(
+        first: RevealWalk,
+        second: RevealWalk,
+    ): List<Double> {
+        val layout = first.codeText.layout
+        val bounds = IntRect(0, 0, first.codeShown.width, first.codeShown.height)
+
+        return first.code.indices
+            .filter { first.code[it] != second.code[it] && !first.code[it].isWhitespace() && !second.code[it].isWhitespace() }
+            .map { index ->
+                val box =
+                    layout
+                        .getBoundingBox(index)
+                        .translate(first.codeText.topLeft)
+                        .roundToIntRect()
+                        .intersect(bounds)
+
+                first.qrFirst.detailDifference(second.qrFirst, box) / first.codeShown.detailDifference(second.codeShown, box)
+            }
     }
 
     private fun readWalk(walk: RevealWalk): WalkReading {
         val qrStates =
             listOf("before anything is revealed" to walk.qrFirst, "after showing the QR code again" to walk.qrAgain).map { (moment, image) ->
-                QrState(moment, image.readQr(), image.matchCode(walk.codeText))
+                QrState(moment, image.readQr(walk.qrRegion), image.matchCode(walk.codeText))
             }
-        val reading = WalkReading(walk, qrStates, hiddenQr = walk.codeShown.readQr(), shownCode = walk.codeShown.matchCode(walk.codeText))
+        val reading = WalkReading(walk, qrStates, hiddenQr = walk.codeShown.readQr(walk.qrRegion), shownCode = walk.codeShown.matchCode(walk.codeText))
 
         qrStates.forEach { Log.i(TAG, "${walk.screen} ${it.moment}: QR code reads as ${it.qr.kind}, hidden code ${it.code}") }
         Log.i(TAG, "${walk.screen} with the code shown: hidden QR code reads as ${reading.hiddenQr.kind}, shown code ${reading.shownCode}")
@@ -265,19 +300,35 @@ class KeyTeleportRevealCaptureTest {
 
     private fun Bitmap.matchCode(text: ShownText) = matchTextReference(text.layout, text.topLeft, compose.density, "code")
 
-    private fun Bitmap.readQr(): QrReading {
-        val pixels = IntArray(width * height)
-        getPixels(pixels, 0, width, 0, 0, width, height)
-        val source = RGBLuminanceSource(width, height, pixels)
+    /**
+     * Read the QR code in [region] of this capture as a camera app might, trying the region alone
+     * and the whole capture with both of zxing's binarizers
+     *
+     * The same reading serves both checks: a shown code must decode in some attempt and a hidden
+     * one in none, so the hidden check gets every chance a scanner would have
+     */
+    private fun Bitmap.readQr(region: IntRect): QrReading {
+        val crop = Bitmap.createBitmap(this, region.left, region.top, region.width, region.height)
+        var closest = QrReading(null, "no QR code")
 
-        return try {
-            val text = QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source)), mapOf(DecodeHintType.TRY_HARDER to true)).text
-            QrReading(text, "a decoded QR code")
-        } catch (_: NotFoundException) {
-            QrReading(null, "no QR code")
-        } catch (error: ReaderException) {
-            QrReading(null, "a QR code zxing found but could not read (${error.javaClass.simpleName})")
+        for (image in listOf(crop, this)) {
+            val pixels = IntArray(image.width * image.height)
+            image.getPixels(pixels, 0, image.width, 0, 0, image.width, image.height)
+            val source = RGBLuminanceSource(image.width, image.height, pixels)
+
+            for (binarizer in listOf(HybridBinarizer(source), GlobalHistogramBinarizer(source))) {
+                try {
+                    val text = QRCodeReader().decode(BinaryBitmap(binarizer), mapOf(DecodeHintType.TRY_HARDER to true)).text
+                    return QrReading(text, "a decoded QR code")
+                } catch (_: NotFoundException) {
+                    // nothing found here, try the next attempt
+                } catch (error: ReaderException) {
+                    closest = QrReading(null, "a QR code zxing found but could not read (${error.javaClass.simpleName})")
+                }
+            }
         }
+
+        return closest
     }
 
     /** What zxing read from a capture, with [kind] safe for messages since it never holds the text */
@@ -418,8 +469,10 @@ class KeyTeleportRevealCaptureTest {
         const val SENDER_PASSWORD_HINT = "Tap to show password"
 
         // TODO measured
-        const val MIN_SHOWN_DETAIL = 1.0
-        const val MAX_HIDDEN_DETAIL_SHARE = 0.2
+        const val MAX_HIDDEN_CHARACTER_SHARE = 0.3
+
+        // random digits differ in nine places in ten, so even two short codes differ in several
+        const val MIN_DIFFERING_CHARACTERS = 4
 
         // about a glyph stroke at the code's size, so the neighbourhood mean keeps a blur's smooth shading
         const val DETAIL_RADIUS_PX = 4
