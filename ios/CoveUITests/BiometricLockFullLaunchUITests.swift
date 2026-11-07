@@ -13,6 +13,9 @@ final class BiometricLockFullLaunchUITests: XCTestCase {
     /// isn't documented and has moved between iOS versions
     private static let systemUiBundles = ["com.apple.springboard", "com.apple.CoreAuthUI"]
 
+    /// The Cancel of the Face Not Recognized alert, which springboard draws on iOS 27
+    private static let faceIdCancel = "com.apple.localauthentication.ax.authentication.button.cancel"
+
     private var app: XCUIApplication!
     private var biometrics: SimulatorBiometrics!
     private var layout: ScreenReachability!
@@ -104,7 +107,7 @@ final class BiometricLockFullLaunchUITests: XCTestCase {
         while Date() < deadline {
             try biometrics.nomatch()
 
-            if let cancel = systemButton("Cancel", timeout: 3) { return cancel }
+            if let cancel = systemButton(Self.faceIdCancel, timeout: 3) { return cancel }
         }
 
         attachSystemUi("face id prompt after nomatch")
@@ -136,9 +139,10 @@ final class BiometricLockFullLaunchUITests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// A button of the system UI drawn over the app, wherever iOS draws it
-    private func systemButton(_ label: String, timeout: TimeInterval) -> XCUIElement? {
-        let candidates = Self.systemUiBundles.map { XCUIApplication(bundleIdentifier: $0).buttons[label] }
+    /// A button of the system UI drawn over the app, wherever iOS draws it, by label or identifier
+    private func systemButton(_ name: String, timeout: TimeInterval) -> XCUIElement? {
+        // the Face ID alert's buttons each nest a copy of themselves, so take the outer one
+        let candidates = Self.systemUiBundles.map { XCUIApplication(bundleIdentifier: $0).buttons[name].firstMatch }
         let deadline = Date().addingTimeInterval(timeout)
 
         repeat {
