@@ -177,6 +177,10 @@ class TapSignerLayoutFullLaunchTest {
         setLargestFontScaleAndWaitForRecreation()
         wallet.waitForBalance(FUNDED_SATS)
 
+        // onboarding is done, so the soft keyboard can show beside the emulator's hardware one,
+        // as it does on a phone, which is the keyboard the address field must stay above
+        device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 1")
+
         // the send screen opens with the amount focused and the keyboard up, and at this scale
         // the address field below it must still scroll into reach above the keyboard
         device.waitFor(By.text("Send")).click()
@@ -607,6 +611,7 @@ class TapSignerLayoutFullLaunchTest {
                     .firstOrNull()
                     ?.window
                     ?.decorView
+
             val insets = decor?.rootWindowInsets?.takeIf { it.isVisible(WindowInsets.Type.ime()) } ?: return@runOnMainSync
             val location = IntArray(2).also(decor::getLocationOnScreen)
             top = location[1] + decor.height - insets.getInsets(WindowInsets.Type.ime()).bottom
