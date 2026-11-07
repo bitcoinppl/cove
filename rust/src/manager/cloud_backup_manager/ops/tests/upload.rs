@@ -440,6 +440,14 @@ async fn deferred_live_wallet_upload_retries_without_restart() {
         },
     )
     .await;
+
+    // the wait above is long enough for a failed first retry to upload on the next backoff, so
+    // the attempt count is what proves the first retry itself uploaded
+    assert_eq!(
+        globals.cloud.wallet_backup_upload_attempt_count(),
+        2,
+        "the first automatic retry should upload the deferred wallet"
+    );
     assert!(globals.cloud.uploaded_wallet_backup_count() >= 1);
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;

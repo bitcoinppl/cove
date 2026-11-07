@@ -16,7 +16,7 @@ use cove_device::cloud_storage::{
 use cove_device::keychain::Keychain;
 use cove_tokio::FutureTimeoutExt as _;
 
-use crate::test_support::MockKeychain;
+use crate::test_support::{MockKeychain, loaded_host_wait};
 use cove_device::passkey::{
     DiscoveredPasskeyResult, PasskeyAccess, PasskeyCredentialPresence, PasskeyError,
     PasskeyFailureReason, PasskeyOperation, PasskeyProvider, PasskeyRegistrationPlatform,
@@ -1379,7 +1379,7 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
 }
 
 fn wait_for_cleanup_idle_for_test(manager: &RustCloudBackupManager) {
-    let deadline = std::time::Instant::now() + Duration::from_secs(1);
+    let deadline = std::time::Instant::now() + loaded_host_wait(Duration::from_secs(1));
     while std::time::Instant::now() < deadline {
         let supervisor = manager.supervisor.clone();
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
@@ -1453,6 +1453,11 @@ pub(crate) fn assert_labels_restored(
     }
 }
 
+/// Polls until `condition` holds, failing with `message` if it never does
+///
+/// `timeout` is how long the wait may take on an idle machine; the deadline is never shorter than
+/// [`crate::test_support::LOADED_HOST_WAIT_FLOOR`]. A test whose deadline is itself the assertion
+/// must check that bound some other way
 pub(crate) async fn wait_for_test_condition(
     timeout: Duration,
     message: &str,
@@ -1467,7 +1472,7 @@ pub(crate) async fn wait_for_test_condition(
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
-    .with_timeout(timeout)
+    .with_timeout(loaded_host_wait(timeout))
     .await
     .expect(message);
 }

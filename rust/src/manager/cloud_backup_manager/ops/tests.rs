@@ -279,15 +279,10 @@ fn platform_authorization_failed() -> PasskeyError {
 }
 
 async fn wait_for_discover_count(globals: &TestGlobals, expected_count: usize) {
-    for _ in 0..20 {
-        if globals.passkey.discover_count() == expected_count {
-            return;
-        }
-
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-
-    assert_eq!(globals.passkey.discover_count(), expected_count);
+    wait_for_test_condition(Duration::from_millis(200), "expected passkey discovery count", || {
+        globals.passkey.discover_count() == expected_count
+    })
+    .await;
 }
 
 async fn run_disable_cloud_backup(manager: &Arc<RustCloudBackupManager>) {
