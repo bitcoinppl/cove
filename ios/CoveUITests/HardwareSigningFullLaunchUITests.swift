@@ -141,6 +141,54 @@ final class HardwareSigningFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Import Signature"].exists, "the draft stays open after each rejection")
     }
 
+    // MARK: - Large text
+
+    /// Side by side at the largest text size, each sign action had room for only part of a word,
+    /// which iOS split with an added hyphen
+    func testSignActionsDrawWholeAtLargestTextSize() throws {
+        _ = try fundTestWallet()
+        importWatchOnlyWallet()
+        app.assertBalance(sats: Self.fundedSats.reduce(0, +), timeout: 120)
+
+        // at the largest size the keyboard covers the send screen's fields, so the draft is made
+        // at the default size and reopened from the wallet's transactions after the relaunch
+        app.startSend(to: XCUIApplication.externalAddress)
+        app.tapMax()
+        app.tapNext()
+        XCTAssertTrue(app.buttons["Import Signature"].waitForExistence(timeout: 30))
+        app.terminate()
+
+        let (probeKey, probeValue) = ScreenReachability.truncationProbeEnvironment
+        app.launchEnvironment[probeKey] = probeValue
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch(expecting: app.element("selectedWallet.balance"))
+
+        // beside its icon and amount, the draft's row split "Pending Signature" with a hyphen; the
+        // row takes taps through a gesture rather than a button, and XCUITest reports its texts
+        // unhittable even on screen, so the tap goes to the text's center
+        let screen = ScreenReachability(app: app)
+        let draft = screen.assertReachable(
+            app.staticTexts.matching(NSPredicate(format: "label == %@", "Pending Signature")),
+            "wallet: the draft",
+            needsHit: false
+        )
+
+        screen.assertDrawsWhole(draft, "wallet: the draft's Pending Signature")
+        draft.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        XCTAssertTrue(app.buttons["Import Signature"].waitForExistence(timeout: 30))
+
+        screen.assertScreenFits(
+            "hardware sign",
+            texts: ["Sign Transaction"],
+            buttons: [signAction("Export Transaction"), signAction("Import Signature")]
+        )
+    }
+
+    /// Buttons whose label starts with the title, since a label can also hold its icon's name
+    private func signAction(_ title: String) -> XCUIElementQuery {
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title))
+    }
+
     // MARK: - TAPSIGNER
 
     func testTapSignerImportRetriesAfterWrongPinAndDroppedSession() throws {

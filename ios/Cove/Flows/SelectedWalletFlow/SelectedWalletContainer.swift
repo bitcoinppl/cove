@@ -259,12 +259,10 @@ private struct WalletBalanceLoadingHeaderView: View {
                 }
             }
 
-            HStack(spacing: 16) {
-                LoadingHeaderButton(title: String(localized: "Send"), systemImage: "arrow.up.right")
-                LoadingHeaderButton(
-                    title: String(localized: "Receive"),
-                    systemImage: "arrow.down.left"
-                )
+            // stacks like the loaded Send and Receive buttons, so the header keeps its shape
+            SideBySideOrStacked(spacing: 16) {
+                LoadingHeaderButton(title: "Send", systemImage: "arrow.up.right")
+                LoadingHeaderButton(title: "Receive", systemImage: "arrow.down.left")
             }
         }
         .padding()
@@ -283,20 +281,16 @@ private struct WalletBalanceLoadingHeaderView: View {
 }
 
 private struct LoadingHeaderButton: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: systemImage)
-            Text(title)
-        }
-        .foregroundColor(Color.midnightBtn.opacity(0.6))
-        .frame(maxWidth: .infinity)
-        .padding()
-        .padding(.vertical, 4)
-        .background(Color.gray)
-        .cornerRadius(10)
+        WalletBalanceActionLabel(
+            title,
+            systemImage: systemImage,
+            foreground: .midnightBtn.opacity(0.6),
+            background: .gray
+        )
     }
 }
 

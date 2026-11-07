@@ -47,6 +47,7 @@ struct QrExportView: View {
 
             Text(subtitle)
                 .font(.callout)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(nil)
@@ -117,31 +118,42 @@ private struct QrExportHeader: View {
     let canCopy: Bool
     let copy: () async -> Void
 
+    // the copy button sits beside the title, with a hidden copy on the other side to keep the
+    // title centered, so at accessibility sizes the title wraps short of the button instead of
+    // running under it; the title keeps the height of its wrapped lines, since the QR code
+    // below takes every point the sheet offers
     var body: some View {
         HStack {
-            Spacer()
+            if canCopy {
+                copyButton.hidden().accessibilityHidden(true)
+            }
 
             Text(title)
                 .font(.title3)
                 .fontWeight(.semibold)
+                .uiTestTruncationProbe()
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
 
-            Spacer()
-        }
-        .overlay(alignment: .trailing) {
             if canCopy {
-                Button {
-                    Task { await copy() }
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Copy")
-                .padding(.trailing, 4)
+                copyButton
             }
         }
         .padding(.top, 12)
+    }
+
+    private var copyButton: some View {
+        Button {
+            Task { await copy() }
+        } label: {
+            Image(systemName: "doc.on.doc")
+                .font(.body)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Copy")
+        .padding(.horizontal, 4)
     }
 }
 

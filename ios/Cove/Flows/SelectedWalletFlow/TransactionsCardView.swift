@@ -469,9 +469,9 @@ struct ConfirmedTransactionView: View {
         let direction = txn.sentAndReceived().direction()
         let showsLockedTreatment = showsLockedTransactionTreatment(lockState)
 
-        HStack {
+        TransactionRowLayout {
             TxnIcon(direction: direction, locked: showsLockedTreatment)
-
+        } details: {
             VStack(alignment: .leading, spacing: 5) {
                 Text(label)
                     .font(.subheadline)
@@ -484,13 +484,13 @@ struct ConfirmedTransactionView: View {
 
                 Text(privateShow(txn.confirmedAtFmt()))
                     .font(.caption)
+                    .uiTestTruncationProbe()
                     .foregroundColor(showsLockedTreatment ? .secondary.opacity(0.68) : .secondary)
             }
-
-            Spacer()
-
-            VStack(alignment: .trailing) {
+        } amounts: { alignment in
+            VStack(alignment: alignment) {
                 Text(amount)
+                    .uiTestTruncationProbe()
                     .foregroundStyle(amountColor(direction, locked: showsLockedTreatment))
                     .contentTransition(.numericText())
 
@@ -589,23 +589,25 @@ struct UnconfirmedTransactionView: View {
         let direction = txn.sentAndReceived().direction()
         let showsLockedTreatment = showsLockedTransactionTreatment(lockState)
 
-        HStack {
+        TransactionRowLayout {
             TxnIcon(
                 direction: direction,
                 confirmed: false,
                 locked: showsLockedTreatment
             )
             .opacity(showsLockedTreatment ? 1 : 0.6)
-
+        } details: {
             VStack(alignment: .leading, spacing: 5) {
                 Text(txn.label())
                     .font(.subheadline)
                     .fontWeight(.medium)
+                    .uiTestTruncationProbe()
                     .foregroundColor(showsLockedTreatment ? .secondary.opacity(0.72) : .primary.opacity(0.4))
             }
-            Spacer()
-            VStack(alignment: .trailing) {
+        } amounts: { alignment in
+            VStack(alignment: alignment) {
                 Text(amount)
+                    .uiTestTruncationProbe()
                     .foregroundStyle(
                         amountColor(direction, locked: showsLockedTreatment)
                             .opacity(showsLockedTreatment && direction == .incoming ? 1 : 0.65)
@@ -678,7 +680,7 @@ struct UnsignedTransactionView: View {
     }
 
     var body: some View {
-        HStack {
+        TransactionRowLayout {
             Image(systemName: "lock.open.trianglebadge.exclamationmark")
                 .symbolRenderingMode(.multicolor)
                 .foregroundColor(.white)
@@ -688,24 +690,25 @@ struct UnsignedTransactionView: View {
                 .cornerRadius(6)
                 .padding(.trailing, 5)
                 .opacity(0.6)
-
+        } details: {
             VStack(alignment: .leading, spacing: 5) {
                 Text(txn.label())
                     .font(.subheadline)
                     .fontWeight(.medium)
+                    .uiTestTruncationProbe()
                     .foregroundColor(.primary.opacity(0.4))
 
                 Text("Pending Signature")
                     .font(.caption)
                     .fontWeight(.regular)
+                    .uiTestTruncationProbe()
                     .foregroundStyle(.orange)
                     .opacity(0.8)
             }
-
-            Spacer()
-
-            VStack(alignment: .trailing) {
+        } amounts: { alignment in
+            VStack(alignment: alignment) {
                 Text(amount)
+                    .uiTestTruncationProbe()
 
                 Text(secondaryAmount)
                     .font(.caption)
@@ -726,6 +729,48 @@ struct UnsignedTransactionView: View {
                 )
 
             navigate(hardwareExportRoute)
+        }
+    }
+}
+
+/// A transaction's icon, its label and status, and its amounts, in one row
+///
+/// At accessibility sizes the icon and the amounts beside the label left it a few letters of
+/// width, so iOS split "Sending" and "Pending Signature" with hyphens and broke the amount across
+/// lines; there the row drops the icon and puts the amounts under the label
+private struct TransactionRowLayout<Icon: View, Details: View, Amounts: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    let icon: Icon
+    let details: Details
+    let amounts: (HorizontalAlignment) -> Amounts
+
+    init(
+        @ViewBuilder icon: () -> Icon,
+        @ViewBuilder details: () -> Details,
+        @ViewBuilder amounts: @escaping (HorizontalAlignment) -> Amounts
+    ) {
+        self.icon = icon()
+        self.details = details()
+        self.amounts = amounts
+    }
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 5) {
+                details
+                amounts(.leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack {
+                icon
+                details
+
+                Spacer()
+
+                amounts(.trailing)
+            }
         }
     }
 }

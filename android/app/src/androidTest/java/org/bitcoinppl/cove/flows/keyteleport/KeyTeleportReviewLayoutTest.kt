@@ -39,8 +39,9 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * The received recovery words, private key and message reviews keep every text whole and every
- * action reachable at the largest system font scale in the dark theme, before and after a reveal
+ * The receive screen and the received recovery words, private key and message reviews keep every
+ * text whole and every action reachable at the largest system font scale in the dark theme,
+ * before and after a reveal
  *
  * Hosts the real KeyTeleport receive screen. The UI test host plays the sending phone
  * ([KeyTeleportHostSender]) in place of the camera between two devices, since the app itself
@@ -86,6 +87,18 @@ class KeyTeleportReviewLayoutTest {
         } finally {
             InstrumentationRegistry.getInstrumentation().runOnMainSync { app.clearKeyTeleportManager() }
         }
+    }
+
+    @Test
+    fun receiveReadyFitsAtTheLargestFontScale() {
+        awaitRequest(receiver())
+        compose.waitUntil(STATE_TIMEOUT_MILLIS) { compose.onAllNodes(hasText(SCAN_RESPONSE) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+
+        val scan = assertActionsFit("receive ready", SCAN_RESPONSE)
+        // the QR code shows first, so the receiver code is the one behind a reveal control
+        val reveal = assertControlFits("receive ready: reveal code", hasContentDescription(RECEIVER_CODE_HINT) and hasClickAction())
+        assertNoOverlap("receive ready", scan + reveal)
+        assertEveryTextDrawsWhole("receive ready")
     }
 
     @Test
@@ -362,6 +375,8 @@ class KeyTeleportReviewLayoutTest {
     private companion object {
         const val STATE_TIMEOUT_MILLIS = 15_000L
         const val RECOVERY_WORDS_HINT = "Tap to reveal recovery words"
+        const val RECEIVER_CODE_HINT = "Tap to show receiver code"
+        const val SCAN_RESPONSE = "Scan Sender Response"
 
         // positions in Compose are floats, and a box rounds its edges to whole pixels
         const val CLIP_TOLERANCE_PX = 1f

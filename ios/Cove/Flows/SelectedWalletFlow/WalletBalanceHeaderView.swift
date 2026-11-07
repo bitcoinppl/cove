@@ -226,33 +226,53 @@ private struct WalletBalanceActions: View {
     let receive: () -> Void
 
     var body: some View {
-        HStack(spacing: 16) {
+        SideBySideOrStacked(spacing: 16) {
             Button(action: send) {
-                HStack(spacing: 10) {
-                    Image(systemName: "arrow.up.right")
-                    Text("Send")
-                }
-                .foregroundColor(sendForegroundColor)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .padding(.vertical, 4)
-                .background(sendBackgroundColor)
-                .cornerRadius(10)
+                WalletBalanceActionLabel(
+                    "Send",
+                    systemImage: "arrow.up.right",
+                    foreground: sendForegroundColor,
+                    background: sendBackgroundColor
+                )
             }
 
             Button(action: receive) {
-                HStack(spacing: 10) {
-                    Image(systemName: "arrow.down.left")
-                    Text("Receive")
-                }
-                .foregroundColor(Color.midnightBtn)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .padding(.vertical, 4)
-                .background(Color.btnPrimary)
-                .cornerRadius(10)
+                WalletBalanceActionLabel(
+                    "Receive",
+                    systemImage: "arrow.down.left",
+                    foreground: .midnightBtn,
+                    background: .btnPrimary
+                )
             }
         }
+    }
+}
+
+/// The Send or Receive button's label, an icon beside its title
+struct WalletBalanceActionLabel: View {
+    let title: LocalizedStringKey
+    let systemImage: String
+    let foreground: Color
+    let background: Color
+
+    init(_ title: LocalizedStringKey, systemImage: String, foreground: Color, background: Color) {
+        self.title = title
+        self.systemImage = systemImage
+        self.foreground = foreground
+        self.background = background
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+            Text(title).uiTestTruncationProbe()
+        }
+        .foregroundColor(foreground)
+        .frame(maxWidth: .infinity)
+        .padding()
+        .padding(.vertical, 4)
+        .background(background)
+        .cornerRadius(10)
     }
 }
 

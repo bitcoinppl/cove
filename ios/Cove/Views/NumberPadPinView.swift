@@ -68,6 +68,9 @@ struct NumberPadPinView: View {
             Spacer()
             Spacer()
 
+            // at the largest sizes a key's third of the width left Cancel room for a few letters, so
+            // iOS split it with a hyphen, and the keys took the height the title needed; the keys
+            // stop growing past the first accessibility size, as the system passcode keys never grow
             PinNumberPad(
                 pin: $pin,
                 animateField: $animateField,
@@ -78,6 +81,7 @@ struct NumberPadPinView: View {
                 isPinCorrect: isPinCorrect,
                 onUnlock: onUnlock
             )
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         }
         .padding()
         .background(.midnightBlue)
@@ -90,6 +94,9 @@ private struct NumberPadPinTitle: View {
     var body: some View {
         Text(title)
             .font(.title.bold())
+            .uiTestTruncationProbe()
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity)
             .foregroundStyle(.white)
             .padding(.vertical)
@@ -241,8 +248,10 @@ private struct PinCancelButton: View {
 
     var body: some View {
         if isEnabled {
-            Button("Cancel", action: action)
-                .foregroundStyle(.white)
+            Button(action: action) {
+                Text("Cancel").uiTestTruncationProbe()
+            }
+            .foregroundStyle(.white)
         } else {
             Button(action: {}) {}
         }

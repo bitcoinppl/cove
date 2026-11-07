@@ -270,7 +270,8 @@ private struct LargeTextLayout {
 
     /// The value a probed text or a truncation report has when everything in it draws whole
     private static let fitsValue = "fits"
-    private static let truncatedValue = "truncated"
+    /// The values a probed text or a truncation report has when part of it doesn't draw whole
+    private static let notWholeValues: Set<String> = ["truncated", "hyphenated", "offscreen"]
 
     /// An action's height at the default text size is at most 44 points, and a one-line label at
     /// the largest size is about 53 points tall before its padding
@@ -349,14 +350,14 @@ private struct LargeTextLayout {
     ///
     /// A button joins the values of everything in its label, so one that shows a spinner beside
     /// its probed text reads as `1, fits`; it fits when the probe's part says so and no part says
-    /// truncated
+    /// it doesn't draw whole
     private func assertProbeFits(_ element: XCUIElement, _ name: String) {
         XCTAssertTrue(element.waitForExistence(timeout: 5), "\(name) has no truncation probe")
 
         let value = { element.value as? String ?? "" }
         let fits = {
             let parts = value().components(separatedBy: ", ")
-            return parts.contains(Self.fitsValue) && !parts.contains(Self.truncatedValue)
+            return parts.contains(Self.fitsValue) && Self.notWholeValues.isDisjoint(with: parts)
         }
 
         let settled = Date().addingTimeInterval(3)

@@ -20,21 +20,17 @@ struct SettingsRow: View {
 
     var onTapGesture: (() -> Void)? = nil
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         HStack {
-            icon ?? SettingsIcon(symbol: symbol ?? "")
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline)
-
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+            // at accessibility sizes the icon left too little room for a title such as
+            // "Appearance", which iOS split with a hyphen, so the title takes the icon's room
+            if !dynamicTypeSize.isAccessibilitySize {
+                icon ?? SettingsIcon(symbol: symbol ?? "")
             }
-            .padding(8)
+
+            SettingsRowTitle(title: title, subtitle: subtitle)
 
             Spacer()
 
@@ -51,6 +47,27 @@ struct SettingsRow: View {
             if let onTapGesture { return onTapGesture() }
             if let route { return app.pushRoute(Route.settings(route)) }
         }
+    }
+}
+
+private struct SettingsRowTitle: View {
+    let title: String
+    let subtitle: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.subheadline)
+                .uiTestTruncationProbe()
+
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.caption2)
+                    .uiTestTruncationProbe()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(8)
     }
 }
 

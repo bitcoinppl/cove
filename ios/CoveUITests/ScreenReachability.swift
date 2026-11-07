@@ -11,8 +11,9 @@ struct ScreenReachability {
     static let truncationProbeEnvironment = ("COVE_UI_TEST_TRUNCATION_PROBE", "1")
 
     private static let fitsValue = "fits"
-    /// What a probe reports for a text that doesn't draw whole: cut short, or past a side of the window
-    private static let notWholeValues: Set<String> = ["truncated", "offscreen"]
+    /// What a probe reports for a text that doesn't draw whole: cut short, split by an added
+    /// hyphen, or past a side of the window
+    private static let notWholeValues: Set<String> = ["truncated", "hyphenated", "offscreen"]
 
     /// Inside the screens' 16 to 20 point side padding, so a drag there lands on no field
     private static let dragMargin: CGFloat = 8
