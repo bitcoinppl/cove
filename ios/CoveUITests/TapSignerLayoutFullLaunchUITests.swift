@@ -261,6 +261,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private func assertCvcScreenFits(on screen: String, title: String, description: String, cancel: String) {
         let submit = button("Continue")
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 15), "the \(screen) screen never showed")
+        waitForSettledKeyboard(on: screen)
         assertScreenFits(
             screen,
             texts: [title],
@@ -268,6 +269,28 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             buttons: [button(cancel), app.secureTextFields.matching(identifier: "Enter CVC"), submit],
             awaitingInput: [submit]
         )
+    }
+
+    /// Waits for the number pad a CVC screen opens with to come to rest on screen, so its texts are
+    /// checked against the space a user reads them in rather than the larger one before it opens
+    private func waitForSettledKeyboard(on screen: String) {
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 15), "the \(screen) screen opened without its number pad")
+
+        // the number pad slides in from below the window, so it has settled once it is inside the
+        // window and stops moving
+        let window = app.windows.firstMatch.frame
+        var last = keyboard.frame
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+            let frame = keyboard.frame
+            if isSameFrame(frame, last), !frame.isEmpty, frame.minY < window.maxY { return }
+
+            last = frame
+        }
+
+        XCTFail("the \(screen) screen's number pad never came to rest: it was last at \(last) in window \(window)")
     }
 
     // MARK: - Layout checks
@@ -407,18 +430,26 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
     /// Scrolls until the first or last line of a description taller than its readable area lies
     /// inside that area, and fails if it never does
+    ///
+    /// A scroll moves the line only up or down, so it must also lie across the area from side to
+    /// side, as one moved off the window sideways doesn't
     private func assertLineReachable(_ element: XCUIElement, _ name: String, first: Bool) {
         let line = first ? "first" : "last"
-        let shows = { () -> Bool in
+        let showsVertically = { () -> Bool in
             let frame = element.frame
             let area = self.readableArea(of: element)
             let edge = first ? frame.minY : frame.maxY
             let lineEnd = first ? edge + Self.lineHeight : edge - Self.lineHeight
             return min(edge, lineEnd) >= area.minY - 0.5 && max(edge, lineEnd) <= area.maxY + 0.5
         }
+        let showsAcross = { () -> Bool in
+            let frame = element.frame
+            let area = self.readableArea(of: element)
+            return !frame.isEmpty && frame.minX >= area.minX - 0.5 && frame.maxX <= area.maxX + 0.5
+        }
 
         // each drag moves the content less than the area less a line, so it can't skip past the line
-        for _ in 0 ..< 12 where !shows() {
+        for _ in 0 ..< 12 where !showsVertically() {
             let frame = element.frame
             let area = readableArea(of: element)
             let target = scrollContainers(holding: element).last ?? visibleScrollView() ?? app.windows.firstMatch
@@ -426,7 +457,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         }
 
         XCTAssertTrue(
-            shows(),
+            showsVertically() && showsAcross(),
             "\(name)'s \(line) line never showed: it spans \(element.frame) but can show only in \(readableArea(of: element))"
         )
     }
