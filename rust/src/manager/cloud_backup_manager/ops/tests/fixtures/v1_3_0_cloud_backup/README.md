@@ -21,4 +21,4 @@ mkdir -p ../golden-out
 COVE_GOLDEN_OUT="$PWD/../golden-out" cargo test --locked -p cove --lib golden_v1_3_0 -- --ignored
 ```
 
-Then replace `cloud/` and `manifest.json` here with the ones in `golden-out`, keep `generator.patch` in step with the generator, and remove the worktree. The generator writes label databases for its fixed wallet ids into the test data directory, which the restore test deletes before and after it runs.
+Then replace `cloud/` and `manifest.json` here with the ones in `golden-out`, keep `generator.patch` in step with the generator, and remove the worktree. The generator points the data directory at a temporary one before anything opens it, so the wallet and label databases it writes for its fixed wallet ids go away with it and never reach the real data directory.

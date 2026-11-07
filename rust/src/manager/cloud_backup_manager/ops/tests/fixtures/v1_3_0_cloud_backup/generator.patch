@@ -150,10 +150,10 @@ index 005e94ad3f..32531da051 100644
 +mod golden_v1_3_0;
 diff --git a/rust/src/manager/cloud_backup_manager/ops/tests/golden_v1_3_0.rs b/rust/src/manager/cloud_backup_manager/ops/tests/golden_v1_3_0.rs
 new file mode 100644
-index 0000000000..32e73bd71d
+index 0000000000..c4313f25fd
 --- /dev/null
 +++ b/rust/src/manager/cloud_backup_manager/ops/tests/golden_v1_3_0.rs
-@@ -0,0 +1,327 @@
+@@ -0,0 +1,337 @@
 +//! Generates the v1.3.0 Cloud Backup golden fixture
 +//!
 +//! Runs a real fresh enable through the v1.3.0 manager against the mock cloud and passkey, then
@@ -368,6 +368,16 @@ index 0000000000..32e73bd71d
 +#[ignore = "writes the v1.3.0 golden fixture; run by hand with COVE_GOLDEN_OUT"]
 +async fn generate_v1_3_0_golden_cloud_backup() {
 +    let out = PathBuf::from(std::env::var("COVE_GOLDEN_OUT").expect("COVE_GOLDEN_OUT"));
++
++    // v1.3.0's test setup moves only the main database, so without this the label databases of
++    // the fixed wallet ids would land in the real data directory and outlive the run
++    let data_root = tempfile::tempdir().unwrap();
++    cove_common::consts::set_root_data_dir(data_root.path().to_path_buf()).unwrap();
++    assert_eq!(
++        cove_common::consts::ROOT_DATA_DIR.as_path(),
++        data_root.path(),
++        "nothing opened the data directory before the generator moved it"
++    );
 +
 +    let _guard = async_test_lock().lock().await;
 +    cove_tokio::init();
