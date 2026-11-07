@@ -29,6 +29,7 @@ import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.KeyTeleportRoute
 import org.bitcoinppl.cove_core.MultiFormatException
 import org.bitcoinppl.cove_core.StringOrData
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -116,7 +117,7 @@ class KeyTeleportPasteRejectionTest {
     // the release checklist asked for a screenshot of the screen after OK, to see that the sender
     // is still usable and not stuck behind the error
     private fun assertOkLeavesTheSenderReadyForAnotherPaste(rejected: String) {
-        compose.onNode(hasAnyAncestor(isDialog()) and hasText("OK")).performClick()
+        compose.onNode(hasAnyAncestor(isDialog()) and hasText(DIALOG_OK)).performClick()
         compose.waitForIdle()
 
         val dialogs = compose.onAllNodes(isDialog()).fetchSemanticsNodes()
@@ -136,12 +137,16 @@ class KeyTeleportPasteRejectionTest {
      * Clipped, truncated, covered, overlapping, undrawn or faint text is what a screenshot of the
      * error would have shown, so each text node must draw in the dialog's [capture] as a reference
      * rendering of its own layout does, keep its full laid-out size, and stay inside the dialog
+     *
+     * The title, the whole message and OK are looked up by name first, since a missing text, or one
+     * that lays out nothing, would otherwise leave nothing to compare
      */
     private fun assertDialogTextFitsInsideTheDialog(capture: Bitmap) {
         val dialog = compose.onNode(isDialog()).fetchSemanticsNode().boundsInWindow
-        val texts = drawnTexts(hasAnyAncestor(isDialog()))
+        val inDialog = hasAnyAncestor(isDialog())
+        val required = listOf(DIALOG_TITLE, KeyTeleportFlowDirection.SEND.rejectedInputMessage, DIALOG_OK).map { requiredText(inDialog, it) }
+        val texts = (required + drawnTexts(inDialog)).distinctBy { it.id }
 
-        assertTrue("the rejection dialog shows no text", texts.isNotEmpty())
         assertTextsMatchTheirReferences(
             "the rejection dialog",
             texts.map { capture.matchTextReference(it, dialog.topLeft, compose.density) },
@@ -177,6 +182,19 @@ class KeyTeleportPasteRejectionTest {
             "the sender after OK",
             texts.map { capture.matchTextReference(it, root.topLeft, compose.density) },
         )
+    }
+
+    // the one node in [matcher] showing exactly [label], which must lay out that text
+    private fun requiredText(
+        matcher: SemanticsMatcher,
+        label: String,
+    ): SemanticsNode {
+        val nodes = compose.onAllNodes(matcher and hasText(label), useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals("the rejection dialog shows \"$label\" the wrong number of times", 1, nodes.size)
+
+        val node = nodes.single()
+        assertEquals("\"$label\" lays out other text than it shows", label, node.textLayouts().singleOrNull()?.layoutInput?.text?.text)
+        return node
     }
 
     // text nodes that lay out visible characters, leaving out an empty field
@@ -231,6 +249,10 @@ class KeyTeleportPasteRejectionTest {
     private companion object {
         // every fourth pixel is enough to tell a drawn screen from a blank one
         const val CAPTURE_SAMPLE_STEP = 4
+
+        // the title and button KeyTeleportMessageDialog shows over every message
+        const val DIALOG_TITLE = "KeyTeleport"
+        const val DIALOG_OK = "OK"
 
         // bounds are floats from the same layout, so allow rounding but not a clipped line of text
         const val CLIP_TOLERANCE_PX = 1f
