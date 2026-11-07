@@ -94,6 +94,41 @@ final class ScenePhasePrivacyTests: XCTestCase {
         XCTAssertFalse(app.isNfcOperationActive, "a released reader still counted as scanning")
     }
 
+    /// A TAPSIGNER operation counts as an active operation from when it starts until it's
+    /// cancelled
+    ///
+    /// The debug TAPSIGNER bridge points at a listener that never answers, so the operation stays
+    /// open on its own until the test cancels it, with no NFC session for the simulator to end
+    func testOpenTapSignerOperationCountsUntilCancelled() async throws {
+        try await bootstrapIfNeeded()
+        let app = AppManager.shared
+        XCTAssertFalse(app.isNfcOperationActive, "the test host should hold no NFC scan")
+
+        let listener = try SilentListener()
+        defer { listener.close() }
+
+        setenv(UITestTapSignerBridge.environmentKey, "127.0.0.1:\(listener.port)", 1)
+        defer { unsetenv(UITestTapSignerBridge.environmentKey) }
+
+        let tapSigner = TapSignerNFC(tapSignerPreviewNew(preview: true))
+        let derive = Task { await tapSigner.derive(pin: "123456") }
+
+        let deadline = Date().addingTimeInterval(10)
+        while !app.isNfcOperationActive, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertTrue(app.isNfcOperationActive, "a started TAPSIGNER operation is an NFC operation")
+
+        // the bridge never answers, so the operation is still open a second later
+        try await Task.sleep(for: .seconds(1))
+        XCTAssertTrue(app.isNfcOperationActive, "an open TAPSIGNER operation stopped counting")
+
+        tapSigner.cancel()
+        _ = await derive.value
+        XCTAssertFalse(app.isNfcOperationActive, "a cancelled TAPSIGNER operation still counted")
+    }
+
     // MARK: - Helpers
 
     /// Every way out of the foreground: straight from active, and on from inactive to background,
@@ -137,5 +172,51 @@ final class ScenePhasePrivacyTests: XCTestCase {
             try XCTUnwrap(Date() < deadline ? true : nil, "bootstrap did not complete")
             try await Task.sleep(for: .milliseconds(50))
         }
+    }
+}
+
+/// A TCP listener on the loopback interface that never accepts, so a client's connect succeeds
+/// and its reads wait until the listener closes
+private final class SilentListener {
+    let port: UInt16
+    private var fd: Int32
+
+    init() throws {
+        let socketFd = socket(AF_INET, SOCK_STREAM, 0)
+        guard socketFd >= 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }
+
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        address.sin_port = 0
+
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bound = withUnsafeMutablePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { pointer in
+                bind(socketFd, pointer, length) == 0
+                    && listen(socketFd, 1) == 0
+                    && getsockname(socketFd, pointer, &length) == 0
+            }
+        }
+
+        guard bound else {
+            let error = errno
+            Darwin.close(socketFd)
+            throw POSIXError(.init(rawValue: error) ?? .EIO)
+        }
+
+        fd = socketFd
+        port = UInt16(bigEndian: address.sin_port)
+    }
+
+    deinit {
+        close()
+    }
+
+    func close() {
+        guard fd >= 0 else { return }
+
+        Darwin.close(fd)
+        fd = -1
     }
 }
