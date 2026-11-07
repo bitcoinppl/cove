@@ -312,8 +312,10 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         switch keyboardState(within: 10) {
         case let .settled(frame):
             return frame
+
         case let .moving(frame):
             XCTFail("the \(screen) screen's number pad never came to rest: it was last at \(frame) in window \(app.windows.firstMatch.frame)")
+
         case .gone:
             XCTFail("the \(screen) screen's number pad closed before it came to rest")
         }
@@ -332,10 +334,13 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         switch keyboardState(within: 3) {
         case let .settled(frame) where isSameFrame(frame, watch.frame):
             return
+
         case let .settled(frame):
             XCTFail("\(action) on the \(watch.screen) screen moved its number pad from \(watch.frame) to \(frame)")
+
         case let .moving(frame):
             XCTFail("\(action) on the \(watch.screen) screen left its number pad moving, last at \(frame)")
+
         case .gone:
             XCTFail("\(action) on the \(watch.screen) screen closed its number pad")
         }
@@ -351,6 +356,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         let window = app.windows.firstMatch.frame
         let deadline = Date().addingTimeInterval(timeout)
         var last = CGRect.null
+
         repeat {
             guard keyboard.exists else { return .gone }
 
@@ -695,15 +701,20 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
     private static let fieldTypes: Set<XCUIElement.ElementType> = [.textField, .secureTextField, .textView, .searchField]
 
-    /// Whether the frame lies inside the area, or for a text field, inside it from top to bottom
-    /// and inside the window across
+    /// How far a text field's frame may reach past the side of the area it shows in: the send
+    /// screen's address editor is drawn `.offset(x: -4)` in `AddressTextEditor`, which moves 4 of
+    /// its 5 points of line padding past its scroll view's side padding, so no text is cut off
+    private static let fieldSideOverhang: CGFloat = 4
+
+    /// Whether the frame lies inside the area, or for a text field, inside it from top to bottom and
+    /// inside it across but for `fieldSideOverhang`
     ///
-    /// A text field's frame takes in its text insets, which can stick out past a scroll view's side
-    /// padding with no text cut off, as the send screen's address editor does by 4 points
+    /// XCUITest reports no bounds for a field's text, only its frame, which takes in its text insets
     private func shows(_ frame: CGRect, ofField isField: Bool, in area: CGRect) -> Bool {
         guard isField else { return area.contains(frame) }
 
-        return frame.minY >= area.minY && frame.maxY <= area.maxY && app.windows.firstMatch.frame.contains(frame)
+        let overhang = Self.fieldSideOverhang + 0.5
+        return area.insetBy(dx: -overhang, dy: 0).contains(frame) && app.windows.firstMatch.frame.contains(frame)
     }
 
     private func isUnderKeyboard(_ frame: CGRect) -> Bool {
