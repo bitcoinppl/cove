@@ -186,12 +186,13 @@ class KeyTeleportAppScannerFullLaunchTest {
     }
 
     /**
-     * Taps the node described as [description] until [done] holds, for up to 20 s
+     * Taps the node described as [description] until [done] holds, and fails once 20 s have passed
      *
      * On a slow emulator a node can go stale on every quick retry while its screen recomposes, and
      * a tap that lands while a screen is still coming in can be dropped. So this taps whichever
      * node is current and checks the app's state instead of trusting one tap, and after a tap that
-     * lands it waits up to 3 s for [done] before tapping again
+     * lands it waits up to 3 s for [done] before tapping again. Every wait stops at the 20 s limit,
+     * though a tap or main-thread read already under way can finish just after it
      */
     private fun tapUntil(
         description: String,
@@ -201,17 +202,23 @@ class KeyTeleportAppScannerFullLaunchTest {
         val deadline = SystemClock.uptimeMillis() + 20_000L
 
         while (!readOnMain(done)) {
-            if (SystemClock.uptimeMillis() > deadline) error("$what\n${device.hierarchy()}")
+            val remaining = deadline - SystemClock.uptimeMillis()
+            if (remaining <= 0) error("$what\n${device.hierarchy()}")
 
-            val node = device.wait(Until.findObject(By.desc(description)), 2_000L) ?: continue
+            val node = device.wait(Until.findObject(By.desc(description)), minOf(2_000L, remaining)) ?: continue
+
+            // the last tap's result can arrive during the lookup, and a second tap would act twice
+            if (readOnMain(done) || SystemClock.uptimeMillis() >= deadline) continue
 
             try {
                 node.click()
             } catch (_: StaleObjectException) {
+                // a stale node sent no input, so pause before looking it up again
+                Thread.sleep(minOf(100L, (deadline - SystemClock.uptimeMillis()).coerceAtLeast(0L)))
                 continue
             }
 
-            val settled = SystemClock.uptimeMillis() + 3_000L
+            val settled = minOf(deadline, SystemClock.uptimeMillis() + 3_000L)
             while (!readOnMain(done) && SystemClock.uptimeMillis() < settled) Thread.sleep(100)
         }
     }
