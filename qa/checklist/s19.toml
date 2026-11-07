@@ -54,6 +54,14 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/QrCodeImportScreen.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/nfc/NfcReader.kt",
+    "ios/Cove/Views/QrExportView.swift",
+    "ios/Cove/Views/QrExportContentViews.swift",
+    "ios/Cove/QrCodeView.swift",
+    "ios/Cove/QrCodeScanView.swift",
+    "ios/CodeScanner/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/QrExportView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/QrCodeGenerator.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/QrCodeScanView.kt",
 ]
 coverage = [
     "human",
