@@ -107,11 +107,25 @@ final class ScenePhasePrivacyTests: XCTestCase {
         let listener = try SilentListener()
         defer { listener.close() }
 
-        setenv(UITestTapSignerBridge.environmentKey, "127.0.0.1:\(listener.port)", 1)
-        defer { unsetenv(UITestTapSignerBridge.environmentKey) }
+        // the test host shares its environment with later tests, so put back whatever was there
+        let key = UITestTapSignerBridge.environmentKey
+        let previousBridge = ProcessInfo.processInfo.environment[key]
+        setenv(key, "127.0.0.1:\(listener.port)", 1)
+        defer {
+            if let previousBridge {
+                setenv(key, previousBridge, 1)
+            } else {
+                unsetenv(key)
+            }
+        }
 
         let tapSigner = TapSignerNFC(tapSignerPreviewNew(preview: true))
-        let derive = Task { await tapSigner.derive(pin: "123456") }
+        let deriveReturned = expectation(description: "the cancelled derive returns")
+        let derive = Task {
+            let result = await tapSigner.derive(pin: "123456")
+            deriveReturned.fulfill()
+            return result
+        }
 
         let deadline = Date().addingTimeInterval(10)
         while !app.isNfcOperationActive, Date() < deadline {
@@ -124,9 +138,20 @@ final class ScenePhasePrivacyTests: XCTestCase {
         try await Task.sleep(for: .seconds(1))
         XCTAssertTrue(app.isNfcOperationActive, "an open TAPSIGNER operation stopped counting")
 
+        // cancel ends the scan before it returns, so a cancel that does nothing can't pass by
+        // waiting out the bridge's receive timeout
         tapSigner.cancel()
-        _ = await derive.value
         XCTAssertFalse(app.isNfcOperationActive, "a cancelled TAPSIGNER operation still counted")
+
+        // well under the bridge's 30 second receive timeout, so only the cancel can end it in time
+        await fulfillment(of: [deriveReturned], timeout: 5)
+        let result = await derive.value
+
+        guard case let .failure(.Unknown(message)) = result else {
+            return XCTFail("the cancelled derive should fail as cancelled, got \(result)")
+        }
+
+        XCTAssertEqual(message, "TapSigner operation cancelled")
     }
 
     // MARK: - Helpers
