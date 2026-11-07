@@ -793,4 +793,74 @@ mod tests {
         );
         assert_eq!(original_bytes, path1_bytes, "Parsed PSBT differs from original bytes");
     }
+
+    /// Reads a tag image 32 blocks at a time as `ios/Cove/NFCReader.swift` does on an ISO 15693
+    /// tag, parsing the first chunk and then each time the bytes read reach the message's length,
+    /// and builds the `NfcMessage` it hands the app. Resuming a lost read is covered in
+    /// `cove-nfc`'s `iso15693_tag_image` tests
+    fn read_iso15693_tag(image: &[u8]) -> NfcMessage {
+        let chunk_bytes = usize::from(cove_nfc::ffi::NfcConst::new().total_bytes_per_chunk());
+        let reader = cove_nfc::ffi::FfiNfcReader::new();
+        let mut read_bytes = Vec::new();
+        let mut full_message_length = None;
+
+        for chunk in image.chunks(chunk_bytes) {
+            read_bytes.extend_from_slice(chunk);
+
+            if full_message_length.is_some_and(|length| read_bytes.len() < length) {
+                continue;
+            }
+
+            match reader.parse(std::mem::take(&mut read_bytes)).unwrap() {
+                cove_nfc::ParseResult::Incomplete(parsing) => {
+                    full_message_length =
+                        Some(usize::from(parsing.message_info.full_message_length));
+                    read_bytes = parsing.left_over_bytes;
+                }
+
+                // a single record whose payload reads as text, as the export's json record does
+                cove_nfc::ParseResult::Complete(_, records) => {
+                    assert_eq!(records.len(), 1);
+                    let string = reader.string_from_record(records[0].clone());
+                    return NfcMessage::try_new(string, None).unwrap();
+                }
+            }
+        }
+
+        panic!("tag ended before the message was complete");
+    }
+
+    #[test]
+    fn iso15693_tag_with_coldcard_json_export_imports_its_wallet() {
+        let fixture = include_str!("../crates/cove-nfc/test/data/export_bytes.txt");
+        let mut image: Vec<u8> =
+            fixture.split(',').map(|byte| byte.trim().parse().unwrap()).collect();
+
+        // the tag's memory runs on past the message
+        image.resize(8 * 1024, 0);
+
+        let message = read_iso15693_tag(&image);
+        let multi_format = MultiFormat::try_from_nfc_message(message).unwrap();
+
+        let MultiFormat::HardwareExport(export) = multi_format else {
+            panic!("expected a hardware export, got {multi_format:?}");
+        };
+
+        let pubport::Format::Json(json) = export.format() else {
+            panic!("expected a json export, got {:?}", export.format());
+        };
+
+        // the native segwit account an import prefers, with the export's own first address
+        let bip84 = json.bip84.as_ref().expect("export has a bip84 account");
+        let first_address = bip84
+            .external
+            .at_derivation_index(0)
+            .unwrap()
+            .address(bitcoin::Network::Bitcoin)
+            .unwrap();
+
+        assert_eq!(bip84.fingerprint().map(|f| f.to_string()).as_deref(), Some("817e7be0"));
+        assert_eq!(bip84.xpub().unwrap().to_string(), ACCOUNT_XPUB);
+        assert_eq!(first_address.to_string(), "bc1q0g0vn4yqyk0zjwxw0zv5pltyyczty004zc9g7r");
+    }
 }
