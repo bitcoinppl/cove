@@ -1433,3 +1433,136 @@ async fn cancelled_passkey_restore_does_not_fall_back_to_local_master_key() {
         passkey_metadata
     );
 }
+
+/// Saves a hot wallet with labels the way the app keeps one, next to an xpub-only wallet
+fn save_fresh_enable_device_wallets() -> (WalletMetadata, WalletMetadata, Mnemonic) {
+    use crate::wallet_secret::WalletSecretExt as _;
+
+    let mnemonic = Mnemonic::parse(
+        "legal winner thank year wave sausage worth useful legal winner thank yellow",
+    )
+    .unwrap();
+    let secret = cove_device::keychain::WalletSecret::Mnemonic(mnemonic.clone());
+
+    let mut hot = WalletMetadata::preview_new();
+    hot.name = "Fresh Enable Hot".into();
+    hot.wallet_type = WalletType::Hot;
+
+    let xpub = secret.xpub(hot.network);
+    let descriptors = secret.clone().into_descriptors(hot.network, hot.address_type);
+    let keychain = Keychain::global();
+    keychain.save_wallet_xpub(&hot.id, xpub).unwrap();
+    keychain
+        .save_public_descriptor(
+            &hot.id,
+            descriptors.external.extended_descriptor.clone(),
+            descriptors.internal.extended_descriptor,
+        )
+        .unwrap();
+    keychain.save_wallet_secret(&hot.id, secret).unwrap();
+
+    let watch = xpub_only_wallet_metadata();
+    keychain.save_wallet_xpub(&watch.id, sample_xpub(&watch).parse().unwrap()).unwrap();
+
+    Database::global()
+        .wallets()
+        .save_all_wallets(hot.network, hot.wallet_mode, vec![hot.clone(), watch.clone()])
+        .unwrap();
+    LabelManager::try_new(hot.id.clone())
+        .unwrap()
+        .import_without_cloud_backup_dirty(sample_labels_jsonl())
+        .unwrap();
+
+    (hot, watch, mnemonic)
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn fresh_enable_on_empty_cloud_uploads_every_wallet_readable_and_verifies() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+    let (hot, watch, mnemonic) = save_fresh_enable_device_wallets();
+    let prf_output = [0x5a; 32];
+    globals.passkey.set_create_result(Ok(vec![9, 8, 7]));
+    globals.passkey.set_authenticate_result(Ok(prf_output.to_vec()));
+
+    enable_cloud_backup_create_new(&manager).await.unwrap();
+    confirm_saved_passkey_session(&manager).await;
+
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+    assert_eq!(globals.passkey.create_count(), 1, "a fresh enable registers one passkey");
+    assert_eq!(globals.passkey.authenticated_credential_ids(), vec![vec![9, 8, 7]]);
+
+    // the master key backup opens with the new passkey's PRF output for the salt it was asked with
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let master_json =
+        globals.cloud.master_key_backup_bytes(&namespace).expect("master key uploaded");
+    let wrapper: cove_cspp::backup_data::EncryptedMasterKeyBackup =
+        serde_json::from_slice(&master_json).unwrap();
+    let asked_salt = globals.passkey.authenticated_requests()[0].prf_salt.clone();
+    assert_eq!(wrapper.prf_salt.to_vec(), asked_salt, "master key wrapper PRF salt");
+
+    let master_key =
+        cove_cspp::master_key_crypto::decrypt_master_key(&wrapper, &prf_output).unwrap();
+    assert_eq!(master_key.namespace_id(), namespace);
+    assert_eq!(
+        cove_cspp::Cspp::new(Keychain::global().clone())
+            .load_master_key_from_store()
+            .unwrap()
+            .unwrap()
+            .as_bytes(),
+        master_key.as_bytes()
+    );
+
+    // every wallet on the device is in the cloud and opens with that master key
+    let decrypt_wallet = |metadata: &WalletMetadata| {
+        let record_id = wallet_record_id(metadata.id.as_ref());
+        let bytes = globals
+            .cloud
+            .wallet_backup_bytes(&namespace, &record_id)
+            .unwrap_or_else(|| panic!("{} uploaded", metadata.name));
+
+        cove_cspp::wallet_crypto::decrypt_wallet_backup(
+            &serde_json::from_slice(&bytes).unwrap(),
+            &master_key.critical_data_key(),
+        )
+        .unwrap()
+    };
+
+    let hot_entry = decrypt_wallet(&hot);
+    assert!(
+        matches!(&hot_entry.secret, WalletSecret::Mnemonic(words) if *words == mnemonic.to_string())
+    );
+    assert_eq!(
+        crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl(&hot_entry)
+            .unwrap()
+            .as_deref(),
+        Some(sample_labels_jsonl())
+    );
+
+    let watch_entry = decrypt_wallet(&watch);
+    assert!(matches!(watch_entry.secret, WalletSecret::WatchOnly));
+    assert_eq!(watch_entry.xpub, Some(sample_xpub(&watch)));
+
+    // the background verifier reads the uploads back and reaches Verified
+    for _ in 0..10 {
+        if !verify_pending_uploads_once_for_test_async(&manager).await {
+            break;
+        }
+    }
+
+    match manager.model_snapshot().verification {
+        VerificationState::Verified(report) => {
+            assert_eq!(report.wallets_verified, 2);
+            assert!(report.wallet_issues.is_empty(), "{:?}", report.wallet_issues);
+        }
+        other => panic!("expected Verified after a fresh enable, got {other:?}"),
+    }
+    assert_eq!(globals.passkey.create_count(), 1, "verification registered another passkey");
+
+    reset_cloud_backup_test_state(&manager, globals);
+}
