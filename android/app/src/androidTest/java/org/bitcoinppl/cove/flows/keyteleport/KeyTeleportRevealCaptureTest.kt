@@ -214,8 +214,9 @@ class KeyTeleportRevealCaptureTest {
 
     /**
      * Before anything is revealed and after each switch, exactly one of the QR code and the code
-     * must be readable, and no character of a hidden code may carry much of what tells it apart
-     * from the other transfer's character in the same place
+     * must be readable, no character of a hidden code may carry much of what tells it apart from
+     * the other transfer's character in the same place, and a hidden QR code may carry little of
+     * what tells the two transfers' QR codes apart
      */
     private fun assertOneValueReadableAtATime(
         what: String,
@@ -242,6 +243,13 @@ class KeyTeleportRevealCaptureTest {
         assertTrue(
             "a hidden $what character differs in detail by ${"%.3f".format(mostExposed)} of how much it does shown",
             mostExposed <= MAX_HIDDEN_CHARACTER_SHARE,
+        )
+
+        // zxing alone passes an unblurred QR code whose centre the hint covers, since it finds the
+        // code but cannot read it, while a better scanner might
+        assertTrue(
+            "the hidden QR codes beside the ${what}s differ in detail by ${"%.3f".format(qrSeparation.ratio)} of how much the shown ones do",
+            qrSeparation.ratio <= MAX_HIDDEN_QR_SHARE,
         )
     }
 
@@ -479,8 +487,16 @@ class KeyTeleportRevealCaptureTest {
         const val RECEIVER_CODE_HINT = "Tap to show receiver code"
         const val SENDER_PASSWORD_HINT = "Tap to show password"
 
-        // TODO measured
-        const val MAX_HIDDEN_CHARACTER_SHARE = 0.3
+        // measured on the emulator: a hidden character's share stayed at or under 0.026 over five
+        // runs with the code blurred, and at or over 0.121 over two runs with no blur, where the
+        // hint's overlay alone leaves the code faintly readable; this is their geometric mean,
+        // rounded down
+        const val MAX_HIDDEN_CHARACTER_SHARE = 0.05
+
+        // measured the same way: a hidden QR code's share stayed at or under 0.035 over five runs
+        // with it blurred, and at or over 0.885 over two runs with no blur; their geometric mean,
+        // rounded down
+        const val MAX_HIDDEN_QR_SHARE = 0.17
 
         // random digits differ in nine places in ten, so even two short codes differ in several
         const val MIN_DIFFERING_CHARACTERS = 4
