@@ -67,6 +67,7 @@ import org.bitcoinppl.cove.ui.theme.ForceLightStatusBarIcons
 import org.bitcoinppl.cove.ui.theme.title3
 import org.bitcoinppl.cove.views.DotMenuView
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove.views.SideBySideOrStacked
 import org.bitcoinppl.cove.views.lockaware.DropdownMenu
 import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
@@ -303,8 +304,11 @@ fun NewWalletSelectScreen(
                         thickness = 1.dp,
                     )
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    // at large font sizes "Hardware Wallet" beside the other choice shrinks to its
+                    // smallest size and is still cut off, so the choices stack when either label
+                    // doesn't fit its half
+                    SideBySideOrStacked(
+                        spacing = 16.dp,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         ImageButton(
@@ -318,7 +322,7 @@ fun NewWalletSelectScreen(
                                     containerColor = CoveColor.btnPrimary,
                                     contentColor = CoveColor.midnightBlue,
                                 ),
-                            modifier = Modifier.weight(1f).testTag("newWalletSelect.hardwareWallet"),
+                            modifier = Modifier.testTag("newWalletSelect.hardwareWallet"),
                         )
 
                         ImageButton(
@@ -330,7 +334,7 @@ fun NewWalletSelectScreen(
                                     containerColor = CoveColor.btnPrimary,
                                     contentColor = CoveColor.midnightBlue,
                                 ),
-                            modifier = Modifier.weight(1f).testTag("newWalletSelect.onThisDevice"),
+                            modifier = Modifier.testTag("newWalletSelect.onThisDevice"),
                         )
                     }
 
