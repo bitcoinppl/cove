@@ -15,13 +15,15 @@ paths = [
 coverage = [
   "human",
   "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::drive_account_switch_continue_reinitializes_retries_and_commits",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/account_switch.rs::drive_account_switch_commit_releases_its_claim_on_a_running_supervisor",
 ]
 # 1.4.0: ios N/A, android BLOCKED
-# rust takes a switch from the chosen account through reinitializing the backup there, a failed
-# reinitialization waiting for try again, the retry, and the commit that hands the backup to the new
-# account. a person still runs the play services account chooser and consent with a real second
-# google account; an android ui test of the switch is a follow-up, since the uitest flavour never
-# registers the switch callbacks (CoveApplication.kt)
+# rust decides the switch's phase and claim transitions from the chosen account through
+# reinitializing the backup there, a failed reinitialization waiting for try again, the retry and the
+# commit, and a running supervisor releases the switch's claim after the commit. a person still runs
+# the play services account chooser and consent with a real second google account, and checks that
+# the backup on the new account verifies; an android ui test of the switch is a follow-up, since the
+# uitest flavour never registers the switch callbacks (CoveApplication.kt)
 
 [[row]]
 id = "s12-enable-backup-without-existing-data"
