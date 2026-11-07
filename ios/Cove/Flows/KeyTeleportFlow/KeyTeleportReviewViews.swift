@@ -149,18 +149,22 @@ struct KeyTeleportRevealedXprv: View {
         // so the buttons stack whenever both labels can't fit on one line
         ViewThatFits(in: .horizontal) {
             HStack {
-                copyButton
-                hideButton
+                KeyTeleportCopyXprvButton(xprv: xprv)
+                KeyTeleportHideXprvButton(hide: hide)
             }
 
             VStack(alignment: .leading) {
-                copyButton
-                hideButton
+                KeyTeleportCopyXprvButton(xprv: xprv)
+                KeyTeleportHideXprvButton(hide: hide)
             }
         }
     }
+}
 
-    private var copyButton: some View {
+private struct KeyTeleportCopyXprvButton: View {
+    let xprv: String
+
+    var body: some View {
         Button { keyTeleportCopySensitiveText(xprv) } label: {
             Label {
                 Text("Copy").uiTestTruncationProbe()
@@ -171,8 +175,12 @@ struct KeyTeleportRevealedXprv: View {
         .buttonStyle(.bordered)
         .tint(.white)
     }
+}
 
-    private var hideButton: some View {
+private struct KeyTeleportHideXprvButton: View {
+    let hide: () -> Void
+
+    var body: some View {
         Button(action: hide) {
             Text("Hide").uiTestTruncationProbe()
         }
