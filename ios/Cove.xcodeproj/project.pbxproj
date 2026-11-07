@@ -29,10 +29,12 @@
 		C0F100022F30000000000001 /* KeyTeleportPeer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100012F30000000000001 /* KeyTeleportPeer.swift */; };
 		C0F100042F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100032F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift */; };
 		C0F100082F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */; };
+		F3F300022F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F300012F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift */; };
 		C0F100062F30000000000001 /* ScreenReachability.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100052F30000000000001 /* ScreenReachability.swift */; };
 		C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */; };
 		C0B000022F00000000000001 /* Fixtures/wallet_2_descriptors.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */; };
 		C0B000102F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */; };
+		F3F300042F80000000000001 /* ScenePhasePrivacyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3F300032F80000000000001 /* ScenePhasePrivacyTests.swift */; };
 		C0B000122F00000000000001 /* TransactionsScanUiTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000132F00000000000001 /* TransactionsScanUiTests.swift */; };
 		C0B000A02F00000000000001 /* MoreInfoPopoverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000A12F00000000000001 /* MoreInfoPopoverTests.swift */; };
 		C0B000142F00000000000001 /* OnboardingBackupViewsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */; };
@@ -130,12 +132,14 @@
 		C0F100012F30000000000001 /* KeyTeleportPeer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportPeer.swift; sourceTree = "<group>"; };
 		C0F100032F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportReceiveFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportSendFullLaunchUITests.swift; sourceTree = "<group>"; };
+		F3F300012F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NfcScanPrivacyCoverFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F100052F30000000000001 /* ScreenReachability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenReachability.swift; sourceTree = "<group>"; };
 		C0A000022EF0000000000001 /* CoveUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPromptLayoutTests.swift; sourceTree = "<group>"; };
 		C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Fixtures/wallet_2_descriptors.txt; sourceTree = "<group>"; };
 		C0B000052F00000000000001 /* CoveTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupPresentationCoordinatorTests.swift; sourceTree = "<group>"; };
+		F3F300032F80000000000001 /* ScenePhasePrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenePhasePrivacyTests.swift; sourceTree = "<group>"; };
 		C0B000132F00000000000001 /* TransactionsScanUiTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsScanUiTests.swift; sourceTree = "<group>"; };
 		C0B000A12F00000000000001 /* MoreInfoPopoverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreInfoPopoverTests.swift; sourceTree = "<group>"; };
 		C0B000152F00000000000001 /* OnboardingBackupViewsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingBackupViewsTests.swift; sourceTree = "<group>"; };
@@ -279,6 +283,7 @@
 				C0F100012F30000000000001 /* KeyTeleportPeer.swift */,
 				C0F100032F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift */,
 				C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */,
+				F3F300012F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift */,
 				C0F100052F30000000000001 /* ScreenReachability.swift */,
 			);
 			path = CoveUITests;
@@ -292,6 +297,7 @@
 				C0F000022F50000000000001 /* KeyTeleportSecurityHelpersTests.swift */,
 				C0D000022F10000000000001 /* WalletTransitionTests.swift */,
 				C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */,
+				F3F300032F80000000000001 /* ScenePhasePrivacyTests.swift */,
 				C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */,
 				C0B000912F00000000000001 /* HardwareImportErrorMessageTests.swift */,
 				C0B000932F00000000000001 /* SendFlowHeaderLayoutTests.swift */,
@@ -596,6 +602,7 @@
 				C0F100022F30000000000001 /* KeyTeleportPeer.swift in Sources */,
 				C0F100042F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift in Sources */,
 				C0F100082F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift in Sources */,
+				F3F300022F80000000000001 /* NfcScanPrivacyCoverFullLaunchUITests.swift in Sources */,
 				C0F100062F30000000000001 /* ScreenReachability.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -609,6 +616,7 @@
 				C0F000012F50000000000001 /* KeyTeleportSecurityHelpersTests.swift in Sources */,
 				C0D000012F10000000000001 /* WalletTransitionTests.swift in Sources */,
 				C0B000102F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift in Sources */,
+				F3F300042F80000000000001 /* ScenePhasePrivacyTests.swift in Sources */,
 				C0B000162F00000000000001 /* CustomFeeRateErrorTests.swift in Sources */,
 				C0B000902F00000000000001 /* HardwareImportErrorMessageTests.swift in Sources */,
 				C0B000922F00000000000001 /* SendFlowHeaderLayoutTests.swift in Sources */,
