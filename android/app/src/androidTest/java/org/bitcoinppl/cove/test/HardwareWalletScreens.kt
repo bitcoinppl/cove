@@ -83,15 +83,18 @@ class HardwareWalletScreens(
      * its own window, which doesn't expose test tags as resource ids
      *
      * [findSubmit] brings the enabled submit action on screen, so a layout test can check it fits
-     * before tapping it
+     * before tapping it. [opened] shows once the screen is open, its title unless a caller that has
+     * already checked which screen it is waits for something else, such as the field, when a tall
+     * message can leave the title above the top
      */
     fun enterTapSignerCvc(
         cvc: String,
         title: String = "Enter TAPSIGNER CVC",
         submit: String = "Submit",
+        opened: BySelector = By.text(title),
         findSubmit: (BySelector) -> UiObject2 = { device.scrollTo(it) },
     ) {
-        device.waitFor(By.text(title), timeoutMs = 15_000L)
+        device.waitFor(opened, timeoutMs = 15_000L)
 
         // the field masks its text, so check the digit count beneath it
         wallet.typeInto(By.clazz("android.widget.EditText"), cvc) {
