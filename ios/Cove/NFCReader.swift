@@ -108,7 +108,6 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
         scriptedScan = nil
         reader = FfiNfcReader()
         readBytes = Data()
-        messageInfo = nil
         currentBlock = 0
     }
 
@@ -193,6 +192,11 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
                 // reset reader and bytes read
                 Log.warn("Trying to scan a different NFC message, resetting")
                 self.resetReader()
+
+                // cleared here rather than in resetReader, which also runs on completion before
+                // handleSuccessfulBlockRead's later checks read messageInfo; kept, the old message's
+                // length would hold off parsing the new tag until that many bytes were read
+                self.messageInfo = nil
             }
 
             self.readNextBlock(tag: tag, session: session)
