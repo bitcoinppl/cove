@@ -51,23 +51,28 @@ final class BiometricLockFullLaunchUITests: XCTestCase {
         app.terminate()
         app.launch()
         let tapToUnlock = app.staticTexts["Tap to Unlock"]
+        let balance = app.element("selectedWallet.balance")
         XCTAssertTrue(tapToUnlock.waitForExistence(timeout: 30), "a cold start with Face ID on should lock the app")
+
+        // read before the prompt is answered, so it shows what the lock screen hides on its own
+        let readableUnderLock = balance.exists
 
         let cancel = try failFaceId()
         cancel.tap()
         XCTAssertTrue(cancel.waitForNonExistence(timeout: 10), "Cancel should close the Face ID prompt")
 
         // gives an unlock that would follow the cancel time to happen before asserting it didn't
-        XCTAssertFalse(
-            app.element("selectedWallet.balance").waitForExistence(timeout: 3),
-            "the wallet showed after Face ID was cancelled"
-        )
-        XCTAssertTrue(tapToUnlock.exists, "the lock screen should stay after Face ID was cancelled")
+        _ = tapToUnlock.waitForNonExistence(timeout: 3)
+        attachScreenshot("after Face ID was cancelled")
+        XCTAssertTrue(tapToUnlock.exists && tapToUnlock.isHittable, "the lock screen should stay after Face ID was cancelled")
+        XCTAssertFalse(balance.exists && balance.isHittable, "the wallet showed after Face ID was cancelled")
+        XCTAssertFalse(readableUnderLock, "the wallet is readable through accessibility under the lock screen")
 
         // the app must have let go of the cancelled prompt, or this tap asks for nothing
         tapToUnlock.tap()
-        try matchFaceId(until: app.element("selectedWallet.balance"))
+        try matchFaceId(until: tapToUnlock, matching: NSPredicate(format: "exists == false"))
         XCTAssertTrue(tapToUnlock.waitForNonExistence(timeout: 10), "the lock screen stayed after a matching face")
+        XCTAssertTrue(balance.waitForExistence(timeout: 10), "the wallet should show once Face ID matched")
     }
 
     // MARK: - Steps
@@ -151,6 +156,13 @@ final class BiometricLockFullLaunchUITests: XCTestCase {
         } while Date() < deadline
 
         return nil
+    }
+
+    private func attachScreenshot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     /// Attaches what the system UI apps show, so a failed run says where the prompt lived
