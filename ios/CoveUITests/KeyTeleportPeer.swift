@@ -253,13 +253,14 @@ private extension CGImage {
     func withVisionMargin(_ margin: Int = 24) -> CGImage? {
         let width = width + 2 * margin
         let height = height + 2 * margin
+        let space = CGColorSpaceCreateDeviceRGB()
         guard let context = CGContext(
             data: nil,
             width: width,
             height: height,
             bitsPerComponent: 8,
             bytesPerRow: width * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
+            space: space,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ), let pixels = context.data?.assumingMemoryBound(to: UInt8.self) else { return nil }
 
@@ -269,12 +270,11 @@ private extension CGImage {
         // the buffer's first row is the image's top, so the drawn image's top-left pixel sits a
         // margin down and a margin in
         let corner = (margin * width + margin) * 4
-        let edge = CGColor(
-            red: CGFloat(pixels[corner]) / 255,
-            green: CGFloat(pixels[corner + 1]) / 255,
-            blue: CGFloat(pixels[corner + 2]) / 255,
-            alpha: 1
-        )
+
+        // the fill keeps the buffer's own color space, so it lands as the same pixel values
+        // instead of being converted from generic RGB
+        let components = (0 ..< 3).map { CGFloat(pixels[corner + $0]) / 255 } + [1]
+        guard let edge = CGColor(colorSpace: space, components: components) else { return nil }
 
         context.setFillColor(edge)
         context.fill([
