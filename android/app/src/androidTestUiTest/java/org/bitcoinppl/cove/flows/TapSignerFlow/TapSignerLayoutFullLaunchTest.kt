@@ -179,7 +179,12 @@ class TapSignerLayoutFullLaunchTest {
         setLargestFontScaleAndWaitForRecreation()
         wallet.waitForBalance(FUNDED_SATS)
 
-        wallet.startSend()
+        // the send screen opens with the amount focused, and at this scale the keyboard covers
+        // the address field below it, where no scroll reaches
+        device.waitFor(By.text("Send")).click()
+        device.waitFor(By.res("sendFlow.amount"))
+        wallet.dismissKeyboard()
+        wallet.enterAddress()
         wallet.tapMax()
         wallet.clickNext(expecting = By.text("Sign using TAPSIGNER"))
         device.scrollTo(By.text("Sign using TAPSIGNER")).click()
