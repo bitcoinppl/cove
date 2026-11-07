@@ -315,16 +315,24 @@ private struct SendFlowSetAmountContent: View {
     /// Space between the form's sections, also kept between its end and the keyboard toolbar
     private let sectionSpacing: CGFloat = 24
 
-    /// Top of the keyboard toolbar in window space while it shows
-    @State private var keyboardToolbarTop: CGFloat?
+    /// How far the keyboard toolbar reaches above the bottom of the scroll view, which stops at the
+    /// keyboard but not at the toolbar floating above it
+    ///
+    /// A constant, since SwiftUI doesn't reliably report where the toolbar lies: the frame of a
+    /// view in a keyboard toolbar item came back sometimes in window space and sometimes in the
+    /// toolbar's own space, several screens away. At the largest accessibility text size on
+    /// iOS 26, where its items were 40 points tall, the toolbar's background started 82 points
+    /// above the scroll view's bottom
+    private let keyboardToolbarReach: CGFloat = 82
 
     private var presenter: SendFlowPresenter {
         sendFlowManager.presenter
     }
 
-    /// The keyboard toolbar's top while a field has focus, so the toolbar shows
-    private var shownKeyboardToolbarTop: CGFloat? {
-        presenter.focusField == nil ? nil : keyboardToolbarTop
+    /// Room below the form while a field has focus, so its end, such as Next, can scroll clear of
+    /// the keyboard toolbar, with the form's section spacing between them
+    private var keyboardToolbarRoom: CGFloat {
+        presenter.focusField == nil ? 0 : keyboardToolbarReach + sectionSpacing
     }
 
     var body: some View {
@@ -356,6 +364,7 @@ private struct SendFlowSetAmountContent: View {
                             SendFlowNextButton(action: next)
                         }
                     }
+                    .padding(.bottom, keyboardToolbarRoom)
                     .toolbar {
                         ToolbarItemGroup(placement: .keyboard) {
                             SendFlowSetAmountToolbar(
@@ -372,11 +381,9 @@ private struct SendFlowSetAmountContent: View {
                                 clearAddress: clearAddress,
                                 dismissIfValid: dismissIfValid
                             )
-                            .modifier(WindowTopReader(top: $keyboardToolbarTop))
                         }
                     }
                 }
-                .modifier(KeyboardToolbarRoom(toolbarTop: shownKeyboardToolbarTop, spacing: sectionSpacing))
                 .padding(.horizontal)
                 .frame(maxWidth: .infinity)
                 .background(colorScheme == .light ? .white : .black)
@@ -417,46 +424,6 @@ private struct SendFlowSetAmountContent: View {
 
     private func clearAddress() {
         sendFlowManager.dispatch(action: .clearAddress)
-    }
-}
-
-/// Keeps `top` at the view's top edge in window space while the view shows, and nil once it's gone
-private struct WindowTopReader: ViewModifier {
-    @Binding var top: CGFloat?
-
-    func body(content: Content) -> some View {
-        content
-            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { top = $0 }
-            .onDisappear { top = nil }
-    }
-}
-
-/// Room below a scroll view's content for the part of a keyboard toolbar that floats above the
-/// keyboard, plus `spacing` between the content's end and the toolbar
-///
-/// The scroll view avoids only the keyboard, so without this the end of the content, such as the
-/// send form's Next, stops behind the toolbar, where it can't be tapped. The toolbar's top is
-/// measured rather than assumed, since its height and gap above the keyboard vary by iOS version
-private struct KeyboardToolbarRoom: ViewModifier {
-    let toolbarTop: CGFloat?
-    let spacing: CGFloat
-
-    /// Bottom of the space above the keyboard the scroll view shows its content in, in window space
-    @State private var visibleBottom: CGFloat = 0
-
-    private var room: CGFloat {
-        guard let toolbarTop else { return 0 }
-
-        let overlap = visibleBottom - toolbarTop
-        return overlap > 0 ? overlap + spacing : 0
-    }
-
-    func body(content: Content) -> some View {
-        content
-            .contentMargins(.bottom, room, for: .scrollContent)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.frame(in: .global).maxY - proxy.safeAreaInsets.bottom
-            } action: { visibleBottom = $0 }
     }
 }
 
