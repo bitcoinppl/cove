@@ -109,10 +109,13 @@ class ScanCancelFullLaunchTest {
             device.wait(Until.gone(By.pkg(PERMISSION_CONTROLLER)), 10_000L),
         )
 
-        // gives a scanner that would open after the denial time to show its zoom control
-        assertFalse("a scanner opened after the camera was denied", device.wait(Until.hasObject(By.text("1x")), 3_000L))
+        // gives a scanner that would open after the denial time to replace the screen; without the
+        // camera it shows no preview, so the screen going is what a wrongly opened scanner looks like
+        assertFalse(
+            "the app should stay on its camera screen",
+            device.wait(Until.gone(By.text("Camera Access Required")), 3_000L),
+        )
         assertFalse("the camera should still be denied", cameraGranted())
-        assertTrue("the app should stay on its camera screen", device.hasObject(By.text("Camera Access Required")))
         assertTrue("Grant Permission should stay to ask again", device.hasObject(By.text("Grant Permission")))
 
         device.waitFor(By.text("Cancel")).click()
