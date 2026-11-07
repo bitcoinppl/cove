@@ -185,12 +185,15 @@ class TapSignerLayoutFullLaunchTest {
         device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 1")
 
         // the send screen opens with the amount focused and the keyboard up, and at this scale
-        // the address field below it must still scroll into reach above the keyboard
+        // every field must still scroll into reach above the keyboard: the address field below
+        // the amount, and Next at the end of the form, which only stops under the keyboard when
+        // the scroll area runs on beneath it
         device.waitFor(By.text("Send")).click()
         device.waitFor(By.res("sendFlow.amount"))
         scrollAboveKeyboard(By.res("sendFlow.address"), "send: address field")
         wallet.enterAddress()
         wallet.tapMax()
+        scrollAboveKeyboard(By.res("sendFlow.next"), "send: Next")
 
         // at this scale the hardware send screen ends its first screenful at its Sign Transaction
         // heading, with the signing options below the fold
