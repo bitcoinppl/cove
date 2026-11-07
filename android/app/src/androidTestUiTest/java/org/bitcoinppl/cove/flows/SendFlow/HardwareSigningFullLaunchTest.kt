@@ -379,9 +379,9 @@ class HardwareSigningFullLaunchTest {
         device.waitFor(By.text(formatLabel)).click()
         device.waitFor(By.desc("QR code for transaction signing"))
 
-        // the test copied the receive address earlier and the app handles the tap asynchronously, so
-        // a read right after it can still see that address; a sentinel shows when Copy has written,
-        // even when it writes the same text again
+        // the clipboard can still hold text from an earlier step or test, such as a receive address,
+        // and the app handles the tap asynchronously, so a read right after it can still see that
+        // text; a sentinel shows when Copy has written, even when it writes the same text again
         setClipboard(CLIPBOARD_SENTINEL)
         device.waitFor(By.desc("Copy")).click()
         wallet.waitUntil("the export's Copy never reached the clipboard", timeoutMs = 5_000L) {
