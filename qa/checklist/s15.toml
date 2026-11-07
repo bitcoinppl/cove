@@ -64,9 +64,12 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/AuthManager.kt",
 ]
 coverage = [
-    "human",
+    "ios-ui:ios/CoveUITests/BiometricLockFullLaunchUITests.swift::testCancelledFaceIdKeepsTheAppLockedUntilAMatch",
+    "human:android",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
+# android stays human: a fingerprint can only be enrolled by driving the emulator's Settings, which is
+# fragile and more than a day of work, and faking BiometricPrompt would need a new production hook
 
 [[row]]
 id = "s15-pin-keypad-haptic-strength-and-duplicates"
@@ -82,9 +85,13 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/views/NumberPadPinView.kt",
 ]
 coverage = [
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/views/NumberPadPinHapticsTest.kt::acceptedTapsGiveOneHapticAndEachPinSubmitsOnce",
     "human",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
+# "duplicates" means one haptic per accepted tap and one PIN check during the 100 ms validation (#854);
+# the android test records them through LocalHapticFeedback. the felt strength stays human on both
+# platforms, and so do ios duplicates, since recording ios haptics would need a production hook
 
 [[row]]
 id = "s15-double-tap-final-watch-import-creates-one"
@@ -137,10 +144,17 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/AndroidPasskeyProvider.kt",
 ]
 coverage = [
-    "human",
+    "ios-ui:ios/CoveUITests/BiometricLockFullLaunchUITests.swift::testCancelledFaceIdKeepsTheAppLockedUntilAMatch",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/NewWalletFlow/ScanCancelFullLaunchTest.kt::deniedCameraKeepsTheScannerClosedAndCancelGoesBack",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/NewWalletFlow/ScanCancelFullLaunchTest.kt::dismissedNfcSheetReadsNoTagUntilItOpensAgain",
+    "human:ios",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# biometric, camera and nfc system prompts need a person
+# ios stays human for the nfc session sheet's cancel, since the nfc seam bypasses
+# didInvalidateWithError, and the camera permission prompt, which the simulator never shows. the
+# biometric cancel is the ios test here and android's stays with s15-biometric-authentication-and-prompt-cancel.
+# passkey cancel is covered outside the os sheet by s05-passkey-cancel-leaves-active-state-intact and
+# s12-passkey-and-provider-failure-retry-policy
 
 [[row]]
 id = "s15-network-dialog-cancel-outside-and-back"
