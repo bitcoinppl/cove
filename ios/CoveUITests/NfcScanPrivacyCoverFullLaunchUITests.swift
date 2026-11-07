@@ -1,7 +1,8 @@
 import XCTest
 
 /// Leaves the real app during an NFC scan with a PIN set, and checks the scan survives: no lock,
-/// the scan's screen still up, and the tag it then reads still imports
+/// the scan's screen still up, and the tag it then reads still imports. Leaving once the scan is
+/// over locks the app as usual
 ///
 /// An NFC scan's system sheet makes the app inactive, and leaving the foreground otherwise covers
 /// the app, locks it and dismisses its sheets. The debug NFC seam keeps the reader's scan open
@@ -45,7 +46,8 @@ final class NfcScanPrivacyCoverFullLaunchUITests: XCTestCase {
     }
 
     /// With a PIN set, going to the Home Screen and back during Add Wallet's NFC scan keeps the
-    /// app unlocked and the scan open, and the tag read afterwards imports its wallet
+    /// app unlocked and the scan open, the tag read afterwards imports its wallet, and leaving
+    /// again after that locks the app
     func testLeavingDuringAnNfcScanKeepsTheAppUnlockedAndTheScanOpen() throws {
         try node.requireHealthy()
         try signer.requireHealthy()
@@ -70,15 +72,7 @@ final class NfcScanPrivacyCoverFullLaunchUITests: XCTestCase {
         let nfcHelp = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "NFC Help")).firstMatch
         XCTAssertTrue(nfcHelp.waitForExistence(timeout: 10), "the NFC scan never started")
 
-        // the app can go straight on to suspended, so any state but the foreground counts
-        XCUIDevice.shared.press(.home)
-        let left = NSPredicate { _, _ in self.app.state != .runningForeground }
-        let leftForeground = XCTNSPredicateExpectation(predicate: left, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [leftForeground], timeout: 10), .completed, "the app never left the foreground")
-        Thread.sleep(forTimeInterval: Self.timeAway)
-        app.activate()
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "the app never came back")
-
+        leaveForTheHomeScreenAndReturn()
         XCTAssertFalse(
             app.staticTexts["Enter Cove PIN"].waitForExistence(timeout: 3),
             "leaving during an NFC scan locked the app"
@@ -106,9 +100,29 @@ final class NfcScanPrivacyCoverFullLaunchUITests: XCTestCase {
         app.openReceive()
         let derivation = app.staticTexts["Derivation: \(export.firstDerivationPath)"]
         XCTAssertTrue(derivation.waitForExistence(timeout: 10), "the selected wallet should be the one the tag held")
+
+        // once the tag is read the scan is over, so leaving locks the app again
+        leaveForTheHomeScreenAndReturn()
+        XCTAssertTrue(
+            app.staticTexts["Enter Cove PIN"].waitForExistence(timeout: 10),
+            "leaving after the NFC scan ended should lock the app"
+        )
     }
 
     // MARK: - Steps
+
+    /// Goes to the Home Screen for longer than the foreground grace, then brings the app back
+    private func leaveForTheHomeScreenAndReturn() {
+        // the app can go straight on to suspended, so any state but the foreground counts
+        XCUIDevice.shared.press(.home)
+        let left = NSPredicate { _, _ in self.app.state != .runningForeground }
+        let leftForeground = XCTNSPredicateExpectation(predicate: left, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [leftForeground], timeout: 10), .completed, "the app never left the foreground")
+        Thread.sleep(forTimeInterval: Self.timeAway)
+
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "the app never came back")
+    }
 
     private func enablePin() {
         app.tapButton(named: "app.sidebar.open")
