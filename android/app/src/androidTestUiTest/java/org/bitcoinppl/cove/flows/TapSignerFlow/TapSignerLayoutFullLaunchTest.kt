@@ -680,7 +680,8 @@ class TapSignerLayoutFullLaunchTest {
      * top if that is higher, so a control behind the bar fails too. Every measurement is taken once
      * the window's keyboard animations have ended, see [settledPlacement], so a keyboard still
      * sliding open can't pass or fail the check. The drags stay in that space, where a drag on the
-     * keys would type instead of scroll
+     * keys would type instead of scroll, and each moves the content only a short way, so a control
+     * at the end of a long form gets as many drags as [scrollBackTo] gives one at its top
      */
     private fun scrollAboveKeyboard(
         selector: BySelector,
@@ -688,20 +689,21 @@ class TapSignerLayoutFullLaunchTest {
         toolbar: BySelector? = null,
     ) {
         val cover = if (toolbar == null) "keyboard" else "keyboard and its toolbar"
+        val drags = MAX_NUDGES * 3
         var last: String? = null
 
-        repeat(MAX_NUDGES) {
+        repeat(drags) {
             val placement = settledPlacement(selector, toolbar, "expected the $cover to come to rest before $name")
             val bounds = placement.control
             if (bounds != null && bounds.whole.bottom <= placement.coverTop && bounds.shown.contains(bounds.whole)) return
 
-            last = "$bounds with the $cover from ${placement.coverTop}"
             val viewport = largestScrollArea(name)
+            last = "$bounds with the $cover from ${placement.coverTop}, dragging in $viewport"
 
             nudge(Rect(viewport.left, viewport.top, viewport.right, minOf(viewport.bottom, placement.coverTop)), towardsTop = true)
         }
 
-        error("$name never showed whole above the $cover after $MAX_NUDGES drags: ${last ?: "not found"}")
+        error("$name never showed whole above the $cover after $drags drags: ${last ?: "not found"}")
     }
 
     /**
