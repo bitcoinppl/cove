@@ -36,6 +36,19 @@ class HardwareWalletScreens(
         return clipboardText().trim()
     }
 
+    /** The wallet only looks for new transactions on its own now and then, so pull to refresh */
+    fun refreshUntilBalance(sats: Long) {
+        wallet.waitUntil("expected a balance of $sats sats after refreshing", timeoutMs = 90_000L) {
+            if (device.findText(By.res("selectedWallet.balance"))?.let(::parseSats) == sats) return@waitUntil true
+
+            device.swipe(device.displayWidth / 2, device.displayHeight * 2 / 5, device.displayWidth / 2, device.displayHeight * 9 / 10, 30)
+            Thread.sleep(3_000)
+            false
+        }
+
+        wallet.waitForBalance(sats)
+    }
+
     /**
      * Scans a TAPSIGNER from Add Wallet; the NFC seam answers from the emulated card, and the app
      * asks to set it up or import it depending on whether it has a key
