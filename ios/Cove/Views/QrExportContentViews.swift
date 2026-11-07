@@ -143,8 +143,8 @@ struct QrExportProgressIndicator: View {
 
 private struct QrExportDensityButton: View {
     let systemImage: String
-    /// Named as Android names it, since VoiceOver would otherwise read the symbol's own name
-    let label: String
+    /// The same name Android gives the button, so both platforms read and find it alike
+    let label: LocalizedStringKey
     let size: CGFloat
     let isEnabled: Bool
     let action: () -> Void
