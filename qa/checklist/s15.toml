@@ -148,13 +148,16 @@ coverage = [
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/NewWalletFlow/ScanCancelFullLaunchTest.kt::deniedCameraKeepsTheScannerClosedAndCancelGoesBack",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/NewWalletFlow/ScanCancelFullLaunchTest.kt::dismissedNfcSheetReadsNoTagUntilItOpensAgain",
     "human:ios",
+    "human:android",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # ios stays human for the nfc session sheet's cancel, since the nfc seam bypasses
 # didInvalidateWithError, and the camera permission prompt, which the simulator never shows. the
 # biometric cancel is the ios test here and android's stays with s15-biometric-authentication-and-prompt-cancel.
-# passkey cancel is covered outside the os sheet by s05-passkey-cancel-leaves-active-state-intact and
-# s12-passkey-and-provider-failure-retry-policy
+# android stays human only to cancel the real credential manager passkey sheet: camera deny and the
+# nfc sheet are the android tests here, and s05-passkey-cancel-leaves-active-state-intact and
+# s12-passkey-and-provider-failure-retry-policy inject the cancellation or call the error mapping
+# directly, so nothing tests the real sheet's cancel reaching AndroidPasskeyProvider
 
 [[row]]
 id = "s15-network-dialog-cancel-outside-and-back"

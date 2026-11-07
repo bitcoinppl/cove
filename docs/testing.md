@@ -256,6 +256,7 @@ These still need hands and eyes:
 - NFC: TAPSIGNER setup and signing, reading a hardware wallet or tag, removing a card mid-operation. The emulator tests cover Cove's card logic and the NFC tag seam covers what the app does with a tag's NDEF records, and Rust tests cover the parser iOS uses for ISO 15693 tags. The Swift loop that reads those tags' blocks (its CoreNFC calls, the order of its resume check against the next read, its reset, retries and NDEF fallback), a physical card or tag, the NFC session and card removal still need a person. The layout at the largest text size of the TAPSIGNER screens, and of the send screen on the way to Sign using TAPSIGNER, doesn't: the TAPSIGNER layout tests run against the card emulator and decide it on both platforms
 - Android biometric unlock and its prompt cancel, since a fingerprint can only be enrolled by driving the emulator's Settings. On iOS, [the Face ID test](#system-prompt-cancels) covers them
 - The cancel of iOS's NFC session sheet, which the NFC seam skips, and the iOS camera permission prompt, which the simulator never shows. Android's camera denial and NFC sheet cancel have tests
+- Cancelling the real passkey sheet on Android. The Cloud Backup tests inject the cancellation or check how its error maps, so none of them reaches Credential Manager's own sheet
 - How strong PIN keypad haptics feel, on both platforms, and duplicate haptics on iOS, which no test can record without a production hook
 - Spoken VoiceOver and TalkBack output and natural focus order
 - COLDCARD and other hardware signers
