@@ -475,7 +475,7 @@ private fun KeyboardToolbar(
     val buttonText = if (!hasAddress) "Next" else "Done"
 
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().testTag("sendFlow.keyboardToolbar"),
         color = MaterialTheme.colorScheme.surface,
     ) {
         Row(

@@ -194,7 +194,8 @@ class TapSignerLayoutFullLaunchTest {
         // with an address in, Max clears the focus and closes the keyboard, so the amount field
         // opens it again, with the toolbar the form must also stop above
         device.scrollTo(By.res("sendFlow.amount")).click()
-        scrollAboveKeyboard(By.res("sendFlow.next"), "send: Next")
+        device.waitFor(By.res("sendFlow.amount").focused(true))
+        scrollAboveKeyboard(By.res("sendFlow.next"), "send: Next", toolbar = By.res("sendFlow.keyboardToolbar"))
 
         // at this scale the hardware send screen ends its first screenful at its Sign Transaction
         // heading, with the signing options below the fold
@@ -618,24 +619,29 @@ class TapSignerLayoutFullLaunchTest {
     }
 
     /**
-     * Waits for the keyboard, then drags the scroll area above it until the control matching
-     * [selector] shows whole there, and fails if it never does
+     * Waits for the keyboard to come to rest, then drags the scroll area above it until the control
+     * matching [selector] shows whole there, and fails if it never does
      *
-     * The drags stay above the keyboard, where a drag on the keys would type instead of scroll
+     * With [toolbar], the space ends at the top of that bar on the keyboard, or at the keyboard's
+     * top if that is higher, so a control behind the bar fails too. Every measurement waits for the
+     * keyboard, the bar and the control to hold still, so a keyboard still sliding open can't pass
+     * or fail the check. The drags stay in that space, where a drag on the keys would type instead
+     * of scroll
      */
     private fun scrollAboveKeyboard(
         selector: BySelector,
         name: String,
+        toolbar: BySelector? = null,
     ) {
-        wallet.waitUntil("expected the keyboard to open before $name") { keyboardTop() != null }
+        val cover = if (toolbar == null) "keyboard" else "keyboard and its toolbar"
         var last: String? = null
 
         repeat(MAX_NUDGES) {
-            val keyboard = keyboardTop() ?: error("the keyboard closed before $name showed above it")
-            val bounds = device.findObject(selector)?.visibleBounds?.let(::controlBounds)
-            if (bounds != null && bounds.whole.bottom <= keyboard && bounds.shown.contains(bounds.whole)) return
+            val placement = settledPlacement(selector, toolbar, "expected the $cover to come to rest before $name")
+            val bounds = placement.control
+            if (bounds != null && bounds.whole.bottom <= placement.coverTop && bounds.shown.contains(bounds.whole)) return
 
-            last = "$bounds with the keyboard from $keyboard"
+            last = "$bounds with the $cover from ${placement.coverTop}"
             val viewport =
                 device
                     .findObjects(By.scrollable(true))
@@ -643,10 +649,51 @@ class TapSignerLayoutFullLaunchTest {
                     .maxByOrNull { it.width() * it.height() }
                     ?: error("$name: the screen has no scroll area")
 
-            nudge(Rect(viewport.left, viewport.top, viewport.right, minOf(viewport.bottom, keyboard)), towardsTop = true)
+            nudge(Rect(viewport.left, viewport.top, viewport.right, minOf(viewport.bottom, placement.coverTop)), towardsTop = true)
         }
 
-        error("$name never showed whole above the keyboard after $MAX_NUDGES drags: ${last ?: "not found"}")
+        error("$name never showed whole above the $cover after $MAX_NUDGES drags: ${last ?: "not found"}")
+    }
+
+    /** Where the keyboard, the toolbar on it if any, and a control lie at one moment */
+    private data class KeyboardPlacement(
+        val keyboardTop: Int,
+        val toolbar: Rect?,
+        val control: ControlBounds?,
+    ) {
+        /** The top of whatever covers the screen from below, the toolbar or the keyboard */
+        val coverTop: Int get() = minOf(keyboardTop, toolbar?.top ?: keyboardTop)
+    }
+
+    /**
+     * Reads the keyboard, the [toolbar] and the control matching [selector] until two reads in a row
+     * agree, with the keyboard open and the toolbar, if one is asked for, laid out
+     */
+    private fun settledPlacement(
+        selector: BySelector,
+        toolbar: BySelector?,
+        message: String,
+    ): KeyboardPlacement {
+        var previous: KeyboardPlacement? = null
+        var settled: KeyboardPlacement? = null
+
+        wallet.waitUntil(message) {
+            val read = readPlacement(selector, toolbar)
+            if (read != null && read == previous) settled = read
+            previous = read
+            settled != null
+        }
+
+        return settled ?: error(message)
+    }
+
+    private fun readPlacement(
+        selector: BySelector,
+        toolbar: BySelector?,
+    ): KeyboardPlacement? {
+        val keyboard = keyboardTop() ?: return null
+        val bar = toolbar?.let { device.findObject(it)?.visibleBounds?.takeIf { bounds -> !bounds.isEmpty } ?: return null }
+        return KeyboardPlacement(keyboard, bar, device.findObject(selector)?.visibleBounds?.let(::controlBounds))
     }
 
     /** The top of the keyboard on screen, or null while it is closed */
