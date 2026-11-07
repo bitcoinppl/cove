@@ -221,6 +221,10 @@ class NfcNdefScript {
         check(temporary.renameTo(file)) { "couldn't move the NDEF script into place" }
     }
 
+    /** Whether the last tag shown is still waiting for a scan to read it */
+    val isWaiting: Boolean
+        get() = file.exists()
+
     fun remove() {
         file.delete()
         Os.unsetenv("COVE_UI_TEST_NFC_NDEF_SCRIPT")
