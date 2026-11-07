@@ -6,6 +6,7 @@ use super::enable::{
 use super::verification::DeepVerificationContinuation;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
 use cove_tokio::FutureTimeoutExt as _;
+use crate::test_support::loaded_host_wait;
 use cove_cspp::CsppStore as _;
 use crate::database::cloud_backup::{
     PersistedDisablingCloudBackup, PersistedDriveAccountSwitch,
@@ -3585,7 +3586,7 @@ async fn restore_all_cancellation_finishes_the_active_wallet_and_skips_the_next(
 
     call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
     gate.wait_until_blocked()
-        .with_timeout(Duration::from_secs(2))
+        .with_timeout(loaded_host_wait(Duration::from_secs(2)))
         .await
         .expect("first wallet restore should reach atomic download");
     call!(manager.supervisor.cancel_restore_all_operation()).await.unwrap();
@@ -3652,7 +3653,7 @@ async fn reentering_detail_keeps_the_running_restore_all_batch() {
 
     call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
     gate.wait_until_blocked()
-        .with_timeout(Duration::from_secs(2))
+        .with_timeout(loaded_host_wait(Duration::from_secs(2)))
         .await
         .expect("first wallet restore should reach atomic download");
 
@@ -4154,7 +4155,7 @@ async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
     ));
 
     gate.wait_until_blocked()
-        .with_timeout(Duration::from_secs(5))
+        .with_timeout(loaded_host_wait(Duration::from_secs(5)))
         .await
         .expect("the reset should start a fetch that reads the new listing");
     assert_eq!(manager.state.read().cloud_only(), CloudOnlyState::Loading);
@@ -4404,7 +4405,7 @@ async fn restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_d
 
     call!(manager.supervisor.start_restore_all_operation(false)).await.unwrap();
     gate.wait_until_blocked()
-        .with_timeout(Duration::from_secs(2))
+        .with_timeout(loaded_host_wait(Duration::from_secs(2)))
         .await
         .expect("the second copy's restore download should block");
     assert!(local_wallet_exists(&first_wallet));

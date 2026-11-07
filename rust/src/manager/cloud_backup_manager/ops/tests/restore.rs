@@ -4,7 +4,7 @@ use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_LABELS_WARNING_MESSAGE,
     GENERIC_CLOUD_BACKUP_ERROR_MESSAGE,
 };
-use crate::test_support::raw_wallet_keychain_entries;
+use crate::test_support::{loaded_host_wait, raw_wallet_keychain_entries};
 use cove_tokio::FutureTimeoutExt as _;
 
 #[tokio::test(flavor = "current_thread")]
@@ -502,7 +502,7 @@ async fn restore_cancellation_retains_exclusive_claim_until_native_call_returns(
         .unwrap();
     let retry_event = retry_receiver
         .recv_async()
-        .with_timeout(Duration::from_secs(2))
+        .with_timeout(loaded_host_wait(Duration::from_secs(2)))
         .await
         .expect("restore retry response")
         .expect("restore retry event");
@@ -603,8 +603,10 @@ async fn restore_activation_upload_failure_keeps_restore_successful_and_queues_u
 
     assert_eq!(report.wallets_restored, 1);
     let wait_record_id = record_id.clone();
+    // the upload runs on the global runtime in real time, so this waits on the wall clock rather
+    // than this test's paused clock, which would skip ahead while the upload is still running
     tokio::task::spawn_blocking(move || {
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + loaded_host_wait(Duration::from_secs(5));
 
         loop {
             let upload_attempted = globals.cloud.wallet_backup_upload_attempt_count() > 0;
