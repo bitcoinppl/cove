@@ -565,6 +565,7 @@ class HardwareSigningFullLaunchTest {
             "drawn $formatLabel export: ${drawn.frames} of $shownParts frames in ${drawn.captures} captures over " +
                 "${drawn.durationMs} ms, after dropping $stale stale frames",
         )
+
         assertEquals("the frame counter and the drawn frames disagree on the part count", shownParts, drawn.frames)
         assertEquals("the drawn frames carry a different PSBT than Copy", copied.lowercase(), drawn.psbt)
 
