@@ -14,6 +14,8 @@
 		ACD0053C2DB5309A003DC493 /* CoveCore in Frameworks */ = {isa = PBXBuildFile; productRef = ACD0053B2DB5309A003DC493 /* CoveCore */; };
 		C0A000012EF0000000000001 /* OnboardingFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */; };
 		C0A0000E2EF0000000000001 /* UtxoLockFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0000D2EF0000000000001 /* UtxoLockFullLaunchUITests.swift */; };
+		F4B000022F90000000000001 /* BiometricLockFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B000012F90000000000001 /* BiometricLockFullLaunchUITests.swift */; };
+		F4B000042F90000000000001 /* SimulatorBiometrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B000032F90000000000001 /* SimulatorBiometrics.swift */; };
 		C0A000102EF0000000000001 /* FullLaunchSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A0000F2EF0000000000001 /* FullLaunchSupport.swift */; };
 		C0A000122EF0000000000001 /* FakeNodeControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000112EF0000000000001 /* FakeNodeControl.swift */; };
 		C0A000142EF0000000000001 /* HardwareSignerControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A000132EF0000000000001 /* HardwareSignerControl.swift */; };
@@ -118,6 +120,8 @@
 		AC9AB5782C34956C00BAE3BE /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0A0000D2EF0000000000001 /* UtxoLockFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UtxoLockFullLaunchUITests.swift; sourceTree = "<group>"; };
+		F4B000012F90000000000001 /* BiometricLockFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricLockFullLaunchUITests.swift; sourceTree = "<group>"; };
+		F4B000032F90000000000001 /* SimulatorBiometrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimulatorBiometrics.swift; sourceTree = "<group>"; };
 		C0A0000F2EF0000000000001 /* FullLaunchSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullLaunchSupport.swift; sourceTree = "<group>"; };
 		C0A000112EF0000000000001 /* FakeNodeControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeNodeControl.swift; sourceTree = "<group>"; };
 		C0A000132EF0000000000001 /* HardwareSignerControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareSignerControl.swift; sourceTree = "<group>"; };
@@ -267,6 +271,8 @@
 				C0F200012F80000000000001 /* CloudBackupUITestControl.swift */,
 				C0A000002EF0000000000001 /* OnboardingFullLaunchUITests.swift */,
 				C0A0000D2EF0000000000001 /* UtxoLockFullLaunchUITests.swift */,
+				F4B000012F90000000000001 /* BiometricLockFullLaunchUITests.swift */,
+				F4B000032F90000000000001 /* SimulatorBiometrics.swift */,
 				C0A0000F2EF0000000000001 /* FullLaunchSupport.swift */,
 				C0A000112EF0000000000001 /* FakeNodeControl.swift */,
 				C0A000132EF0000000000001 /* HardwareSignerControl.swift */,
@@ -584,6 +590,8 @@
 			files = (
 				C0A000012EF0000000000001 /* OnboardingFullLaunchUITests.swift in Sources */,
 				C0A0000E2EF0000000000001 /* UtxoLockFullLaunchUITests.swift in Sources */,
+				F4B000022F90000000000001 /* BiometricLockFullLaunchUITests.swift in Sources */,
+				F4B000042F90000000000001 /* SimulatorBiometrics.swift in Sources */,
 				C0A000102EF0000000000001 /* FullLaunchSupport.swift in Sources */,
 				C0A000122EF0000000000001 /* FakeNodeControl.swift in Sources */,
 				C0A000142EF0000000000001 /* HardwareSignerControl.swift in Sources */,

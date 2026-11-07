@@ -431,6 +431,27 @@ impl ContentSize {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct BiometricsRequest {
+    udid: String,
+    action: BiometricsAction,
+}
+
+/// What the Simulator app's Features > Face ID menu does, as `simctl` can do it from the host
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+enum BiometricsAction {
+    /// Enrolls a face, so `LAContext` reports Face ID as available
+    Enroll,
+    /// Removes the enrolled face
+    Unenroll,
+    /// Answers the Face ID prompt on screen with the enrolled face
+    Match,
+    /// Answers the Face ID prompt on screen with a face that isn't enrolled
+    Nomatch,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct DropRequest {
     after_exchanges: u32,
 }
@@ -459,6 +480,7 @@ fn route(state: &SignerState, method: &str, path: &str, body: &[u8]) -> Result<V
         ("POST", "/simulator-content-size") => {
             simulator_content_size(serde_json::from_slice(body)?)
         }
+        ("POST", "/simulator-biometrics") => simulator_biometrics(serde_json::from_slice(body)?),
 
         ("POST", "/tapsigner/start") => {
             let request: TapSignerStartRequest = if body.is_empty() {
@@ -663,6 +685,54 @@ fn simulator_content_size(request: ContentSizeRequest) -> Result<Value> {
     }
 
     Ok(json!({ "previous": previous.name() }))
+}
+
+/// Enrolls or removes the simulator's Face ID, or answers the Face ID prompt on screen, which an
+/// XCUITest can't do from inside the simulator
+///
+/// These are the Darwin notifications the Simulator app's Features > Face ID menu posts, which the
+/// simulator's BiometricKit listens for
+fn simulator_biometrics(request: BiometricsRequest) -> Result<Value> {
+    const ENROLLMENT: &str = "com.apple.BiometricKit.enrollmentChanged";
+
+    let udid = request.udid.as_str();
+    match request.action {
+        BiometricsAction::Enroll => {
+            simctl_notifyutil(udid, &["-s", ENROLLMENT, "1"])?;
+            simctl_notifyutil(udid, &["-p", ENROLLMENT])?;
+        }
+        BiometricsAction::Unenroll => {
+            simctl_notifyutil(udid, &["-s", ENROLLMENT, "0"])?;
+            simctl_notifyutil(udid, &["-p", ENROLLMENT])?;
+        }
+        BiometricsAction::Match => {
+            simctl_notifyutil(udid, &["-p", "com.apple.BiometricKit_Sim.pearl.match"])?;
+        }
+        BiometricsAction::Nomatch => {
+            simctl_notifyutil(udid, &["-p", "com.apple.BiometricKit_Sim.pearl.nomatch"])?;
+        }
+    }
+
+    Ok(json!({ "ok": true }))
+}
+
+/// Runs `notifyutil` inside the simulator
+fn simctl_notifyutil(udid: &str, args: &[&str]) -> Result<()> {
+    let output = Command::new("xcrun")
+        .args(["simctl", "spawn", udid, "notifyutil"])
+        .args(args)
+        .output()
+        .wrap_err("Failed to run simctl spawn notifyutil")?;
+
+    if !output.status.success() {
+        bail!(
+            "notifyutil {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    Ok(())
 }
 
 /// Runs `simctl ui <udid> <args>` and returns what it printed
