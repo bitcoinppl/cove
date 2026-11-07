@@ -112,22 +112,27 @@ paths = [
   "ios/Cove/Views/QrExportView.swift",
   "ios/Cove/Views/QrExportContentViews.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/views/QrExportView.kt",
+  "ios/Cove/QrCodeView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/QrCodeGenerator.kt",
   "rust/crates/cove-ur/src/crypto_psbt.rs",
   "rust/crates/cove-types/src/confirm.rs",
   "rust/src/qr_scanner.rs",
   "rust/src/multi_format.rs",
 ]
 coverage = [
-  "human",
   "rust:rust/crates/cove-ur/src/crypto_psbt.rs::test_crypto_psbt_cbor_is_untagged_bytes",
   "rust:rust/src/hardware_signing_tests.rs::signed_animated_ur_and_bbqr_from_an_external_signer_finalize_the_saved_draft",
   "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testAnimatedUrSignatureReachesConfirmationAndBroadcasts",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::animatedUrSignatureReachesConfirmationAndBroadcasts",
+  "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testDrawnUrExportJoinsToTheDraftAndItsSignatureBroadcasts",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::drawnUrExportJoinsToTheDraftAndItsSignatureBroadcasts",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# the export, scan and finalize loop with an independent signer is asserted in rust, and the ui
-# tests export the draft, feed signed ur frames out of order through the qr seam and check the
-# broadcast; a strict physical signer and the camera still need a person
+# rust asserts the export, scan and finalize loop with an independent signer. the ui tests
+# screenshot the animated ur export the app draws, decode every frame and join them to the draft's
+# psbt on the host, then sign it, feed the signed ur frames out of order through the qr seam and
+# check the broadcast. a strict physical signer and the camera reading the screen are checked in
+# s19-hardware-journey-qr-and-nfc-legs
 
 [[row]]
 id = "s13-bbqr-unsigned-and-signed-scan-path"
@@ -144,22 +149,27 @@ paths = [
   "ios/Cove/Views/QrExportView.swift",
   "ios/Cove/Views/QrExportContentViews.swift",
   "android/app/src/main/java/org/bitcoinppl/cove/views/QrExportView.kt",
+  "ios/Cove/QrCodeView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/QrCodeGenerator.kt",
   "rust/crates/cove-types/src/confirm.rs",
   "rust/src/qr_scanner.rs",
 ]
 coverage = [
-  "human",
   "rust:rust/src/hardware_signing_tests.rs::signed_animated_ur_and_bbqr_from_an_external_signer_finalize_the_saved_draft",
   "rust:rust/src/hardware_signing_tests.rs::signed_psbts_that_match_no_saved_draft_are_rejected",
   "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testAnimatedBbqrSignatureReachesConfirmationAndBroadcasts",
   "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testPartialBbqrFramesShowProgressUntilTheRestArrive",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::animatedBbqrSignatureReachesConfirmationAndBroadcasts",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::partialBbqrFramesShowProgressUntilTheRestArrive",
+  "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testDrawnBbqrExportJoinsToTheDraftAndItsSignatureBroadcasts",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::drawnBbqrExportJoinsToTheDraftAndItsSignatureBroadcasts",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# bbqr export, out-of-order and truncated scans and finalize are asserted in rust, and the ui tests
-# cover bbqr export, partial and repeated frames and the broadcast through the qr seam; the camera
-# exchange with a physical signer still needs a person
+# rust asserts bbqr export, out-of-order and truncated scans and finalize. the ui tests lower the
+# density until the bbqr export animates, screenshot and decode every frame the app draws and join
+# them to the draft's psbt on the host, then sign it and cover partial and repeated signed frames
+# and the broadcast through the qr seam. the camera exchange with a physical signer is checked in
+# s19-hardware-journey-qr-and-nfc-legs
 
 [[row]]
 id = "s13-nfc-and-tapsigner-setup-retry-and-signing"
