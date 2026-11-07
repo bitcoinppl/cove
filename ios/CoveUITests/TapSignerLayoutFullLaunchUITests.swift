@@ -1,18 +1,19 @@
 import XCTest
 
-/// Walks every TAPSIGNER setup and import screen at the largest accessibility text size and checks
-/// that each screen's text and actions fit the window or scroll into it, through the debug
-/// TAPSIGNER seam and an emulated card (docs/testing.md)
+/// Walks every TAPSIGNER setup and import screen, and the CVC screen signing opens, at the largest
+/// accessibility text size and checks that each screen's text and actions fit the window or scroll
+/// into it, through the debug TAPSIGNER seam and an emulated card (docs/testing.md)
 ///
 /// The checks catch text and actions pushed off screen, cut off by their scroll view or out of
 /// reach. XCUITest reports a text's whole label even when it draws truncated, so each title and
 /// button label also carries the debug truncation probe, which reports whether it draws whole.
-/// Needs the hardware signer host, which `xtask ios-ui` (`just ios-ui-background`) starts for
-/// every run
+/// Needs the hardware signer host, and the fake node for the signing test, which `xtask ios-ui`
+/// (`just ios-ui-background`) starts for every run
 final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private static let esploraUrl = UITestHostPorts.esploraUrl
     private static let largestContentSize = "UICTContentSizeCategoryAccessibilityXXXL"
     private static let newCvc = "246810"
+    private static let fundedSats: UInt64 = 100_000
 
     /// The value a probed text reports when it draws whole, from `UITestTruncationProbe` in the app
     private static let fitsValue = "fits"
@@ -72,6 +73,59 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         app.scanTapSignerFromAddWallet(expectingAlert: alert)
     }
 
+    /// A funded card's Sign using TAPSIGNER opens the CVC screen with signing's own message
+    ///
+    /// That screen shows before the app contacts the card, so signing failing on the card
+    /// (#965) doesn't stop the check; the test cancels instead of submitting a CVC. The card is
+    /// imported and funded at the default size, since only the signing screen is under test
+    func testTapSignerSigningCvcScreenFitsAtLargestTextSize() throws {
+        let node = FakeNodeControl()
+        try node.requireHealthy()
+        try node.reset()
+        try signer.requireHealthy()
+        try signer.startTapSigner()
+
+        // the draft prices its fee from the fake node
+        app.launchEnvironment["COVE_FEE_URL"] = "\(Self.esploraUrl)/api/v1/fees/recommended"
+        app.launch(expecting: app.staticTexts["Welcome to Cove"])
+        app.importTestMnemonic()
+
+        app.scanTapSignerFromAddWallet(expectingAlert: "Import TAPSIGNER?")
+        app.enterTapSignerCvc(HardwareSignerControl.tapSignerCvc)
+        XCTAssertTrue(app.staticTexts["Import Complete"].waitForExistence(timeout: 30))
+        app.tapButton(named: "Continue")
+        XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
+
+        _ = try node.fund(address: app.copyReceiveAddress(using: signer), sats: [Self.fundedSats])
+        app.refreshUntilBalance(sats: Self.fundedSats)
+        app.terminate()
+
+        // the app reopens the card's wallet, the one last selected
+        app.launchArguments += ["-UIPreferredContentSizeCategoryName", Self.largestContentSize]
+        app.launch(expecting: app.element("selectedWallet.balance"))
+        app.assertBalance(sats: Self.fundedSats, timeout: 60)
+
+        app.startSend(to: XCUIApplication.externalAddress)
+        app.tapMax()
+
+        // Next shows once fee rates load, and the larger text can push it below the fold
+        let next = app.buttons.matching(identifier: "sendFlow.next")
+        XCTAssertTrue(next.firstMatch.waitForExistence(timeout: 60), "Next never showed on the send screen")
+        reachAndTap(next, "send: Next")
+        reachAndTap(button("Sign using TAPSIGNER"), "hardware send: Sign using TAPSIGNER")
+
+        assertCvcScreenFits(
+            on: "signing CVC",
+            title: "Enter TAPSIGNER CVC",
+            description: "For security purposes, you must enter your TAPSIGNER PIN before you can sign",
+            cancel: "Cancel"
+        )
+
+        reachAndTap(button("Cancel"), "signing CVC: Cancel")
+        XCTAssertTrue(app.staticTexts["Enter TAPSIGNER CVC"].waitForNonExistence(timeout: 15), "Cancel didn't close the signing CVC screen")
+        XCTAssertTrue(button("Sign using TAPSIGNER").firstMatch.waitForExistence(timeout: 15), "Cancel should leave the draft open")
+    }
+
     // MARK: - Setup
 
     private func setUpCardThroughEveryScreen() throws {
@@ -81,6 +135,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             descriptions: ["A chain code works", "You can provide your own chain code"],
             buttons: [button("Cancel"), button(startingWith: "Automatic Setup"), button("Advanced Setup")]
         )
+        assertReportFits("tapSigner.automaticSetup.truncation", "choose chain code: Automatic Setup", probes: 2)
         reachAndTap(button("Advanced Setup"), "choose chain code: Advanced Setup")
 
         // the field grows vertically, which XCUITest can report as a text view rather than a text field
@@ -138,6 +193,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             descriptions: ["Your TAPSIGNER ready to use", "If you haven"],
             buttons: [button("Cancel"), button(startingWith: "Download Backup"), button("Continue")]
         )
+        assertReportFits("tapSigner.downloadBackup.truncation", "setup success: Download Backup", probes: 2)
         reachAndTap(button("Continue"), "setup success: Continue")
         XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30))
     }
@@ -178,20 +234,25 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
     /// Checks the CVC screen fits with the number pad up, then enters the CVC and submits it
     private func enterCvc(_ cvc: String, on screen: String, title: String, description: String, cancel: String) throws {
+        assertCvcScreenFits(on: screen, title: title, description: description, cancel: cancel)
+
         let field = app.secureTextFields.matching(identifier: "Enter CVC")
+        reachAndTap(field, "\(screen): CVC field").typeText(cvc)
+        reachAndTap(button("Continue"), "\(screen): Continue")
+        XCTAssertTrue(app.staticTexts[title].waitForNonExistence(timeout: 15), "the \(screen) screen didn't accept the CVC")
+    }
+
+    /// Checks the CVC screen fits with the number pad up, before any CVC is entered
+    private func assertCvcScreenFits(on screen: String, title: String, description: String, cancel: String) {
         let submit = button("Continue")
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 15), "the \(screen) screen never showed")
         assertScreenFits(
             screen,
             texts: [title],
             descriptions: [description],
-            buttons: [button(cancel), field, submit],
+            buttons: [button(cancel), app.secureTextFields.matching(identifier: "Enter CVC"), submit],
             awaitingInput: [submit]
         )
-
-        reachAndTap(field, "\(screen): CVC field").typeText(cvc)
-        reachAndTap(button("Continue"), "\(screen): Continue")
-        XCTAssertTrue(app.staticTexts[title].waitForNonExistence(timeout: 15), "the \(screen) screen didn't accept the CVC")
     }
 
     // MARK: - Layout checks
@@ -240,17 +301,32 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// Fails unless the truncation probe of the text, or of the button's label, reports it draws
     /// whole
     ///
-    /// A button takes its label's accessibility value. A text without the probe has no value, so
-    /// dropping the probe fails here too. The probe measures after layout, so its value gets a
-    /// moment to settle
+    /// A button joins the values of the texts in its label, so one holding a probed title and a
+    /// probed description reads `fits, fits`, and every part must say `fits`. A text without the
+    /// probe has no value, so dropping the probe fails here too. The probe measures after layout,
+    /// so its value gets a moment to settle
     private func assertDrawsWhole(_ element: XCUIElement, _ name: String) {
         let value = { element.value as? String ?? "" }
+        let fits = { value().components(separatedBy: ", ").allSatisfy { $0 == Self.fitsValue } }
         let settled = Date().addingTimeInterval(3)
-        while value() != Self.fitsValue, Date() < settled {
+        while !fits(), Date() < settled {
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         }
 
-        XCTAssertEqual(value(), Self.fitsValue, "\(name) doesn't draw whole: its truncation probe reports '\(value())'")
+        XCTAssertTrue(fits(), "\(name) doesn't draw whole: its truncation probe reports '\(value())'")
+    }
+
+    /// Fails unless the truncation report beside a button holds `probes` probed texts and reads
+    /// `fits`
+    ///
+    /// A button merges the texts of its label into one element, so a button holding a title and a
+    /// description sums up both probes through an element beside it. The count catches one probe
+    /// of the two dropped, which the summed value alone wouldn't
+    private func assertReportFits(_ identifier: String, _ name: String, probes: Int) {
+        let report = app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+        XCTAssertTrue(report.waitForExistence(timeout: 15), "\(name)'s truncation report is missing")
+        XCTAssertEqual(report.label, "Truncation report of \(probes) texts", "\(name) should probe its title and its description")
+        assertDrawsWhole(report, "\(name) title or description")
     }
 
     @discardableResult

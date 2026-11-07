@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.flows.TapSignerFlow
 
 import android.graphics.Rect
+import android.system.Os
 import android.view.View
 import android.view.ViewGroup
 import android.view.inspector.WindowInspector
@@ -22,6 +23,7 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.test.AndroidDeviceStayAwakeRule
+import org.bitcoinppl.cove.test.FAKE_NODE_ESPLORA_URL
 import org.bitcoinppl.cove.test.FakeNodeControl
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchStartupRobot
@@ -46,22 +48,26 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Walks every TAPSIGNER setup and import screen at the largest system font scale and checks that
- * each screen's text and actions fit the display or scroll into it, through the debug TAPSIGNER seam
- * and an emulated card (docs/testing.md)
+ * Walks every TAPSIGNER setup and import screen, and the CVC screen signing opens, at the largest
+ * system font scale and checks that each screen's text and actions fit the display or scroll into
+ * it, through the debug TAPSIGNER seam and an emulated card (docs/testing.md)
  *
  * The TAPSIGNER sheet is its own window, which ignores a Compose test font scale, so this sets the
  * system font scale and restores it afterwards. Each node's full bounds and text layout come from
  * the Compose semantics tree, so the checks catch text and actions pushed off screen, cut off by
  * their container or squeezed, and text that lays out ellipsized or cut short inside its own bounds.
- * Runs in the uiTest flavour; needs the hardware signer host up and forwarded, which
- * `just android-instrumented-ci` does
+ * Runs in the uiTest flavour; needs the hardware signer host, and the fake node for the signing
+ * test, up and forwarded, which `just android-instrumented-ci` does
  */
 @LargeTest
 @RunWith(AndroidJUnit4::class)
 class TapSignerLayoutFullLaunchTest {
     private companion object {
         const val NEW_CVC = "246810"
+        const val FUNDED_SATS = 100_000L
+
+        // where signing's CVC message differs from import's
+        const val SIGNING_MESSAGE_START = "For security purposes, you must enter your TAPSIGNER PIN before you can sign"
 
         // drops the card's session once the operation has started on it, so the app offers to
         // continue instead of failing outright
@@ -141,6 +147,57 @@ class TapSignerLayoutFullLaunchTest {
     }
 
     /**
+     * A funded card's Sign using TAPSIGNER opens the CVC screen with signing's own message
+     *
+     * That screen shows before the app contacts the card, so signing failing on the card (#965)
+     * doesn't stop the check; the test cancels instead of submitting the CVC. The card is imported
+     * and funded at the default scale, since only the signing screen is under test, and the scale
+     * changes on the wallet screen, which the activity the change recreates opens again
+     */
+    @Test
+    fun tapSignerSigningCvcScreenFitsAtLargestFontScale() {
+        signer.requireHealthy()
+
+        // debug builds read this on every fee fetch, so the draft prices its fee from the fake node
+        Os.setenv("COVE_FEE_URL", "$FAKE_NODE_ESPLORA_URL/api/v1/fees/recommended", true)
+        launchPastOnboarding(needsSetup = false)
+
+        screens.scanTapSignerFromAddWallet("Import TAPSIGNER?")
+        screens.enterTapSignerCvc(TAPSIGNER_CVC)
+        device.waitFor(By.text("Import Complete"), timeoutMs = 30_000L)
+        device.waitFor(By.text("Continue")).click()
+        device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
+
+        node.fund(screens.copyReceiveAddress(), listOf(FUNDED_SATS))
+        screens.refreshUntilBalance(FUNDED_SATS)
+
+        device.executeShellCommand("settings put system font_scale $LARGEST_SYSTEM_FONT_SCALE")
+        device.waitForIdle()
+        wallet.waitForBalance(FUNDED_SATS)
+
+        wallet.startSend()
+        wallet.tapMax()
+        wallet.clickNext(expecting = By.text("Sign using TAPSIGNER"))
+        device.scrollTo(By.text("Sign using TAPSIGNER")).click()
+
+        val title = "Enter TAPSIGNER CVC"
+        assertCvcScreenFits(title, "Cancel")
+        device.waitFor(By.textStartsWith(SIGNING_MESSAGE_START))
+
+        // the submit action stays disabled until the field holds a whole CVC, which is typed but
+        // never submitted
+        wallet.typeInto(By.clazz("android.widget.EditText"), TAPSIGNER_CVC) {
+            device.hasObject(By.text("Digits: ${TAPSIGNER_CVC.length}"))
+        }
+        wallet.dismissKeyboard()
+        reachable(By.text("Submit").enabled(true), "$title: Submit", drawsWhole = "Submit", usable = true)
+
+        reachable(By.text("Cancel"), "$title: Cancel", usable = true).click()
+        assertTrue("Cancel didn't close the signing CVC screen", device.wait(Until.gone(By.text(title)), 15_000L))
+        device.waitFor(By.text("Sign using TAPSIGNER"))
+    }
+
+    /**
      * Finishes onboarding at the default scale, since Add Wallet needs a wallet and only the
      * TAPSIGNER screens are under test, then sets the largest scale and scans the card
      */
@@ -148,6 +205,15 @@ class TapSignerLayoutFullLaunchTest {
         needsSetup: Boolean,
         alert: String,
     ) {
+        launchPastOnboarding(needsSetup)
+
+        device.executeShellCommand("settings put system font_scale $LARGEST_SYSTEM_FONT_SCALE")
+        device.waitForIdle()
+        screens.scanTapSignerFromAddWallet(alert)
+    }
+
+    /** Starts the card and a fresh app on the fake node, and imports a software wallet to finish onboarding */
+    private fun launchPastOnboarding(needsSetup: Boolean) {
         node.reset()
         signer.startTapSigner(needsSetup)
         HardwareSignerControl.useTapSignerBridge()
@@ -164,10 +230,6 @@ class TapSignerLayoutFullLaunchTest {
             .skipCloudBackupAfterImport()
             .acceptTermsAfterImport()
         device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
-
-        device.executeShellCommand("settings put system font_scale $LARGEST_SYSTEM_FONT_SCALE")
-        device.waitForIdle()
-        screens.scanTapSignerFromAddWallet(alert)
     }
 
     // MARK: setup
@@ -232,15 +294,23 @@ class TapSignerLayoutFullLaunchTest {
         back: String,
         submit: String,
     ) {
-        device.waitFor(By.text(title), timeoutMs = 15_000L)
-        assertScreenFits(title, back, title)
-        reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
+        assertCvcScreenFits(title, back)
 
         screens.enterTapSignerCvc(cvc, title, submit) { reachable(it, "$title: $submit", drawsWhole = submit, usable = true) }
         assertTrue(
             "the $title screen didn't accept the CVC",
             device.wait(Until.gone(By.text(title)), 15_000L),
         )
+    }
+
+    /** Checks the CVC screen titled [title] fits, before any CVC is entered */
+    private fun assertCvcScreenFits(
+        title: String,
+        back: String,
+    ) {
+        device.waitFor(By.text(title), timeoutMs = 15_000L)
+        assertScreenFits(title, back, title)
+        reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
     }
 
     // MARK: layout checks
