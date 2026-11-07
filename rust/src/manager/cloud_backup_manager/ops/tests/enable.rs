@@ -1474,6 +1474,7 @@ fn save_fresh_enable_hot_wallet(
             descriptors.internal.extended_descriptor,
         )
         .unwrap();
+
     keychain.save_wallet_secret(&metadata.id, secret).unwrap();
 
     FreshEnableWallet {
@@ -1493,10 +1494,12 @@ fn save_fresh_enable_device_wallets() -> Vec<FreshEnableWallet> {
         Network::Bitcoin,
         WalletMode::Main,
     );
+
     LabelManager::try_new(hot.metadata.id.clone())
         .unwrap()
         .import_without_cloud_backup_dirty(sample_labels_jsonl())
         .unwrap();
+
     hot.labels_jsonl = Some(sample_labels_jsonl());
 
     let mut watch = xpub_only_wallet_metadata();
@@ -1516,6 +1519,7 @@ fn save_fresh_enable_device_wallets() -> Vec<FreshEnableWallet> {
         Network::Testnet,
         WalletMode::Main,
     );
+
     let decoy = save_fresh_enable_hot_wallet(
         "Fresh Enable Decoy",
         "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong",
@@ -1529,6 +1533,7 @@ fn save_fresh_enable_device_wallets() -> Vec<FreshEnableWallet> {
     wallets
         .save_all_wallets(Network::Testnet, WalletMode::Main, vec![testnet.metadata.clone()])
         .unwrap();
+
     wallets
         .save_all_wallets(Network::Bitcoin, WalletMode::Decoy, vec![decoy.metadata.clone()])
         .unwrap();
@@ -1559,6 +1564,7 @@ async fn assert_fresh_enable_wallet_restored(wallet: &FreshEnableWallet) {
         wallet.mnemonic.as_ref().map(ToString::to_string),
         "{name} recovery words"
     );
+
     assert_eq!(
         keychain.get_wallet_xpub(&source.id).unwrap().map(|xpub| xpub.to_string()),
         Some(wallet.xpub.clone()),
@@ -1597,13 +1603,16 @@ async fn fresh_enable_on_empty_cloud_uploads_every_wallet_and_restores_it_on_a_n
     let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
     let master_json =
         globals.cloud.master_key_backup_bytes(&namespace).expect("master key uploaded");
+
     let wrapper: cove_cspp::backup_data::EncryptedMasterKeyBackup =
         serde_json::from_slice(&master_json).unwrap();
+
     let asked_salt = globals.passkey.authenticated_requests()[0].prf_salt.clone();
     assert_eq!(wrapper.prf_salt.to_vec(), asked_salt, "master key wrapper PRF salt");
 
     let master_key =
         cove_cspp::master_key_crypto::decrypt_master_key(&wrapper, &prf_output).unwrap();
+
     assert_eq!(master_key.namespace_id(), namespace);
     assert_eq!(
         cove_cspp::Cspp::new(Keychain::global().clone())
@@ -1696,11 +1705,13 @@ async fn fresh_enable_on_empty_cloud_uploads_every_wallet_and_restores_it_on_a_n
         .iter()
         .map(|(record_id, _)| wallet_filename_from_record_id(record_id))
         .collect();
+
     globals.cloud.set_wallet_files(namespace.clone(), wallet_files);
     globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
         prf_output: prf_output.to_vec(),
         credential_id: vec![9, 8, 7],
     }));
+
     globals.passkey.set_authenticate_result(Ok(prf_output.to_vec()));
 
     let report = restore_like_onboarding(&manager).await;
