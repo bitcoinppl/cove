@@ -145,23 +145,39 @@ struct KeyTeleportRevealedXprv: View {
             .background(Color.midnightBlue.opacity(0.48))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-        HStack {
-            Button { keyTeleportCopySensitiveText(xprv) } label: {
-                Label {
-                    Text("Copy").uiTestTruncationProbe()
-                } icon: {
-                    Image(systemName: "doc.on.doc")
-                }
+        // side by side at the largest sizes, Copy broke mid-word into "C", "op" and "y",
+        // so the buttons stack whenever both labels can't fit on one line
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                copyButton
+                hideButton
             }
-            .buttonStyle(.bordered)
-            .tint(.white)
 
-            Button(action: hide) {
-                Text("Hide").uiTestTruncationProbe()
+            VStack(alignment: .leading) {
+                copyButton
+                hideButton
             }
-            .buttonStyle(.bordered)
-            .tint(.white)
         }
+    }
+
+    private var copyButton: some View {
+        Button { keyTeleportCopySensitiveText(xprv) } label: {
+            Label {
+                Text("Copy").uiTestTruncationProbe()
+            } icon: {
+                Image(systemName: "doc.on.doc")
+            }
+        }
+        .buttonStyle(.bordered)
+        .tint(.white)
+    }
+
+    private var hideButton: some View {
+        Button(action: hide) {
+            Text("Hide").uiTestTruncationProbe()
+        }
+        .buttonStyle(.bordered)
+        .tint(.white)
     }
 }
 
