@@ -193,6 +193,10 @@ class TapSignerLayoutFullLaunchTest {
         scrollAboveKeyboard(By.res("sendFlow.address"), "send: address field")
         wallet.enterAddress()
         wallet.tapMax()
+
+        // with an address in, Max clears the focus and closes the keyboard, so the amount field
+        // opens it again, with the toolbar the form must also stop above
+        device.scrollTo(By.res("sendFlow.amount")).click()
         scrollAboveKeyboard(By.res("sendFlow.next"), "send: Next")
 
         // at this scale the hardware send screen ends its first screenful at its Sign Transaction
