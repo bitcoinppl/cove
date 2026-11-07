@@ -672,7 +672,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// field and text view across that column
     ///
     /// The view under the first touch takes the whole drag, so only the start must miss them; where
-    /// no point does, the drag starts at the middle as before
+    /// no point does, the drag is centred in `area` as before, within its start limits
     private func dragStart(in area: CGRect, x: CGFloat, travel: CGFloat) -> CGFloat {
         let ideal = area.midY + travel / 2
         let low = area.minY + max(0, travel) + Self.fieldClearance
@@ -686,7 +686,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             .map(\.frame)
             .filter { !$0.isEmpty }
             .map { $0.insetBy(dx: -Self.fieldClearance, dy: -Self.fieldClearance) }
-            .filter { $0.minX <= x && x <= $0.maxX }
+            .filter { $0.minX < x && x < $0.maxX }
 
         let isClear = { (y: CGFloat) in !fields.contains { $0.minY < y && y < $0.maxY } }
 
