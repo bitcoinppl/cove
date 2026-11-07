@@ -113,8 +113,8 @@ private struct WalletSettingsLoadingInformationSection: View {
 
     var body: some View {
         Section(header: Text("Wallet Information")) {
-            WalletSettingsLoadingRow(title: "Network", value: metadata.network.description)
-            WalletSettingsLoadingRow(title: "Wallet Type", value: String(metadata.walletType))
+            WalletSettingsValueRow(title: "Network", value: metadata.network.description)
+            WalletSettingsValueRow(title: "Wallet Type", value: String(metadata.walletType))
         }
     }
 }
@@ -205,20 +205,5 @@ private struct WalletSettingsLoadingColor: View {
                 .fill(Color(color))
                 .frame(width: 28, height: 28)
         }
-    }
-}
-
-private struct WalletSettingsLoadingRow: View {
-    let title: LocalizedStringKey
-    let value: String
-
-    var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Text(value)
-                .foregroundColor(.secondary)
-        }
-        .font(.subheadline)
     }
 }

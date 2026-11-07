@@ -153,16 +153,28 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
         // at the largest size the wallet screen's menu runs past the screen, and a drag to reach
         // its Wallet Settings closes it, so the wallet's row in a freshly opened Settings opens
         // them; a swipe could leave that list still moving under the tap, while reachAndTap's
-        // drag holds at its end, and it passes over the sidebar's copy of the row off screen; the
-        // list builds rows only near the screen, and at this size the wallet's row starts below it
+        // drag holds at its end, and it passes over the sidebar's copy of the row off screen
         robot.goBack()
         robot.openSettings()
 
+        // both lists build rows only near the screen, and at this size the wallet's row and Export
+        // Private Key start below it
         let screen = ScreenReachability(app: app)
         let walletRow = app.staticTexts.matching(NSPredicate(format: "label == %@", walletName))
         screen.scrollDown(untilExists: walletRow)
         screen.reachAndTap(walletRow, "settings: \(walletName)")
-        screen.reachAndTap(app.buttons.matching(NSPredicate(format: "label == %@", "Export Private Key")), "wallet settings: Export Private Key")
+
+        // beside its value, the Fingerprint title split as "Finger-" over "print"
+        screen.assertScreenFits(
+            "wallet settings",
+            texts: ["Network", "Wallet Type"],
+            fields: [(label: "Fingerprint", value: "3442193E")],
+            buttons: []
+        )
+
+        let export = app.buttons.matching(NSPredicate(format: "label == %@", "Export Private Key"))
+        screen.scrollDown(untilExists: export)
+        screen.reachAndTap(export, "wallet settings: Export Private Key")
         app.tapButton(named: "Reveal and Copy")
         robot.enterPin(mainPin)
         XCTAssertTrue(app.navigationBars["Private Key"].waitForExistence(timeout: 10))

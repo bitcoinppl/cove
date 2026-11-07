@@ -34,20 +34,40 @@ struct WalletSettingsInformationSection: View {
     }
 }
 
+/// A titled value, which moves under its title when the two don't fit on one line
+///
+/// Beside its value at accessibility sizes, "Fingerprint" had room for only part of the word, so
+/// iOS split it with a hyphen
 struct WalletSettingsValueRow: View {
     let title: String
     let value: String
     var minimumScaleFactor: CGFloat = 1
 
     var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
-            Text(value)
-                .foregroundColor(.secondary)
-                .minimumScaleFactor(minimumScaleFactor)
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                titleText
+                Spacer()
+                valueText
+            }
+
+            VStack(alignment: .leading) {
+                titleText
+                valueText
+            }
         }
         .font(.subheadline)
+    }
+
+    private var titleText: some View {
+        Text(title).uiTestTruncationProbe()
+    }
+
+    private var valueText: some View {
+        Text(value)
+            .foregroundColor(.secondary)
+            .uiTestTruncationProbe()
+            .minimumScaleFactor(minimumScaleFactor)
     }
 }
 
