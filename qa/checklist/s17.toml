@@ -110,7 +110,8 @@ coverage = [
 ]
 # 1.4.0: ios N/A, android HUMAN
 # the protected screen returns no screencap over adb, so the test captures the error dialog and the sender after OK from inside the app (Pictures/cove-layout-screenshots) and checks that the sender still takes a paste after OK
-# every text in the dialog and on the sender after OK must match a reference rendering of its own text layout, drawn in its own colour over the background beside it, on all but 2% of its glyph pixels, and every glyph pixel must reach WCAG AA contrast (4.5:1, or 3:1 for large text); a clipped, covered, overdrawn, wrong or faint text fails
+# the dialog's title, whole message and OK are required by name; each, and every other text in the dialog and on the sender after OK, must match a reference rendering of its own text layout drawn in its own colour over the background beside it
+# a text matches when at most 2% of its glyph-core pixels (reference coverage 75% or more) are off the reference, and at most 1% fall under WCAG AA contrast (4.5:1, or 3:1 for large text) measured from the captured pixels; a missing, clipped, covered, overdrawn, wrong, faint or faded text fails
 # dialog texts must also keep their laid-out size, stay inside the dialog and not overlap
 
 [[row]]
