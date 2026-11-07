@@ -1,5 +1,9 @@
+use std::collections::BTreeMap;
+
 use super::*;
+use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
+use cove_types::network::Network;
 
 use crate::manager::cloud_backup_manager::{
     CloudBackupOnboardingCompletionReadiness, PendingEnableJournalPhase,
@@ -1432,4 +1436,329 @@ async fn cancelled_passkey_restore_does_not_fall_back_to_local_master_key() {
         CloudBackupKeychain::global().snapshot_passkey_metadata().unwrap(),
         passkey_metadata
     );
+}
+
+/// A wallet the fresh enable test puts on the device, with what its backup must hold
+struct FreshEnableWallet {
+    metadata: WalletMetadata,
+    mnemonic: Option<Mnemonic>,
+    xpub: String,
+    labels_jsonl: Option<&'static str>,
+}
+
+/// Saves a hot wallet's recovery words, xpub and public descriptors the way the app keeps them
+fn save_fresh_enable_hot_wallet(
+    name: &str,
+    words: &str,
+    network: Network,
+    wallet_mode: WalletMode,
+) -> FreshEnableWallet {
+    use crate::wallet_secret::WalletSecretExt as _;
+
+    let mnemonic = Mnemonic::parse(words).unwrap();
+    let secret = cove_device::keychain::WalletSecret::Mnemonic(mnemonic.clone());
+
+    let mut metadata = WalletMetadata::preview_new();
+    metadata.name = name.into();
+    metadata.network = network;
+    metadata.wallet_mode = wallet_mode;
+    metadata.wallet_type = WalletType::Hot;
+
+    // the real fingerprint, so restore tells these wallets apart the way it does on a device
+    let xpub = secret.xpub(network);
+    metadata.master_fingerprint = Some(Arc::new(xpub.fingerprint().into()));
+    let descriptors = secret.clone().into_descriptors(network, metadata.address_type);
+    let keychain = Keychain::global();
+    keychain.save_wallet_xpub(&metadata.id, xpub).unwrap();
+    keychain
+        .save_public_descriptor(
+            &metadata.id,
+            descriptors.external.extended_descriptor.clone(),
+            descriptors.internal.extended_descriptor,
+        )
+        .unwrap();
+
+    keychain.save_wallet_secret(&metadata.id, secret).unwrap();
+
+    FreshEnableWallet {
+        metadata,
+        mnemonic: Some(mnemonic),
+        xpub: xpub.to_string(),
+        labels_jsonl: None,
+    }
+}
+
+/// Saves wallets in three network and mode groups: on mainnet a hot wallet with labels and an
+/// xpub-only wallet, a testnet hot wallet, and a hot wallet in decoy mode
+fn save_fresh_enable_device_wallets() -> Vec<FreshEnableWallet> {
+    let mut hot = save_fresh_enable_hot_wallet(
+        "Fresh Enable Hot",
+        "legal winner thank year wave sausage worth useful legal winner thank yellow",
+        Network::Bitcoin,
+        WalletMode::Main,
+    );
+
+    LabelManager::try_new(hot.metadata.id.clone())
+        .unwrap()
+        .import_without_cloud_backup_dirty(sample_labels_jsonl())
+        .unwrap();
+
+    hot.labels_jsonl = Some(sample_labels_jsonl());
+
+    let mut watch = xpub_only_wallet_metadata();
+    let watch_xpub: bdk_wallet::bitcoin::bip32::Xpub = sample_xpub(&watch).parse().unwrap();
+    watch.master_fingerprint = Some(Arc::new(watch_xpub.fingerprint().into()));
+    Keychain::global().save_wallet_xpub(&watch.id, watch_xpub).unwrap();
+    let watch = FreshEnableWallet {
+        xpub: sample_xpub(&watch),
+        metadata: watch,
+        mnemonic: None,
+        labels_jsonl: None,
+    };
+
+    let testnet = save_fresh_enable_hot_wallet(
+        "Fresh Enable Testnet",
+        "letter advice cage absurd amount doctor acoustic avoid letter advice cage above",
+        Network::Testnet,
+        WalletMode::Main,
+    );
+
+    let decoy = save_fresh_enable_hot_wallet(
+        "Fresh Enable Decoy",
+        "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong",
+        Network::Bitcoin,
+        WalletMode::Decoy,
+    );
+
+    let wallets = Database::global().wallets();
+    let mainnet = vec![hot.metadata.clone(), watch.metadata.clone()];
+    wallets.save_all_wallets(Network::Bitcoin, WalletMode::Main, mainnet).unwrap();
+    wallets
+        .save_all_wallets(Network::Testnet, WalletMode::Main, vec![testnet.metadata.clone()])
+        .unwrap();
+
+    wallets
+        .save_all_wallets(Network::Bitcoin, WalletMode::Decoy, vec![decoy.metadata.clone()])
+        .unwrap();
+
+    vec![hot, watch, testnet, decoy]
+}
+
+/// The restored wallet matches the one the fresh enable uploaded, from its metadata to its keys
+/// and labels
+async fn assert_fresh_enable_wallet_restored(wallet: &FreshEnableWallet) {
+    let source = &wallet.metadata;
+    let name = source.name.as_str();
+    let restored = Database::global()
+        .wallets()
+        .get(&source.id, source.network, source.wallet_mode)
+        .unwrap()
+        .unwrap_or_else(|| panic!("{name} restored into its network and mode"));
+
+    assert_eq!(restored.name, source.name);
+    assert_eq!(restored.wallet_type, source.wallet_type, "{name} type");
+    assert_eq!(restored.color, source.color, "{name} color");
+    assert_eq!(restored.address_type, source.address_type, "{name} address type");
+    assert_eq!(restored.master_fingerprint, source.master_fingerprint, "{name} fingerprint");
+
+    let keychain = Keychain::global();
+    assert_eq!(
+        keychain.get_wallet_key(&source.id).unwrap().map(|mnemonic| mnemonic.to_string()),
+        wallet.mnemonic.as_ref().map(ToString::to_string),
+        "{name} recovery words"
+    );
+
+    assert_eq!(
+        keychain.get_wallet_xpub(&source.id).unwrap().map(|xpub| xpub.to_string()),
+        Some(wallet.xpub.clone()),
+        "{name} xpub"
+    );
+
+    let exported = LabelManager::try_new(source.id.clone()).unwrap().export().await.unwrap();
+    match wallet.labels_jsonl {
+        Some(labels) => assert_labels_restored(name, labels, &exported),
+        None => assert!(exported.trim().is_empty(), "{name} has no labels: {exported}"),
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn fresh_enable_on_empty_cloud_uploads_every_wallet_and_restores_it_on_a_new_device() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
+    let wallets = save_fresh_enable_device_wallets();
+    let prf_output = [0x5a; 32];
+    globals.passkey.set_create_result(Ok(vec![9, 8, 7]));
+    globals.passkey.set_authenticate_result(Ok(prf_output.to_vec()));
+
+    enable_cloud_backup_create_new(&manager).await.unwrap();
+    confirm_saved_passkey_session(&manager).await;
+
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+    assert_eq!(globals.passkey.create_count(), 1, "a fresh enable registers one passkey");
+    assert_eq!(globals.passkey.authenticated_credential_ids(), vec![vec![9, 8, 7]]);
+
+    // the master key backup opens with the new passkey's PRF output for the salt it was asked with
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    let master_json =
+        globals.cloud.master_key_backup_bytes(&namespace).expect("master key uploaded");
+
+    let wrapper: cove_cspp::backup_data::EncryptedMasterKeyBackup =
+        serde_json::from_slice(&master_json).unwrap();
+
+    let asked_salt = globals.passkey.authenticated_requests()[0].prf_salt.clone();
+    assert_eq!(wrapper.prf_salt.to_vec(), asked_salt, "master key wrapper PRF salt");
+
+    let master_key =
+        cove_cspp::master_key_crypto::decrypt_master_key(&wrapper, &prf_output).unwrap();
+
+    assert_eq!(master_key.namespace_id(), namespace);
+    assert_eq!(
+        cove_cspp::Cspp::new(Keychain::global().clone())
+            .load_master_key_from_store()
+            .unwrap()
+            .unwrap()
+            .as_bytes(),
+        master_key.as_bytes()
+    );
+
+    // every wallet on the device is in the cloud and opens with that master key
+    let decrypt_wallet = |metadata: &WalletMetadata| {
+        let record_id = wallet_record_id(metadata.id.as_ref());
+        let bytes = globals
+            .cloud
+            .wallet_backup_bytes(&namespace, &record_id)
+            .unwrap_or_else(|| panic!("{} uploaded", metadata.name));
+
+        cove_cspp::wallet_crypto::decrypt_wallet_backup(
+            &serde_json::from_slice(&bytes).unwrap(),
+            &master_key.critical_data_key(),
+        )
+        .unwrap()
+    };
+
+    for wallet in &wallets {
+        let name = wallet.metadata.name.as_str();
+        let entry = decrypt_wallet(&wallet.metadata);
+
+        match &wallet.mnemonic {
+            Some(mnemonic) => assert!(
+                matches!(&entry.secret, WalletSecret::Mnemonic(words) if *words == mnemonic.to_string()),
+                "{name} recovery words"
+            ),
+            None => {
+                assert!(matches!(entry.secret, WalletSecret::WatchOnly), "{name} is watch-only");
+                assert_eq!(entry.xpub.as_ref(), Some(&wallet.xpub), "{name} xpub");
+            }
+        }
+
+        assert_eq!(
+            crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl(&entry)
+                .unwrap()
+                .as_deref(),
+            wallet.labels_jsonl,
+            "{name} labels"
+        );
+    }
+
+    // the background verifier reads the uploads back and reaches Verified
+    for _ in 0..10 {
+        if !verify_pending_uploads_once_for_test_async(&manager).await {
+            break;
+        }
+    }
+
+    match manager.model_snapshot().verification {
+        VerificationState::Verified(report) => {
+            assert_eq!(report.wallets_verified as usize, wallets.len(), "wallets verified");
+            assert!(report.wallet_issues.is_empty(), "{:?}", report.wallet_issues);
+        }
+
+        other => panic!("expected Verified after a fresh enable, got {other:?}"),
+    }
+
+    assert_eq!(globals.passkey.create_count(), 1, "verification registered another passkey");
+
+    // a new device restores those uploads, from the paths the enable wrote them to, and gets
+    // every wallet back as it was
+    let mut uploads = BTreeMap::new();
+    for upload in globals.cloud.uploads() {
+        if upload.namespace == namespace {
+            uploads.insert(upload.record_id.clone(), upload);
+        }
+    }
+
+    assert_eq!(uploads.len(), wallets.len() + 1, "master key and every wallet uploaded");
+
+    reset_cloud_backup_test_state(&manager, globals);
+    for wallet in &wallets {
+        Keychain::global().delete_wallet_items(&wallet.metadata.id);
+        crate::wallet::delete_wallet_specific_data(&wallet.metadata.id).unwrap();
+    }
+
+    let mut wallet_files = Vec::new();
+    for upload in uploads.values() {
+        if upload.record_id == MASTER_KEY_RECORD_ID {
+            globals.cloud.set_master_key_backup(namespace.clone(), upload.data.clone());
+            continue;
+        }
+
+        globals.cloud.set_wallet_backup(
+            namespace.clone(),
+            upload.record_id.clone(),
+            upload.data.clone(),
+        );
+
+        wallet_files.push(upload.relative_path.clone());
+    }
+
+    globals.cloud.set_wallet_files(namespace.clone(), wallet_files);
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_output.to_vec(),
+        credential_id: vec![9, 8, 7],
+    }));
+
+    globals.passkey.set_authenticate_result(Ok(prf_output.to_vec()));
+
+    let report = restore_like_onboarding(&manager).await;
+
+    // the mock serves files by record id, so a restore reading another path than the upload
+    // wrote would still find them here but not on a real provider
+    let downloads = globals.cloud.download_requests();
+    for download in &downloads {
+        assert_eq!(download.namespace, namespace, "restore read another namespace");
+    }
+
+    for upload in uploads.values() {
+        let read_paths: Vec<&str> = downloads
+            .iter()
+            .filter(|download| download.record_id == upload.record_id)
+            .flat_map(|download| download.relative_paths.iter().map(String::as_str))
+            .collect();
+
+        assert!(
+            read_paths.contains(&upload.relative_path.as_str()),
+            "{} written but restore read {read_paths:?}",
+            upload.relative_path
+        );
+    }
+
+    assert_eq!(report.failed_wallet_errors, Vec::<String>::new(), "wallet restore errors");
+    assert_eq!(report.labels_failed_errors, Vec::<String>::new(), "label restore errors");
+    assert_eq!(report.wallets_restored as usize, wallets.len(), "wallets restored");
+
+    for wallet in &wallets {
+        assert_fresh_enable_wallet_restored(wallet).await;
+    }
+
+    assert_eq!(globals.passkey.create_count(), 0, "restore registered a passkey");
+
+    reset_cloud_backup_test_state(&manager, globals);
+    for wallet in &wallets {
+        crate::wallet::delete_wallet_specific_data(&wallet.metadata.id).unwrap();
+    }
 }

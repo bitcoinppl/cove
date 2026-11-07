@@ -82,6 +82,7 @@ coverage = [
     "human",
 ]
 # 1.4.0: ios N/A, android HUMAN
+# a tester step, not app behavior: before approving the android wipe, confirm a verified cloud backup exists to restore from. no app code reads the cloud before a wipe: the wipe in rust/src/app.rs only stops cloud backup's writers and clears its local state, and the wipe tests there cover its failure paths
 
 [[row]]
 id = "s01-main-recovery-copy-before-wipe"
@@ -185,6 +186,11 @@ platforms = ["ios", "android"]
 target = "manual"
 paths = [
     "rust/src/manager/cloud_backup_manager/ops/restore.rs",
+    "rust/src/manager/cloud_backup_manager/actors/restore.rs",
+    "rust/src/manager/cloud_backup_manager/wallets/restore.rs",
+    "rust/src/backup/import/cloud_restore.rs",
+    "rust/crates/cove-cspp/src/**",
+    "rust/src/manager/cloud_backup_manager/ops/tests/fixtures/v1_3_0_cloud_backup/**",
     "rust/src/database/cloud_backup/**",
     "ios/Cove/CloudBackupManager.swift",
     "ios/Cove/Flows/SettingsFlow/CloudBackup*.swift",
@@ -193,9 +199,11 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/CloudBackupSettingsPresentation.kt",
 ]
 coverage = [
+    "rust:rust/src/manager/cloud_backup_manager/ops/tests/golden_v1_3_0_restore.rs::restore_on_new_device_brings_back_every_wallet_a_v1_3_0_backup_holds",
     "human",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
+# rust restores a backup the v1.3.0 code wrote, kept as a fixture, the way onboarding does on a new device: every wallet comes back with its secret, labels, name, network, mode and type, each file is read at its 1.3.0 path, and the passkey is asked with the relying party and prf salt 1.3.0 used. a person still restores a passkey and backup made by a real 1.3.0 install on a real icloud or google drive account, which the scripted providers can't stand in for
 
 [[row]]
 id = "s01-existing-encrypted-manual-backup"
