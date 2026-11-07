@@ -1,4 +1,7 @@
+use std::collections::BTreeMap;
+
 use super::*;
+use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
 use cove_types::network::Network;
 
@@ -1680,15 +1683,16 @@ async fn fresh_enable_on_empty_cloud_uploads_every_wallet_and_restores_it_on_a_n
 
     assert_eq!(globals.passkey.create_count(), 1, "verification registered another passkey");
 
-    // a new device restores those uploads and gets every wallet back as it was
-    let wallet_backups: Vec<(String, Vec<u8>)> = wallets
-        .iter()
-        .map(|wallet| {
-            let record_id = wallet_record_id(wallet.metadata.id.as_ref());
-            let bytes = globals.cloud.wallet_backup_bytes(&namespace, &record_id).unwrap();
-            (record_id, bytes)
-        })
-        .collect();
+    // a new device restores those uploads, from the paths the enable wrote them to, and gets
+    // every wallet back as it was
+    let mut uploads = BTreeMap::new();
+    for upload in globals.cloud.uploads() {
+        if upload.namespace == namespace {
+            uploads.insert(upload.record_id.clone(), upload);
+        }
+    }
+
+    assert_eq!(uploads.len(), wallets.len() + 1, "master key and every wallet uploaded");
 
     reset_cloud_backup_test_state(&manager, globals);
     for wallet in &wallets {
@@ -1696,15 +1700,20 @@ async fn fresh_enable_on_empty_cloud_uploads_every_wallet_and_restores_it_on_a_n
         crate::wallet::delete_wallet_specific_data(&wallet.metadata.id).unwrap();
     }
 
-    globals.cloud.set_master_key_backup(namespace.clone(), master_json);
-    for (record_id, bytes) in &wallet_backups {
-        globals.cloud.set_wallet_backup(namespace.clone(), record_id.clone(), bytes.clone());
-    }
+    let mut wallet_files = Vec::new();
+    for upload in uploads.values() {
+        if upload.record_id == MASTER_KEY_RECORD_ID {
+            globals.cloud.set_master_key_backup(namespace.clone(), upload.data.clone());
+            continue;
+        }
 
-    let wallet_files = wallet_backups
-        .iter()
-        .map(|(record_id, _)| wallet_filename_from_record_id(record_id))
-        .collect();
+        globals.cloud.set_wallet_backup(
+            namespace.clone(),
+            upload.record_id.clone(),
+            upload.data.clone(),
+        );
+        wallet_files.push(upload.relative_path.clone());
+    }
 
     globals.cloud.set_wallet_files(namespace.clone(), wallet_files);
     globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
@@ -1715,6 +1724,27 @@ async fn fresh_enable_on_empty_cloud_uploads_every_wallet_and_restores_it_on_a_n
     globals.passkey.set_authenticate_result(Ok(prf_output.to_vec()));
 
     let report = restore_like_onboarding(&manager).await;
+
+    // the mock serves files by record id, so a restore reading another path than the upload
+    // wrote would still find them here but not on a real provider
+    let downloads = globals.cloud.download_requests();
+    for download in &downloads {
+        assert_eq!(download.namespace, namespace, "restore read another namespace");
+    }
+
+    for upload in uploads.values() {
+        let read_paths: Vec<&str> = downloads
+            .iter()
+            .filter(|download| download.record_id == upload.record_id)
+            .flat_map(|download| download.relative_paths.iter().map(String::as_str))
+            .collect();
+
+        assert!(
+            read_paths.contains(&upload.relative_path.as_str()),
+            "{} written but restore read {read_paths:?}",
+            upload.relative_path
+        );
+    }
 
     assert_eq!(report.failed_wallet_errors, Vec::<String>::new(), "wallet restore errors");
     assert_eq!(report.labels_failed_errors, Vec::<String>::new(), "label restore errors");

@@ -177,6 +177,16 @@ struct MockCloudState {
     dirty_wallet_on_next_backup_check: Option<WalletId>,
     disabling_on_next_upload: Option<PersistedDisablingCloudBackup>,
     download_requests: Vec<MockCloudDownloadRequest>,
+    uploads: Vec<MockCloudUpload>,
+}
+
+/// A file the provider accepted, at the path it was asked to write
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MockCloudUpload {
+    pub(crate) namespace: String,
+    pub(crate) record_id: String,
+    pub(crate) relative_path: String,
+    pub(crate) data: Vec<u8>,
 }
 
 /// A download as the provider received it, with the paths it was asked to read
@@ -469,6 +479,10 @@ impl MockCloudStorage {
         self.state.lock().uploaded_master_key_pending_confirmation = enabled;
     }
 
+    pub(crate) fn uploads(&self) -> Vec<MockCloudUpload> {
+        self.state.lock().uploads.clone()
+    }
+
     pub(crate) fn download_requests(&self) -> Vec<MockCloudDownloadRequest> {
         self.state.lock().download_requests.clone()
     }
@@ -592,15 +606,22 @@ impl CloudStorageAccess for MockCloudStorage {
     async fn upload_master_key_backup(
         &self,
         namespace: String,
-        _location: cove_device::cloud_storage::RemoteBackupLocation,
+        location: cove_device::cloud_storage::RemoteBackupLocation,
         data: Vec<u8>,
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        if let Some(error) = self.state.lock().upload_master_key_error.clone() {
+        let mut state = self.state.lock();
+        if let Some(error) = state.upload_master_key_error.clone() {
             return Err(error);
         }
 
-        self.state.lock().master_key_backups.insert(namespace, data);
+        state.uploads.push(MockCloudUpload {
+            namespace: namespace.clone(),
+            record_id: MASTER_KEY_RECORD_ID.to_string(),
+            relative_path: location.relative_path,
+            data: data.clone(),
+        });
+        state.master_key_backups.insert(namespace, data);
         Ok(())
     }
 
@@ -608,7 +629,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
-        _location: cove_device::cloud_storage::RemoteBackupLocation,
+        location: cove_device::cloud_storage::RemoteBackupLocation,
         data: Vec<u8>,
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
@@ -633,6 +654,12 @@ impl CloudStorageAccess for MockCloudStorage {
             let dirty_wallet = state.dirty_wallet_on_next_upload.take();
             let changed_wallet = state.changed_wallet_on_next_upload.take();
             let disabling = state.disabling_on_next_upload.take();
+            state.uploads.push(MockCloudUpload {
+                namespace: namespace.clone(),
+                record_id: record_id.clone(),
+                relative_path: location.relative_path,
+                data: data.clone(),
+            });
             state.wallet_backups.insert((namespace.clone(), record_id.clone()), data);
             state.uploaded_wallet_backups.push((namespace, record_id));
             state.wallet_backup_success_count += 1;
