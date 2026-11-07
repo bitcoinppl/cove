@@ -11,7 +11,6 @@ use cove_cspp::backup_data::MASTER_KEY_RECORD_ID;
 use serde::Deserialize;
 
 use super::*;
-use crate::manager::cloud_backup_manager::CloudBackupRestoreReport;
 use crate::manager::cloud_backup_manager::PASSKEY_RP_ID;
 use crate::network::Network;
 use crate::wallet::WalletAddressType;
@@ -104,50 +103,6 @@ fn load_fixture_into_cloud(globals: &TestGlobals, manifest: &GoldenManifest) {
 fn delete_fixture_wallet_stores(manifest: &GoldenManifest) {
     for wallet in &manifest.wallets {
         crate::wallet::delete_wallet_specific_data(&WalletId::from(wallet.id.clone())).unwrap();
-    }
-}
-
-async fn restore_like_onboarding(manager: &RustCloudBackupManager) -> CloudBackupRestoreReport {
-    let receiver = manager.restore_from_cloud_backup_with_events();
-
-    loop {
-        let event = tokio::time::timeout(Duration::from_secs(30), receiver.recv_async())
-            .await
-            .expect("restore finishes")
-            .expect("restore event");
-
-        match event {
-            CloudBackupRestoreEvent::Progress(_) => {}
-            CloudBackupRestoreEvent::Complete(report) => return report,
-            CloudBackupRestoreEvent::NoBackupFound => panic!("restore found no backup"),
-            CloudBackupRestoreEvent::Failed(message) => panic!("restore failed: {message}"),
-        }
-    }
-}
-
-fn label_lines(jsonl: &str) -> Vec<serde_json::Value> {
-    jsonl
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str(line).unwrap())
-        .collect()
-}
-
-/// Every field of every expected label is in the exported label for the same type and ref
-fn assert_labels_restored(wallet_name: &str, expected_jsonl: &str, exported_jsonl: &str) {
-    let exported = label_lines(exported_jsonl);
-
-    for expected in label_lines(expected_jsonl) {
-        let found = exported.iter().find(|label| {
-            label.get("type") == expected.get("type") && label.get("ref") == expected.get("ref")
-        });
-        let Some(found) = found else {
-            panic!("{wallet_name}: label {expected} missing from {exported_jsonl}");
-        };
-
-        for (key, value) in expected.as_object().unwrap() {
-            assert_eq!(found.get(key), Some(value), "{wallet_name}: label field {key}");
-        }
     }
 }
 
