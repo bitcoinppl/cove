@@ -5,11 +5,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasAnyAncestor
@@ -19,12 +16,15 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.core.graphics.ColorUtils
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.test.assertTextsMatchTheirReferences
 import org.bitcoinppl.cove.test.bootstrapRustRuntimeForUiTest
+import org.bitcoinppl.cove.test.matchTextReference
 import org.bitcoinppl.cove.test.saveNodeScreenshotToLayoutAudit
+import org.bitcoinppl.cove.test.textLabel
+import org.bitcoinppl.cove.test.textLayouts
 import org.bitcoinppl.cove.ui.theme.CoveTheme
 import org.bitcoinppl.cove_core.KeyTeleportRoute
 import org.bitcoinppl.cove_core.MultiFormatException
@@ -122,7 +122,9 @@ class KeyTeleportPasteRejectionTest {
         val dialogs = compose.onAllNodes(isDialog()).fetchSemanticsNodes()
         assertTrue("the rejection dialog stayed open after OK", dialogs.isEmpty())
         compose.onNodeWithText("Paste").assertIsDisplayed().assertIsEnabled()
-        assertCaptureShowsContent(saveNodeScreenshotToLayoutAudit(compose.onRoot(), "s17-sender-after-psbt-error.png"))
+        val capture = saveNodeScreenshotToLayoutAudit(compose.onRoot(), "s17-sender-after-psbt-error.png")
+        assertCaptureShowsContent(capture)
+        assertSenderTextIsDrawnAsLaidOut(capture)
 
         // pasting again reaches the sender and is rejected the same way, rather than doing nothing
         putOnClipboard(rejected)
@@ -131,21 +133,22 @@ class KeyTeleportPasteRejectionTest {
     }
 
     /**
-     * Clipped, truncated, overlapping, undrawn or faint text is what a screenshot of the error would
-     * have shown, so each text node must keep its full laid-out size on screen, stay inside the
-     * dialog, and stand out from its background in the dialog's [capture]
+     * Clipped, truncated, covered, overlapping, undrawn or faint text is what a screenshot of the
+     * error would have shown, so each text node must draw in the dialog's [capture] as a reference
+     * rendering of its own layout does, keep its full laid-out size, and stay inside the dialog
      */
     private fun assertDialogTextFitsInsideTheDialog(capture: Bitmap) {
         val dialog = compose.onNode(isDialog()).fetchSemanticsNode().boundsInWindow
-        val texts =
-            compose
-                .onAllNodes(hasAnyAncestor(isDialog()), useUnmergedTree = true)
-                .fetchSemanticsNodes()
-                .filter { it.config.getOrNull(SemanticsProperties.Text).orEmpty().isNotEmpty() }
+        val texts = drawnTexts(hasAnyAncestor(isDialog()))
 
         assertTrue("the rejection dialog shows no text", texts.isNotEmpty())
+        assertTextsMatchTheirReferences(
+            "the rejection dialog",
+            texts.map { capture.matchTextReference(it, dialog.topLeft, compose.density) },
+        )
+
         texts.forEach { node ->
-            val label = node.config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString { it.text }
+            val label = node.textLabel()
             val bounds = node.boundsInWindow
             assertTrue("\"$label\" has no size", bounds.width > 0f && bounds.height > 0f)
             assertTrue("\"$label\" reaches outside the dialog", dialog.contains(bounds))
@@ -156,8 +159,6 @@ class KeyTeleportPasteRejectionTest {
                 "\"$label\" is clipped by its container",
                 bounds.width >= node.size.width - CLIP_TOLERANCE_PX && bounds.height >= node.size.height - CLIP_TOLERANCE_PX,
             )
-            val contrast = capture.textContrastIn(bounds.translate(-dialog.topLeft))
-            assertTrue("\"$label\" is hard to read: contrast $contrast:1", contrast >= MIN_TEXT_CONTRAST)
         }
 
         texts.forEachIndexed { index, node ->
@@ -166,6 +167,24 @@ class KeyTeleportPasteRejectionTest {
             }
         }
     }
+
+    // once the dialog closes the sender is the only window, and every text on it must still be drawn whole
+    private fun assertSenderTextIsDrawnAsLaidOut(capture: Bitmap) {
+        val root = compose.onRoot().fetchSemanticsNode().boundsInWindow
+        val texts = drawnTexts(SemanticsMatcher("anywhere") { true })
+
+        assertTextsMatchTheirReferences(
+            "the sender after OK",
+            texts.map { capture.matchTextReference(it, root.topLeft, compose.density) },
+        )
+    }
+
+    // text nodes that lay out visible characters, leaving out an empty field
+    private fun drawnTexts(matcher: SemanticsMatcher): List<SemanticsNode> =
+        compose
+            .onAllNodes(matcher, useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .filter { node -> node.textLayouts().any { it.layoutInput.text.isNotBlank() } }
 
     // a protected window can come back blank, which would make the saved capture worthless
     private fun assertCaptureShowsContent(bitmap: Bitmap) {
@@ -179,29 +198,13 @@ class KeyTeleportPasteRejectionTest {
         assertTrue("the capture is a single color", colors.size > 1)
     }
 
-    // glyphs cover less of a text's box than the space around them, so the most common color there
-    // is the background, and the strongest pixel against it is the text's own color
-    private fun Bitmap.textContrastIn(region: Rect): Double {
-        val left = region.left.toInt().coerceIn(0, width - 1)
-        val top = region.top.toInt().coerceIn(0, height - 1)
-        val right = region.right.toInt().coerceIn(left + 1, width)
-        val bottom = region.bottom.toInt().coerceIn(top + 1, height)
-        val pixels = (top until bottom).flatMap { y -> (left until right).map { x -> ColorUtils.setAlphaComponent(getPixel(x, y), 255) } }
-        val background = pixels.groupingBy { it }.eachCount().maxBy { it.value }.key
-
-        return pixels.maxOf { ColorUtils.calculateContrast(it, background) }
-    }
-
     private fun Rect.contains(other: Rect): Boolean =
         other.left >= left && other.top >= top && other.right <= right && other.bottom <= bottom
 
     // the paragraph width is the width the text was offered, not the width it drew, so a short title
     // in a wide dialog looked overflowing to hasVisualOverflow on CI; measure the widest drawn line
     private fun SemanticsNode.overflow(): String? {
-        val layouts = mutableListOf<TextLayoutResult>()
-        config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
-
-        return layouts.firstNotNullOfOrNull { layout ->
+        return textLayouts().firstNotNullOfOrNull { layout ->
             val paragraph = layout.multiParagraph
             val widestLine = (0 until paragraph.lineCount).maxOfOrNull { paragraph.getLineRight(it) - paragraph.getLineLeft(it) } ?: 0f
 
@@ -231,9 +234,6 @@ class KeyTeleportPasteRejectionTest {
 
         // bounds are floats from the same layout, so allow rounding but not a clipped line of text
         const val CLIP_TOLERANCE_PX = 1f
-
-        // WCAG AA for body text, what a person checking the screenshot would need to read it
-        const val MIN_TEXT_CONTRAST = 4.5
 
         // a recognisable non-KeyTeleport payload
         const val MAINNET_ADDRESS = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
