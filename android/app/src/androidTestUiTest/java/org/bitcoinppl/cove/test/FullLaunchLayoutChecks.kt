@@ -274,7 +274,7 @@ class FullLaunchLayoutChecks(
         val owner = checkNotNull(root) { "$screen: its title matches no Compose semantics node" }
         val problems =
             texts.mapNotNull { (id, text) ->
-                textShowWholeProblem(owner, id)?.let { "\"${text.take(TEXT_IN_MESSAGE)}\": $it" }
+                textShowWholeProblem(owner, id, text)?.let { "\"${text.take(TEXT_IN_MESSAGE)}\": $it" }
             }
 
         assertTrue("$screen has texts that never show whole: $problems", problems.isEmpty())
@@ -299,17 +299,32 @@ class FullLaunchLayoutChecks(
      * Its scroll area is scrolled just far enough to bring the part under check inside it. A text
      * taller than the area must show its whole first line and then its whole last line, from the
      * line bounds its layout measures, so an area too short for a line fails
+     *
+     * A scroll can replace the text's subtree, which gives it a new semantics id, so a text that
+     * goes missing is looked for again by its [text] in the same window, see [replacementTextId],
+     * and fails if it can't be found
      */
     private fun textShowWholeProblem(
         root: RootForTest,
         id: Int,
+        text: String,
     ): String? {
         val edges = mutableListOf("whole")
         var checked = 0
         var scrolledFrom: Rect? = null
+        var nodeId = id
+        var lastWhole: Rect? = null
 
         repeat(MAX_NUDGES * 2) {
-            val placement = textPlacement(root, id) ?: return null
+            val placement =
+                textPlacement(root, nodeId)
+                    ?: replacementTextId(root, text, lastWhole)?.let { replacement ->
+                        nodeId = replacement
+                        textPlacement(root, replacement)
+                    }
+                    ?: return "it left its window, and no text there read the same after $STALE_READS reads"
+
+            lastWhole = placement.whole
             val (shown, whole, firstLine, lastLine, viewport, scrollBy) = placement
             if (viewport != null && whole.height() > viewport.height() + CLIP_TOLERANCE_PX && edges == listOf("whole")) {
                 edges.clear()
@@ -360,6 +375,35 @@ class FullLaunchLayoutChecks(
         }
 
         return "it never scrolled to show its ${edges.getOrNull(checked)?.takeIf { it != "whole" } ?: "text"} whole"
+    }
+
+    /**
+     * The semantics id of the text in [root] that reads [text], nearest [near] when several do, or
+     * null when none does after [STALE_READS] reads, each once the app is idle
+     */
+    private fun replacementTextId(
+        root: RootForTest,
+        text: String,
+        near: Rect?,
+    ): Int? {
+        repeat(STALE_READS) {
+            device.waitForIdle()
+            var found: Int? = null
+
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                found =
+                    root.semanticsOwner
+                        .getAllSemanticsNodes(mergingEnabled = false)
+                        .filter { SemanticsProperties.Text in it.config && SemanticsProperties.EditableText !in it.config }
+                        .filter { node -> node.config[SemanticsProperties.Text].joinToString(" ") { it.text } == text }
+                        .minByOrNull { node -> near?.let { edgeDistance(node.fullOnScreen(), it) } ?: 0 }
+                        ?.id
+            }
+
+            if (found != null) return found
+        }
+
+        return null
     }
 
     /** The on-screen bounds of the text with semantics [id] and its nearest vertical scroll area */
