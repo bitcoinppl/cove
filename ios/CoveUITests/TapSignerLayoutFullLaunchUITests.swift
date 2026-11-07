@@ -21,12 +21,20 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// Inside the screens' 16 to 20 point side padding, so a drag there lands on no field
     private static let dragMargin: CGFloat = 8
 
-    /// Taller than the keyboard's suggestion bar and shorter than any screen's scroll area
+    /// Taller than the keyboard's suggestion bar and shorter than any screen's scroll area, and the
+    /// drag that moves a covered match toward the middle of the screen
     private static let rowHeight: CGFloat = 100
 
     /// About one line of body text at the largest accessibility size, the most of a description
     /// taller than its scroll area that must show to count its first or last line as on screen
     private static let lineHeight: CGFloat = 72
+
+    /// About how far a touch moves before a scroll view takes it as a drag, added to each drag so
+    /// the content moves about as far as asked
+    private static let touchSlop: CGFloat = 10
+
+    /// Room left between an element scrolled into view and the edge of the space it shows in
+    private static let scrollRoom: CGFloat = 8
 
     /// Drops the card's session once the operation has started on it, so the app offers to continue
     /// instead of failing outright
@@ -35,14 +43,20 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private var app: XCUIApplication!
     private var signer: HardwareSignerControl!
 
-    /// The number pad of the CVC screen under check, watched across every drag, so a description
-    /// checked once a drag has closed it is told apart from one checked above it
+    /// The CVC screen under check and where its number pad came to rest, which every drag on the
+    /// screen must leave in place, so all its texts are checked in the space above the number pad
     private var numberPad: NumberPadWatch?
 
     private struct NumberPadWatch {
         let screen: String
+        let frame: CGRect
         var drags = 0
-        var closedBy: Int?
+    }
+
+    private enum KeyboardState {
+        case gone
+        case settled(CGRect)
+        case moving(CGRect)
     }
 
     override func setUp() {
@@ -271,8 +285,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private func assertCvcScreenFits(on screen: String, title: String, description: String, cancel: String) {
         let submit = button("Continue")
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 15), "the \(screen) screen never showed")
-        waitForSettledKeyboard(on: screen)
-        numberPad = NumberPadWatch(screen: screen)
+        numberPad = NumberPadWatch(screen: screen, frame: settledNumberPad(on: screen))
         defer { numberPad = nil }
 
         assertScreenFits(
@@ -283,31 +296,72 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             awaitingInput: [submit]
         )
 
-        let drags = numberPad?.drags ?? 0
-        let closedBy = numberPad?.closedBy.map { "drag \($0) of \(drags) closed it" } ?? "it stayed up through \(drags) drags"
-        note("number pad on the \(screen) screen: \(closedBy)")
+        // every drag checked the number pad, but a text that showed with no drag was checked
+        // against the space above it too, so it must still be in place now
+        assertNumberPadInPlace(after: "checking the screen")
+        note("number pad on the \(screen) screen stayed in place through \(numberPad?.drags ?? 0) drags")
     }
 
     /// Waits for the number pad a CVC screen opens with to come to rest on screen, so its texts are
-    /// checked against the space a user reads them in rather than the larger one before it opens
-    private func waitForSettledKeyboard(on screen: String) {
-        let keyboard = app.keyboards.firstMatch
-        XCTAssertTrue(keyboard.waitForExistence(timeout: 15), "the \(screen) screen opened without its number pad")
+    /// checked against the space a user reads them in rather than the larger one before it opens,
+    /// and returns where it rests
+    private func settledNumberPad(on screen: String) -> CGRect {
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 15), "the \(screen) screen opened without its number pad")
 
-        // the number pad slides in from below the window, so it has settled once it is inside the
-        // window and stops moving
-        let window = app.windows.firstMatch.frame
-        var last = keyboard.frame
-        let deadline = Date().addingTimeInterval(10)
-        while Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
-            let frame = keyboard.frame
-            if isSameFrame(frame, last), !frame.isEmpty, frame.minY < window.maxY { return }
-
-            last = frame
+        // the number pad slides in from below the window
+        switch keyboardState(within: 10) {
+        case let .settled(frame):
+            return frame
+        case let .moving(frame):
+            XCTFail("the \(screen) screen's number pad never came to rest: it was last at \(frame) in window \(app.windows.firstMatch.frame)")
+        case .gone:
+            XCTFail("the \(screen) screen's number pad closed before it came to rest")
         }
 
-        XCTFail("the \(screen) screen's number pad never came to rest: it was last at \(last) in window \(window)")
+        return .null
+    }
+
+    /// On a CVC screen, fails unless the number pad is still where it came to rest, so no text was
+    /// checked against the larger space a closed or moved number pad leaves
+    ///
+    /// The screen's scroll view keeps its default keyboard dismissal, and drags on every CVC screen
+    /// have left the number pad in place, so one that closes or moves it is a change to look at
+    private func assertNumberPadInPlace(after action: String) {
+        guard let watch = numberPad else { return }
+
+        switch keyboardState(within: 3) {
+        case let .settled(frame) where isSameFrame(frame, watch.frame):
+            return
+        case let .settled(frame):
+            XCTFail("\(action) on the \(watch.screen) screen moved its number pad from \(watch.frame) to \(frame)")
+        case let .moving(frame):
+            XCTFail("\(action) on the \(watch.screen) screen left its number pad moving, last at \(frame)")
+        case .gone:
+            XCTFail("\(action) on the \(watch.screen) screen closed its number pad")
+        }
+    }
+
+    /// Waits up to `timeout` for the keyboard to close, or to hold still inside the window, and
+    /// returns how it was left
+    ///
+    /// A keyboard sliding away still exists until it has gone, so a frame read once can't tell it
+    /// from one that stays
+    private func keyboardState(within timeout: TimeInterval) -> KeyboardState {
+        let keyboard = app.keyboards.firstMatch
+        let window = app.windows.firstMatch.frame
+        let deadline = Date().addingTimeInterval(timeout)
+        var last = CGRect.null
+        repeat {
+            guard keyboard.exists else { return .gone }
+
+            let frame = keyboard.frame
+            if isSameFrame(frame, last), !frame.isEmpty, frame.minY < window.maxY { return .settled(frame) }
+
+            last = frame
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        } while Date() < deadline
+
+        return keyboard.exists ? .moving(last) : .gone
     }
 
     // MARK: - Layout checks
@@ -409,12 +463,17 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         }
 
-        // scroll toward a match that scrolling could bring on screen; dragging content down only
-        // scrolls it back, since it runs only when that match sits above the top
+        // scroll a match that scrolling could bring on screen by about as far as it lies outside the
+        // space above any keyboard, so content with less scroll range than a drag stops partway
+        // instead of swinging between its ends; a match inside that space but covered, as by the
+        // keyboard's toolbar, moves a row toward the middle
         for _ in 0 ..< 8 where reachableMatch(query, needsHit: needsHit) == nil {
             let candidate = scrollCandidate(query)
             let target = scrollContainers(holding: candidate).last ?? visibleScrollView() ?? app.windows.firstMatch
-            drag(target, revealingContentBelow: candidate.frame.minY >= visibleArea(of: candidate).minY)
+            let area = readableArea(of: candidate)
+            let nudge = candidate.frame.midY > area.midY ? Self.rowHeight : -Self.rowHeight
+            let distance = scrollDistance(showing: candidate.frame, in: area)
+            drag(target, by: distance != 0 ? distance : nudge)
         }
 
         if let element = reachableMatch(query, needsHit: needsHit) {
@@ -437,31 +496,12 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         let element = query.firstMatch
         XCTAssertTrue(element.waitForExistence(timeout: 15), "\(name) is missing")
         guard element.frame.height > readableArea(of: element).height else {
-            let reached = assertReachable(query, name, needsHit: false)
-            assertNumberPadCase(name)
-            return reached
+            return assertReachable(query, name, needsHit: false)
         }
 
         assertLineReachable(element, name, first: true)
         assertLineReachable(element, name, first: false)
-        assertNumberPadCase(name)
         return element
-    }
-
-    /// On a CVC screen, names the space a description just showed whole in: above the number pad,
-    /// or, once a drag has closed the number pad, as the screen's scroll view does by default, the
-    /// window it then has. Fails when the number pad is gone with no drag having closed it, so a
-    /// description can't pass against the larger window by chance
-    private func assertNumberPadCase(_ name: String) {
-        guard let watch = numberPad else { return }
-
-        if app.keyboards.firstMatch.exists {
-            note("\(name) shows whole above the number pad, after \(watch.drags) drags on the screen")
-        } else if let closedBy = watch.closedBy {
-            note("\(name) shows whole in the window, since drag \(closedBy) on the screen closed the number pad")
-        } else {
-            XCTFail("\(name) was checked without the number pad, which closed with no drag closing it")
-        }
     }
 
     /// Records a finding in the test log and the result bundle
@@ -476,13 +516,15 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     /// A scroll moves the line only up or down, so it must also lie across the area from side to
     /// side, as one moved off the window sideways doesn't
     private func assertLineReachable(_ element: XCUIElement, _ name: String, first: Bool) {
-        let line = first ? "first" : "last"
-        let showsVertically = { () -> Bool in
+        let which = first ? "first" : "last"
+        let line = { () -> CGRect in
             let frame = element.frame
+            return CGRect(x: frame.minX, y: first ? frame.minY : frame.maxY - Self.lineHeight, width: frame.width, height: Self.lineHeight)
+        }
+
+        let showsVertically = { () -> Bool in
             let area = self.readableArea(of: element)
-            let edge = first ? frame.minY : frame.maxY
-            let lineEnd = first ? edge + Self.lineHeight : edge - Self.lineHeight
-            return min(edge, lineEnd) >= area.minY - 0.5 && max(edge, lineEnd) <= area.maxY + 0.5
+            return line().minY >= area.minY - 0.5 && line().maxY <= area.maxY + 0.5
         }
 
         let showsAcross = { () -> Bool in
@@ -491,18 +533,25 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             return !frame.isEmpty && frame.minX >= area.minX - 0.5 && frame.maxX <= area.maxX + 0.5
         }
 
-        // each drag moves the content less than the area less a line, so it can't skip past the line
         for _ in 0 ..< 12 where !showsVertically() {
-            let frame = element.frame
-            let area = readableArea(of: element)
             let target = scrollContainers(holding: element).last ?? visibleScrollView() ?? app.windows.firstMatch
-            drag(target, revealingContentBelow: (first ? frame.minY : frame.maxY) > area.midY)
+            drag(target, by: scrollDistance(showing: line(), in: readableArea(of: element)))
         }
 
         XCTAssertTrue(
             showsVertically() && showsAcross(),
-            "\(name)'s \(line) line never showed: it spans \(element.frame) but can show only in \(readableArea(of: element)), with the keyboard \(app.keyboards.firstMatch.exists ? "up" : "closed")"
+            "\(name)'s \(which) line never showed: it spans \(element.frame) but can show only in \(readableArea(of: element)), with the keyboard \(app.keyboards.firstMatch.exists ? "up" : "closed")"
         )
+    }
+
+    /// How far to scroll so `frame` lies inside `area`, positive to bring content below into view,
+    /// or zero when it already lies there from top to bottom
+    private func scrollDistance(showing frame: CGRect, in area: CGRect) -> CGFloat {
+        let room = max(0, min(Self.scrollRoom, (area.height - frame.height) / 2))
+        if frame.maxY > area.maxY { return frame.maxY - area.maxY + room }
+        if frame.minY < area.minY { return frame.minY - area.minY - room }
+
+        return 0
     }
 
     /// The part of the window the element can show in and read, above the keyboard
@@ -516,14 +565,17 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         return area
     }
 
-    /// Drags the container's content along its leading margin, within the part of it showing
-    /// above the keyboard, as a user would
+    /// Drags the container's content by about `distance` points, positive to bring content below
+    /// into view, along its leading margin within the part of it showing above the keyboard, as a
+    /// user would, and on a CVC screen checks the drag left the number pad in place
     ///
-    /// `swipeUp` starts at the container's center, which on a sheet with the number pad up lands
-    /// on the keyboard's backdrop; that backdrop sits above the frame XCUITest reports for the
-    /// keyboard, takes the drag, and the content never moves. The margin keeps the drag off the
-    /// multi-line chain code field, which scrolls its own text instead of the screen
-    private func drag(_ container: XCUIElement, revealingContentBelow: Bool) {
+    /// A drag moves at most 40% of that part, and the caller drags again to go further, so a text
+    /// that fits only partway through a short scroll range isn't swung past. `swipeUp` starts at the
+    /// container's center, which on a sheet with the number pad up lands on the keyboard's
+    /// backdrop; that backdrop sits above the frame XCUITest reports for the keyboard, takes the
+    /// drag, and the content never moves. The margin keeps the drag off the multi-line chain code
+    /// field, which scrolls its own text instead of the screen
+    private func drag(_ container: XCUIElement, by distance: CGFloat) {
         let window = app.windows.firstMatch.frame
         var area = container.frame.intersection(window)
         if area.isNull { area = window }
@@ -533,43 +585,22 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             area.size.height = min(area.height, keyboard.frame.minY - area.minY)
         }
 
-        let point = { (fraction: CGFloat) in
+        let step = max(-area.height * 0.4, min(area.height * 0.4, distance))
+        let travel = step + (step < 0 ? -Self.touchSlop : Self.touchSlop)
+        let point = { (y: CGFloat) in
             container.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
                 dx: area.minX + Self.dragMargin - container.frame.minX,
-                dy: area.minY + area.height * fraction - container.frame.minY
+                dy: y - container.frame.minY
             ))
         }
 
-        let padUp = keyboard.exists
-        let (start, end) = revealingContentBelow ? (point(0.7), point(0.3)) : (point(0.3), point(0.7))
-        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
-        recordNumberPad(after: padUp)
-    }
+        point(area.midY + travel / 2).press(forDuration: 0.05, thenDragTo: point(area.midY - travel / 2), withVelocity: .slow, thenHoldForDuration: 0.1)
 
-    /// On a CVC screen, records whether the drag just made kept the number pad up, closed it, or
-    /// found it already closed
-    private func recordNumberPad(after padWasUp: Bool) {
         guard var watch = numberPad else { return }
 
-        // the number pad slides away over about a quarter of a second
-        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
         watch.drags += 1
-
-        let padUp = app.keyboards.firstMatch.exists
-        let outcome =
-            switch (padWasUp, padUp) {
-            case (true, true): "kept the number pad up"
-            case (true, false): "closed the number pad"
-            case (false, true): "opened the number pad again"
-            case (false, false): "found the number pad already closed"
-            }
-
-        if padWasUp, !padUp, watch.closedBy == nil {
-            watch.closedBy = watch.drags
-        }
-
         numberPad = watch
-        note("drag \(watch.drags) on the \(watch.screen) screen \(outcome)")
+        assertNumberPadInPlace(after: "drag \(watch.drags)")
     }
 
     // MARK: - Queries
@@ -656,9 +687,23 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         guard element.exists else { return false }
 
         let frame = element.frame
-        guard !frame.isEmpty, visibleArea(of: element).contains(frame), !isUnderKeyboard(frame) else { return false }
+        guard !frame.isEmpty, shows(frame, ofField: Self.fieldTypes.contains(element.elementType), in: visibleArea(of: element)),
+              !isUnderKeyboard(frame) else { return false }
 
         return !needsHit || element.isHittable
+    }
+
+    private static let fieldTypes: Set<XCUIElement.ElementType> = [.textField, .secureTextField, .textView, .searchField]
+
+    /// Whether the frame lies inside the area, or for a text field, inside it from top to bottom
+    /// and inside the window across
+    ///
+    /// A text field's frame takes in its text insets, which can stick out past a scroll view's side
+    /// padding with no text cut off, as the send screen's address editor does by 4 points
+    private func shows(_ frame: CGRect, ofField isField: Bool, in area: CGRect) -> Bool {
+        guard isField else { return area.contains(frame) }
+
+        return frame.minY >= area.minY && frame.maxY <= area.maxY && app.windows.firstMatch.frame.contains(frame)
     }
 
     private func isUnderKeyboard(_ frame: CGRect) -> Bool {
