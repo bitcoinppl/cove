@@ -547,15 +547,15 @@ class KeyTeleportRevealCaptureTest {
         const val SENDER_PASSWORD_HINT = "Tap to show password"
 
         // measured on the emulator: a hidden character's share stayed at or under 0.026 over five
-        // runs with the code blurred, and at or over 0.121 over two runs with no blur, where the
-        // hint's overlay alone leaves the code faintly readable; this is their geometric mean,
-        // rounded down
+        // runs with the code blurred, and at or over 0.122 over two runs with no blur on the code,
+        // where the hint's overlay alone leaves it faintly readable; the limit is their geometric
+        // mean, rounded down
         const val MAX_HIDDEN_CHARACTER_SHARE = 0.05
 
-        // measured the same way: a hidden QR code's share stayed at or under 0.035 over five runs
-        // with it blurred, and at or over 0.885 over two runs with no blur; their geometric mean,
-        // rounded down
-        const val MAX_HIDDEN_QR_SHARE = 0.17
+        // measured the same way: a hidden QR code's share stayed at or under 0.040 over five runs
+        // with it blurred, and at or over 0.885 over two runs with no blur on the QR code; their
+        // geometric mean, rounded down
+        const val MAX_HIDDEN_QR_SHARE = 0.18
 
         // a digit stays the same over six random receiver codes one time in 100,000, so all eight
         // places differ somewhere about 99.992% of the time, and Base32 password characters more often
