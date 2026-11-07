@@ -33,6 +33,24 @@ pub(crate) fn loaded_host_wait(expected: Duration) -> Duration {
     expected.max(LOADED_HOST_WAIT_FLOOR)
 }
 
+/// A wall-clock deadline for a hand-rolled poll until something becomes true
+///
+/// It reads the wall clock, not tokio's, because some of these polls run in paused-time tests
+/// while the work they wait for runs in real time on the global runtime. A paused clock skips
+/// ahead on every sleep, so a tokio deadline there only bounds the number of polls
+pub(crate) struct LoadedHostDeadline(std::time::Instant);
+
+impl LoadedHostDeadline {
+    /// A deadline [`loaded_host_wait`] of `expected` from now
+    pub(crate) fn after(expected: Duration) -> Self {
+        Self(std::time::Instant::now() + loaded_host_wait(expected))
+    }
+
+    pub(crate) fn has_passed(&self) -> bool {
+        std::time::Instant::now() >= self.0
+    }
+}
+
 static FAIL_KEYCHAIN_DELETES: AtomicBool = AtomicBool::new(false);
 type AfterSaveHook = Arc<dyn Fn(&str) + Send + Sync>;
 

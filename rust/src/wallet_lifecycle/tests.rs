@@ -98,7 +98,7 @@ async fn successful_terminal_request_awaits_termination() {
     let actor = spawn_actor(Arc::new(Notify::new()));
     let result = terminal_shutdown(
         actor.clone(),
-        tokio::time::Instant::now() + std::time::Duration::from_secs(1),
+        tokio::time::Instant::now() + loaded_host_wait(std::time::Duration::from_secs(1)),
         |_actor| Box::pin(async { Ok(()) }),
     )
     .await;
@@ -112,7 +112,8 @@ async fn already_terminated_actor_is_idempotent_success() {
     let actor = spawn_actor(Arc::new(Notify::new()));
     let quiesce_calls = Arc::new(AtomicUsize::new(0));
     let first_calls = quiesce_calls.clone();
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(1);
+    let deadline =
+        tokio::time::Instant::now() + loaded_host_wait(std::time::Duration::from_secs(1));
 
     terminal_shutdown(actor.clone(), deadline, move |_actor| {
         first_calls.fetch_add(1, Ordering::SeqCst);
