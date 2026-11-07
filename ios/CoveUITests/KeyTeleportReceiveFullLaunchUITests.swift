@@ -11,6 +11,7 @@ import XCTest
 final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
     private static let esploraUrl = UITestHostPorts.esploraUrl
     private static let largestContentSize = "UICTContentSizeCategoryAccessibilityXXXL"
+    private static let receiveHeader = ["Receive by KeyTeleport", "Show this request to the sending wallet, then scan the sender response."]
 
     /// A BIP39 test vector, a different wallet from the one onboarding imports
     private static let sentWords = "legal winner thank year wave sausage worth useful legal winner thank yellow"
@@ -163,14 +164,16 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         try receive(.mnemonic(Self.sentWords), checkingLayout: true)
         waitForReview("Recovery words received")
         assertWordsConcealed()
+        let reviewTexts = ["Recovery words received", "Cove found a 12-word wallet. Review it below or import it directly."]
+        let choices = ["Import Wallet", "Finish Without Importing"]
         layout.assertScreenFits(
             "mnemonic review",
-            texts: ["Recovery words received", "Cove found a 12-word wallet. Review it below or import it directly."],
-            buttons: [button("Tap to reveal recovery words"), button("Import Wallet"), button("Finish Without Importing")]
+            texts: reviewTexts,
+            buttons: [button("Tap to reveal recovery words")] + choices.map(button(_:))
         )
 
         layout.reachAndTap(button("Tap to reveal recovery words"), "mnemonic review: reveal")
-        assertNumberedWordsFit()
+        assertNumberedWordsFit(besides: Set(reviewTexts + choices))
         layout.reachAndTap(button("Import Wallet"), "mnemonic review: Import Wallet")
 
         XCTAssertTrue(app.staticTexts["Wallet imported"].waitForExistence(timeout: 30))
@@ -225,8 +228,11 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
             texts: [
                 "Messages received",
                 "This transfer contains text, not a wallet. Cove has displayed it exactly as received.",
-                "Quick Note", "Personal", "MESSAGE", "Attack at dawn.",
-                "Exchange", "Work", "USERNAME", "satoshi", "PASSWORD", "hunter2", "WEBSITE", "example.com", "NOTES", "Rotate yearly",
+                "Quick Note", "Personal", "Exchange", "Work",
+            ],
+            fields: [
+                ("MESSAGE", "Attack at dawn."),
+                ("USERNAME", "satoshi"), ("PASSWORD", "hunter2"), ("WEBSITE", "example.com"), ("NOTES", "Rotate yearly"),
             ],
             buttons: [button("Done")]
         )
@@ -243,12 +249,15 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
     }
 
     /// Finishes onboarding at the default size, since only the KeyTeleport screens are under test,
-    /// then relaunches at the largest size in dark mode
+    /// then relaunches at the largest size in dark mode, with the truncation probe the fit checks
+    /// read
     private func launchWithWalletAtLargestTextSizeInDarkMode() throws {
         try launchWithWallet()
         app.terminate()
 
         try signer.setSimulatorAppearance(dark: true)
+        let (probeKey, probeValue) = ScreenReachability.truncationProbeEnvironment
+        app.launchEnvironment[probeKey] = probeValue
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", Self.largestContentSize]
         app.launch(expecting: app.element("selectedWallet.balance"))
     }
@@ -287,11 +296,10 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         if checkingLayout {
             layout.assertScreenFits(
                 "password",
-                texts: [],
+                texts: Self.receiveHeader,
                 buttons: [button("Unlock")],
                 controls: [app.secureTextFields.matching(identifier: "Teleport Password"), button("Show password")]
             )
-            layout.assertNoTruncatedText("password")
         }
 
         layout.reachAndTap(app.secureTextFields.matching(identifier: "Teleport Password"), "password: field").typeText(response.password)
@@ -307,7 +315,8 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         if checkingLayout {
             layout.assertScreenFits(
                 "receive request",
-                texts: ["Receive by KeyTeleport"],
+                texts: Self.receiveHeader,
+                descriptions: ["Have the sending wallet scan the QR code"],
                 buttons: [button("Tap to show QR code"), button("Tap to show receiver code"), button("Scan Sender Response")]
             )
         }
@@ -376,9 +385,12 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
     }
 
     /// Each word fits on screen beside its number, found by position since the test words repeat,
-    /// so a clipped second 'legal' can't pass on the first
-    private func assertNumberedWordsFit() {
-        for (index, word) in Self.sentWords.split(separator: " ").map(String.init).enumerated() {
+    /// so a clipped second 'legal' can't pass on the first, and overlaps no other word or number,
+    /// nor the review's other texts and buttons labeled `screenLabels`
+    private func assertNumberedWordsFit(besides screenLabels: Set<String>) {
+        let words = Self.sentWords.split(separator: " ").map(String.init)
+        let checkedLabels = screenLabels.union(words + words.indices.map { "\($0 + 1)" })
+        for (index, word) in words.enumerated() {
             let name = "revealed words: word \(index + 1)"
             let numbers = app.staticTexts.matching(NSPredicate(format: "label == %@", "\(index + 1)"))
             layout.scrollDown(untilExists: numbers)
@@ -411,7 +423,16 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
 
             let visible = layout.visibleArea(of: shown)
             XCTAssertTrue(visible.contains(shown.frame), "\(name), '\(word)', runs out of view at \(shown.frame) in \(visible)")
-            layout.assertDrawn(word, in: shown, name)
+            layout.assertDrawsWhole(shown, name)
+
+            // a word its chip clips at full height still reports that it fits, but runs into the
+            // next row, so it and its number may overlap no other checked text or button
+            layout.assertNoOverlap(shown, name, withElementsLabeled: checkedLabels)
+            for number in numbers.allElementsBoundByIndex where isBeside(shown.frame, number.frame) {
+                layout.assertDrawsWhole(number, "\(name): its number")
+                layout.assertNoOverlap(number, "\(name): its number", withElementsLabeled: checkedLabels)
+            }
+
             layout.assertNoTruncatedText(name)
         }
     }

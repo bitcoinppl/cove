@@ -175,33 +175,53 @@ struct KeyTeleportReceiveReadyView: View {
                 receiverCode
             }
 
-            Text(
-                """
-                Have the sending wallet scan the QR code, then send the receiver code through a different channel, such as a call or message.
-
-                If the sending wallet cannot scan this screen, tap Share and open the link on another device. The link shows the same QR code.
-                """
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+            KeyTeleportReceiveInstructions()
 
             Button(action: scan) {
-                Label("Scan Sender Response", systemImage: "qrcode.viewfinder")
-                    .frame(maxWidth: .infinity)
+                Label {
+                    Text("Scan Sender Response").uiTestTruncationProbe()
+                } icon: {
+                    Image(systemName: "qrcode.viewfinder")
+                }
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(OnboardingPrimaryButtonStyle())
         }
     }
 
     private var receiverCode: some View {
+        KeyTeleportReceiverCode(code: state.groupedNumericCode)
+    }
+}
+
+struct KeyTeleportReceiverCode: View {
+    let code: String
+
+    var body: some View {
         VStack(spacing: 4) {
             Text("Receiver Code")
                 .font(.caption)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
-            KeyTeleportCodeText(state.groupedNumericCode)
+            KeyTeleportCodeText(code)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+struct KeyTeleportReceiveInstructions: View {
+    var body: some View {
+        Text(
+            """
+            Have the sending wallet scan the QR code, then send the receiver code through a different channel, such as a call or message.
+
+            If the sending wallet cannot scan this screen, tap Share and open the link on another device. The link shows the same QR code.
+            """
+        )
+        .font(.caption)
+        .uiTestTruncationProbe()
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -215,6 +235,7 @@ struct KeyTeleportPasswordEntryView: View {
 
             Button(action: submit) {
                 Text("Unlock")
+                    .uiTestTruncationProbe()
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(OnboardingPrimaryButtonStyle())
@@ -242,15 +263,19 @@ struct KeyTeleportImportedWalletView: View {
             VStack(spacing: 8) {
                 Text(title)
                     .font(OnboardingRecoveryTypography.compactTitle)
+                    .uiTestTruncationProbe()
 
                 Text(message ?? "\(wallet.name) is ready to use in Cove.")
                     .font(.subheadline)
+                    .uiTestTruncationProbe()
                     .foregroundStyle(.coveLightGray.opacity(0.74))
                     .multilineTextAlignment(.center)
             }
 
-            Button(buttonTitle, action: finish)
-                .buttonStyle(OnboardingPrimaryButtonStyle())
+            Button(action: finish) {
+                Text(buttonTitle).uiTestTruncationProbe()
+            }
+            .buttonStyle(OnboardingPrimaryButtonStyle())
         }
         .frame(maxWidth: .infinity)
     }
