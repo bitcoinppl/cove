@@ -44,7 +44,7 @@ struct KeyTeleportMnemonicReviewView: View {
                     Text("\(index + 1)")
                         .uiTestTruncationProbe()
                         .foregroundStyle(.coveLightGray.opacity(0.6))
-                    Text(word).uiTestTruncationProbe()
+                    Text(unhyphenated: word).uiTestTruncationProbe()
                     Spacer()
                 }
                 .font(.system(.subheadline, design: .monospaced))
@@ -267,12 +267,12 @@ struct KeyTeleportMessageTitle: View {
         // at the largest sizes the icon left too little room for a word such as "Exchange", which
         // then broke mid-word, so the title takes the card's full width instead
         if dynamicTypeSize.isAccessibilitySize {
-            Text(title)
+            Text(unhyphenated: title)
                 .font(.headline)
                 .uiTestTruncationProbe()
         } else {
             Label {
-                Text(title).uiTestTruncationProbe()
+                Text(unhyphenated: title).uiTestTruncationProbe()
             } icon: {
                 Image(systemName: systemImage)
             }
@@ -287,7 +287,7 @@ struct KeyTeleportMessageGroup: View {
 
     var body: some View {
         if !group.isEmpty {
-            Text(group)
+            Text(unhyphenated: group)
                 .font(.caption)
                 .uiTestTruncationProbe()
                 .foregroundStyle(.coveLightGray.opacity(0.7))
