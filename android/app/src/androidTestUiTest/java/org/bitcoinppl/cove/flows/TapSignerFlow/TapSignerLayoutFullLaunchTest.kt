@@ -461,10 +461,8 @@ class TapSignerLayoutFullLaunchTest {
         }
     }
 
-
     private fun randomChainCode(): String = ByteArray(32).also(SecureRandom()::nextBytes).joinToString("") { "%02x".format(it) }
 }
-
 
 /** How far, in pixels, rounding can put the toolbar's bottom from the keyboard's top */
 private const val KEYBOARD_EDGE_ROUNDING_PX = 2
