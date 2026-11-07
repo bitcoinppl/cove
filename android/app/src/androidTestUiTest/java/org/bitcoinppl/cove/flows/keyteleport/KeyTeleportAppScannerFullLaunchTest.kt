@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.AppManager
@@ -112,11 +113,11 @@ class KeyTeleportAppScannerFullLaunchTest {
         assertTrue("the response must be a BBQr of at least 3 parts", frames.size >= 3)
 
         // leaving the receive screen keeps its request, so a later scan can still answer it
-        device.waitFor(By.desc("Back")).click()
+        retryingStale { device.waitFor(By.desc("Back")).click() }
         untilOnMain("Back should leave the receive screen") { app.router.routes.none { it is Route.KeyTeleport } }
 
         // the camera can catch an animated QR at any frame, so two arrive out of order
-        device.waitFor(By.desc("QR Code"), timeoutMs = 20_000L).click()
+        retryingStale { device.waitFor(By.desc("QR Code"), timeoutMs = 20_000L).click() }
         qr.show(listOf(frames[2], frames[0]))
         waitForScanProgress("Scanned 2 of ${frames.size}")
 
@@ -133,11 +134,15 @@ class KeyTeleportAppScannerFullLaunchTest {
             app.router.routes.lastOrNull() == RouteFactory().keyTeleportReceive()
         }
 
-        val field =
-            device.wait(Until.findObject(By.clazz("android.widget.EditText")), 10_000L)
-                ?: error("no password field on screen\n${device.hierarchy()}")
-        field.text = password
-        device.waitFor(By.text("Continue")).click()
+        retryingStale {
+            val field =
+                device.wait(Until.findObject(By.clazz("android.widget.EditText")), 10_000L)
+                    ?: error("no password field on screen\n${device.hierarchy()}")
+
+            field.text = password
+        }
+
+        retryingStale { device.waitFor(By.text("Continue")).click() }
         device.waitFor(By.text("Recovery words received"), timeoutMs = 30_000L)
     }
 
@@ -176,6 +181,20 @@ class KeyTeleportAppScannerFullLaunchTest {
         val parts: JSONArray = response.getJSONArray("parts")
 
         return (0 until parts.length()).map(parts::getString) to response.getString("password")
+    }
+
+    // compose can replace a node between its lookup and the click or edit that follows, which
+    // throws before any input is sent, so the block looks its node up again and retries
+    private inline fun retryingStale(block: () -> Unit) {
+        repeat(2) {
+            try {
+                return block()
+            } catch (_: StaleObjectException) {
+                device.waitForIdle()
+            }
+        }
+
+        block()
     }
 
     // see HardwareSigningFullLaunchTest: the scanner's progress text updates under a cached tree
