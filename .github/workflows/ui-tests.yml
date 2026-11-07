@@ -55,6 +55,7 @@ env:
     CoveUITests/KeyTeleportReceiveFullLaunchUITests/testXprvReviewRevealHideCopyAndImport,
     CoveUITests/KeyTeleportReceiveFullLaunchUITests/testMultiPartBbqrResponseReachesTheReview,
     CoveUITests/KeyTeleportSendFullLaunchUITests,
+    CoveUITests/KeyTeleportAppScannerFullLaunchUITests,
     CoveCloudBackupUITests/CloudBackupRestoreAllFullAppUITests,
     CoveCloudBackupUITests/CloudBackupOnboardingLateOfferFullAppUITests,
     CoveCloudBackupUITests/PrivateKeyExportFullAppUITests,

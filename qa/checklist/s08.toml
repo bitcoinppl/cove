@@ -169,12 +169,33 @@ id = "s08-bbqr-scans-and-opened-shared-response-links"
 section = "8"
 title = "BBQr scans and opened/shared response links"
 platforms = ["ios", "android"]
-target = "manual"
-paths = ["rust/src/key_teleport.rs", "rust/src/qr_scanner.rs", "ios/Cove/ScanManager+KeyTeleport.swift", "ios/Cove/ScanManager.swift", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt", "android/app/src/main/java/org/bitcoinppl/cove/ExternalKeyTeleportIntentHandler.kt", "android/app/src/main/java/org/bitcoinppl/cove/ScanManager.kt"]
-coverage = ["human", "ios-ui:ios/CoveUITests/KeyTeleportReceiveFullLaunchUITests.swift::testMultiPartBbqrResponseReachesTheReview"]
+target = "ui"
+paths = [
+    "rust/src/key_teleport.rs",
+    "rust/src/qr_scanner.rs",
+    "ios/Cove/ScanManager+KeyTeleport.swift",
+    "ios/Cove/ScanManager.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/ExternalKeyTeleportIntentHandler.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/ScanManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/QrCodeScanView.kt",
+    "android/app/src/main/AndroidManifest.xml",
+]
+coverage = [
+    "rust:rust/src/qr_scanner.rs::key_teleport_sender_frames_survive_foreign_and_replayed_frames",
+    "ios-ui:ios/CoveUITests/KeyTeleportReceiveFullLaunchUITests.swift::testMultiPartBbqrResponseReachesTheReview",
+    "ios-ui:ios/CoveUITests/KeyTeleportAppScannerFullLaunchUITests.swift::testResponseScannedFromTheAppScannerReopensTheReceiveAtThePassword",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportAppScannerFullLaunchTest.kt::multiPartResponseScannedFromTheWalletShowsProgressThenReopensTheReceiveAtThePassword",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/KeyTeleportLinksDisabledTest.kt::keyTeleportLinksAndSharedTextResolveToNoCoveActivity",
+]
 # 1.4.0: ios HUMAN, android HUMAN
-# camera scans and share sheet routing need a person
-# the ios test scans a multi-part BBQr response out of order through the qr seam; opened and shared links still need a person
+# rust assembles a multi-part sender response through foreign and replayed frames; the ios and
+# android tests scan multi-part BBQr responses out of order through the qr seam, on android from
+# the wallet's scanner with a repeated frame, checking "Scanned i of N" before the password
+# opened and shared KeyTeleport links are off in this build on android and absent on ios; the
+# android test checks a keyteleport.com link and shared text still resolve to no Cove activity
+# the camera decoding the other phone's response qr is the person's check in
+# s20-ios-to-android-complete-keyteleport-migration and s20-android-to-ios-private-key-migration
 
 [[row]]
 id = "s08-private-key-export-reveal-copy-and-keyteleport"
