@@ -193,7 +193,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
             !CloudBackupManager.getInstance().hasPendingUploadVerification
         }
 
-        device.clickClickableAncestor(device.waitForText("Continue"))
+        device.clickText("Continue")
         onboarding.continueFromBackupWallet().acceptTermsAfterImport()
         assertTrue(
             "accepting terms should complete onboarding before opening Settings",
@@ -206,9 +206,9 @@ class CloudBackupLocalDeleteFullLaunchTest {
         launchApp()
 
         device.waitForText("Google Drive Backup Found")
-        device.clickClickableAncestor(device.waitForText("Restore with Passkey"))
+        device.clickText("Restore with Passkey")
         device.waitForText("You're all set")
-        device.clickClickableAncestor(device.waitForText("Done"))
+        device.clickText("Done")
         FullLaunchOnboardingRobot(device).acceptTermsAfterImport()
         assertTrue(
             "accepting terms should complete onboarding before opening Settings",
@@ -315,7 +315,7 @@ class CloudBackupLocalDeleteFullLaunchTest {
             ?: error("Timed out waiting for text \"$value\"")
 
     private fun UiDevice.clickText(value: String) {
-        clickClickableAncestor(waitForText(value))
+        clickClickableAncestorForText(value, scrollWhenMissing = false)
     }
 
     private fun UiDevice.scrollUntilText(
@@ -335,41 +335,61 @@ class CloudBackupLocalDeleteFullLaunchTest {
         error("Timed out scrolling to text \"$value\"")
     }
 
-    private fun UiDevice.clickClickableAncestor(node: UiObject2) {
-        var clickable: UiObject2? = node
-
-        while (clickable != null && !clickable.isClickable) {
-            clickable = clickable.parent
-        }
-
-        requireNotNull(clickable) { "expected a clickable ancestor for ${node.text}" }.click()
-    }
-
+    // a node found while a screen settles can belong to a copy with no tap target, such as the retained
+    // detail still listing a just-deleted wallet above its Not on This Device row until the refresh
+    // replaces it, so each attempt finds the text again instead of trusting the first node
     private fun UiDevice.clickClickableAncestorForText(
         value: String,
         timeoutMs: Long = 20_000L,
+        scrollWhenMissing: Boolean = true,
     ) {
         val deadline = System.currentTimeMillis() + timeoutMs
+        var missing = 0
+        var withoutClickableAncestor = 0
+        var stale = 0
 
         while (System.currentTimeMillis() < deadline) {
             val node = findObject(By.text(value))
             if (node == null) {
-                swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
+                missing++
+                if (scrollWhenMissing) {
+                    swipe(displayWidth / 2, displayHeight * 3 / 4, displayWidth / 2, displayHeight / 4, 20)
+                }
+            } else {
+                try {
+                    val clickable = node.clickableAncestor()
+                    if (clickable != null) {
+                        clickable.click()
+                        return
+                    }
 
-                // a tap while the list still flings only stops it, so the next tap must wait for it to settle
-                waitForIdle()
-                continue
+                    withoutClickableAncestor++
+                } catch (_: StaleObjectException) {
+                    stale++
+                }
             }
 
-            try {
-                clickClickableAncestor(node)
-                return
-            } catch (_: StaleObjectException) {
-                Thread.sleep(100)
-            }
+            // a tap while the list still flings only stops it, so the next lookup waits for it to settle
+            waitForIdle()
+            Thread.sleep(100)
         }
 
-        error("Timed out clicking text \"$value\"")
+        val attempts =
+            "$withoutClickableAncestor lookups found no clickable ancestor, $stale went stale and " +
+                "$missing found no text in ${timeoutMs}ms"
+        check(withoutClickableAncestor + stale > 0) { "Timed out clicking text \"$value\"; $attempts" }
+
+        throw IllegalArgumentException("expected a clickable ancestor for $value; $attempts")
+    }
+
+    private fun UiObject2.clickableAncestor(): UiObject2? {
+        var candidate: UiObject2? = this
+
+        while (candidate != null && !candidate.isClickable) {
+            candidate = candidate.parent
+        }
+
+        return candidate
     }
 
     private fun waitUntil(
