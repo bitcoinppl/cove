@@ -9,12 +9,14 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.Lifecycle
 import androidx.test.platform.app.InstrumentationRegistry
@@ -45,11 +47,14 @@ import org.junit.Test
 
 /**
  * Leaving Cove at each secret-bearing KeyTeleport step and coming back must show the PIN cover
- * first, with no secret in the UI tree until the user unlocks and reveals it again
+ * first, with no secret in the UI tree until the user unlocks. Secrets behind a reveal control
+ * also stay hidden until revealed again, while a received message, which has no reveal step,
+ * shows again on unlocking
  *
  * Hosts the real KeyTeleport screen under the real app lock, switches to the system Settings app
  * so the process really stops, stays away past the grace period, and returns with Back. A second
- * KeyTeleport manager plays the other device, which stands in for the camera scan between them.
+ * KeyTeleport manager plays the other device, which stands in for the camera scan between them,
+ * and the UI test host plays a COLDCARD for the message payload the app never sends.
  * Secrets are looked for in the merged semantics tree, which matches what accessibility services and
  * UiAutomator read, so drawing them behind the lock overlay or a blur is not enough to pass
  */
@@ -186,6 +191,48 @@ class KeyTeleportBackgroundLockTest {
         }
 
         compose.onNodeWithText("Done").performClick()
+    }
+
+    // the app sends only wallets, so the UI test host plays a COLDCARD sending Secure Notes
+    @Test
+    fun receivedMessageShowsThePinCoverAndNoSecretAfterReturning() {
+        showKeyTeleport(KeyTeleportRoute.RECEIVE)
+        val receiver = AppManager.getInstance().getKeyTeleportManager()
+        val response = KeyTeleportHostSender().send(KeyTeleportHostPayload.Notes(SENT_NOTES), awaitRequest(receiver))
+        val accepted =
+            awaitOnMain("the receiver to read the sender response") {
+                receiver.ingestKeyTeleportText(response.packetText, KeyTeleportFlowDirection.RECEIVE)
+            }
+
+        assertTrue("the receiver rejected the sender response", accepted)
+        compose.waitUntil(STATE_TIMEOUT_MILLIS) { receiver.state is KeyTeleportManagerState.ReceiveEnterPassword }
+        compose.onNode(hasSetTextAction()).performTextInput(response.password)
+        compose.onNodeWithText("Continue").performClick()
+
+        // the message review shows what it received without a reveal step
+        compose.waitUntil(STATE_TIMEOUT_MILLIS) { receiver.state is KeyTeleportManagerState.ReceiveMessageReview }
+        compose.waitUntil(REVEAL_TIMEOUT_MILLIS) { MESSAGE_SECRETS.all { compose.containsText(it, substring = true) } }
+
+        leaveAndReturnPastTheGracePeriod()
+        assertPinCoverWithoutSecrets("the received message review", MESSAGE_SECRETS)
+        unlock()
+
+        // unlocking returns to the same review rather than dropping the transfer
+        assertTrue(
+            "the received message review was gone after unlocking",
+            receiver.state is KeyTeleportManagerState.ReceiveMessageReview,
+        )
+        compose.waitUntil(REVEAL_TIMEOUT_MILLIS) { MESSAGE_SECRETS.all { compose.containsText(it, substring = true) } }
+
+        // two message cards can push Done below the screen, and a click there would miss it
+        compose
+            .onNodeWithText("Done")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        // Done finishes the review, which deletes the stored receive session
+        awaitOnMain("Done to end the receive") { (!hasStoredReceiveSession()).takeIf { it } }
     }
 
     private fun showKeyTeleport(route: KeyTeleportRoute) {
@@ -326,5 +373,24 @@ class KeyTeleportBackgroundLockTest {
                 "acoustic", "avoid", "letter", "advice", "cage", "above",
             )
         val TEST_WALLET = TestWalletWords(TEST_WORDS, masterFingerprint = "28645006")
+
+        // a note and a password record in the shape COLDCARD's Secure Notes send them
+        val SENT_NOTES =
+            listOf(
+                mapOf("title" to "Vault Note", "misc" to "Spare key under the third stone", "group" to "Home"),
+                mapOf(
+                    "title" to "Broker",
+                    "user" to "nakamoto-31",
+                    "password" to "plover-quartz-88",
+                    "site" to "broker.example",
+                    "misc" to "Recovery code 4417-2290",
+                    "group" to "Money",
+                ),
+            )
+
+        // the note text and every password record value but the site, which are what the review
+        // shows that someone looking over a shoulder could use
+        val MESSAGE_SECRETS =
+            listOf("Spare key under the third stone", "nakamoto-31", "plover-quartz-88", "Recovery code 4417-2290")
     }
 }
