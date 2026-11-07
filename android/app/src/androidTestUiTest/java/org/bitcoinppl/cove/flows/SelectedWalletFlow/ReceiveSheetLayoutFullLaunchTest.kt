@@ -3,6 +3,7 @@ package org.bitcoinppl.cove.flows.SelectedWalletFlow
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.system.Os
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
@@ -37,8 +38,9 @@ import org.junit.runner.RunWith
  * still do their jobs (docs/testing.md)
  *
  * The sheet is its own window, which ignores a Compose test font scale, so this sets the system
- * font scale and restores it afterwards. Runs in the uiTest flavour; needs the fake node up and
- * forwarded, which `just android-instrumented-ci` does
+ * font scale and restores it afterwards. A refresh failure needs a save to fail, so the debug
+ * seam behind `COVE_UI_TEST_RECEIVE_REFRESH_FAILS` makes one fail. Runs in the uiTest flavour;
+ * needs the fake node up and forwarded, which `just android-instrumented-ci` does
  */
 @LargeTest
 @RunWith(AndroidJUnit4::class)
@@ -56,6 +58,11 @@ class ReceiveSheetLayoutFullLaunchTest {
 
         // the sheet polls the node for its address every 20 seconds while it is open
         const val PAYMENT_TIMEOUT_MS = 90_000L
+
+        // while set, a new address expires after five seconds and the save that replaces it fails
+        const val REFRESH_FAILS_ENV = "COVE_UI_TEST_RECEIVE_REFRESH_FAILS"
+        const val REFRESH_FAILED = "Unable to refresh address"
+        const val REFRESH_TIMEOUT_MS = 30_000L
     }
 
     @get:Rule
@@ -85,6 +92,7 @@ class ReceiveSheetLayoutFullLaunchTest {
 
     @After
     fun restoreDevice() {
+        Os.unsetenv(REFRESH_FAILS_ENV)
         fontScale.restore()
 
         when (val previous = previousShowImeWithHardKeyboard) {
@@ -97,13 +105,12 @@ class ReceiveSheetLayoutFullLaunchTest {
      * Every text in the sheet must lay out and show whole, the address and both actions must
      * scroll into reach unclipped and unsqueezed, Create New Address must show another address,
      * and Copy Address must put the shown address on the clipboard and close the sheet. Paying
-     * the shown address while the sheet is open must then show Payment Received, and every text
-     * must still lay out and show whole
+     * the shown address while the sheet is open must then show Payment Received, and a new address
+     * whose refresh fails must show Unable to refresh address, and in each state every text must
+     * still lay out and show whole
      *
      * The address takes no tap, so the clipboard and its new value after Create New Address are
-     * what show it is the wallet's live address rather than a stale or cut-short copy. The sheet's
-     * refresh failure label isn't reached: it shows only when saving a new address fails five
-     * minutes after the address first showed, which no test seam can make happen
+     * what show it is the wallet's live address rather than a stale or cut-short copy
      */
     @Test
     fun receiveSheetFitsAndWorksAtLargestFontScale() {
@@ -155,6 +162,7 @@ class ReceiveSheetLayoutFullLaunchTest {
         assertNotEquals("Copy Address copied the address Create New Address replaced", first.replace(" ", ""), copied)
 
         checkPaidAddress()
+        checkRefreshFailure()
     }
 
     /**
@@ -178,6 +186,40 @@ class ReceiveSheetLayoutFullLaunchTest {
         layout.reachable(By.text(address), "paid $SHEET: address", drawsWhole = address)
         layout.reachable(By.text("Copy Address"), "paid $SHEET: Copy Address", drawsWhole = "Copy Address", usable = true)
         layout.reachable(By.text("Create New Address"), "paid $SHEET: Create New Address", drawsWhole = "Create New Address", usable = true)
+    }
+
+    /**
+     * Turns on the refresh failure seam and creates a new address from the open sheet, which then
+     * expires after a few seconds; the save that would replace it fails, so the sheet keeps it and
+     * shows the refresh failure, and every text and the address and actions are checked there
+     */
+    private fun checkRefreshFailure() {
+        // only an address shown after this takes the seam's short window
+        Os.setenv(REFRESH_FAILS_ENV, "1", true)
+        val paid = shownAddress()
+        layout
+            .reachable(By.text("Create New Address"), "paid $SHEET: Create New Address", usable = true)
+            .click()
+
+        var fresh = paid
+        wallet.waitUntil("Create New Address kept the paid address $paid", timeoutMs = 30_000L) {
+            fresh = shownAddress()
+            fresh != paid
+        }
+
+        device.waitFor(By.text(REFRESH_FAILED), timeoutMs = REFRESH_TIMEOUT_MS)
+        assertEquals("the failed refresh replaced the shown address", fresh, shownAddress())
+
+        val sheet = "$SHEET after a failed refresh"
+        layout.scrollBackTo(By.text(REFRESH_FAILED), "$sheet: \"$REFRESH_FAILED\"")
+        val failed = layout.reachable(By.text(REFRESH_FAILED), "$sheet: \"$REFRESH_FAILED\"", drawsWhole = REFRESH_FAILED)
+        layout.assertWindowTextsDrawWhole(sheet, failed.visibleBounds)
+        layout.assertWindowTextsShowWhole(sheet, device.waitFor(By.text(REFRESH_FAILED)).visibleBounds)
+
+        layout.scrollBackTo(By.text(fresh), "$sheet: address")
+        layout.reachable(By.text(fresh), "$sheet: address", drawsWhole = fresh)
+        layout.reachable(By.text("Copy Address"), "$sheet: Copy Address", drawsWhole = "Copy Address", usable = true)
+        layout.reachable(By.text("Create New Address"), "$sheet: Create New Address", drawsWhole = "Create New Address", usable = true)
     }
 
     /** Starts a fresh app on the reset fake node and imports a software wallet to finish onboarding */

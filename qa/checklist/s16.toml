@@ -280,23 +280,25 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/views/AddressText.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/views/lockaware/LockAwareWindows.kt",
+    "rust/src/manager/wallet_manager/receive_address.rs",
+    "rust/src/manager/wallet_manager/receive_address/**",
+    "rust/src/manager/wallet_manager/actor/receive_address.rs",
 ]
 coverage = [
-    "human",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveSheetLayoutFullLaunchTest.kt::receiveSheetFitsAndWorksAtLargestFontScale",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/LargeFontScaleLayoutTest.kt::receiveSheetActionsCanBeReachedAtLargestFontScale",
 ]
 # 1.4.0: ios N/A, android HUMAN
 # the full-launch test opens Receive in the real lock-aware sheet window at system font scale 2
-# on the emulator, with a fresh address and again once the fake node pays it: the address, Copy
-# Address and Create New Address must scroll into reach unclipped and unsqueezed and lay out
-# whole, every text the sheet shows in those two states, Payment Received included, must lay out
-# and show whole, Create New Address must show another address and Copy Address must replace a
-# placeholder on the clipboard with the shown address; the fixed-box test also fails when the
-# sheet's content can't scroll (#919). A person still checks the "Unable to refresh address"
-# label at the largest font: it shows only when saving a new address fails once the shown one
-# is five minutes old, which no test seam can make happen. Other screen sizes than the
-# emulator's aren't covered
+# on the emulator in three states: with a fresh address, once the fake node pays it, and
+# once a new address's refresh fails, which the debug-only Rust seam behind
+# COVE_UI_TEST_RECEIVE_REFRESH_FAILS makes happen by failing the refresh's save after a few
+# seconds. In each, the address, Copy Address and Create New Address must scroll into reach
+# unclipped and unsqueezed and lay out whole, and every text the sheet shows, Payment Received
+# and Unable to refresh address included, must lay out and show whole; Create New Address must
+# show another address and Copy Address must replace a placeholder on the clipboard with the
+# shown address. The fixed-box test also fails when the sheet's content can't scroll (#919).
+# Other screen sizes than the emulator's aren't covered
 
 [[row]]
 id = "s16-keyteleport-sender-code-and-password-layout-at"
