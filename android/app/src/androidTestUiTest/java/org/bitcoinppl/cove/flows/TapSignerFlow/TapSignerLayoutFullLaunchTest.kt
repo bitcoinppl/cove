@@ -367,8 +367,139 @@ class TapSignerLayoutFullLaunchTest {
 
         val titleNode = reachable(By.text(title), "$screen: \"$title\"", drawsWhole = title)
         assertWindowTextsDrawWhole(screen, titleNode.visibleBounds)
+        assertWindowTextsShowWhole(screen, titleNode.visibleBounds)
 
         actions.forEach { reachable(By.text(it), "$screen: \"$it\"", drawsWhole = it, usable = true) }
+    }
+
+    /**
+     * Fails unless every Compose text in the window that shows [titleVisible] can be scrolled to
+     * show whole, with no ancestor clipping it
+     *
+     * A text keeps its whole layout inside a smaller container that clips it, which the layout
+     * check can't see, so this compares each text's clipped bounds with its full bounds once it is
+     * scrolled into its scroll area. A text taller than its scroll area must show its top edge and
+     * then its bottom edge. Text fields are left out, as in [assertWindowTextsDrawWhole]
+     *
+     * The texts are checked from the bottom up, so the scroll areas end near their top, where the
+     * later downward scroll to each action starts
+     */
+    private fun assertWindowTextsShowWhole(
+        screen: String,
+        titleVisible: Rect,
+    ) {
+        var root: RootForTest? = null
+        var texts = emptyList<Pair<Int, String>>()
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            root = semanticsNodeAt(titleVisible)?.first
+            texts =
+                root
+                    ?.semanticsOwner
+                    ?.getAllSemanticsNodes(mergingEnabled = false)
+                    ?.filter { SemanticsProperties.Text in it.config && SemanticsProperties.EditableText !in it.config }
+                    ?.filter { it.size.height > 0 && it.size.width > 0 }
+                    ?.sortedByDescending { it.positionOnScreen.y }
+                    ?.map { node -> node.id to node.config[SemanticsProperties.Text].joinToString(" ") { it.text } }
+                    .orEmpty()
+        }
+
+        val owner = checkNotNull(root) { "$screen: its title matches no Compose semantics node" }
+        val problems =
+            texts.mapNotNull { (id, text) ->
+                textShowWholeProblem(owner, id)?.let { "\"${text.take(TEXT_IN_MESSAGE)}\": $it" }
+            }
+
+        assertTrue("$screen has texts that never show whole: $problems", problems.isEmpty())
+    }
+
+    /** Where a text lies on screen, and the scroll area that can move it */
+    private data class TextPlacement(
+        val shown: Rect,
+        val whole: Rect,
+        val viewport: Rect?,
+        val scrollBy: ((Float, Float) -> Boolean)?,
+    )
+
+    /**
+     * Why the text with semantics [id] never shows whole, or null when it does
+     *
+     * Its scroll area is scrolled just far enough to bring the edge under check inside it, the
+     * top first for a text taller than the area
+     */
+    private fun textShowWholeProblem(
+        root: RootForTest,
+        id: Int,
+    ): String? {
+        val edges = mutableListOf("whole")
+        var checked = 0
+
+        repeat(MAX_NUDGES * 2) {
+            val placement = textPlacement(root, id) ?: return null
+            val (shown, whole, viewport, scrollBy) = placement
+            if (viewport != null && whole.height() > viewport.height() + CLIP_TOLERANCE_PX && edges == listOf("whole")) {
+                edges.clear()
+                edges += listOf("top", "bottom")
+            }
+
+            val edge = edges[checked]
+            val delta =
+                when {
+                    viewport == null -> 0
+                    edge == "bottom" -> maxOf(0, whole.bottom - viewport.bottom)
+                    whole.top < viewport.top -> whole.top - viewport.top
+                    edge == "top" && whole.top >= viewport.bottom - CLIP_TOLERANCE_PX -> whole.top - viewport.top
+                    edge == "whole" && whole.bottom > viewport.bottom -> whole.bottom - viewport.bottom
+                    else -> 0
+                }
+
+            if (abs(delta) > CLIP_TOLERANCE_PX && scrollBy != null) {
+                InstrumentationRegistry.getInstrumentation().runOnMainSync { scrollBy(0f, delta.toFloat()) }
+                device.waitForIdle()
+                Thread.sleep(300)
+                return@repeat
+            }
+
+            val sides = abs(shown.left - whole.left) <= CLIP_TOLERANCE_PX && abs(shown.right - whole.right) <= CLIP_TOLERANCE_PX
+            val top = abs(shown.top - whole.top) <= CLIP_TOLERANCE_PX
+            val bottom = abs(shown.bottom - whole.bottom) <= CLIP_TOLERANCE_PX
+            val shows =
+                when (edge) {
+                    "top" -> sides && top
+                    "bottom" -> sides && bottom
+                    else -> sides && top && bottom
+                }
+
+            if (!shows) return "its $edge spans $whole but shows only $shown"
+
+            checked += 1
+            if (checked == edges.size) return null
+        }
+
+        return "it never scrolled to show its ${edges.getOrNull(checked) ?: "whole"} edge"
+    }
+
+    /** The on-screen bounds of the text with semantics [id] and its nearest vertical scroll area */
+    private fun textPlacement(
+        root: RootForTest,
+        id: Int,
+    ): TextPlacement? {
+        var placement: TextPlacement? = null
+        val display = Rect(0, 0, device.displayWidth, device.displayHeight)
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val node = root.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false).firstOrNull { it.id == id } ?: return@runOnMainSync
+            val scroller =
+                generateSequence(node.parent) { it.parent }
+                    .firstOrNull { SemanticsProperties.VerticalScrollAxisRange in it.config && SemanticsActions.ScrollBy in it.config }
+
+            // boundsInWindow isn't clipped to the display, which a window can extend past
+            val shown = node.clippedOnScreen().also { if (!it.intersect(display)) it.setEmpty() }
+            val viewport = scroller?.clippedOnScreen()?.also { if (!it.intersect(display)) it.setEmpty() }
+            placement = TextPlacement(shown, node.fullOnScreen(), viewport, scroller?.config?.getOrNull(SemanticsActions.ScrollBy)?.action)
+        }
+
+        return placement
     }
 
     /**
