@@ -1143,10 +1143,12 @@ impl TapSignerReader {
         let mut reader = self.reader.lock().await;
         let mut auth_delay = reader.auth_delay;
 
+        // each wait takes the card about a second and lowers the delay by one, so the message
+        // goes up before the wait it describes and counts down with the card
         while let Some(delay) = auth_delay {
             let message = format!("Too many CVC attempts, waiting for {delay} seconds...");
-            reader.wait(None).await.map_err(TransportError::from)?;
             self.transport.set_message(message);
+            reader.wait(None).await.map_err(TransportError::from)?;
             auth_delay = reader.auth_delay;
         }
 
@@ -1160,6 +1162,8 @@ impl TapSignerReader {
 
             let auth_delay = self.reader.lock().await.auth_delay;
             if let Some(delay) = auth_delay {
+                let message = format!("Too many CVC attempts, waiting for {delay} seconds...");
+                self.transport.set_message(message);
                 self.reader
                     .lock()
                     .await
@@ -1167,8 +1171,6 @@ impl TapSignerReader {
                     .await
                     .map_err(TransportError::from)
                     .map_err(Error::from)?;
-                let message = format!("Too many CVC attempts, waiting for {delay} seconds...");
-                self.transport.set_message(message);
                 continue;
             }
 
@@ -1959,15 +1961,22 @@ mod tests {
         card_nonce: [u8; 16],
     }
 
+    /// Each progress message with the number of APDUs sent before it
+    type MockMessageLog = Arc<SyncMutex<Vec<(usize, String)>>>;
+
     #[derive(Debug)]
     struct MockStatusTransport {
         responses: MockResponseQueue,
         calls: Arc<SyncMutex<Vec<Vec<u8>>>>,
+        messages: MockMessageLog,
     }
 
     #[async_trait::async_trait]
     impl TapcardTransportProtocol for MockStatusTransport {
-        fn set_message(&self, _message: String) {}
+        fn set_message(&self, message: String) {
+            let sent = self.calls.lock().len();
+            self.messages.lock().push((sent, message));
+        }
 
         fn append_message(&self, _message: String) {}
 
@@ -2005,6 +2014,14 @@ mod tests {
     }
 
     fn status_response_with(path: Option<Vec<u32>>, num_backups: Option<u32>) -> Vec<u8> {
+        status_response_with_delay(path, num_backups, None)
+    }
+
+    fn status_response_with_delay(
+        path: Option<Vec<u32>>,
+        num_backups: Option<u32>,
+        auth_delay: Option<u8>,
+    ) -> Vec<u8> {
         let secp = Secp256k1::new();
         let secret_key = SecretKey::from_slice(&[1; 32]).expect("valid test secret key");
         let pubkey = bitcoin::secp256k1::PublicKey::from_secret_key(&secp, &secret_key);
@@ -2021,7 +2038,7 @@ mod tests {
             pubkey: pubkey.serialize().to_vec(),
             card_nonce: [0; 16],
             testnet: None,
-            auth_delay: None,
+            auth_delay,
         };
         let mut response = Vec::new();
         ciborium::ser::into_writer(&status, &mut response).expect("status serializes");
@@ -2043,7 +2060,15 @@ mod tests {
     }
 
     fn wait_success_response() -> Vec<u8> {
-        cbor_response(&MockWaitResponse { success: true, auth_delay: 0 })
+        wait_response(0)
+    }
+
+    fn wait_response(auth_delay: u8) -> Vec<u8> {
+        cbor_response(&MockWaitResponse { success: true, auth_delay })
+    }
+
+    fn rate_limited_response() -> Vec<u8> {
+        cbor_response(&MockErrorResponse { error: "rate limited".to_string(), code: 429 })
     }
 
     fn derive_response() -> Vec<u8> {
@@ -2089,15 +2114,33 @@ mod tests {
         num_backups: Option<u32>,
         card_identity: String,
     ) -> (TapSignerReader, Arc<SyncMutex<Vec<Vec<u8>>>>) {
+        let (reader, calls, _) =
+            reader_with_message_log(responses, path, num_backups, card_identity);
+
+        (reader, calls)
+    }
+
+    fn reader_with_message_log(
+        responses: Vec<Result<Vec<u8>, TransportError>>,
+        path: Option<Vec<u32>>,
+        num_backups: Option<u32>,
+        card_identity: String,
+    ) -> (TapSignerReader, Arc<SyncMutex<Vec<Vec<u8>>>>, MockMessageLog) {
         let calls = Arc::new(SyncMutex::new(Vec::new()));
+        let messages = MockMessageLog::default();
         let callback = MockStatusTransport {
             responses: Arc::new(SyncMutex::new(responses.into_iter().collect())),
             calls: calls.clone(),
+            messages: messages.clone(),
         };
         let transport = TapcardTransport(Arc::new(Box::new(callback)));
         let reader = reader_with_transport(transport, path, num_backups, card_identity);
 
-        (reader, calls)
+        (reader, calls, messages)
+    }
+
+    fn delay_message(seconds: u8) -> String {
+        format!("Too many CVC attempts, waiting for {seconds} seconds...")
     }
 
     fn reader_with_transport(
@@ -2794,6 +2837,131 @@ mod tests {
         };
         assert_eq!(retry.id(), continuation.id());
         assert_eq!(retry.message(), "TAPSIGNER CVC change needs card status reconciliation");
+    }
+
+    #[tokio::test]
+    async fn connect_waits_out_auth_delay_before_any_command() {
+        let responses = vec![Ok(wait_response(2)), Ok(wait_response(1)), Ok(wait_response(0))];
+        let (reader, calls, messages) = reader_with_message_log(
+            responses,
+            Some(vec![84, 0, 0]),
+            Some(0),
+            "TEST-CARD".to_string(),
+        );
+
+        // the status the card answered on connect reported three seconds of delay left
+        reader.reader.lock().await.auth_delay = Some(3);
+
+        reader.wait_if_needed().await.expect("reader waits out the delay");
+
+        assert_eq!(command_names(&calls), vec!["wait", "wait", "wait"]);
+        assert_eq!(
+            *messages.lock(),
+            vec![(0, delay_message(3)), (1, delay_message(2)), (2, delay_message(1))],
+            "each countdown message goes up before the wait it describes",
+        );
+        assert_eq!(reader.reader.lock().await.auth_delay, None);
+    }
+
+    #[tokio::test]
+    async fn cvc_probe_waits_out_auth_delay_then_authenticates() {
+        let responses = vec![
+            // rate limited when the probe starts
+            Ok(status_response_with_delay(Some(vec![84, 0, 0]), Some(0), Some(2))),
+            Ok(wait_response(1)),
+            Ok(status_response_with_delay(Some(vec![84, 0, 0]), Some(0), Some(1))),
+            Ok(wait_response(0)),
+            // the CVC wait itself reports one more second of delay
+            Ok(status_response(0)),
+            Ok(wait_response(1)),
+            Ok(status_response_with_delay(Some(vec![84, 0, 0]), Some(0), Some(1))),
+            Ok(wait_response(0)),
+            // the new CVC authenticates once the delay is over
+            Ok(status_response(0)),
+            Ok(wait_success_response()),
+        ];
+        let (reader, calls, messages) = reader_with_message_log(
+            responses,
+            Some(vec![84, 0, 0]),
+            Some(0),
+            "TEST-CARD".to_string(),
+        );
+        let current_cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
+        let new_cvc = Arc::new(TapSignerCvc::try_new("654321".to_string()).unwrap());
+        let continuation = TapSignerOperationContinuation::new(
+            "TEST-CARD".to_string(),
+            OperationContinuationStage::Change {
+                current_cvc,
+                new_cvc,
+                error: TapSignerReaderError::TapSignerError(TransportError::Transport(
+                    "change response was lost".to_string(),
+                )),
+            },
+        );
+
+        let response = reader.continue_operation(continuation).await.unwrap();
+
+        assert!(matches!(response, TapSignerResponse::Change));
+        assert_eq!(
+            command_names(&calls),
+            vec![
+                "status", "wait", "status", "wait", "status", "wait", "status", "wait", "status",
+                "wait",
+            ]
+        );
+
+        // only the third and last waits carry a CVC: the rest wait out the delay without one
+        let cvc_waits = calls
+            .lock()
+            .iter()
+            .enumerate()
+            .filter(|(_, command)| command_field(command, "xcvc").is_some_and(|v| !v.is_null()))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        assert_eq!(cvc_waits, vec![5, 9]);
+        assert_eq!(
+            *messages.lock(),
+            vec![
+                (1, delay_message(2)),
+                (3, delay_message(1)),
+                (6, delay_message(1)),
+                (7, delay_message(1)),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn rate_limited_cvc_is_not_treated_as_a_wrong_cvc() {
+        let responses = vec![Ok(status_response(0)), Ok(rate_limited_response())];
+        let (reader, calls) = reader_for_responses(responses, Some(vec![84, 0, 0]), Some(0));
+        let current_cvc = Arc::new(TapSignerCvc::try_new("123456".to_string()).unwrap());
+        let new_cvc = Arc::new(TapSignerCvc::try_new("654321".to_string()).unwrap());
+        let continuation = TapSignerOperationContinuation::new(
+            "TEST-CARD".to_string(),
+            OperationContinuationStage::Change {
+                current_cvc,
+                new_cvc,
+                error: TapSignerReaderError::TapSignerError(TransportError::Transport(
+                    "change response was lost".to_string(),
+                )),
+            },
+        );
+
+        let error = reader.continue_operation(continuation).await.unwrap_err();
+
+        // a wrong new CVC would fall through to probing the current CVC, spending another
+        // attempt on a card that is already rate limited
+        assert!(
+            matches!(
+                error,
+                TapSignerReaderError::TapSignerError(TransportError::CkTap(
+                    CkTapError::RateLimited
+                ))
+            ),
+            "429 must surface as RateLimited, got {error:?}",
+        );
+        assert!(!error.is_auth_error());
+        assert_eq!(command_names(&calls), vec!["status", "wait"]);
     }
 }
 
