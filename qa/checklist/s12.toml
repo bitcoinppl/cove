@@ -503,7 +503,17 @@ paths = [
   "ios/Cove/FFI/ICloudDriveHelper+Metadata.swift",
   "ios/Cove/FFI/CloudStorageAccessImpl.swift",
   "rust/src/manager/cloud_backup_manager/cloud_inventory.rs",
+  "rust/src/manager/cloud_backup_manager/actors/restore.rs",
 ]
-coverage = ["human"]
+coverage = [
+  "human",
+  "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testLocalListingsReportEvictedPlaceholdersUnderTheirRealNames",
+  "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testBackupReadOfEvictedFileWaitsForMetadataInsteadOfReadingThePlaceholder",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_reports_a_still_syncing_wallet_backup_without_applying_any_wallet",
+]
 # 1.4.0: ios HUMAN, android N/A
-# needs a real icloud account and local eviction
+# ios unit tests list evicted .name.icloud placeholders under their real names and send a read whose
+# only local copy is a placeholder to icloud's metadata, and rust stops a restore that meets a file
+# the provider is still syncing with the keep-cove-open message instead of calling it missing or
+# corrupt. a person still evicts and downloads backups on a real icloud account; the download poll
+# loop calls FileManager directly, with no test seam

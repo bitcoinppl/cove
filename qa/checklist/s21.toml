@@ -16,4 +16,11 @@ coverage = [
     "human",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# needs a real cloud account, passkey and a clean device
+# scripted providers cover the fresh-device restore logic: rust's
+# restore_with_one_passkey_restores_wallets_from_all_matching_namespaces, ios's
+# CloudBackupRestoreAllFullAppUITests testRestoreAllSkipsACloudCopyOfAWalletAlreadyOnDevice, and
+# android's CloudBackupPasskeyScenarioFullLaunchTest prePresentationDiscoveryFailureRetriesOnceThenSucceeds
+# and CloudBackupRestoreAllFullLaunchTest runningBatchRestoresEachWalletInTurnAndSkipsTheCopyAlreadyOnDevice
+# each restore a clean install through passkey discovery. a person still restores with a real
+# passkey synced to a new device, its real prf output, a real icloud or google drive account and a
+# clean device
