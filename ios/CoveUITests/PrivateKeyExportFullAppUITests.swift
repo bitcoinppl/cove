@@ -140,6 +140,41 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
         assertPrivateKeyHidden()
     }
 
+    /// At the largest text size the revealed key, its heading, Copy and the clipboard note each
+    /// draw whole, and the key gains no hyphen where it wraps, which would read as part of the key
+    func testRevealedKeyDrawsWholeAtLargestTextSize() {
+        let (probeKey, probeValue) = ScreenReachability.truncationProbeEnvironment
+        app.launchEnvironment[probeKey] = probeValue
+        robot.launch(scenario: "XPRV-01", arguments: CloudBackupHostRobot.largestContentSizeArguments)
+        robot.restoreFromCloudBackup()
+        robot.openSettings()
+        enableMainAndDecoyPins()
+
+        // at the largest size the wallet screen's menu runs past the screen, and a drag to reach
+        // its Wallet Settings closes it, so the wallet's row in a freshly opened Settings opens
+        // them; a swipe could leave that list still moving under the tap, while reachAndTap's
+        // drag holds at its end, and it passes over the sidebar's copy of the row off screen; the
+        // list builds rows only near the screen, and at this size the wallet's row starts below it
+        robot.goBack()
+        robot.openSettings()
+
+        let screen = ScreenReachability(app: app)
+        let walletRow = app.staticTexts.matching(NSPredicate(format: "label == %@", walletName))
+        screen.scrollDown(untilExists: walletRow)
+        screen.reachAndTap(walletRow, "settings: \(walletName)")
+        screen.reachAndTap(app.buttons.matching(NSPredicate(format: "label == %@", "Export Private Key")), "wallet settings: Export Private Key")
+        app.tapButton(named: "Reveal and Copy")
+        robot.enterPin(mainPin)
+        XCTAssertTrue(app.navigationBars["Private Key"].waitForExistence(timeout: 10))
+
+        screen.assertScreenFits(
+            "revealed private key",
+            texts: ["Extended Private Key", fixtureXprv],
+            descriptions: ["The clipboard copy stays on this device"],
+            buttons: [app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Copy for 2 Minutes"))]
+        )
+    }
+
     private var verifyIdentity: XCUIElement {
         app.navigationBars["Verify Identity"]
     }

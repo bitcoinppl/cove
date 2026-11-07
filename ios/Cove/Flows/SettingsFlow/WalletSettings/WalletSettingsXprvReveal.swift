@@ -29,9 +29,11 @@ struct XprvRevealContent: View {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Extended Private Key")
                     .font(.headline)
+                    .uiTestTruncationProbe()
 
-                Text(xprv)
+                Text(unhyphenated: xprv)
                     .font(.system(.caption, design: .monospaced))
+                    .uiTestTruncationProbe()
                     .privacySensitive()
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -42,7 +44,7 @@ struct XprvRevealContent: View {
                     copySensitiveXprv(xprv)
                     copied = true
                 } label: {
-                    Label(
+                    ProbedLabel(
                         copied ? "Copied for 2 Minutes" : "Copy for 2 Minutes",
                         systemImage: copied ? "checkmark" : "doc.on.doc"
                     )
@@ -52,6 +54,7 @@ struct XprvRevealContent: View {
 
                 Text("The clipboard copy stays on this device and expires after two minutes.")
                     .font(.footnote)
+                    .uiTestTruncationProbe()
                     .foregroundStyle(.secondary)
             }
             .padding()

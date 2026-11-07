@@ -472,13 +472,18 @@ private struct CloudBackupRecoverySupportCodeCard: View {
                 .uiTestTruncationProbe()
                 .foregroundStyle(.white)
                 .accessibilityIdentifier("cloudBackup.recovery.supportCode")
-            HStack {
-                Button(action: copy) {
-                    ProbedLabel("Copy Code", systemImage: "doc.on.doc")
+            // side by side at accessibility sizes, each button had room for only part of
+            // "Support", so they stack when both don't fit on one line
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    copyButton
+                    Spacer()
+                    contactSupportButton
                 }
-                Spacer()
-                Button(action: contactSupport) {
-                    ProbedLabel("Contact Support", systemImage: "envelope")
+
+                VStack(alignment: .leading) {
+                    copyButton
+                    contactSupportButton
                 }
             }
             .buttonStyle(.bordered)
@@ -487,6 +492,18 @@ private struct CloudBackupRecoverySupportCodeCard: View {
         .padding(16)
         .background(Color.duskBlue.opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var copyButton: some View {
+        Button(action: copy) {
+            ProbedLabel("Copy Code", systemImage: "doc.on.doc")
+        }
+    }
+
+    private var contactSupportButton: some View {
+        Button(action: contactSupport) {
+            ProbedLabel("Contact Support", systemImage: "envelope")
+        }
     }
 }
 
