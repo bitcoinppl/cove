@@ -183,8 +183,20 @@ class KeyTeleportRevealCaptureTest {
         compose.waitForIdle()
         assertTrue("$screen is not protected with FLAG_SECURE", windowIsSecure())
 
-        val codeRegion = compose.onNodeWithContentDescription(codeHint).regionInRoot()
         val qrFirst = capture()
+
+        // a hidden code has no text in the tree, so a code that has one is judged by its pixels
+        // before the hint it should carry is looked for
+        compose.onAllNodes(hasText(code), useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.let { node ->
+            val match = qrFirst.matchCode(ShownText(node.textLayouts().single(), node.positionInRoot))
+            assertTrue("the hidden code of $screen matches its own text before anything is revealed: $match", !match.matches)
+        }
+
+        val codeRegion =
+            compose
+                .onNodeWithContentDescription(codeHint)
+                .assertExists("the code of $screen has no reveal hint before anything is revealed")
+                .regionInRoot()
 
         compose.onNodeWithContentDescription(codeHint).performClick()
         compose.waitForIdle()
