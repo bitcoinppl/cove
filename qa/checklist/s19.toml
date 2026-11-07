@@ -54,9 +54,13 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/QrCodeImportScreen.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/nfc/NfcReader.kt",
+    "rust/src/signed_import.rs",
 ]
 coverage = [
     "human",
+    "rust:rust/src/signed_import.rs::signed_import_nfc_message_accepts_every_record_shape",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# needs a hardware signer over qr and nfc
+# rust decides how a signed psbt or finalized transaction read over nfc parses, from a text record,
+# a binary record or both. a person still runs the journey with a hardware signer over qr and nfc,
+# including the nfc export of the unsigned psbt, which has no test seam
