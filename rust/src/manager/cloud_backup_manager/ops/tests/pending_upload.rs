@@ -507,7 +507,8 @@ async fn pending_upload_verification_refreshes_sync_health_to_all_uploaded() {
     assert!(manager.pending_verification_completion().is_none());
     assert_eq!(manager.compute_sync_health().await, CloudSyncHealth::AllUploaded,);
 
-    for _ in 0..20 {
+    let deadline = LoadedHostDeadline::after(Duration::from_millis(200));
+    while !deadline.has_passed() {
         if manager.model_snapshot().sync_health == CloudSyncHealth::AllUploaded {
             break;
         }

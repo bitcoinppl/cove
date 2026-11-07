@@ -16,7 +16,7 @@ use cove_device::cloud_storage::{
 use cove_device::keychain::Keychain;
 use cove_tokio::FutureTimeoutExt as _;
 
-use crate::test_support::{MockKeychain, loaded_host_wait};
+use crate::test_support::{LoadedHostDeadline, MockKeychain, loaded_host_wait};
 use cove_device::passkey::{
     DiscoveredPasskeyResult, PasskeyAccess, PasskeyCredentialPresence, PasskeyError,
     PasskeyFailureReason, PasskeyOperation, PasskeyProvider, PasskeyRegistrationPlatform,
@@ -1379,8 +1379,8 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
 }
 
 fn wait_for_cleanup_idle_for_test(manager: &RustCloudBackupManager) {
-    let deadline = std::time::Instant::now() + loaded_host_wait(Duration::from_secs(1));
-    while std::time::Instant::now() < deadline {
+    let deadline = LoadedHostDeadline::after(Duration::from_secs(1));
+    while !deadline.has_passed() {
         let supervisor = manager.supervisor.clone();
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
         let _task = cove_tokio::task::spawn(async move {
