@@ -1,5 +1,6 @@
 use super::*;
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
+use cove_types::network::Network;
 
 use crate::manager::cloud_backup_manager::{
     CloudBackupOnboardingCompletionReadiness, PendingEnableJournalPhase,
@@ -1434,46 +1435,89 @@ async fn cancelled_passkey_restore_does_not_fall_back_to_local_master_key() {
     );
 }
 
-/// Saves a hot wallet with labels the way the app keeps one, next to an xpub-only wallet
-fn save_fresh_enable_device_wallets() -> (WalletMetadata, WalletMetadata, Mnemonic) {
+/// A wallet the fresh enable test puts on the device, with what its backup must hold
+struct FreshEnableWallet {
+    metadata: WalletMetadata,
+    mnemonic: Option<Mnemonic>,
+    labels_jsonl: Option<&'static str>,
+}
+
+/// Saves a hot wallet's recovery words, xpub and public descriptors the way the app keeps them
+fn save_fresh_enable_hot_wallet(
+    name: &str,
+    words: &str,
+    network: Network,
+    wallet_mode: WalletMode,
+) -> FreshEnableWallet {
     use crate::wallet_secret::WalletSecretExt as _;
 
-    let mnemonic = Mnemonic::parse(
-        "legal winner thank year wave sausage worth useful legal winner thank yellow",
-    )
-    .unwrap();
+    let mnemonic = Mnemonic::parse(words).unwrap();
     let secret = cove_device::keychain::WalletSecret::Mnemonic(mnemonic.clone());
 
-    let mut hot = WalletMetadata::preview_new();
-    hot.name = "Fresh Enable Hot".into();
-    hot.wallet_type = WalletType::Hot;
+    let mut metadata = WalletMetadata::preview_new();
+    metadata.name = name.into();
+    metadata.network = network;
+    metadata.wallet_mode = wallet_mode;
+    metadata.wallet_type = WalletType::Hot;
 
-    let xpub = secret.xpub(hot.network);
-    let descriptors = secret.clone().into_descriptors(hot.network, hot.address_type);
+    let descriptors = secret.clone().into_descriptors(network, metadata.address_type);
     let keychain = Keychain::global();
-    keychain.save_wallet_xpub(&hot.id, xpub).unwrap();
+    keychain.save_wallet_xpub(&metadata.id, secret.xpub(network)).unwrap();
     keychain
         .save_public_descriptor(
-            &hot.id,
+            &metadata.id,
             descriptors.external.extended_descriptor.clone(),
             descriptors.internal.extended_descriptor,
         )
         .unwrap();
-    keychain.save_wallet_secret(&hot.id, secret).unwrap();
+    keychain.save_wallet_secret(&metadata.id, secret).unwrap();
 
-    let watch = xpub_only_wallet_metadata();
-    keychain.save_wallet_xpub(&watch.id, sample_xpub(&watch).parse().unwrap()).unwrap();
+    FreshEnableWallet { metadata, mnemonic: Some(mnemonic), labels_jsonl: None }
+}
 
-    Database::global()
-        .wallets()
-        .save_all_wallets(hot.network, hot.wallet_mode, vec![hot.clone(), watch.clone()])
-        .unwrap();
-    LabelManager::try_new(hot.id.clone())
+/// Saves wallets in three network and mode groups: on mainnet a hot wallet with labels and an
+/// xpub-only wallet, a testnet hot wallet, and a hot wallet in decoy mode
+fn save_fresh_enable_device_wallets() -> Vec<FreshEnableWallet> {
+    let mut hot = save_fresh_enable_hot_wallet(
+        "Fresh Enable Hot",
+        "legal winner thank year wave sausage worth useful legal winner thank yellow",
+        Network::Bitcoin,
+        WalletMode::Main,
+    );
+    LabelManager::try_new(hot.metadata.id.clone())
         .unwrap()
         .import_without_cloud_backup_dirty(sample_labels_jsonl())
         .unwrap();
+    hot.labels_jsonl = Some(sample_labels_jsonl());
 
-    (hot, watch, mnemonic)
+    let watch = xpub_only_wallet_metadata();
+    Keychain::global().save_wallet_xpub(&watch.id, sample_xpub(&watch).parse().unwrap()).unwrap();
+    let watch = FreshEnableWallet { metadata: watch, mnemonic: None, labels_jsonl: None };
+
+    let testnet = save_fresh_enable_hot_wallet(
+        "Fresh Enable Testnet",
+        "letter advice cage absurd amount doctor acoustic avoid letter advice cage above",
+        Network::Testnet,
+        WalletMode::Main,
+    );
+    let decoy = save_fresh_enable_hot_wallet(
+        "Fresh Enable Decoy",
+        "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong",
+        Network::Bitcoin,
+        WalletMode::Decoy,
+    );
+
+    let wallets = Database::global().wallets();
+    let mainnet = vec![hot.metadata.clone(), watch.metadata.clone()];
+    wallets.save_all_wallets(Network::Bitcoin, WalletMode::Main, mainnet).unwrap();
+    wallets
+        .save_all_wallets(Network::Testnet, WalletMode::Main, vec![testnet.metadata.clone()])
+        .unwrap();
+    wallets
+        .save_all_wallets(Network::Bitcoin, WalletMode::Decoy, vec![decoy.metadata.clone()])
+        .unwrap();
+
+    vec![hot, watch, testnet, decoy]
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -1485,7 +1529,7 @@ async fn fresh_enable_on_empty_cloud_uploads_every_wallet_readable_and_verifies(
     reset_cloud_backup_test_state(&manager, globals);
     CONNECTIVITY_MANAGER.set_connection_state(true);
     globals.cloud.set_reflect_uploaded_wallets_in_listing(true);
-    let (hot, watch, mnemonic) = save_fresh_enable_device_wallets();
+    let wallets = save_fresh_enable_device_wallets();
     let prf_output = [0x5a; 32];
     globals.passkey.set_create_result(Ok(vec![9, 8, 7]));
     globals.passkey.set_authenticate_result(Ok(prf_output.to_vec()));
@@ -1533,20 +1577,29 @@ async fn fresh_enable_on_empty_cloud_uploads_every_wallet_readable_and_verifies(
         .unwrap()
     };
 
-    let hot_entry = decrypt_wallet(&hot);
-    assert!(
-        matches!(&hot_entry.secret, WalletSecret::Mnemonic(words) if *words == mnemonic.to_string())
-    );
-    assert_eq!(
-        crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl(&hot_entry)
-            .unwrap()
-            .as_deref(),
-        Some(sample_labels_jsonl())
-    );
+    for wallet in &wallets {
+        let name = wallet.metadata.name.as_str();
+        let entry = decrypt_wallet(&wallet.metadata);
 
-    let watch_entry = decrypt_wallet(&watch);
-    assert!(matches!(watch_entry.secret, WalletSecret::WatchOnly));
-    assert_eq!(watch_entry.xpub, Some(sample_xpub(&watch)));
+        match &wallet.mnemonic {
+            Some(mnemonic) => assert!(
+                matches!(&entry.secret, WalletSecret::Mnemonic(words) if *words == mnemonic.to_string()),
+                "{name} recovery words"
+            ),
+            None => {
+                assert!(matches!(entry.secret, WalletSecret::WatchOnly), "{name} is watch-only");
+                assert_eq!(entry.xpub, Some(sample_xpub(&wallet.metadata)), "{name} xpub");
+            }
+        }
+
+        assert_eq!(
+            crate::manager::cloud_backup_manager::wallets::decode_cloud_labels_jsonl(&entry)
+                .unwrap()
+                .as_deref(),
+            wallet.labels_jsonl,
+            "{name} labels"
+        );
+    }
 
     // the background verifier reads the uploads back and reaches Verified
     for _ in 0..10 {
@@ -1557,7 +1610,7 @@ async fn fresh_enable_on_empty_cloud_uploads_every_wallet_readable_and_verifies(
 
     match manager.model_snapshot().verification {
         VerificationState::Verified(report) => {
-            assert_eq!(report.wallets_verified, 2);
+            assert_eq!(report.wallets_verified as usize, wallets.len(), "wallets verified");
             assert!(report.wallet_issues.is_empty(), "{:?}", report.wallet_issues);
         }
 
