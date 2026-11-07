@@ -116,7 +116,8 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && (needs.changes.result != 'success' || (needs.changes.outputs.android_instrumented != 'false' && needs.changes.outputs.android_named != 'false')) }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    # the UiTest flavour takes about 70 minutes, so a slow hosted emulator ran past a 75 minute limit
+    timeout-minutes: 90
     # one flavour per job: with both in one job the hosted runner shut down about 35 minutes in, twice
     # the matrix is fixed, not planned by an earlier job, so a run cancelled before it starts still
     # names its checks the way the run that replaces it does
