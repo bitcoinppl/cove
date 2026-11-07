@@ -3,18 +3,8 @@ package org.bitcoinppl.cove.flows.TapSignerFlow
 import android.graphics.Rect
 import android.system.Os
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsAnimation
-import android.view.inspector.WindowInspector
-import androidx.compose.ui.geometry.Rect as ComposeRect
-import androidx.compose.ui.node.RootForTest
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.semantics.SemanticsNode
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getAllSemanticsNodes
-import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.unit.toSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
@@ -24,22 +14,24 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import org.bitcoinppl.cove.test.AndroidDeviceStayAwakeRule
 import org.bitcoinppl.cove.test.FAKE_NODE_ESPLORA_URL
 import org.bitcoinppl.cove.test.FakeNodeControl
+import org.bitcoinppl.cove.test.FullLaunchLayoutChecks
+import org.bitcoinppl.cove.test.FullLaunchLayoutChecks.Companion.MAX_NUDGES
+import org.bitcoinppl.cove.test.FullLaunchLayoutChecks.ControlBounds
 import org.bitcoinppl.cove.test.FullLaunchOnboardingRobot
 import org.bitcoinppl.cove.test.FullLaunchStartupRobot
 import org.bitcoinppl.cove.test.FullLaunchWalletRobot
 import org.bitcoinppl.cove.test.HardwareSignerControl
 import org.bitcoinppl.cove.test.HardwareWalletScreens
 import org.bitcoinppl.cove.test.LARGEST_SYSTEM_FONT_SCALE
+import org.bitcoinppl.cove.test.SystemFontScale
 import org.bitcoinppl.cove.test.TAPSIGNER_CVC
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.test.scrollTo
-import org.bitcoinppl.cove.test.textLayoutProblem
 import org.bitcoinppl.cove.test.waitFor
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -49,7 +41,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.security.SecureRandom
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /**
  * Walks every TAPSIGNER setup and import screen, and the CVC screen signing opens, at the largest
@@ -77,21 +68,6 @@ class TapSignerLayoutFullLaunchTest {
         // continue instead of failing outright
         const val EXCHANGES_BEFORE_DROP = 3
 
-        // well under a line of text at 2x, so only a squeezed or clipped node falls below it
-        const val MIN_NODE_HEIGHT_DP = 24
-
-        // how far one drag moves a node cut off at the top or bottom, and how many it gets
-        const val NUDGE_DP = 96
-        const val MAX_NUDGES = 6
-
-        // Compose positions are floats that the accessibility bounds round
-        const val CLIP_TOLERANCE_PX = 1
-
-        // enough of a text to tell which one a failure names
-        const val TEXT_IN_MESSAGE = 40
-
-        // taps in gesture navigation's bottom strip go to the system, not the app
-        const val GESTURE_STRIP_DP = 48
     }
 
     @get:Rule
@@ -100,10 +76,11 @@ class TapSignerLayoutFullLaunchTest {
     private lateinit var device: UiDevice
     private lateinit var wallet: FullLaunchWalletRobot
     private lateinit var screens: HardwareWalletScreens
+    private lateinit var layout: FullLaunchLayoutChecks
+    private lateinit var fontScale: SystemFontScale
     private val node = FakeNodeControl()
     private val signer = HardwareSignerControl()
     private var previousShowImeWithHardKeyboard: String? = null
-    private var previousFontScale: String? = null
     private var imeAnimations: ImeAnimationProbe? = null
 
     @Before
@@ -111,19 +88,18 @@ class TapSignerLayoutFullLaunchTest {
         device = fullLaunchDevice()
         wallet = FullLaunchWalletRobot(device)
         screens = HardwareWalletScreens(device, wallet)
+        layout = FullLaunchLayoutChecks(device, wallet)
+        fontScale = SystemFontScale(device, wallet)
 
         // see UtxoLockFullLaunchTest: the onboarding robot must never see the soft keyboard
         previousShowImeWithHardKeyboard = device.executeShellCommand("settings get secure show_ime_with_hard_keyboard").trim()
         device.executeShellCommand("settings put secure show_ime_with_hard_keyboard 0")
-        previousFontScale = device.executeShellCommand("settings get system font_scale").trim()
+        fontScale.save()
     }
 
     @After
     fun restoreDevice() {
-        when (val previous = previousFontScale) {
-            null, "null" -> device.executeShellCommand("settings delete system font_scale")
-            else -> device.executeShellCommand("settings put system font_scale $previous")
-        }
+        fontScale.restore()
 
         when (val previous = previousShowImeWithHardKeyboard) {
             null, "null" -> device.executeShellCommand("settings delete secure show_ime_with_hard_keyboard")
@@ -176,7 +152,7 @@ class TapSignerLayoutFullLaunchTest {
         node.fund(screens.copyReceiveAddress(), listOf(FUNDED_SATS))
         screens.refreshUntilBalance(FUNDED_SATS)
 
-        setLargestFontScaleAndWaitForRecreation()
+        fontScale.setLargestFontScaleAndWaitForRecreation()
         wallet.waitForBalance(FUNDED_SATS)
 
         // onboarding is done, so the soft keyboard can show beside the emulator's hardware one,
@@ -206,7 +182,7 @@ class TapSignerLayoutFullLaunchTest {
         // at this scale the hardware send screen ends its first screenful at its Sign Transaction
         // heading, with the signing options below the fold
         wallet.clickNext(expecting = By.text("Sign Transaction"))
-        reachable(By.text("Sign using TAPSIGNER"), "hardware send: \"Sign using TAPSIGNER\"", usable = true).click()
+        layout.reachable(By.text("Sign using TAPSIGNER"), "hardware send: \"Sign using TAPSIGNER\"", usable = true).click()
 
         val title = "Enter TAPSIGNER CVC"
         assertCvcScreenFits(title, "Cancel")
@@ -219,9 +195,9 @@ class TapSignerLayoutFullLaunchTest {
         }
 
         wallet.dismissKeyboard()
-        reachable(By.text("Submit").enabled(true), "$title: Submit", drawsWhole = "Submit", usable = true)
+        layout.reachable(By.text("Submit").enabled(true), "$title: Submit", drawsWhole = "Submit", usable = true)
 
-        reachable(By.text("Cancel"), "$title: Cancel", usable = true).click()
+        layout.reachable(By.text("Cancel"), "$title: Cancel", usable = true).click()
         assertTrue("Cancel didn't close the signing CVC screen", device.wait(Until.gone(By.text(title)), 15_000L))
         device.scrollTo(By.text("Sign using TAPSIGNER"), timeoutMs = 15_000L)
     }
@@ -270,10 +246,10 @@ class TapSignerLayoutFullLaunchTest {
         // the advanced screen is the one with Back where the choose screen has Cancel
         device.waitFor(By.text("Back"))
         assertScreenFits("advanced setup", "Back", "Advanced Setup")
-        reachable(By.clazz("android.widget.EditText"), "advanced setup: chain code field")
+        layout.reachable(By.clazz("android.widget.EditText"), "advanced setup: chain code field")
         wallet.typeInto(By.clazz("android.widget.EditText"), randomChainCode())
         wallet.dismissKeyboard()
-        reachable(By.text("Continue").enabled(true), "advanced setup: Continue", drawsWhole = "Continue", usable = true).click()
+        layout.reachable(By.text("Continue").enabled(true), "advanced setup: Continue", drawsWhole = "Continue", usable = true).click()
 
         enterCvc(TAPSIGNER_CVC, "Enter Factory CVC", "Back", "Continue", next = "Create New CVC")
         enterCvc(NEW_CVC, "Create New CVC", "Back", "Continue", next = "Confirm New CVC")
@@ -287,12 +263,12 @@ class TapSignerLayoutFullLaunchTest {
         repeat(3) {
             if (device.hasObject(By.text("Setup Complete"))) return@repeat
 
-            reachable(By.text("Continue Setup").enabled(true), "Continue Setup", usable = true).click()
+            layout.reachable(By.text("Continue Setup").enabled(true), "Continue Setup", usable = true).click()
             device.wait(Until.hasObject(By.text("Setup Complete")), 30_000L)
         }
 
         assertScreenFits("setup success", "Cancel", "Setup Complete", "Download Backup", "Continue")
-        reachable(By.text("Continue"), "setup success: Continue", usable = true).click()
+        layout.reachable(By.text("Continue"), "setup success: Continue", usable = true).click()
         device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
     }
 
@@ -302,11 +278,11 @@ class TapSignerLayoutFullLaunchTest {
         signer.dropNextTapSignerSession(afterExchanges = EXCHANGES_BEFORE_DROP)
         enterCvc(TAPSIGNER_CVC, "Enter TAPSIGNER CVC", "Cancel", "Submit", next = "Continue Import")
         assertScreenFits("import retry", "Cancel", "Import needs to continue", "Continue Import")
-        reachable(By.text("Continue Import"), "Continue Import", usable = true).click()
+        layout.reachable(By.text("Continue Import"), "Continue Import", usable = true).click()
 
         device.waitFor(By.text("Import Complete"), timeoutMs = 30_000L)
         assertScreenFits("import success", "Cancel", "Import Complete", "Continue")
-        reachable(By.text("Continue"), "import success: Continue", usable = true).click()
+        layout.reachable(By.text("Continue"), "import success: Continue", usable = true).click()
         device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
     }
 
@@ -331,36 +307,12 @@ class TapSignerLayoutFullLaunchTest {
         assertCvcScreenFits(title, back)
 
         screens.enterTapSignerCvc(cvc, title, submit, opened = By.clazz("android.widget.EditText")) {
-            reachable(it, "$title: $submit", drawsWhole = submit, usable = true)
+            layout.reachable(it, "$title: $submit", drawsWhole = submit, usable = true)
         }
 
         if (!device.wait(Until.hasObject(By.text(next)), 30_000L)) {
-            scrollBackTo(By.text(next), "after $title accepted the CVC, \"$next\"")
+            layout.scrollBackTo(By.text(next), "after $title accepted the CVC, \"$next\"")
         }
-    }
-
-    /**
-     * Sets the largest system font scale and waits until the app's resumed activity has it
-     *
-     * The change recreates the activity, and a click that lands on the one it replaces is lost,
-     * so the wallet screen must be the new activity's before the test opens Send
-     */
-    private fun setLargestFontScaleAndWaitForRecreation() {
-        device.executeShellCommand("settings put system font_scale $LARGEST_SYSTEM_FONT_SCALE")
-        wallet.waitUntil("expected the app to recreate its activity at font scale $LARGEST_SYSTEM_FONT_SCALE", timeoutMs = 30_000L) {
-            var applied = false
-            InstrumentationRegistry.getInstrumentation().runOnMainSync {
-                applied =
-                    ActivityLifecycleMonitorRegistry
-                        .getInstance()
-                        .getActivitiesInStage(Stage.RESUMED)
-                        .any { it.resources.configuration.fontScale == LARGEST_SYSTEM_FONT_SCALE }
-            }
-
-            applied
-        }
-
-        device.waitForIdle()
     }
 
     /** Checks the CVC screen titled [title] fits, before any CVC is entered */
@@ -377,29 +329,10 @@ class TapSignerLayoutFullLaunchTest {
         // the sheet slides in, and a node read while its content moves goes stale, so the checks
         // start once the content holds still, then scroll back to the top in case it opened lower,
         // and scroll to the field explicitly at the end
-        awaitContentAtRest("the $title screen", By.text(title), By.text("CVC"))
-        scrollBackTo(By.text(back), "$title: \"$back\"")
+        layout.awaitContentAtRest("the $title screen", By.text(title), By.text("CVC"))
+        layout.scrollBackTo(By.text(back), "$title: \"$back\"")
         assertScreenFits(title, back, title)
-        reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
-    }
-
-    /**
-     * Drags the screen's scroll area down, above any keyboard, until a match for [selector] shows,
-     * for content above the top, which [reachable] never scrolls back to
-     */
-    private fun scrollBackTo(
-        selector: BySelector,
-        name: String,
-    ) {
-        repeat(MAX_NUDGES * 3) {
-            if (device.hasObject(selector)) return
-
-            val viewport = largestScrollArea(name)
-            val bottom = minOf(viewport.bottom, keyboardTop() ?: viewport.bottom)
-            nudge(Rect(viewport.left, viewport.top, viewport.right, bottom), towardsTop = false)
-        }
-
-        assertTrue("$name never scrolled back into view", device.hasObject(selector))
+        layout.reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
     }
 
     // MARK: layout checks
@@ -417,254 +350,13 @@ class TapSignerLayoutFullLaunchTest {
         title: String,
         vararg actions: String,
     ) {
-        reachable(By.text(back), "$screen: \"$back\"", drawsWhole = back, usable = true)
+        layout.reachable(By.text(back), "$screen: \"$back\"", drawsWhole = back, usable = true)
 
-        val titleNode = reachable(By.text(title), "$screen: \"$title\"", drawsWhole = title)
-        assertWindowTextsDrawWhole(screen, titleNode.visibleBounds)
-        assertWindowTextsShowWhole(screen, titleNode.visibleBounds)
+        val titleNode = layout.reachable(By.text(title), "$screen: \"$title\"", drawsWhole = title)
+        layout.assertWindowTextsDrawWhole(screen, titleNode.visibleBounds)
+        layout.assertWindowTextsShowWhole(screen, titleNode.visibleBounds)
 
-        actions.forEach { reachable(By.text(it), "$screen: \"$it\"", drawsWhole = it, usable = true) }
-    }
-
-    /**
-     * Fails unless every Compose text in the window that shows [titleVisible] can be scrolled to
-     * show whole, with no ancestor clipping it
-     *
-     * A text keeps its whole layout inside a smaller container that clips it, which the layout
-     * check can't see, so this compares each text's clipped bounds with its full bounds once it is
-     * scrolled into its scroll area. A text taller than its scroll area must show its whole first
-     * line and then its whole last line. Text fields are left out, as in [assertWindowTextsDrawWhole]
-     *
-     * The texts are checked from the bottom up, so the scroll areas end near their top, where the
-     * later downward scroll to each action starts
-     */
-    private fun assertWindowTextsShowWhole(
-        screen: String,
-        titleVisible: Rect,
-    ) {
-        var root: RootForTest? = null
-        var texts = emptyList<Pair<Int, String>>()
-
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            root = semanticsNodeAt(titleVisible)?.first
-            texts =
-                root
-                    ?.semanticsOwner
-                    ?.getAllSemanticsNodes(mergingEnabled = false)
-                    ?.filter { SemanticsProperties.Text in it.config && SemanticsProperties.EditableText !in it.config }
-                    ?.filter { it.size.height > 0 && it.size.width > 0 }
-                    ?.sortedByDescending { it.positionOnScreen.y }
-                    ?.map { node -> node.id to node.config[SemanticsProperties.Text].joinToString(" ") { it.text } }
-                    .orEmpty()
-        }
-
-        val owner = checkNotNull(root) { "$screen: its title matches no Compose semantics node" }
-        val problems =
-            texts.mapNotNull { (id, text) ->
-                textShowWholeProblem(owner, id)?.let { "\"${text.take(TEXT_IN_MESSAGE)}\": $it" }
-            }
-
-        assertTrue("$screen has texts that never show whole: $problems", problems.isEmpty())
-    }
-
-    /**
-     * Where a text lies on screen, where its first and last lines lie across its width, and the
-     * scroll area that can move it
-     */
-    private data class TextPlacement(
-        val shown: Rect,
-        val whole: Rect,
-        val firstLine: Rect?,
-        val lastLine: Rect?,
-        val viewport: Rect?,
-        val scrollBy: ((Float, Float) -> Boolean)?,
-    )
-
-    /**
-     * Why the text with semantics [id] never shows whole, or null when it does
-     *
-     * Its scroll area is scrolled just far enough to bring the part under check inside it. A text
-     * taller than the area must show its whole first line and then its whole last line, from the
-     * line bounds its layout measures, so an area too short for a line fails
-     */
-    private fun textShowWholeProblem(
-        root: RootForTest,
-        id: Int,
-    ): String? {
-        val edges = mutableListOf("whole")
-        var checked = 0
-        var scrolledFrom: Rect? = null
-
-        repeat(MAX_NUDGES * 2) {
-            val placement = textPlacement(root, id) ?: return null
-            val (shown, whole, firstLine, lastLine, viewport, scrollBy) = placement
-            if (viewport != null && whole.height() > viewport.height() + CLIP_TOLERANCE_PX && edges == listOf("whole")) {
-                edges.clear()
-                edges += listOf("first line", "last line")
-            }
-
-            val edge = edges[checked]
-            val part =
-                when (edge) {
-                    "first line" -> firstLine ?: return "its text reports no layout for its first line"
-                    "last line" -> lastLine ?: return "its text reports no layout for its last line"
-                    else -> whole
-                }
-
-            if (viewport != null && part.height() > viewport.height() + CLIP_TOLERANCE_PX) {
-                return "its $edge is ${part.height()}px tall but its scroll area shows only ${viewport.height()}px"
-            }
-
-            // a part outside the area scrolls to its nearer edge, and the last line to the bottom
-            val outside = viewport != null && (part.top < viewport.top || part.bottom > viewport.bottom)
-            val delta =
-                when {
-                    viewport == null || !outside -> 0
-                    edge == "last line" || part.top >= viewport.top -> part.bottom - viewport.bottom
-                    else -> part.top - viewport.top
-                }
-
-            // a scroll that didn't move the text has reached the end of its area, so check it there
-            if (abs(delta) > CLIP_TOLERANCE_PX && scrollBy != null && whole != scrolledFrom) {
-                scrolledFrom = whole
-                InstrumentationRegistry.getInstrumentation().runOnMainSync { scrollBy(0f, delta.toFloat()) }
-                device.waitForIdle()
-                Thread.sleep(300)
-                return@repeat
-            }
-
-            val shows =
-                shown.left - CLIP_TOLERANCE_PX <= part.left &&
-                    shown.top - CLIP_TOLERANCE_PX <= part.top &&
-                    shown.right + CLIP_TOLERANCE_PX >= part.right &&
-                    shown.bottom + CLIP_TOLERANCE_PX >= part.bottom
-
-            if (!shows) return "its ${if (edge == "whole") "text" else edge} spans $part but it shows only $shown"
-
-            checked += 1
-            scrolledFrom = null
-            if (checked == edges.size) return null
-        }
-
-        return "it never scrolled to show its ${edges.getOrNull(checked)?.takeIf { it != "whole" } ?: "text"} whole"
-    }
-
-    /** The on-screen bounds of the text with semantics [id] and its nearest vertical scroll area */
-    private fun textPlacement(
-        root: RootForTest,
-        id: Int,
-    ): TextPlacement? {
-        var placement: TextPlacement? = null
-        val display = Rect(0, 0, device.displayWidth, device.displayHeight)
-
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val node = root.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false).firstOrNull { it.id == id } ?: return@runOnMainSync
-            val scroller =
-                generateSequence(node.parent) { it.parent }
-                    .firstOrNull { SemanticsProperties.VerticalScrollAxisRange in it.config && SemanticsActions.ScrollBy in it.config }
-
-            // boundsInWindow isn't clipped to the display, which a window can extend past
-            val shown = node.clippedOnScreen().also { if (!it.intersect(display)) it.setEmpty() }
-            val viewport = scroller?.clippedOnScreen()?.also { if (!it.intersect(display)) it.setEmpty() }
-            val whole = node.fullOnScreen()
-            val layout = node.textLayout()
-
-            // line tops and bottoms match the drawn text, as layoutProblem explains
-            val line = { index: Int ->
-                layout?.let { Rect(whole.left, whole.top + it.getLineTop(index).roundToInt(), whole.right, whole.top + it.getLineBottom(index).roundToInt()) }
-            }
-
-            placement =
-                TextPlacement(
-                    shown = shown,
-                    whole = whole,
-                    firstLine = line(0),
-                    lastLine = layout?.let { line(it.lineCount - 1) },
-                    viewport = viewport,
-                    scrollBy = scroller?.config?.getOrNull(SemanticsActions.ScrollBy)?.action,
-                )
-        }
-
-        return placement
-    }
-
-    /** The text's single layout, as the accessibility service reads it, or null when it has none */
-    private fun SemanticsNode.textLayout(): TextLayoutResult? {
-        val action = config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action ?: return null
-        val layouts = mutableListOf<TextLayoutResult>()
-
-        return layouts.takeIf { action(it) }?.singleOrNull()?.takeIf { it.lineCount > 0 }
-    }
-
-    /**
-     * Scrolls until the node's control lies above the gesture strip and shows whole, then checks the
-     * node isn't squeezed
-     *
-     * The control is the clickable that merges the node, such as a card holding a title and a
-     * description, or the node itself when nothing does. UiAutomator reports bounds already clipped
-     * to the display, window and scroll container, so the control's full and shown bounds come from
-     * the Compose semantics tree instead. A control cut off at the top or bottom is dragged inward
-     * until it shows whole; one cut off at the side, or that never shows whole, fails
-     *
-     * With [drawsWhole], the control's text showing that string must also lay out whole, and with
-     * [usable], the control must take a click and be enabled
-     */
-    private fun reachable(
-        selector: BySelector,
-        name: String,
-        drawsWhole: String? = null,
-        usable: Boolean = false,
-    ): UiObject2 {
-        val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
-        val gestureStripTop = device.displayHeight - (GESTURE_STRIP_DP * density).toInt()
-        var node = device.scrollTo(selector, timeoutMs = 15_000L)
-        var control: ControlBounds? = null
-
-        repeat(MAX_NUDGES) {
-            // a recomposition can replace the node between reads
-            val visible =
-                try {
-                    node.visibleBounds
-                } catch (_: StaleObjectException) {
-                    node = device.waitFor(selector, timeoutMs = 5_000L)
-                    node.visibleBounds
-                }
-
-            val (shown, whole) =
-                controlBounds(visible)?.also { control = it } ?: error("$name at $visible matches no Compose semantics node")
-
-            val cutTop = whole.top < shown.top - CLIP_TOLERANCE_PX
-            val cutBottom = whole.bottom > shown.bottom + CLIP_TOLERANCE_PX
-            assertTrue(
-                "$name is cut off at the side: its control spans $whole but shows only $shown",
-                whole.left >= shown.left - CLIP_TOLERANCE_PX && whole.right <= shown.right + CLIP_TOLERANCE_PX,
-            )
-            assertTrue("$name's control spans $whole, taller than the $shown it can show in", !(cutTop && cutBottom))
-
-            if (!cutTop && !cutBottom && shown.bottom <= gestureStripTop) {
-                assertTrue(
-                    "$name is squeezed to $visible, under ${MIN_NODE_HEIGHT_DP}dp tall",
-                    visible.height() >= MIN_NODE_HEIGHT_DP * density,
-                )
-
-                drawsWhole?.let { assertDrawsWhole(visible, it, name) }
-                if (usable) assertUsable(visible, name)
-                return node
-            }
-
-            // below the gesture strip counts as cut off at the bottom, since the content must move up
-            val viewport =
-                try {
-                    node.scrollViewport()
-                } catch (_: StaleObjectException) {
-                    device.waitFor(selector, timeoutMs = 5_000L).scrollViewport()
-                }
-
-            nudge(viewport ?: Rect(0, 0, device.displayWidth, device.displayHeight), towardsTop = !cutTop)
-            node = device.waitFor(selector, timeoutMs = 5_000L)
-        }
-
-        error("$name never showed whole after $MAX_NUDGES drags: ${control ?: "no control found"}")
+        actions.forEach { layout.reachable(By.text(it), "$screen: \"$it\"", drawsWhole = it, usable = true) }
     }
 
     /**
@@ -676,7 +368,7 @@ class TapSignerLayoutFullLaunchTest {
      * the window's keyboard animations have ended, see [settledPlacement], so a keyboard still
      * sliding open can't pass or fail the check. The drags stay in that space, where a drag on the
      * keys would type instead of scroll, and each moves the content only a short way, so a control
-     * at the end of a long form gets as many drags as [scrollBackTo] gives one at its top
+     * at the end of a long form gets as many drags as [FullLaunchLayoutChecks.scrollBackTo] gives one at its top
      */
     private fun scrollAboveKeyboard(
         selector: BySelector,
@@ -692,10 +384,10 @@ class TapSignerLayoutFullLaunchTest {
             val bounds = placement.control
             if (bounds != null && bounds.whole.bottom <= placement.coverTop && bounds.shown.contains(bounds.whole)) return
 
-            val viewport = largestScrollArea(name)
+            val viewport = layout.largestScrollArea(name)
             last = "$bounds with the $cover from ${placement.coverTop}, dragging in $viewport"
 
-            nudge(Rect(viewport.left, viewport.top, viewport.right, minOf(viewport.bottom, placement.coverTop)), towardsTop = true)
+            layout.nudge(Rect(viewport.left, viewport.top, viewport.right, minOf(viewport.bottom, placement.coverTop)), towardsTop = true)
         }
 
         error("$name never showed whole above the $cover after $drags drags: ${last ?: "not found"}")
@@ -750,7 +442,7 @@ class TapSignerLayoutFullLaunchTest {
     ): KeyboardPlacement? {
         val animations = imeAnimations ?: error("the keyboard animation probe must go on before the screen opens the keyboard")
         val ended = animations.endedIfIdle() ?: return null
-        val keyboard = keyboardTop() ?: return null
+        val keyboard = layout.keyboardTop() ?: return null
 
         // a node replaced between finding and reading it makes this read count as not yet at rest
         return try {
@@ -763,275 +455,16 @@ class TapSignerLayoutFullLaunchTest {
                         ?: return null
                 }
 
-            KeyboardPlacement(keyboard, bar, device.findObject(selector)?.visibleBounds?.let(::controlBounds), ended)
+            KeyboardPlacement(keyboard, bar, device.findObject(selector)?.visibleBounds?.let(layout::controlBounds), ended)
         } catch (_: StaleObjectException) {
             null
         }
     }
 
-    /** The top of the keyboard on screen, or null while it is closed */
-    private fun keyboardTop(): Int? {
-        var top: Int? = null
-
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val decor =
-                ActivityLifecycleMonitorRegistry
-                    .getInstance()
-                    .getActivitiesInStage(Stage.RESUMED)
-                    .firstOrNull()
-                    ?.window
-                    ?.decorView
-
-            val insets = decor?.rootWindowInsets?.takeIf { it.isVisible(WindowInsets.Type.ime()) } ?: return@runOnMainSync
-            val location = IntArray(2).also(decor::getLocationOnScreen)
-            top = location[1] + decor.height - insets.getInsets(WindowInsets.Type.ime()).bottom
-        }
-
-        return top
-    }
-
-    /** Where a control shows on screen after every clip, and where it would lie unclipped */
-    private data class ControlBounds(
-        val shown: Rect,
-        val whole: Rect,
-    )
-
-    /** The bounds of the control holding the Compose node that UiAutomator shows at [visible] */
-    private fun controlBounds(visible: Rect): ControlBounds? {
-        var bounds: ControlBounds? = null
-
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val control = semanticsNodeAt(visible)?.second?.controlOrSelf() ?: return@runOnMainSync
-            val shown = control.clippedOnScreen()
-
-            // boundsInWindow isn't clipped to the display, which a window can extend past
-            if (!shown.intersect(0, 0, device.displayWidth, device.displayHeight)) shown.setEmpty()
-            bounds = ControlBounds(shown, control.fullOnScreen())
-        }
-
-        return bounds
-    }
-
-    /**
-     * Fails unless every Compose text in the control UiAutomator shows at [visible] that reads
-     * [text] lays out whole: no line ellipsized, no line past the text's height or line limit, and
-     * no line wider than the text
-     *
-     * UiAutomator reports a text's whole string even when it draws cut short, so the layout comes
-     * from Compose. A text that reports no layout fails too, so a change that hides the layout
-     * can't turn the check off
-     */
-    private fun assertDrawsWhole(
-        visible: Rect,
-        text: String,
-        name: String,
-    ) {
-        var problem: String? = null
-
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val control = semanticsNodeAt(visible)?.second?.controlOrSelf()
-            val texts =
-                control
-                    ?.selfAndDescendants()
-                    ?.filter { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text == text } }
-                    ?.toList()
-                    .orEmpty()
-
-            problem =
-                when {
-                    control == null -> "matches no Compose semantics node"
-                    texts.isEmpty() -> "has no Compose text reading \"$text\" in its control"
-                    else -> texts.firstNotNullOfOrNull { it.textLayoutProblem() }
-                }
-        }
-
-        problem?.let { error("$name doesn't draw whole: $it") }
-    }
-
-    /**
-     * Fails unless every Compose text in the window that shows [titleVisible] lays out whole
-     *
-     * The TAPSIGNER screens are a sheet in their own window, so this covers each screen's
-     * descriptions without naming them. Text fields are left out, since they scroll a long entry
-     * inside themselves by design
-     */
-    private fun assertWindowTextsDrawWhole(
-        screen: String,
-        titleVisible: Rect,
-    ) {
-        var problems = listOf("its title matches no Compose semantics node")
-
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val root = semanticsNodeAt(titleVisible)?.first ?: return@runOnMainSync
-            problems =
-                root.semanticsOwner
-                    .getAllSemanticsNodes(mergingEnabled = false)
-                    .filter { SemanticsProperties.Text in it.config && SemanticsProperties.EditableText !in it.config }
-                    .mapNotNull { node ->
-                        val text = node.config[SemanticsProperties.Text].joinToString(" ") { it.text }
-                        node.textLayoutProblem()?.let { "\"${text.take(TEXT_IN_MESSAGE)}\": $it" }
-                    }
-        }
-
-        assertTrue("$screen has texts that don't draw whole: $problems", problems.isEmpty())
-    }
-
-    /** Fails unless the control UiAutomator shows at [visible] takes a click and is enabled */
-    private fun assertUsable(
-        visible: Rect,
-        name: String,
-    ) {
-        var problem: String? = null
-
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            val control = semanticsNodeAt(visible)?.second?.controlOrSelf()
-            problem =
-                when {
-                    control == null -> "matches no Compose semantics node"
-                    SemanticsActions.OnClick !in control.config -> "takes no click"
-                    SemanticsProperties.Disabled in control.config -> "is disabled"
-                    else -> null
-                }
-        }
-
-        problem?.let { error("$name $it") }
-    }
-
-    /**
-     * The Compose node UiAutomator shows at [visible], read on the main thread
-     *
-     * Every node's clipped bounds are compared with [visible], and the closest one is taken, so the
-     * same text elsewhere, such as behind the sheet, doesn't match
-     */
-    private fun semanticsNodeAt(visible: Rect): Pair<RootForTest, SemanticsNode>? =
-        WindowInspector
-            .getGlobalWindowViews()
-            .flatMap { it.composeRoots() }
-            .flatMap { root -> root.semanticsOwner.getAllSemanticsNodes(mergingEnabled = false).map { root to it } }
-            .filter { (_, node) -> Rect.intersects(node.clippedOnScreen(), visible) }
-            .minByOrNull { (_, node) -> edgeDistance(node.clippedOnScreen(), visible) }
-
-    private fun SemanticsNode.selfAndDescendants(): Sequence<SemanticsNode> =
-        sequenceOf(this) + children.asSequence().flatMap { it.selfAndDescendants() }
-
-    // a clickable that merges its children is one control, such as a card with a title and a description
-    private fun SemanticsNode.controlOrSelf(): SemanticsNode =
-        generateSequence(this) { it.parent }
-            .firstOrNull { it.config.isMergingSemanticsOfDescendants && SemanticsActions.OnClick in it.config }
-            ?: this
-
-    private fun View.composeRoots(): List<RootForTest> =
-        when (this) {
-            is RootForTest -> listOf(this)
-            is ViewGroup -> (0 until childCount).flatMap { getChildAt(it).composeRoots() }
-            else -> emptyList()
-        }
-
-    // boundsInWindow is clipped by every ancestor; shifting it by the window's screen offset puts
-    // it beside the unclipped position on screen
-    private fun SemanticsNode.clippedOnScreen(): Rect {
-        val offset = positionOnScreen - positionInWindow
-        return boundsInWindow.translate(offset).rounded()
-    }
-
-    private fun SemanticsNode.fullOnScreen(): Rect = ComposeRect(positionOnScreen, size.toSize()).rounded()
-
-    // rounds each edge to the nearest pixel, as the accessibility bounds do
-    private fun ComposeRect.rounded(): Rect = Rect(left.roundToInt(), top.roundToInt(), right.roundToInt(), bottom.roundToInt())
-
-    private fun edgeDistance(
-        a: Rect,
-        b: Rect,
-    ): Int = abs(a.left - b.left) + abs(a.top - b.top) + abs(a.right - b.right) + abs(a.bottom - b.bottom)
-
-    /**
-     * The bounds of the largest scroll area on screen, read again when a recomposition replaces a
-     * node between finding it and reading it
-     */
-    private fun largestScrollArea(name: String): Rect {
-        repeat(STALE_READS) {
-            try {
-                return device
-                    .findObjects(By.scrollable(true))
-                    .map { it.visibleBounds }
-                    .maxByOrNull { it.width() * it.height() }
-                    ?: error("$name: the screen has no scroll area")
-            } catch (_: StaleObjectException) {
-                device.waitForIdle()
-            }
-        }
-
-        error("$name: the scroll area kept changing under each read")
-    }
-
-    /**
-     * Waits until the screen's content lies in the same place on two reads in a row, each taken
-     * once the app is idle, and fails if it never does
-     *
-     * The first of [anchors] on screen marks the content, which is measured with the anchor's
-     * nearest scrollable ancestor, so a screen behind a sheet doesn't count, or with the root of
-     * the anchor's window when nothing scrolls, since Compose marks an area scrollable only while
-     * its content overflows it
-     */
-    private fun awaitContentAtRest(
-        name: String,
-        vararg anchors: BySelector,
-    ) {
-        var was: List<Rect>? = null
-
-        wallet.waitUntil("$name never came to rest", timeoutMs = 15_000L) {
-            device.waitForIdle()
-            val content = contentBounds(anchors)
-            (content != null && content == was).also { was = content }
-        }
-    }
-
-    /**
-     * Where the anchor, its container and each node directly inside that container lie, or null
-     * when no anchor shows or a node went stale while it was read
-     */
-    private fun contentBounds(anchors: Array<out BySelector>): List<Rect>? =
-        try {
-            anchors.firstNotNullOfOrNull { device.findObject(it) }?.let { anchor ->
-                val ancestors = generateSequence(anchor) { it.parent }.toList()
-                val container = ancestors.firstOrNull { it.isScrollable } ?: ancestors.last()
-
-                listOf(anchor.visibleBounds, container.visibleBounds) + container.children.map { it.visibleBounds }
-            }
-        } catch (_: StaleObjectException) {
-            null
-        }
-
-    // the nearest scrollable ancestor's visible bounds, which is where a drag scrolls the node
-    private fun UiObject2.scrollViewport(): Rect? =
-        generateSequence(parent) { it.parent }
-            .firstOrNull { it.isScrollable }
-            ?.visibleBounds
-
-    // a short slow drag, which moves the content without a fling
-    private fun nudge(
-        viewport: Rect,
-        towardsTop: Boolean,
-    ) {
-        val density = InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
-        val distance = minOf(viewport.height() / 4, (NUDGE_DP * density).toInt())
-        val (from, to) =
-            if (towardsTop) {
-                viewport.centerY() + distance / 2 to viewport.centerY() - distance / 2
-            } else {
-                viewport.centerY() - distance / 2 to viewport.centerY() + distance / 2
-            }
-
-        device.swipe(viewport.centerX(), from, viewport.centerX(), to, 40)
-        device.waitForIdle()
-        Thread.sleep(300)
-    }
 
     private fun randomChainCode(): String = ByteArray(32).also(SecureRandom()::nextBytes).joinToString("") { "%02x".format(it) }
 }
 
-/** How many times a read retries after a recomposition replaces the node it read */
-private const val STALE_READS = 5
 
 /** How far, in pixels, rounding can put the toolbar's bottom from the keyboard's top */
 private const val KEYBOARD_EDGE_ROUNDING_PX = 2
