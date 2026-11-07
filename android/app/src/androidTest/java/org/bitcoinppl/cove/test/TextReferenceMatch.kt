@@ -38,7 +38,8 @@ import kotlin.math.roundToInt
  * The reference is the text's [TextLayoutResult] drawn offscreen as a coverage mask, then blended
  * from the text's own colour over the background the capture shows beside each glyph. Only pixels
  * the reference covers almost fully count as ink, since glyph edges rasterise a little differently
- * on screen and offscreen
+ * on screen and offscreen. Contrast comes from the captured ink itself, so translucency from any
+ * layer above the text counts, not only the colour the text declares
  */
 class TextReferenceMatch(
     val label: String,
@@ -46,9 +47,12 @@ class TextReferenceMatch(
     val inkPixels: Int,
     /** Ink pixels whose captured colour is far from the reference blend, or outside the capture */
     val mismatchedInk: Int,
-    /** Ink pixels whose text colour falls short of [minContrast] against the background beside them */
+    /**
+     * Ink pixels whose captured colour, taken back to full glyph coverage, falls short of
+     * [minContrast] against the background beside them
+     */
     val faintInk: Int,
-    /** The lowest text-to-background contrast over the ink pixels */
+    /** The lowest captured text-to-background contrast over the ink pixels */
     val lowestContrast: Double,
     val minContrast: Double,
     /** The shift from the laid-out position that matched best */
@@ -258,15 +262,17 @@ private fun Bitmap.compareAt(
                 continue
             }
 
-            // a translucent text colour shows as its blend with what is behind it
-            val contrast = ColorUtils.calculateContrast(blend(behind, textArgb, textAlpha), behind)
+            val captured = getPixel(captureX, captureY) or OPAQUE
+
+            // what the glyph shows where it covers the pixel fully, whichever layer made it translucent
+            val contrast = ColorUtils.calculateContrast(unblend(behind, captured, c), behind)
             lowestContrast = minOf(lowestContrast, contrast)
             if (contrast < minContrast) faint++
 
             val expected = blend(behind, textArgb, c * textAlpha)
             val tolerance =
                 max(MATCH_TOLERANCE_FLOOR, (channelDistance(textArgb, behind) * textAlpha * MATCH_TOLERANCE_SHARE).roundToInt())
-            if (channelDistance(getPixel(captureX, captureY) or OPAQUE, expected) > tolerance) mismatched++
+            if (channelDistance(captured, expected) > tolerance) mismatched++
         }
     }
 
@@ -318,6 +324,21 @@ private fun blend(
     to: Int,
     share: Float,
 ): Int = ColorUtils.blendARGB(from, to, share) or OPAQUE
+
+// the colour that, drawn over [behind] at [coverage], gives [captured], clamped to a real colour
+private fun unblend(
+    behind: Int,
+    captured: Int,
+    coverage: Float,
+): Int {
+    fun channel(shift: Int): Int {
+        val b = behind shr shift and 0xFF
+        val p = captured shr shift and 0xFF
+        return (b + (p - b) / coverage).roundToInt().coerceIn(0, 255)
+    }
+
+    return OPAQUE or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+}
 
 private fun channelDistance(
     a: Int,
