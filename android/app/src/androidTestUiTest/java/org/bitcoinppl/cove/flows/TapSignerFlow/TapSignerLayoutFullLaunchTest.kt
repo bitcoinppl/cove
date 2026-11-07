@@ -378,6 +378,14 @@ class TapSignerLayoutFullLaunchTest {
             device.hasObject(By.text(title)) || device.hasObject(By.text("CVC"))
         }
 
+        // that scroll runs on its own after the screen shows and takes nodes out of the tree, so
+        // the checks start once the field lies in the same place on two reads in a row
+        var fieldWas: Rect? = null
+        wallet.waitUntil("the $title screen never came to rest", timeoutMs = 15_000L) {
+            val field = visibleBoundsOrNull(By.clazz("android.widget.EditText"))
+            (field != null && field == fieldWas).also { fieldWas = field }
+        }
+
         scrollBackTo(By.text(back), "$title: \"$back\"")
         assertScreenFits(title, back, title)
         reachable(By.clazz("android.widget.EditText"), "$title: CVC field")
@@ -394,13 +402,7 @@ class TapSignerLayoutFullLaunchTest {
         repeat(MAX_NUDGES * 3) {
             if (device.hasObject(selector)) return
 
-            val viewport =
-                device
-                    .findObjects(By.scrollable(true))
-                    .map { it.visibleBounds }
-                    .maxByOrNull { it.width() * it.height() }
-                    ?: error("$name: the screen has no scroll area")
-
+            val viewport = largestScrollArea(name)
             val bottom = minOf(viewport.bottom, keyboardTop() ?: viewport.bottom)
             nudge(Rect(viewport.left, viewport.top, viewport.right, bottom), towardsTop = false)
         }
@@ -659,7 +661,14 @@ class TapSignerLayoutFullLaunchTest {
             }
 
             // below the gesture strip counts as cut off at the bottom, since the content must move up
-            nudge(node.scrollViewport() ?: Rect(0, 0, device.displayWidth, device.displayHeight), towardsTop = !cutTop)
+            val viewport =
+                try {
+                    node.scrollViewport()
+                } catch (_: StaleObjectException) {
+                    device.waitFor(selector, timeoutMs = 5_000L).scrollViewport()
+                }
+
+            nudge(viewport ?: Rect(0, 0, device.displayWidth, device.displayHeight), towardsTop = !cutTop)
             node = device.waitFor(selector, timeoutMs = 5_000L)
         }
 
@@ -690,12 +699,7 @@ class TapSignerLayoutFullLaunchTest {
             if (bounds != null && bounds.whole.bottom <= placement.coverTop && bounds.shown.contains(bounds.whole)) return
 
             last = "$bounds with the $cover from ${placement.coverTop}"
-            val viewport =
-                device
-                    .findObjects(By.scrollable(true))
-                    .map { it.visibleBounds }
-                    .maxByOrNull { it.width() * it.height() }
-                    ?: error("$name: the screen has no scroll area")
+            val viewport = largestScrollArea(name)
 
             nudge(Rect(viewport.left, viewport.top, viewport.right, minOf(viewport.bottom, placement.coverTop)), towardsTop = true)
         }
@@ -970,6 +974,34 @@ class TapSignerLayoutFullLaunchTest {
         b: Rect,
     ): Int = abs(a.left - b.left) + abs(a.top - b.top) + abs(a.right - b.right) + abs(a.bottom - b.bottom)
 
+    /**
+     * The bounds of the largest scroll area on screen, read again when a recomposition replaces a
+     * node between finding it and reading it
+     */
+    private fun largestScrollArea(name: String): Rect {
+        repeat(STALE_READS) {
+            try {
+                return device
+                    .findObjects(By.scrollable(true))
+                    .map { it.visibleBounds }
+                    .maxByOrNull { it.width() * it.height() }
+                    ?: error("$name: the screen has no scroll area")
+            } catch (_: StaleObjectException) {
+                device.waitForIdle()
+            }
+        }
+
+        error("$name: the scroll area kept changing under each read")
+    }
+
+    /** The bounds of the first match for [selector], or null when none shows or it went stale */
+    private fun visibleBoundsOrNull(selector: BySelector): Rect? =
+        try {
+            device.findObject(selector)?.visibleBounds
+        } catch (_: StaleObjectException) {
+            null
+        }
+
     // the nearest scrollable ancestor's visible bounds, which is where a drag scrolls the node
     private fun UiObject2.scrollViewport(): Rect? =
         generateSequence(parent) { it.parent }
@@ -997,6 +1029,9 @@ class TapSignerLayoutFullLaunchTest {
 
     private fun randomChainCode(): String = ByteArray(32).also(SecureRandom()::nextBytes).joinToString("") { "%02x".format(it) }
 }
+
+/** How many times a read retries after a recomposition replaces the node it read */
+private const val STALE_READS = 5
 
 /** How far, in pixels, rounding can put the toolbar's bottom from the keyboard's top */
 private const val KEYBOARD_EDGE_ROUNDING_PX = 2
