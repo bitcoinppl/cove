@@ -141,6 +141,7 @@ impl TransactionWatcher {
                     "failed to check txn {} ({} in a row): {error:?}",
                     self.tx_id, self.consecutive_failures
                 );
+
                 self.client = None;
                 TransactionWatcherPollKind::Failed
             }
