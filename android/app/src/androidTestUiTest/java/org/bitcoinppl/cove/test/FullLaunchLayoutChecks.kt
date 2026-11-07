@@ -279,6 +279,7 @@ class FullLaunchLayoutChecks(
                     .eachCount()
                     .filterValues { it > 1 }
                     .keys
+
             texts =
                 nodes
                     .filter { it.size.height > 0 && it.size.width > 0 }
@@ -462,6 +463,8 @@ class FullLaunchLayoutChecks(
                     root.semanticsOwner
                         .getAllSemanticsNodes(mergingEnabled = false)
                         .filter { SemanticsProperties.Text in it.config && SemanticsProperties.EditableText !in it.config }
+                        // a text from elsewhere that first shows during the scroll with the same string and anchor
+                        // would match too; no screen swaps texts so, and telling them apart needs a tag on each
                         .filter { it.id !in claimed && it.textIdentity() == identity }
                         .map { it.id }
             }

@@ -105,6 +105,7 @@ class FullLaunchLayoutChecksTest {
             Text(SAME)
             if (!moved) ClippedText(SAME)
         }
+
         val before = textIds(SAME)
 
         assertAmbiguous("left text")
@@ -119,6 +120,7 @@ class FullLaunchLayoutChecksTest {
                 ClippedText(SAME)
             }
         }
+
         val before = textIds(SAME)
 
         assertAmbiguous("replaced pair")
@@ -134,6 +136,7 @@ class FullLaunchLayoutChecksTest {
             Spacer(Modifier.height(36.dp))
             key(moved) { Text(SAME) }
         }
+
         val before = textIds(SAME)
 
         assertAmbiguous("scan order")
