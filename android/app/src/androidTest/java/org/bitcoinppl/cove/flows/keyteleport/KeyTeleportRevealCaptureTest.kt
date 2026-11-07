@@ -67,7 +67,7 @@ class KeyTeleportRevealCaptureTest {
     private val app get() = AppManager.getInstance()
     private var walletId: WalletId? = null
 
-    // JUnit runs @After even when the assumption below skips the test, and the session found then is someone else's
+    // the @After hook runs even when the assumption below skips the test, and a session found then is someone else's
     private var ownsReceiveSession = false
 
     @Before
@@ -167,6 +167,7 @@ class KeyTeleportRevealCaptureTest {
                 KeyTeleportContainer(app = app, route = route)
             }
         }
+
         compose.waitForIdle()
     }
 
@@ -342,6 +343,7 @@ class KeyTeleportRevealCaptureTest {
             listOf("before anything is revealed" to walk.qrFirst, "after showing the QR code again" to walk.qrAgain).map { (moment, image) ->
                 QrState(moment, image.readQr(walk.qrRegion), image.matchCode(walk.codeText))
             }
+
         val reading = WalkReading(walk, qrStates, hiddenQr = walk.codeShown.readQr(walk.qrRegion), shownCode = walk.codeShown.matchCode(walk.codeText))
 
         qrStates.forEach { Log.i(TAG, "${walk.screen} ${it.moment}: QR code reads as ${it.qr.kind}, hidden code ${it.code}") }
@@ -368,6 +370,7 @@ class KeyTeleportRevealCaptureTest {
         compose.runOnUiThread {
             secure = compose.activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0
         }
+
         return secure
     }
 

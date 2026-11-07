@@ -272,6 +272,7 @@ private fun Bitmap.compareAt(
             val expected = blend(behind, textArgb, c * textAlpha)
             val tolerance =
                 max(MATCH_TOLERANCE_FLOOR, (channelDistance(textArgb, behind) * textAlpha * MATCH_TOLERANCE_SHARE).roundToInt())
+
             if (channelDistance(captured, expected) > tolerance) mismatched++
         }
     }
