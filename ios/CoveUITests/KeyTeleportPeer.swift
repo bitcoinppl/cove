@@ -124,13 +124,17 @@ extension XCUIElement {
         visibleText.joined().withoutSpaces
     }
 
-    /// Waits for Vision to read the text, compared without whitespace and case, allowing up to
-    /// `misreads` characters misread, missed or added
+    /// Waits for Vision to read the text, compared without whitespace and case and with zero and
+    /// the letter O as one, allowing up to `misreads` characters misread, missed or added
+    ///
+    /// Vision reads one as the other in these monospaced codes, so "OO OO XY Q4" read as "0000XYQ4".
+    /// No code mixes them: receiver codes are digits, and Teleport Passwords are Base32, which has
+    /// no zero
     func waitForVisibleText(containing text: String, misreads: Int = 0, timeout: TimeInterval = 5) -> Bool {
-        let compact = Array(text.withoutSpaces)
+        let compact = Array(text.withoutSpaces.zeroAsO)
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if Array(visibleTextWithoutSpaces).contains(compact, allowingEdits: misreads) { return true }
+            if Array(visibleTextWithoutSpaces.zeroAsO).contains(compact, allowingEdits: misreads) { return true }
 
             Thread.sleep(forTimeInterval: 0.3)
         }
@@ -179,6 +183,10 @@ extension XCUIElement {
 private extension String {
     var withoutSpaces: String {
         filter { !$0.isWhitespace }.uppercased().latinized
+    }
+
+    var zeroAsO: String {
+        String(map { $0 == "0" ? "O" : $0 })
     }
 
     /// Latin capitals in place of the Cyrillic and Greek ones drawn the same, which Vision
