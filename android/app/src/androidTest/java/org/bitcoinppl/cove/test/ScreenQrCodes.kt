@@ -35,8 +35,11 @@ fun visibleQrCode(): String? {
 }
 
 /**
- * The state description of the first node whose text or content description contains [label],
+ * The state description of the first node, in any window, whose content description is [label],
  * which uiautomator's own objects don't expose
+ *
+ * Walks the node tree itself, since `findAccessibilityNodeInfosByText` doesn't reach Compose's
+ * nodes, and a bottom sheet draws in a window of its own
  */
 fun stateDescriptionOf(label: String): String? {
     val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
@@ -44,8 +47,14 @@ fun stateDescriptionOf(label: String): String? {
     // uiautomator answers from a node cache that can miss a state change on an idle screen
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) automation.clearCache()
 
-    val root = automation.rootInActiveWindow ?: return null
-    return root
-        .findAccessibilityNodeInfosByText(label)
-        .firstNotNullOfOrNull { it.stateDescription?.toString() }
+    // the window list needs the flag uiautomator sets when it connects, so take the active one too
+    val pending = ArrayDeque(automation.windows.mapNotNull { it.root } + listOfNotNull(automation.rootInActiveWindow))
+    while (pending.isNotEmpty()) {
+        val node = pending.removeFirst()
+        if (node.contentDescription?.toString() == label) return node.stateDescription?.toString()
+
+        for (index in 0 until node.childCount) node.getChild(index)?.let(pending::addLast)
+    }
+
+    return null
 }
