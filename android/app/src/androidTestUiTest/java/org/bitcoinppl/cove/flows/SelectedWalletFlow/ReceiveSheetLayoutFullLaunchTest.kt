@@ -1,7 +1,11 @@
 package org.bitcoinppl.cove.flows.SelectedWalletFlow
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.UiDevice
@@ -44,6 +48,14 @@ class ReceiveSheetLayoutFullLaunchTest {
 
         // the wallet is on signet and Receive shows a native segwit address
         const val ADDRESS_PREFIX = "tb1q"
+
+        // no address reads like this, so only a copy that ran can replace it
+        const val CLIPBOARD_SENTINEL = "receive sheet test: nothing copied yet"
+
+        const val PAYMENT_SATS = 50_000L
+
+        // the sheet polls the node for its address every 20 seconds while it is open
+        const val PAYMENT_TIMEOUT_MS = 90_000L
     }
 
     @get:Rule
@@ -84,14 +96,25 @@ class ReceiveSheetLayoutFullLaunchTest {
     /**
      * Every text in the sheet must lay out and show whole, the address and both actions must
      * scroll into reach unclipped and unsqueezed, Create New Address must show another address,
-     * and Copy Address must put the shown address on the clipboard and close the sheet
+     * and Copy Address must put the shown address on the clipboard and close the sheet. Paying
+     * the shown address while the sheet is open must then show Payment Received, and every text
+     * must still lay out and show whole
      *
      * The address takes no tap, so the clipboard and its new value after Create New Address are
-     * what show it is the wallet's live address rather than a stale or cut-short copy
+     * what show it is the wallet's live address rather than a stale or cut-short copy. The sheet's
+     * refresh failure label isn't reached: it shows only when saving a new address fails five
+     * minutes after the address first showed, which no test seam can make happen
      */
     @Test
     fun receiveSheetFitsAndWorksAtLargestFontScale() {
         launchPastOnboarding()
+
+        // the wallet's addresses are the same on every run, so a clipboard left by an earlier run
+        // can already hold the one copied below; a value no address reads like must be replaced
+        // by the copy. It goes on before Receive opens, since the system shows its clipboard
+        // overlay over the screen for a few seconds after each write
+        setClipboard(CLIPBOARD_SENTINEL)
+        assertEquals("the clipboard didn't take the test's placeholder", CLIPBOARD_SENTINEL, clipboardText())
 
         // onboarding runs at the default scale, since only the receive sheet is under test
         fontScale.setLargestFontScaleAndWaitForRecreation()
@@ -130,6 +153,31 @@ class ReceiveSheetLayoutFullLaunchTest {
         val copied = clipboardText().trim()
         assertEquals("Copy Address copied something other than the shown address", second.replace(" ", ""), copied)
         assertNotEquals("Copy Address copied the address Create New Address replaced", first.replace(" ", ""), copied)
+
+        checkPaidAddress()
+    }
+
+    /**
+     * Opens Receive again, pays the address it shows on the fake node and waits for the open sheet
+     * to mark it paid, then checks every text and the address and actions in that state
+     */
+    private fun checkPaidAddress() {
+        screens.openReceive()
+        val address = shownAddress()
+        layout.awaitContentAtRest("the reopened $SHEET", By.text(address), By.text("Copy Address"))
+
+        node.fund(address.replace(" ", ""), listOf(PAYMENT_SATS))
+        device.waitFor(By.text("Payment Received"), timeoutMs = PAYMENT_TIMEOUT_MS)
+
+        layout.scrollBackTo(By.text("Payment Received"), "$SHEET: Payment Received")
+        val paid = layout.reachable(By.text("Payment Received"), "$SHEET: Payment Received", drawsWhole = "Payment Received")
+        layout.assertWindowTextsDrawWhole("paid $SHEET", paid.visibleBounds)
+        layout.assertWindowTextsShowWhole("paid $SHEET", device.waitFor(By.text("Payment Received")).visibleBounds)
+
+        layout.scrollBackTo(By.text(address), "paid $SHEET: address")
+        layout.reachable(By.text(address), "paid $SHEET: address", drawsWhole = address)
+        layout.reachable(By.text("Copy Address"), "paid $SHEET: Copy Address", drawsWhole = "Copy Address", usable = true)
+        layout.reachable(By.text("Create New Address"), "paid $SHEET: Create New Address", drawsWhole = "Create New Address", usable = true)
     }
 
     /** Starts a fresh app on the reset fake node and imports a software wallet to finish onboarding */
@@ -149,7 +197,16 @@ class ReceiveSheetLayoutFullLaunchTest {
             .importKnownEmptyMainnetWalletWords()
             .skipCloudBackupAfterImport()
             .acceptTermsAfterImport()
+
         device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
+    }
+
+    private fun setClipboard(text: String) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            val clipboard = instrumentation.targetContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Receive sheet test", text))
+        }
     }
 
     /** The address the sheet shows, once it has loaded one */
