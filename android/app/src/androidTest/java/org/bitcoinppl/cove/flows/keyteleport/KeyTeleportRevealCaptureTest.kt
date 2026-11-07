@@ -66,18 +66,22 @@ class KeyTeleportRevealCaptureTest {
     private val app get() = AppManager.getInstance()
     private var walletId: WalletId? = null
 
+    // JUnit runs @After even when the assumption below skips the test, and the session found then is someone else's
+    private var ownsReceiveSession = false
+
     @Before
     fun setUp() {
         bootstrapRustRuntimeForUiTest()
 
         // both tests run a receive, and ending it deletes the stored session, so never run over someone's pending transfer
         assumeTrue("a KeyTeleport receive session is already stored on this device", !hasStoredReceiveSession())
+        ownsReceiveSession = true
     }
 
     @After
     fun tearDown() {
         try {
-            if (hasStoredReceiveSession()) endReceive(app.getKeyTeleportManager())
+            if (ownsReceiveSession && hasStoredReceiveSession()) endReceive(app.getKeyTeleportManager())
         } finally {
             compose.runOnUiThread { app.clearKeyTeleportManager() }
             walletId?.let(::deleteTestWallet)
