@@ -7,7 +7,9 @@ target = "manual"
 paths = [
     "rust/src/key_teleport.rs",
     "rust/src/qr_scanner.rs",
+    "rust/src/multi_format.rs",
     "ios/Cove/QrCodeScanView.swift",
+    "ios/Cove/Extention/StringOrData+Ext.swift",
     "ios/CodeScanner/**",
     "android/app/src/main/java/org/bitcoinppl/cove/QrCodeScanView.kt",
     "rust/src/manager/key_teleport_manager.rs",
@@ -40,7 +42,9 @@ target = "manual"
 paths = [
     "rust/src/key_teleport.rs",
     "rust/src/qr_scanner.rs",
+    "rust/src/multi_format.rs",
     "ios/Cove/QrCodeScanView.swift",
+    "ios/Cove/Extention/StringOrData+Ext.swift",
     "ios/CodeScanner/**",
     "android/app/src/main/java/org/bitcoinppl/cove/QrCodeScanView.kt",
     "rust/src/manager/key_teleport_manager.rs",
