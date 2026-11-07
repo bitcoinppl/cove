@@ -357,6 +357,86 @@ mod tests {
     }
 
     #[test]
+    fn signed_import_nfc_message_accepts_every_record_shape() {
+        for (draft, signed_psbt, txid) in SIGNED_FIXTURES {
+            let finalized_tx =
+                Psbt::try_new(signed_psbt.to_vec()).unwrap().0.extract_tx_unchecked_fee_rate();
+
+            let binary_tx = bitcoin::consensus::serialize(&finalized_tx);
+            let base64_psbt = BASE64_STANDARD.encode(signed_psbt);
+            let hex_tx = hex::encode(&binary_tx);
+
+            // the platform NFC readers hand over a text record, a binary record, or both
+            let messages = [
+                ("text base64 psbt", NfcMessage::String(format!("{base64_psbt}\n")), true),
+                ("text hex transaction", NfcMessage::String(hex_tx.clone()), false),
+                ("binary psbt", NfcMessage::Data(signed_psbt.to_vec()), true),
+                ("binary transaction", NfcMessage::Data(binary_tx.clone()), false),
+                (
+                    "binary record of base64 text",
+                    NfcMessage::Data(base64_psbt.clone().into()),
+                    true,
+                ),
+                (
+                    "both forms of a psbt",
+                    NfcMessage::Both(base64_psbt.clone(), signed_psbt.to_vec()),
+                    true,
+                ),
+                (
+                    "both forms of a transaction",
+                    NfcMessage::Both(hex_tx.clone(), binary_tx.clone()),
+                    false,
+                ),
+                // a binary payload that doesn't parse falls back to the text record
+                (
+                    "text psbt beside unreadable data",
+                    NfcMessage::Both(base64_psbt.clone(), vec![0xde, 0xad, 0xbe, 0xef]),
+                    true,
+                ),
+                (
+                    "text transaction beside unreadable data",
+                    NfcMessage::Both(hex_tx.clone(), vec![0xde, 0xad, 0xbe, 0xef]),
+                    false,
+                ),
+            ];
+
+            for (form, message, is_psbt) in messages {
+                let parsed = SignedTransactionOrPsbt::try_from_nfc_message(&message)
+                    .unwrap_or_else(|error| panic!("{draft} {form}: {error}"));
+
+                assert_eq!(
+                    matches!(parsed, SignedTransactionOrPsbt::SignedPsbt(_)),
+                    is_psbt,
+                    "{draft} {form}: {parsed:?}"
+                );
+                assert_eq!(parsed.unsigned_tx_id().to_string(), txid, "{draft} {form}");
+            }
+        }
+
+        let garbage = [
+            NfcMessage::String("not a transaction".to_string()),
+            NfcMessage::Data(vec![0xde, 0xad, 0xbe, 0xef]),
+            NfcMessage::Both("not a transaction".to_string(), vec![0xde, 0xad, 0xbe, 0xef]),
+        ];
+        for message in garbage {
+            let result = SignedTransactionOrPsbt::try_from_nfc_message(&message);
+            assert!(result.is_err(), "{message:?} parsed as {result:?}");
+        }
+
+        // an unsigned binary psbt keeps the sign-first error instead of trying the text record
+        let unsigned = include_bytes!("../test/data/signet_android_draft_unsigned.psbt");
+        let signed_text = BASE64_STANDARD.encode(SIGNED_FIXTURES[1].1);
+        for message in [
+            NfcMessage::Data(unsigned.to_vec()),
+            NfcMessage::String(BASE64_STANDARD.encode(unsigned)),
+            NfcMessage::Both(signed_text, unsigned.to_vec()),
+        ] {
+            let result = SignedTransactionOrPsbt::try_from_nfc_message(&message);
+            assert!(matches!(result, Err(SignedImportError::NotSigned)), "{result:?}");
+        }
+    }
+
+    #[test]
     fn test_invalid_input() {
         let result = SignedTransactionOrPsbt::try_parse("invalid data");
         assert!(matches!(result, Err(SignedImportError::UnrecognizedFormat)));
