@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.flows.keyteleport
 
 import android.os.Build
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
@@ -32,6 +33,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Receives a KeyTeleport response through the wallet screen's QR scanner rather than the receive
@@ -113,8 +115,7 @@ class KeyTeleportAppScannerFullLaunchTest {
         assertTrue("the response must be a BBQr of at least 3 parts", frames.size >= 3)
 
         // leaving the receive screen keeps its request, so a later scan can still answer it
-        retryingStale { device.waitFor(By.desc("Back")).click() }
-        untilOnMain("Back should leave the receive screen") { app.router.routes.none { it is Route.KeyTeleport } }
+        leaveReceiveScreen(app)
 
         // the camera can catch an animated QR at any frame, so two arrive out of order
         retryingStale { device.waitFor(By.desc("QR Code"), timeoutMs = 20_000L).click() }
@@ -181,6 +182,36 @@ class KeyTeleportAppScannerFullLaunchTest {
         val parts: JSONArray = response.getJSONArray("parts")
 
         return (0 until parts.length()).map(parts::getString) to response.getString("password")
+    }
+
+    // on a slow emulator the receive screen can still be recomposing after its request appears,
+    // and Back went stale on all three quick tries, so this taps whichever Back is current until
+    // the route is gone, for up to 20 s
+    private fun leaveReceiveScreen(app: AppManager) {
+        val deadline = SystemClock.uptimeMillis() + 20_000L
+
+        while (onReceiveScreen(app)) {
+            if (SystemClock.uptimeMillis() > deadline) error("Back should leave the receive screen\n${device.hierarchy()}")
+
+            val back = device.wait(Until.findObject(By.desc("Back")), 2_000L) ?: continue
+
+            try {
+                back.click()
+            } catch (_: StaleObjectException) {
+                continue
+            }
+
+            // a tap that landed pops the route, so wait for that before looking for Back again
+            val settled = SystemClock.uptimeMillis() + 3_000L
+            while (onReceiveScreen(app) && SystemClock.uptimeMillis() < settled) Thread.sleep(100)
+        }
+    }
+
+    private fun onReceiveScreen(app: AppManager): Boolean {
+        val on = AtomicBoolean()
+        onMain { on.set(app.router.routes.any { it is Route.KeyTeleport }) }
+
+        return on.get()
     }
 
     // compose can replace a node between its lookup and the click or edit that follows, which
