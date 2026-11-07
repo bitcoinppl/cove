@@ -35,6 +35,16 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
     private var app: XCUIApplication!
     private var signer: HardwareSignerControl!
 
+    /// The number pad of the CVC screen under check, watched across every drag, so a description
+    /// checked once a drag has closed it is told apart from one checked above it
+    private var numberPad: NumberPadWatch?
+
+    private struct NumberPadWatch {
+        let screen: String
+        var drags = 0
+        var closedBy: Int?
+    }
+
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
@@ -262,6 +272,9 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         let submit = button("Continue")
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 15), "the \(screen) screen never showed")
         waitForSettledKeyboard(on: screen)
+        numberPad = NumberPadWatch(screen: screen)
+        defer { numberPad = nil }
+
         assertScreenFits(
             screen,
             texts: [title],
@@ -269,6 +282,10 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             buttons: [button(cancel), app.secureTextFields.matching(identifier: "Enter CVC"), submit],
             awaitingInput: [submit]
         )
+
+        let drags = numberPad?.drags ?? 0
+        let closedBy = numberPad?.closedBy.map { "drag \($0) of \(drags) closed it" } ?? "it stayed up through \(drags) drags"
+        note("number pad on the \(screen) screen: \(closedBy)")
     }
 
     /// Waits for the number pad a CVC screen opens with to come to rest on screen, so its texts are
@@ -420,12 +437,37 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
         let element = query.firstMatch
         XCTAssertTrue(element.waitForExistence(timeout: 15), "\(name) is missing")
         guard element.frame.height > readableArea(of: element).height else {
-            return assertReachable(query, name, needsHit: false)
+            let reached = assertReachable(query, name, needsHit: false)
+            assertNumberPadCase(name)
+            return reached
         }
 
         assertLineReachable(element, name, first: true)
         assertLineReachable(element, name, first: false)
+        assertNumberPadCase(name)
         return element
+    }
+
+    /// On a CVC screen, names the space a description just showed whole in: above the number pad,
+    /// or, once a drag has closed the number pad, as the screen's scroll view does by default, the
+    /// window it then has. Fails when the number pad is gone with no drag having closed it, so a
+    /// description can't pass against the larger window by chance
+    private func assertNumberPadCase(_ name: String) {
+        guard let watch = numberPad else { return }
+
+        if app.keyboards.firstMatch.exists {
+            note("\(name) shows whole above the number pad, after \(watch.drags) drags on the screen")
+        } else if let closedBy = watch.closedBy {
+            note("\(name) shows whole in the window, since drag \(closedBy) on the screen closed the number pad")
+        } else {
+            XCTFail("\(name) was checked without the number pad, which closed with no drag closing it")
+        }
+    }
+
+    /// Records a finding in the test log and the result bundle
+    private func note(_ message: String) {
+        print("TapSignerLayout: \(message)")
+        XCTContext.runActivity(named: message) { _ in }
     }
 
     /// Scrolls until the first or last line of a description taller than its readable area lies
@@ -442,6 +484,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             let lineEnd = first ? edge + Self.lineHeight : edge - Self.lineHeight
             return min(edge, lineEnd) >= area.minY - 0.5 && max(edge, lineEnd) <= area.maxY + 0.5
         }
+
         let showsAcross = { () -> Bool in
             let frame = element.frame
             let area = self.readableArea(of: element)
@@ -458,7 +501,7 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
 
         XCTAssertTrue(
             showsVertically() && showsAcross(),
-            "\(name)'s \(line) line never showed: it spans \(element.frame) but can show only in \(readableArea(of: element))"
+            "\(name)'s \(line) line never showed: it spans \(element.frame) but can show only in \(readableArea(of: element)), with the keyboard \(app.keyboards.firstMatch.exists ? "up" : "closed")"
         )
     }
 
@@ -497,8 +540,36 @@ final class TapSignerLayoutFullLaunchUITests: XCTestCase {
             ))
         }
 
+        let padUp = keyboard.exists
         let (start, end) = revealingContentBelow ? (point(0.7), point(0.3)) : (point(0.3), point(0.7))
         start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
+        recordNumberPad(after: padUp)
+    }
+
+    /// On a CVC screen, records whether the drag just made kept the number pad up, closed it, or
+    /// found it already closed
+    private func recordNumberPad(after padWasUp: Bool) {
+        guard var watch = numberPad else { return }
+
+        // the number pad slides away over about a quarter of a second
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+        watch.drags += 1
+
+        let padUp = app.keyboards.firstMatch.exists
+        let outcome =
+            switch (padWasUp, padUp) {
+            case (true, true): "kept the number pad up"
+            case (true, false): "closed the number pad"
+            case (false, true): "opened the number pad again"
+            case (false, false): "found the number pad already closed"
+            }
+
+        if padWasUp, !padUp, watch.closedBy == nil {
+            watch.closedBy = watch.drags
+        }
+
+        numberPad = watch
+        note("drag \(watch.drags) on the \(watch.screen) screen \(outcome)")
     }
 
     // MARK: - Queries
