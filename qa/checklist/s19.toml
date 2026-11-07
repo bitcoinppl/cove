@@ -63,7 +63,6 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/QrCodeGenerator.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/QrCodeScanView.kt",
     "ios/Cove/Flows/SendFlow/SendFlowHardwareSheets.swift",
-    "ios/Cove/PSBTFile.swift",
     "rust/crates/cove-types/src/confirm.rs",
     "rust/crates/cove-ur/src/crypto_psbt.rs",
     "rust/src/multi_format.rs",
