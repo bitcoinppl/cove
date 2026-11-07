@@ -1712,6 +1712,7 @@ async fn fresh_enable_on_empty_cloud_uploads_every_wallet_and_restores_it_on_a_n
             upload.record_id.clone(),
             upload.data.clone(),
         );
+
         wallet_files.push(upload.relative_path.clone());
     }
 
