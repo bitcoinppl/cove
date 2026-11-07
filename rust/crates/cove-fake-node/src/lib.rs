@@ -43,7 +43,10 @@ use control::Control;
 #[cfg(test)]
 mod tests;
 
-const WAIT_TIMEOUT: Duration = Duration::from_secs(20);
+// thirty seconds because CI and local machines run several heavy suites at once, which can slow
+// what a test waits for well past its idle time, the same floor as the cove crate's
+// `test_support::LOADED_HOST_WAIT_FLOOR`
+const WAIT_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// State every server reads from
 pub(crate) struct Shared {
