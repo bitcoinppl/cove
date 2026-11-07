@@ -104,8 +104,8 @@ fn join_ur(frames: &[String]) -> Result<Value> {
             bail!("`{frame}` is a second part {} with other data", part.sequence);
         }
 
-        // every frame goes to the decoder, a repeated part too, so none skips its checks; it
-        // ignores a part it already has
+        // every distinct frame goes to the decoder, one repeating a part too, so none skips its
+        // checks; it ignores a part it already has
         decoder.receive(ur).map_err(|error| eyre!("`{frame}` doesn't join the others: {error}"))?;
         parts.entry(part.sequence).or_insert(part);
     }
@@ -851,6 +851,7 @@ mod tests {
         for (bad, expected) in [
             (with_uri_sequence(&frames[0], Some("0-0")), "but its fountain part is 1 of 3"),
             (with_uri_sequence(&frames[0], Some("2-3")), "but its fountain part is 1 of 3"),
+            (with_uri_sequence(&frames[0], Some("1-4")), "but its fountain part is 1 of 3"),
             (with_uri_sequence(&frames[0], None), "single-part UR doesn't join"),
         ] {
             let mut first = vec![bad.clone()];
