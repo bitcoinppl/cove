@@ -472,21 +472,49 @@ private struct CloudBackupRecoverySupportCodeCard: View {
                 .uiTestTruncationProbe()
                 .foregroundStyle(.white)
                 .accessibilityIdentifier("cloudBackup.recovery.supportCode")
-            HStack {
-                Button(action: copy) {
-                    ProbedLabel("Copy Code", systemImage: "doc.on.doc")
-                }
-                Spacer()
-                Button(action: contactSupport) {
-                    ProbedLabel("Contact Support", systemImage: "envelope")
-                }
-            }
-            .buttonStyle(.bordered)
-            .tint(.white)
+            CloudBackupRecoverySupportButtons(copy: copy, contactSupport: contactSupport)
+                .buttonStyle(.bordered)
+                .tint(.white)
         }
         .padding(16)
         .background(Color.duskBlue.opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+/// Copy Code and Contact Support, side by side when both fit on one line and stacked otherwise
+///
+/// Side by side at accessibility sizes, each button had room for only part of "Support", which
+/// iOS split with a hyphen
+private struct CloudBackupRecoverySupportButtons: View {
+    let copy: () -> Void
+    let contactSupport: () -> Void
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                copyButton
+                Spacer()
+                contactSupportButton
+            }
+
+            VStack(alignment: .leading) {
+                copyButton
+                contactSupportButton
+            }
+        }
+    }
+
+    private var copyButton: some View {
+        Button(action: copy) {
+            ProbedLabel("Copy Code", systemImage: "doc.on.doc")
+        }
+    }
+
+    private var contactSupportButton: some View {
+        Button(action: contactSupport) {
+            ProbedLabel("Contact Support", systemImage: "envelope")
+        }
     }
 }
 

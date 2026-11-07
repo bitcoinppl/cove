@@ -49,51 +49,81 @@ struct SendFlowHardwareSignTransactionSection: View {
                 Text("Sign Transaction")
                     .font(.footnote)
                     .fontWeight(.medium)
+                    .uiTestTruncationProbe()
                     .foregroundColor(.secondary)
 
                 Spacer()
             }
 
-            HStack {
-                Button(action: exportTransaction) {
-                    SendFlowHardwareActionLabel(
-                        title: "Export Transaction",
-                        systemImage: "square.and.arrow.up"
+            // side by side at the largest sizes, each label had room for only part of a word and
+            // iOS split it with an added hyphen, so the buttons stack when both can't fit on a line
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    SendFlowHardwareExportButton(
+                        exportTransaction: exportTransaction,
+                        isPresented: exportDialogIsPresented,
+                        dialogActions: dialogActions
+                    )
+                    Spacer()
+                    SendFlowHardwareImportButton(
+                        importSignature: importSignature,
+                        isPresented: importDialogIsPresented,
+                        dialogActions: dialogActions
                     )
                 }
-                .confirmationDialog(
-                    "Export Transaction",
-                    isPresented: exportDialogIsPresented,
-                    actions: {
-                        SendFlowHardwareExportTransactionDialog(
-                            exportQr: dialogActions.exportQr,
-                            exportNfc: dialogActions.exportNfc,
-                            shareTransaction: dialogActions.shareTransaction
-                        )
-                    }
-                )
 
-                Spacer()
-
-                Button(action: importSignature) {
-                    SendFlowHardwareActionLabel(
-                        title: "Import Signature",
-                        systemImage: "square.and.arrow.down"
+                VStack(alignment: .leading) {
+                    SendFlowHardwareExportButton(
+                        exportTransaction: exportTransaction,
+                        isPresented: exportDialogIsPresented,
+                        dialogActions: dialogActions
+                    )
+                    SendFlowHardwareImportButton(
+                        importSignature: importSignature,
+                        isPresented: importDialogIsPresented,
+                        dialogActions: dialogActions
                     )
                 }
-                .confirmationDialog(
-                    "Import Signature",
-                    isPresented: importDialogIsPresented,
-                    actions: {
-                        SendFlowHardwareImportTransactionDialog(
-                            scanQr: dialogActions.scanQr,
-                            importFile: dialogActions.importFile,
-                            pasteSignature: dialogActions.pasteSignature,
-                            scanNfc: dialogActions.scanNfc
-                        )
-                    }
-                )
             }
+        }
+    }
+}
+
+private struct SendFlowHardwareExportButton: View {
+    let exportTransaction: () -> Void
+    let isPresented: Binding<Bool>
+    let dialogActions: SendFlowHardwareDialogActions
+
+    var body: some View {
+        Button(action: exportTransaction) {
+            SendFlowHardwareActionLabel(title: "Export Transaction", systemImage: "square.and.arrow.up")
+        }
+        .confirmationDialog("Export Transaction", isPresented: isPresented) {
+            SendFlowHardwareExportTransactionDialog(
+                exportQr: dialogActions.exportQr,
+                exportNfc: dialogActions.exportNfc,
+                shareTransaction: dialogActions.shareTransaction
+            )
+        }
+    }
+}
+
+private struct SendFlowHardwareImportButton: View {
+    let importSignature: () -> Void
+    let isPresented: Binding<Bool>
+    let dialogActions: SendFlowHardwareDialogActions
+
+    var body: some View {
+        Button(action: importSignature) {
+            SendFlowHardwareActionLabel(title: "Import Signature", systemImage: "square.and.arrow.down")
+        }
+        .confirmationDialog("Import Signature", isPresented: isPresented) {
+            SendFlowHardwareImportTransactionDialog(
+                scanQr: dialogActions.scanQr,
+                importFile: dialogActions.importFile,
+                pasteSignature: dialogActions.pasteSignature,
+                scanNfc: dialogActions.scanNfc
+            )
         }
     }
 }
@@ -129,13 +159,17 @@ private struct SendFlowHardwareActionLabel: View {
     let systemImage: String
 
     var body: some View {
-        Label(title, systemImage: systemImage)
-            .padding(.horizontal, 18)
-            .padding(.vertical)
-            .foregroundColor(.midnightBlue)
-            .background(.btnPrimary)
-            .cornerRadius(10)
-            .font(.caption)
-            .fontWeight(.medium)
+        Label {
+            Text(title).uiTestTruncationProbe()
+        } icon: {
+            Image(systemName: systemImage)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical)
+        .foregroundColor(.midnightBlue)
+        .background(.btnPrimary)
+        .cornerRadius(10)
+        .font(.caption)
+        .fontWeight(.medium)
     }
 }

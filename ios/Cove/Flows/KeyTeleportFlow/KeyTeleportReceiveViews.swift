@@ -178,12 +178,8 @@ struct KeyTeleportReceiveReadyView: View {
             KeyTeleportReceiveInstructions()
 
             Button(action: scan) {
-                Label {
-                    Text("Scan Sender Response").uiTestTruncationProbe()
-                } icon: {
-                    Image(systemName: "qrcode.viewfinder")
-                }
-                .frame(maxWidth: .infinity)
+                KeyTeleportScanResponseLabel()
+                    .frame(maxWidth: .infinity)
             }
             .buttonStyle(OnboardingPrimaryButtonStyle())
         }
@@ -191,6 +187,26 @@ struct KeyTeleportReceiveReadyView: View {
 
     private var receiverCode: some View {
         KeyTeleportReceiverCode(code: state.groupedNumericCode)
+    }
+}
+
+/// The scan button's label, which drops its icon at accessibility sizes
+///
+/// Beside the icon, "Response" had too little room at the largest sizes and drew as "Re-" over
+/// "sponse", so the title takes the button's full width there instead
+private struct KeyTeleportScanResponseLabel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            Text("Scan Sender Response").uiTestTruncationProbe()
+        } else {
+            Label {
+                Text("Scan Sender Response").uiTestTruncationProbe()
+            } icon: {
+                Image(systemName: "qrcode.viewfinder")
+            }
+        }
     }
 }
 

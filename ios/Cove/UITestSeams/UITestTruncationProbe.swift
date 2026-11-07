@@ -219,7 +219,13 @@ extension View {
 
 /// A `Label` whose title carries the truncation probe, so a UI test can tell whether it draws
 /// whole, from its own value or from that of the button it labels
+///
+/// At accessibility sizes it shows only its title. Beside the icon, a list row left a word such as
+/// "Restore" too little width, so it broke across lines, and above the title the icon made an
+/// error too tall to see whole; the title says what the icon shows
 struct ProbedLabel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private let title: Text
     private let systemImage: String
 
@@ -235,10 +241,16 @@ struct ProbedLabel: View {
     }
 
     var body: some View {
-        Label {
+        let label = Label {
             title.uiTestTruncationProbe()
         } icon: {
             Image(systemName: systemImage)
+        }
+
+        if dynamicTypeSize.isAccessibilitySize {
+            label.labelStyle(.titleOnly)
+        } else {
+            label
         }
     }
 }

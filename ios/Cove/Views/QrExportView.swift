@@ -47,6 +47,7 @@ struct QrExportView: View {
 
             Text(subtitle)
                 .font(.callout)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(nil)
@@ -112,6 +113,11 @@ struct QrExportView: View {
     }
 }
 
+/// The export's title, with its copy button beside it
+///
+/// A hidden copy of the button on the other side keeps the title centered, so at accessibility
+/// sizes the title wraps short of the button instead of running under it. The title keeps the
+/// height of its wrapped lines, since the QR code below takes every point the sheet offers
 private struct QrExportHeader: View {
     let title: String
     let canCopy: Bool
@@ -119,29 +125,36 @@ private struct QrExportHeader: View {
 
     var body: some View {
         HStack {
-            Spacer()
+            if canCopy {
+                copyButton.hidden().accessibilityHidden(true)
+            }
 
             Text(title)
                 .font(.title3)
                 .fontWeight(.semibold)
+                .uiTestTruncationProbe()
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
 
-            Spacer()
-        }
-        .overlay(alignment: .trailing) {
             if canCopy {
-                Button {
-                    Task { await copy() }
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Copy")
-                .padding(.trailing, 4)
+                copyButton
             }
         }
         .padding(.top, 12)
+    }
+
+    private var copyButton: some View {
+        Button {
+            Task { await copy() }
+        } label: {
+            Image(systemName: "doc.on.doc")
+                .font(.body)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Copy")
+        .padding(.horizontal, 4)
     }
 }
 
