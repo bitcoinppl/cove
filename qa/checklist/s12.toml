@@ -41,7 +41,7 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
 coverage = [
-  "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::fresh_enable_on_empty_cloud_uploads_every_wallet_readable_and_verifies",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::fresh_enable_on_empty_cloud_uploads_every_wallet_and_restores_it_on_a_new_device",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::enable_create_new_succeeds_with_new_passkey_auth",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::fresh_enable_upload_progress_counts_master_and_wallets",
   "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testBackgroundVerificationWaitsForVisibilityThenVerifiesOnItsOwn",
