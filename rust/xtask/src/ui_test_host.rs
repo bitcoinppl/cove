@@ -10,6 +10,8 @@
 //!   hardware wallet would and returns it as UR and BBQr frames for the QR
 //!   seam, `/unrelated-psbt` signs one that matches no draft, and
 //!   `/watch-only-descriptor` returns the account a hardware wallet exports.
+//!   `/join-export-frames` joins the UR or BBQr frames a test read off the
+//!   app's PSBT export back into the PSBT ([`export_frames`]).
 //!   `/public-key-export` returns an account's bare SLIP-132 public key, as a
 //!   plain QR and as a single-part BBQr, with the first receive address it
 //!   should import as. `/simulator-pasteboard` reads an iOS simulator's
@@ -59,6 +61,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use xshell::Shell;
 
+mod export_frames;
 mod key_teleport;
 
 use crate::{
@@ -452,6 +455,7 @@ fn route(state: &SignerState, method: &str, path: &str, body: &[u8]) -> Result<V
         ("GET", "/health") => Ok(json!({ "ok": true })),
         ("POST", "/sign-psbt") => sign_psbt(serde_json::from_slice(body)?),
         ("POST", "/unrelated-psbt") => unrelated_psbt(serde_json::from_slice(body)?),
+        ("POST", "/join-export-frames") => export_frames::join(serde_json::from_slice(body)?),
         ("POST", "/watch-only-descriptor") => watch_only_descriptor(serde_json::from_slice(body)?),
         ("POST", "/public-key-export") => public_key_export(serde_json::from_slice(body)?),
         ("POST", "/simulator-pasteboard") => simulator_pasteboard(serde_json::from_slice(body)?),
