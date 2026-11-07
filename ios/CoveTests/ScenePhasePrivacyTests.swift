@@ -120,11 +120,9 @@ final class ScenePhasePrivacyTests: XCTestCase {
         }
 
         let tapSigner = TapSignerNFC(tapSignerPreviewNew(preview: true))
-        let deriveReturned = expectation(description: "the cancelled derive returns")
+        let derived = DeriveOutcome()
         let derive = Task {
-            let result = await tapSigner.derive(pin: "123456")
-            deriveReturned.fulfill()
-            return result
+            derived.result = await tapSigner.derive(pin: "123456")
         }
 
         let deadline = Date().addingTimeInterval(10)
@@ -143,9 +141,18 @@ final class ScenePhasePrivacyTests: XCTestCase {
         tapSigner.cancel()
         XCTAssertFalse(app.isNfcOperationActive, "a cancelled TAPSIGNER operation still counted")
 
-        // well under the bridge's 30 second receive timeout, so only the cancel can end it in time
-        await fulfillment(of: [deriveReturned], timeout: 5)
-        let result = await derive.value
+        // well under the bridge's 30 second receive timeout, so only the cancel can end it in time.
+        // The test reads the outcome rather than awaiting the task, so a derive that never returns
+        // can't hold it past the limit, and one that returns late only fills a box no one reads
+        let returnBy = Date().addingTimeInterval(5)
+        while derived.result == nil, Date() < returnBy {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        guard let result = derived.result else {
+            derive.cancel()
+            return XCTFail("the cancelled derive never returned")
+        }
 
         guard case let .failure(.Unknown(message)) = result else {
             return XCTFail("the cancelled derive should fail as cancelled, got \(result)")
@@ -198,6 +205,12 @@ final class ScenePhasePrivacyTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(50))
         }
     }
+}
+
+/// Where a derive the test doesn't await leaves its result
+@MainActor
+private final class DeriveOutcome {
+    var result: Result<DeriveInfo, TapSignerReaderError>?
 }
 
 /// A TCP listener on the loopback interface that never accepts, so a client's connect succeeds
