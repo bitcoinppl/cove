@@ -437,6 +437,7 @@ mod deep_verify;
 mod disable;
 mod enable;
 mod enable_session;
+mod golden_v1_3_0_restore;
 mod master_key;
 mod other_backups;
 mod passkey;

@@ -1,0 +1,483 @@
+diff --git a/rust/src/manager/cloud_backup_manager/ops/test_support.rs b/rust/src/manager/cloud_backup_manager/ops/test_support.rs
+index b89b15f2b1..c0493b5cd7 100644
+--- a/rust/src/manager/cloud_backup_manager/ops/test_support.rs
++++ b/rust/src/manager/cloud_backup_manager/ops/test_support.rs
+@@ -169,6 +169,8 @@ struct MockCloudState {
+     changed_wallet_on_next_upload: Option<WalletId>,
+     dirty_wallet_on_next_backup_check: Option<WalletId>,
+     disabling_on_next_upload: Option<PersistedDisablingCloudBackup>,
++    // golden fixture: every accepted upload as (namespace, record id, relative path, bytes)
++    golden_uploads: Vec<(String, String, String, Vec<u8>)>,
+ }
+ 
+ #[derive(Debug, Clone, Default)]
+@@ -339,6 +341,11 @@ impl MockCloudStorage {
+         self.state.lock().uploaded_master_key_pending_confirmation = enabled;
+     }
+ 
++    /// Every accepted upload as (namespace, record id, relative path, bytes), for the golden fixture
++    pub(crate) fn golden_uploads(&self) -> Vec<(String, String, String, Vec<u8>)> {
++        self.state.lock().golden_uploads.clone()
++    }
++
+     pub(crate) fn uploaded_wallet_backup_count(&self) -> usize {
+         self.state.lock().uploaded_wallet_backups.len()
+     }
+@@ -415,7 +422,7 @@ impl CloudStorageAccess for MockCloudStorage {
+     async fn upload_master_key_backup(
+         &self,
+         namespace: String,
+-        _location: cove_device::cloud_storage::RemoteBackupLocation,
++        location: cove_device::cloud_storage::RemoteBackupLocation,
+         data: Vec<u8>,
+         _policy: CloudAccessPolicy,
+     ) -> Result<(), CloudStorageError> {
+@@ -423,6 +430,12 @@ impl CloudStorageAccess for MockCloudStorage {
+             return Err(error);
+         }
+ 
++        self.state.lock().golden_uploads.push((
++            namespace.clone(),
++            cove_cspp::backup_data::MASTER_KEY_RECORD_ID.to_string(),
++            location.relative_path,
++            data.clone(),
++        ));
+         self.state.lock().master_key_backups.insert(namespace, data);
+         Ok(())
+     }
+@@ -431,7 +444,7 @@ impl CloudStorageAccess for MockCloudStorage {
+         &self,
+         namespace: String,
+         record_id: String,
+-        _location: cove_device::cloud_storage::RemoteBackupLocation,
++        location: cove_device::cloud_storage::RemoteBackupLocation,
+         data: Vec<u8>,
+         _policy: CloudAccessPolicy,
+     ) -> Result<(), CloudStorageError> {
+@@ -456,6 +469,12 @@ impl CloudStorageAccess for MockCloudStorage {
+             let dirty_wallet = state.dirty_wallet_on_next_upload.take();
+             let changed_wallet = state.changed_wallet_on_next_upload.take();
+             let disabling = state.disabling_on_next_upload.take();
++            state.golden_uploads.push((
++                namespace.clone(),
++                record_id.clone(),
++                location.relative_path,
++                data.clone(),
++            ));
+             state.wallet_backups.insert((namespace.clone(), record_id.clone()), data);
+             state.uploaded_wallet_backups.push((namespace, record_id));
+             state.wallet_backup_success_count += 1;
+@@ -683,6 +702,8 @@ pub(crate) struct MockPasskeyProviderImpl {
+     discover_count: Arc<Mutex<usize>>,
+     presence_results: MockPasskeyPresenceResults,
+     authenticated_credential_ids: Arc<Mutex<Vec<Vec<u8>>>>,
++    // golden fixture: every passkey call as (operation, rp id, credential id, prf salt)
++    golden_requests: Arc<Mutex<Vec<(String, String, Vec<u8>, Vec<u8>)>>>,
+ }
+ 
+ impl MockPasskeyProviderImpl {
+@@ -695,6 +716,12 @@ impl MockPasskeyProviderImpl {
+         *self.discover_count.lock() = 0;
+         self.presence_results.lock().clear();
+         self.authenticated_credential_ids.lock().clear();
++        self.golden_requests.lock().clear();
++    }
++
++    /// Every passkey call as (operation, rp id, credential id, prf salt), for the golden fixture
++    pub(crate) fn golden_requests(&self) -> Vec<(String, String, Vec<u8>, Vec<u8>)> {
++        self.golden_requests.lock().clone()
+     }
+ 
+     pub(crate) fn set_discover_result(
+@@ -749,11 +776,12 @@ impl MockPasskeyProviderImpl {
+ impl PasskeyProvider for MockPasskeyProviderImpl {
+     fn create_passkey(
+         &self,
+-        _rp_id: String,
++        rp_id: String,
+         _challenge: Vec<u8>,
+         _user: PasskeyRegistrationUser,
+     ) -> Result<PasskeyRegistrationResult, PasskeyError> {
+         *self.create_count.lock() += 1;
++        self.golden_requests.lock().push(("create".into(), rp_id, Vec::new(), Vec::new()));
+         self.create_result.lock().take().unwrap_or_else(|| {
+             Err(PasskeyError::RequestFailed {
+                 operation: PasskeyOperation::Registration,
+@@ -766,12 +794,18 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
+ 
+     fn authenticate_with_prf(
+         &self,
+-        _rp_id: String,
++        rp_id: String,
+         credential_id: Vec<u8>,
+-        _prf_salt: Vec<u8>,
++        prf_salt: Vec<u8>,
+         _challenge: Vec<u8>,
+     ) -> Result<Vec<u8>, PasskeyError> {
+         *self.authenticate_count.lock() += 1;
++        self.golden_requests.lock().push((
++            "authenticate".into(),
++            rp_id,
++            credential_id.clone(),
++            prf_salt,
++        ));
+         self.authenticated_credential_ids.lock().push(credential_id);
+         self.authenticate_results.lock().pop_front().unwrap_or_else(|| {
+             Err(PasskeyError::RequestFailed {
+@@ -785,11 +819,12 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
+ 
+     fn discover_and_authenticate_with_prf(
+         &self,
+-        _rp_id: String,
+-        _prf_salt: Vec<u8>,
++        rp_id: String,
++        prf_salt: Vec<u8>,
+         _challenge: Vec<u8>,
+     ) -> Result<DiscoveredPasskeyResult, PasskeyError> {
+         *self.discover_count.lock() += 1;
++        self.golden_requests.lock().push(("discover".into(), rp_id, Vec::new(), prf_salt));
+         self.discover_results
+             .lock()
+             .pop_front()
+diff --git a/rust/src/manager/cloud_backup_manager/ops/tests.rs b/rust/src/manager/cloud_backup_manager/ops/tests.rs
+index 005e94ad3f..32531da051 100644
+--- a/rust/src/manager/cloud_backup_manager/ops/tests.rs
++++ b/rust/src/manager/cloud_backup_manager/ops/tests.rs
+@@ -8259,3 +8259,4 @@ async fn restore_fails_when_all_listed_wallet_backups_are_missing() {
+         PersistedCloudBackupStatus::Disabled
+     );
+ }
++mod golden_v1_3_0;
+diff --git a/rust/src/manager/cloud_backup_manager/ops/tests/golden_v1_3_0.rs b/rust/src/manager/cloud_backup_manager/ops/tests/golden_v1_3_0.rs
+new file mode 100644
+index 0000000000..32e73bd71d
+--- /dev/null
++++ b/rust/src/manager/cloud_backup_manager/ops/tests/golden_v1_3_0.rs
+@@ -0,0 +1,327 @@
++//! Generates the v1.3.0 Cloud Backup golden fixture
++//!
++//! Runs a real fresh enable through the v1.3.0 manager against the mock cloud and passkey, then
++//! writes every file the cloud received at the path v1.3.0 wrote it, plus the passkey inputs and
++//! the wallets it put on the device, so master can restore exactly what a 1.3.0 install uploaded
++//!
++//! Only public BIP39 test mnemonics and fixed fake bytes are used
++//!
++//! COVE_GOLDEN_OUT=<dir> cargo test -p cove --lib golden_v1_3_0 -- --ignored --nocapture
++
++use std::collections::{BTreeMap, HashMap};
++use std::path::PathBuf;
++
++use serde_json::json;
++
++use super::*;
++use crate::mnemonic::MnemonicExt as _;
++use crate::network::Network;
++use crate::wallet::metadata::{HardwareWalletMetadata, WalletBirthday, WalletColor, WalletId};
++
++const HOT_MNEMONIC: &str =
++    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
++const WATCH_MNEMONIC: &str =
++    "legal winner thank year wave sausage worth useful legal winner thank yellow";
++const HARDWARE_MNEMONIC: &str =
++    "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
++const TAP_SIGNER_MNEMONIC: &str = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
++const DECOY_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
++
++const HOT_LABELS: &str = concat!(
++    r#"{"type":"tx","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290","label":"last txn received","origin":"wpkh([73c5da0a/84h/0h/0h])"}"#,
++    "\n",
++    r#"{"type":"addr","ref":"bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu","label":"golden first receive"}"#,
++    "\n",
++    r#"{"type":"output","ref":"d97bf8892657980426c879e4ab2001f09342f1ab61cfa602741a7715a3d60290:1","spendable":false}"#,
++);
++const WATCH_LABELS: &str = r#"{"type":"tx","ref":"f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16","label":"golden watch payment"}"#;
++
++const TAP_SIGNER_BACKUP: &[u8] = b"cove-v1.3.0-golden-fake-tapsigner-backup";
++const CREDENTIAL_ID: &[u8] = b"cove-v1.3.0-golden-credential";
++
++fn prf_output() -> Vec<u8> {
++    (0u8..32).map(|byte| 0xA0 ^ byte).collect()
++}
++
++struct GoldenWallet {
++    id: &'static str,
++    name: &'static str,
++    network: Network,
++    mode: WalletMode,
++    wallet_type: WalletType,
++    mnemonic: &'static str,
++    save_mnemonic: bool,
++    tap_signer: bool,
++    labels: Option<&'static str>,
++    color: WalletColor,
++}
++
++fn golden_wallets() -> Vec<GoldenWallet> {
++    vec![
++        GoldenWallet {
++            id: "golden-hot-wallet",
++            name: "Golden Hot",
++            network: Network::Bitcoin,
++            mode: WalletMode::Main,
++            wallet_type: WalletType::Hot,
++            mnemonic: HOT_MNEMONIC,
++            save_mnemonic: true,
++            tap_signer: false,
++            labels: Some(HOT_LABELS),
++            color: WalletColor::Blue,
++        },
++        GoldenWallet {
++            id: "golden-xpub-wallet",
++            name: "Golden Watch",
++            network: Network::Bitcoin,
++            mode: WalletMode::Main,
++            wallet_type: WalletType::XpubOnly,
++            mnemonic: WATCH_MNEMONIC,
++            save_mnemonic: false,
++            tap_signer: false,
++            labels: Some(WATCH_LABELS),
++            color: WalletColor::Green,
++        },
++        GoldenWallet {
++            id: "golden-hardware-wallet",
++            name: "Golden Hardware",
++            network: Network::Bitcoin,
++            mode: WalletMode::Main,
++            wallet_type: WalletType::Cold,
++            mnemonic: HARDWARE_MNEMONIC,
++            save_mnemonic: false,
++            tap_signer: false,
++            labels: None,
++            color: WalletColor::Red,
++        },
++        GoldenWallet {
++            id: "golden-tapsigner-wallet",
++            name: "Golden TAPSIGNER",
++            network: Network::Bitcoin,
++            mode: WalletMode::Main,
++            wallet_type: WalletType::Cold,
++            mnemonic: TAP_SIGNER_MNEMONIC,
++            save_mnemonic: false,
++            tap_signer: true,
++            labels: None,
++            color: WalletColor::Yellow,
++        },
++        GoldenWallet {
++            id: "golden-decoy-testnet-wallet",
++            name: "Golden Decoy Testnet",
++            network: Network::Testnet,
++            mode: WalletMode::Decoy,
++            wallet_type: WalletType::Hot,
++            mnemonic: DECOY_MNEMONIC,
++            save_mnemonic: true,
++            tap_signer: false,
++            labels: None,
++            color: WalletColor::Blue,
++        },
++    ]
++}
++
++fn tap_signer_metadata() -> HardwareWalletMetadata {
++    // secp256k1 generator point G, a valid compressed pubkey with no card behind it
++    let pubkey = bitcoin::secp256k1::PublicKey::from_slice(&[
++        0x02, 0x79, 0xBE, 0x66, 0x7E, 0xF9, 0xDC, 0xBB, 0xAC, 0x55, 0xA0, 0x62, 0x95, 0xCE, 0x87,
++        0x0B, 0x07, 0x02, 0x9B, 0xFC, 0xDB, 0x2D, 0xCE, 0x28, 0xD9, 0x59, 0xF2, 0x81, 0x5B, 0x16,
++        0xF8, 0x17, 0x98,
++    ])
++    .unwrap();
++
++    HardwareWalletMetadata::TapSigner(Arc::new(cove_tap_card::TapSigner {
++        state: cove_tap_card::TapSignerState::Sealed,
++        card_ident: "GOLDEN-TEST-IDENT".to_string(),
++        nonce: "deadbeef".to_string(),
++        signature: "cafebabe".to_string(),
++        pubkey: Arc::new(pubkey),
++    }))
++}
++
++/// Saves the wallet the way the 1.3.0 app keeps it on the device, returning what a restore must
++/// bring back
++fn persist_golden_wallet(wallet: &GoldenWallet) -> (WalletMetadata, serde_json::Value) {
++    let keychain = Keychain::global();
++    let mnemonic = Mnemonic::parse(wallet.mnemonic).unwrap();
++
++    let mut metadata = WalletMetadata::preview_new();
++    metadata.id = WalletId::from(wallet.id);
++    metadata.name = wallet.name.to_string();
++    metadata.color = wallet.color;
++    metadata.verified = true;
++    metadata.network = wallet.network;
++    metadata.wallet_mode = wallet.mode;
++    metadata.wallet_type = wallet.wallet_type;
++    metadata.birthday = Some(WalletBirthday::BlockHeight(900_000));
++
++    let xpub = mnemonic.xpub(wallet.network.into());
++    let descriptors =
++        mnemonic.clone().into_descriptors(None, wallet.network, metadata.address_type);
++    metadata.master_fingerprint =
++        Some(Arc::new(crate::wallet::fingerprint::Fingerprint::from(xpub.fingerprint())));
++
++    if wallet.wallet_type == WalletType::Cold {
++        metadata.origin = descriptors.origin().ok();
++    }
++
++    if wallet.tap_signer {
++        metadata.hardware_metadata = Some(tap_signer_metadata());
++    }
++
++    let external = descriptors.external.extended_descriptor.clone();
++    let internal = descriptors.internal.extended_descriptor.clone();
++    keychain.save_wallet_xpub(&metadata.id, xpub).unwrap();
++    keychain.save_public_descriptor(&metadata.id, external.clone(), internal.clone()).unwrap();
++
++    if wallet.save_mnemonic {
++        keychain.save_wallet_key(&metadata.id, mnemonic).unwrap();
++    }
++
++    if wallet.tap_signer {
++        keychain.save_tap_signer_backup(&metadata.id, TAP_SIGNER_BACKUP).unwrap();
++    }
++
++    if let Some(labels) = wallet.labels {
++        LabelManager::try_new(metadata.id.clone()).unwrap().import(labels).unwrap();
++    }
++
++    let expected = json!({
++        "id": wallet.id,
++        "record_id": wallet_record_id(wallet.id),
++        "name": wallet.name,
++        "network": metadata.network,
++        "wallet_mode": metadata.wallet_mode,
++        "wallet_type": metadata.wallet_type,
++        "color": metadata.color,
++        "address_type": metadata.address_type,
++        "fingerprint": metadata.master_fingerprint.as_ref().map(|fingerprint| fingerprint.as_uppercase()),
++        "origin": metadata.origin,
++        "mnemonic": wallet.save_mnemonic.then_some(wallet.mnemonic),
++        "xpub": xpub.to_string(),
++        "external_descriptor": external.to_string(),
++        "internal_descriptor": internal.to_string(),
++        "tap_signer_backup_hex": wallet.tap_signer.then(|| hex::encode(TAP_SIGNER_BACKUP)),
++        "labels_jsonl": wallet.labels,
++    });
++
++    (metadata, expected)
++}
++
++#[tokio::test(flavor = "current_thread")]
++#[ignore = "writes the v1.3.0 golden fixture; run by hand with COVE_GOLDEN_OUT"]
++async fn generate_v1_3_0_golden_cloud_backup() {
++    let out = PathBuf::from(std::env::var("COVE_GOLDEN_OUT").expect("COVE_GOLDEN_OUT"));
++
++    let _guard = async_test_lock().lock().await;
++    cove_tokio::init();
++    let globals = test_globals();
++    let manager = init_manager();
++
++    reset_cloud_backup_test_state(&manager, globals);
++    CONNECTIVITY_MANAGER.set_connection_state(true);
++
++    let mut by_scope: HashMap<(Network, WalletMode), Vec<WalletMetadata>> = HashMap::new();
++    let mut expected_wallets = Vec::new();
++    for wallet in golden_wallets() {
++        let (metadata, expected) = persist_golden_wallet(&wallet);
++        by_scope.entry((metadata.network, metadata.wallet_mode)).or_default().push(metadata);
++        expected_wallets.push(expected);
++    }
++
++    for ((network, mode), wallets) in by_scope {
++        Database::global().wallets().save_all_wallets(network, mode, wallets).unwrap();
++    }
++
++    // the cloud is empty, so this is a fresh enable that registers one new passkey
++    globals.passkey.set_create_result(Ok(CREDENTIAL_ID.to_vec()));
++    globals.passkey.set_authenticate_result(Ok(prf_output()));
++
++    enable_cloud_backup_create_new(&manager).await.unwrap();
++    confirm_saved_passkey_session(&manager).await;
++
++    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
++    assert_eq!(globals.passkey.create_count(), 1);
++
++    let namespace_id = CloudBackupKeychain::global().namespace_id().unwrap();
++    let uploads = globals.cloud.golden_uploads();
++    let requests = globals.passkey.golden_requests();
++
++    // 1.3.0 can read back what it wrote with the same passkey output
++    let (_, _, _, master_bytes) = uploads
++        .iter()
++        .find(|(_, record_id, _, _)| record_id == cove_cspp::backup_data::MASTER_KEY_RECORD_ID)
++        .expect("master key uploaded");
++    let encrypted_master: cove_cspp::backup_data::EncryptedMasterKeyBackup =
++        serde_json::from_slice(master_bytes).unwrap();
++    let prf_key: [u8; 32] = prf_output().try_into().unwrap();
++    let master_key =
++        cove_cspp::master_key_crypto::decrypt_master_key(&encrypted_master, &prf_key).unwrap();
++    assert_eq!(master_key.namespace_id(), namespace_id);
++
++    // the salt in the uploaded wrapper is the one 1.3.0 asked the new passkey for
++    let prf_salt = hex::encode(encrypted_master.prf_salt);
++    assert!(requests.iter().any(|(operation, _, credential_id, salt)| operation == "authenticate"
++        && credential_id == CREDENTIAL_ID
++        && hex::encode(salt) == prf_salt));
++
++    let mut wallet_uploads = 0;
++    for (_, record_id, _, bytes) in &uploads {
++        if record_id == cove_cspp::backup_data::MASTER_KEY_RECORD_ID {
++            continue;
++        }
++
++        let encrypted: cove_cspp::backup_data::EncryptedWalletBackup =
++            serde_json::from_slice(bytes).unwrap();
++        cove_cspp::wallet_crypto::decrypt_wallet_backup(
++            &encrypted,
++            &master_key.critical_data_key(),
++        )
++        .unwrap();
++        wallet_uploads += 1;
++    }
++    assert_eq!(wallet_uploads, expected_wallets.len());
++
++    // keep the last upload of each path, which is what the cloud holds
++    let mut files: BTreeMap<String, (String, Vec<u8>)> = BTreeMap::new();
++    for (namespace, record_id, relative_path, bytes) in uploads {
++        assert_eq!(namespace, namespace_id);
++        files.insert(relative_path, (record_id, bytes));
++    }
++
++    let cloud_dir = out.join("cloud").join(&namespace_id);
++    let mut file_entries = Vec::new();
++    for (relative_path, (record_id, bytes)) in &files {
++        let path = cloud_dir.join(relative_path);
++        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
++        std::fs::write(&path, bytes).unwrap();
++        file_entries.push(json!({ "path": relative_path, "record_id": record_id }));
++    }
++
++    let manifest = json!({
++        "generated_by": "rust/src/manager/cloud_backup_manager/ops/tests/golden_v1_3_0.rs at tag v1.3.0",
++        "cove_version": env!("CARGO_PKG_VERSION"),
++        "namespace_id": namespace_id,
++        "files": file_entries,
++        "passkey": {
++            "credential_id_hex": hex::encode(CREDENTIAL_ID),
++            "prf_output_hex": hex::encode(prf_output()),
++            "prf_salt_hex": prf_salt,
++            "requests": requests
++                .iter()
++                .map(|(operation, rp_id, credential_id, prf_salt)| json!({
++                    "operation": operation,
++                    "rp_id": rp_id,
++                    "credential_id_hex": hex::encode(credential_id),
++                    "prf_salt_hex": hex::encode(prf_salt),
++                }))
++                .collect::<Vec<_>>(),
++        },
++        "wallets": expected_wallets,
++    });
++
++    std::fs::write(out.join("manifest.json"), serde_json::to_string_pretty(&manifest).unwrap())
++        .unwrap();
++
++    reset_cloud_backup_test_state(&manager, globals);
++}
