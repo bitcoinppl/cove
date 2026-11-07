@@ -274,14 +274,12 @@ class TapSignerLayoutFullLaunchTest {
         wallet.dismissKeyboard()
         reachable(By.text("Continue").enabled(true), "advanced setup: Continue", drawsWhole = "Continue", usable = true).click()
 
-        enterCvc(TAPSIGNER_CVC, "Enter Factory CVC", "Back", "Continue")
-        enterCvc(NEW_CVC, "Create New CVC", "Back", "Continue")
+        enterCvc(TAPSIGNER_CVC, "Enter Factory CVC", "Back", "Continue", next = "Create New CVC")
+        enterCvc(NEW_CVC, "Create New CVC", "Back", "Continue", next = "Confirm New CVC")
 
         // the card leaves the field once setup has started on it
         signer.dropNextTapSignerSession(afterExchanges = EXCHANGES_BEFORE_DROP)
-        enterCvc(NEW_CVC, "Confirm New CVC", "Back", "Confirm and continue")
-
-        device.waitFor(By.text("Continue Setup"), timeoutMs = 30_000L)
+        enterCvc(NEW_CVC, "Confirm New CVC", "Back", "Confirm and continue", next = "Continue Setup")
         assertScreenFits("setup retry", "Cancel", "Setup in Progress", "Continue Setup")
 
         // each scan can stop at another stage, which offers to continue again
@@ -301,9 +299,7 @@ class TapSignerLayoutFullLaunchTest {
 
     private fun importCardThroughEveryScreen() {
         signer.dropNextTapSignerSession(afterExchanges = EXCHANGES_BEFORE_DROP)
-        enterCvc(TAPSIGNER_CVC, "Enter TAPSIGNER CVC", "Cancel", "Submit")
-
-        device.waitFor(By.text("Continue Import"), timeoutMs = 30_000L)
+        enterCvc(TAPSIGNER_CVC, "Enter TAPSIGNER CVC", "Cancel", "Submit", next = "Continue Import")
         assertScreenFits("import retry", "Cancel", "Import needs to continue", "Continue Import")
         reachable(By.text("Continue Import"), "Continue Import", usable = true).click()
 
@@ -315,20 +311,31 @@ class TapSignerLayoutFullLaunchTest {
 
     // MARK: CVC screens
 
-    /** Checks the CVC screen fits, then enters the CVC and submits it */
+    /**
+     * Checks the CVC screen fits, then enters the CVC, submits it and waits for the screen after it,
+     * which shows the text [next]
+     *
+     * The title alone can't mark either screen: the field scrolls a tall message's title above the
+     * top. So the CVC goes in once the field shows, the check above having said which screen it is,
+     * and the next screen counts as open only once [next] shows, dragging back to the top for it if
+     * that screen opened at its field. A CVC screen that stays open never shows [next], so it fails
+     */
     private fun enterCvc(
         cvc: String,
         title: String,
         back: String,
         submit: String,
+        next: String,
     ) {
         assertCvcScreenFits(title, back)
 
-        screens.enterTapSignerCvc(cvc, title, submit) { reachable(it, "$title: $submit", drawsWhole = submit, usable = true) }
-        assertTrue(
-            "the $title screen didn't accept the CVC",
-            device.wait(Until.gone(By.text(title)), 15_000L),
-        )
+        screens.enterTapSignerCvc(cvc, title, submit, opened = By.clazz("android.widget.EditText")) {
+            reachable(it, "$title: $submit", drawsWhole = submit, usable = true)
+        }
+
+        if (!device.wait(Until.hasObject(By.text(next)), 30_000L)) {
+            scrollBackTo(By.text(next), "after $title accepted the CVC, \"$next\"")
+        }
     }
 
     /**
