@@ -278,13 +278,20 @@ platforms = ["android"]
 target = "ui"
 paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveAddressSheet.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/AddressText.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/lockaware/LockAwareWindows.kt",
 ]
 coverage = [
-    "human",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ReceiveSheetLayoutFullLaunchTest.kt::receiveSheetFitsAndWorksAtLargestFontScale",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/LargeFontScaleLayoutTest.kt::receiveSheetActionsCanBeReachedAtLargestFontScale",
 ]
 # 1.4.0: ios N/A, android HUMAN
-# the test renders the sheet content in a fixed s20-sized box at a test font scale; the real ModalBottomSheet window under the system font setting stays human
+# the full-launch test opens Receive in the real lock-aware sheet window at system font scale 2
+# on the emulator: the address, Copy Address and Create New Address must scroll into reach
+# unclipped and unsqueezed and lay out whole, every text in the sheet's window must lay out and
+# show whole, Create New Address must show another address and Copy Address must put the shown
+# address on the clipboard; the fixed-box test also fails when the sheet's content can't scroll
+# (#919). Nothing here needs a person; other screen sizes than the emulator's aren't covered
 
 [[row]]
 id = "s16-keyteleport-sender-code-and-password-layout-at"
