@@ -21,6 +21,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.toSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove.flows.NewWalletFlow.NewWalletSelectScreen
@@ -66,7 +67,10 @@ import org.junit.runner.RunWith
 @LayoutRegressionTest
 @RunWith(AndroidJUnit4::class)
 class LargeTextWordBreakLayoutTest {
-    private val compose = createAndroidComposeRule<ComponentActivity>()
+    // a slow xpub export resumes the sheet's effect from a Rust thread, and under the rule's default
+    // unconfined dispatcher the sheet never showed its QR code. A standard dispatcher queues the
+    // resume for the UI thread, which waitUntil drives each frame
+    private val compose = createAndroidComposeRule<ComponentActivity>(effectContext = StandardTestDispatcher())
 
     @get:Rule
     val rules: RuleChain = RuleChain.outerRule(SystemFontScaleRule(LARGEST_SYSTEM_FONT_SCALE)).around(compose)
