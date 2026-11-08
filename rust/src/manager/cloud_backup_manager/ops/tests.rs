@@ -442,6 +442,7 @@ mod other_backups;
 mod passkey;
 mod pending_upload;
 mod restore;
+mod restored_history;
 mod round_trip;
 mod sync_health;
 mod ui_fixture;
