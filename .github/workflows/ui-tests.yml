@@ -36,10 +36,11 @@ on:
 permissions:
   contents: read
 
-# a newer run on the same ref replaces an older one, but the nightly has a group of its own, since
-# a push to master cancelled every nightly it overlapped
+# a newer run on the same ref replaces an older one, but the nightly and manual runs have groups of
+# their own, since a push to master cancelled every nightly it overlapped and would cancel a manual
+# run's iOS shards without running iOS again
 concurrency:
-  group: ui-tests-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  group: ui-tests-${{ github.event_name == 'schedule' && 'nightly' || github.event_name == 'workflow_dispatch' && format('manual-{0}', github.ref) || github.ref }}
   cancel-in-progress: true
 
 env:

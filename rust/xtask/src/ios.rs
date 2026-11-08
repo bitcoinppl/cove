@@ -1734,10 +1734,31 @@ impl XcodebuildFailure {
         })
     }
 
+    /// The simulator failure to retry the run for, unless a test also failed for a reason of
+    /// its own, since a class run retries every test and could pass that one on the second try
     fn environment_failure(&self) -> Option<IosUiEnvironmentFailure> {
-        IosUiEnvironmentFailure::detect(&self.stdout)
-            .or_else(|| IosUiEnvironmentFailure::detect(&self.stderr))
+        let failure = IosUiEnvironmentFailure::detect(&self.stdout)
+            .or_else(|| IosUiEnvironmentFailure::detect(&self.stderr))?;
+
+        let mut environment_by_test = BTreeMap::<&str, bool>::new();
+        let outputs = [self.stdout.as_str(), self.stderr.as_str()];
+        for (test, message) in outputs.into_iter().flat_map(test_errors) {
+            *environment_by_test.entry(test).or_default() |=
+                IosUiEnvironmentFailure::detect(message).is_some();
+        }
+
+        environment_by_test.values().all(|environment| *environment).then_some(failure)
     }
+}
+
+/// Each XCTest error line in xcodebuild output as its test, like
+/// `-[CoveUITests.OnboardingFullLaunchUITests testWelcome]`, and its message
+fn test_errors(output: &str) -> impl Iterator<Item = (&str, &str)> {
+    output.lines().filter_map(|line| {
+        let (_, rest) = line.split_once("error: -[")?;
+        let (test, message) = rest.split_once("] : ")?;
+        Some((test, message))
+    })
 }
 
 /// A UI test failure caused by the simulator rather than the app under test
@@ -2672,7 +2693,7 @@ mod tests {
     }
 
     mod ui_environment_failure {
-        use crate::ios::IosUiEnvironmentFailure;
+        use crate::ios::{IosUiEnvironmentFailure, XcodebuildFailure};
 
         #[test]
         fn retries_simulator_failures_seen_in_runs() {
@@ -2697,6 +2718,26 @@ mod tests {
             assert_eq!(
                 IosUiEnvironmentFailure::detect(missing),
                 Some(IosUiEnvironmentFailure::MissingSimulator)
+            );
+        }
+
+        #[test]
+        fn a_class_run_does_not_retry_when_another_test_failed_on_its_own() {
+            let launch_timeout = "CloudBackupLargeTextFullAppUITests.swift:40: error: -[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests testA] : Failed to launch <XCUIApplicationImpl: 0x1 org.bitcoinppl.cove at Cove.app> via Xcode: Timed out while launching application via Xcode.";
+            let assertion = "CloudBackupLargeTextFullAppUITests.swift:90: error: -[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests testB] : failed - Timed out waiting for button 'Restore'";
+            let failure = |stdout: String| XcodebuildFailure {
+                status: std::process::ExitStatus::default(),
+                stdout,
+                stderr: String::new(),
+            };
+
+            assert_eq!(
+                failure(launch_timeout.to_owned()).environment_failure(),
+                Some(IosUiEnvironmentFailure::AppLaunch)
+            );
+            assert_eq!(
+                failure(format!("{launch_timeout}\n{assertion}")).environment_failure(),
+                None
             );
         }
 

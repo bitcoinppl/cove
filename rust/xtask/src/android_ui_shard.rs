@@ -12,7 +12,7 @@
 
 use crate::ui_test_shard::UiTestShard;
 use color_eyre::{
-    eyre::{bail, Context},
+    eyre::{bail, eyre, Context},
     Result,
 };
 use std::{
@@ -105,7 +105,9 @@ fn android_sources() -> PathBuf {
 /// The test classes of a flavour's instrumented test sources, shared and its own, sorted
 ///
 /// A class is a Kotlin or Java file with a line that is a `@Test` annotation, named for its path,
-/// as each test file holds one class named for the file
+/// as each test file holds one class named for the file. An abstract base class is left out, as
+/// the runner skips it, and a file whose class isn't named for it fails the listing, since that
+/// name would select nothing on the shard given it
 fn flavour_classes(sources: &Path, flavour: &str) -> Result<Vec<String>> {
     let mut classes = Vec::new();
 
@@ -123,8 +125,13 @@ fn flavour_classes(sources: &Path, flavour: &str) -> Result<Vec<String>> {
                     let contents = fs::read_to_string(&file)
                         .wrap_err_with(|| format!("Failed to read {}", file.display()))?;
 
-                    if contents.lines().any(is_test_annotation) {
-                        classes.push(class_name(&root, &file)?);
+                    if !contents.lines().any(is_test_annotation) {
+                        continue;
+                    }
+
+                    match class_declaration(&file, &contents)? {
+                        ClassDeclaration::Abstract => {}
+                        ClassDeclaration::Concrete => classes.push(class_name(&root, &file)?),
                     }
                 }
             }
@@ -146,6 +153,35 @@ fn flavour_classes(sources: &Path, flavour: &str) -> Result<Vec<String>> {
 fn is_test_annotation(line: &str) -> bool {
     let line = line.trim();
     line == "@Test" || line.starts_with("@Test(") || line.starts_with("@Test ")
+}
+
+enum ClassDeclaration {
+    Abstract,
+    Concrete,
+}
+
+/// How a test file declares the class named for it
+fn class_declaration(file: &Path, contents: &str) -> Result<ClassDeclaration> {
+    let stem = file.file_stem().map(|stem| stem.to_string_lossy()).unwrap_or_default();
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+
+    for line in contents.lines() {
+        let words = line.split(|c: char| !is_word(c)).filter(|word| !word.is_empty());
+        let words = words.collect::<Vec<_>>();
+        let declares = words.windows(2).any(|pair| pair == ["class", stem.as_ref()]);
+
+        if declares {
+            return Ok(match words.contains(&"abstract") {
+                true => ClassDeclaration::Abstract,
+                false => ClassDeclaration::Concrete,
+            });
+        }
+    }
+
+    Err(eyre!(
+        "{} has tests but declares no class {stem}; name the file for its test class, one class a file",
+        file.display()
+    ))
 }
 
 fn class_name(root: &Path, file: &Path) -> Result<String> {
@@ -331,8 +367,8 @@ fn xml_attribute<'a>(attributes: &'a str, name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        android_sources, flavour_classes, junit_class_seconds, plan_shard, AndroidUiShardPlan,
-        ClassSeconds, DEFAULT_CLASS_SECS,
+        android_sources, class_declaration, flavour_classes, junit_class_seconds, plan_shard,
+        AndroidUiShardPlan, ClassDeclaration, ClassSeconds, DEFAULT_CLASS_SECS,
     };
     use crate::ui_test_shard::UiTestShard;
     use std::collections::HashSet;
@@ -341,6 +377,24 @@ mod tests {
 
     fn shard(value: &str) -> UiTestShard {
         value.parse().unwrap()
+    }
+
+    #[test]
+    fn only_a_concrete_class_named_for_its_file_is_a_test_class() {
+        let file = std::path::Path::new("flows/WalletFlowTest.kt");
+        let declaration = |contents: &str| class_declaration(file, contents);
+
+        assert!(matches!(
+            declaration("@RunWith(AndroidJUnit4::class)\nclass WalletFlowTest : BaseTest() {"),
+            Ok(ClassDeclaration::Concrete)
+        ));
+        assert!(matches!(
+            declaration("abstract class WalletFlowTest {\n    @Test\n    fun opens() {}"),
+            Ok(ClassDeclaration::Abstract)
+        ));
+
+        // a file whose test class has another name, so the planner's name would select nothing
+        assert!(declaration("class WalletFlowTests {\n    @Test\n    fun opens() {}").is_err());
     }
 
     fn only(plan: AndroidUiShardPlan) -> Vec<String> {
