@@ -1799,15 +1799,13 @@ fn test_cases<'a>(output: &'a str, result: &'a str) -> impl Iterator<Item = (&'a
     })
 }
 
-/// The class and method of each test the runner crashed or timed out in, from lines like
-/// `Restarting after unexpected exit, crash, or test timeout in CloudBackupLargeTextFullAppUITests.testA(); summary will include totals from previous launches.`
+/// The class and method of each test the runner crashed or timed out in, from XCTestCore's
+/// `Restarting after unexpected exit, crash, or test timeout in -[UITestingUITests testRunner]; summary will include totals from previous launches.`
 fn tests_restarted(output: &str) -> impl Iterator<Item = (&str, &str)> {
     output.lines().filter_map(|line| {
-        let (_, rest) = line.split_once("test timeout in ")?;
-        let (test, _) = rest.split_once("()")?;
-        let (module_and_class, method) = test.rsplit_once('.')?;
-        let class = module_and_class.rsplit('.').next()?;
-        Some((class, method))
+        let (_, rest) = line.split_once("test timeout in -[")?;
+        let (test, _) = rest.split_once("]; ")?;
+        objc_test(test)
     })
 }
 
@@ -2846,7 +2844,7 @@ mod tests {
 
             // a crash in testB leaves no error line, and testC's lost app doesn't make it retryable
             let crash_then_lost_app = [
-                "Restarting after unexpected exit, crash, or test timeout in CloudBackupLargeTextFullAppUITests.testB(); summary will include totals from previous launches.".to_owned(),
+                "Restarting after unexpected exit, crash, or test timeout in -[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests testB]; summary will include totals from previous launches.".to_owned(),
                 format!("A.swift:40: error: {} : {lost_app}", test.replace("testA", "testC")),
             ];
             assert_eq!(failure(&crash_then_lost_app).environment_failure(), None);
