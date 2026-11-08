@@ -376,10 +376,10 @@ class CloudBackupLocalDeleteFullLaunchTest {
 
         val attempts =
             "$withoutClickableAncestor lookups found no clickable ancestor, $stale went stale and " +
-                "$missing found no text in ${timeoutMs}ms"
-        check(withoutClickableAncestor + stale > 0) { "Timed out clicking text \"$value\"; $attempts" }
+                "$missing found no text within the ${timeoutMs}ms budget"
 
-        throw IllegalArgumentException("expected a clickable ancestor for $value; $attempts")
+        require(withoutClickableAncestor == 0) { "expected a clickable ancestor for $value; $attempts" }
+        error("Timed out clicking text \"$value\"; $attempts")
     }
 
     private fun UiObject2.clickableAncestor(): UiObject2? {
