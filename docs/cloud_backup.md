@@ -28,6 +28,11 @@ typed completions back through the manager. Exclusive operations carry a
 `CloudBackupExclusiveOperationClaim` so every async completion can prove it
 still belongs to the active operation.
 
+A finished reinitialize, including one at the end of a Google Drive account
+switch, hands its slot straight to a verification of the new backup under a new
+claim. That verification reports the backup as enabled, so it reads the cloud,
+while the reinitialize stays on screen until it ends.
+
 Swift and Kotlin own provider mechanics and native presentation classification.
 They return typed cloud-storage and passkey outcomes to Rust; they do not decide
 whether inventory is complete, whether an enable path is safe, or which wallets

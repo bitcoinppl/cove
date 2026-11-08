@@ -45,6 +45,12 @@ pub(crate) enum CloudBackupExclusiveOperation {
     Disable,
     RecreateManifest,
     ReinitializeBackup,
+    /// Verification of a backup that a reinitialize just replaced
+    ///
+    /// It holds the exclusive slot so nothing else starts before the new backup is checked, but
+    /// unlike `ReinitializeBackup` it no longer reports the backup as enabling, since verification
+    /// only reads the cloud for an enabled backup
+    VerifyReinitializedBackup,
     RepairPasskey,
     VerificationRepair,
     RecoverOtherBackups,
@@ -116,6 +122,11 @@ impl CloudBackupExclusiveOperationClaim {
 pub(crate) enum CloudBackupStateReducerEvent {
     ExclusiveOperationStarted(CloudBackupExclusiveOperationClaim),
     ExclusiveOperationFinished(CloudBackupExclusiveOperationClaim),
+    /// The active claim moves to a follow-up operation without the slot ever being free
+    ExclusiveOperationHandedOff {
+        from: CloudBackupExclusiveOperationClaim,
+        to: CloudBackupExclusiveOperationClaim,
+    },
     EnableContextStarted(CloudBackupEnableContext),
     RuntimeStatusReconciled {
         status: CloudBackupStatus,

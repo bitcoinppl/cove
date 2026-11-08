@@ -523,6 +523,27 @@ impl CloudBackupSupervisor {
         Some(claim)
     }
 
+    /// Moves the active exclusive slot from `from` to a new claim for `operation`
+    ///
+    /// The slot is never free in between, so no other operation can start, and completions that
+    /// still carry `from` are stale from then on
+    fn hand_off_exclusive_operation(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        from: CloudBackupExclusiveOperationClaim,
+        operation: CloudBackupExclusiveOperation,
+    ) -> Option<CloudBackupExclusiveOperationClaim> {
+        if !self.active_operation.is_current(from) {
+            return None;
+        }
+
+        let operation_id = NEXT_SUPERVISOR_OPERATION_ID.fetch_add(1, Ordering::Relaxed);
+        let to = CloudBackupExclusiveOperationClaim::new(operation, operation_id);
+        self.active_operation.start_standard(to);
+        manager.project_exclusive_operation_handed_off(from, to);
+        Some(to)
+    }
+
     fn begin_restore_all_exclusive_operation(
         &mut self,
     ) -> Option<CloudBackupExclusiveOperationClaim> {

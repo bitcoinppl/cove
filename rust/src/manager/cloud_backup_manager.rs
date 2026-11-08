@@ -470,6 +470,17 @@ impl RustCloudBackupManager {
         self.apply_model_event(CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim));
     }
 
+    pub(crate) fn project_exclusive_operation_handed_off(
+        &self,
+        from: CloudBackupExclusiveOperationClaim,
+        to: CloudBackupExclusiveOperationClaim,
+    ) {
+        self.apply_model_event(CloudBackupStateReducerEvent::ExclusiveOperationHandedOff {
+            from,
+            to,
+        });
+    }
+
     pub(crate) fn project_enable_context_started(&self, context: CloudBackupEnableContext) {
         self.apply_model_event(CloudBackupStateReducerEvent::EnableContextStarted(context));
     }
