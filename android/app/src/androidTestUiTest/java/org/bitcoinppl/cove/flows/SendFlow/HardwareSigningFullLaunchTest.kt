@@ -3,6 +3,7 @@ package org.bitcoinppl.cove.flows.SendFlow
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
 import android.system.Os
 import android.util.Base64
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -25,7 +26,6 @@ import org.bitcoinppl.cove.test.QrScript
 import org.bitcoinppl.cove.test.SignedFrames
 import org.bitcoinppl.cove.test.TAPSIGNER_CVC
 import org.bitcoinppl.cove.test.TEST_MNEMONIC
-import org.bitcoinppl.cove.test.clearAccessibilityCache
 import org.bitcoinppl.cove.test.clipboardText
 import org.bitcoinppl.cove.test.findText
 import org.bitcoinppl.cove.test.fullLaunchDevice
@@ -407,14 +407,16 @@ class HardwareSigningFullLaunchTest {
     /**
      * Waits for the scanner's progress text, reading the screen afresh on each try
      *
-     * The progress text is the last thing that changes on an otherwise idle screen, so a content
-     * change the accessibility cache misses would stay hidden from the test for good
+     * The progress text is the last thing that changes on an otherwise idle screen, and
+     * uiautomator answers from the accessibility node cache, so a content change the cache misses
+     * stays hidden from it for good
      */
     private fun waitForScanProgress(text: String) {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         val deadline = System.currentTimeMillis() + 20_000L
 
         while (System.currentTimeMillis() < deadline) {
-            device.clearAccessibilityCache()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) automation.clearCache()
             if (device.hasObject(By.text(text))) return
 
             Thread.sleep(250)
