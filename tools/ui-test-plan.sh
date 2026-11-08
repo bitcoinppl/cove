@@ -5,7 +5,8 @@
 # slice of IOS_UI_SUITES, and each Android flavour all its tests. With either set, only the listed
 # tests run, so a fix can be checked without the full suites: the iOS shards split the listed iOS
 # tests as they split the full suites, and an Android flavour runs the listed tests its test
-# sources hold. A job with nothing to run is skipped
+# sources hold. A job with nothing to run is skipped. Splitting a flavour's tests across its
+# shards happens later in the job, in `xtask android-ui-shard`, which needs the Rust toolchain
 #
 #   PLATFORM=ios SHARD=<index>/<count>  or  PLATFORM=android FLAVOUR=<flavour>
 #   IOS_TESTS      comma-separated <Target>/<Class>[/<method>] entries, <Target> CoveUITests or CoveCloudBackupUITests

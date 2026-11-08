@@ -1,11 +1,14 @@
 name: UI tests
 
 # emulator and simulator suites take far longer than the rest of CI, so they
-# run after merge, nightly, and on PRs that opt in with the `ui-tests` label.
+# run nightly, on PRs that opt in with the `ui-tests` label, and, for Android
+# only, after merge.
+# iOS runs only nightly and in manual runs: its shards hold three of GitHub's
+# few macOS runners for well over an hour each, so iOS UI runs for a PR happen
+# locally with cove-local-ci or through a manual run, and a push to master
+# leaves them to the next nightly.
 # A labeled PR runs only the Android suites, and only when its changes reach
-# Android: the iOS shards would hold three of GitHub's few macOS runners for up
-# to two hours each, so iOS UI runs for a PR happen locally with cove-local-ci
-# or through a manual run.
+# Android.
 # A manual run can name tests to run instead of the full suites, to check a fix
 # without waiting on every test again, and then runs only the platforms whose
 # tests it names; see docs/testing.md
@@ -33,8 +36,10 @@ on:
 permissions:
   contents: read
 
+# a newer run on the same ref replaces an older one, but the nightly has a group of its own, since
+# a push to master cancelled every nightly it overlapped
 concurrency:
-  group: ui-tests-${{ github.ref }}
+  group: ui-tests-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -43,10 +48,10 @@ env:
   # every iOS suite a full run covers, comma-separated; the rest of CoveCloudBackupUITests stays
   # out until its inventory scenarios pass on master, see #947, and the two classes here use the
   # scripted cloud host only to restore a fixture wallet or reach a screen
+  # WatchOnlyUpgradeFullLaunchUITests is quarantined, since it failed in every full run, see #1076
   IOS_UI_SUITES: >-
     CoveUITests/OnboardingFullLaunchUITests,
     CoveUITests/ReceiveTextSizeFullLaunchUITests,
-    CoveUITests/WatchOnlyUpgradeFullLaunchUITests,
     CoveUITests/UtxoLockFullLaunchUITests,
     CoveUITests/HardwareSigningFullLaunchUITests,
     CoveUITests/PublicKeyImportFullLaunchUITests,
@@ -114,16 +119,28 @@ jobs:
   android-instrumented:
     needs: changes
     if: ${{ !cancelled() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'ui-tests')) && (needs.changes.result != 'success' || (needs.changes.outputs.android_instrumented != 'false' && needs.changes.outputs.android_named != 'false')) }}
+    # Dev keeps its old check name; a UiTest shard adds its slice, as in `(UiTest 2/3)`
+    name: android-instrumented (${{ matrix.flavour }}${{ matrix.shard != '1/1' && format(' {0}', matrix.shard) || '' }})
     runs-on: ubuntu-24.04
-    # the UiTest flavour takes about 70 minutes, so a slow hosted emulator ran past a 75 minute limit
-    timeout-minutes: 90
+    # each job's tests took 15 to 25 minutes after about 8 minutes of setup, and a slow hosted
+    # emulator once ran the unsharded UiTest flavour 20 minutes past its usual time
+    timeout-minutes: 60
     # one flavour per job: with both in one job the hosted runner shut down about 35 minutes in, twice
-    # the matrix is fixed, not planned by an earlier job, so a run cancelled before it starts still
-    # names its checks the way the run that replaces it does
+    # UiTest runs about twice Dev's test time, so it splits three ways by whole class, see
+    # rust/xtask/src/android_ui_shard.rs; the matrix is fixed, not planned by an earlier job, so a
+    # run cancelled before it starts still names its checks the way the run that replaces it does
     strategy:
       fail-fast: false
       matrix:
-        flavour: [Dev, UiTest]
+        include:
+          - flavour: Dev
+            shard: "1/1"
+          - flavour: UiTest
+            shard: "1/3"
+          - flavour: UiTest
+            shard: "2/3"
+          - flavour: UiTest
+            shard: "3/3"
     steps:
       - uses: actions/checkout@v6
 
@@ -134,13 +151,6 @@ jobs:
           PLATFORM: android
           FLAVOUR: ${{ matrix.flavour }}
         run: tools/ui-test-plan.sh
-
-      - name: Enable KVM for the emulator
-        if: steps.plan.outputs.run == 'true'
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
 
       - name: Install Rust toolchain
         if: steps.plan.outputs.run == 'true'
@@ -154,14 +164,38 @@ jobs:
           cache-bin: false
           prefix-key: v1-rust-android-x86_64
 
-      - name: Set up just
+      # xtask deals the flavour's classes, or the ones a manual run names, out to the shards longest
+      # first by the times in rust/xtask/src/android_ui_shard/class_seconds.tsv, keeping each class
+      # whole since UtxoLockFullLaunchTest's second stage needs its first on the same device; the
+      # last shard of a full run excludes the others' classes instead of listing its own, so a
+      # class xtask doesn't find still runs, and a shard with nothing to run stops here
+      - name: List this shard's test classes
+        id: shard
         if: steps.plan.outputs.run == 'true'
+        env:
+          FLAVOUR: ${{ matrix.flavour }}
+          SHARD: ${{ matrix.shard }}
+          TESTS: ${{ steps.plan.outputs.tests }}
+        run: |
+          cd rust
+          plan=$(cargo run --locked -q -p xtask -- android-ui-shard --flavour "$FLAVOUR" --shard "$SHARD" --tests "$TESTS")
+          printf '%s\n' "$plan" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Enable KVM for the emulator
+        if: steps.shard.outputs.run == 'true'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up just
+        if: steps.shard.outputs.run == 'true'
         uses: taiki-e/install-action@v2
         with:
           tool: just
 
       - name: Setup Java
-        if: steps.plan.outputs.run == 'true'
+        if: steps.shard.outputs.run == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: "temurin"
@@ -171,31 +205,31 @@ jobs:
       # rarely downloads the Kotlin compiler from its GitHub release redirect, which can 504;
       # read-only so the scheduled master run doesn't save a different set under the shared key
       - name: Setup Gradle
-        if: steps.plan.outputs.run == 'true'
+        if: steps.shard.outputs.run == 'true'
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
           cache-read-only: true
 
       - name: Install build dependencies
-        if: steps.plan.outputs.run == 'true'
+        if: steps.shard.outputs.run == 'true'
         run: cd rust && cargo --locked xtask install-deps
 
       # the hosted emulator is x86_64, which the default arm64-only build skips
       - name: Build Rust FFI for the x86_64 emulator
-        if: steps.plan.outputs.run == 'true'
+        if: steps.shard.outputs.run == 'true'
         run: just xtask build-android debug --x86-64
 
       # the TAPSIGNER emulator runs in a Python environment uv builds
       - name: Set up uv
-        if: steps.plan.outputs.run == 'true'
+        if: steps.shard.outputs.run == 'true'
         uses: astral-sh/setup-uv@v10.3.3
 
       # the recipe starts cove-fake-node and the hardware signer host on the first host port
       # block, 39100-39111, and forwards them to 39000-39002 and 39010-39011 in the emulator, for
       # the tests that fund a wallet or sign with a hardware wallet
       - name: Run instrumented tests
-        if: steps.plan.outputs.run == 'true'
+        if: steps.shard.outputs.run == 'true'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -213,11 +247,12 @@ jobs:
           # the setting when it changes, so it applies to the tests started on the next line
           script: |
             adb shell settings put global hide_error_dialogs 1
-            just android-instrumented-ci "$FLAVOUR" "$ANDROID_TESTS"
+            just android-instrumented-ci "$FLAVOUR" "$ANDROID_TESTS" "$ANDROID_NOT_TESTS"
         env:
           FLAVOUR: ${{ matrix.flavour }}
-          # empty runs every test in the flavour
-          ANDROID_TESTS: ${{ steps.plan.outputs.tests }}
+          # this shard's classes, or empty to run every test in the flavour but the excluded ones
+          ANDROID_TESTS: ${{ steps.shard.outputs.tests }}
+          ANDROID_NOT_TESTS: ${{ steps.shard.outputs.not_tests }}
 
       # the emulator has died mid-run with no output of its own, so record whether the host killed it
       - name: Show host memory and kernel kills
@@ -226,34 +261,41 @@ jobs:
           free -m
           sudo dmesg --ctime | grep -iE 'out of memory|oom|killed process' || echo "no kernel OOM kills recorded"
 
+      # uploaded on success too, since its JUnit XML is what `cargo xtask android-ui-timings`
+      # refreshes the shard timings from; named for the job's place in the matrix, as a shard's
+      # slash can't be in an artifact name
       - name: Upload Android test reports
-        if: failure() && steps.plan.outputs.run == 'true'
+        if: ${{ !cancelled() && steps.shard.outputs.run == 'true' }}
         uses: actions/upload-artifact@v7
         with:
-          name: android-instrumented-reports-${{ matrix.flavour }}
+          name: android-instrumented-reports-${{ matrix.flavour }}-${{ strategy.job-index }}
           path: |
             android/app/build/reports/androidTests/connected
             android/app/build/outputs/androidTest-results/connected
-          retention-days: 7
+          retention-days: 30
+          # a re-run job uploads under the same name
+          overwrite: true
 
       # a separate artifact keeps the report layout; the host overwrites the log at each card start
       - name: Upload TAPSIGNER emulator log
-        if: failure() && steps.plan.outputs.run == 'true'
+        if: failure() && steps.shard.outputs.run == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: tapsigner-emulator-log-android-${{ matrix.flavour }}
+          name: tapsigner-emulator-log-android-${{ matrix.flavour }}-${{ strategy.job-index }}
           path: rust/target/ui-test-host/ecard-*.log
           if-no-files-found: ignore
           retention-days: 7
+          overwrite: true
 
   ios-ui:
     needs: changes
-    # never on a pull request, see the top of this file
-    if: ${{ !cancelled() && github.event_name != 'pull_request' && (needs.changes.result != 'success' || (needs.changes.outputs.ios_ui != 'false' && needs.changes.outputs.ios_named != 'false')) }}
+    # never on a pull request or a push, see the top of this file
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && github.event_name != 'push' && (needs.changes.result != 'success' || (needs.changes.outputs.ios_ui != 'false' && needs.changes.outputs.ios_named != 'false')) }}
     runs-on: macos-26
-    # each shard runs about 11 tests, after about 25 minutes building the Rust library, the fake
-    # node and the test bundles; a test took 6 to 8 minutes when each erased the simulator and
-    # rebuilt, and the slowest hosted runners need headroom beyond the faster path's estimate
+    # each shard runs about 22 tests, after 10 to 18 minutes building the Rust library, the fake
+    # node and the test bundles; a CoveUITests test paid about 3 minutes of simulator, runner and
+    # coverage overhead on top of its body before coverage was turned off and cloud backup classes
+    # shared a simulator, and the slowest hosted runners need headroom beyond the estimate
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -313,11 +355,12 @@ jobs:
         if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         uses: astral-sh/setup-uv@v10.3.3
 
-      # xtask expands each class into its test methods and keeps this shard's slice, builds each
-      # scheme once, runs every test on a fresh clone of a once-booted simulator so each starts at
-      # first launch, and keeps cove-fake-node up on the first port block, 39100-39102, for the
-      # tests that fund a wallet from it and the hardware signer host on 39110-39111 for the
-      # hardware signing tests
+      # xtask expands each class into its test methods and keeps this shard's share, builds each
+      # scheme once, and runs each CoveUITests test on a fresh clone of a once-booted simulator so
+      # it starts at first launch; each CoveCloudBackupUITests class shares one clone and one
+      # xcodebuild call, since its host app wipes its data at every launch. It keeps
+      # cove-fake-node up on the first port block, 39100-39102, for the tests that fund a wallet
+      # from it and the hardware signer host on 39110-39111 for the hardware signing tests
       # xcodebuild passes TEST_RUNNER_-prefixed variables to the test process without the prefix
       - name: Run iOS UI tests
         if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
@@ -327,7 +370,9 @@ jobs:
           SHARD: ${{ steps.plan.outputs.shard }}
         run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test "$TESTS" --shard "$SHARD" --results-dir "$RUNNER_TEMP/ios-ui-results"
 
-      # each attempt's bundle and logs are named for its test; DerivedData keeps only the newest bundles
+      # each attempt's bundle and logs are named for its test, or its class when the class run
+      # holds several;
+      # DerivedData keeps only the newest bundles
       - name: Upload iOS test results
         if: failure() && steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         uses: actions/upload-artifact@v7

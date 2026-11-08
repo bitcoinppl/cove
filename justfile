@@ -223,11 +223,12 @@ fake-node-run *command:
 # Runs on an emulator only: the one ANDROID_SERIAL names, which must be an emulator-* serial, else
 # the only connected emulator, and Gradle gets that serial in ANDROID_SERIAL
 # tests: optional comma-separated `package.Class` or `package.Class#method` entries to run instead of all
+# not_tests: optional comma-separated `package.Class` entries to skip, as the last UiTest CI shard skips the other shards' classes
 # [long, external] Run Android instrumented tests the way the UI tests workflow does; flavours: Dev, UiTest or both
 [group('test')]
 [working-directory('android')]
-android-instrumented-ci flavours="Dev UiTest" tests="":
-    cargo run --locked -q --manifest-path ../rust/Cargo.toml --package xtask -- ui-test-host run --android -- ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi" "-Pandroid.testInstrumentationRunnerArguments.listener=org.bitcoinppl.cove.test.DismissAnrDialogs" {{ if tests == "" { "" } else { quote("-Pandroid.testInstrumentationRunnerArguments.class=" + replace(tests, " ", "")) } }}
+android-instrumented-ci flavours="Dev UiTest" tests="" not_tests="":
+    cargo run --locked -q --manifest-path ../rust/Cargo.toml --package xtask -- ui-test-host run --android -- ./gradlew $(for flavour in {{ flavours }}; do printf 'connected%sDebugAndroidTest ' "$flavour"; done) --continue "-Pandroid.testInstrumentationRunnerArguments.notAnnotation=org.bitcoinppl.cove.test.StagedProcessFullLaunchTest,org.bitcoinppl.cove.test.QuarantinedInCi" "-Pandroid.testInstrumentationRunnerArguments.listener=org.bitcoinppl.cove.test.DismissAnrDialogs" {{ if tests == "" { "" } else { quote("-Pandroid.testInstrumentationRunnerArguments.class=" + replace(tests, " ", "")) } }} {{ if not_tests == "" { "" } else { quote("-Pandroid.testInstrumentationRunnerArguments.notClass=" + replace(not_tests, " ", "")) } }}
 
 # Creates the CoveCI35 AVD on first use with the UI tests workflow's emulator settings, and boots it
 # read-only, so several can run at once: give each its own even console port from 5554 and point

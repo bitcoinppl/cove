@@ -254,6 +254,9 @@ final class OnboardingFullLaunchUITests: XCTestCase {
     /// 10 second bootstrap watchdog; the timeout screen asks the user to force-quit and retry,
     /// so do that once and still fail when a warm launch also times out
     private func launchApp() {
+        // the Cloud Backup target builds this class too, and runs each class's tests in one
+        // simulator session, so its host app must wipe the last test's wallets; Cove ignores it
+        app.launchEnvironment["COVE_CLOUD_BACKUP_UI_RESET"] = "1"
         app.launch()
 
         guard waitForOnboardingOrStartupTimeout() == .startupTimedOut else { return }

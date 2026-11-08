@@ -4,6 +4,7 @@ use color_eyre::Result;
 mod android;
 mod android_ci_emulator;
 mod android_device;
+mod android_ui_shard;
 mod common;
 mod fake_node;
 mod github;
@@ -18,6 +19,7 @@ mod swift_tools;
 mod tapsigner_emulator;
 mod ui_test_host;
 mod ui_test_ports;
+mod ui_test_shard;
 mod util;
 mod version;
 
@@ -139,6 +141,31 @@ enum Commands {
     #[command(name = "android-ui-first-inventory")]
     AndroidUiFirstInventory,
 
+    /// Print a CI shard's share of a flavour's Android instrumented tests, as `run=` and `tests=`
+    /// lines for `$GITHUB_OUTPUT`; shards split by whole class, weighed by the checked-in timings
+    #[command(name = "android-ui-shard")]
+    AndroidUiShard {
+        /// Product flavour whose tests to split, such as `UiTest`
+        #[arg(long)]
+        flavour: String,
+
+        /// This job's shard, as `<index>/<count>`, such as `2/3`
+        #[arg(long, default_value = "1/1")]
+        shard: ui_test_shard::UiTestShard,
+
+        /// Comma-separated `<package>.<Class>[#<method>]` entries to split instead of every class
+        #[arg(long, default_value = "")]
+        tests: String,
+    },
+
+    /// Rewrite the Android class timings `android-ui-shard` weighs classes by, from UiTest JUnit
+    /// XML reports or directories holding them
+    #[command(name = "android-ui-timings")]
+    AndroidUiTimings {
+        #[arg(required = true)]
+        reports: Vec<std::path::PathBuf>,
+    },
+
     /// Start a headless emulator like the UI tests workflow's, creating its AVD first if needed, and wait for it to boot
     #[command(name = "android-ci-emulator")]
     AndroidCiEmulator {
@@ -249,9 +276,10 @@ enum Commands {
         #[arg(long, default_value = "CoveUITests/OnboardingFullLaunchUITests")]
         test: String,
 
-        /// Run only this slice of the expanded tests, as `<index>/<count>`, such as `2/3`
+        /// Run only this shard's share of the expanded tests, as `<index>/<count>`, such as `2/3`;
+        /// a CoveCloudBackupUITests class stays whole on one shard
         #[arg(long, default_value = "1/1")]
-        shard: ios::IosUiShard,
+        shard: ui_test_shard::UiTestShard,
 
         /// Open Simulator before running tests
         #[arg(long)]
@@ -468,6 +496,12 @@ fn run(cli: Cli) -> Result<()> {
         }
 
         Commands::AndroidUiFirstInventory => android::run_first_inventory_ui_test(),
+
+        Commands::AndroidUiShard { flavour, shard, tests } => {
+            android_ui_shard::print_plan(&flavour, shard, &tests)
+        }
+
+        Commands::AndroidUiTimings { reports } => android_ui_shard::refresh_timings(&reports),
 
         Commands::AndroidCiEmulator { port } => android_ci_emulator::start(port),
 

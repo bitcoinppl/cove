@@ -26,7 +26,8 @@ struct CloudBackupHostRobot {
         app.terminate()
         app.launch()
 
-        // xtask retries the test on a clean simulator when it sees this message
+        // xtask retries the test, or a cloud backup class whole, on a clean simulator when it
+        // sees this message
         if waitForOnboardingOrStartupTimeout() == .startupTimedOut {
             XCTFail("App startup timed out on relaunch")
         }
