@@ -122,6 +122,23 @@ struct HardwareSignerControl {
         return try decode(Pasteboard.self, controlRequest(baseUrl, "POST", "simulator-pasteboard", body: body)).text
     }
 
+    /// Reads the simulator's pasteboard, trimmed, until it holds `expected` or 5 seconds pass, and
+    /// returns what it last held
+    ///
+    /// The app sets the pasteboard asynchronously from the tap, so one read can come before it
+    func simulatorPasteboard(awaiting expected: String) throws -> String {
+        let deadline = Date().addingTimeInterval(5)
+        var text = ""
+        while Date() < deadline {
+            text = try simulatorPasteboard().trimmingCharacters(in: .whitespacesAndNewlines)
+            if text == expected { return text }
+
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+
+        return text
+    }
+
     /// Switches the simulator to dark or light mode, which only the host can do
     func setSimulatorAppearance(dark: Bool) throws {
         let body: [String: Any] = try ["udid": Self.simulatorUdid(), "appearance": dark ? "dark" : "light"]

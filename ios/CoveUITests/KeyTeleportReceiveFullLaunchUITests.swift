@@ -15,9 +15,23 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
     /// A BIP39 test vector, a different wallet from the one onboarding imports
     private static let sentWords = "legal winner thank year wave sausage worth useful legal winner thank yellow"
 
+    /// The master fingerprint of `sentWords` with no passphrase, as Wallet Settings shows it
+    private static let sentWordsFingerprint = "B8688DF1"
+
     /// The master key of BIP32 test vector 1
     private static let sentXprv =
         "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi"
+
+    /// `sentXprv` encoded for a test network, as Export Private Key shows it for the Signet wallet
+    /// the import makes
+    private static let sentXprvOnSignet =
+        "tprv8ZgxMBicQKsPeDgjzdC36fs6bMjGApWDNLR9erAXMs5skhMv36j9MV5ecvfavji5khqjWaWSFhN3YcCUUdiKH6isR4Pwy3U5y5egddBr16m"
+
+    /// The master fingerprint of `sentXprv`, from BIP32 test vector 1
+    private static let sentXprvFingerprint = "3442193E"
+
+    /// Export Private Key needs an app lock, so the xprv test sets this PIN
+    private static let pin = "135791"
 
     /// A note and a password record in the shape COLDCARD's Secure Notes send them
     private static let sentNotes: [[String: String]] = [
@@ -74,7 +88,13 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         waitForReview("Recovery words received")
         assertWordsConcealed()
         layout.reachAndTap(button("Import Wallet"), "mnemonic review: Import Wallet")
-        try openImportedWallet()
+        try openImportedWallet(fingerprint: Self.sentWordsFingerprint)
+
+        // the words the wallet saved, read back from Wallet Settings
+        layout.reachAndTap(button("View Secret Words"), "wallet settings: View Secret Words")
+        app.tapButton(named: "Show Me")
+        XCTAssertTrue(app.buttons["Secret words options"].waitForExistence(timeout: 10), "the saved words never showed")
+        assertWordsShown(numbered: { "\($0)." })
     }
 
     /// The key needs Reveal, Hide conceals it again, Copy copies it, and Import opens the new wallet
@@ -99,10 +119,22 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         layout.reachAndTap(button("Reveal XPRV"), "xprv review: Reveal XPRV again")
         XCTAssertTrue(key.waitForExistence(timeout: 5))
         layout.reachAndTap(button(startingWith: "Copy"), "xprv review: Copy")
-        XCTAssertEqual(try waitForPasteboard(Self.sentXprv), Self.sentXprv, "Copy should copy the shown key")
+        XCTAssertEqual(try signer.simulatorPasteboard(awaiting: Self.sentXprv), Self.sentXprv, "Copy should copy the shown key")
 
         layout.reachAndTap(button("Import Wallet"), "xprv review: Import Wallet")
-        try openImportedWallet()
+        try openImportedWallet(fingerprint: Self.sentXprvFingerprint)
+
+        // the key the wallet saved, read back through Export Private Key, which needs an app lock
+        app.goBack()
+        XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 10))
+        app.enablePin(Self.pin)
+        app.tapButton(named: "selectedWallet.more")
+        app.tapButton(named: "Wallet Settings")
+        layout.reachAndTap(button("Export Private Key"), "wallet settings: Export Private Key")
+        app.tapButton(named: "Reveal and Copy")
+        app.verifyIdentity(Self.pin)
+        XCTAssertTrue(app.navigationBars["Private Key"].waitForExistence(timeout: 10), "the saved key never showed")
+        XCTAssertTrue(app.staticTexts[Self.sentXprvOnSignet].exists, "the imported wallet saved a key other than the one sent")
     }
 
     // MARK: - Scanning
@@ -295,8 +327,14 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts[title].waitForExistence(timeout: 30), "the review '\(title)' never showed")
     }
 
-    /// Opens the wallet the review imported from the Wallet imported screen
-    private func openImportedWallet() throws {
+    /// Opens the wallet the review imported from the Wallet imported screen, and checks its
+    /// fingerprint is the sent key's
+    ///
+    /// Wallet Settings shows the fingerprint the import recorded in the wallet's metadata, so a
+    /// wallet made from other words or another key shows another one, as does the launch wallet
+    /// if Done left it selected. The metadata doesn't show which secret the keychain saved, so
+    /// each test reads that back separately
+    private func openImportedWallet(fingerprint: String) throws {
         let imported = app.staticTexts["Wallet imported"]
         XCTAssertTrue(imported.waitForExistence(timeout: 30), "Import Wallet should import a new wallet")
 
@@ -306,7 +344,24 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
 
         layout.reachAndTap(button("Done"), "imported: Done")
         XCTAssertTrue(app.element("selectedWallet.balance").waitForExistence(timeout: 30), "Done should open the imported wallet")
-        XCTAssertTrue(app.staticText(containing: name).waitForExistence(timeout: 10), "Done should open '\(name)', the imported wallet")
+
+        // the closed sidebar also lists the wallet off screen, so only a hittable name counts
+        let names = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", name))
+        let deadline = Date().addingTimeInterval(10)
+        var nameShown = false
+        while !nameShown, Date() < deadline {
+            nameShown = names.allElementsBoundByIndex.contains(where: \.isHittable)
+        }
+
+        XCTAssertTrue(nameShown, "Done should open '\(name)', the imported wallet")
+
+        app.tapButton(named: "selectedWallet.more")
+        app.tapButton(named: "Wallet Settings")
+        XCTAssertTrue(app.staticTexts["Fingerprint"].waitForExistence(timeout: 10), "Wallet Settings showed no fingerprint")
+        XCTAssertTrue(
+            app.staticTexts[fingerprint].exists,
+            "the imported wallet's fingerprint isn't \(fingerprint), so it holds a key other than the one sent"
+        )
     }
 
     // MARK: - Secrets on screen
@@ -361,11 +416,12 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
         }
     }
 
-    /// Each word must show beside its number, so a review that swaps two words, or shows one
-    /// repeated word in place of another, fails
-    private func assertWordsShown() {
+    /// Each sent word must show beside its number, so a screen that swaps two words, or shows one
+    /// repeated word in place of another, fails. The review labels the numbers "1" and the saved
+    /// words screen "1."
+    private func assertWordsShown(numbered label: (Int) -> String = { "\($0)" }) {
         for (index, word) in Self.sentWords.split(separator: " ").map(String.init).enumerated() {
-            let number = app.staticTexts.matching(NSPredicate(format: "label == %@", "\(index + 1)"))
+            let number = app.staticTexts.matching(NSPredicate(format: "label == %@", label(index + 1)))
             let words = app.staticTexts.matching(NSPredicate(format: "label == %@", word))
             XCTAssertTrue(words.firstMatch.waitForExistence(timeout: 5), "the revealed words should include '\(word)'")
 
@@ -388,20 +444,6 @@ final class KeyTeleportReceiveFullLaunchUITests: XCTestCase {
 
     private func receiverCode() -> XCUIElement {
         app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^[0-9]{2}( [0-9]{2}){3}$")).firstMatch
-    }
-
-    /// The app sets the pasteboard asynchronously from the tap, so read until it holds the key
-    private func waitForPasteboard(_ expected: String) throws -> String {
-        let deadline = Date().addingTimeInterval(5)
-        var text = ""
-        while Date() < deadline {
-            text = try signer.simulatorPasteboard().trimmingCharacters(in: .whitespacesAndNewlines)
-            if text == expected { return text }
-
-            Thread.sleep(forTimeInterval: 0.3)
-        }
-
-        return text
     }
 
     // MARK: - Queries

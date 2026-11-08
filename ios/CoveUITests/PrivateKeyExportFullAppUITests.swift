@@ -15,12 +15,20 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
 
     private var app: XCUIApplication!
     private var robot: CloudBackupHostRobot!
+    private var qr: QrScript!
 
     override func setUp() {
         super.setUp()
         continueAfterFailure = false
         app = XCUIApplication()
         robot = CloudBackupHostRobot(app: app)
+        qr = QrScript()
+        qr.configure(app)
+    }
+
+    override func tearDown() {
+        qr.remove()
+        super.tearDown()
     }
 
     func testOnlyAFreshMainPinRevealsThePrivateKey() {
@@ -58,9 +66,10 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
     }
 
     /// Reveal's Copy puts the shown key on the pasteboard, and Continue with KeyTeleport asks for
-    /// the main PIN afresh as Reveal does before it starts a send of this wallet
+    /// the main PIN afresh as Reveal does before it sends the same key
     ///
-    /// The host reads the pasteboard, since reading it here shows the paste prompt
+    /// The host reads the pasteboard, since reading it here shows the paste prompt, and plays the
+    /// receiving phone, decrypting the send from the response the app shows
     func testRevealCopiesTheKeyAndKeyTeleportNeedsAFreshMainPin() throws {
         let signer = HardwareSignerControl()
         try signer.requireHealthy()
@@ -73,14 +82,15 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
         startReveal()
         robot.enterPin(mainPin)
         XCTAssertTrue(app.navigationBars["Private Key"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts[fixtureXprv].exists)
+        let shownKey = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'xprv' OR label BEGINSWITH 'tprv'")).firstMatch
+        XCTAssertTrue(shownKey.exists, "Reveal showed no private key")
+        let revealed = shownKey.label
+        XCTAssertEqual(revealed, fixtureXprv, "Reveal showed a key other than the wallet's")
+
         app.buttons["Copy for 2 Minutes"].tap()
         XCTAssertTrue(app.buttons["Copied for 2 Minutes"].waitForExistence(timeout: 5))
-        XCTAssertEqual(
-            try signer.simulatorPasteboard().trimmingCharacters(in: .whitespacesAndNewlines),
-            fixtureXprv,
-            "Copy put something other than the revealed key on the pasteboard"
-        )
+        let copied = try signer.simulatorPasteboard(awaiting: revealed)
+        XCTAssertEqual(copied, revealed, "Copy put something other than the revealed key on the pasteboard")
         app.buttons["Done"].tap()
         XCTAssertTrue(app.navigationBars["Private Key"].waitForNonExistence(timeout: 5))
 
@@ -97,6 +107,18 @@ final class PrivateKeyExportFullAppUITests: XCTestCase {
         robot.enterPin(mainPin)
         XCTAssertTrue(keyTeleportSend.waitForExistence(timeout: 10), "the main PIN didn't start a KeyTeleport send")
         assertPrivateKeyHidden()
+
+        // the receiving phone gets the same key Reveal showed and Copy copied
+        let received = try ScreenReachability(app: app).receiveSend(with: KeyTeleportPeer(), scanner: qr, "private key send")
+        XCTAssertEqual(received.kind, "xprv", "KeyTeleport sent something other than a private key")
+        XCTAssertEqual(received.xprv, revealed, "KeyTeleport sent a key other than the one Reveal showed")
+        XCTAssertEqual(received.xprv, copied, "KeyTeleport sent a key other than the one Copy copied")
+
+        app.buttons.matching(NSPredicate(format: "label == %@", "Done")).firstMatch.tap()
+        XCTAssertTrue(
+            app.buttons["Tap to show password"].waitForNonExistence(timeout: 10),
+            "Done should close the response"
+        )
     }
 
     func testExportWithoutAppPinIsRefused() {
