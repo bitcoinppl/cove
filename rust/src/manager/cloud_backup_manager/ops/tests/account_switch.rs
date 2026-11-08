@@ -92,6 +92,7 @@ async fn drive_account_switch_commit_releases_its_claim_on_a_running_supervisor(
     let globals = test_globals();
     let manager = init_manager();
     configure_enabled_cloud_backup(&manager, globals, 0);
+    seed_verifiable_cloud_master_key(globals);
     CONNECTIVITY_MANAGER.set_connection_state(true);
 
     // the platform has signed in to the new account and reinitialized the backup there
@@ -106,9 +107,9 @@ async fn drive_account_switch_commit_releases_its_claim_on_a_running_supervisor(
 
     manager.confirm_drive_account_switch_committed(transition_id).await.unwrap();
 
-    // the commit hands its claim to the verification it schedules, so a commit that never
-    // schedules it leaves the claim held here; the supervisor test checks the commit keeps the
-    // claim rather than dropping it, and together they cover the hand-off
+    // the commit hands the slot to a verification of the new account's backup, which reads the
+    // cloud and releases the slot once it reports; a commit that never schedules it leaves the
+    // switch's claim held here
     wait_for_test_condition(
         Duration::from_secs(8),
         "the running supervisor releases the switch's claim after the commit",
@@ -121,6 +122,11 @@ async fn drive_account_switch_commit_releases_its_claim_on_a_running_supervisor(
     };
 
     assert_eq!(configured.destructive_operation, CloudBackupDestructiveOperationState::Idle);
+    assert!(
+        matches!(configured.verification, CloudBackupVerificationState::Verified { .. }),
+        "the new account's backup should verify, got {:?}",
+        configured.verification
+    );
 
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }

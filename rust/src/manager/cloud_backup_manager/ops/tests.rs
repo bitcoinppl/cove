@@ -33,7 +33,7 @@ use crate::manager::cloud_backup_manager::actors::{
 use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
-    CloudBackupExclusiveOperationClaim,
+    CloudBackupExclusiveOperationClaim, CloudBackupVerificationState,
 };
 use crate::manager::cloud_backup_manager::verify::CloudBackupDeepVerificationStep;
 use crate::manager::cloud_backup_manager::wallets::{

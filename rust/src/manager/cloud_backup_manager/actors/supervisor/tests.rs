@@ -4773,6 +4773,7 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
         configured_cloud_backup_state(manager).verification,
         CloudBackupVerificationState::Running
     );
+
     assert_eq!(
         configured_cloud_backup_state(manager).destructive_operation,
         Destructive::ReinitializingBackup
@@ -4785,6 +4786,7 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
         !matches!(step, CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled)),
         "verification stopped before reading the cloud"
     );
+
     assert!(globals.cloud.master_key_download_attempt_count() > master_key_reads);
 
     // it could read the cloud because the backup reads as enabled again, while the verification

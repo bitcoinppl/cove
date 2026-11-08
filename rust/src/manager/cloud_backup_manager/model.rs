@@ -354,6 +354,7 @@ impl CloudBackupReducerState {
             Some(CloudBackupExclusiveOperation::RecreateManifest) => {
                 CloudBackupDestructiveOperationState::RecreatingManifest
             }
+
             // the reinitialize stays on screen until the new backup has been verified
             Some(
                 CloudBackupExclusiveOperation::ReinitializeBackup
