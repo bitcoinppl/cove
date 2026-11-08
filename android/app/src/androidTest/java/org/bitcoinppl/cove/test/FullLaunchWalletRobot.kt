@@ -21,6 +21,7 @@ import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.types.Network
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import java.io.ByteArrayOutputStream
 import java.math.BigDecimal
 
@@ -112,10 +113,9 @@ class FullLaunchWalletRobot(
         if (showsAddressSoon(address)) return
 
         setAddress(address)
-        assertTrue(
-            "expected the address field to hold $address after setting it twice\n${device.hierarchy()}",
-            showsAddressSoon(address),
-        )
+        if (!showsAddressSoon(address)) {
+            fail("expected the address field to hold $address after setting it twice\n${device.hierarchy()}")
+        }
     }
 
     // once the app accepts the address it moves focus to the amount, whose keyboard toolbar can
@@ -192,7 +192,7 @@ class FullLaunchWalletRobot(
         typeKeys(field, text)
         if (becomesTrue(FIRST_ATTEMPT_TIMEOUT_MS, typed)) return
 
-        clearByKeys(field, text.length)
+        clearByKeys(field)
         typeKeys(field, text)
         waitUntil("expected the field to hold $text after typing it twice", condition = typed)
     }
@@ -206,19 +206,14 @@ class FullLaunchWalletRobot(
         device.executeShellCommand("input text $text")
     }
 
-    // deletes key by key for the same reason typing does. The tap can leave the cursor anywhere,
-    // even on an earlier line of a wrapped field, so this deletes the whole length both behind and
-    // ahead of it. A masked field reads as its mask, so it deletes at least as many keys as were typed
-    private fun clearByKeys(
-        field: BySelector,
-        typedLength: Int,
-    ) {
-        val length = maxOf(device.findText(field)?.length ?: 0, typedLength) + 1
-        val deletes = List(length) { "KEYCODE_DEL" } + List(length) { "KEYCODE_FORWARD_DEL" }
-
+    // selects everything and deletes it as one edit, as a keyboard would. Deleting key by key lets
+    // the amount field reformat after each key, which can leave the cursor and its text out of step
+    // with the keys that follow, and a line-end jump leaves earlier lines of a wrapped field behind
+    private fun clearByKeys(field: BySelector) {
         device.waitFor(field).click()
         device.waitForIdle()
-        device.executeShellCommand("input keyevent ${deletes.joinToString(" ")}")
+        device.executeShellCommand("input keycombination KEYCODE_CTRL_LEFT KEYCODE_A")
+        device.executeShellCommand("input keyevent KEYCODE_DEL")
         device.waitForIdle()
     }
 
@@ -279,7 +274,7 @@ class FullLaunchWalletRobot(
         assertTrue("$message\n${device.hierarchy()}", condition())
     }
 
-    // a first attempt that hasn't landed by now won't; the second attempt gets waitUntil's full wait
+    // a first attempt that hasn't landed by now won't
     private fun becomesTrue(
         timeoutMs: Long,
         condition: () -> Boolean,
