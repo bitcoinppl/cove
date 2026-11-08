@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use cove_cspp::backup_data::remote_payload::RemotePayloadMetadata;
 use cove_cspp::wallet_crypto;
@@ -84,6 +84,15 @@ impl CloudBackupStore {
                 )
             })
         })
+    }
+
+    /// Cloud record IDs of every wallet on this device
+    pub(crate) fn local_wallet_record_ids(&self) -> Result<HashSet<String>, CloudBackupError> {
+        Ok(self
+            .all_wallets()?
+            .into_iter()
+            .map(|wallet| cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref()))
+            .collect())
     }
 
     pub(crate) fn wallet_count(&self) -> Result<u32, CloudBackupError> {

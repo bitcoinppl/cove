@@ -8,9 +8,9 @@ use super::{
     CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason, CloudBackupListedDetail,
     CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
     CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupStateReducerEvent,
-    CloudBackupWalletItem, CloudBackupWalletRestoreFailure, CloudBackupWalletStatus,
-    CloudOnlyFetch, CloudOnlyListingUpdate, DeepVerificationFailure, DeepVerificationReport,
-    DeepVerificationResult, OtherBackupsOperation, RustCloudBackupManager,
+    CloudBackupStore, CloudBackupWalletItem, CloudBackupWalletRestoreFailure,
+    CloudBackupWalletStatus, CloudOnlyFetch, CloudOnlyListingUpdate, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RustCloudBackupManager,
 };
 
 type Action = CloudBackupManagerAction;
@@ -557,7 +557,16 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn apply_local_wallets_changed(&self) {
-        self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyLocalWalletsChanged);
+        let local_record_ids = CloudBackupStore::global()
+            .local_wallet_record_ids()
+            .inspect_err(|error| {
+                error!("read local wallets after a wallet change: {error}");
+            })
+            .ok();
+
+        self.apply_model_event(CloudBackupStateReducerEvent::LocalWalletsChanged {
+            local_record_ids,
+        });
     }
 
     /// Applies a fetch outcome, reporting whether a `Loaded` result was dropped as stale

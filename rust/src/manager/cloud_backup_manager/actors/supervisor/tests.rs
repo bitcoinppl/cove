@@ -4125,6 +4125,66 @@ async fn deleting_the_matching_local_wallet_makes_its_cloud_duplicate_restorable
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn deleted_wallet_leaves_the_local_rows_while_the_detail_refresh_fails() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    let namespace = manager.current_namespace_id().unwrap();
+
+    let local_wallet = xpub_only_wallet_metadata();
+    let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
+    let local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    local_restore.restore_record(&local_record_id).await.unwrap();
+    list_test_wallet_files(&namespace, &[local_record_id.as_str()]);
+
+    // the detail lists the wallet as backed up from this device
+    let mut listed = listed_detail(&[]);
+    listed.detail.up_to_date.push(CloudBackupWalletItem {
+        sync_status: CloudBackupWalletStatus::Confirmed,
+        ..test_cloud_only_wallet(&local_record_id)
+    });
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(listed));
+
+    // from here every listing fails, so no detail refresh can correct the rows
+    test_globals().cloud.fail_list_wallet_files("provider unavailable");
+
+    Database::global()
+        .wallets
+        .remove_prepared_wallet_metadata(
+            local_wallet.network,
+            local_wallet.wallet_mode,
+            &local_wallet.id,
+        )
+        .unwrap();
+    manager.handle_local_wallets_changed();
+
+    let public_detail = || {
+        let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+            panic!("expected configured cloud backup lifecycle");
+        };
+
+        match configured.detail {
+            CloudBackupDetailState::Complete { state } => Some(state.detail),
+            CloudBackupDetailState::Checking { retained }
+            | CloudBackupDetailState::Failed { retained, .. } => {
+                retained.map(|state| state.detail)
+            }
+            CloudBackupDetailState::NotLoaded => None,
+        }
+    };
+
+    wait_for_test_condition(Duration::from_secs(5), "the deleted wallet leaves the local rows", || {
+        public_detail().is_some_and(|detail| detail.up_to_date.is_empty())
+    })
+    .await;
+
+    // its backup is still in the cloud, now as a record that is not on this device
+    let detail = public_detail().unwrap();
+    assert!(detail.needs_sync.is_empty());
+    assert_eq!(detail.cloud_only_count, 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn background_verification_that_resets_loaded_rows_starts_a_fetch() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();

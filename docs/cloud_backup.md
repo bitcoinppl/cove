@@ -71,6 +71,12 @@ once every five seconds and admits results by start order, so an older screen or
 operation refresh cannot overwrite a newer one. Closing the detail screen
 invalidates its refresh owner without cancelling manager-owned operations.
 
+A local wallet change doesn't wait for that refresh to correct the local rows.
+The reducer drops rows for wallets that are no longer on this device at once,
+and counts a deleted wallet's confirmed backup as cloud-only, so a deleted
+wallet shows only under Not on This Device once the cloud-only rows are read
+again, even when the refresh fails. Everything else waits for the refresh.
+
 iOS can publish a fast, incomplete local wallet snapshot before completing its
 mandatory FileManager-plus-`NSMetadataQuery` union. Android's first successful
 Google Drive list is complete because Drive returns provider inventory directly.

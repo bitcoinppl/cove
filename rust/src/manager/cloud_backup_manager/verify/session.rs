@@ -6,9 +6,7 @@
 
 use std::collections::HashSet;
 
-use cove_cspp::backup_data::{
-    EncryptedMasterKeyBackup, MasterKeyBackupVersion, WalletEntry, wallet_record_id,
-};
+use cove_cspp::backup_data::{EncryptedMasterKeyBackup, MasterKeyBackupVersion, WalletEntry};
 use cove_cspp::master_key::MasterKey;
 use cove_cspp::master_key_crypto;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient, CloudStorageError};
@@ -23,7 +21,6 @@ use super::wrapper_repair::{
     CloudBackupPasskeyWrapperRepairUpload, CloudBackupPreparedPasskeyWrapperRepair,
     WrapperRepairError, WrapperRepairOperation, WrapperRepairStrategy,
 };
-use crate::database::Database;
 use crate::manager::cloud_backup_manager::pending::remote_wallet_revision_matches;
 use crate::manager::cloud_backup_manager::{
     BlockingCloudStep, CLOUD_BACKUP_COMPATIBILITY_MESSAGE, CLOUD_BACKUP_IO_CONCURRENCY,
@@ -862,7 +859,7 @@ impl VerificationSession {
             Zeroizing::new(*critical_key),
         );
         let listed_record_ids: HashSet<String> = wallet_record_ids.iter().cloned().collect();
-        let local_record_ids = self.local_wallet_record_ids()?;
+        let local_record_ids = CloudBackupStore::global().local_wallet_record_ids()?;
         let mut record_ids = listed_record_ids.iter().cloned().collect::<Vec<_>>();
 
         for record_id in &local_record_ids {
@@ -902,16 +899,6 @@ impl VerificationSession {
         }
 
         Ok(read_pass)
-    }
-
-    fn local_wallet_record_ids(&self) -> Result<HashSet<String>, CloudBackupError> {
-        let db = Database::global();
-
-        Ok(CloudBackupStore::new(&db)
-            .all_wallets()?
-            .into_iter()
-            .map(|wallet| wallet_record_id(wallet.id.as_ref()))
-            .collect())
     }
 
     fn finish_verified(self) -> DeepVerificationResult {
