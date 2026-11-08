@@ -112,7 +112,7 @@ private struct StartupDiagnosticsActions: View {
     @State private var copiedDiagnostics = false
 
     var body: some View {
-        HStack(spacing: 12) {
+        SideBySideOrStacked(spacing: 12) {
             Button(copiedDiagnostics ? "Copied" : "Copy Diagnostics") {
                 UIPasteboard.general.string = StartupDiagnostics.report(errorMessage: errorMessage)
                 copiedDiagnostics = true

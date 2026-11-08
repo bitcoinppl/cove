@@ -53,6 +53,7 @@ env:
     CoveUITests/TapSignerLayoutFullLaunchUITests,
     CoveUITests/KeyTeleportReceiveFullLaunchUITests,
     CoveUITests/KeyTeleportSendFullLaunchUITests,
+    CoveUITests/LargeTextWordBreakFullLaunchUITests,
     CoveCloudBackupUITests/CloudBackupRestoreAllFullAppUITests,
     CoveCloudBackupUITests/CloudBackupOnboardingLateOfferFullAppUITests,
     CoveCloudBackupUITests/PrivateKeyExportFullAppUITests,

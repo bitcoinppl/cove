@@ -39,6 +39,7 @@ import org.bitcoinppl.cove.R
 import org.bitcoinppl.cove.ui.theme.CoveColor
 import org.bitcoinppl.cove.views.BalanceAutoSizeText
 import org.bitcoinppl.cove.views.ImageButton
+import org.bitcoinppl.cove.views.SideBySideOrStacked
 import org.bitcoinppl.cove_core.BalancePresentation
 import org.bitcoinppl.cove_core.RustWalletManager
 import org.bitcoinppl.cove_core.WalletScanStatus
@@ -249,7 +250,9 @@ private fun SendReceiveButtons(
     val sendUnavailable = isWatchOnly || initialScanIncomplete || balanceUnavailable
     val receiveUnavailable = balanceUnavailable
 
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    // at large font sizes a label beside the other would shrink or be cut off, so the buttons
+    // stack when either label doesn't fit its half
+    SideBySideOrStacked(spacing = 16.dp) {
         ImageButton(
             text = stringResource(R.string.btn_send),
             leadingIcon = rememberVectorPainter(Icons.Filled.NorthEast),
@@ -259,7 +262,6 @@ private fun SendReceiveButtons(
                     containerColor = if (sendUnavailable) Color.Gray else CoveColor.btnPrimary,
                     contentColor = if (sendUnavailable) CoveColor.midnightBlue.copy(alpha = 0.6f) else CoveColor.midnightBlue,
                 ),
-            modifier = Modifier.weight(1f),
         )
         ImageButton(
             text = stringResource(R.string.btn_receive),
@@ -271,7 +273,6 @@ private fun SendReceiveButtons(
                     contentColor = if (receiveUnavailable) CoveColor.midnightBlue.copy(alpha = 0.6f) else CoveColor.midnightBlue,
                 ),
             enabled = !receiveUnavailable,
-            modifier = Modifier.weight(1f),
         )
     }
 }

@@ -301,6 +301,34 @@ private struct NewWalletTypeActions: View {
     }
 }
 
+/// One of the wallet type cards, an icon beside its title
+private struct NewWalletTypeLabel<Icon: View>: View {
+    let title: LocalizedStringKey
+    let icon: Icon
+
+    init(_ title: LocalizedStringKey, @ViewBuilder icon: () -> Icon) {
+        self.title = title
+        self.icon = icon()
+    }
+
+    var body: some View {
+        HStack {
+            icon
+
+            Text(title)
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .uiTestTruncationProbe()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+        .padding(.horizontal, 10)
+        .background(Color.btnPrimary)
+        .foregroundColor(.midnightBlue)
+        .cornerRadius(10)
+    }
+}
+
 private struct NewWalletTypeButtons: View {
     @Binding var showSelectDialog: Bool
 
@@ -311,21 +339,11 @@ private struct NewWalletTypeButtons: View {
     let pasteWallet: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
+        SideBySideOrStacked(spacing: 14) {
             Button(action: showHardwareWalletOptions) {
-                HStack {
+                NewWalletTypeLabel("Hardware Wallet") {
                     BitcoinShieldIcon(width: 15, color: .midnightBlue)
-
-                    Text("Hardware Wallet")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .padding(.horizontal, 10)
-                .background(Color.btnPrimary)
-                .foregroundColor(.midnightBlue)
-                .cornerRadius(10)
             }
             .confirmationDialog(
                 "Import hardware wallet using",
@@ -341,21 +359,11 @@ private struct NewWalletTypeButtons: View {
             }
 
             NavigationLink(value: hotWalletRoute) {
-                HStack {
+                NewWalletTypeLabel("On This Device") {
                     Image(systemName: "iphone")
                         .font(.subheadline)
                         .symbolRenderingMode(.monochrome)
-
-                    Text("On This Device")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .padding(.horizontal, 10)
-                .background(Color.btnPrimary)
-                .foregroundColor(.midnightBlue)
-                .cornerRadius(10)
             }
             .buttonStyle(PlainButtonStyle())
         }

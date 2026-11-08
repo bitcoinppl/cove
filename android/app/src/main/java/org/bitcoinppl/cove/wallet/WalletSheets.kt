@@ -192,46 +192,23 @@ internal fun WalletSheetsHost(
 
     // export xpub confirmation dialog
     if (showExportXpubDialog) {
-        AlertDialog(
-            onDismissRequest = { showExportXpubDialog = false },
-            title = { Text("Export Xpub") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = {
-                            showExportXpubDialog = false
-                            showXpubQrExport = true
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Default.QrCode, contentDescription = null)
-                        Text("QR Code", modifier = Modifier.padding(start = 8.dp))
-                    }
-
-                    TextButton(
-                        onClick = {
-                            showExportXpubDialog = false
-                            scope.launch {
-                                try {
-                                    shareXpubFile(context, manager)
-                                } catch (e: Exception) {
-                                    android.util.Log.e(tag, "Failed to share xpub", e)
-                                    snackbarHostState.showSnackbar("Unable to share xpub: ${e.localizedMessage ?: e.message}")
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Default.Share, contentDescription = null)
-                        Text("Share...", modifier = Modifier.padding(start = 8.dp))
+        ExportXpubDialog(
+            onShowQrCode = {
+                showExportXpubDialog = false
+                showXpubQrExport = true
+            },
+            onShare = {
+                showExportXpubDialog = false
+                scope.launch {
+                    try {
+                        shareXpubFile(context, manager)
+                    } catch (e: Exception) {
+                        android.util.Log.e(tag, "Failed to share xpub", e)
+                        snackbarHostState.showSnackbar("Unable to share xpub: ${e.localizedMessage ?: e.message}")
                     }
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showExportXpubDialog = false }) {
-                    Text("Cancel")
-                }
-            },
+            onDismiss = { showExportXpubDialog = false },
         )
     }
 
@@ -241,14 +218,7 @@ internal fun WalletSheetsHost(
             onDismissRequest = { showXpubQrExport = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         ) {
-            QrExportView(
-                title = "Export Xpub",
-                subtitle = "Public descriptor for\nwatch-only wallet",
-                generateBbqrStrings = { density -> manager.exportXpubForQr(density) },
-                generateUrStrings = null,
-                onCopy = { manager.exportXpubForShare().content },
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
-            )
+            ExportXpubQrView(manager)
         }
     }
 
@@ -381,6 +351,56 @@ private suspend fun shareTransactionsFile(
         }
 
     context.startActivity(Intent.createChooser(intent, "Share Transactions"))
+}
+
+/** Asks whether to show the wallet's xpub as a QR code or share it as a file */
+@Composable
+internal fun ExportXpubDialog(
+    onShowQrCode: () -> Unit,
+    onShare: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Export Xpub") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    onClick = onShowQrCode,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.QrCode, contentDescription = null)
+                    Text("QR Code", modifier = Modifier.padding(start = 8.dp))
+                }
+
+                TextButton(
+                    onClick = onShare,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null)
+                    Text("Share...", modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        },
+    )
+}
+
+/** The wallet's xpub as a QR code, the content of the xpub export sheet */
+@Composable
+internal fun ExportXpubQrView(manager: WalletManager) {
+    QrExportView(
+        title = "Export Xpub",
+        subtitle = "Public descriptor for\nwatch-only wallet",
+        generateBbqrStrings = { density -> manager.exportXpubForQr(density) },
+        generateUrStrings = null,
+        onCopy = { manager.exportXpubForShare().content },
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
+    )
 }
 
 private suspend fun shareXpubFile(

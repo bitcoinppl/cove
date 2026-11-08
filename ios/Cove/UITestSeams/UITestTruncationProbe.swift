@@ -14,7 +14,8 @@ import UIKit
     /// XCUITest reports a text's whole label even when it draws truncated or
     /// clipped, so a test can't see an ellipsis. When
     /// `COVE_UI_TEST_TRUNCATION_PROBE` is `1` in the launch environment, each
-    /// probed text sets its accessibility value to `fits`, `truncated`, or
+    /// probed text sets its accessibility value to `fits`, `truncated`,
+    /// `hyphenated` when a line break added a hyphen the text doesn't hold, or
     /// `offscreen` when it lies partly past the window's leading or trailing edge
     enum UITestTruncationProbe {
         static let environmentKey = "COVE_UI_TEST_TRUNCATION_PROBE"
@@ -24,6 +25,7 @@ import UIKit
 
         static let fits = "fits"
         static let truncated = "truncated"
+        static let hyphenated = "hyphenated"
         static let offscreen = "offscreen"
 
         /// text heights are fractional and can differ in the last bits between two layouts
@@ -41,6 +43,12 @@ import UIKit
     /// Draws the text and a hidden copy with no line limit at the same width,
     /// and reports `truncated` when the copy is taller than the drawn text
     ///
+    /// It reports `hyphenated` when the drawn text holds more glyphs than a hidden
+    /// copy laid out on one line. At accessibility sizes iOS hyphenates a word that
+    /// doesn't fit on a line, and the hyphen it adds is the only glyph a line break
+    /// adds, so "Hardware" drawn as "Hard-" and "ware" holds one glyph more. XCUITest
+    /// reads the text's string, which never holds that hyphen
+    ///
     /// It also reports `offscreen` when the text's frame in the window runs past
     /// either side of it. XCUITest can't see that, since UIKit clips an element's
     /// accessibility frame to its list cell, so a label pushed off the screen
@@ -49,14 +57,23 @@ import UIKit
         let text: Text
 
         @State private var drawnFrame: CGRect?
+        @State private var drawnHeight: CGFloat?
         @State private var fullHeight: CGFloat?
+        @State private var drawnGlyphs: Int?
+        @State private var oneLineGlyphs: Int?
 
         private var value: String {
-            guard let drawnFrame, let fullHeight else { return UITestTruncationProbe.truncated }
+            guard let drawnFrame, let drawnHeight, let fullHeight, let drawnGlyphs, let oneLineGlyphs else {
+                return UITestTruncationProbe.truncated
+            }
 
             let tolerance = UITestTruncationProbe.tolerance
-            if fullHeight - drawnFrame.height > tolerance {
+            if fullHeight - drawnHeight > tolerance {
                 return UITestTruncationProbe.truncated
+            }
+
+            if drawnGlyphs > oneLineGlyphs {
+                return UITestTruncationProbe.hyphenated
             }
 
             let windowWidth = UITestTruncationProbe.windowWidth ?? .infinity
@@ -69,7 +86,11 @@ import UIKit
 
         var body: some View {
             text
+                .onPreferenceChange(Text.LayoutKey.self) { drawnGlyphs = $0.glyphCount }
                 .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { drawnFrame = $0 }
+                // the copy's height is in its own space, while a frame in the window shrinks with
+                // any scaled container, so the heights compare in the text's own space
+                .onGeometryChange(for: CGFloat.self, of: \.size.height) { drawnHeight = $0 }
                 .background(alignment: .top) {
                     // the innermost line limit wins, so a limit applied outside the probe can't
                     // cut the copy short too
@@ -80,6 +101,14 @@ import UIKit
                         .accessibilityHidden(true)
                         .onGeometryChange(for: CGFloat.self, of: \.size.height) { fullHeight = $0 }
                 }
+                .background {
+                    text
+                        .lineLimit(nil)
+                        .fixedSize()
+                        .hidden()
+                        .accessibilityHidden(true)
+                        .onPreferenceChange(Text.LayoutKey.self) { oneLineGlyphs = $0.glyphCount }
+                }
                 .accessibilityValue(value)
                 .preference(
                     key: UITestTruncationReportKey.self,
@@ -88,8 +117,8 @@ import UIKit
         }
     }
 
-    /// How many probed texts a view holds and how many of them draw truncated or offscreen, or
-    /// are not yet measured
+    /// How many probed texts a view holds and how many of them draw truncated, hyphenated or
+    /// offscreen, or are not yet measured
     struct UITestTruncationReport: Equatable {
         var probed = 0
         var truncated = 0
@@ -98,6 +127,17 @@ import UIKit
         /// view whose probes were dropped reads as truncated
         var value: String {
             probed > 0 && truncated == 0 ? UITestTruncationProbe.fits : UITestTruncationProbe.truncated
+        }
+    }
+
+    private extension [Text.LayoutKey.AnchoredLayout] {
+        /// Every glyph the texts lay out, across all their lines
+        var glyphCount: Int {
+            reduce(0) { total, anchored in
+                anchored.layout.reduce(total) { total, line in
+                    line.reduce(total) { $0 + $1.count }
+                }
+            }
         }
     }
 
@@ -179,7 +219,13 @@ extension View {
 
 /// A `Label` whose title carries the truncation probe, so a UI test can tell whether it draws
 /// whole, from its own value or from that of the button it labels
+///
+/// At accessibility sizes it shows only its title. Beside the icon, a list row left a word such as
+/// "Restore" too little width, so it broke across lines, and above the title the icon made an
+/// error too tall to see whole; the title says what the icon shows
 struct ProbedLabel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private let title: Text
     private let systemImage: String
 
@@ -195,10 +241,16 @@ struct ProbedLabel: View {
     }
 
     var body: some View {
-        Label {
+        let label = Label {
             title.uiTestTruncationProbe()
         } icon: {
             Image(systemName: systemImage)
+        }
+
+        if dynamicTypeSize.isAccessibilitySize {
+            label.labelStyle(.titleOnly)
+        } else {
+            label
         }
     }
 }
