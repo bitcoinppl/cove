@@ -1438,8 +1438,8 @@ fn simctl_shutdown_already_shutdown(stdout: &str, stderr: &str) -> bool {
         || stderr.contains("Unable to shutdown device in current state: Shutdown")
 }
 
-/// Runs one run's tests in one `xcodebuild` call on a fresh simulator, and all of them again on
-/// another after a simulator failure
+/// Runs one run's tests in one `xcodebuild` call on a fresh simulator, and the ones that didn't
+/// pass again on another after a simulator failure
 fn run_ios_ui_run(
     sh: &Shell,
     build: &IosUiBuild,
@@ -1449,7 +1449,7 @@ fn run_ios_ui_run(
     results_dir: Option<&Path>,
     verbose: bool,
 ) -> Result<()> {
-    let label = run.label();
+    let mut label = run.label();
     print_info(&format!("Running iOS UI {label}"));
 
     let only_testing = &run.only_testing_args();
@@ -1489,17 +1489,21 @@ fn run_ios_ui_run(
         return Ok(());
     }
 
+    // artifacts stay filed under the first attempt's name, a class's, when a retry runs fewer
+    let name = run.name();
+    let mut run = run.clone();
     let mut retry_reason = None;
     for attempt in 0..=IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS {
         if let Some(reason) = retry_reason {
             print_info(&format!("Retrying iOS UI {label} after {reason}"));
         }
 
+        let only_testing = &run.only_testing_args();
         let started = Instant::now();
         let udid = simulators.fresh()?;
         let destination = format!("platform=iOS Simulator,id={udid}");
 
-        let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, run.name(), attempt));
+        let artifacts = results_dir.map(|dir| IosUiAttemptArtifacts::new(dir, name, attempt));
         let test_cmd = cmd!(
             sh,
             "xcodebuild test-without-building -xctestrun {xctestrun} -destination {destination} -parallel-testing-enabled NO -enableCodeCoverage NO {only_testing...}"
@@ -1527,11 +1531,14 @@ fn run_ios_ui_run(
             artifacts.collect_app_logs(sh, &udid, run.suite, started);
         }
 
-        // a class run retries as a whole, since its tests share the simulator that failed
         let failure = XcodebuildFailure::from_output(output)?;
         retry_reason = failure.environment_failure();
 
         if retry_reason.is_some() && attempt < IOS_UI_ENVIRONMENT_RETRY_ATTEMPTS {
+            // a class run retries only the tests that didn't pass, including any the failure
+            // stopped before they started
+            run = failure.unpassed(run);
+            label = run.label();
             continue;
         }
 
@@ -1749,6 +1756,48 @@ impl XcodebuildFailure {
 
         environment_by_test.values().all(|environment| *environment).then_some(failure)
     }
+}
+
+impl XcodebuildFailure {
+    /// The run's tests that xcodebuild didn't report as passed, or the whole run when it reported
+    /// all of them passed, since then it failed outside any test
+    fn unpassed(&self, run: IosUiRun) -> IosUiRun {
+        let passed = test_cases_passed(&self.stdout).collect::<HashSet<_>>();
+        let unpassed = run
+            .tests
+            .iter()
+            .filter(|test| !passed.contains(&class_and_method(test)))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        match unpassed.is_empty() {
+            true => run,
+            false => IosUiRun { tests: unpassed, ..run },
+        }
+    }
+}
+
+/// The class and method of each test xcodebuild reports as passed, from lines like
+/// `Test Case '-[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests testA]' passed (9.1 seconds).`
+fn test_cases_passed(output: &str) -> impl Iterator<Item = (&str, &str)> {
+    output.lines().filter_map(|line| {
+        let (_, rest) = line.split_once("Test Case '-[")?;
+        let (test, result) = rest.split_once("]' ")?;
+        result.starts_with("passed").then_some(())?;
+
+        // the module before the class can differ from the target's name, so it isn't compared
+        let (module_and_class, method) = test.split_once(' ')?;
+        let class = module_and_class.rsplit('.').next()?;
+        Some((class, method))
+    })
+}
+
+/// The class and method of a `<Target>/<Class>/<method>` test
+fn class_and_method(test: &str) -> (&str, &str) {
+    let mut parts = test.rsplit('/');
+    let method = parts.next().unwrap_or_default();
+    let class = parts.next().unwrap_or_default();
+    (class, method)
 }
 
 /// Each XCTest error line in xcodebuild output as its test, like
@@ -2693,7 +2742,7 @@ mod tests {
     }
 
     mod ui_environment_failure {
-        use crate::ios::{IosUiEnvironmentFailure, XcodebuildFailure};
+        use crate::ios::{IosUiEnvironmentFailure, IosUiRun, IosUiSuite, XcodebuildFailure};
 
         #[test]
         fn retries_simulator_failures_seen_in_runs() {
@@ -2739,6 +2788,42 @@ mod tests {
                 failure(format!("{launch_timeout}\n{assertion}")).environment_failure(),
                 None
             );
+        }
+
+        #[test]
+        fn a_class_run_retries_only_the_tests_that_did_not_pass() {
+            let class = "CoveCloudBackupUITests/CloudBackupLargeTextFullAppUITests";
+            let run = IosUiRun {
+                suite: IosUiSuite::CloudBackup,
+                tests: ["testA", "testB", "testC"].map(|method| format!("{class}/{method}")).into(),
+            };
+
+            // testA passed, testB lost its app, and testC never started
+            let stdout = [
+                "Test Case '-[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests testA]' started.",
+                "Test Case '-[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests testA]' passed (90.2 seconds).",
+                "Test Case '-[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests testB]' started.",
+                "CloudBackupLargeTextFullAppUITests.swift:40: error: -[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests testB] : Application 'org.bitcoinppl.cove' does not have a process ID",
+                "Test Case '-[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests testB]' failed (31.0 seconds).",
+            ]
+            .join("\n");
+
+            let failure = XcodebuildFailure {
+                status: std::process::ExitStatus::default(),
+                stdout,
+                stderr: String::new(),
+            };
+
+            let retry = failure.unpassed(run.clone());
+            assert_eq!(retry.tests, [format!("{class}/testB"), format!("{class}/testC")]);
+            assert_eq!(retry.label(), format!("tests in {class} (2 tests)"));
+
+            // a failure outside every test, with each one passed, reruns them all
+            let all_passed = ["testA", "testB", "testC"]
+                .map(|method| format!("Test Case '-[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests {method}]' passed (1.0 seconds)."))
+                .join("\n");
+            let failure = XcodebuildFailure { stdout: all_passed, ..failure };
+            assert_eq!(failure.unpassed(run.clone()), run);
         }
 
         #[test]
