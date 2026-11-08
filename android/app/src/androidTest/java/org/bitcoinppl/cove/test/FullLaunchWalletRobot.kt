@@ -208,13 +208,18 @@ class FullLaunchWalletRobot(
 
     // selects everything and deletes it as one edit, as a keyboard would. Deleting key by key lets
     // the amount field reformat after each key, which can leave the cursor and its text out of step
-    // with the keys that follow, and a line-end jump leaves earlier lines of a wrapped field behind
+    // with the keys that follow, and a line-end jump leaves earlier lines of a wrapped field behind.
+    // The tap that focuses the field can land after the select-all and collapse it to a cursor, so
+    // this checks the field emptied and selects again, without another tap, if it didn't
     private fun clearByKeys(field: BySelector) {
         device.waitFor(field).click()
         device.waitForIdle()
-        device.executeShellCommand("input keycombination KEYCODE_CTRL_LEFT KEYCODE_A")
-        device.executeShellCommand("input keyevent KEYCODE_DEL")
-        device.waitForIdle()
+
+        repeat(CLEAR_ATTEMPTS) {
+            device.executeShellCommand("input keycombination KEYCODE_CTRL_LEFT KEYCODE_A")
+            device.executeShellCommand("input keyevent KEYCODE_DEL")
+            if (becomesTrue(CLEAR_TIMEOUT_MS) { device.findText(field).isNullOrEmpty() }) return
+        }
     }
 
     /** Taps Next and waits for the screen it leads to */
@@ -293,6 +298,8 @@ class FullLaunchWalletRobot(
     private companion object {
         const val FIRST_ATTEMPT_TIMEOUT_MS = 10_000L
         const val UNCOVERED_ADDRESS_TIMEOUT_MS = 5_000L
+        const val CLEAR_ATTEMPTS = 3
+        const val CLEAR_TIMEOUT_MS = 2_000L
     }
 }
 
