@@ -1742,19 +1742,29 @@ impl XcodebuildFailure {
     }
 
     /// The simulator failure to retry the run for, unless a test also failed for a reason of
-    /// its own, since a class run retries every test and could pass that one on the second try
+    /// its own, since a retry could pass that test on the second try
+    ///
+    /// A failed test is the simulator's when its first error is, as the errors after a lost app
+    /// follow from it. One whose first error is the test's own, or that failed or crashed without
+    /// an error line, is its own
     fn environment_failure(&self) -> Option<IosUiEnvironmentFailure> {
         let failure = IosUiEnvironmentFailure::detect(&self.stdout)
             .or_else(|| IosUiEnvironmentFailure::detect(&self.stderr))?;
 
-        let mut environment_by_test = BTreeMap::<&str, bool>::new();
+        let mut failed_by_environment = BTreeMap::<(&str, &str), bool>::new();
         let outputs = [self.stdout.as_str(), self.stderr.as_str()];
         for (test, message) in outputs.into_iter().flat_map(test_errors) {
-            *environment_by_test.entry(test).or_default() |=
-                IosUiEnvironmentFailure::detect(message).is_some();
+            failed_by_environment
+                .entry(test)
+                .or_insert_with(|| IosUiEnvironmentFailure::detect(message).is_some());
         }
 
-        environment_by_test.values().all(|environment| *environment).then_some(failure)
+        let failed = test_cases(&self.stdout, "failed").chain(tests_restarted(&self.stdout));
+        for test in failed {
+            failed_by_environment.entry(test).or_insert(false);
+        }
+
+        failed_by_environment.values().all(|environment| *environment).then_some(failure)
     }
 }
 
@@ -1762,7 +1772,7 @@ impl XcodebuildFailure {
     /// The run's tests that xcodebuild didn't report as passed, or the whole run when it reported
     /// all of them passed, since then it failed outside any test
     fn unpassed(&self, run: IosUiRun) -> IosUiRun {
-        let passed = test_cases_passed(&self.stdout).collect::<HashSet<_>>();
+        let passed = test_cases(&self.stdout, "passed").collect::<HashSet<_>>();
         let unpassed = run
             .tests
             .iter()
@@ -1777,19 +1787,37 @@ impl XcodebuildFailure {
     }
 }
 
-/// The class and method of each test xcodebuild reports as passed, from lines like
+/// The class and method of each test xcodebuild reports with `result`, `passed` or `failed`, from
+/// lines like
 /// `Test Case '-[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests testA]' passed (9.1 seconds).`
-fn test_cases_passed(output: &str) -> impl Iterator<Item = (&str, &str)> {
-    output.lines().filter_map(|line| {
+fn test_cases<'a>(output: &'a str, result: &'a str) -> impl Iterator<Item = (&'a str, &'a str)> {
+    output.lines().filter_map(move |line| {
         let (_, rest) = line.split_once("Test Case '-[")?;
-        let (test, result) = rest.split_once("]' ")?;
-        result.starts_with("passed").then_some(())?;
+        let (test, reported) = rest.split_once("]' ")?;
+        reported.starts_with(result).then_some(())?;
+        objc_test(test)
+    })
+}
 
-        // the module before the class can differ from the target's name, so it isn't compared
-        let (module_and_class, method) = test.split_once(' ')?;
+/// The class and method of each test the runner crashed or timed out in, from lines like
+/// `Restarting after unexpected exit, crash, or test timeout in CloudBackupLargeTextFullAppUITests.testA(); summary will include totals from previous launches.`
+fn tests_restarted(output: &str) -> impl Iterator<Item = (&str, &str)> {
+    output.lines().filter_map(|line| {
+        let (_, rest) = line.split_once("test timeout in ")?;
+        let (test, _) = rest.split_once("()")?;
+        let (module_and_class, method) = test.rsplit_once('.')?;
         let class = module_and_class.rsplit('.').next()?;
         Some((class, method))
     })
+}
+
+/// The class and method of an XCTest name like `CoveUITests.OnboardingFullLaunchUITests testA`
+///
+/// The module before the class can differ from the target's name, so it is dropped
+fn objc_test(test: &str) -> Option<(&str, &str)> {
+    let (module_and_class, method) = test.split_once(' ')?;
+    let class = module_and_class.rsplit('.').next()?;
+    Some((class, method))
 }
 
 /// The class and method of a `<Target>/<Class>/<method>` test
@@ -1800,13 +1828,13 @@ fn class_and_method(test: &str) -> (&str, &str) {
     (class, method)
 }
 
-/// Each XCTest error line in xcodebuild output as its test, like
+/// Each XCTest error line in xcodebuild output, in order, as its test's class and method, from
 /// `-[CoveUITests.OnboardingFullLaunchUITests testWelcome]`, and its message
-fn test_errors(output: &str) -> impl Iterator<Item = (&str, &str)> {
+fn test_errors(output: &str) -> impl Iterator<Item = ((&str, &str), &str)> {
     output.lines().filter_map(|line| {
         let (_, rest) = line.split_once("error: -[")?;
         let (test, message) = rest.split_once("] : ")?;
-        Some((test, message))
+        Some((objc_test(test)?, message))
     })
 }
 
@@ -2788,6 +2816,46 @@ mod tests {
                 failure(format!("{launch_timeout}\n{assertion}")).environment_failure(),
                 None
             );
+        }
+
+        #[test]
+        fn a_test_that_failed_on_its_own_first_blocks_a_retry() {
+            let test = "-[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests testA]";
+            let lost_app = "Application 'org.bitcoinppl.cove' does not have a process ID";
+            let failure = |lines: &[String]| XcodebuildFailure {
+                status: std::process::ExitStatus::default(),
+                stdout: lines.join("\n"),
+                stderr: String::new(),
+            };
+
+            // errors after a lost app follow from it
+            let follow_on = [
+                format!("A.swift:40: error: {test} : {lost_app}"),
+                format!(
+                    "A.swift:41: error: {test} : failed - Timed out waiting for button 'Restore'"
+                ),
+            ];
+            assert_eq!(
+                failure(&follow_on).environment_failure(),
+                Some(IosUiEnvironmentFailure::AppLaunch)
+            );
+
+            // an assertion that came first is the test's own, whatever its teardown hit after
+            let assertion_first = [follow_on[1].clone(), follow_on[0].clone()];
+            assert_eq!(failure(&assertion_first).environment_failure(), None);
+
+            // a crash in testB leaves no error line, and testC's lost app doesn't make it retryable
+            let crash_then_lost_app = [
+                "Restarting after unexpected exit, crash, or test timeout in CloudBackupLargeTextFullAppUITests.testB(); summary will include totals from previous launches.".to_owned(),
+                format!("A.swift:40: error: {} : {lost_app}", test.replace("testA", "testC")),
+            ];
+            assert_eq!(failure(&crash_then_lost_app).environment_failure(), None);
+
+            let failed_without_error = [
+                "Test Case '-[CoveCloudBackupUITests.CloudBackupLargeTextFullAppUITests testB]' failed (3.0 seconds).".to_owned(),
+                format!("A.swift:40: error: {test} : {lost_app}"),
+            ];
+            assert_eq!(failure(&failed_without_error).environment_failure(), None);
         }
 
         #[test]

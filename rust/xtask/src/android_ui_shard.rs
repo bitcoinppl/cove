@@ -166,12 +166,20 @@ fn class_declaration(file: &Path, contents: &str) -> Result<ClassDeclaration> {
     let is_word = |c: char| c.is_alphanumeric() || c == '_';
 
     for line in contents.lines() {
-        let words = line.split(|c: char| !is_word(c)).filter(|word| !word.is_empty());
-        let words = words.collect::<Vec<_>>();
-        let declares = words.windows(2).any(|pair| pair == ["class", stem.as_ref()]);
+        // a declaration's words, without a trailing comment or any string's text
+        let code = line.split("//").next().unwrap_or_default();
+        let code = code.split('"').step_by(2).collect::<Vec<_>>().join(" ");
+        if code.trim_start().starts_with('*') || code.trim_start().starts_with("/*") {
+            continue;
+        }
 
-        if declares {
-            return Ok(match words.contains(&"abstract") {
+        let words = code.split(|c: char| !is_word(c)).filter(|word| !word.is_empty());
+        let words = words.collect::<Vec<_>>();
+        let declared_at = words.windows(2).position(|pair| pair == ["class", stem.as_ref()]);
+
+        // the modifiers come before `class`, on the same line in this repo's sources
+        if let Some(at) = declared_at {
+            return Ok(match words[..at].contains(&"abstract") {
                 true => ClassDeclaration::Abstract,
                 false => ClassDeclaration::Concrete,
             });
@@ -393,8 +401,15 @@ mod tests {
             Ok(ClassDeclaration::Abstract)
         ));
 
-        // a file whose test class has another name, so the planner's name would select nothing
+        // a file whose test class has another name, so the planner's name would select nothing,
+        // even when a comment or string mentions the file's
         assert!(declaration("class WalletFlowTests {\n    @Test\n    fun opens() {}").is_err());
+        assert!(declaration("// class WalletFlowTest\nclass WalletFlowTests {").is_err());
+        assert!(declaration("val name = \"class WalletFlowTest\"\nclass Other {").is_err());
+        assert!(matches!(
+            declaration("class WalletFlowTest { // not abstract"),
+            Ok(ClassDeclaration::Concrete)
+        ));
     }
 
     fn only(plan: AndroidUiShardPlan) -> Vec<String> {
