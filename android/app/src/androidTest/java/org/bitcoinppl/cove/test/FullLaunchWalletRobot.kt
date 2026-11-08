@@ -1,6 +1,7 @@
 package org.bitcoinppl.cove.test
 
 import android.graphics.Rect
+import android.os.Build
 import android.view.WindowInsets
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
@@ -102,7 +103,22 @@ class FullLaunchWalletRobot(
         enterAddress(address)
     }
 
+    /**
+     * Sets the address and waits until the screen shows it, setting it once more if it doesn't
+     *
+     * The app can take the address and move focus to the amount while the accessibility tree still
+     * shows the field empty, so each check reads the screen afresh. A second set replaces the
+     * field's whole text, so it can't type the address twice
+     */
     fun enterAddress(address: String = EXTERNAL_ADDRESS) {
+        setAddress(address)
+        if (becomesTrue(FIRST_ATTEMPT_TIMEOUT_MS) { showsAddress(address) }) return
+
+        setAddress(address)
+        waitUntil("expected the address field to hold $address after setting it twice") { showsAddress(address) }
+    }
+
+    private fun setAddress(address: String) {
         // the send screen opens with the amount focused, and the keyboard sliding in can move the
         // address field out from under a tap; tapping again is harmless once it has focus
         for (attempt in 1..3) {
@@ -113,16 +129,18 @@ class FullLaunchWalletRobot(
 
         device.waitFor(By.res("sendFlow.address").focused(true))
         device.findObject(By.res("sendFlow.address")).text = address
+    }
 
-        // once the address is accepted the field can lose focus and show it in groups of four
-        waitUntil("expected the address field to hold $address") {
-            try {
-                device.findObjects(By.textStartsWith(address.take(4))).any { node ->
-                    node.text?.filterNot { it.isWhitespace() } == address
-                }
-            } catch (_: StaleObjectException) {
-                false
+    // once the address is accepted the field can lose focus and show it in groups of four
+    private fun showsAddress(address: String): Boolean {
+        device.clearAccessibilityCache()
+
+        return try {
+            device.findObjects(By.textStartsWith(address.take(4))).any { node ->
+                node.text?.filterNot { it.isWhitespace() } == address
             }
+        } catch (_: StaleObjectException) {
+            false
         }
     }
 
@@ -154,17 +172,52 @@ class FullLaunchWalletRobot(
     /**
      * Types into a field key by key, as the keyboard would. Cove's fields check each edit against
      * the last, and setting the whole text at once leaves them empty
+     *
+     * The emulator's keyboard can drop a key when its link to the field stalls, which leaves the
+     * field one character short, so a field that doesn't hold [text] is cleared and typed once more.
+     * [typed] still decides the result, so a field that ends up with the wrong text fails
      */
     fun typeInto(
         field: BySelector,
         text: String,
         typed: () -> Boolean = { device.findText(field) == text },
     ) {
+        // reads the screen afresh, like enterAddress
+        val holdsText = {
+            device.clearAccessibilityCache()
+            typed()
+        }
+
+        typeKeys(field, text)
+        if (becomesTrue(FIRST_ATTEMPT_TIMEOUT_MS, holdsText)) return
+
+        clearByKeys(field, text.length)
+        typeKeys(field, text)
+        waitUntil("expected the field to hold $text after typing it twice", condition = holdsText)
+    }
+
+    private fun typeKeys(
+        field: BySelector,
+        text: String,
+    ) {
         device.waitFor(field).click()
         device.waitForIdle()
         device.executeShellCommand("input text $text")
+    }
 
-        waitUntil("expected the field to hold $text", condition = typed)
+    // deletes key by key for the same reason typing does; a masked field reads as its mask, so
+    // this deletes at least as many keys as were typed
+    private fun clearByKeys(
+        field: BySelector,
+        typedLength: Int,
+    ) {
+        val shown = device.findText(field)?.length ?: 0
+        val deletes = List(maxOf(shown, typedLength) + 1) { "KEYCODE_DEL" }.joinToString(" ")
+
+        device.waitFor(field).click()
+        device.waitForIdle()
+        device.executeShellCommand("input keyevent KEYCODE_MOVE_END $deletes")
+        device.waitForIdle()
     }
 
     /** Taps Next and waits for the screen it leads to */
@@ -222,6 +275,38 @@ class FullLaunchWalletRobot(
         }
 
         assertTrue("$message\n${device.hierarchy()}", condition())
+    }
+
+    // a first attempt that hasn't landed by now won't; the second attempt gets waitUntil's full wait
+    private fun becomesTrue(
+        timeoutMs: Long,
+        condition: () -> Boolean,
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return true
+
+            Thread.sleep(100)
+        }
+
+        return condition()
+    }
+
+    private companion object {
+        const val FIRST_ATTEMPT_TIMEOUT_MS = 10_000L
+    }
+}
+
+/**
+ * Drops UiAutomator's cached accessibility nodes, so the next read sees the screen as it is now
+ *
+ * UiAutomator answers from that cache, and a content change the cache misses stays hidden from it
+ * for good. Only API 34 and later can clear it
+ */
+fun UiDevice.clearAccessibilityCache() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        InstrumentationRegistry.getInstrumentation().uiAutomation.clearCache()
     }
 }
 
