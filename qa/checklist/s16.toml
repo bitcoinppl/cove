@@ -279,11 +279,15 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewViews.kt",
 ]
 coverage = [
-    "human",
+    "ios-ui:ios/CoveUITests/KeyTeleportReceiveFullLaunchUITests.swift::testMnemonicReceiveScreensFitAtLargestTextSizeInDarkMode",
+    "ios-ui:ios/CoveUITests/KeyTeleportReceiveFullLaunchUITests.swift::testXprvAndMessageReviewsFitAtLargestTextSizeInDarkMode",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewLayoutTest.kt::mnemonicReviewFitsAtTheLargestFontScale",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewLayoutTest.kt::xprvReviewFitsAtTheLargestFontScale",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReviewLayoutTest.kt::messageReviewFitsAtTheLargestFontScale",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# on android, reaching the review screens needs a camera qr hand-off between two phones
-# on ios, testMnemonicReceiveScreensFitAtLargestTextSizeInDarkMode and testXprvAndMessageReviewsFitAtLargestTextSizeInDarkMode in KeyTeleportReceiveFullLaunchUITests check these screens at the largest text size in dark mode, but they haven't passed on GitHub yet (Vision misses a lone recovery word and the Copy label where drawn), so a person still checks the layout
+# both platforms have the ui test host send a mnemonic, an xprv and secure notes in place of the camera hand-off between two phones
+# ios checks each text with the truncation probe at the largest text size in dark mode, and android checks each compose text layout at the largest font scale in the dark theme
 
 [[row]]
 id = "s16-restore-normal-font-and-compare-receive-controls"

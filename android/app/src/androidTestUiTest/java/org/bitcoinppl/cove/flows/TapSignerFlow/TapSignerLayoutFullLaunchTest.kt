@@ -11,7 +11,6 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.toSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -34,6 +33,7 @@ import org.bitcoinppl.cove.test.TAPSIGNER_CVC
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.test.scrollTo
+import org.bitcoinppl.cove.test.textLayoutProblem
 import org.bitcoinppl.cove.test.waitFor
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -76,9 +76,6 @@ class TapSignerLayoutFullLaunchTest {
 
         // Compose positions are floats that the accessibility bounds round
         const val CLIP_TOLERANCE_PX = 1
-
-        // a text's box is its widest line rounded up to a whole pixel
-        const val LINE_WIDTH_TOLERANCE_PX = 1f
 
         // enough of a text to tell which one a failure names
         const val TEXT_IN_MESSAGE = 40
@@ -384,7 +381,7 @@ class TapSignerLayoutFullLaunchTest {
                 when {
                     control == null -> "matches no Compose semantics node"
                     texts.isEmpty() -> "has no Compose text reading \"$text\" in its control"
-                    else -> texts.firstNotNullOfOrNull { it.layoutProblem() }
+                    else -> texts.firstNotNullOfOrNull { it.textLayoutProblem() }
                 }
         }
 
@@ -412,7 +409,7 @@ class TapSignerLayoutFullLaunchTest {
                     .filter { SemanticsProperties.Text in it.config && SemanticsProperties.EditableText !in it.config }
                     .mapNotNull { node ->
                         val text = node.config[SemanticsProperties.Text].joinToString(" ") { it.text }
-                        node.layoutProblem()?.let { "\"${text.take(TEXT_IN_MESSAGE)}\": $it" }
+                        node.textLayoutProblem()?.let { "\"${text.take(TEXT_IN_MESSAGE)}\": $it" }
                     }
         }
 
@@ -438,35 +435,6 @@ class TapSignerLayoutFullLaunchTest {
         }
 
         problem?.let { error("$name $it") }
-    }
-
-    /**
-     * Why the text's layout doesn't show whole, or null when it does
-     *
-     * A text node reports its layout through this action, as the accessibility service reads it.
-     * Compose lays that copy out again at the text's maximum width constraint rather than the width
-     * it took, so its paragraph width is the parent's and `didOverflowWidth` holds for any text
-     * narrower than its parent. Line breaks and heights match the drawn text, since a text only
-     * takes less than its maximum width when it fits on its lines without wrapping, so the width
-     * check measures each line instead
-     */
-    private fun SemanticsNode.layoutProblem(): String? {
-        val action = config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action ?: return "its text reports no layout"
-        val layouts = mutableListOf<TextLayoutResult>()
-        if (!action(layouts)) return "its text has no layout yet"
-
-        val layout = layouts.singleOrNull() ?: return "its text reports ${layouts.size} layouts"
-        val lines = 0 until layout.lineCount
-        val ellipsized = lines.filter(layout::isLineEllipsized)
-        val widest = lines.maxOfOrNull { layout.getLineRight(it) - layout.getLineLeft(it) } ?: 0f
-
-        return when {
-            ellipsized.isNotEmpty() -> "line ${ellipsized.first() + 1} of ${layout.lineCount} is ellipsized"
-            layout.multiParagraph.didExceedMaxLines -> "it needs more than its ${layout.lineCount} line limit"
-            layout.didOverflowHeight -> "it needs ${layout.multiParagraph.height}px but gets ${layout.size.height}px"
-            widest > layout.size.width + LINE_WIDTH_TOLERANCE_PX -> "a line needs ${widest}px wide but gets ${layout.size.width}px"
-            else -> null
-        }
     }
 
     /**

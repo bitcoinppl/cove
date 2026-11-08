@@ -49,18 +49,22 @@ struct KeyTeleportRevealable<Content: View>: View {
 
                             // wraps rather than staying on one line, which at the largest
                             // text sizes ran the hint off both edges of the screen
-                            Label(hint, systemImage: "eye")
-                                .font(.caption)
-                                .foregroundStyle(.white)
-                                .multilineTextAlignment(.center)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                        .fill(Color.midnightBlue.opacity(0.88))
-                                )
-                                .padding(.horizontal, 12)
+                            Label {
+                                Text(hint).uiTestTruncationProbe()
+                            } icon: {
+                                Image(systemName: "eye")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(Color.midnightBlue.opacity(0.88))
+                            )
+                            .padding(.horizontal, 12)
                         }
                         .contentShape(Rectangle())
                     }

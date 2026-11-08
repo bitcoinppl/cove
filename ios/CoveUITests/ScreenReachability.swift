@@ -3,14 +3,25 @@ import XCTest
 /// Scrolls a screen as a user would and checks that its text and actions fit inside the window
 ///
 /// The checks catch text and actions pushed off screen, cut off by their scroll view or out of
-/// reach. XCUITest reports a text's whole label even when it draws truncated, so wherever a text is
-/// scrolled into view they also read the screenshot with Vision and fail on an ellipsis
+/// reach. XCUITest reports a text's whole label even when it draws truncated, so the fit checks
+/// need the app launched with `COVE_UI_TEST_TRUNCATION_PROBE=1` (`truncationProbeEnvironment`),
+/// and read whether each text draws whole from the value its truncation probe reports
 struct ScreenReachability {
+    /// Turns on the app's truncation probe, `UITestTruncationProbe`, for the launch
+    static let truncationProbeEnvironment = ("COVE_UI_TEST_TRUNCATION_PROBE", "1")
+
+    private static let fitsValue = "fits"
+    /// What a probe reports for a text that doesn't draw whole: cut short, or past a side of the window
+    private static let notWholeValues: Set<String> = ["truncated", "offscreen"]
+
     /// Inside the screens' 16 to 20 point side padding, so a drag there lands on no field
     private static let dragMargin: CGFloat = 8
 
     /// Taller than the keyboard's suggestion bar and shorter than any screen's scroll area
     private static let rowHeight: CGFloat = 100
+
+    /// Frames are in points with fractional edges, and adjacent views can share a rounded edge
+    private static let overlapTolerance: CGFloat = 1
 
     /// Room for one line of a text at the largest text size, about 50 points, with margin
     private static let endLineHeight: CGFloat = 80
@@ -18,61 +29,154 @@ struct ScreenReachability {
     let app: XCUIApplication
 
     /// Every text and action must lie wholly inside the window once scrolled to, the actions must
-    /// take a tap there, and no text on screen may draw truncated wherever one of them is scrolled
-    /// into view
+    /// take a tap there, each text and each button's label must draw whole, no two of them may
+    /// overlap, and no probed text on the screen may draw truncated
     ///
-    /// Vision must also read each text and each button's label where it is drawn. `controls` are
-    /// actions without a drawn label, such as icon-only buttons and fields, checked for reach only
-    func assertScreenFits(_ screen: String, texts: [String], buttons: [XCUIElementQuery], controls: [XCUIElementQuery] = []) {
-        for text in texts {
-            let query = app.staticTexts.matching(NSPredicate(format: "label == %@", text))
+    /// `texts` match a text's whole label and `descriptions` the start of one, for a long
+    /// paragraph. `fields` are selectable values drawn under their labels, such as a received
+    /// message's, checked as `texts` are. `controls` are actions without a probed label, such as
+    /// icon-only buttons and fields, checked for reach only
+    func assertScreenFits(
+        _ screen: String,
+        texts: [String],
+        descriptions: [String] = [],
+        fields: [(label: String, value: String)] = [],
+        buttons: [XCUIElementQuery],
+        controls: [XCUIElementQuery] = []
+    ) {
+        let textQueries = (texts + fields.flatMap { [$0.label, $0.value] })
+            .map { ("'\($0)'", app.staticTexts.matching(NSPredicate(format: "label == %@", $0))) }
+            + descriptions.map { ("'\($0)…'", app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", $0))) }
+
+        var shown: [(name: String, element: XCUIElement)] = []
+        for (label, query) in textQueries {
+            let name = "\(screen): \(label)"
             if let tall = tallerThanItsScrollArea(query) {
-                assertBothEndsFit(text, in: tall, "\(screen): '\(text)'")
+                assertBothEndsFit(tall, name)
+                assertDrawsWhole(tall, name)
+                shown.append((name, tall))
                 continue
             }
 
-            let element = assertReachable(query, "\(screen): '\(text)'", needsHit: false)
-            assertDrawn(text, in: element, "\(screen): '\(text)'")
-            assertNoTruncatedText("\(screen) at '\(text)'")
+            let text = assertReachable(query, name, needsHit: false)
+            assertDrawsWhole(text, name)
+            shown.append((name, text))
         }
 
         for button in buttons {
-            let name = button.firstMatch.description
-            let element = assertReachable(button, "\(screen): \(name)", needsHit: true)
-            assertDrawn(element.label, in: element, "\(screen): \(name)")
-            assertNoTruncatedText("\(screen) at \(name)")
+            let name = "\(screen): \(button.firstMatch.description)"
+            let element = assertReachable(button, name, needsHit: true)
+            assertDrawsWhole(element, name)
+            shown.append((name, element))
         }
+
+        assertNoOverlap(shown, fields: fields.map { ("\(screen): '\($0.label)'", "\(screen): '\($0.value)'") })
 
         for control in controls {
-            let name = control.firstMatch.description
-            assertReachable(control, "\(screen): \(name)", needsHit: true)
-            assertNoTruncatedText("\(screen) at \(name)")
+            assertReachable(control, "\(screen): \(control.firstMatch.description)", needsHit: true)
+        }
+
+        assertNoTruncatedText(screen)
+    }
+
+    /// Fails unless the truncation probe of the text, or of the button's label, reports that it
+    /// draws whole
+    ///
+    /// A button takes its label's accessibility value. A text without the probe has no value, so
+    /// dropping the probe fails here too. The probe measures after layout, so its value gets a
+    /// moment to settle
+    func assertDrawsWhole(_ element: XCUIElement, _ name: String) {
+        let value = { element.value as? String ?? "" }
+        let settled = Date().addingTimeInterval(3)
+        while value() != Self.fitsValue, Date() < settled {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+
+        XCTAssertEqual(value(), Self.fitsValue, "\(name) doesn't draw whole: its truncation probe reports '\(value())'")
+    }
+
+    /// Fails when two of the elements' frames overlap
+    ///
+    /// The probe compares a text with its own laid-out size, so a text that keeps its full height
+    /// inside a shorter parent that clips it still reports that it fits. Its accessibility frame
+    /// keeps the full height, though, and runs into whatever follows the parent. Scrolling moves
+    /// every frame, so they're all read at one scroll position
+    ///
+    /// Some iOS versions report a selectable text's frame standing out the same distance past the
+    /// text on every side, so each field's value is first inset by how far its leading edge sits
+    /// before its label's, which the view aligns with it. Where iOS adds nothing that measures 0
+    private func assertNoOverlap(_ elements: [(name: String, element: XCUIElement)], fields: [(label: String, value: String)]) {
+        var frames = elements.map { ($0.name, $0.element.frame) }
+        for field in fields {
+            guard let label = frames.first(where: { $0.0 == field.label })?.1,
+                  let value = frames.firstIndex(where: { $0.0 == field.value })
+            else { continue }
+
+            let outset = max(0, label.minX - frames[value].1.minX)
+            frames[value].1 = frames[value].1.insetBy(dx: outset, dy: outset)
+        }
+
+        for (index, (name, frame)) in frames.enumerated() {
+            for (otherName, otherFrame) in frames[(index + 1)...] {
+                let shared = frame.intersection(otherFrame)
+                XCTAssertFalse(
+                    shared.width > Self.overlapTolerance && shared.height > Self.overlapTolerance,
+                    "\(name) at \(frame) overlaps \(otherName) at \(otherFrame)"
+                )
+            }
         }
     }
 
-    /// Fails when Vision reads an ellipsis on screen, which SwiftUI draws in place of the end of a
-    /// text it truncates
+    /// Fails when the text overlaps any other text or button on screen labeled one of `labels`,
+    /// for a text checked on its own rather than with its whole screen, such as one word of a grid
+    /// built lazily
     ///
-    /// Text above the top navigation bar is left out: the status bar draws over content scrolled
-    /// beneath it, and Vision reads its clock and signal dots as one line with that content, as
-    /// "9:33 e sending....."
+    /// A text its parent clips at full height still reports that it fits, but its frame runs into
+    /// whatever follows. The text itself is told apart from the others by its label and frame
+    func assertNoOverlap(_ element: XCUIElement, _ name: String, withElementsLabeled labels: Set<String>) {
+        guard let snapshot = try? app.snapshot() else {
+            XCTFail("\(name): the app's accessibility tree could not be read")
+            return
+        }
+
+        let frame = element.frame
+        let label = element.label
+        for other in frames(in: snapshot, labeled: labels) where other.label != label || !isSameFrame(other.frame, frame) {
+            let shared = frame.intersection(other.frame)
+            XCTAssertFalse(
+                shared.width > Self.overlapTolerance && shared.height > Self.overlapTolerance,
+                "\(name) at \(frame) overlaps '\(other.label)' at \(other.frame)"
+            )
+        }
+    }
+
+    private func frames(in snapshot: XCUIElementSnapshot, labeled labels: Set<String>) -> [(label: String, frame: CGRect)] {
+        let checked = [.staticText, .button].contains(snapshot.elementType) && labels.contains(snapshot.label)
+        let own = checked ? [(snapshot.label, snapshot.frame)] : []
+        return own + snapshot.children.flatMap { frames(in: $0, labeled: labels) }
+    }
+
+    /// Fails when any probed text or button label in the app reports that it draws truncated or
+    /// past a side of the window, so a text the caller didn't list is checked too
+    ///
+    /// A probe reports truncated until it has measured, so the sweep gets a moment to settle
     func assertNoTruncatedText(_ screen: String) {
-        let statusBarBottom = app.navigationBars.allElementsBoundByIndex.map(\.frame.minY).filter { $0 > 0 }.min() ?? 0
-        let truncated = app.visibleText(below: statusBarBottom).filter { $0.contains("…") || $0.contains("...") }
-        XCTAssertTrue(truncated.isEmpty, "\(screen): text draws truncated: \(truncated)")
+        var truncated: [String] = []
+        let settled = Date().addingTimeInterval(3)
+        repeat {
+            truncated = (try? app.snapshot()).map(labelsNotDrawnWhole(in:)) ?? ["the app's accessibility tree could not be read"]
+            if truncated.isEmpty { return }
+
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        } while Date() < settled
+
+        XCTFail("\(screen): text doesn't draw whole: \(truncated)")
     }
 
-    /// Fails unless Vision reads the start and the end of the text where it is drawn, so a text
-    /// clipped without an ellipsis fails, and the ellipsis check above is reading the screen it is
-    /// meant to and not, say, one still sliding in
-    ///
-    /// Eight characters at each end, allowing one misread, since across a whole key or address a
-    /// misread is likelier than missing text, and clipping cuts off an end
-    func assertDrawn(_ text: String, in element: XCUIElement, _ name: String) {
-        let compact = text.filter { !$0.isWhitespace }
-        for part in [String(compact.prefix(8)), String(compact.suffix(8))] {
-            XCTAssertTrue(element.waitForVisibleText(containing: part, misreads: 1, timeout: 3), "\(name): Vision never read '\(part)' where it is drawn")
-        }
+    private func labelsNotDrawnWhole(in snapshot: XCUIElementSnapshot) -> [String] {
+        let value = snapshot.value as? String ?? ""
+        let own = Self.notWholeValues.contains(value) ? ["\(snapshot.label) (\(value))"] : []
+        return own + snapshot.children.flatMap(labelsNotDrawnWhole(in:))
     }
 
     /// A match too tall to scroll wholly into view by dragging, such as a revealed private key
@@ -86,10 +190,9 @@ struct ScreenReachability {
         return query.allElementsBoundByIndex.first { $0.frame.height > readableArea(of: $0).height * 0.6 }
     }
 
-    /// Scrolls a text too tall to show whole until its first line shows, then its last, and at
-    /// each needs Vision to read that end of it on screen and no ellipsis, as a user reading it
-    /// through would; across the screen it must still fit the window
-    private func assertBothEndsFit(_ text: String, in element: XCUIElement, _ name: String) {
+    /// Scrolls a text too tall to show whole until its first line shows, then its last, as a user
+    /// reading it through would; across the screen it must still fit the window
+    private func assertBothEndsFit(_ element: XCUIElement, _ name: String) {
         let window = app.windows.firstMatch.frame
         XCTAssertTrue(
             element.frame.minX >= window.minX && element.frame.maxX <= window.maxX,
@@ -99,13 +202,12 @@ struct ScreenReachability {
         // each end's line runs into the text from that edge, so the edge needs a line's room
         // inside the readable area on that side
         let line = Self.endLineHeight
-        let compact = text.filter { !$0.isWhitespace }
-        let ends: [(part: String, edge: (CGRect) -> CGFloat, room: (CGRect) -> ClosedRange<CGFloat>)] = [
-            (String(compact.prefix(8)), \.minY, { $0.minY ... max($0.minY, $0.maxY - line) }),
-            (String(compact.suffix(8)), \.maxY, { min($0.minY + line, $0.maxY) ... $0.maxY }),
+        let ends: [(edge: (CGRect) -> CGFloat, room: (CGRect) -> ClosedRange<CGFloat>)] = [
+            (\.minY, { $0.minY ... max($0.minY, $0.maxY - line) }),
+            (\.maxY, { min($0.minY + line, $0.maxY) ... $0.maxY }),
         ]
 
-        for (part, edge, room) in ends {
+        for (edge, room) in ends {
             for _ in 0 ..< 8 {
                 let y = edge(element.frame)
                 let fits = room(readableArea(of: element))
@@ -117,8 +219,6 @@ struct ScreenReachability {
             let y = edge(element.frame)
             let fits = room(readableArea(of: element))
             XCTAssertTrue(fits.contains(y), "\(name): its end at \(y) never scrolled into \(fits)")
-            XCTAssertTrue(app.waitForVisibleText(containing: part, misreads: 1, timeout: 3), "\(name): Vision never read '\(part)' on screen")
-            assertNoTruncatedText(name)
         }
     }
 

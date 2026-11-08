@@ -2,11 +2,15 @@ package org.bitcoinppl.cove.flows.keyteleport
 
 import androidx.test.platform.app.InstrumentationRegistry
 import org.bitcoinppl.cove.KeychainAccessor
+import org.bitcoinppl.cove.test.HostControlHttp
 import org.bitcoinppl.cove.test.awaitOnMain
 import org.bitcoinppl.cove_core.KeyTeleportManagerAction
 import org.bitcoinppl.cove_core.KeyTeleportManagerState
 import org.bitcoinppl.cove_core.RustKeyTeleportManager
 import org.bitcoinppl.cove_core.types.WalletId
+import org.json.JSONArray
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import java.io.Closeable
 
@@ -71,6 +75,68 @@ internal class KeyTeleportTestPeer : Closeable {
         } finally {
             manager.close()
         }
+    }
+}
+
+/** What [KeyTeleportHostSender] sends */
+internal sealed interface KeyTeleportHostPayload {
+    fun json(): JSONObject
+
+    data class Mnemonic(
+        val words: String,
+    ) : KeyTeleportHostPayload {
+        override fun json(): JSONObject = JSONObject().put("mnemonic", words)
+    }
+
+    data class Xprv(
+        val xprv: String,
+    ) : KeyTeleportHostPayload {
+        override fun json(): JSONObject = JSONObject().put("xprv", xprv)
+    }
+
+    /** COLDCARD Secure Notes & Passwords records, each a map of COLDCARD's JSON fields */
+    data class Notes(
+        val records: List<Map<String, String>>,
+    ) : KeyTeleportHostPayload {
+        override fun json(): JSONObject = JSONObject().put("notes", JSONArray(records.map { JSONObject(it) }))
+    }
+}
+
+/**
+ * Plays a sending phone through the UI test host's `/keyteleport/send` route
+ * (`rust/xtask/src/ui_test_host/key_teleport.rs`), for payloads the app itself never sends
+ *
+ * The app sends only wallets, so [KeyTeleportTestPeer] can't send a received message or an xprv
+ * the app holds no wallet for. The host encrypts mnemonics and xprvs with the `keyteleport` crate
+ * the app uses, and Secure Notes the way COLDCARD firmware does. The runner forwards the host's
+ * control port into the device with `adb reverse`
+ */
+internal class KeyTeleportHostSender(
+    host: String = "127.0.0.1",
+    port: Int = 39_010,
+) {
+    private val http =
+        HostControlHttp(host, port) {
+            "the UI test host at $host:$port is unreachable; run the test through " +
+                "`just android-instrumented-ci` or `cargo xtask ui-test-host run --android -- <command>`"
+        }
+
+    /** Encrypts [payload] for [request] and returns the response as one BBQr frame */
+    fun send(
+        payload: KeyTeleportHostPayload,
+        request: KeyTeleportRequestCopy,
+    ): KeyTeleportResponseCopy {
+        val body =
+            JSONObject()
+                .put("request", request.packetText)
+                .put("code", request.numericCode)
+                .put("payload", payload.json())
+        val response = JSONObject(http.request("POST", "/keyteleport/send", body))
+        val parts = response.getJSONArray("parts")
+
+        // the screen's manager reads one pasted frame, as a single-QR scan gives it
+        assertEquals("the host split the response into several QR frames", 1, parts.length())
+        return KeyTeleportResponseCopy(packetText = parts.getString(0), password = response.getString("password"))
     }
 }
 

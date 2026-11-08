@@ -25,9 +25,11 @@ struct KeyTeleportHeader: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(OnboardingRecoveryTypography.compactTitle)
+                .uiTestTruncationProbe()
 
             Text(subtitle)
                 .font(OnboardingRecoveryTypography.footnote)
+                .uiTestTruncationProbe()
                 .foregroundStyle(.coveLightGray.opacity(0.74))
                 .fixedSize(horizontal: false, vertical: true)
         }
