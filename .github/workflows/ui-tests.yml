@@ -203,13 +203,18 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
-          # headroom for the software-rendered launcher, which stops responding on a busy emulator;
-          # the DismissAnrDialogs test listener clears its dialog when it does anyway
+          # headroom for the software-rendered launcher, which stops responding on a busy emulator
           cores: 4
           ram-size: 4096M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: just android-instrumented-ci "$FLAVOUR" "$ANDROID_TESTS"
+          # a stalled foreground launcher otherwise gets an "isn't responding" dialog that takes taps,
+          # Back and focus from the app under test, and UiAutomator can't read it to press Wait; with
+          # error dialogs hidden Android kills the launcher and restarts home instead, and it reads
+          # the setting when it changes, so it applies to the tests started on the next line
+          script: |
+            adb shell settings put global hide_error_dialogs 1
+            just android-instrumented-ci "$FLAVOUR" "$ANDROID_TESTS"
         env:
           FLAVOUR: ${{ matrix.flavour }}
           # empty runs every test in the flavour
