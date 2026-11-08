@@ -88,6 +88,38 @@ pub(crate) struct CloudBackupListedDetail {
     pub(crate) cloud_only_record_ids: HashSet<String>,
 }
 
+impl CloudBackupListedDetail {
+    /// Drops local rows for wallets no longer on this device, listing their confirmed backups as
+    /// cloud-only so the listing keeps matching the cloud-only rows read after the deletion
+    pub(crate) fn retain_local_wallets(&mut self, local_record_ids: &HashSet<String>) {
+        let removed_confirmed = self.detail.retain_local_wallets(local_record_ids);
+        self.cloud_only_record_ids.extend(removed_confirmed);
+    }
+}
+
+impl CloudBackupDetail {
+    /// Drops local rows for wallets no longer on this device and returns the record IDs of the
+    /// confirmed rows it dropped
+    ///
+    /// A deleted wallet keeps its backup, so a confirmed row's backup is a cloud-only record from
+    /// now on and the count grows by those rows. A row that still needed a sync may never have
+    /// reached the cloud, so the next refresh settles it
+    pub(crate) fn retain_local_wallets(
+        &mut self,
+        local_record_ids: &HashSet<String>,
+    ) -> Vec<String> {
+        let (kept, removed): (Vec<_>, Vec<_>) = std::mem::take(&mut self.up_to_date)
+            .into_iter()
+            .partition(|wallet| local_record_ids.contains(&wallet.record_id));
+
+        self.up_to_date = kept;
+        self.needs_sync.retain(|wallet| local_record_ids.contains(&wallet.record_id));
+        self.cloud_only_count += removed.len() as u32;
+
+        removed.into_iter().map(|wallet| wallet.record_id).collect()
+    }
+}
+
 /// Remote detail fetch result that keeps access errors distinguishable from failed detail state
 #[derive(Debug)]
 pub(crate) enum CloudBackupDetailResult {
@@ -1357,19 +1389,10 @@ impl CloudBackupReducerState {
     ///
     /// A deleted wallet keeps its backup, so it moves to Not on This Device once the cloud-only
     /// rows are read again. Waiting for the throttled detail refresh, or for one that fails, left
-    /// it listed as local as well. Its backup is a cloud-only record from now on when its row was
-    /// confirmed, so the count grows by those rows; a row that still needed a sync may never have
-    /// reached the cloud, so the refresh settles the rest
+    /// it listed as local as well
     fn remove_detail_rows_no_longer_local(&mut self, local_record_ids: &HashSet<String>) {
         let Some(state) = self.loaded_detail_mut() else { return };
-        let detail = &mut state.detail;
-        let confirmed_before = detail.up_to_date.len();
-
-        detail.up_to_date.retain(|wallet| local_record_ids.contains(&wallet.record_id));
-        detail.needs_sync.retain(|wallet| local_record_ids.contains(&wallet.record_id));
-
-        let removed_confirmed = (confirmed_before - detail.up_to_date.len()) as u32;
-        detail.cloud_only_count += removed_confirmed;
+        state.detail.retain_local_wallets(local_record_ids);
     }
 
     fn apply_detail_cleared(&mut self) {

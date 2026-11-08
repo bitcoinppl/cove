@@ -170,6 +170,20 @@ fn cloud_only_row_statuses(rows: &[CloudBackupWalletItem]) -> Vec<(&str, CloudBa
     rows.iter().map(|row| (row.record_id.as_str(), row.sync_status.clone())).collect()
 }
 
+/// The detail the frontends read, including one retained while a refresh runs or after it failed
+fn public_detail(manager: &RustCloudBackupManager) -> Option<CloudBackupDetail> {
+    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+        panic!("expected configured cloud backup lifecycle");
+    };
+
+    match configured.detail {
+        CloudBackupDetailState::Complete { state } => Some(state.detail),
+        CloudBackupDetailState::Checking { retained }
+        | CloudBackupDetailState::Failed { retained, .. } => retained.map(|state| state.detail),
+        CloudBackupDetailState::NotLoaded => None,
+    }
+}
+
 /// The cloud-only state the frontends read, which only exists once the detail has loaded
 fn public_cloud_only(manager: &RustCloudBackupManager) -> Option<CloudOnlyState> {
     let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
@@ -4158,29 +4172,79 @@ async fn deleted_wallet_leaves_the_local_rows_while_the_detail_refresh_fails() {
         .unwrap();
     manager.handle_local_wallets_changed();
 
-    let public_detail = || {
-        let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
-            panic!("expected configured cloud backup lifecycle");
-        };
-
-        match configured.detail {
-            CloudBackupDetailState::Complete { state } => Some(state.detail),
-            CloudBackupDetailState::Checking { retained }
-            | CloudBackupDetailState::Failed { retained, .. } => {
-                retained.map(|state| state.detail)
-            }
-            CloudBackupDetailState::NotLoaded => None,
-        }
-    };
-
     wait_for_test_condition(Duration::from_secs(5), "the deleted wallet leaves the local rows", || {
-        public_detail().is_some_and(|detail| detail.up_to_date.is_empty())
+        public_detail(&manager).is_some_and(|detail| detail.up_to_date.is_empty())
     })
     .await;
 
     // its backup is still in the cloud, now as a record that is not on this device
-    let detail = public_detail().unwrap();
+    let detail = public_detail(&manager).unwrap();
     assert!(detail.needs_sync.is_empty());
+    assert_eq!(detail.cloud_only_count, 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    let namespace = manager.current_namespace_id().unwrap();
+
+    let local_wallet = xpub_only_wallet_metadata();
+    let local_record_id = upload_test_wallet_backup(&namespace, &local_wallet);
+    let local_restore = manager.prepare_active_namespace_wallet_restore().await.unwrap();
+    local_restore.restore_record(&local_record_id).await.unwrap();
+
+    // a refresh and a verification both read the wallet as local before it is deleted
+    let mut stale = listed_detail(&[]);
+    stale.detail.up_to_date.push(CloudBackupWalletItem {
+        sync_status: CloudBackupWalletStatus::Confirmed,
+        ..test_cloud_only_wallet(&local_record_id)
+    });
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(stale.clone()));
+
+    Database::global()
+        .wallets
+        .remove_prepared_wallet_metadata(
+            local_wallet.network,
+            local_wallet.wallet_mode,
+            &local_wallet.id,
+        )
+        .unwrap();
+    manager.handle_local_wallets_changed();
+
+    wait_for_test_condition(Duration::from_secs(5), "the deleted wallet leaves the local rows", || {
+        public_detail(&manager).is_some_and(|detail| detail.up_to_date.is_empty())
+    })
+    .await;
+
+    // the cloud-only rows read after the deletion list its backup as not on this device
+    manager.apply_cloud_only_fetch_outcome(complete_loaded_outcome(&manager, vec![
+        test_cloud_only_wallet(&local_record_id),
+    ]));
+
+    // the refresh finishes late, with the listing it read while the wallet was local
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::Refreshed(stale.clone()));
+
+    let detail = public_detail(&manager).unwrap();
+    assert!(detail.up_to_date.is_empty(), "the deleted wallet is listed as local again");
+    assert_eq!(detail.cloud_only_count, 1);
+
+    let cloud_only = public_cloud_only(&manager);
+    assert!(
+        matches!(
+            &cloud_only,
+            Some(CloudOnlyState::Loaded { wallets, incomplete: false })
+                if wallets.len() == 1 && wallets[0].record_id == local_record_id
+        ),
+        "the late listing should still match the cloud-only rows, got {cloud_only:?}"
+    );
+
+    // the verification's detail finishes late too
+    manager.apply_detail_outcome(CloudBackupDetailOutcome::RefreshedWithoutListing(stale.detail));
+
+    let detail = public_detail(&manager).unwrap();
+    assert!(detail.up_to_date.is_empty(), "the verification listed the deleted wallet as local");
     assert_eq!(detail.cloud_only_count, 1);
 }
 

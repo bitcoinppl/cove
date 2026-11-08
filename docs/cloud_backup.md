@@ -76,6 +76,9 @@ The reducer drops rows for wallets that are no longer on this device at once,
 and counts a deleted wallet's confirmed backup as cloud-only, so a deleted
 wallet shows only under Not on This Device once the cloud-only rows are read
 again, even when the refresh fails. Everything else waits for the refresh.
+A detail result that read the local wallets before the deletion, from a refresh
+or a verification, gets the same check against the current local wallets when
+it lands, so it can't list the wallet as local again.
 
 iOS can publish a fast, incomplete local wallet snapshot before completing its
 mandatory FileManager-plus-`NSMetadataQuery` union. Android's first successful
