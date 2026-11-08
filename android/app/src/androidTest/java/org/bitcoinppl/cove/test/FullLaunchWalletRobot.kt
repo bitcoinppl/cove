@@ -21,6 +21,7 @@ import org.bitcoinppl.cove_core.NodeSelector
 import org.bitcoinppl.cove_core.types.Network
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import java.io.ByteArrayOutputStream
 import java.math.BigDecimal
 
@@ -102,7 +103,32 @@ class FullLaunchWalletRobot(
         enterAddress(address)
     }
 
+    /**
+     * Sets the address and waits until the screen shows it, setting it once more if it doesn't
+     *
+     * A second set replaces the field's whole text, so it can't enter the address twice
+     */
     fun enterAddress(address: String = EXTERNAL_ADDRESS) {
+        setAddress(address)
+        if (showsAddressSoon(address)) return
+
+        setAddress(address)
+        if (!showsAddressSoon(address)) {
+            fail("expected the address field to hold $address after setting it twice\n${device.hierarchy()}")
+        }
+    }
+
+    // once the app accepts the address it moves focus to the amount, whose keyboard toolbar can
+    // cover the spaced-out address; a covered node is left out of the accessibility tree, so close
+    // the keyboard and look again before calling the address missing
+    private fun showsAddressSoon(address: String): Boolean {
+        if (becomesTrue(FIRST_ATTEMPT_TIMEOUT_MS) { showsAddress(address) }) return true
+
+        dismissKeyboard()
+        return becomesTrue(UNCOVERED_ADDRESS_TIMEOUT_MS) { showsAddress(address) }
+    }
+
+    private fun setAddress(address: String) {
         // the send screen opens with the amount focused, and the keyboard sliding in can move the
         // address field out from under a tap; tapping again is harmless once it has focus
         for (attempt in 1..3) {
@@ -113,18 +139,17 @@ class FullLaunchWalletRobot(
 
         device.waitFor(By.res("sendFlow.address").focused(true))
         device.findObject(By.res("sendFlow.address")).text = address
-
-        // once the address is accepted the field can lose focus and show it in groups of four
-        waitUntil("expected the address field to hold $address") {
-            try {
-                device.findObjects(By.textStartsWith(address.take(4))).any { node ->
-                    node.text?.filterNot { it.isWhitespace() } == address
-                }
-            } catch (_: StaleObjectException) {
-                false
-            }
-        }
     }
+
+    // once the address is accepted the field can lose focus and show it in groups of four
+    private fun showsAddress(address: String): Boolean =
+        try {
+            device.findObjects(By.textStartsWith(address.take(4))).any { node ->
+                node.text?.filterNot { it.isWhitespace() } == address
+            }
+        } catch (_: StaleObjectException) {
+            false
+        }
 
     /** Fills the amount with Max and returns it in sats */
     fun tapMax(): Long {
@@ -154,17 +179,47 @@ class FullLaunchWalletRobot(
     /**
      * Types into a field key by key, as the keyboard would. Cove's fields check each edit against
      * the last, and setting the whole text at once leaves them empty
+     *
+     * The emulator's keyboard can drop a key when its link to the field stalls, which leaves the
+     * field a character short, so a field that doesn't hold [text] is cleared and typed once more.
+     * [typed] still decides the result; the default needs the exact text
      */
     fun typeInto(
         field: BySelector,
         text: String,
         typed: () -> Boolean = { device.findText(field) == text },
     ) {
+        typeKeys(field, text)
+        if (becomesTrue(FIRST_ATTEMPT_TIMEOUT_MS, typed)) return
+
+        clearByKeys(field)
+        typeKeys(field, text)
+        waitUntil("expected the field to hold $text after typing it twice", condition = typed)
+    }
+
+    private fun typeKeys(
+        field: BySelector,
+        text: String,
+    ) {
         device.waitFor(field).click()
         device.waitForIdle()
         device.executeShellCommand("input text $text")
+    }
 
-        waitUntil("expected the field to hold $text", condition = typed)
+    // selects everything and deletes it as one edit, as a keyboard would. Deleting key by key lets
+    // the amount field reformat after each key, which can leave the cursor and its text out of step
+    // with the keys that follow, and a line-end jump leaves earlier lines of a wrapped field behind.
+    // The tap that focuses the field can land after the select-all and collapse it to a cursor, so
+    // this checks the field emptied and selects again, without another tap, if it didn't
+    private fun clearByKeys(field: BySelector) {
+        device.waitFor(field).click()
+        device.waitForIdle()
+
+        repeat(CLEAR_ATTEMPTS) {
+            device.executeShellCommand("input keycombination KEYCODE_CTRL_LEFT KEYCODE_A")
+            device.executeShellCommand("input keyevent KEYCODE_DEL")
+            if (becomesTrue(CLEAR_TIMEOUT_MS) { device.findText(field).isNullOrEmpty() }) return
+        }
     }
 
     /** Taps Next and waits for the screen it leads to */
@@ -222,6 +277,29 @@ class FullLaunchWalletRobot(
         }
 
         assertTrue("$message\n${device.hierarchy()}", condition())
+    }
+
+    // a first attempt that hasn't landed by now won't
+    private fun becomesTrue(
+        timeoutMs: Long,
+        condition: () -> Boolean,
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return true
+
+            Thread.sleep(100)
+        }
+
+        return condition()
+    }
+
+    private companion object {
+        const val FIRST_ATTEMPT_TIMEOUT_MS = 10_000L
+        const val UNCOVERED_ADDRESS_TIMEOUT_MS = 5_000L
+        const val CLEAR_ATTEMPTS = 3
+        const val CLEAR_TIMEOUT_MS = 2_000L
     }
 }
 
