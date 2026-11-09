@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use cove_device::cloud_storage::CloudSyncHealth;
 
 use crate::database::cloud_backup::DriveAccountSwitchId;
@@ -204,8 +206,14 @@ pub(crate) enum CloudBackupStateReducerEvent {
     /// Cloud-only rows no longer belong to any known listing, such as after disable or reset
     CloudOnlyInventoryInvalidated,
     /// The local wallet set changed, so the listing and any loaded rows may now count a record as
-    /// cloud-only, restorable, or a duplicate when it no longer is
-    CloudOnlyLocalWalletsChanged,
+    /// cloud-only, restorable, or a duplicate when it no longer is, and the detail may list a
+    /// wallet as local that is gone
+    ///
+    /// `local_record_ids` holds the wallets on this device now, or `None` when they could not be
+    /// read, in which case the detail's local rows wait for the next refresh
+    LocalWalletsChanged {
+        local_record_ids: Option<HashSet<String>>,
+    },
     CloudOnlyOperationResolved(CloudOnlyOperation),
     OtherBackupsOperationResolved(OtherBackupsOperation),
     OtherBackupsStateResolved(crate::manager::cloud_backup_manager::CloudBackupOtherBackupsState),

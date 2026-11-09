@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
 use futures::stream::{self, StreamExt as _};
@@ -7,7 +5,6 @@ use tracing::{info, warn};
 use zeroize::Zeroizing;
 
 use super::load_master_key_for_cloud_action;
-use crate::database::Database;
 use crate::manager::cloud_backup_manager::actors::CloudBackupWriteClient;
 use crate::manager::cloud_backup_manager::wallets::{WalletBackupLookup, WalletBackupReader};
 use crate::manager::cloud_backup_manager::{
@@ -74,7 +71,7 @@ impl RustCloudBackupManager {
             )
         })?;
 
-        let local_record_ids = self.local_wallet_record_ids_for_undecryptable_deletion()?;
+        let local_record_ids = CloudBackupStore::global().local_wallet_record_ids()?;
         let reader = WalletBackupReader::new(
             cloud.clone(),
             namespace.clone(),
@@ -143,7 +140,7 @@ impl RustCloudBackupManager {
         for record_id in record_ids {
             self.ensure_cloud_connectivity(BlockingCloudStep::DeleteUndecryptableWalletBackups)?;
 
-            let local_record_ids = self.local_wallet_record_ids_for_undecryptable_deletion()?;
+            let local_record_ids = CloudBackupStore::global().local_wallet_record_ids()?;
             if local_record_ids.contains(&record_id) {
                 info!(
                     "skipping inaccessible wallet backup deletion because the wallet is now on this device"
@@ -180,16 +177,6 @@ impl RustCloudBackupManager {
 
         info!("Deleted {deleted} inaccessible wallet backup(s)");
         Ok(deleted)
-    }
-
-    fn local_wallet_record_ids_for_undecryptable_deletion(
-        &self,
-    ) -> Result<HashSet<String>, CloudBackupError> {
-        Ok(CloudBackupStore::new(&Database::global())
-            .all_wallets()?
-            .into_iter()
-            .map(|wallet| cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref()))
-            .collect())
     }
 }
 

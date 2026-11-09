@@ -88,6 +88,38 @@ pub(crate) struct CloudBackupListedDetail {
     pub(crate) cloud_only_record_ids: HashSet<String>,
 }
 
+impl CloudBackupListedDetail {
+    /// Drops local rows for wallets no longer on this device, listing their confirmed backups as
+    /// cloud-only so the listing keeps matching the cloud-only rows read after the deletion
+    pub(crate) fn retain_local_wallets(&mut self, local_record_ids: &HashSet<String>) {
+        let removed_confirmed = self.detail.retain_local_wallets(local_record_ids);
+        self.cloud_only_record_ids.extend(removed_confirmed);
+    }
+}
+
+impl CloudBackupDetail {
+    /// Drops local rows for wallets no longer on this device and returns the record IDs of the
+    /// confirmed rows it dropped
+    ///
+    /// A deleted wallet keeps its backup, so a confirmed row's backup is a cloud-only record from
+    /// now on and the count grows by those rows. A row that still needed a sync may never have
+    /// reached the cloud, so the next refresh settles it
+    pub(crate) fn retain_local_wallets(
+        &mut self,
+        local_record_ids: &HashSet<String>,
+    ) -> Vec<String> {
+        let (kept, removed): (Vec<_>, Vec<_>) = std::mem::take(&mut self.up_to_date)
+            .into_iter()
+            .partition(|wallet| local_record_ids.contains(&wallet.record_id));
+
+        self.up_to_date = kept;
+        self.needs_sync.retain(|wallet| local_record_ids.contains(&wallet.record_id));
+        self.cloud_only_count += removed.len() as u32;
+
+        removed.into_iter().map(|wallet| wallet.record_id).collect()
+    }
+}
+
 /// Remote detail fetch result that keeps access errors distinguishable from failed detail state
 #[derive(Debug)]
 pub(crate) enum CloudBackupDetailResult {
@@ -1353,6 +1385,16 @@ impl CloudBackupReducerState {
         self.resolve_cloud_only_state(CloudOnlyState::Loaded { wallets, incomplete });
     }
 
+    /// Drops the detail's local rows for wallets that are no longer on this device
+    ///
+    /// A deleted wallet keeps its backup, so it moves to Not on This Device once the cloud-only
+    /// rows are read again. Waiting for the throttled detail refresh, or for one that fails, left
+    /// it listed as local as well
+    fn remove_detail_rows_no_longer_local(&mut self, local_record_ids: &HashSet<String>) {
+        let Some(state) = self.loaded_detail_mut() else { return };
+        state.detail.retain_local_wallets(local_record_ids);
+    }
+
     fn apply_detail_cleared(&mut self) {
         self.configured.detail_refresh = DetailRefreshActivity::Idle;
         self.configured.detail = CloudBackupDetailState::NotLoaded;
@@ -1796,7 +1838,11 @@ impl CloudBackupStateReducer {
                 self.state.cloud_only_inventory.invalidate();
                 self.state.cloud_only_failures_awaiting_refetch.clear();
             }
-            CloudBackupStateReducerEvent::CloudOnlyLocalWalletsChanged => {
+            CloudBackupStateReducerEvent::LocalWalletsChanged { local_record_ids } => {
+                if let Some(local_record_ids) = &local_record_ids {
+                    self.state.remove_detail_rows_no_longer_local(local_record_ids);
+                }
+
                 self.state.cloud_only_inventory.invalidate();
 
                 // a fetch still in flight is now stale, so it is discarded and replaced when it
@@ -2110,6 +2156,110 @@ mod tests {
         configured.restore_all
     }
 
+    /// Every row the detail screen lists, local rows first, then loaded cloud-only rows
+    fn visible_rows(model: &CloudBackupStateReducer) -> Vec<(String, CloudBackupWalletStatus)> {
+        let CloudBackupLifecycle::Configured(configured) = model.public_state().lifecycle else {
+            panic!("expected configured lifecycle");
+        };
+        let loaded = match configured.detail {
+            CloudBackupDetailState::Complete { state } => state,
+            CloudBackupDetailState::Checking { retained: Some(state) }
+            | CloudBackupDetailState::Failed { retained: Some(state), .. } => state,
+            other => panic!("expected a retained detail, got {other:?}"),
+        };
+        let cloud_only = match loaded.cloud_only {
+            CloudOnlyState::Loaded { wallets, .. } => wallets,
+            CloudOnlyState::NotFetched
+            | CloudOnlyState::Loading
+            | CloudOnlyState::Failed { .. } => Vec::new(),
+        };
+
+        loaded
+            .detail
+            .up_to_date
+            .into_iter()
+            .chain(loaded.detail.needs_sync)
+            .chain(cloud_only)
+            .map(|wallet| (wallet.record_id, wallet.sync_status))
+            .collect()
+    }
+
+    #[test]
+    fn deleted_wallet_is_listed_once_when_the_detail_refresh_fails() {
+        let deleted = cloud_only_wallet("deleted", CloudBackupWalletStatus::Confirmed);
+        let kept = cloud_only_wallet("kept", CloudBackupWalletStatus::Dirty);
+        let detail = CloudBackupDetail {
+            last_sync: None,
+            up_to_date: vec![deleted.clone()],
+            needs_sync: vec![kept.clone()],
+            cloud_only_count: 0,
+        };
+        let mut model = configured_model_with_cloud_only(Vec::new());
+        load_listed_cloud_only(&mut model, &detail, &[]);
+
+        // the wallet is deleted from this device: its local row goes at once, and the cloud-only
+        // rows are read again to pick up its backup
+        let effects = model.apply_event(CloudBackupStateReducerEvent::LocalWalletsChanged {
+            local_record_ids: Some(HashSet::from([kept.record_id.clone()])),
+        });
+
+        assert!(effects.cloud_only_refetch_needed);
+        assert_eq!(
+            visible_rows(&model),
+            vec![(kept.record_id.clone(), CloudBackupWalletStatus::Dirty)]
+        );
+        assert_eq!(model.state.loaded_detail().unwrap().detail.cloud_only_count, 1);
+
+        // the throttled detail refresh fails, which keeps the retained detail as it now is
+        model.apply_event(CloudBackupStateReducerEvent::DetailRefreshFailed {
+            reason: CloudBackupInventoryIncompleteReason::ProviderUnavailable,
+            error: "provider unavailable".into(),
+        });
+
+        assert_eq!(
+            visible_rows(&model),
+            vec![(kept.record_id.clone(), CloudBackupWalletStatus::Dirty)]
+        );
+
+        // the refetch lists the deleted wallet under Not on This Device, and only there
+        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyFetchLoaded(CloudOnlyFetch {
+            wallets: vec![cloud_only_wallet("deleted", CloudBackupWalletStatus::DeletedFromDevice)],
+            unresolved_record_ids: Vec::new(),
+            listing_generation: model.cloud_only_listing_generation(),
+        }));
+
+        assert_eq!(
+            visible_rows(&model),
+            vec![
+                (kept.record_id, CloudBackupWalletStatus::Dirty),
+                (deleted.record_id, CloudBackupWalletStatus::DeletedFromDevice),
+            ]
+        );
+    }
+
+    #[test]
+    fn unreadable_local_wallets_leave_the_detail_rows_for_the_refresh() {
+        let wallet = cloud_only_wallet("wallet", CloudBackupWalletStatus::Confirmed);
+        let detail = CloudBackupDetail {
+            last_sync: None,
+            up_to_date: vec![wallet.clone()],
+            needs_sync: Vec::new(),
+            cloud_only_count: 0,
+        };
+        let mut model = configured_model_with_cloud_only(Vec::new());
+        load_listed_cloud_only(&mut model, &detail, &[]);
+
+        model.apply_event(CloudBackupStateReducerEvent::LocalWalletsChanged {
+            local_record_ids: None,
+        });
+
+        assert_eq!(
+            visible_rows(&model),
+            vec![(wallet.record_id, CloudBackupWalletStatus::Confirmed)]
+        );
+        assert_eq!(model.state.loaded_detail().unwrap().detail.cloud_only_count, 0);
+    }
+
     #[test]
     fn already_on_device_result_read_before_a_local_wallet_change_is_discarded() {
         let wallet = cloud_only_wallet("wallet-1", CloudBackupWalletStatus::DeletedFromDevice);
@@ -2119,7 +2269,9 @@ mod tests {
         let restore_generation = model.cloud_only_listing_generation();
 
         // the matching local wallet is deleted and the refetch lands before the restore result
-        model.apply_event(CloudBackupStateReducerEvent::CloudOnlyLocalWalletsChanged);
+        model.apply_event(CloudBackupStateReducerEvent::LocalWalletsChanged {
+            local_record_ids: None,
+        });
         model.apply_event(CloudBackupStateReducerEvent::CloudOnlyFetchLoaded(CloudOnlyFetch {
             wallets: vec![wallet.clone()],
             unresolved_record_ids: Vec::new(),

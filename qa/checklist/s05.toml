@@ -147,9 +147,16 @@ coverage = [
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::deleting_the_matching_local_wallet_makes_its_cloud_duplicate_restorable",
     "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::restore_all_restores_the_next_copy_after_its_matching_local_wallet_is_deleted",
     "rust:rust/src/manager/cloud_backup_manager/ops/tests/round_trip.rs::cloud_round_trip_restores_labels_locks_and_seed_without_scan_state",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::deleted_wallet_leaves_the_local_rows_while_the_detail_refresh_fails",
+    "rust:rust/src/manager/cloud_backup_manager/model.rs::deleted_wallet_is_listed_once_when_the_detail_refresh_fails",
+    "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::detail_built_before_a_wallet_deletion_does_not_list_it_as_local_again",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# rust tests remove wallet data directly and send the change notification themselves
+# rust tests remove wallet data directly and send the change notification themselves. the deleted
+# wallet leaves the local rows as soon as the change is sent, even when the detail refresh fails,
+# and is listed once, under Not on This Device, after the cloud-only rows are read again. a refresh
+# or verification that read the local wallets before the delete and lands after it does not list
+# the wallet as local again
 # ui tests on both platforms delete the wallet through wallet settings and every confirmation dialog its count calls for, two for the restored watch-only fixture wallet and three with the final warning's cloud recovery text for a new unverified hot wallet, then restore it from its cloud-only row; both scripted clouds drop deleted backups, so a stray cloud delete would fail them
 # the ui tests reopen cloud backup after the delete, so they don't show that an already-open cloud backup updates without the change notification
 

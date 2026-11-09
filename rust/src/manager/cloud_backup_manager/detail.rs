@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use act_zero::send;
 use serde::{Deserialize, Serialize};
 use tracing::error;
@@ -8,9 +10,9 @@ use super::{
     CloudBackupInventoryAuthority, CloudBackupInventoryIncompleteReason, CloudBackupListedDetail,
     CloudBackupManagerAction, CloudBackupOtherBackupsState, CloudBackupPasskeyChoiceIntent,
     CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupStateReducerEvent,
-    CloudBackupWalletItem, CloudBackupWalletRestoreFailure, CloudBackupWalletStatus,
-    CloudOnlyFetch, CloudOnlyListingUpdate, DeepVerificationFailure, DeepVerificationReport,
-    DeepVerificationResult, OtherBackupsOperation, RustCloudBackupManager,
+    CloudBackupStore, CloudBackupWalletItem, CloudBackupWalletRestoreFailure,
+    CloudBackupWalletStatus, CloudOnlyFetch, CloudOnlyListingUpdate, DeepVerificationFailure,
+    DeepVerificationReport, DeepVerificationResult, OtherBackupsOperation, RustCloudBackupManager,
 };
 
 type Action = CloudBackupManagerAction;
@@ -505,7 +507,13 @@ impl RustCloudBackupManager {
 impl RustCloudBackupManager {
     /// Applies a detail refresh, keeping loaded cloud-only rows only when they are a complete read
     /// of exactly the wallets the listing found that are not local
+    ///
+    /// A detail read the local wallets when it was built, so one that finishes after a wallet was
+    /// deleted would list that wallet as local again. Its rows are checked against the wallets on
+    /// this device now before it is applied
     pub(crate) fn apply_detail_outcome(&self, outcome: CloudBackupDetailOutcome) {
+        let outcome = Self::retain_local_wallets(outcome);
+
         let (detail, authority, cloud_only_listing) = match outcome {
             CloudBackupDetailOutcome::Checking => {
                 self.apply_model_event(CloudBackupStateReducerEvent::DetailRefreshStarted);
@@ -556,8 +564,58 @@ impl RustCloudBackupManager {
         self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyStateResolved(cloud_only));
     }
 
+    /// Drops the outcome's local rows for wallets no longer on this device, leaving it as it is
+    /// when the local wallets cannot be read
+    fn retain_local_wallets(mut outcome: CloudBackupDetailOutcome) -> CloudBackupDetailOutcome {
+        let carries_no_rows = matches!(
+            outcome,
+            CloudBackupDetailOutcome::Checking
+                | CloudBackupDetailOutcome::Cleared
+                | CloudBackupDetailOutcome::Failed { .. }
+        );
+
+        if carries_no_rows {
+            return outcome;
+        }
+
+        let Some(local_record_ids) = Self::local_wallet_record_ids("apply a detail refresh") else {
+            return outcome;
+        };
+
+        match &mut outcome {
+            CloudBackupDetailOutcome::Refreshed(listed)
+            | CloudBackupDetailOutcome::RefreshedWithAuthority { listed, .. } => {
+                listed.retain_local_wallets(&local_record_ids);
+            }
+
+            CloudBackupDetailOutcome::Provisional(detail)
+            | CloudBackupDetailOutcome::RefreshedWithoutListing(detail) => {
+                detail.retain_local_wallets(&local_record_ids);
+            }
+
+            CloudBackupDetailOutcome::Checking
+            | CloudBackupDetailOutcome::Cleared
+            | CloudBackupDetailOutcome::Failed { .. } => {}
+        }
+
+        outcome
+    }
+
+    fn local_wallet_record_ids(purpose: &str) -> Option<HashSet<String>> {
+        CloudBackupStore::global()
+            .local_wallet_record_ids()
+            .inspect_err(|error| {
+                error!("read local wallets to {purpose}: {error}");
+            })
+            .ok()
+    }
+
     pub(crate) fn apply_local_wallets_changed(&self) {
-        self.apply_model_event(CloudBackupStateReducerEvent::CloudOnlyLocalWalletsChanged);
+        let local_record_ids = Self::local_wallet_record_ids("apply a wallet change");
+
+        self.apply_model_event(CloudBackupStateReducerEvent::LocalWalletsChanged {
+            local_record_ids,
+        });
     }
 
     /// Applies a fetch outcome, reporting whether a `Loaded` result was dropped as stale
