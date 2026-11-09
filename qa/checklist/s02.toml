@@ -201,17 +201,23 @@ target = "ui"
 paths = [
     "ios/Cove/Flows/KeyTeleportFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportRevealPair.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportComponents.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportSendViews.kt",
 ]
 coverage = [
-    "human:android",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportRevealCaptureTest.kt::receiverRequestShowsOnlyOneOfItsQrCodeAndReceiverCode",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportRevealCaptureTest.kt::senderResponseShowsOnlyOneOfItsQrCodeAndPassword",
     "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportRevealPairTest.kt::revealActionSwapsTheOnlyExposedValue",
     "ios-ui:ios/CoveUITests/KeyTeleportReceiveFullLaunchUITests.swift::testMnemonicReviewRevealsOnTapAndOnlyImportAddsTheWallet",
     "ios-ui:ios/CoveUITests/KeyTeleportSendFullLaunchUITests.swift::testSentWordsShowTheQrCodeAndPasswordOneAtATime",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# the compose test covers android one-at-a-time exposure; the visual judgement stays human on android
+# the compose test covers android one-at-a-time exposure in the semantics tree
+# the android capture tests read the real receiver request and sender response, FLAG_SECURE set, from in-app captures, before anything is revealed and after each switch: zxing must decode the shown QR code to its exact packet and must not decode the hidden one, where a hidden QR code zxing finds but cannot read still passes that check
+# the shown code or password must match a reference rendering of its own text, with at most 2% of its glyph-core pixels off the reference and at most 1% under WCAG AA contrast measured from the captured pixels, and the hidden one must not match
+# without OCR on android, the tests walk transfers, up to six, until every character place has differed between two of them; no hidden character, before anything is revealed or after showing the QR code again, may differ in fine detail by more than 5% of how much it does once shown, and the hidden QR codes by more than 18%
+# with the blur removed, the hint's 88% overlay alone leaves those at 12% or more for a character and 88% or more for the QR code, and the working blur keeps them under 3% and 4%
 # the ios tests read the receiver request and sender response off screenshots: a hidden QR code must not decode and a hidden code or password must not read with Vision, and each must once shown
 
 [[row]]
