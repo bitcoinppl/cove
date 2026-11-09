@@ -17,7 +17,8 @@ use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     async_test_lock, complete_cloud_only_fetch, complete_loaded_outcome,
     configure_enabled_cloud_backup, encrypted_wallet_backup_bytes_for_entry, listed_detail,
-    persisted_enabled_cloud_backup_state, reset_cloud_backup_test_state, test_globals,
+    persisted_enabled_cloud_backup_state, reset_cloud_backup_test_state,
+    seed_verifiable_cloud_master_key, test_globals,
     staged_pending_enable_journal, wait_for_test_condition, wallet_entry_with_labels,
     xpub_only_wallet_metadata,
 };
@@ -1331,7 +1332,7 @@ async fn supervisor_ignores_stale_reinitialize_backup_completion() {
 
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_reinitialize_verification_completion() {
-    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::ReinitializeBackup), async |supervisor, claim| {
+    assert_completion_ignores_stale_claim(begin_exclusive(CloudBackupExclusiveOperation::VerifyReinitializedBackup), async |supervisor, claim| {
             supervisor
                 .complete_verification(
                     Some(claim),
@@ -4605,13 +4606,12 @@ fn drained_drive_account_commit_requests(
 
 #[tokio::test(flavor = "current_thread")]
 async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
-    use crate::manager::cloud_backup_manager::model::{
-        CloudBackupDestructiveOperationState as Destructive, CloudBackupVerificationState,
-    };
+    use crate::manager::cloud_backup_manager::model::CloudBackupDestructiveOperationState as Destructive;
 
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
     configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    seed_verifiable_cloud_master_key(test_globals());
     let mut supervisor = CloudBackupSupervisor::new(
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
@@ -4712,8 +4712,8 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
     assert_eq!(drained_drive_account_commit_requests(&manager, transition_id.value()), 1);
     assert_eq!(supervisor.active_operation.claim(), Some(claim));
 
-    // once the platform commits, the switch ends like any reinitialize: verification of the new
-    // account's backup is scheduled under the same claim, and its terminal result releases it
+    // once the platform commits, the switch ends like any reinitialize and the new account's backup
+    // is verified
     supervisor
         .confirm_drive_account_switch_committed(transition_id)
         .await
@@ -4723,17 +4723,105 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
         .unwrap();
 
     assert_eq!(persisted_drive_account_switch_phase(), None);
+    assert_reinitialized_backup_verification_reads_cloud(&mut supervisor, &manager, claim).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn reinitialize_backup_verification_reads_the_new_backup() {
+    use crate::manager::cloud_backup_manager::model::CloudBackupDestructiveOperationState as Destructive;
+
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    seed_verifiable_cloud_master_key(test_globals());
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
+    );
+
+    supervisor.begin_recovery_operation(RecoveryAction::ReinitializeBackup);
+    let claim = supervisor.active_operation.claim().unwrap();
+
+    assert_eq!(claim.operation(), CloudBackupExclusiveOperation::ReinitializeBackup);
+    assert_eq!(manager.state.read().status(), CloudBackupStatus::Enabling);
     assert_eq!(
-        configured_cloud_backup_state(&manager).verification,
+        configured_cloud_backup_state(&manager).destructive_operation,
+        Destructive::ReinitializingBackup
+    );
+
+    supervisor.finish_enable_operation(manager.clone(), claim);
+
+    assert_reinitialized_backup_verification_reads_cloud(&mut supervisor, &manager, claim).await;
+}
+
+/// Runs the verification a finished reinitialize scheduled and checks it read the new backup
+///
+/// The supervisor here is not spawned, so this calls the same preparation step its scheduled
+/// verification runs and hands the result back the way that task would
+async fn assert_reinitialized_backup_verification_reads_cloud(
+    supervisor: &mut CloudBackupSupervisor,
+    manager: &Arc<RustCloudBackupManager>,
+    reinitialize_claim: CloudBackupExclusiveOperationClaim,
+) {
+    use crate::manager::cloud_backup_manager::model::{
+        CloudBackupDestructiveOperationState as Destructive, CloudBackupVerificationState,
+    };
+
+    let globals = test_globals();
+
+    assert_eq!(
+        configured_cloud_backup_state(manager).verification,
         CloudBackupVerificationState::Running
     );
-    assert_eq!(supervisor.active_operation.claim(), Some(claim));
 
-    // when that verification ends, the claim goes and the reinitializing spinner goes with it
+    assert_eq!(
+        configured_cloud_backup_state(manager).destructive_operation,
+        Destructive::ReinitializingBackup
+    );
+
+    let master_key_reads = globals.cloud.master_key_download_attempt_count();
+    let step = manager.prepare_deep_verify_cloud_backup(false).await;
+
+    assert!(
+        !matches!(step, CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled)),
+        "verification stopped before reading the cloud"
+    );
+
+    assert!(globals.cloud.master_key_download_attempt_count() > master_key_reads);
+
+    // it could read the cloud because the backup reads as enabled again, while the verification
+    // holds the slot under its own claim and the reinitialize stays on screen
+    let verification_claim = supervisor.active_operation.claim().unwrap();
+
+    assert_eq!(manager.state.read().status(), CloudBackupStatus::Enabled);
+    assert_ne!(manager.state().settings_row_status, CloudBackupSettingsRowStatus::SettingUp);
+    assert_ne!(verification_claim, reinitialize_claim);
+    assert_eq!(
+        verification_claim.operation(),
+        CloudBackupExclusiveOperation::VerifyReinitializedBackup
+    );
+    assert_eq!(manager.projected_exclusive_operation(), Some(verification_claim));
+
+    // a completion still carrying the reinitialize claim is stale
     supervisor
         .complete_verification(
-            Some(claim),
+            Some(reinitialize_claim),
             CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
+            DeepVerificationContinuation::ReinitializeBackup {
+                attempt: VerificationAttempt::Initial,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(supervisor.active_operation.claim(), Some(verification_claim));
+
+    // the verification's own result reports the new backup verified, and releases the slot and
+    // the spinner
+    supervisor
+        .complete_verification(
+            Some(verification_claim),
+            step,
             DeepVerificationContinuation::ReinitializeBackup {
                 attempt: VerificationAttempt::Initial,
             },
@@ -4743,5 +4831,9 @@ async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
 
     assert_eq!(supervisor.active_operation, None);
     assert_eq!(manager.projected_exclusive_operation(), None);
-    assert_eq!(configured_cloud_backup_state(&manager).destructive_operation, Destructive::Idle);
+    assert_eq!(configured_cloud_backup_state(manager).destructive_operation, Destructive::Idle);
+    assert!(matches!(
+        configured_cloud_backup_state(manager).verification,
+        CloudBackupVerificationState::Verified { .. }
+    ));
 }

@@ -33,7 +33,7 @@ use crate::manager::cloud_backup_manager::actors::{
 use crate::manager::cloud_backup_manager::model::CloudBackupDetailState;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupExclusiveOperation,
-    CloudBackupExclusiveOperationClaim,
+    CloudBackupExclusiveOperationClaim, CloudBackupVerificationState,
 };
 use crate::manager::cloud_backup_manager::verify::CloudBackupDeepVerificationStep;
 use crate::manager::cloud_backup_manager::wallets::{
@@ -381,29 +381,6 @@ fn operation_write_client_for_test(
     claim: CloudBackupExclusiveOperationClaim,
 ) -> CloudBackupWriteClient {
     CloudBackupWriteClient::for_operation(manager.cloud_writes.clone(), claim)
-}
-
-fn seed_verifiable_cloud_master_key(globals: &TestGlobals) -> String {
-    let prf_key = [7u8; 32];
-    let prf_salt = [9u8; 32];
-    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
-    let master_key = cove_cspp::Cspp::new(Keychain::global().clone())
-        .load_master_key_from_store()
-        .unwrap()
-        .unwrap();
-    let encrypted =
-        cove_cspp::master_key_crypto::encrypt_master_key(&master_key, &prf_key, &prf_salt).unwrap();
-
-    let master_json = serde_json::to_vec(&encrypted).unwrap();
-    let revision_hash = master_key_wrapper_revision_hash(&master_json);
-    globals.cloud.set_master_key_backup(namespace, master_json);
-    CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
-    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
-        prf_output: prf_key.to_vec(),
-        credential_id: vec![1, 2, 3],
-    }));
-    globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
-    revision_hash
 }
 
 fn global_manager() -> Arc<RustCloudBackupManager> {

@@ -167,9 +167,19 @@ impl CloudBackupSupervisor {
         );
 
         if matches!(runtime_status, CloudBackupStatus::Enabled) {
+            // the reinitialize claim reports the backup as still enabling, and verification only
+            // reads the cloud for an enabled backup, so the verification gets its own claim
+            let Some(verification_claim) = self.hand_off_exclusive_operation(
+                &manager,
+                claim,
+                CloudBackupExclusiveOperation::VerifyReinitializedBackup,
+            ) else {
+                return;
+            };
+
             self.start_verification_with_context(
                 manager,
-                Some(claim),
+                Some(verification_claim),
                 DeepVerificationContinuation::ReinitializeBackup {
                     attempt: VerificationAttempt::Initial,
                 },

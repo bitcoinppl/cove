@@ -20,10 +20,10 @@ coverage = [
 # 1.4.0: ios N/A, android BLOCKED
 # rust decides the switch's phase and claim transitions from the chosen account through
 # reinitializing the backup there, a failed reinitialization waiting for try again, the retry and the
-# commit, and a running supervisor releases the switch's claim after the commit. a person still runs
-# the play services account chooser and consent with a real second google account, and checks that
-# the backup on the new account verifies; an android ui test of the switch is a follow-up, since the
-# uitest flavour never registers the switch callbacks (CoveApplication.kt)
+# commit, then verifies the new account's backup, and a running supervisor releases the switch's claim
+# after the commit. a person still runs the play services account chooser and consent with a real
+# second google account; an android ui test of the switch is a follow-up, since the uitest flavour
+# never registers the switch callbacks (CoveApplication.kt)
 
 [[row]]
 id = "s12-enable-backup-without-existing-data"
@@ -332,6 +332,7 @@ coverage = [
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::reconnect_retries_verification_after_offline_failure",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/sync_health.rs::sync_now_offline_uploads_nothing_then_uploads_after_reconnect",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/deep_verify.rs::manual_verification_repairs_missing_master_key_wrapper_through_supervisor",
+  "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::reinitialize_backup_verification_reads_the_new_backup",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/passkey.rs::wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/pending_upload.rs::pending_upload_verification_survives_restart",
   "rust:rust/src/manager/cloud_backup_manager/ops/tests/connectivity.rs::startup_resume_retries_interrupted_uploading_wallets",
@@ -343,7 +344,7 @@ coverage = [
   "ios-ui:ios/CoveUITests/CloudBackupSyncNowFullAppUITests.swift::testCancelledVerificationRetriesWithTheSamePasskey",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# ui tests on both platforms: tapping Sync Now uploads a wallet whose upload the cloud rejected for quota and the detail refreshes to show it confirmed with Sync Now gone; offline it uploads nothing and shows the offline error, then uploads after reconnecting; a cancelled passkey leaves Cloud Backup Not Verified and Verify Now verifies with the same passkey, creating none. Repairing a missing master-key wrapper has only the Rust tests on both platforms
+# ui tests on both platforms: tapping Sync Now uploads a wallet whose upload the cloud rejected for quota and the detail refreshes to show it confirmed with Sync Now gone; offline it uploads nothing and shows the offline error, then uploads after reconnecting; a cancelled passkey leaves Cloud Backup Not Verified and Verify Now verifies with the same passkey, creating none. Repairing a missing master-key wrapper, and verifying the new backup after a reinitialize, have only the Rust tests on both platforms
 
 [[row]]
 id = "s12-restore-all-sequential-progress-and-deduplication"

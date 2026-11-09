@@ -354,9 +354,12 @@ impl CloudBackupReducerState {
             Some(CloudBackupExclusiveOperation::RecreateManifest) => {
                 CloudBackupDestructiveOperationState::RecreatingManifest
             }
-            Some(CloudBackupExclusiveOperation::ReinitializeBackup) => {
-                CloudBackupDestructiveOperationState::ReinitializingBackup
-            }
+
+            // the reinitialize stays on screen until the new backup has been verified
+            Some(
+                CloudBackupExclusiveOperation::ReinitializeBackup
+                | CloudBackupExclusiveOperation::VerifyReinitializedBackup,
+            ) => CloudBackupDestructiveOperationState::ReinitializingBackup,
             _ => self.configured.destructive_operation.clone(),
         }
     }
@@ -520,6 +523,7 @@ impl CloudBackupReducerState {
             Some(CloudBackupExclusiveOperation::Disable) => return CloudBackupStatus::Disabling,
             Some(
                 CloudBackupExclusiveOperation::RecreateManifest
+                | CloudBackupExclusiveOperation::VerifyReinitializedBackup
                 | CloudBackupExclusiveOperation::RepairPasskey
                 | CloudBackupExclusiveOperation::VerificationRepair
                 | CloudBackupExclusiveOperation::RecoverOtherBackups
@@ -760,6 +764,18 @@ impl CloudBackupReducerState {
         self.active_operation = None;
     }
 
+    fn hand_off_exclusive_operation(
+        &mut self,
+        from: CloudBackupExclusiveOperationClaim,
+        to: CloudBackupExclusiveOperationClaim,
+    ) {
+        if self.active_operation != Some(from) {
+            return;
+        }
+
+        self.active_operation = Some(to);
+    }
+
     fn apply_exclusive_operation_start(&mut self, operation: CloudBackupExclusiveOperation) {
         match operation {
             CloudBackupExclusiveOperation::Enable
@@ -784,7 +800,8 @@ impl CloudBackupReducerState {
             CloudBackupExclusiveOperation::RepairPasskey => {
                 self.resolve_recovery(RecoveryState::Recovering(RecoveryAction::RepairPasskey));
             }
-            CloudBackupExclusiveOperation::VerificationRepair => {}
+            CloudBackupExclusiveOperation::VerifyReinitializedBackup
+            | CloudBackupExclusiveOperation::VerificationRepair => {}
             CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups => {
                 self.configured.undecryptable_wallet_deletion =
                     CloudBackupUndecryptableWalletDeletionState::Idle;
@@ -1565,6 +1582,9 @@ impl CloudBackupStateReducer {
             }
             CloudBackupStateReducerEvent::ExclusiveOperationFinished(claim) => {
                 self.state.finish_exclusive_operation(claim);
+            }
+            CloudBackupStateReducerEvent::ExclusiveOperationHandedOff { from, to } => {
+                self.state.hand_off_exclusive_operation(from, to);
             }
             CloudBackupStateReducerEvent::EnableContextStarted(context) => {
                 self.state.active_enable_context = Some(context);
