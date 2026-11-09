@@ -54,9 +54,24 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/cold_wallet/QrCodeImportScreen.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/nfc/NfcReader.kt",
+    "ios/Cove/Views/QrExportView.swift",
+    "ios/Cove/Views/QrExportContentViews.swift",
+    "ios/Cove/QrCodeView.swift",
+    "ios/Cove/QrCodeScanView.swift",
+    "ios/CodeScanner/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/QrExportView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/QrCodeGenerator.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/QrCodeScanView.kt",
+    "ios/Cove/Flows/SendFlow/SendFlowHardwareSheets.swift",
+    "rust/crates/cove-types/src/confirm.rs",
+    "rust/crates/cove-ur/src/crypto_psbt.rs",
+    "rust/src/multi_format.rs",
+    "rust/src/qr_scanner.rs",
 ]
 coverage = [
     "human",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# needs a hardware signer over qr and nfc
+# needs a strict physical hardware signer over qr and nfc. over qr, its camera reads the animated ur
+# and bbqr exports off the phone's screen and the phone's camera reads the signed ur and bbqr back;
+# the s13 rows' ui tests decide the drawn frames and the signed import without a camera

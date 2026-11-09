@@ -32,6 +32,11 @@ image = { version = "0.25.10", features = ["gif"] }
 gif = "0.14.2"
 bbqr = { workspace = true }
 foundation-ur = { version = "0.5.0", default-features = false, features = ["std"] }
+# for the ui test host's checks on drawn export frames, which bbqr and foundation-ur skip
+crc = "3.4.0"
+data-encoding = "2.11.0"
+flate2 = { version = "1.1.9", default-features = false, features = ["any_zlib", "zlib-rs"] }
+minicbor = { version = "0.24.4", features = ["std"] }
 hex = "0.4.3"
 # for the ui test host's KeyTeleport peer
 keyteleport = "0.1.0"

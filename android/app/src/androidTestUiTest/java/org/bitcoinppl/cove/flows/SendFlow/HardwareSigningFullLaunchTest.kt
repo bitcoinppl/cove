@@ -6,6 +6,7 @@ import android.content.Context
 import android.os.Build
 import android.system.Os
 import android.util.Base64
+import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.platform.app.InstrumentationRegistry
@@ -31,6 +32,8 @@ import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.hierarchy
 import org.bitcoinppl.cove.test.launchFullApp
 import org.bitcoinppl.cove.test.scrollTo
+import org.bitcoinppl.cove.test.stateDescriptionOf
+import org.bitcoinppl.cove.test.visibleQrCode
 import org.bitcoinppl.cove.test.waitFor
 import org.bitcoinppl.cove.uitest.UiTestSeams
 import org.bitcoinppl.cove_core.TapSignerReaderException
@@ -45,6 +48,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.math.BigDecimal
 import java.util.regex.Pattern
+import kotlin.random.Random
 
 /**
  * Signs sends from hardware wallets in the real app: animated UR and BBQr signatures over the QR
@@ -69,6 +73,22 @@ class HardwareSigningFullLaunchTest {
 
         // what the TAPSIGNER sheet shows when signing fails for any reason but the CVC
         const val SIGNING_FAILED = "Connection failed, please try again"
+
+        // what the clipboard holds until the export's Copy replaces it
+        const val CLIPBOARD_SENTINEL = "cove-test-clipboard-sentinel"
+
+        // the fewest frames a drawn export should cycle through, so the test reads an animated QR
+        const val DRAWN_EXPORT_MIN_PARTS = 3
+
+        // bounds the screenshots taken to see every part; a part that never shows fails within it
+        const val DRAWN_EXPORT_TIMEOUT_MS = 90_000L
+
+        // bounds the wait for the first frame of the split the frame counter shows
+        const val DRAWN_EXPORT_SETTLE_MS = 5_000L
+        const val TAG = "HardwareSigningTest"
+
+        // a multi-part UR's `ur:type/i-N/` path, whose N is the part count
+        val UR_SEQUENCE = Regex("^ur:[^/]+/\\d+-(\\d+)/", RegexOption.IGNORE_CASE)
     }
 
     @get:Rule
@@ -365,7 +385,15 @@ class HardwareSigningFullLaunchTest {
         device.waitFor(By.text(formatLabel)).click()
         device.waitFor(By.desc("QR code for transaction signing"))
 
+        // the clipboard can still hold text from an earlier step or test, such as a receive address,
+        // and the app handles the tap asynchronously, so a read right after it can still see that
+        // text; a sentinel shows when Copy has written, even when it writes the same text again
+        setClipboard(CLIPBOARD_SENTINEL)
         device.waitFor(By.desc("Copy")).click()
+        wallet.waitUntil("the export's Copy never reached the clipboard", timeoutMs = 5_000L) {
+            clipboardText() != CLIPBOARD_SENTINEL
+        }
+
         val psbt = clipboardText().trim()
         assertTrue("the Copy button copied nothing", psbt.isNotEmpty())
 
@@ -497,4 +525,165 @@ class HardwareSigningFullLaunchTest {
     }
 
     private fun hex(base64: String): String = Base64.decode(base64, Base64.DEFAULT).joinToString("") { "%02x".format(it) }
+
+    // MARK: drawn export frames
+
+    @Test
+    fun drawnUrExportJoinsToTheDraftAndItsSignatureBroadcasts() {
+        signDrawnExportAndBroadcast(SignedFrames::ur, "UR", "ur:")
+    }
+
+    @Test
+    fun drawnBbqrExportJoinsToTheDraftAndItsSignatureBroadcasts() {
+        signDrawnExportAndBroadcast(SignedFrames::bbqr, "BBQr", "B$")
+    }
+
+    /**
+     * Reads the unsigned export off the screen as a hardware wallet's camera would, instead of
+     * from Copy, so a frame the sheet never draws or draws unreadably fails the send
+     */
+    private fun signDrawnExportAndBroadcast(
+        frames: (SignedFrames) -> List<String>,
+        formatLabel: String,
+        framePrefix: String,
+    ) {
+        val funded = fundTestWallet()
+        importWatchOnlyWallet()
+        startMaxDraft()
+
+        val copied = exportUnsignedPsbt(formatLabel)
+
+        openExportSheet(formatLabel)
+        val shownParts = lowerDensityUntilAnimated()
+        val stale = dropStaleFrames(framePrefix, shownParts)
+        val drawn = readDrawnExport(framePrefix)
+        device.pressBack()
+        device.waitFor(By.text("Import Signature"))
+
+        Log.i(
+            TAG,
+            "drawn $formatLabel export: ${drawn.frames} of $shownParts frames in ${drawn.captures} captures over " +
+                "${drawn.durationMs} ms, after dropping $stale stale frames",
+        )
+
+        assertEquals("the frame counter and the drawn frames disagree on the part count", shownParts, drawn.frames)
+        assertEquals("the drawn frames carry a different PSBT than Copy", copied.lowercase(), drawn.psbt)
+
+        val signed = signer.sign(drawn.psbt, ANIMATED_PARTS)
+        openSignatureScanner()
+        qr.show(frames(signed).reversed())
+
+        assertConfirmationScreen()
+        wallet.swipeToSend()
+
+        val broadcast = node.broadcasts().single()
+        assertEquals("a Max send spends every UTXO", funded.map { it.outpoint }.toSet(), broadcast.inputs.toSet())
+        assertEquals(listOf(EXTERNAL_ADDRESS), broadcast.outputs.map { it.address })
+    }
+
+    private data class DrawnExport(
+        val psbt: String,
+        val frames: Int,
+        val captures: Int,
+        val durationMs: Long,
+    )
+
+    private fun openExportSheet(formatLabel: String) {
+        device.waitFor(By.text("Export Transaction")).click()
+        device.waitFor(By.text("QR Code")).click()
+        device.waitFor(By.text("Scan this QR"), timeoutMs = 15_000L)
+        device.waitFor(By.text(formatLabel)).click()
+        device.waitFor(By.desc("QR code for transaction signing"))
+    }
+
+    /**
+     * Lowers the density until the export cycles through at least [DRAWN_EXPORT_MIN_PARTS] frames,
+     * and returns how many the frame counter shows
+     *
+     * A small PSBT fits in one BBQr frame at the default density, which shows no frame counter
+     */
+    private fun lowerDensityUntilAnimated(): Int {
+        fun shownFrames() = stateDescriptionOf("QR frame")?.substringAfterLast(" ")?.toIntOrNull() ?: 1
+
+        var shown = shownFrames()
+        repeat(6) {
+            if (shown >= DRAWN_EXPORT_MIN_PARTS) return@repeat
+            val decrease = device.findObject(By.desc("Decrease density")) ?: return@repeat
+            if (!decrease.isEnabled) return@repeat
+            decrease.click()
+
+            // the sheet regenerates its frames, and frames drawn before then would join a different
+            // split, so wait until the counter shows the new count
+            val previous = shown
+            val deadline = System.currentTimeMillis() + 5_000L
+            while (System.currentTimeMillis() < deadline && shown == previous) {
+                Thread.sleep(200)
+                shown = shownFrames()
+            }
+        }
+
+        assertTrue("the export never became an animated QR, it shows $shown frames", shown >= DRAWN_EXPORT_MIN_PARTS)
+        return shown
+    }
+
+    /**
+     * Decodes the sheet's QR until it shows a frame of the split the frame counter reports, and
+     * returns how many decoded frames of an earlier split it dropped first
+     */
+    private fun dropStaleFrames(
+        framePrefix: String,
+        shownParts: Int,
+    ): Int {
+        // the counter can update before the image is redrawn, so the first frames after a density
+        // change can still belong to the split it replaced, which the host rightly won't join
+        val deadline = System.currentTimeMillis() + DRAWN_EXPORT_SETTLE_MS
+        var stale = 0
+
+        while (System.currentTimeMillis() < deadline) {
+            val code = visibleQrCode()
+            if (code != null && code.startsWith(framePrefix, ignoreCase = true)) {
+                if (partCount(code) == shownParts) return stale
+                stale++
+            }
+
+            Thread.sleep(Random.nextLong(50, 250))
+        }
+
+        error("no drawn frame showed the $shownParts parts the frame counter reports within $DRAWN_EXPORT_SETTLE_MS ms, after $stale stale frames")
+    }
+
+    /** The part count in a frame's header: a BBQr's base 36 total, or the N of a UR's `i-N` */
+    private fun partCount(frame: String): Int? {
+        if (frame.startsWith("B$")) {
+            return if (frame.length >= 6) frame.substring(4, 6).toIntOrNull(36) else null
+        }
+
+        val match = UR_SEQUENCE.find(frame) ?: return null
+        return match.groupValues[1].toIntOrNull()
+    }
+
+    /** Screenshots the sheet and decodes its QR until the host can join every distinct frame seen */
+    private fun readDrawnExport(framePrefix: String): DrawnExport {
+        val started = System.currentTimeMillis()
+        val frames = mutableListOf<String>()
+        var captures = 0
+        var partsLeft: Int? = null
+
+        while (System.currentTimeMillis() - started < DRAWN_EXPORT_TIMEOUT_MS) {
+            captures++
+            val code = visibleQrCode()
+            if (code != null && code.startsWith(framePrefix, ignoreCase = true) && code !in frames) {
+                frames += code
+
+                val joined = signer.joinExportFrames(frames)
+                joined.psbt?.let { return DrawnExport(it, frames.size, captures, System.currentTimeMillis() - started) }
+                partsLeft = joined.partsLeft
+            }
+
+            // a random pause keeps the screenshots from falling into step with the frame timer
+            Thread.sleep(Random.nextLong(50, 250))
+        }
+
+        error("decoded ${frames.size} distinct frames in $captures captures, and ${partsLeft ?: "some"} parts never showed")
+    }
 }
