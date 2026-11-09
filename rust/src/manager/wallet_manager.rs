@@ -1792,7 +1792,8 @@ mod tests {
             .insert_or_update_labels_for_txn(details().await, "Journey receive 2".to_string(), None)
             .expect("label edit saves");
 
-        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        let deadline = tokio::time::Instant::now()
+            + crate::test_support::loaded_host_wait(std::time::Duration::from_secs(2));
         let mut seen = Vec::new();
         while let Ok(Ok(message)) = receiver.recv_async().with_deadline(deadline).await {
             let messages = match message {

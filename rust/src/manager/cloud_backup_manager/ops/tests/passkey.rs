@@ -1331,7 +1331,8 @@ async fn wrapper_repair_refreshes_missing_master_key_sync_health_to_uploading() 
 
     run_repair_passkey_operation(&manager, true).await;
 
-    for _ in 0..20 {
+    let deadline = LoadedHostDeadline::after(Duration::from_millis(200));
+    while !deadline.has_passed() {
         if manager.model_snapshot().sync_health == CloudSyncHealth::Uploading {
             break;
         }

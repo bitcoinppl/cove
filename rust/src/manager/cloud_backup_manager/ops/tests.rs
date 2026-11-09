@@ -71,6 +71,7 @@ use crate::manager::cloud_backup_manager::{
 };
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 use crate::manager::wallet_manager::RustWalletManager;
+use crate::test_support::LoadedHostDeadline;
 use crate::wallet::{
     Wallet,
     metadata::{WalletMetadata, WalletMode, WalletType},
@@ -237,7 +238,8 @@ async fn run_enable_operation(
     }
     .expect("start enable operation");
 
-    for _ in 0..200 {
+    let deadline = LoadedHostDeadline::after(Duration::from_secs(2));
+    while !deadline.has_passed() {
         let Some(claim) = manager.projected_exclusive_operation() else { break };
 
         if has_awaiting_saved_passkey_confirmation_for_test(manager).await {
@@ -279,15 +281,10 @@ fn platform_authorization_failed() -> PasskeyError {
 }
 
 async fn wait_for_discover_count(globals: &TestGlobals, expected_count: usize) {
-    for _ in 0..20 {
-        if globals.passkey.discover_count() == expected_count {
-            return;
-        }
-
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-
-    assert_eq!(globals.passkey.discover_count(), expected_count);
+    wait_for_test_condition(Duration::from_millis(200), "expected passkey discovery count", || {
+        globals.passkey.discover_count() == expected_count
+    })
+    .await;
 }
 
 async fn run_disable_cloud_backup(manager: &Arc<RustCloudBackupManager>) {
@@ -343,7 +340,8 @@ async fn run_repair_passkey_operation(manager: &Arc<RustCloudBackupManager>, no_
 
 async fn confirm_saved_passkey_session(manager: &Arc<RustCloudBackupManager>) {
     call!(manager.supervisor.confirm_saved_passkey()).await.expect("confirm saved passkey");
-    for _ in 0..500 {
+    let deadline = LoadedHostDeadline::after(Duration::from_secs(5));
+    while !deadline.has_passed() {
         if !matches!(
             manager
                 .projected_exclusive_operation()

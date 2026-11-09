@@ -81,6 +81,7 @@ impl EmulatedCard {
 
     fn wait_for_socket(&mut self) {
         let started = Instant::now();
+        let timeout = crate::test_support::loaded_host_wait(STARTUP_TIMEOUT);
 
         while !self.pipe.exists() {
             if let Some(status) = self.child.try_wait().expect("emulator status reads") {
@@ -88,8 +89,8 @@ impl EmulatedCard {
             }
 
             assert!(
-                started.elapsed() < STARTUP_TIMEOUT,
-                "TAPSIGNER emulator did not open {} within {STARTUP_TIMEOUT:?}:\n{}",
+                started.elapsed() < timeout,
+                "TAPSIGNER emulator did not open {} within {timeout:?}:\n{}",
                 self.pipe.display(),
                 self.log_contents()
             );

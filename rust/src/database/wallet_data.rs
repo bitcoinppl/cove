@@ -879,7 +879,11 @@ mod tests {
         assert!(receiver.recv_timeout(Duration::from_millis(100)).is_err());
         drop(gate_guard);
 
-        assert!(receiver.recv_timeout(Duration::from_secs(2)).unwrap());
+        assert!(
+            receiver
+                .recv_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(2)))
+                .unwrap()
+        );
         handle.join().expect("wallet data open thread should not panic");
         test_support::clear_wallet_registry_entry(&wallet_id);
     }

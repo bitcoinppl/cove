@@ -12,6 +12,8 @@ use cove_tokio::FutureTimeoutExt as _;
 use futures::FutureExt as _;
 use tokio::sync::{Notify, oneshot};
 
+use crate::test_support::loaded_host_wait;
+
 use super::{
     CoordinatorPhase, DestructiveClaim, DestructiveIntent, ORDINARY_CLOSE_RETRY_BACKOFF,
     OrdinaryCloseOutcome, RegistrationState, ResumedRegistrationState, ShutdownDeadlineTier,
@@ -96,7 +98,7 @@ async fn successful_terminal_request_awaits_termination() {
     let actor = spawn_actor(Arc::new(Notify::new()));
     let result = terminal_shutdown(
         actor.clone(),
-        tokio::time::Instant::now() + std::time::Duration::from_secs(1),
+        tokio::time::Instant::now() + loaded_host_wait(std::time::Duration::from_secs(1)),
         |_actor| Box::pin(async { Ok(()) }),
     )
     .await;
@@ -110,7 +112,8 @@ async fn already_terminated_actor_is_idempotent_success() {
     let actor = spawn_actor(Arc::new(Notify::new()));
     let quiesce_calls = Arc::new(AtomicUsize::new(0));
     let first_calls = quiesce_calls.clone();
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(1);
+    let deadline =
+        tokio::time::Instant::now() + loaded_host_wait(std::time::Duration::from_secs(1));
 
     terminal_shutdown(actor.clone(), deadline, move |_actor| {
         first_calls.fetch_add(1, Ordering::SeqCst);
@@ -268,7 +271,7 @@ async fn retryable_ordinary_close_is_retried_without_a_new_construction() {
             notified.await;
         }
     }
-    .with_timeout(std::time::Duration::from_secs(2))
+    .with_timeout(loaded_host_wait(std::time::Duration::from_secs(2)))
     .await
     .expect("the coordinator-owned retry closes the actors");
 
@@ -336,7 +339,7 @@ async fn ordinary_close_retry_waits_for_failed_destructive_phase_to_release() {
             notified.await;
         }
     }
-    .with_timeout(Duration::from_secs(2))
+    .with_timeout(loaded_host_wait(Duration::from_secs(2)))
     .await
     .expect("the retained retry closes after destructive ownership releases");
 
@@ -360,7 +363,7 @@ async fn wait_for_registration_removal(
             notified.await;
         }
     }
-    .with_timeout(Duration::from_secs(2))
+    .with_timeout(loaded_host_wait(Duration::from_secs(2)))
     .await
     .expect("ordinary close retry removes the registration");
 }
@@ -776,7 +779,7 @@ async fn cancelled_preparation_finishes_in_the_coordinator_owned_task() {
             notified.await;
         }
     }
-    .with_timeout(std::time::Duration::from_secs(1))
+    .with_timeout(loaded_host_wait(std::time::Duration::from_secs(1)))
     .await
     .expect("preparation reserves ownership");
 
@@ -797,7 +800,7 @@ async fn cancelled_preparation_finishes_in_the_coordinator_owned_task() {
             notified.await;
         }
     }
-    .with_timeout(std::time::Duration::from_secs(2))
+    .with_timeout(loaded_host_wait(std::time::Duration::from_secs(2)))
     .await
     .expect("coordinator-owned preparation releases after cancellation");
 }
@@ -844,7 +847,7 @@ async fn cancelled_preparation_converges_a_real_destructive_registration() {
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
     }
-    .with_timeout(Duration::from_secs(1))
+    .with_timeout(loaded_host_wait(Duration::from_secs(1)))
     .await
     .expect("real registration enters destructive closing");
 
@@ -870,7 +873,7 @@ async fn cancelled_preparation_converges_a_real_destructive_registration() {
             notified.await;
         }
     }
-    .with_timeout(Duration::from_secs(2))
+    .with_timeout(loaded_host_wait(Duration::from_secs(2)))
     .await
     .expect("detached preparation converges phase and registration");
 
