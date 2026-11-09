@@ -12,9 +12,18 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/AndroidCloudStorageAccess.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
-coverage = ["human"]
+coverage = [
+  "human",
+  "rust:rust/src/manager/cloud_backup_manager/actors/supervisor/tests.rs::drive_account_switch_continue_reinitializes_retries_and_commits",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/account_switch.rs::drive_account_switch_commit_releases_its_claim_on_a_running_supervisor",
+]
 # 1.4.0: ios N/A, android BLOCKED
-# needs real google accounts and consent ui
+# rust decides the switch's phase and claim transitions from the chosen account through
+# reinitializing the backup there, a failed reinitialization waiting for try again, the retry and the
+# commit, and a running supervisor releases the switch's claim after the commit. a person still runs
+# the play services account chooser and consent with a real second google account, and checks that
+# the backup on the new account verifies; an android ui test of the switch is a follow-up, since the
+# uitest flavour never registers the switch callbacks (CoveApplication.kt)
 
 [[row]]
 id = "s12-enable-backup-without-existing-data"
@@ -503,7 +512,17 @@ paths = [
   "ios/Cove/FFI/ICloudDriveHelper+Metadata.swift",
   "ios/Cove/FFI/CloudStorageAccessImpl.swift",
   "rust/src/manager/cloud_backup_manager/cloud_inventory.rs",
+  "rust/src/manager/cloud_backup_manager/actors/restore.rs",
 ]
-coverage = ["human"]
+coverage = [
+  "human",
+  "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testLocalListingsReportEvictedPlaceholdersUnderTheirRealNames",
+  "ios-unit:ios/CoveTests/CloudBackupIOSSafetyHelpersTests.swift::testBackupReadOfEvictedFileWaitsForMetadataInsteadOfReadingThePlaceholder",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/restore.rs::restore_reports_a_still_syncing_wallet_backup_without_applying_any_wallet",
+]
 # 1.4.0: ios HUMAN, android N/A
-# needs a real icloud account and local eviction
+# ios unit tests list evicted .name.icloud placeholders under their real names and send a read whose
+# only local copy is a placeholder to icloud's metadata, and rust stops a restore that meets a file
+# the provider is still syncing with the keep-cove-open message instead of calling it missing or
+# corrupt. a person still evicts and downloads backups on a real icloud account; the download poll
+# loop calls FileManager directly, with no test seam

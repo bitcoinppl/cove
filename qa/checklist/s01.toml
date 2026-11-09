@@ -340,4 +340,5 @@ coverage = [
     "human",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# release sign-off on the store-signed artifacts
+# the release decision, made on the builds the app store and play store re-sign after upload; no
+# build ci makes is that artifact, so a person smoke-tests it and signs off

@@ -211,7 +211,9 @@ impl CloudBackupSupervisor {
 
         self.resume_cloud_backup_work_after_drive_account_switch(&manager, transition_id).await;
 
-        self.finish_enable_operation(manager, claim);
+        // the switch record is gone, so finish_enable_operation would take this claim for a stale
+        // switch and leave it held with the recovery spinner up
+        self.finish_reinitialize_backup(manager, claim);
 
         Produces::ok(Ok(()))
     }

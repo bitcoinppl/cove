@@ -7,7 +7,10 @@
 //! with a message naming the missing piece when it is absent
 //!
 //! Each test starts its own emulated card. The emulator implements neither the 429 rate limit
-//! nor `wait`, so the auth-delay paths stay covered only by the mock-transport tests
+//! nor `wait`, so the auth-delay paths are covered by the mock-transport tests in the parent
+//! module instead: `connect_waits_out_auth_delay_before_any_command`,
+//! `cvc_probe_waits_out_auth_delay_then_authenticates` and
+//! `rate_limited_cvc_is_not_treated_as_a_wrong_cvc`
 
 use bitcoin::{
     CompressedPublicKey, ScriptBuf,

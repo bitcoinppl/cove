@@ -431,4 +431,10 @@ coverage = [
     "human",
 ]
 # 1.4.0: ios HUMAN, android N/A
-# restores a phone setting the mirror could not set; no app code involved
+# a person sets the iphone to the largest text size for the ios agent passes of
+# s16-send-entry-warnings-confirmation-and-advanced-details, s16-coin-control-search-list-and-continue-at,
+# s16-largest-text-makes-change-filter-unreadable, s16-recovery-words-two-column-layout-at-largest,
+# s16-add-create-and-verification-at-largest-font, s16-receive-copy-address-missing-at-largest-font,
+# s16-keyteleport-request-and-code-layout-at-largest and s16-keyteleport-sender-code-and-password-layout-at,
+# which the mirror can't set, and puts it back after; no app code involved. delete this row once those
+# rows run on simulators

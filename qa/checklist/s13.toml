@@ -195,11 +195,17 @@ coverage = [
   "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testTapSignerSignsAfterWrongPinAndDroppedSession",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::tapSignerImportRetriesAfterWrongPinAndDroppedSession",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::tapSignerSignsAfterWrongPinAndDroppedSession",
+  "rust:rust/src/tap_card/tap_signer_reader.rs::connect_waits_out_auth_delay_before_any_command",
+  "rust:rust/src/tap_card/tap_signer_reader.rs::cvc_probe_waits_out_auth_delay_then_authenticates",
+  "rust:rust/src/tap_card/tap_signer_reader.rs::rate_limited_cvc_is_not_treated_as_a_wrong_cvc",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # cove's card logic runs against coinkite's emulator in `just test-tapsigner-emulator`, and the ui
 # tests drive the tapsigner screens against it through the transport seam, with a wrong pin and a
-# dropped session; a physical card, the nfc session and the rate limit still need a person
+# dropped session. the emulator has no rate limit, so mock-card rust tests count a positive auth
+# delay down with one wait per second and a countdown message, on connect and in a cvc probe, and
+# keep a 429 a rate limit instead of a wrong pin. a person still uses a physical card over the
+# corenfc or isodep session, and sits through the card's real 15 second delay after three wrong pins
 
 [[row]]
 id = "s13-watch-only-badge-and-secret-action-isolation"

@@ -4560,3 +4560,188 @@ async fn seed_backup_watched_under_two_address_types_restores_as_its_own_wallet(
     assert_eq!(wallet_type(&native_segwit.id), Some(WalletType::WatchOnly));
     assert_eq!(wallet_type(&wrapped_segwit.id), Some(WalletType::WatchOnly));
 }
+
+fn persisted_drive_account_switch_phase() -> Option<PersistedDriveAccountSwitchPhase> {
+    RustCloudBackupManager::load_persisted_state()
+        .drive_account_switch()
+        .map(|account_switch| account_switch.phase)
+}
+
+fn configured_cloud_backup_state(
+    manager: &RustCloudBackupManager,
+) -> crate::manager::cloud_backup_manager::model::CloudBackupConfiguredState {
+    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+        panic!("expected configured cloud backup lifecycle");
+    };
+
+    configured
+}
+
+/// Drains the reconcile queue and counts the commit requests for one transition
+fn drained_drive_account_commit_requests(
+    manager: &RustCloudBackupManager,
+    transition_id: u64,
+) -> usize {
+    let is_commit_request = |message: &CloudBackupReconcileMessage| {
+        matches!(
+            message,
+            CloudBackupReconcileMessage::DriveAccountSwitchCommitRequired(id)
+                if *id == transition_id
+        )
+    };
+
+    manager
+        .reconciler
+        .receiver()
+        .try_iter()
+        .map(|messages| match messages {
+            SingleOrMany::Single(message) => usize::from(is_commit_request(&message)),
+            SingleOrMany::Many(messages) => {
+                messages.iter().filter(|message| is_commit_request(message)).count()
+            }
+        })
+        .sum()
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn drive_account_switch_continue_reinitializes_retries_and_commits() {
+    use crate::manager::cloud_backup_manager::model::{
+        CloudBackupDestructiveOperationState as Destructive, CloudBackupVerificationState,
+    };
+
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    configure_enabled_cloud_backup(&manager, test_globals(), 0);
+    let mut supervisor = CloudBackupSupervisor::new(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
+    );
+
+    let (transition_id, _ready) = supervisor
+        .begin_drive_account_switch()
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap();
+    let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition_id);
+
+    let stale = supervisor
+        .continue_drive_account_switch((transition_id.value() + 1).into())
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap_err();
+
+    assert_eq!(stale, CloudBackupDriveAccountSwitchError::InvalidTransition);
+    assert_eq!(
+        persisted_drive_account_switch_phase(),
+        Some(PersistedDriveAccountSwitchPhase::AwaitingAccountSelection)
+    );
+
+    // the user picked the new account: the backup is reinitialized there under the switch's claim
+    supervisor
+        .continue_drive_account_switch(transition_id)
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        persisted_drive_account_switch_phase(),
+        Some(PersistedDriveAccountSwitchPhase::Reinitializing)
+    );
+    assert_eq!(supervisor.active_operation.claim(), Some(claim));
+    assert_eq!(manager.projected_exclusive_operation(), Some(claim));
+    assert_eq!(
+        configured_cloud_backup_state(&manager).destructive_operation,
+        Destructive::ReinitializingBackup
+    );
+
+    let repeated = supervisor
+        .continue_drive_account_switch(transition_id)
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap_err();
+
+    assert_eq!(repeated, CloudBackupDriveAccountSwitchError::InvalidTransition);
+
+    // reinitializing in the new account fails: the switch waits for a retry, never a commit
+    supervisor
+        .complete_enable_preparation(
+            claim,
+            Err(CloudBackupError::Internal("new account upload failed".into())),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        persisted_drive_account_switch_phase(),
+        Some(PersistedDriveAccountSwitchPhase::AwaitingReinitializationRetry)
+    );
+    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(manager.projected_exclusive_operation(), None);
+    assert_eq!(configured_cloud_backup_state(&manager).destructive_operation, Destructive::Idle);
+    assert_eq!(drained_drive_account_commit_requests(&manager, transition_id.value()), 0);
+
+    // try again on the recovery prompt restarts the same switch, not a plain reinitialize
+    supervisor.begin_recovery_operation(RecoveryAction::ReinitializeBackup);
+
+    assert_eq!(
+        persisted_drive_account_switch_phase(),
+        Some(PersistedDriveAccountSwitchPhase::Reinitializing)
+    );
+    assert_eq!(supervisor.active_operation.claim(), Some(claim));
+    assert_eq!(manager.projected_exclusive_operation(), Some(claim));
+    assert_eq!(
+        configured_cloud_backup_state(&manager).destructive_operation,
+        Destructive::ReinitializingBackup
+    );
+
+    // the retry succeeds: the platform is asked to commit the account exactly once
+    supervisor.finish_enable_operation(manager.clone(), claim);
+
+    assert_eq!(
+        persisted_drive_account_switch_phase(),
+        Some(PersistedDriveAccountSwitchPhase::AwaitingAccountCommitSucceeded)
+    );
+    assert_eq!(drained_drive_account_commit_requests(&manager, transition_id.value()), 1);
+    assert_eq!(supervisor.active_operation.claim(), Some(claim));
+
+    // once the platform commits, the switch ends like any reinitialize: verification of the new
+    // account's backup is scheduled under the same claim, and its terminal result releases it
+    supervisor
+        .confirm_drive_account_switch_committed(transition_id)
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(persisted_drive_account_switch_phase(), None);
+    assert_eq!(
+        configured_cloud_backup_state(&manager).verification,
+        CloudBackupVerificationState::Running
+    );
+    assert_eq!(supervisor.active_operation.claim(), Some(claim));
+
+    // when that verification ends, the claim goes and the reinitializing spinner goes with it
+    supervisor
+        .complete_verification(
+            Some(claim),
+            CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
+            DeepVerificationContinuation::ReinitializeBackup {
+                attempt: VerificationAttempt::Initial,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(supervisor.active_operation, None);
+    assert_eq!(manager.projected_exclusive_operation(), None);
+    assert_eq!(configured_cloud_backup_state(&manager).destructive_operation, Destructive::Idle);
+}

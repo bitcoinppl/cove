@@ -144,20 +144,37 @@ impl CloudBackupSupervisor {
                 | DriveAccountSwitchReinitializationCompletion::Handled => return,
             }
 
-            manager.apply_recovery_state(RecoveryState::Idle);
-            let runtime_status = RustCloudBackupManager::runtime_status_for(
-                &RustCloudBackupManager::load_persisted_state(),
+            self.finish_reinitialize_backup(manager, claim);
+            return;
+        }
+
+        self.active_operation.clear();
+        manager.project_exclusive_operation_finished(claim);
+    }
+
+    /// Ends a successful reinitialize that has nothing left to wait for
+    ///
+    /// A plain reinitialize gets here as soon as it succeeds, and a Google Drive account switch
+    /// gets here once the platform has committed the new account
+    pub(crate) fn finish_reinitialize_backup(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        claim: CloudBackupExclusiveOperationClaim,
+    ) {
+        manager.apply_recovery_state(RecoveryState::Idle);
+        let runtime_status = RustCloudBackupManager::runtime_status_for(
+            &RustCloudBackupManager::load_persisted_state(),
+        );
+
+        if matches!(runtime_status, CloudBackupStatus::Enabled) {
+            self.start_verification_with_context(
+                manager,
+                Some(claim),
+                DeepVerificationContinuation::ReinitializeBackup {
+                    attempt: VerificationAttempt::Initial,
+                },
             );
-            if matches!(runtime_status, CloudBackupStatus::Enabled) {
-                self.start_verification_with_context(
-                    manager,
-                    Some(claim),
-                    DeepVerificationContinuation::ReinitializeBackup {
-                        attempt: VerificationAttempt::Initial,
-                    },
-                );
-                return;
-            }
+            return;
         }
 
         self.active_operation.clear();

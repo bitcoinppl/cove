@@ -1806,3 +1806,104 @@ private final class QueuedCancellableDispatchOperationTestGate: @unchecked Senda
         }
     }
 }
+
+/// iCloud evicts a file it has uploaded by replacing it with a hidden `.Name.icloud`
+/// placeholder, so a restored or space-starved device lists placeholders where its backups are
+@MainActor
+extension CloudBackupIOSSafetyHelpersTests {
+    func testLocalListingsReportEvictedPlaceholdersUnderTheirRealNames() throws {
+        let fixture = makeICloudMetadataFixture()
+        defer { fixture.removeContainer() }
+
+        let evictedNamespace = "fedcba9876543210fedcba9876543210"
+        let namespacesRoot = try fixture.helper.namespacesRootReadURL()
+        let walletsDirectory = try fixture.helper.walletsDirectoryReadURL(namespace: testNamespace)
+        let prefix = csppWalletFilePrefix()
+        try FileManager.default.createDirectory(
+            at: walletsDirectory,
+            withIntermediateDirectories: true
+        )
+
+        // a downloaded namespace, an evicted one, and files that are not namespaces
+        try writeEmptyFile(".\(evictedNamespace).icloud", in: namespacesRoot)
+        try writeEmptyFile("notes.txt", in: namespacesRoot)
+        try writeEmptyFile(".DS_Store", in: namespacesRoot)
+
+        // a downloaded wallet, an evicted one, one present both ways, and unrelated files
+        try writeEmptyFile("\(prefix)downloaded.json", in: walletsDirectory)
+        try writeEmptyFile(".\(prefix)evicted.json.icloud", in: walletsDirectory)
+        try writeEmptyFile("\(prefix)both.json", in: walletsDirectory)
+        try writeEmptyFile(".\(prefix)both.json.icloud", in: walletsDirectory)
+        try writeEmptyFile(".other.json.icloud", in: walletsDirectory)
+        try writeEmptyFile("other.json", in: walletsDirectory)
+
+        XCTAssertEqual(
+            fixture.helper.locallyVisibleSubdirectoryNames(parentPath: namespacesRoot.path),
+            [testNamespace, evictedNamespace].sorted()
+        )
+
+        let expectedWallets = ["both", "downloaded", "evicted"].map { "\(prefix)\($0).json" }
+        XCTAssertEqual(
+            fixture.helper.locallyVisibleFileNames(
+                namespacePath: walletsDirectory.path,
+                prefix: prefix
+            ),
+            expectedWallets
+        )
+        XCTAssertEqual(
+            try fixture.helper.localFileSnapshot(namespacePath: walletsDirectory.path, prefix: prefix),
+            expectedWallets
+        )
+    }
+
+    func testBackupReadOfEvictedFileWaitsForMetadataInsteadOfReadingThePlaceholder() async throws {
+        let fixture = makeICloudMetadataFixture()
+        defer { fixture.removeContainer() }
+
+        let locations = backupLocations()
+        let currentURL = try fixture.helper.backupFileReadURL(
+            namespace: testNamespace,
+            location: locations[0]
+        )
+        try FileManager.default.createDirectory(
+            at: currentURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try writeEmptyFile(
+            ".\(currentURL.lastPathComponent).icloud",
+            in: currentURL.deletingLastPathComponent()
+        )
+
+        let request = Task {
+            try await fixture.helper.existingBackupFileReadTarget(
+                namespace: self.testNamespace,
+                recordId: "wallet-record",
+                locations: locations,
+                lookupMode: .waitForSync
+            )
+        }
+
+        // the placeholder is not a readable copy, so the read goes to the provider's metadata
+        await fixture.source.waitUntilStarted()
+        fixture.source.send(.finishedGathering([]))
+        fixture.source.send(.updated([
+            metadataRecord(
+                name: currentURL.lastPathComponent,
+                parentPath: currentURL.deletingLastPathComponent().path
+            ),
+        ]))
+
+        let target = try await request.value
+
+        XCTAssertEqual(
+            target,
+            .provider(currentURL, metadataPath: currentURL.resolvingSymlinksInPath().path)
+        )
+        XCTAssertEqual(fixture.source.startCount, 1)
+    }
+
+    private func writeEmptyFile(_ name: String, in directory: URL) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data().write(to: directory.appendingPathComponent(name))
+    }
+}

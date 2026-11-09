@@ -85,3 +85,42 @@ async fn drive_account_switch_rollback_resumes_dirty_wallet_uploads() {
     )
     .await;
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn drive_account_switch_commit_releases_its_claim_on_a_running_supervisor() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+
+    // the platform has signed in to the new account and reinitialized the backup there
+    let transition_id = manager.begin_drive_account_switch().await.unwrap();
+    let mut persisted = RustCloudBackupManager::load_persisted_state();
+    assert!(persisted.set_drive_account_switch_phase(
+        transition_id.into(),
+        PersistedDriveAccountSwitchPhase::AwaitingAccountCommitSucceeded,
+    ));
+
+    Database::global().cloud_backup_state.set(&persisted).unwrap();
+
+    manager.confirm_drive_account_switch_committed(transition_id).await.unwrap();
+
+    // the commit hands its claim to the verification it schedules, so a commit that never
+    // schedules it leaves the claim held here; the supervisor test checks the commit keeps the
+    // claim rather than dropping it, and together they cover the hand-off
+    wait_for_test_condition(
+        Duration::from_secs(8),
+        "the running supervisor releases the switch's claim after the commit",
+        || manager.projected_exclusive_operation().is_none(),
+    )
+    .await;
+
+    let CloudBackupLifecycle::Configured(configured) = manager.state().lifecycle else {
+        panic!("expected configured cloud backup lifecycle");
+    };
+
+    assert_eq!(configured.destructive_operation, CloudBackupDestructiveOperationState::Idle);
+
+    clear_wallet_upload_runtime_for_test_async(&manager).await;
+}

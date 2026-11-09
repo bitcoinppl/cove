@@ -67,11 +67,16 @@ paths = [
     "rust/crates/cove-ur/src/crypto_psbt.rs",
     "rust/src/multi_format.rs",
     "rust/src/qr_scanner.rs",
+    "rust/src/signed_import.rs",
 ]
 coverage = [
     "human",
+    "rust:rust/src/signed_import.rs::signed_import_nfc_message_accepts_every_record_shape",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
 # needs a strict physical hardware signer over qr and nfc. over qr, its camera reads the animated ur
 # and bbqr exports off the phone's screen and the phone's camera reads the signed ur and bbqr back;
-# the s13 rows' ui tests decide the drawn frames and the signed import without a camera
+# the s13 rows' ui tests decide the drawn frames and the signed import without a camera. over nfc,
+# rust decides how a signed psbt or finalized transaction read from a tag parses, from a text
+# record, a binary record or both, and a person still checks the nfc export of the unsigned psbt,
+# which has no test seam
