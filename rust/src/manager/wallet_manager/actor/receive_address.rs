@@ -19,8 +19,8 @@ use crate::{
         Error, WalletManagerReconcileMessage,
         actor::WalletActor,
         receive_address::{
-            CACHE_WINDOW, ReceiveAddressPresentation, ReceiveAddressRefreshState,
-            ReceiveAddressState, ReceiveAddressStatus, RefreshExpiredAddressDecision,
+            ReceiveAddressPresentation, ReceiveAddressRefreshState, ReceiveAddressState,
+            ReceiveAddressStatus, RefreshExpiredAddressDecision, cache_window,
         },
     },
     node::{
@@ -31,6 +31,9 @@ use crate::{
     receive_address_watcher::ReceiveAddressWatcher,
     wallet::AddressInfo,
 };
+
+#[cfg(debug_assertions)]
+use crate::manager::wallet_manager::receive_address::ui_test_refresh_failure::RefreshScope;
 
 const RECEIVE_ADDRESS_FRESHNESS_TIMEOUT: Duration = Duration::from_millis(400);
 
@@ -212,7 +215,7 @@ impl WalletActor {
         cache: &ReceiveAddressCache,
         now_secs: u64,
     ) -> bool {
-        let Some(expires_at_secs) = cache.first_shown_at_secs.checked_add(CACHE_WINDOW.as_secs())
+        let Some(expires_at_secs) = cache.first_shown_at_secs.checked_add(cache_window().as_secs())
         else {
             return false;
         };
@@ -304,7 +307,15 @@ impl WalletActor {
         self.stop_receive_address_refresh_timer();
         self.set_receive_address_refresh_state(ReceiveAddressRefreshState::Refreshing);
 
-        match self.new_receive_address_state(request_id, now, ReceiveAddressStatus::Fresh) {
+        let replaced = {
+            // lets the UI test fail the save this refresh makes, see the seam's docs
+            #[cfg(debug_assertions)]
+            let _refresh = RefreshScope::enter();
+
+            self.new_receive_address_state(request_id, now, ReceiveAddressStatus::Fresh)
+        };
+
+        match replaced {
             Ok(_) => Produces::ok(()),
             Err(error) => {
                 if self.receive_address.visible_state().is_none() {
@@ -512,7 +523,7 @@ impl WalletActor {
             derivation_index,
             address,
             client_builder,
-            CACHE_WINDOW,
+            cache_window(),
         );
 
         self.receive_address_watcher = Some(spawn_actor(watcher));

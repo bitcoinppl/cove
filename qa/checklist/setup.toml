@@ -25,6 +25,7 @@ target = "rust"
 paths = [
     "rust/src/wallet/addressing.rs",
     "rust/src/manager/wallet_manager/receive_address.rs",
+    "rust/src/manager/wallet_manager/receive_address/**",
     "ios/Cove/Flows/SelectedWalletFlow/ReceiveView.swift",
 ]
 coverage = [
