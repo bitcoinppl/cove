@@ -54,6 +54,7 @@ env:
     CoveUITests/OnboardingFullLaunchUITests,
     CoveUITests/ReceiveTextSizeFullLaunchUITests,
     CoveUITests/UtxoLockFullLaunchUITests,
+    CoveUITests/NfcScanPrivacyCoverFullLaunchUITests,
     CoveUITests/HardwareSigningFullLaunchUITests,
     CoveUITests/PublicKeyImportFullLaunchUITests,
     CoveUITests/TapSignerLayoutFullLaunchUITests,

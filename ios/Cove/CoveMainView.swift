@@ -56,19 +56,23 @@ struct CoveMainView: View {
 
         if oldPhase == .active, newPhase != .active {
             app.hideSensitiveKeyTeleportReveals()
-
-            // an NFC scan makes the app inactive, covering it would interrupt the scan
-            let tapSignerScanning = app.tapSignerNfc?.isScanning ?? false
-            if !app.nfcWriter.isScanning, !app.nfcReader.isScanning, !tapSignerScanning {
-                showCover = true
-            }
         }
+
+        let privacy = ScenePhasePrivacyOutcome(
+            ScenePhasePrivacyContext(
+                oldPhase: oldPhase,
+                newPhase: newPhase,
+                isAuthEnabled: auth.isAuthEnabled,
+                isUsingBiometrics: auth.isUsingBiometrics,
+                isNfcOperationActive: app.isNfcOperationActive
+            )
+        )
 
         unlockWhenAuthenticationIsDisabled()
         guard handleActivePhase(newPhase) else { return }
 
-        handleLeavingActive(oldPhase, newPhase)
         handleBackgroundPhase(newPhase)
+        applyPrivacy(privacy)
         handleReturningToActive(oldPhase, newPhase)
         leaveDecoyModeIfNeeded(newPhase)
     }
@@ -92,24 +96,29 @@ struct CoveMainView: View {
         return true
     }
 
-    private func handleLeavingActive(_ oldPhase: ScenePhase, _ newPhase: ScenePhase) {
-        guard auth.isAuthEnabled else { return }
-        guard !auth.isUsingBiometrics else { return }
-        guard oldPhase == .active, newPhase == .inactive else { return }
+    private func handleBackgroundPhase(_ newPhase: ScenePhase) {
+        guard newPhase == .background else { return }
 
-        Log.debug("[scene] app going inactive")
-        coverClearTask?.cancel()
-
-        if !isNfcOperationActive {
-            showCover = true
-        }
-
-        scheduleCoverRecovery()
+        Log.debug("[scene] app going into background")
+        app.isSidebarVisible = false
+        app.beginInitialScanBackgroundTaskIfNeeded()
     }
 
-    private var isNfcOperationActive: Bool {
-        let tapSignerScanning = app.tapSignerNfc?.isScanning ?? false
-        return app.nfcWriter.isScanning || app.nfcReader.isScanning || tapSignerScanning
+    private func applyPrivacy(_ privacy: ScenePhasePrivacyOutcome) {
+        if privacy != ScenePhasePrivacyOutcome() {
+            Log.debug("[scene] privacy: \(privacy)")
+        }
+
+        if privacy.coverRecovery != .unchanged { coverClearTask?.cancel() }
+        if privacy.showsCover { showCover = true }
+        if privacy.locks { auth.lock(reason: .background) }
+
+        if privacy.dismissesSheets {
+            dismissPresentedViewControllers()
+            UIApplication.shared.endEditing()
+        }
+
+        if privacy.coverRecovery == .restarted { scheduleCoverRecovery() }
     }
 
     private func scheduleCoverRecovery() {
@@ -124,37 +133,6 @@ struct CoveMainView: View {
 
             if phase == .active { showCover = false }
         }
-    }
-
-    private func handleBackgroundPhase(_ newPhase: ScenePhase) {
-        guard newPhase == .background else { return }
-
-        app.isSidebarVisible = false
-        app.beginInitialScanBackgroundTaskIfNeeded()
-
-        // the cached auth type can lag behind or misread the saved one, and Rust skips the
-        // lock only when it can read that no authentication is set up
-        guard auth.isAuthEnabled else {
-            auth.lock(reason: .background)
-            return
-        }
-
-        Log.debug("[scene] app going into background")
-        coverClearTask?.cancel()
-
-        guard !isNfcOperationActive else {
-            Log.debug("[scene] NFC operation active, not dismissing sheets or locking")
-            return
-        }
-
-        showCover = true
-
-        // lock even when already locked, so a lock another owner can release still
-        // leaves this one needing authentication
-        auth.lock(reason: .background)
-
-        dismissPresentedViewControllers()
-        UIApplication.shared.endEditing()
     }
 
     private func dismissPresentedViewControllers() {

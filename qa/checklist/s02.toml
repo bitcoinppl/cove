@@ -265,17 +265,28 @@ id = "s02-nfc-active-scan-privacy-cover"
 section = "2"
 title = "NFC active-scan privacy cover"
 platforms = ["ios"]
-target = "manual"
+target = "ui"
 paths = [
     "ios/Cove/NFCReader.swift",
+    "ios/Cove/NFCWriter.swift",
     "ios/Cove/TapSignerNFC.swift",
     "ios/Cove/CoverView.swift",
+    "ios/Cove/CoveMainView.swift",
+    "ios/Cove/ScenePhasePrivacy.swift",
+    "ios/Cove/NfcScanRegistry.swift",
+    "ios/Cove/AppManager.swift",
 ]
 coverage = [
-    "human",
+    "ios-unit:ios/CoveTests/ScenePhasePrivacyTests.swift::testNfcScanKeepsTheAppUncoveredUnlockedAndItsSheetsUp",
+    "ios-unit:ios/CoveTests/ScenePhasePrivacyTests.swift::testLeavingTheForegroundWithoutNfcCoversLocksAndDismisses",
+    "ios-unit:ios/CoveTests/ScenePhasePrivacyTests.swift::testEveryNfcReaderAndWriterCountsAsAnActiveOperation",
+    "ios-unit:ios/CoveTests/ScenePhasePrivacyTests.swift::testOpenTapSignerOperationCountsUntilCancelled",
+    "ios-ui:ios/CoveUITests/NfcScanPrivacyCoverFullLaunchUITests.swift::testLeavingDuringAnNfcScanKeepsTheAppUnlockedAndTheScanOpen",
 ]
 # 1.4.0: ios HUMAN, android N/A
-# needs a real NFC card scan
+# the unit tests decide when leaving the foreground covers the app, locks it and dismisses its sheets, and that any open tag read or write holds all three off, whoever owns the reader or writer; the ui test goes to the home screen and back mid-scan with a pin set, past the foreground grace, and checks the app stays unlocked, the scan's screen stays up and the tag still imports, then that leaving once the scan is over locks the app again
+# a TAPSIGNER operation counts from start to cancel, held open by a debug card bridge that never answers; real card scans stay with s13-nfc-and-tapsigner-setup-retry-and-signing
+# the real CoreNFC sheet making the app inactive is the os's job, and a physical tag read in a real session, including a multi-block ISO 15693 read the seam can't reach, stays with s19-hardware-journey-qr-and-nfc-legs
 
 [[row]]
 id = "s02-background-every-secret-bearing-keyteleport-state"

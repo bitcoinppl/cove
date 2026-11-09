@@ -88,6 +88,12 @@ struct CorruptedWalletDeletionRetry: Equatable {
     var nfcWriter = NFCWriter()
     var tapSignerNfc: TapSignerNFC?
 
+    /// Whether any NFC reader, writer or TAPSIGNER session has a scan open, including one a
+    /// screen owns, which makes the app inactive while its system sheet is up
+    var isNfcOperationActive: Bool {
+        NfcScanRegistry.isAnyScanning
+    }
+
     var prices: PriceResponse?
     var fees: FeeResponse?
 

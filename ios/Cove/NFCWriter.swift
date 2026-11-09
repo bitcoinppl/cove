@@ -5,13 +5,16 @@ class NFCWriter: NSObject, NFCNDEFReaderSessionDelegate, ObservableObject {
     var data: Data?
     var session: NFCNDEFReaderSession?
 
-    var isScanning: Bool = false
+    /// Reported to `NfcScanRegistry`, which the privacy cover and app lock consult
+    var isScanning = false {
+        didSet { NfcScanRegistry.set(ObjectIdentifier(self), isScanning: isScanning) }
+    }
 
     private let logger = Log(id: "NfcWriter")
     private var task: Task<Void, Never>?
 
     deinit {
-        isScanning = false
+        NfcScanRegistry.set(ObjectIdentifier(self), isScanning: false)
     }
 
     func writeToTag(data: Data) {

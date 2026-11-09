@@ -324,11 +324,20 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     private var session: NFCTagReaderSession?
 
     let tapcard: TapCard
-    var isScanning = false
+
+    /// Reported to `NfcScanRegistry`, which the privacy cover and app lock consult
+    var isScanning = false {
+        didSet { NfcScanRegistry.set(ObjectIdentifier(self), isScanning: isScanning) }
+    }
+
     var lastResponse: TapSignerResponse?
 
     init(tapcard: TapCard) {
         self.tapcard = tapcard
+    }
+
+    deinit {
+        NfcScanRegistry.set(ObjectIdentifier(self), isScanning: false)
     }
 
     func start(command: TapSignerCmd, operation: TapSignerOperationToken) {
