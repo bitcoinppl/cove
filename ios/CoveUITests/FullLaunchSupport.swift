@@ -14,7 +14,8 @@ extension XCUIApplication {
         terminate()
         launch()
 
-        // xtask retries the test on a clean simulator when it sees this message
+        // xtask retries the test, or a cloud backup class's tests that didn't pass, on a clean
+        // simulator when it sees this message
         if waitForReadyOrStartupTimeout(readyElement) == .startupTimedOut {
             XCTFail("App startup timed out on relaunch")
         }

@@ -47,7 +47,13 @@ struct CoveCloudBackupUITestHostApp: App {
             return
         }
 
-        try? FileManager.default.removeItem(atPath: rootDataDirPath())
+        // the diagnostics logs stay: a class's tests share one simulator session, and its
+        // failure artifacts hold the app logs of every test in it, which append and rotate
+        let root = rootDataDirPath()
+        let entries = (try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []
+        for entry in entries where entry != "logs" {
+            try? FileManager.default.removeItem(atPath: (root as NSString).appendingPathComponent(entry))
+        }
 
         // the scripted keychain is local state too, while the cloud copy in the control
         // directory is not, so a reset wipes only the keychain
