@@ -47,12 +47,48 @@ id = "s07-receiver-response-open-with-routing"
 section = "7"
 title = "Receiver response/open-with routing"
 platforms = ["ios", "android"]
-target = "manual"
-paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift", "ios/Cove/ScanManager.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt", "android/app/src/main/java/org/bitcoinppl/cove/ExternalKeyTeleportIntentHandler.kt", "android/app/src/main/java/org/bitcoinppl/cove/ScanManager.kt"]
-coverage = ["human"]
+target = "ui"
+paths = [
+    "rust/src/manager/key_teleport_manager.rs",
+    "rust/src/manager/key_teleport_manager/receive.rs",
+    "rust/src/manager/key_teleport_manager/receive_session.rs",
+    "rust/src/manager/key_teleport_manager/controller.rs",
+    "rust/src/file_handler.rs",
+    "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift",
+    "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift",
+    "ios/Cove/ScanManager.swift",
+    "ios/Cove/ScanManager+KeyTeleport.swift",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/ExternalKeyTeleportIntentHandler.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/ScanManager.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt",
+    "android/app/src/main/AndroidManifest.xml",
+]
+coverage = [
+    "human:ios",
+    "ios-ui:ios/CoveUITests/KeyTeleportAppScannerFullLaunchUITests.swift::testResponseScannedFromTheAppScannerReopensTheReceiveAtThePassword",
+    "ios-unit:ios/CoveTests/KeyTeleportFileOpenTests.swift::testOpenedSenderResponseFileReopensTheStoredReceiveAtThePassword",
+    "ios-unit:ios/CoveTests/KeyTeleportFileOpenTests.swift::testOpenedReceiverRequestFileStartsAKeyTeleportSend",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportAppScannerFullLaunchTest.kt::multiPartResponseScannedFromTheWalletShowsProgressThenReopensTheReceiveAtThePassword",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/KeyTeleportLinksDisabledTest.kt::keyTeleportLinksAndSharedTextResolveToNoCoveActivity",
+]
 # 1.4.0: ios HUMAN, android HUMAN
-# receiver response is camera-only and app links are disabled in this build
-# ios has no app link or url scheme for KeyTeleport, only open-with for text and json files, which a ui test can't hand the app
+# both full-launch tests show the request, leave the receive screen, and scan the host's response
+# from the app-wide scanner through the qr seam: scanmanager must reopen the stored receive at the
+# teleport password, and the password must unlock it to the review
+# ios has no KeyTeleport app link or url scheme, only open-with for text and json files; the ios
+# unit tests hand scanmanager's onopenurl handler a text file in the app's container: a sender
+# response, made in-process for a receive that was started and left, must reopen that stored
+# receive at the teleport password, and a receiver request must start a send through to the code
+# the app opens documents in place, and no test can hand it a files url outside its container
+# that needs security-scoped access, so the person's ios check is to open a KeyTeleport response
+# file in place from the files app (on my iphone or icloud drive) during a receive and see it
+# reopen the receive at the teleport password
+# android ships the KeyTeleport link and share filters disabled, and the android test checks a
+# keyteleport.com link and shared text still resolve to no Cove activity
+# the camera decoding the other phone's response qr is the person's check in
+# s20-ios-to-android-complete-keyteleport-migration and s20-android-to-ios-private-key-migration
 
 [[row]]
 id = "s07-end-session-clears-receiver-request"

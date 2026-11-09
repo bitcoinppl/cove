@@ -32,6 +32,7 @@
 		C0F100042F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100032F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift */; };
 		C0F100082F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */; };
 		C0F400022F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F400012F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift */; };
+		C0F600012F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F600022F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift */; };
 		C0F100062F30000000000001 /* ScreenReachability.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F100052F30000000000001 /* ScreenReachability.swift */; };
 		C0B000012F00000000000001 /* OnboardingPromptLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */; };
 		C0B000022F00000000000001 /* Fixtures/wallet_2_descriptors.txt in Resources */ = {isa = PBXBuildFile; fileRef = C0B000042F00000000000001 /* Fixtures/wallet_2_descriptors.txt */; };
@@ -68,6 +69,7 @@
 		C0E0000C2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */; };
 		C0F000012F40000000000001 /* PresentationTransitionCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000022F40000000000001 /* PresentationTransitionCoordinatorTests.swift */; };
 		C0F000012F50000000000001 /* KeyTeleportSecurityHelpersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000022F50000000000001 /* KeyTeleportSecurityHelpersTests.swift */; };
+		C0F600032F90000000000001 /* KeyTeleportFileOpenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F600042F90000000000001 /* KeyTeleportFileOpenTests.swift */; };
 		C0F000032F40000000000001 /* WalletSettingsPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F000042F40000000000001 /* WalletSettingsPresentationTests.swift */; };
 		C0F300012F80000000000001 /* CloudBackupUITestControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200012F80000000000001 /* CloudBackupUITestControl.swift */; };
 		C0F300022F80000000000001 /* CloudBackupHostControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F200022F80000000000001 /* CloudBackupHostControl.swift */; };
@@ -134,6 +136,7 @@
 		C0F100032F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportReceiveFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportSendFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F400012F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LargeTextWordBreakFullLaunchUITests.swift; sourceTree = "<group>"; };
+		C0F600022F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportAppScannerFullLaunchUITests.swift; sourceTree = "<group>"; };
 		C0F100052F30000000000001 /* ScreenReachability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenReachability.swift; sourceTree = "<group>"; };
 		C0A000022EF0000000000001 /* CoveUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CoveUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0B000032F00000000000001 /* OnboardingPromptLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingPromptLayoutTests.swift; sourceTree = "<group>"; };
@@ -168,6 +171,7 @@
 		C0E0000D2F20000000000001 /* CloudBackupInventoryFullAppUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupInventoryFullAppUITests.swift; sourceTree = "<group>"; };
 		C0F000022F40000000000001 /* PresentationTransitionCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresentationTransitionCoordinatorTests.swift; sourceTree = "<group>"; };
 		C0F000022F50000000000001 /* KeyTeleportSecurityHelpersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportSecurityHelpersTests.swift; sourceTree = "<group>"; };
+		C0F600042F90000000000001 /* KeyTeleportFileOpenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyTeleportFileOpenTests.swift; sourceTree = "<group>"; };
 		C0F000042F40000000000001 /* WalletSettingsPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletSettingsPresentationTests.swift; sourceTree = "<group>"; };
 		D0245F4C2C0F7B4E0042B447 /* Cove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0F200012F80000000000001 /* CloudBackupUITestControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ../CoveCloudBackupUITestHost/CloudBackupUITestControl.swift; sourceTree = "<group>"; };
@@ -284,6 +288,7 @@
 				C0F100032F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift */,
 				C0F100072F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift */,
 				C0F400012F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift */,
+				C0F600022F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift */,
 				C0F100052F30000000000001 /* ScreenReachability.swift */,
 			);
 			path = CoveUITests;
@@ -295,6 +300,7 @@
 				C0B000232F60000000000001 /* CoinControlManagerTests.swift */,
 				C0C000022F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift */,
 				C0F000022F50000000000001 /* KeyTeleportSecurityHelpersTests.swift */,
+				C0F600042F90000000000001 /* KeyTeleportFileOpenTests.swift */,
 				C0D000022F10000000000001 /* WalletTransitionTests.swift */,
 				C0B000112F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift */,
 				C0B000172F00000000000001 /* CustomFeeRateErrorTests.swift */,
@@ -602,6 +608,7 @@
 				C0F100042F30000000000001 /* KeyTeleportReceiveFullLaunchUITests.swift in Sources */,
 				C0F100082F30000000000001 /* KeyTeleportSendFullLaunchUITests.swift in Sources */,
 				C0F400022F90000000000001 /* LargeTextWordBreakFullLaunchUITests.swift in Sources */,
+				C0F600012F90000000000001 /* KeyTeleportAppScannerFullLaunchUITests.swift in Sources */,
 				C0F100062F30000000000001 /* ScreenReachability.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -613,6 +620,7 @@
 				C0C000012F10000000000001 /* CloudBackupIOSSafetyHelpersTests.swift in Sources */,
 				C0B000222F60000000000001 /* CoinControlManagerTests.swift in Sources */,
 				C0F000012F50000000000001 /* KeyTeleportSecurityHelpersTests.swift in Sources */,
+				C0F600032F90000000000001 /* KeyTeleportFileOpenTests.swift in Sources */,
 				C0D000012F10000000000001 /* WalletTransitionTests.swift in Sources */,
 				C0B000102F00000000000001 /* CloudBackupPresentationCoordinatorTests.swift in Sources */,
 				C0B000162F00000000000001 /* CustomFeeRateErrorTests.swift in Sources */,
