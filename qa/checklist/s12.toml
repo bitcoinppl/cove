@@ -40,9 +40,16 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupPendingEnableRecoveryContent.kt",
   "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupManager.kt",
 ]
-coverage = ["human"]
+coverage = [
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::fresh_enable_on_empty_cloud_uploads_every_wallet_and_restores_it_on_a_new_device",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::enable_create_new_succeeds_with_new_passkey_auth",
+  "rust:rust/src/manager/cloud_backup_manager/ops/tests/enable.rs::fresh_enable_upload_progress_counts_master_and_wallets",
+  "ios-ui:ios/CoveUITests/CloudBackupEnableRecoveryFullAppUITests.swift::testBackgroundVerificationWaitsForVisibilityThenVerifiesOnItsOwn",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupDurableCompletionFullLaunchTest.kt::backgroundVerificationWaitsForVisibilityThenVerifiesOnItsOwn",
+  "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/cloudbackup/CloudBackupDurableCompletionFullLaunchTest.kt::acceptedWritesAdvanceOnboardingBeforeVisibilityAndConfirmInBackground",
+]
 # 1.4.0: ios HUMAN, android HUMAN
-# state machine is rust with fakes available; real passkey and cloud account still need a person
+# with scripted passkey and cloud providers, a fresh enable on an empty cloud registers one passkey and confirms it once, uploads the master key and every on-device wallet, and reaches Verified: rust opens the master key backup with that passkey's prf output and salt and every wallet with the master key, and the ui tests on both platforms enable through onboarding and verify in the background with no other passkey prompt. the real passkey sheet, prf and cloud account are checked once in s18-journey-cloud-backup
 
 [[row]]
 id = "s12-existing-namespace-uses-existing-passkey"

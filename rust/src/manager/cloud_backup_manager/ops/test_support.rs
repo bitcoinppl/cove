@@ -176,6 +176,25 @@ struct MockCloudState {
     changed_wallet_on_next_upload: Option<WalletId>,
     dirty_wallet_on_next_backup_check: Option<WalletId>,
     disabling_on_next_upload: Option<PersistedDisablingCloudBackup>,
+    download_requests: Vec<MockCloudDownloadRequest>,
+    uploads: Vec<MockCloudUpload>,
+}
+
+/// A file the provider accepted, at the path it was asked to write
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MockCloudUpload {
+    pub(crate) namespace: String,
+    pub(crate) record_id: String,
+    pub(crate) relative_path: String,
+    pub(crate) data: Vec<u8>,
+}
+
+/// A download as the provider received it, with the paths it was asked to read
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MockCloudDownloadRequest {
+    pub(crate) namespace: String,
+    pub(crate) record_id: String,
+    pub(crate) relative_paths: Vec<String>,
 }
 
 #[derive(Debug, Default)]
@@ -460,6 +479,14 @@ impl MockCloudStorage {
         self.state.lock().uploaded_master_key_pending_confirmation = enabled;
     }
 
+    pub(crate) fn uploads(&self) -> Vec<MockCloudUpload> {
+        self.state.lock().uploads.clone()
+    }
+
+    pub(crate) fn download_requests(&self) -> Vec<MockCloudDownloadRequest> {
+        self.state.lock().download_requests.clone()
+    }
+
     pub(crate) fn uploaded_wallet_backup_count(&self) -> usize {
         self.state.lock().uploaded_wallet_backups.len()
     }
@@ -579,15 +606,23 @@ impl CloudStorageAccess for MockCloudStorage {
     async fn upload_master_key_backup(
         &self,
         namespace: String,
-        _location: cove_device::cloud_storage::RemoteBackupLocation,
+        location: cove_device::cloud_storage::RemoteBackupLocation,
         data: Vec<u8>,
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
-        if let Some(error) = self.state.lock().upload_master_key_error.clone() {
+        let mut state = self.state.lock();
+        if let Some(error) = state.upload_master_key_error.clone() {
             return Err(error);
         }
 
-        self.state.lock().master_key_backups.insert(namespace, data);
+        state.uploads.push(MockCloudUpload {
+            namespace: namespace.clone(),
+            record_id: MASTER_KEY_RECORD_ID.to_string(),
+            relative_path: location.relative_path,
+            data: data.clone(),
+        });
+
+        state.master_key_backups.insert(namespace, data);
         Ok(())
     }
 
@@ -595,7 +630,7 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
-        _location: cove_device::cloud_storage::RemoteBackupLocation,
+        location: cove_device::cloud_storage::RemoteBackupLocation,
         data: Vec<u8>,
         _policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
@@ -620,6 +655,13 @@ impl CloudStorageAccess for MockCloudStorage {
             let dirty_wallet = state.dirty_wallet_on_next_upload.take();
             let changed_wallet = state.changed_wallet_on_next_upload.take();
             let disabling = state.disabling_on_next_upload.take();
+            state.uploads.push(MockCloudUpload {
+                namespace: namespace.clone(),
+                record_id: record_id.clone(),
+                relative_path: location.relative_path,
+                data: data.clone(),
+            });
+
             state.wallet_backups.insert((namespace.clone(), record_id.clone()), data);
             state.uploaded_wallet_backups.push((namespace, record_id));
             state.wallet_backup_success_count += 1;
@@ -644,11 +686,19 @@ impl CloudStorageAccess for MockCloudStorage {
     async fn download_master_key_backup(
         &self,
         namespace: String,
-        _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
+        locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         let gate = {
             let mut state = self.state.lock();
+            state.download_requests.push(MockCloudDownloadRequest {
+                namespace: namespace.clone(),
+                record_id: MASTER_KEY_RECORD_ID.to_string(),
+                relative_paths: locations
+                    .into_iter()
+                    .map(|location| location.relative_path)
+                    .collect(),
+            });
             state.master_key_download_attempts += 1;
             state.master_key_download_active += 1;
             state.master_key_download_max_active =
@@ -681,12 +731,20 @@ impl CloudStorageAccess for MockCloudStorage {
         &self,
         namespace: String,
         record_id: String,
-        _locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
+        locations: Vec<cove_device::cloud_storage::RemoteBackupLocation>,
         _policy: CloudAccessPolicy,
     ) -> Result<Vec<u8>, CloudStorageError> {
         let override_key = (namespace.clone(), record_id.clone());
         let (dirty_wallet, deferred_error, gate) = {
             let mut state = self.state.lock();
+            state.download_requests.push(MockCloudDownloadRequest {
+                namespace: namespace.clone(),
+                record_id: record_id.clone(),
+                relative_paths: locations
+                    .into_iter()
+                    .map(|location| location.relative_path)
+                    .collect(),
+            });
             state.wallet_backup_download_attempts += 1;
             let attempt = {
                 let attempts = state
@@ -944,7 +1002,15 @@ pub(crate) struct MockPasskeyProviderImpl {
     authenticate_count: Arc<Mutex<usize>>,
     discover_count: Arc<Mutex<usize>>,
     authenticated_requests: Arc<Mutex<Vec<MockPasskeyAuthenticationRequest>>>,
+    discovered_requests: Arc<Mutex<Vec<MockPasskeyDiscoveryRequest>>>,
     authenticate_gate: Arc<Mutex<Option<Arc<MockPasskeyCallGate>>>>,
+}
+
+/// A discoverable-credential request as the platform passkey received it
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MockPasskeyDiscoveryRequest {
+    pub(crate) rp_id: String,
+    pub(crate) prf_salt: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -965,6 +1031,7 @@ impl MockPasskeyProviderImpl {
         *self.authenticate_count.lock() = 0;
         *self.discover_count.lock() = 0;
         self.authenticated_requests.lock().clear();
+        self.discovered_requests.lock().clear();
         *self.authenticate_gate.lock() = None;
     }
 
@@ -1025,6 +1092,10 @@ impl MockPasskeyProviderImpl {
 
     pub(crate) fn authenticated_requests(&self) -> Vec<MockPasskeyAuthenticationRequest> {
         self.authenticated_requests.lock().clone()
+    }
+
+    pub(crate) fn discovered_requests(&self) -> Vec<MockPasskeyDiscoveryRequest> {
+        self.discovered_requests.lock().clone()
     }
 
     pub(crate) fn gate_next_authenticate(&self) -> Arc<MockPasskeyCallGate> {
@@ -1092,11 +1163,12 @@ impl PasskeyProvider for MockPasskeyProviderImpl {
 
     fn discover_and_authenticate_with_prf(
         &self,
-        _rp_id: String,
-        _prf_salt: Vec<u8>,
+        rp_id: String,
+        prf_salt: Vec<u8>,
         _challenge: Vec<u8>,
     ) -> Result<DiscoveredPasskeyResult, PasskeyError> {
         *self.discover_count.lock() += 1;
+        self.discovered_requests.lock().push(MockPasskeyDiscoveryRequest { rp_id, prf_salt });
         self.discover_results
             .lock()
             .pop_front()
@@ -1326,6 +1398,59 @@ fn wait_for_cleanup_idle_for_test(manager: &RustCloudBackupManager) {
     }
 
     panic!("cleanup worker should become idle before resetting cloud backup test state");
+}
+
+/// Restores from the cloud the way onboarding does on a new device, returning the final report
+pub(crate) async fn restore_like_onboarding(
+    manager: &RustCloudBackupManager,
+) -> crate::manager::cloud_backup_manager::CloudBackupRestoreReport {
+    use crate::manager::cloud_backup_manager::CloudBackupRestoreEvent;
+
+    let receiver = manager.restore_from_cloud_backup_with_events();
+
+    loop {
+        let event = tokio::time::timeout(Duration::from_secs(30), receiver.recv_async())
+            .await
+            .expect("restore finishes")
+            .expect("restore event");
+
+        match event {
+            CloudBackupRestoreEvent::Progress(_) => {}
+            CloudBackupRestoreEvent::Complete(report) => return report,
+            CloudBackupRestoreEvent::NoBackupFound => panic!("restore found no backup"),
+            CloudBackupRestoreEvent::Failed(message) => panic!("restore failed: {message}"),
+        }
+    }
+}
+
+fn label_lines(jsonl: &str) -> Vec<serde_json::Value> {
+    jsonl
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
+/// Every field of every expected label is in the exported label for the same type and ref
+pub(crate) fn assert_labels_restored(
+    wallet_name: &str,
+    expected_jsonl: &str,
+    exported_jsonl: &str,
+) {
+    let exported = label_lines(exported_jsonl);
+
+    for expected in label_lines(expected_jsonl) {
+        let found = exported.iter().find(|label| {
+            label.get("type") == expected.get("type") && label.get("ref") == expected.get("ref")
+        });
+        let Some(found) = found else {
+            panic!("{wallet_name}: label {expected} missing from {exported_jsonl}");
+        };
+
+        for (key, value) in expected.as_object().unwrap() {
+            assert_eq!(found.get(key), Some(value), "{wallet_name}: label field {key}");
+        }
+    }
 }
 
 pub(crate) async fn wait_for_test_condition(

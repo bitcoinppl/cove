@@ -100,7 +100,7 @@ coverage = [
     "human",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# needs a real cloud account and passkey
+# the one pass on real providers: enable with the platform passkey sheet and a real authenticator's prf, on a real icloud or google drive account, then verify and restore. the same flow with scripted providers is covered in s12-enable-backup-without-existing-data and the other s12 rows
 
 [[row]]
 id = "s18-journey-encrypted-manual-backup"
