@@ -197,26 +197,61 @@ id = "s16-tapsigner-setup-signing-and-retry-layout"
 section = "16"
 title = "TAPSIGNER setup signing and retry layout"
 platforms = ["ios", "android"]
-target = "manual"
+target = "ui"
 paths = [
     "ios/Cove/Flows/TapSignerFlow/**",
+    "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/AddressTextEditor.swift",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAmountView.swift",
+    "ios/Cove/Flows/SendFlow/SetAmountScreen/SendFlowSetAmountSections.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowHardwareScreen.swift",
+    "ios/Cove/Flows/SendFlow/SendFlowHardwareSections.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/TapSignerFlow/**",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/SendFlowSetAmountScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAddressView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAmountView.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/views/AutoSizeText.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/SendFlowHardwareScreen.kt",
+    "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/HardwareScreen/SendFlowHardwareSections.kt",
 ]
 coverage = [
-    "human",
     "ios-ui:ios/CoveUITests/TapSignerLayoutFullLaunchUITests.swift::testTapSignerSetupScreensFitAtLargestTextSize",
     "ios-ui:ios/CoveUITests/TapSignerLayoutFullLaunchUITests.swift::testTapSignerImportScreensFitAtLargestTextSize",
+    "ios-ui:ios/CoveUITests/TapSignerLayoutFullLaunchUITests.swift::testTapSignerSigningCvcScreenFitsAtLargestTextSize",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/TapSignerFlow/TapSignerLayoutFullLaunchTest.kt::tapSignerSetupScreensFitAtLargestFontScale",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/TapSignerFlow/TapSignerLayoutFullLaunchTest.kt::tapSignerImportScreensFitAtLargestFontScale",
+    "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/TapSignerFlow/TapSignerLayoutFullLaunchTest.kt::tapSignerSigningCvcScreenFitsAtLargestFontScale",
 ]
 # 1.4.0: ios HUMAN, android HUMAN
-# the ui tests walk the choose, advanced, cvc, retry and success screens at the largest text size
-# through the tapsigner seam and check titles, descriptions and actions draw whole, each action
-# scrolls fully on screen and is enabled and clickable; android reads every text's compose layout for
-# an ellipsis or overflow, and ios probes compare each probed text with an unlimited copy. a person
-# still checks the signing cvc screen, whose message differs from import's, at the largest text size,
-# and on ios the descriptions inside the automatic setup and download backup buttons, which carry no
-# probe
+# the ui tests decide the row on both platforms; they run the app against the tapsigner emulator
+# through the ui test seam, so a physical card and the nfc session stay with the nfc rows
+# they walk setup's choose, advanced, cvc, retry and success screens and import's cvc, retry and
+# success screens at the largest text size (accessibility xxxl on ios, font scale 2 on android),
+# dropping a card session so each retry screen shows, and open the signing cvc screen from a funded
+# card's max draft without submitting a cvc
+# on every screen each title, description and action must scroll whole into view and draw whole,
+# and each action must be enabled and take a tap; a description taller than the space it shows in,
+# above any keyboard, must scroll its first and then its last line into view
+# android reads every text's compose layout for an ellipsis or overflow and scrolls each text until
+# no ancestor clips it; ios compares each probed text with an unlimited copy, including the
+# descriptions inside the automatic setup and download backup buttons, through a report beside each
+# on ios cvc screens every text and action must show above the number pad, and after each drag and
+# at the end of the screen's checks the test fails if the pad has closed or moved
+# the signing test fills in the send screen with the soft keyboard up, and the address field must
+# scroll whole into the space above the keyboard, as on ios must the amount field; max closes the
+# keyboard once an address is in, so the test focuses the amount field again, and next must then
+# scroll whole above the keyboard and the toolbar on it; on ios the amount's number pad must stay
+# where it came to rest through that check, and android measures once the keyboard's animations
+# have ended
+# sign using tapsigner on the hardware send screen must scroll into reach and take a tap, and on the
+# signing cvc screen the test enters a whole cvc and checks the submit action is enabled and takes a
+# tap, then cancels without submitting it
+# the send screen is checked only along this path: the address, the amount, max and next at the
+# largest text size, not its other sheets, alerts or coin control
+# nothing here needs a person; the tests use the simulator's and the emulator's default keyboard
+# and screen size, so other keyboards, such as third-party ones with taller toolbars, and other
+# screen sizes aren't covered
 
 [[row]]
 id = "s16-keyteleport-request-and-code-layout-at-largest"

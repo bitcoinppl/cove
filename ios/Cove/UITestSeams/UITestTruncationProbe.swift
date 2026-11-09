@@ -152,7 +152,7 @@ import UIKit
     }
 
     /// An invisible accessibility element behind the view whose value sums up the probed texts
-    /// inside it
+    /// inside it, and whose label counts them, so a test can tell one probe of several was dropped
     ///
     /// It lies behind rather than over the view, since XCUITest finds an element under a tap
     /// point by hit testing, and an element over a row would take the row's taps
@@ -164,7 +164,7 @@ import UIKit
                 Color.clear
                     .allowsHitTesting(false)
                     .accessibilityElement()
-                    .accessibilityLabel("Truncation report")
+                    .accessibilityLabel("Truncation report of \(report.probed) texts")
                     .accessibilityIdentifier(identifier)
                     .accessibilityValue(report.value)
             }
@@ -200,9 +200,9 @@ extension View {
     ///
     /// With the debug seam turned on, it lays an invisible element with `identifier` behind the
     /// view, whose value is `fits` when the view holds a probed text and all of them draw whole,
-    /// and `truncated` otherwise. Apply it outside any button that holds the view, since a
-    /// button merges the elements of its label. Without the seam, and in every release build, it
-    /// returns the view unchanged
+    /// and `truncated` otherwise, and whose label is `Truncation report of <n> texts`. Apply it
+    /// outside any button that holds the view, since a button merges the elements of its label.
+    /// Without the seam, and in every release build, it returns the view unchanged
     @ViewBuilder
     func uiTestTruncationReport(_ identifier: String) -> some View {
         #if DEBUG

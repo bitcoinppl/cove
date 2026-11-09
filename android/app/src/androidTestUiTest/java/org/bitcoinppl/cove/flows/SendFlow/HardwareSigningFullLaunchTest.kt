@@ -27,11 +27,9 @@ import org.bitcoinppl.cove.test.SignedFrames
 import org.bitcoinppl.cove.test.TAPSIGNER_CVC
 import org.bitcoinppl.cove.test.TEST_MNEMONIC
 import org.bitcoinppl.cove.test.clipboardText
-import org.bitcoinppl.cove.test.findText
 import org.bitcoinppl.cove.test.fullLaunchDevice
 import org.bitcoinppl.cove.test.hierarchy
 import org.bitcoinppl.cove.test.launchFullApp
-import org.bitcoinppl.cove.test.parseSats
 import org.bitcoinppl.cove.test.scrollTo
 import org.bitcoinppl.cove.test.waitFor
 import org.bitcoinppl.cove.uitest.UiTestSeams
@@ -246,7 +244,7 @@ class HardwareSigningFullLaunchTest {
         finishTapSignerImport()
 
         val funded = node.fund(receiveAddress(), listOf(100_000L))
-        refreshUntilBalance(100_000L)
+        screens.refreshUntilBalance(100_000L)
 
         wallet.startSend()
         wallet.tapMax()
@@ -484,19 +482,6 @@ class HardwareSigningFullLaunchTest {
         device.waitFor(By.text("Import Complete"), timeoutMs = 30_000L)
         device.waitFor(By.text("Continue")).click()
         device.waitFor(By.res("selectedWallet.balance"), timeoutMs = 30_000L)
-    }
-
-    /** The wallet only looks for new transactions on its own now and then, so pull to refresh */
-    private fun refreshUntilBalance(sats: Long) {
-        wallet.waitUntil("expected a balance of $sats sats after refreshing", timeoutMs = 90_000L) {
-            if (device.findText(By.res("selectedWallet.balance"))?.let(::parseSats) == sats) return@waitUntil true
-
-            device.swipe(device.displayWidth / 2, device.displayHeight * 2 / 5, device.displayWidth / 2, device.displayHeight * 9 / 10, 30)
-            Thread.sleep(3_000)
-            false
-        }
-
-        wallet.waitForBalance(sats)
     }
 
     private fun receiveAddress(): String = screens.copyReceiveAddress()

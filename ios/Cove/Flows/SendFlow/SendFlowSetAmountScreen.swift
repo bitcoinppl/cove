@@ -312,8 +312,27 @@ private struct SendFlowSetAmountContent: View {
     let dismissIfValid: () -> Void
     let showFeeSelection: () -> Void
 
+    /// Space between the form's sections, also kept between its end and the keyboard toolbar
+    private let sectionSpacing: CGFloat = 24
+
+    /// How far the keyboard toolbar reaches above the bottom of the scroll view, which stops at the
+    /// keyboard but not at the toolbar floating above it
+    ///
+    /// A constant, since SwiftUI doesn't reliably report where the toolbar lies: the frame of a
+    /// view in a keyboard toolbar item came back sometimes in window space and sometimes in the
+    /// toolbar's own space, several screens away. At the largest accessibility text size on
+    /// iOS 26, where its items were 40 points tall, the toolbar's background started 82 points
+    /// above the scroll view's bottom
+    private let keyboardToolbarReach: CGFloat = 82
+
     private var presenter: SendFlowPresenter {
         sendFlowManager.presenter
+    }
+
+    /// Room below the form while a field has focus, so its end, such as Next, can scroll clear of
+    /// the keyboard toolbar, with the form's section spacing between them
+    private var keyboardToolbarRoom: CGFloat {
+        presenter.focusField == nil ? 0 : keyboardToolbarReach + sectionSpacing
     }
 
     var body: some View {
@@ -322,7 +341,7 @@ private struct SendFlowSetAmountContent: View {
 
             ZStack {
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: sectionSpacing) {
                         SendFlowAmountInfoSection()
                         EnterAmountView(sendFlowManager: sendFlowManager)
                         SendFlowAddressSection(address: sendFlowManager.enteringAddress)
@@ -345,6 +364,7 @@ private struct SendFlowSetAmountContent: View {
                             SendFlowNextButton(action: next)
                         }
                     }
+                    .padding(.bottom, keyboardToolbarRoom)
                     .toolbar {
                         ToolbarItemGroup(placement: .keyboard) {
                             SendFlowSetAmountToolbar(
