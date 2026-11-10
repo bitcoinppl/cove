@@ -1511,11 +1511,11 @@ mod tests {
 
             delete_from_wallet_settings(&last.id).await;
 
-            assert_eq!(signet_wallet_ids(), vec![first.id, selected.id.clone()]);
+            assert_eq!(signet_wallet_ids(), vec![first.id.clone(), selected.id.clone()]);
             assert_eq!(selected_wallet(), Some(selected.id.clone()));
             assert_eq!(
                 router(),
-                (Route::SelectedWallet(selected.id), settings_routes),
+                (Route::SelectedWallet(selected.id.clone()), settings_routes),
                 "the settings screen pops itself back to the untouched route"
             );
 
@@ -1524,9 +1524,10 @@ mod tests {
                 evicted.contains(&last.id),
                 "eviction is requested for the deleted wallet's cached manager"
             );
+            // the tap sees the whole process, so only this test's other wallets are checked
             assert!(
-                evicted.iter().all(|id| *id == last.id),
-                "only the deleted wallet's cached manager is dropped, got {evicted:?}"
+                !evicted.contains(&first.id) && !evicted.contains(&selected.id),
+                "the remaining wallets keep their cached managers, got {evicted:?}"
             );
         }
 
@@ -1632,9 +1633,10 @@ mod tests {
                 evicted.contains(&decoy.id),
                 "eviction is requested for the deleted wallet's cached manager"
             );
+            // the tap sees the whole process, so only this test's other wallet is checked
             assert!(
-                evicted.iter().all(|id| *id == decoy.id),
-                "only the deleted wallet's cached manager is dropped, got {evicted:?}"
+                !evicted.contains(&main.id),
+                "the main wallet keeps its cached manager, got {evicted:?}"
             );
 
             // the main scope never saw the decoy deletion
