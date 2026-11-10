@@ -1460,7 +1460,7 @@ mod tests {
             (descriptor_export, WalletType::Cold),
         ];
 
-        for (pasted, wallet_type) in pastes.iter().cycle().take(pastes.len() * 4).cloned() {
+        for (pasted, wallet_type) in pastes.iter().cycle().take(pastes.len() * 4) {
             // both taps check for a duplicate at the same moment, as two threads would
             let start = std::sync::Barrier::new(2);
             let (first, second) = std::thread::scope(|scope| {
@@ -1486,7 +1486,7 @@ mod tests {
                 (Err(first), Err(second)) => panic!("neither paste imported: {first}, {second}"),
             };
 
-            assert_eq!(imported.metadata.wallet_type, wallet_type, "{pasted}");
+            assert_eq!(imported.metadata.wallet_type, *wallet_type, "{pasted}");
             assert_eq!(
                 rejected.err(),
                 Some(WalletError::WalletAlreadyExists(imported.id.clone())),
