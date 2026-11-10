@@ -10,6 +10,7 @@ use parking_lot::Mutex;
 pub(crate) mod fake_node;
 pub(crate) mod hardware_signing;
 pub(crate) mod tap_signer_emulator;
+pub(crate) mod utxo_locks;
 pub(crate) mod wallet_target;
 
 use crate::wallet::fingerprint::Fingerprint;

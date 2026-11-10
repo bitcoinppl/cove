@@ -39,12 +39,15 @@ paths = [
 ]
 coverage = [
     "agent",
+    "rust:rust/src/manager/wallet_manager/transaction_locks.rs::locking_a_received_transaction_marks_it_locked_and_keeps_its_outputs_out_of_sends",
     "rust:rust/src/manager/wallet_manager/actor.rs::lock_state_for_outpoints_returns_locked_when_all_outputs_are_locked",
     "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/CoinControlFlow/UtxoLockFullLaunchTest.kt::stage1LocksFromCoinControlAndTransactionDetails",
     "ios-ui:ios/CoveUITests/UtxoLockFullLaunchUITests.swift::testLockedUtxosAreExcludedFromCoinControlAndSends",
 ]
 # 1.4.0: ios PASS, android PASS
-# rust decides the locked state; list and detail labels stay agent
+# rust decides the Locked state both screens read and that normal, Max and coin control sends skip
+# the outputs; an agent still checks the list row's lock icon and the details "UTXOs locked" header,
+# which only Swift and Kotlin draw from that state
 
 [[row]]
 id = "s03-normal-send-max-excludes-locked-value"
@@ -283,10 +286,13 @@ paths = [
 ]
 coverage = [
     "agent",
+    "rust:rust/src/manager/wallet_manager/transaction_locks.rs::toggling_a_mixed_transaction_locks_then_unlocks_every_unspent_output",
     "rust:rust/src/manager/wallet_manager/transaction_locks.rs::transaction_lock_toggle_uses_current_outpoints_for_bulk_label_update",
     "rust:rust/src/manager/wallet_manager/actor.rs::lock_state_for_outpoints_returns_mixed_when_some_outputs_are_locked",
 ]
 # 1.4.0: ios BLOCKED, android PASS
+# rust decides Mixed, then Locked and Unlocked across every unspent output; an agent still checks the
+# details "Some UTXOs locked" label and that its Lock and Unlock button calls the toggle
 
 [[row]]
 id = "s03-coin-control-lock-after-back-and-fee"
@@ -299,18 +305,21 @@ paths = [
     "rust/src/manager/coin_control_manager/**",
     "rust/src/database/wallet_data/label.rs",
     "rust/src/manager/wallet_manager/transaction_locks.rs",
+    "rust/src/manager/send_flow_manager.rs",
+    "rust/src/manager/send_flow_manager/*.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/wallet_manager/actor/**",
     "ios/Cove/Flows/CoinControlFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
     "ios/Cove/Flows/SendFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/**",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/send_flow_manager/coin_control_lock_tests.rs::coin_control_send_refuses_a_coin_locked_after_going_back_and_changing_the_fee",
     "rust:rust/src/manager/wallet_manager/actor.rs::actor_manual_tx_rejects_db_locked_outpoints",
     "rust:rust/src/manager/coin_control_manager.rs::direct_selection_prunes_locked_utxos",
 ]
 # 1.4.0: ios PASS, android PASS
-# rust rejects locked inputs regardless of navigation; the back and fee-change route stays agent
 
 [[row]]
 id = "s03-coin-control-lock-after-amount-edit"
@@ -323,18 +332,21 @@ paths = [
     "rust/src/manager/coin_control_manager/**",
     "rust/src/database/wallet_data/label.rs",
     "rust/src/manager/wallet_manager/transaction_locks.rs",
+    "rust/src/manager/send_flow_manager.rs",
+    "rust/src/manager/send_flow_manager/*.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
+    "rust/src/manager/wallet_manager/actor/**",
     "ios/Cove/Flows/CoinControlFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
     "ios/Cove/Flows/SendFlow/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/**",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/send_flow_manager/coin_control_lock_tests.rs::coin_control_send_refuses_a_coin_locked_before_an_amount_edit",
     "rust:rust/src/manager/wallet_manager/actor.rs::actor_manual_tx_rejects_db_locked_outpoints",
     "rust:rust/src/manager/coin_control_manager.rs::direct_selection_prunes_locked_utxos",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# amount edit control was not reachable in the UI; rust rejects locked inputs regardless
 
 [[row]]
 id = "s03-mixed-toggle-leaves-spent-output-metadata-intact"
@@ -344,12 +356,13 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
     "rust/src/manager/wallet_manager/transaction_locks.rs",
+    "rust/src/manager/wallet_manager/actor/transactions.rs",
     "rust/src/database/wallet_data/label.rs",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/transaction_locks.rs::toggling_a_transaction_lock_leaves_its_spent_outputs_labels_and_locks_alone",
     "rust:rust/src/manager/wallet_manager/transaction_locks.rs::transaction_lock_toggle_uses_current_outpoints_for_bulk_label_update",
     "rust:rust/src/database/wallet_data/label.rs::bulk_spendability_update_only_changes_requested_outpoints",
 ]
