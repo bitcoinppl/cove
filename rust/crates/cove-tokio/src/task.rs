@@ -3,7 +3,7 @@ use crate::TOKIO;
 use act_zero::{Actor, Addr};
 use core::future::Future;
 use futures::task::{Spawn, SpawnError};
-use tokio::task::JoinHandle;
+use tokio::task::{JoinError, JoinHandle};
 
 struct CustomRuntime;
 
@@ -37,6 +37,19 @@ where
     R: Send + 'static,
 {
     TOKIO.get().expect("tokio runtime not initialized").spawn_blocking(f)
+}
+
+/// Log a join failure at the task owner unless it is the normal cancellation of an aborted task
+///
+/// Release builds abort on panic, so this mostly surfaces panics in debug and test builds; the
+/// panic hook records the location either way
+pub fn log_unexpected_join_error(operation: &str, error: &JoinError) {
+    if error.is_cancelled() {
+        return;
+    }
+
+    // the join error's Display carries the panic payload, which can hold secrets
+    tracing::error!("{operation} task panicked");
 }
 
 /// Provides an infallible way to spawn an actor onto the Tokio runtime,
