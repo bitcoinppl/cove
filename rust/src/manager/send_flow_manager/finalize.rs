@@ -8,7 +8,10 @@ use crate::{
 };
 use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee};
 
-use super::{EnterMode, Message, RustSendFlowManager, SendFlowAlertState, SendFlowError};
+use super::{
+    EnterMode, Message, RustSendFlowManager, SendFlowAlertState, SendFlowError,
+    amount_input::MaxTrigger,
+};
 
 #[derive(Clone)]
 struct FinalizeSnapshot {
@@ -22,6 +25,23 @@ impl RustSendFlowManager {
     /// Create the PSBT and everything is valid go to the next screen
     pub(crate) fn finalize_and_go_to_next_screen(self: &Arc<Self>) {
         if !self.validate_amount_internal(true) || !self.validate_address_internal(true) {
+            return;
+        }
+
+        // a Max amount drained at an older fee rate or address would be sent as a plain amount
+        // with change, so drain again first and finalize with the fresh amount
+        let max_is_stale = self.state.lock().max_is_stale();
+        if max_is_stale {
+            let me = self.clone();
+            cove_tokio::task::spawn(async move {
+                match me.drain_max_send(MaxTrigger::Refresh).await {
+                    Ok(Some(_)) => me.finalize_and_go_to_next_screen(),
+
+                    // the user cleared Max meanwhile, so the next Next sends what they entered
+                    Ok(None) => {}
+                    Err(error) => me.report_max_send_error(Err(error)),
+                }
+            });
             return;
         }
 

@@ -205,17 +205,14 @@ impl RustSendFlowManager {
         sender: &mut DeferredSender,
     ) {
         let selected = selection.selected.clone();
-        let (rate_changed, max_selected) = {
+        let max_is_stale = {
             let mut state = self.state.lock();
-            let previous_rate =
-                state.fee_selection.as_ref().map(|current| current.selected.fee_rate);
-
             if state.fee_selection.as_ref() != Some(&selection) {
                 state.clear_warning_acknowledgements();
             }
 
             state.fee_selection = Some(selection.clone());
-            (previous_rate != Some(selected.fee_rate), state.max_selected.is_some())
+            state.max_is_stale()
         };
 
         sender.queue(Message::UpdateFeeSelection(selection));
@@ -228,8 +225,8 @@ impl RustSendFlowManager {
         self.reconcile_coin_control_amount_for_selected_fee();
 
         // a Max amount is drained at one rate, so at any other rate it leaves change or overspends;
-        // comparing only the rate keeps a totals-only update from draining again
-        if rate_changed && max_selected {
+        // a totals-only update keeps the rate, so it does not drain again
+        if max_is_stale {
             let me = self.clone();
             cove_tokio::task::spawn(async move { me.refresh_max_send_report_error().await });
         }
