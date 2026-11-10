@@ -232,6 +232,7 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
   "rust/src/transaction/unsigned_transaction.rs",
+  "rust/src/manager/wallet_manager.rs",
   "rust/src/manager/wallet_manager/unsigned_transactions.rs",
   "rust/src/manager/wallet_manager/actor/transactions.rs",
   "rust/src/wallet/addressing.rs",

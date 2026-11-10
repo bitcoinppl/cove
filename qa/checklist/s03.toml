@@ -356,6 +356,7 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
     "rust/src/manager/wallet_manager/transaction_locks.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
     "rust/src/manager/wallet_manager/actor/transactions.rs",
     "rust/src/database/wallet_data/label.rs",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",
