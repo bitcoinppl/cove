@@ -49,6 +49,8 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
     "rust/src/key_teleport.rs",
+    "rust/src/multi_format.rs",
+    "rust/src/signed_import.rs",
     "rust/src/manager/key_teleport_manager.rs",
     "rust/src/manager/key_teleport_manager/**",
     "ios/Cove/Flows/KeyTeleportFlow/**",

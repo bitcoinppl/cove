@@ -2274,12 +2274,19 @@ mod tests {
     }
 
     async fn set_broadcast_esplora_node(broadcast_status: u16) -> BroadcastEsploraNode {
+        set_broadcast_esplora_node_for(CoveNetwork::Bitcoin, broadcast_status).await
+    }
+
+    async fn set_broadcast_esplora_node_for(
+        network: CoveNetwork,
+        broadcast_status: u16,
+    ) -> BroadcastEsploraNode {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("test esplora server binds");
         let address = listener.local_addr().expect("test esplora server has address");
         let node = Node::new_esplora(
             "broadcast test esplora node".to_string(),
             format!("http://{address}"),
-            CoveNetwork::Bitcoin,
+            network,
         );
 
         crate::database::Database::global()
@@ -3139,17 +3146,38 @@ mod tests {
 
         let _ = rustls::crypto::ring::default_provider().install_default();
         test_keychain();
-
         crate::database::test_support::init_test_database();
-        let server = set_broadcast_esplora_node(200).await;
 
-        // a BIP 21 URI with a BIP 77 v2 pj= endpoint, from the payjoin crate's own test vectors
-        let uri = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.0005&pjos=0&pj=HTTPS://PAYJO.IN/TXJCGKTKXLUUZ%23EX1C4UC6ES-OH1QYPM5JXYNS754Y4R45QWE336QFX6ZR8DQGVQCULVZTV20TFVEYDMFQC-RK1Q0DJS3VVDXWQQTLQ8022QGXSX7ML9PHZ6EDSF6AKEWQG758JPS2EV";
-        let parsed = cove_types::address::AddressWithNetwork::try_new(uri).expect("URI parses");
+        // the broadcast goes to the node selected for the wallet's network, so pay on both
+        let signet_address =
+            crate::test_support::hardware_signing::external_address(bitcoin::Network::Signet);
+
+        pay_pj_v2_uri_once(CoveNetwork::Bitcoin, "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm")
+            .await;
+        pay_pj_v2_uri_once(CoveNetwork::Signet, &signet_address.to_string()).await;
+    }
+
+    /// Pays a BIP 21 URI with a BIP 77 v2 pj= endpoint from a funded wallet on `network`, and
+    /// checks it is broadcast once as an ordinary payment
+    async fn pay_pj_v2_uri_once(network: CoveNetwork, address: &str) {
+        crate::database::Database::global()
+            .global_config
+            .set_selected_network(network)
+            .expect("selected network is saved");
+
+        let server = set_broadcast_esplora_node_for(network, 200).await;
+
+        // the pj= endpoint comes from the payjoin crate's own test vectors
+        let uri = format!(
+            "bitcoin:{address}?amount=0.0005&pjos=0&pj=HTTPS://PAYJO.IN/TXJCGKTKXLUUZ%23EX1C4UC6ES-OH1QYPM5JXYNS754Y4R45QWE336QFX6ZR8DQGVQCULVZTV20TFVEYDMFQC-RK1Q0DJS3VVDXWQQTLQ8022QGXSX7ML9PHZ6EDSF6AKEWQG758JPS2EV"
+        );
+        let parsed = cove_types::address::AddressWithNetwork::try_new(&uri).expect("URI parses");
         let endpoint = parsed.payjoin.expect("the URI carries a payjoin endpoint").endpoint;
         let amount = Amount::from_sat(parsed.amount.expect("the URI carries an amount").as_sats());
 
-        let metadata = WalletMetadata::preview_new();
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.network = network;
+
         let mut wallet = persisted_preview_wallet(metadata.clone());
         mark_wallet_ledger_ready(&mut wallet);
         insert_checkpoint(
@@ -3180,13 +3208,24 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(200)).await;
         let payjoin_session = db.get_payjoin_sender_session().expect("payjoin session reads");
 
-        restore_default_bitcoin_node();
+        crate::database::Database::global()
+            .global_config
+            .set_selected_node(&Node::default(network))
+            .expect("default node config is saved");
+        crate::database::Database::global()
+            .global_config
+            .set_selected_network(CoveNetwork::Bitcoin)
+            .expect("selected network is restored");
+
         server.server.abort();
         let _ = crate::wallet::delete_wallet_specific_data(&metadata.id);
 
-        result.expect("broadcast succeeds");
-        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1);
-        assert!(payjoin_session.is_none(), "an ordinary payment leaves no payjoin session");
+        result.unwrap_or_else(|error| panic!("{network}: broadcast fails: {error:?}"));
+        assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1, "{network}: broadcasts");
+        assert!(
+            payjoin_session.is_none(),
+            "{network}: an ordinary payment leaves no payjoin session"
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -1392,11 +1392,11 @@ const BIP174_UNSIGNED_PSBT_BASE64: &str = "cHNidP8BAJoCAAAAAljoeiG1ba8MI76OcHBFb
 /// What pasted text became once both apps routed it into the KeyTeleport sender
 #[derive(Debug, PartialEq, Eq)]
 enum SenderPaste {
-    /// a receiver request, handed to the manager
+    /// A receiver request, handed to the manager
     Ingested,
-    /// parsed as some other format, which the apps reject without calling the manager
+    /// Parsed as some other format, which the apps reject without calling the manager
     OtherFormat,
-    /// failed to parse, which the apps also reject
+    /// Failed to parse, which the apps also reject
     Unparsed(crate::multi_format::MultiFormatError),
 }
 
