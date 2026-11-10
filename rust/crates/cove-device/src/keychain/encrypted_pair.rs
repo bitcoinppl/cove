@@ -1,3 +1,4 @@
+use tracing::error;
 use zeroize::Zeroizing;
 
 use cove_util::{ResultExt as _, encryption::Cryptor};
@@ -96,13 +97,25 @@ impl EncryptedPair {
         self.access.save(self.cryptor_key.clone(), serialized.as_str().to_owned())?;
 
         if let Err(error) = self.access.save(self.value_key.clone(), encrypted) {
-            // cleanup is best effort, the value save error is what the caller needs
+            // cleanup is best effort, the value save error is what the caller needs, but a failed
+            // rollback leaves the stored value undecryptable so it must be visible in the logs
             match prior_cryptor {
                 Some(prior_cryptor) => {
-                    let _ = self.access.save(self.cryptor_key.clone(), prior_cryptor.to_string());
+                    if let Err(rollback_error) =
+                        self.access.save(self.cryptor_key.clone(), prior_cryptor.to_string())
+                    {
+                        error!(
+                            "keychain value save failed ({error}) and restoring the prior cryptor also failed: {rollback_error}"
+                        );
+                    }
                 }
+
                 None => {
-                    self.delete_cryptor();
+                    if !self.delete_cryptor() {
+                        error!(
+                            "keychain value save failed ({error}) and removing the new cryptor also failed"
+                        );
+                    }
                 }
             }
 
