@@ -107,9 +107,11 @@ paths = [
 coverage = [
     "rust:rust/src/diagnostics.rs::assembly_includes_sections_and_redacts_sensitive_values",
     "rust:rust/src/diagnostics.rs::shared_plain_report_is_the_redacted_preview_with_the_upload_content",
+    "agent",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# both apps write the rust shared text to the file unchanged
+# rust decides the shared text; writing it to a file and sharing it is app code no other row
+# checks
 
 [[row]]
 id = "s04-offline-diagnostic-submission-keeps-preview"
