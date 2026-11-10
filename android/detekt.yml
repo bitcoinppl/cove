@@ -51,11 +51,12 @@ style:
   ForbiddenMethodCall:
     active: true
     excludes:
-      - '**/test/**'
-      - '**/androidTest/**'
-      - '**/androidTestUiTest/**'
-      - '**/screenshotTest/**'
-      - '**/org/bitcoinppl/cove/Log.kt'
+      - '**/src/test/**'
+      - '**/src/androidTest/**'
+      - '**/src/androidTestUiTest/**'
+      - '**/src/testUiTest/**'
+      - '**/src/screenshotTest/**'
+      - '**/src/main/java/org/bitcoinppl/cove/Log.kt'
     methods:
       - value: 'android.util.Log.v'
         reason: 'Use org.bitcoinppl.cove.Log, which keeps debug lines out of release logcat'

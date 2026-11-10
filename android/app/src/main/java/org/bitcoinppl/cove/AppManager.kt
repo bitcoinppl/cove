@@ -952,13 +952,15 @@ class AppManager private constructor() : FfiReconcile {
         dispatchResult(action).isSuccess
 
     private fun dispatchResult(action: AppAction): Result<Unit> {
-        Log.d(tag, "dispatch $action")
+        // only the kind: routes can carry TAPSIGNER PINs and signed transactions
+        val actionKind = action::class.simpleName
+        Log.d(tag, "dispatch $actionKind")
 
         return runCatching {
             withRust {
                 dispatch(action)
             }
-        }.onFailure { Log.e(tag, "Unable to dispatch app action $action", it) }
+        }.onFailure { Log.e(tag, "Unable to dispatch app action $actionKind", it) }
     }
 
     companion object {

@@ -765,11 +765,14 @@ struct CorruptedWalletDeletionRetry: Equatable {
     }
 
     public func dispatch(action: AppAction) {
-        logger.debug("dispatch \(action)")
+        // only the case name: routes can carry TAPSIGNER PINs and signed transactions
+        let actionKind = String(describing: action).prefix { $0 != "(" }
+        logger.debug("dispatch \(actionKind)")
+
         do {
             try rust.dispatch(action: action)
         } catch {
-            logger.error("Unable to dispatch app action \(action), error: \(error)")
+            logger.error("Unable to dispatch app action \(actionKind), error: \(error)")
         }
     }
 }

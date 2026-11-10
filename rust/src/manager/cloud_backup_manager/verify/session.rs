@@ -336,7 +336,11 @@ impl WalletBackupReadPass {
                 }
 
                 if is_local {
-                    warn!("Cloud backup remote truth failed for wallet backup: {error}");
+                    // a listed wallet's failure was logged above
+                    if !is_listed {
+                        warn!("Cloud backup remote truth failed for wallet backup: {error}");
+                    }
+
                     self.remote_wallet_truth.unknown_record_ids.insert(record_id);
                 }
             }

@@ -111,6 +111,15 @@ class SendFlowManager internal constructor(
         Log.d(tag, message)
     }
 
+    // the error's toString is the Rust Display text, which leaves out entered text; its generated
+    // message and the other alerts' fields can carry it, so they stay out
+    private fun alertKind(alert: SendFlowAlertState): String =
+        when (alert) {
+            is SendFlowAlertState.Error -> "error: ${alert.v1}"
+            is SendFlowAlertState.General -> "general"
+            is SendFlowAlertState.Warning -> "warning: ${alert.kind}"
+        }
+
     private fun logWarn(message: String) {
         Log.w(tag, message)
     }
@@ -319,7 +328,7 @@ class SendFlowManager internal constructor(
             }
 
             is SendFlowManagerReconcileMessage.SetAlert -> {
-                logWarn("setAlert: ${message.v1}")
+                logWarn("setAlert: ${alertKind(message.v1)}")
 
                 val hadSheet = presenter.sheetState != null
                 val hadAlert = presenter.alertState != null

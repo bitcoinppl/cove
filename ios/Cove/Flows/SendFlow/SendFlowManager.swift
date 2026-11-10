@@ -373,7 +373,15 @@ private enum SendFlowManagerAccessError: LocalizedError {
     }
 
     private func applySetAlert(_ alertState: SendFlowAlertState) {
-        Log.warn("setAlert: \(alertState)")
+        // SendFlowError's description is the Rust Display text, which leaves out entered text;
+        // interpolating the enum itself reflects its payload, so only kinds are logged
+        let alertKind = switch alertState {
+        case let .error(error): "error: \(error.description)"
+        case .general: "general"
+        case let .warning(kind, _, _): "warning: \(kind)"
+        }
+
+        Log.warn("setAlert: \(alertKind)")
         let hadSheet = presenter.sheetState != .none
         let hadAlert = presenter.alertState != .none
         let isDismissingAlert = presenter.isDisappearing

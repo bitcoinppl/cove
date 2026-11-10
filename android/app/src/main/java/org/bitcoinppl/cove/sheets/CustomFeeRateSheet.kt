@@ -213,9 +213,10 @@ fun CustomFeeRateSheet(
                         }
                     } catch (e: SendFlowException) {
                         if (!isTooHighCustomFeeError(e)) {
+                            // toString is the Rust Display text; the generated message lists raw fields
                             Log.e(
                                 "CustomFeeRateSheet",
-                                "Unexpected error calculating fee: ${e.javaClass.simpleName} - ${e.message}",
+                                "Unexpected error calculating fee: ${e.javaClass.simpleName} - $e",
                                 e,
                             )
                             return@withContext
