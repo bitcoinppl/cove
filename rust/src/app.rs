@@ -1689,10 +1689,20 @@ mod tests {
             assert_eq!(visible_wallet_ids(), decoy_ids);
             assert_eq!(selected_wallet(), Some(decoy_hot.id));
 
-            let launch_order = Database::global().wallets().all_sorted_active().unwrap();
-            assert!(
-                launch_order.iter().all(|wallet| decoy_ids.contains(&wallet.id)),
-                "launch selection only picks from the decoy list"
+            let mut launch_choices = Database::global()
+                .wallets()
+                .all_sorted_active()
+                .unwrap()
+                .into_iter()
+                .map(|wallet| wallet.id)
+                .collect::<Vec<_>>();
+
+            launch_choices.sort();
+            let mut expected_choices = decoy_ids;
+            expected_choices.sort();
+            assert_eq!(
+                launch_choices, expected_choices,
+                "launch selection picks from exactly the decoy list"
             );
 
             config.set_main_mode().unwrap();

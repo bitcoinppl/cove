@@ -346,6 +346,14 @@ pub(crate) mod test_support {
             config.set_selected_network(Network::Signet).unwrap();
             config.set_main_mode().unwrap();
             config.clear_selected_wallet().unwrap();
+
+            // each mode keeps its own saved selection, which a later mode switch would bring back
+            for key in
+                [GlobalConfigKey::MainSelectedWalletId, GlobalConfigKey::DecoySelectedWalletId]
+            {
+                config.delete(key).unwrap();
+            }
+
             for mode in Self::MODES {
                 let _ = Database::global().wallets.save_all_wallets(Network::Signet, mode, vec![]);
             }
