@@ -3,7 +3,8 @@ use std::{num::NonZeroU32, sync::Arc};
 use bdk_wallet::Wallet as BdkWallet;
 use bdk_wallet::bitcoin::Transaction as BdkTransaction;
 use bdk_wallet::chain::{
-    ChainPosition as BdkChainPosition, ConfirmationBlockTime, tx_graph::CanonicalTx,
+    ChainPosition as BdkChainPosition, ConfirmationBlockTime,
+    tx_graph::{CalculateFeeError, CanonicalTx},
 };
 use bip329::{Label, Labels, TransactionRecord};
 use bitcoin::params::Params;
@@ -181,24 +182,47 @@ impl TransactionDetails {
         let tx_details = wallet.get_tx(txid).ok_or(Error::NotFound)?.tx_node.tx;
         let network = Network::try_from(wallet.network()).map_err(Error::UnsupportedNetwork)?;
 
-        // missing parts degrade the details screen, one line per load names every missing part
-        let mut missing = Vec::new();
+        // fee and fee rate need every input's previous output, which the wallet only has for
+        // its own inputs, so incoming transactions with external inputs routinely lack them
+        let mut expected_missing = Vec::new();
+        let mut unexpected_missing = Vec::new();
+        let mut note_fee_error = |part: &str, error: &CalculateFeeError| match error {
+            CalculateFeeError::MissingTxOut(outpoints) => {
+                expected_missing.push(format!("{part}: {} input txouts unknown", outpoints.len()));
+            }
+            CalculateFeeError::NegativeFee(_) => {
+                unexpected_missing.push(format!("{part}: {error}"))
+            }
+        };
+
         let fee = wallet
             .calculate_fee(&tx_details)
-            .tap_err(|e| missing.push(format!("fee: {e}")))
+            .tap_err(|e| note_fee_error("fee", e))
             .ok()
             .map(Into::into);
         let fee_rate = wallet
             .calculate_fee_rate(&tx_details)
-            .tap_err(|e| missing.push(format!("fee rate: {e}")))
+            .tap_err(|e| note_fee_error("fee rate", e))
             .ok()
             .map(Into::into);
 
-        let address =
-            Address::try_new(&tx, wallet).tap_err(|e| missing.push(format!("address: {e}"))).ok();
+        // every received or sent transaction should have an address output to show
+        let address = Address::try_new(&tx, wallet)
+            .tap_err(|e| unexpected_missing.push(format!("address: {e}")))
+            .ok();
 
-        if !missing.is_empty() {
-            tracing::warn!("transaction details for {txid} are missing {}", missing.join("; "));
+        // one line per load names every missing part
+        if !unexpected_missing.is_empty() {
+            unexpected_missing.extend(expected_missing);
+            tracing::warn!(
+                "transaction details for {txid} are missing {}",
+                unexpected_missing.join("; ")
+            );
+        } else if !expected_missing.is_empty() {
+            tracing::debug!(
+                "transaction details for {txid} are missing {}",
+                expected_missing.join("; ")
+            );
         }
 
         let pending_or_confirmed = PendingOrConfirmed::new(chain_postition);
