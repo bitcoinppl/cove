@@ -11,7 +11,8 @@ use cove_util::result_ext::ResultExt as _;
 pub struct HistoricalFiatPriceReport {
     currency: FiatCurrency,
     txns: Vec<(ConfirmedTransaction, Option<f32>)>,
-    timezone: String,
+    timezone_name: String,
+    timezone: jiff::tz::TimeZone,
 }
 
 #[derive(Debug)]
@@ -52,13 +53,24 @@ pub struct TxnWithHistoricalPrice {
 
 impl HistoricalFiatPriceReport {
     pub fn new(currency: FiatCurrency, txns: Vec<(ConfirmedTransaction, Option<f32>)>) -> Self {
-        Self { currency, txns, timezone: Device::global().timezone() }
+        let timezone_name = Device::global().timezone();
+
+        // resolve once so an unknown zone logs one warning instead of one per CSV row
+        let (timezone_name, timezone) = match jiff::tz::TimeZone::get(&timezone_name) {
+            Ok(timezone) => (timezone_name, timezone),
+            Err(error) => {
+                tracing::warn!("unable to load time zone for CSV export, using UTC: {error}");
+                ("UTC".to_string(), jiff::tz::TimeZone::UTC)
+            }
+        };
+
+        Self { currency, txns, timezone_name, timezone }
     }
 
     pub fn create_csv(self) -> Result<Csv, CsvCreationError> {
         let fiat_header = format!("Amount ({}{})", self.currency.symbol(), self.currency.suffix());
 
-        let confirmed_at_local_header = format!("Confirmed At ({})", self.timezone);
+        let confirmed_at_local_header = format!("Confirmed At ({})", self.timezone_name);
 
         let mut csv = WriterBuilder::new().has_headers(false).from_writer(vec![]);
 
@@ -93,13 +105,7 @@ impl HistoricalFiatPriceReport {
         let fiat_price = *fiat_price;
 
         // convert to local time zone
-        let datetime_local = match txn.confirmed_at.in_tz(&self.timezone) {
-            Ok(local) => local,
-            Err(error) => {
-                tracing::warn!("unable to convert timestamp: {error}");
-                txn.confirmed_at.in_tz("UTC").expect("all timestamps after unix epoch")
-            }
-        };
+        let datetime_local = txn.confirmed_at.to_zoned(self.timezone.clone());
 
         let datetime_local_string = datetime_local.strftime("%Y-%m-%dT%H:%M:%S%:z").to_string();
 
