@@ -232,9 +232,14 @@ section = "9"
 title = "Alternate-address history without duplicate/unrelated scans"
 platforms = ["ios", "android"]
 target = "rust"
-paths = ["rust/src/discovery_scanner.rs", "rust/src/wallet/builder.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
-coverage = ["agent", "rust:rust/src/discovery_scanner.rs::json_discovery_builds_wrapped_and_legacy_alternates_for_native_segwit", "rust:rust/src/discovery_scanner.rs::json_discovery_skips_current_wrapped_segwit_alternate"]
+paths = ["rust/src/discovery_scanner.rs", "rust/src/wallet/builder.rs", "rust/src/manager/wallet_manager.rs", "rust/src/manager/wallet_manager/**", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "ios/Cove/Flows/SelectedWalletFlow/ChooseWalletTypeView.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/ChooseWalletTypeSheet.kt"]
+coverage = [
+    "rust:rust/src/discovery_scanner.rs::json_discovery_builds_wrapped_and_legacy_alternates_for_native_segwit",
+    "rust:rust/src/discovery_scanner.rs::json_discovery_skips_current_wrapped_segwit_alternate",
+    "rust:rust/src/discovery_scanner.rs::imported_export_shows_legacy_history_once_after_scanning_only_its_alternates",
+]
 # 1.4.0: ios BLOCKED, android BLOCKED
+# both apps only show the accounts rust found and switch through switch_to_different_wallet_address_type in the wallet type chooser
 
 [[row]]
 id = "s09-upgraded-watch-only-name-material-origin-type"
@@ -243,9 +248,14 @@ title = "Upgraded watch-only name/material/origin/type/history"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/wallet/builder.rs", "rust/src/manager/import_wallet_manager.rs", "rust/src/wallet_identity/existing.rs", "ios/Cove/Flows/NewWalletFlow/NewWalletSelectScreen.swift", "ios/Cove/CoveMainAlerts.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/NewWalletFlow/NewWalletSelectScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/MainActivityGlobalAlerts.kt"]
-coverage = ["agent", "rust:rust/src/wallet/builder.rs::cold_upgrade_metadata_carries_json_discovery_state"]
+coverage = [
+    "rust:rust/src/wallet/builder.rs::cold_upgrade_metadata_carries_json_discovery_state",
+    "rust:rust/src/wallet/builder.rs::hardware_export_upgrades_the_matching_watch_only_wallet_in_place",
+    "rust:rust/src/manager/import_wallet_manager.rs::existing_wallet_upgrade_preserves_public_material_and_origin",
+]
 # 1.4.0: ios BLOCKED, android BLOCKED
 # read as the watch-only to cold upgrade via import; results treated it as an app upgrade
+# both apps call Wallet.newFromXpub and select the wallet it returns
 
 [[row]]
 id = "s09-ios-signet-upub-import-and-first-receive"

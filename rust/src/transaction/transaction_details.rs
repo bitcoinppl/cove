@@ -634,15 +634,32 @@ mod tests {
     use super::*;
     use cove_types::unit::BitcoinUnit;
 
-    /// Clears the Bitcoin explorer override and restores the selected network when dropped,
+    use crate::custom_block_explorer::BlockExplorerOption;
+    use strum::IntoEnumIterator as _;
+
+    // the first bitcoin payment, so the url points at a transaction that really exists
+    const MAINNET_TXID: &str = "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16";
+
+    /// Clears every network's explorer override and restores the selected network when dropped,
     /// since both live in the process-global database
     struct RestoreExplorerConfig(Network);
 
     impl Drop for RestoreExplorerConfig {
         fn drop(&mut self) {
             let config = &Database::global().global_config;
-            let _ = config.clear_custom_block_explorer(Network::Bitcoin);
+            for network in Network::iter() {
+                let _ = config.clear_custom_block_explorer(network);
+            }
+
             let _ = config.set_selected_network(self.0);
+        }
+    }
+
+    fn mainnet_details_on(network: Network) -> TransactionDetails {
+        TransactionDetails {
+            network,
+            tx_id: cove_types::TxId(MAINNET_TXID.parse().unwrap()),
+            ..TransactionDetails::preview_new_confirmed()
         }
     }
 
@@ -675,6 +692,91 @@ mod tests {
             let details = TransactionDetails { network, ..bitcoin.clone() };
 
             assert_eq!(details.transaction_url(), format!("{prefix}{txid}"), "{network:?}");
+        }
+    }
+
+    // both apps open transaction_url() as is, so each saved placeholder spelling must put the
+    // transaction's own txid exactly where the template says, once, with no placeholder left
+    #[test]
+    fn transaction_url_substitutes_each_placeholder_spelling_once() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::init_test_database();
+        let config = &Database::global().global_config;
+        let _restore = RestoreExplorerConfig(config.selected_network());
+
+        for placeholder in ["{txid}", "{0}", "{tx_id}"] {
+            for network in [Network::Bitcoin, Network::Signet] {
+                config
+                    .set_custom_block_explorer(
+                        network,
+                        format!("https://explorer.example.com/tx/{placeholder}?view=full"),
+                    )
+                    .unwrap();
+
+                let url = mainnet_details_on(network).transaction_url();
+
+                assert_eq!(
+                    url,
+                    format!("https://explorer.example.com/tx/{MAINNET_TXID}?view=full"),
+                    "{placeholder} on {network:?}"
+                );
+                assert_eq!(url.matches(MAINNET_TXID).count(), 1, "{placeholder} on {network:?}");
+            }
+        }
+    }
+
+    // the preset picked in settings is what the transaction details link opens, per network
+    #[test]
+    fn transaction_url_follows_each_saved_preset() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::database::test_support::init_test_database();
+        let config = &Database::global().global_config;
+        let _restore = RestoreExplorerConfig(config.selected_network());
+
+        let cases = [
+            (BlockExplorerOption::MempoolSpace, Network::Bitcoin, "https://mempool.space/tx/"),
+            (
+                BlockExplorerOption::MempoolSpace,
+                Network::Testnet,
+                "https://mempool.space/testnet/tx/",
+            ),
+            (
+                BlockExplorerOption::MempoolSpace,
+                Network::Testnet4,
+                "https://mempool.space/testnet4/tx/",
+            ),
+            (BlockExplorerOption::MempoolSpace, Network::Signet, "https://mutinynet.com/tx/"),
+            (BlockExplorerOption::MempoolGuide, Network::Bitcoin, "https://mempool.guide/tx/"),
+            (
+                BlockExplorerOption::BullBitcoin,
+                Network::Bitcoin,
+                "https://mempool.bullbitcoin.com/tx/",
+            ),
+            (BlockExplorerOption::Blockstream, Network::Bitcoin, "https://blockstream.info/tx/"),
+            (
+                BlockExplorerOption::Blockstream,
+                Network::Testnet,
+                "https://blockstream.info/testnet/tx/",
+            ),
+            (
+                BlockExplorerOption::Blockstream,
+                Network::Signet,
+                "https://blockstream.info/signet/tx/",
+            ),
+        ];
+
+        for (option, network, prefix) in cases {
+            // start from a custom explorer so Default must actually clear the saved override
+            config
+                .set_custom_block_explorer(network, "https://explorer.example.com".to_string())
+                .unwrap();
+
+            config.set_block_explorer_option(network, option).unwrap();
+
+            let url = mainnet_details_on(network).transaction_url();
+
+            assert_eq!(url, format!("{prefix}{MAINNET_TXID}"), "{option:?} on {network:?}");
+            assert_eq!(url.matches(MAINNET_TXID).count(), 1, "{option:?} on {network:?}");
         }
     }
 

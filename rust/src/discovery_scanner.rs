@@ -818,6 +818,15 @@ mod tests {
     use cove_tokio::FutureTimeoutExt as _;
 
     use super::*;
+    use crate::{
+        database::test_support::RestoreWalletTarget,
+        manager::{
+            deferred_sender::SingleOrMany,
+            wallet_manager::{RustWalletManager, WalletScanStatus},
+        },
+        test_support::fake_node::FakeNode,
+        wallet::Wallet,
+    };
 
     struct TaskCompletion(Arc<AtomicBool>);
 
@@ -1005,6 +1014,241 @@ mod tests {
             worker_failure_message(&workers),
             Some("WrappedSegwit: node unavailable".into())
         );
+    }
+
+    /// The fake node selected as the Bitcoin node, which puts back the node, network and wallet
+    /// mode it found when it drops, since later tests share these settings
+    struct SelectedFakeNode {
+        node: FakeNode,
+        previous_node: crate::node::Node,
+
+        // dropped after `drop` restores the node, which restores the network and mode
+        _previous_target: RestoreWalletTarget,
+    }
+
+    impl SelectedFakeNode {
+        fn start() -> Self {
+            let config = &Database::global().global_config;
+            let previous_target = RestoreWalletTarget::capture();
+            let previous_node = config.selected_node_for_network(CoveNetwork::Bitcoin);
+            config.set_selected_network(CoveNetwork::Bitcoin).expect("select Bitcoin");
+            config.set_main_mode().expect("select the main wallet mode");
+
+            let node = FakeNode::start(Network::Bitcoin);
+            node.chain().mine(5);
+            node.select_esplora();
+
+            Self { node, previous_node, _previous_target: previous_target }
+        }
+    }
+
+    impl Drop for SelectedFakeNode {
+        fn drop(&mut self) {
+            let _ = Database::global().global_config.set_selected_node(&self.previous_node);
+        }
+    }
+
+    /// Reconcile messages the selected wallet screen receives
+    struct ScreenUpdates {
+        receiver: Arc<flume::Receiver<SingleOrMany<WalletManagerReconcileMessage>>>,
+        seen: Vec<WalletManagerReconcileMessage>,
+    }
+
+    impl ScreenUpdates {
+        async fn until(
+            &mut self,
+            what: &str,
+            done: impl Fn(&WalletManagerReconcileMessage) -> bool,
+        ) {
+            let wait = crate::test_support::loaded_host_wait(std::time::Duration::from_secs(30));
+            tokio::time::timeout(wait, async {
+                while !self.seen.iter().any(&done) {
+                    match self.receiver.recv_async().await.expect("the reconciler stays open") {
+                        SingleOrMany::Single(message) => self.seen.push(message),
+                        SingleOrMany::Many(messages) => self.seen.extend(messages),
+                    }
+                }
+            })
+            .await
+            .unwrap_or_else(|_| panic!("timed out waiting for {what}; saw {:#?}", self.seen));
+        }
+
+        async fn until_scan_settles(&mut self) {
+            self.seen.clear();
+            self.until("the scan to complete", |message| {
+                matches!(message, WalletManagerReconcileMessage::ScanComplete(_))
+            })
+            .await;
+
+            self.until("the scan status to go idle", |message| {
+                matches!(
+                    message,
+                    WalletManagerReconcileMessage::WalletScanStatusChanged(WalletScanStatus::Idle)
+                )
+            })
+            .await;
+        }
+    }
+
+    /// Receive addresses of a descriptor fixture, derived without the discovery code under test
+    fn receive_addresses(
+        descriptors: pubport::descriptor::Descriptors,
+        count: u32,
+    ) -> Vec<Address> {
+        let wallet = crate::keys::Descriptors::from(descriptors)
+            .into_create_params()
+            .network(Network::Bitcoin)
+            .create_wallet_no_persist()
+            .expect("the fixture wallet is created");
+
+        (0..count).map(|index| wallet.peek_address(KeychainKind::External, index).address).collect()
+    }
+
+    /// Every address discovery asked the Esplora server about, in request order
+    ///
+    /// The selected wallet's own scan asks by script hash, so these are discovery's checks only
+    fn discovery_address_checks(node: &FakeNode) -> Vec<String> {
+        node.requests()
+            .into_iter()
+            .filter_map(|request| request.name.strip_prefix("/address/").map(str::to_string))
+            .collect()
+    }
+
+    // past the first legacy address, so discovery has to walk to it
+    const LEGACY_HISTORY_INDEX: u32 = 2;
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn imported_export_shows_legacy_history_once_after_scanning_only_its_alternates() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::init_test_database();
+        crate::test_support::init_test_keychain();
+        let fake = SelectedFakeNode::start();
+
+        // the import's duplicate check would match a wallet another test left with this fingerprint
+        let wallets = &Database::global().wallets;
+        for leftover in wallets.get_all(CoveNetwork::Bitcoin, WalletMode::Main).unwrap() {
+            crate::wallet::test_support::remove_wallet(&leftover.id);
+        }
+
+        let json = descriptor_json(
+            Some(bip44_descriptors()),
+            Some(bip49_descriptors()),
+            Some(bip84_descriptors()),
+        );
+        let wrapped = receive_addresses(bip49_descriptors(), DEFAULT_SCAN_LIMIT);
+        let legacy = receive_addresses(bip44_descriptors(), LEGACY_HISTORY_INDEX + 2);
+
+        // only the legacy account has history: one receive discovery finds and one after it
+        let chain = fake.node.chain();
+        let found_txid = chain.pay(
+            &legacy[LEGACY_HISTORY_INDEX as usize].script_pubkey(),
+            bdk_wallet::bitcoin::Amount::from_sat(80_000),
+        );
+        let later_txid = chain.pay(
+            &legacy[LEGACY_HISTORY_INDEX as usize + 1].script_pubkey(),
+            bdk_wallet::bitcoin::Amount::from_sat(20_000),
+        );
+        chain.confirm_together(&[found_txid, later_txid]);
+        chain.mine(2);
+
+        // the import closes its store before the wallet manager opens it
+        let id = {
+            let export = pubport::Format::Json(Box::new(json.clone()));
+            let wallet =
+                Wallet::try_new_persisted_from_pubport(export).expect("the export imports");
+
+            assert_eq!(wallet.metadata.address_type, WalletAddressType::NativeSegwit);
+            wallet.id()
+        };
+
+        fake.node.clear_requests();
+        let manager = RustWalletManager::try_new(id.clone()).expect("the imported wallet opens");
+        let mut screen =
+            ScreenUpdates { receiver: manager.reconciler.receiver(), seen: Vec::new() };
+
+        screen
+            .until("discovery to finish", |message| {
+                matches!(message, WalletManagerReconcileMessage::WalletScannerResponse(_))
+            })
+            .await;
+
+        let found = vec![FoundAddress {
+            type_: WalletAddressType::Legacy,
+            first_address: legacy[0].to_string(),
+        }];
+
+        assert!(
+            screen.seen.contains(&WalletManagerReconcileMessage::WalletScannerResponse(
+                ScannerResponse::FoundAddresses(found.clone())
+            )),
+            "discovery must offer the legacy account and nothing else, saw {:#?}",
+            screen.seen
+        );
+
+        // each wrapped address up to the limit and each legacy address up to the history is
+        // checked once, and no native segwit address, which the selected wallet syncs itself
+        let mut expected_checks = wrapped
+            .iter()
+            .chain(&legacy[..=LEGACY_HISTORY_INDEX as usize])
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
+
+        let mut checks = discovery_address_checks(&fake.node);
+        expected_checks.sort();
+        checks.sort();
+        assert_eq!(checks, expected_checks);
+
+        // what the next launch reads, so discovery does not start again
+        let stored = Database::global()
+            .wallets
+            .get(&id, CoveNetwork::Bitcoin, WalletMode::Main)
+            .unwrap()
+            .expect("the wallet row exists");
+
+        let DiscoveryState::FoundAddressesFromJson(stored_found, stored_json) =
+            stored.discovery_state
+        else {
+            panic!("expected found JSON addresses, got {:?}", stored.discovery_state);
+        };
+
+        assert_eq!(stored_found, found);
+        assert_eq!(stored_json.0, json);
+
+        // the wallet screen scans the native segwit wallet before the user picks an account
+        manager.start_wallet_scan().await.unwrap();
+        screen.until_scan_settles().await;
+
+        fake.node.clear_requests();
+        manager
+            .switch_to_different_wallet_address_type(WalletAddressType::Legacy)
+            .await
+            .expect("the wallet switches to the legacy account");
+        screen.until_scan_settles().await;
+
+        let mut txids = call!(manager.actor.transactions())
+            .await
+            .expect("the wallet actor answers")
+            .iter()
+            .map(|transaction| transaction.id().0)
+            .collect::<Vec<_>>();
+
+        let mut expected_txids = vec![found_txid, later_txid];
+        txids.sort();
+        expected_txids.sort();
+
+        let balance = manager.balance().await.expect("the wallet has a balance").0;
+        let metadata = manager.wallet_metadata();
+        let late_discovery_checks = discovery_address_checks(&fake.node);
+
+        drop(manager);
+        crate::wallet::test_support::remove_wallet(&id);
+
+        assert_eq!(txids, expected_txids, "each legacy transaction must show exactly once");
+        assert_eq!(balance.confirmed.to_sat(), 100_000);
+        assert_eq!(metadata.address_type, WalletAddressType::Legacy);
+        assert_eq!(metadata.discovery_state, DiscoveryState::ChoseAdressType);
+        assert_eq!(late_discovery_checks, Vec::<String>::new());
     }
 
     #[tokio::test]

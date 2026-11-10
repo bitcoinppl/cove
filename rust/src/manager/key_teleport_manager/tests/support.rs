@@ -148,19 +148,29 @@ pub(crate) fn send_from_cove(
     secret: WalletSecret,
     request: &KeyTeleportReceiveState,
 ) -> (Arc<KeyTeleportSenderPacket>, String) {
+    try_send_from_cove(secret, &request.packet, &request.grouped_numeric_code).unwrap()
+}
+
+/// Sends `secret` to `packet` with whatever receiver code the sender typed, so a test can try a
+/// code that belongs to another request
+pub(crate) fn try_send_from_cove(
+    secret: WalletSecret,
+    packet: &KeyTeleportReceiverPacket,
+    receiver_code: &str,
+) -> Result<(Arc<KeyTeleportSenderPacket>, String), KeyTeleportAlert> {
     let fixture = SendWalletFixture::with_secret(secret);
     let sender = RustKeyTeleportManager::new();
-    let scanned_request = StringOrData::String(request.packet.url().unwrap());
+    let scanned_request = StringOrData::String(packet.url().unwrap());
 
-    sender.handle_action(Action::StartSendFromWallet(fixture.wallet.id.clone())).unwrap();
-    sender.handle_action(Action::Ingest(KeyTeleportInput::MultiFormat(scanned_request))).unwrap();
-    sender.handle_action(Action::EnterReceiverCode(request.grouped_numeric_code.clone())).unwrap();
+    sender.handle_action(Action::StartSendFromWallet(fixture.wallet.id.clone()))?;
+    sender.handle_action(Action::Ingest(KeyTeleportInput::MultiFormat(scanned_request)))?;
+    sender.handle_action(Action::EnterReceiverCode(receiver_code.to_string()))?;
 
     let KeyTeleportManagerState::SendReady(ready) = sender.state() else {
         panic!("expected the sender response, got {:?}", sender.state())
     };
 
-    (ready.packet, ready.password.display_text())
+    Ok((ready.packet, ready.password.display_text()))
 }
 
 /// The wallet a receiver should end up with, derived with BDK's BIP84 template instead of Cove's
