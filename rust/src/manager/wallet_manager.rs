@@ -1078,8 +1078,10 @@ impl RustWalletManager {
 
         let actor = self.actor.clone();
         let psbt = Arc::unwrap_or_clone(psbt).into();
-        let transaction =
-            call!(actor.finalize_psbt(psbt)).await.map_err(|_| Error::ManagerClosed)??;
+        let transaction = call!(actor.finalize_psbt(psbt))
+            .await
+            .map_err(|_| Error::ManagerClosed)?
+            .inspect_err(|error| warn!("failed to finalize signed psbt: {error}"))?;
 
         Ok(BitcoinTransaction::from(transaction))
     }

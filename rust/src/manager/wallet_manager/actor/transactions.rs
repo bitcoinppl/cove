@@ -46,6 +46,15 @@ pub(crate) enum BroadcastTransactionError {
 }
 
 impl BroadcastTransactionError {
+    fn log(&self) {
+        match self {
+            Self::BroadcastFailed(error) => warn!("transaction broadcast failed: {error}"),
+            Self::PostBroadcastFailed(error) => {
+                error!("transaction broadcast bookkeeping failed: {error}")
+            }
+        }
+    }
+
     fn into_error(self) -> Error {
         match self {
             Self::BroadcastFailed(error) | Self::PostBroadcastFailed(error) => error,
@@ -668,7 +677,10 @@ impl WalletActor {
         let secret = Keychain::global()
             .get_wallet_secret(&self.wallet.metadata.id)
             .tap_err(|error| error!("failed to get wallet secret: {error}"))?
-            .ok_or_else(|| err("failed to get wallet secret"))?;
+            .ok_or_else(|| {
+                error!("wallet secret missing, unable to sign");
+                err("failed to get wallet secret")
+            })?;
         let descriptors = secret.into_descriptors(network, self.wallet.metadata.address_type);
 
         let create_params = descriptors.into_create_params().network(network.into());
@@ -685,6 +697,7 @@ impl WalletActor {
             .map_err(|_| err("unable to sign"))?;
 
         if !finalized {
+            warn!("signing did not finalize every input");
             return Err(err("transaction not finalized, unable to sign"));
         }
 
@@ -718,6 +731,7 @@ impl WalletActor {
         self.addr.send_fut_with(|addr| async move {
             let result = broadcast_transaction_with_connection(addr, connection, transaction)
                 .await
+                .inspect_err(BroadcastTransactionError::log)
                 .map_err(BroadcastTransactionError::into_error);
             let _ = reply.send(Produces::Value(result));
         });
