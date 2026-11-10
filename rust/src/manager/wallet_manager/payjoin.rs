@@ -21,7 +21,7 @@ use payjoin::{
 use rand::seq::SliceRandom as _;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::database::wallet_data::{
     PayjoinSenderSession, PendingAction, WalletDataDb, WalletDataError,
@@ -296,12 +296,15 @@ async fn try_ohttp_relays<C>(
     timeout: Duration,
     build_request: impl Fn(&str) -> Result<(payjoin::Request, C)>,
 ) -> Result<(Vec<u8>, C)> {
+    // per-relay failures stay at debug because polls repeat them every tick; callers log
+    // the summary returned here
+    let relays = ohttp_relays();
     let mut last_err = eyre::eyre!("no OHTTP relays configured");
-    for relay in ohttp_relays() {
+    for relay in &relays {
         let (req, ctx) = match build_request(relay) {
             Ok(pair) => pair,
             Err(e) => {
-                warn!("payjoin: relay {relay} rejected: {e:?}");
+                debug!("payjoin: relay {relay} rejected: {e:?}");
                 last_err = e;
                 continue;
             }
@@ -309,12 +312,13 @@ async fn try_ohttp_relays<C>(
         match http_post(client, req, timeout).await {
             Ok(body) => return Ok((body, ctx)),
             Err(e) => {
-                warn!("payjoin: relay {relay} request failed: {e:?}");
+                debug!("payjoin: relay {relay} request failed: {e:?}");
                 last_err = e;
             }
         }
     }
-    Err(last_err)
+
+    Err(eyre::eyre!("{} OHTTP relays failed, last error: {last_err}", relays.len()))
 }
 
 // returns the index of the single external (recipient) output, or Err for batch/self-send PSBTs
@@ -426,9 +430,8 @@ async fn do_poll(
         {
             Ok(pair) => pair,
             Err(e) => {
-                warn!("payjoin poll: all relays failed, retrying: {e}");
                 tokio::time::sleep(Duration::from_secs(2)).await;
-                send!(addr.begin_next_poll_msg());
+                send!(addr.retry_poll_after_failure(PollFailure::RelaysUnreachable, e.to_string()));
                 return;
             }
         };
@@ -445,14 +448,31 @@ async fn do_poll(
             // WellKnown/Unrecognized mean the receiver explicitly rejected the session;
             // the public API does not expose fatal/transient classification directly —
             // other opaque response errors retry until the bounded session deadline fires
+            //
+            // receiver-provided text is untrusted, so only well-known errors, whose Display
+            // is fixed per code, are logged; everything else logs its kind
             match e.api_error_ref() {
-                Some(ResponseError::WellKnown(_)) | Some(ResponseError::Unrecognized { .. }) => {
-                    warn!("payjoin poll: receiver rejected session: {e:?}");
+                Some(ResponseError::WellKnown(well_known)) => {
+                    warn!("payjoin poll: receiver rejected session: {well_known}");
                     send!(addr.complete_with_fallback_msg());
                 }
-                _ => {
-                    warn!("payjoin poll: transient error, retrying: {e:?}");
-                    send!(addr.begin_next_poll_msg());
+                Some(ResponseError::Unrecognized { .. }) => {
+                    warn!("payjoin poll: receiver rejected session with an unrecognized error");
+                    send!(addr.complete_with_fallback_msg());
+                }
+                Some(ResponseError::Validation(_)) => {
+                    send!(addr.retry_poll_after_failure(
+                        PollFailure::InvalidResponse,
+                        "malformed directory response".to_string()
+                    ));
+                }
+                None => {
+                    let (failure, detail) = match e.storage_error_ref() {
+                        Some(storage) => (PollFailure::Storage, storage.to_string()),
+                        None => (PollFailure::Other, "unclassified poll error".to_string()),
+                    };
+
+                    send!(addr.retry_poll_after_failure(failure, detail));
                 }
             }
         }
@@ -471,6 +491,15 @@ enum PayjoinSession {
     Closed,
 }
 
+/// Why the last directory poll failed and will be retried
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PollFailure {
+    RelaysUnreachable,
+    InvalidResponse,
+    Storage,
+    Other,
+}
+
 pub(crate) struct PayjoinActor {
     addr: WeakAddr<Self>,
     wallet_addr: WeakAddr<WalletActor>,
@@ -478,6 +507,8 @@ pub(crate) struct PayjoinActor {
     fallback_tx: BdkTransaction,
     session: PayjoinSession,
     poll_deadline: Option<Instant>,
+    /// Kept so a failure that repeats on every poll logs once until it changes or clears
+    last_poll_failure: Option<PollFailure>,
 }
 
 impl PayjoinActor {
@@ -494,6 +525,7 @@ impl PayjoinActor {
             fallback_tx,
             session: PayjoinSession::PrePost { sender },
             poll_deadline: None,
+            last_poll_failure: None,
         }
     }
 
@@ -522,6 +554,7 @@ impl PayjoinActor {
             fallback_tx,
             session: PayjoinSession::Polling { polling_sender },
             poll_deadline,
+            last_poll_failure: None,
         }
     }
 }
@@ -631,6 +664,10 @@ impl PayjoinActor {
 
         // if the session deadline has passed, broadcast the fallback immediately
         if self.poll_deadline.is_some_and(|d| Instant::now() >= d) {
+            let last_failure = self.last_poll_failure;
+            warn!(
+                "payjoin session deadline passed without a proposal, broadcasting fallback, last poll failure: {last_failure:?}"
+            );
             self.complete_with_fallback();
             return Produces::ok(());
         }
@@ -664,15 +701,30 @@ impl PayjoinActor {
             return Produces::ok(());
         }
 
+        if let Some(failure) = self.last_poll_failure.take() {
+            info!("payjoin poll recovered after {failure:?}");
+        }
+
         self.session = PayjoinSession::Polling { polling_sender: next };
         self.begin_next_poll();
         Produces::ok(())
     }
 
-    /// Queues the next poll immediately, called from async task context
-    pub(crate) async fn begin_next_poll_msg(&mut self) -> ActorResult<()> {
+    /// Logs a poll failure when it differs from the last one, then polls again
+    async fn retry_poll_after_failure(
+        &mut self,
+        failure: PollFailure,
+        detail: String,
+    ) -> ActorResult<()> {
         if matches!(self.session, PayjoinSession::Closed) {
             return Produces::ok(());
+        }
+
+        if self.last_poll_failure != Some(failure) {
+            warn!(
+                "payjoin poll failed ({failure:?}), retrying until the session deadline: {detail}"
+            );
+            self.last_poll_failure = Some(failure);
         }
 
         self.begin_next_poll();
@@ -951,6 +1003,7 @@ pub(crate) mod test_support {
             fallback_tx,
             session: PayjoinSession::Posting,
             poll_deadline: Some(Instant::now()),
+            last_poll_failure: None,
         }
     }
 }
@@ -1136,6 +1189,7 @@ mod tests {
             fallback_tx: empty_transaction(),
             session: PayjoinSession::Posting,
             poll_deadline: Some(Instant::now()),
+            last_poll_failure: None,
         };
 
         assert!(actor.close_session());
