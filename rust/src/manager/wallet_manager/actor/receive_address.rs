@@ -129,10 +129,25 @@ impl WalletActor {
                                 .await
                                 .map_err_str(Error::ReceiveAddressError),
                         ),
-                        Ok(Ok(false)) | Ok(Err(_)) | Err(_) => None,
+                        Ok(Ok(false)) => None,
+
+                        // an unknown result keeps the cached address, which may already be used
+                        Ok(Err(error)) => {
+                            warn!("receive address freshness check failed, using cache: {error}");
+                            None
+                        }
+
+                        Err(_) => {
+                            warn!("receive address freshness check timed out, using cache");
+                            None
+                        }
                     }
                 }
-                Err(_) => None,
+
+                Err(error) => {
+                    warn!("receive address freshness check could not reach node: {error}");
+                    None
+                }
             };
 
             let _ = call!(addr.finish_open_receive_address_after_activity_check(
@@ -206,6 +221,7 @@ impl WalletActor {
         self.set_receive_address_loading(false);
 
         if let Err(error) = result {
+            warn!("failed to open receive address: {error}");
             self.send(WalletManagerReconcileMessage::ReceiveAddressError(error.to_string()));
         }
     }
@@ -280,6 +296,7 @@ impl WalletActor {
         match self.do_create_new_receive_address() {
             Ok(_) => self.set_receive_address_loading(false),
             Err(error) => {
+                warn!("failed to create receive address: {error}");
                 self.set_receive_address_loading(false);
                 self.send(WalletManagerReconcileMessage::ReceiveAddressError(error.to_string()));
             }
@@ -471,8 +488,12 @@ impl WalletActor {
             return Produces::ok(());
         }
 
-        if result.unwrap_or(false) {
-            self.start_targeted_receive_address_sync(request_id, derivation_index);
+        match result {
+            Ok(true) => self.start_targeted_receive_address_sync(request_id, derivation_index),
+            Ok(false) => {}
+            Err(error) => {
+                warn!("receive address activity check failed index={derivation_index}: {error}")
+            }
         }
 
         Produces::ok(())

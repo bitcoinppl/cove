@@ -6,6 +6,8 @@ mod send;
 
 use std::{fmt, sync::Arc};
 
+use tracing::warn;
+
 use cove_device::keychain::KeychainError;
 use keyteleport::{Error as KeyTeleportError, NotesPayload, NotesRecord, TeleportPassword};
 use parking_lot::Mutex;
@@ -454,6 +456,7 @@ impl RustKeyTeleportManager {
     #[uniffi::method]
     pub fn dispatch(self: Arc<Self>, action: Action) {
         if let Err(alert) = ManagerController::new(&self).handle(action) {
+            warn!("KeyTeleport action failed: {alert}");
             self.reconciler.send(Message::SetAlert(alert));
         }
     }

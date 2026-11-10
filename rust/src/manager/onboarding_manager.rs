@@ -4,7 +4,7 @@ use cove_device::cloud_storage::{CloudStorage, CloudStorageError};
 use cove_util::ResultExt as _;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::{
     app::FfiApp,
@@ -343,7 +343,16 @@ pub struct RustOnboardingManager {
 impl RustOnboardingManager {
     #[uniffi::constructor]
     pub fn new() -> Arc<Self> {
-        let has_wallets = !Database::global().wallets.all().unwrap_or_default().is_empty();
+        // a failed read resumes onboarding as if no wallets exist, so note why
+        let has_wallets = !Database::global()
+            .wallets
+            .all()
+            .unwrap_or_else(|error| {
+                warn!("Onboarding: failed to read wallets, assuming none: {error}");
+                Vec::new()
+            })
+            .is_empty();
+
         let should_resume_onboarding_enable = CLOUD_BACKUP_MANAGER
             .onboarding_enable_completion_readiness()
             != CloudBackupOnboardingCompletionReadiness::NotReady;
@@ -352,18 +361,26 @@ impl RustOnboardingManager {
             has_wallets,
             should_resume_onboarding_enable,
             |wallet_id, network, wallet_mode| {
-                let wallet_exists = Database::global()
-                    .wallets
-                    .get(wallet_id, network, wallet_mode)
-                    .ok()
-                    .flatten()
-                    .is_some();
+                let wallet_exists =
+                    match Database::global().wallets.get(wallet_id, network, wallet_mode) {
+                        Ok(wallet) => wallet.is_some(),
+                        Err(error) => {
+                            warn!("Onboarding: failed to read resumed wallet: {error}");
+                            false
+                        }
+                    };
+
                 if !wallet_exists {
                     return None;
                 }
 
-                let mnemonic: bip39::Mnemonic = StoredMnemonic::try_from_id(wallet_id).ok()?.into();
-                Some(mnemonic)
+                match StoredMnemonic::try_from_id(wallet_id) {
+                    Ok(mnemonic) => Some(mnemonic.into()),
+                    Err(error) => {
+                        warn!("Onboarding: failed to load resumed wallet words: {error}");
+                        None
+                    }
+                }
             },
         );
         let should_start_cloud_check = resolution.start_cloud_check;
@@ -604,7 +621,10 @@ impl RustOnboardingManager {
     fn create_wallet_for_branch(&self, branch: OnboardingBranch) {
         let event = match Self::create_wallet(branch) {
             Ok(flow) => InternalEvent::WalletCreated { flow },
-            Err(error) => InternalEvent::WalletCreationFailed { branch, error },
+            Err(error) => {
+                error!("Onboarding: failed to create wallet: {error}");
+                InternalEvent::WalletCreationFailed { branch, error }
+            }
         };
         self.apply_event(event);
     }
@@ -631,6 +651,7 @@ impl RustOnboardingManager {
         match result {
             Ok(()) => {
                 if let Err(error) = Database::global().global_flag.mark_onboarding_complete() {
+                    error!("Onboarding: failed to persist onboarding completion: {error}");
                     self.apply_event(InternalEvent::CompletionFailed {
                         error: format!("failed to persist onboarding completion: {error}"),
                     });
@@ -639,7 +660,10 @@ impl RustOnboardingManager {
                 Self::sync_onboarding_progress(None);
                 self.send(Message::Complete);
             }
-            Err(error) => self.apply_event(InternalEvent::CompletionFailed { error }),
+            Err(error) => {
+                warn!("Onboarding: failed to select a wallet to finish onboarding: {error}");
+                self.apply_event(InternalEvent::CompletionFailed { error });
+            }
         }
     }
 
