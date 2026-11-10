@@ -286,7 +286,7 @@ coverage = [
     "rust:rust/src/app.rs::deleting_a_non_selected_wallet_from_settings_keeps_the_selection_and_route",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# rust keeps the selection and route and requests eviction only for the deleted wallet; agent: only the platform dropping its cached manager and finishing the loading route on a usable screen
+# rust keeps the selection and route and requests eviction only for the deleted wallet; agent: only the platform dropping the deleted wallet's cached manager and dismissing its settings screen back to the unchanged route
 
 [[row]]
 id = "s11-restore-deleted-non-current-watch-wallet"

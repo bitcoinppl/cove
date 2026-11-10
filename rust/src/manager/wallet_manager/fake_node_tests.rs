@@ -267,6 +267,15 @@ async fn hold_a_refresh(
     (gate, rule)
 }
 
+/// Releases a refresh held by `hold_a_refresh` and waits for it to complete and settle, counting
+/// only messages from after the release
+async fn release_the_refresh(screen: &mut ScreenUpdates, gate: Gate, rule: RuleHandle) {
+    screen.seen.clear();
+    drop(rule);
+    gate.open();
+    wait_for_refresh_to_settle(screen).await;
+}
+
 /// Waits for the released refresh to complete and the scan status to settle, counting only
 /// messages seen since the screen was last cleared
 async fn wait_for_refresh_to_settle(screen: &mut ScreenUpdates) {
@@ -490,13 +499,13 @@ async fn details_opened_during_a_refresh_belong_to_their_transaction_and_confirm
     assert_eq!(other_opened.label, None, "another transaction's label must not leak in");
     assert_eq!(other_opened.lock, TransactionLockState::Unlocked);
 
-    // the node confirms the payment while the details screen and the refresh wait on it
+    // the node confirms the payment while the details screen and the refresh wait on it, and the
+    // watcher reports it while the refresh is still held, so the refresh finishes last
     wait_until("the watcher to poll the node", || status_gate.waiting() > 0).await;
     screen.seen.clear();
     let height = fx.node.chain().confirm(paid);
-    drop((status_rule, scan_rule));
+    drop(status_rule);
     status_gate.open();
-    scan_gate.open();
 
     let confirmed = |message: &Msg| {
         matches!(
@@ -528,7 +537,7 @@ async fn details_opened_during_a_refresh_belong_to_their_transaction_and_confirm
     assert_eq!(updated.confirmations(), Some(fx.node.chain().tip_height() - height + 1));
 
     // the forced refresh finishes after the watcher, and must not undo the confirmation
-    wait_for_refresh_to_settle(&mut screen).await;
+    release_the_refresh(&mut screen, scan_gate, scan_rule).await;
 
     // reopening after the refresh shows the same transaction, now confirmed, with its lock
     let reopened = open_details(&manager, paid).await;
@@ -544,10 +553,10 @@ async fn details_opened_during_a_refresh_belong_to_their_transaction_and_confirm
     assert_eq!(other_reopened.label, None);
 }
 
-/// A payment this wallet sends keeps its amount, destination and fee while a refresh runs and
+/// A payment this wallet sends keeps its amount, destination, fee and label while a refresh runs and
 /// the node confirms it, as the open details screen shows them
 #[tokio::test(flavor = "current_thread")]
-async fn sent_payment_details_keep_amount_destination_and_fee_as_it_confirms() {
+async fn sent_payment_details_keep_amount_destination_fee_and_label_as_it_confirms() {
     let _guard = crate::test_support::global_state_test_lock().lock().await;
     let mut fx = Fixture::signet();
 
@@ -598,6 +607,12 @@ async fn sent_payment_details_keep_amount_destination_and_fee_as_it_confirms() {
 
     wait_for_refresh_to_settle(&mut screen).await;
 
+    let details = manager.transaction_details(tx_id(sent)).await.unwrap().details();
+    manager
+        .label_manager()
+        .insert_or_update_labels_for_txn(details, "Rent".into(), None)
+        .expect("the label saves");
+
     // hold the watcher's status poll and a pull-to-refresh scan so both are in flight
     let (status_gate, status_rule) = fx.node.on(&format!("/tx/{sent}/status")).hold();
     let (scan_gate, scan_rule) = hold_a_refresh(&fx, &manager, &funding_script).await;
@@ -606,19 +621,20 @@ async fn sent_payment_details_keep_amount_destination_and_fee_as_it_confirms() {
         assert_eq!(shown.sent_sans_fee_sats, Some(10_000));
         assert_eq!(shown.fee_sats, Some(fee));
         assert_eq!(shown.address.as_deref(), Some(destination.to_string().as_str()));
+        assert_eq!(shown.label.as_deref(), Some("Rent"));
     };
 
     let pending = open_details(&manager, sent).await;
     shows_the_payment(&pending);
     assert_eq!(pending.confirmations, None, "the payment is still pending");
 
-    // the node confirms the payment while the details screen and the refresh wait on it
+    // the node confirms the payment while the details screen and the refresh wait on it, and the
+    // watcher reports it while the refresh is still held, so the refresh finishes last
     wait_until("the watcher to poll the node", || status_gate.waiting() > 0).await;
     screen.seen.clear();
     fx.node.chain().confirm(sent);
-    drop((status_rule, scan_rule));
+    drop(status_rule);
     status_gate.open();
-    scan_gate.open();
 
     let confirmed = |message: &Msg| {
         matches!(
@@ -643,8 +659,10 @@ async fn sent_payment_details_keep_amount_destination_and_fee_as_it_confirms() {
     assert_eq!(updated.sent_sans_fee().map(|amount| amount.to_sat()), Some(10_000));
     assert_eq!(updated.fee.map(|amount| amount.to_sat()), Some(fee));
     assert_eq!(updated.address().map(|address| address.to_string()), Some(destination.to_string()));
+    assert_eq!(updated.transaction_label().as_deref(), Some("Rent"));
 
-    wait_for_refresh_to_settle(&mut screen).await;
+    // the forced refresh finishes after the watcher, and must not undo the confirmation
+    release_the_refresh(&mut screen, scan_gate, scan_rule).await;
     let reopened = open_details(&manager, sent).await;
     shows_the_payment(&reopened);
     assert!(reopened.confirmations.is_some(), "the payment now shows as confirmed");
@@ -886,6 +904,7 @@ async fn choosing_a_discovered_address_type_during_the_initial_scan_loads_its_hi
     screen.seen.clear();
     drop(scan_rule);
     scan_gate.open();
+
     // a late result from the interrupted native segwit scan would land before the status settles
     screen
         .until_then_idle("the wrapped segwit history to load", |message| {
