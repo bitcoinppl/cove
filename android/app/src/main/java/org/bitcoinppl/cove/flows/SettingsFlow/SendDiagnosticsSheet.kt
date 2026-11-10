@@ -299,6 +299,7 @@ private class SendDiagnosticsSheetState(
         try {
             if (clearStoredLogs) {
                 withContext(ioDispatcher) { clearDiagnosticsLogs() }
+                clearAndroidAppLogs(ioDispatcher)
                 attemptToClearAndroidPlatformLogs(ioDispatcher)
             }
 
@@ -329,6 +330,10 @@ private class SendDiagnosticsSheetState(
         } catch (error: InterruptedException) {
             if (rebuildGeneration.isCurrent(generation)) {
                 loadError = error.displayMessage()
+            }
+        } catch (error: IOException) {
+            if (rebuildGeneration.isCurrent(generation)) {
+                loadError = "Unable to clear app logs: ${error.displayMessage()}"
             }
         } finally {
             builtReport?.close()
