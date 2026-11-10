@@ -4,9 +4,12 @@ use act_zero::{runtimes::tokio::spawn_actor, *};
 use bdk_wallet::KeychainKind;
 use bitcoin::{Amount, Network, ScriptBuf};
 
+use cove_device::keychain::WalletSecret;
+
 use super::{
     SingleOrMany, WalletManagerReconcileMessage, drain_reconcile_messages, new_test_wallet_actor,
-    one_sat_vbyte_fee_rate, persisted_preview_wallet, restore_default_bitcoin_node,
+    one_sat_vbyte_fee_rate, persisted_preview_wallet, restore_default_bitcoin_node, test_keychain,
+    test_mnemonic,
 };
 use crate::{
     manager::wallet_manager::{
@@ -18,9 +21,10 @@ use crate::{
     test_support::fake_node::{FakeNode, Protocol, wait_until},
     transaction::Transaction,
     wallet::{
-        Address,
+        Address, WalletAddressType,
         metadata::{WalletId, WalletMetadata},
     },
+    wallet_secret::WalletSecretExt as _,
 };
 
 type Msg = WalletManagerReconcileMessage;
@@ -191,6 +195,30 @@ fn full_scan_basis_points(statuses: &[WalletScanStatus]) -> Vec<u32> {
         .collect()
 }
 
+/// The first receive script of the test mnemonic's mainnet account for `address_type`
+fn first_receive_script(address_type: WalletAddressType) -> ScriptBuf {
+    WalletSecret::Mnemonic(test_mnemonic())
+        .into_descriptors(CoveNetwork::Bitcoin, address_type)
+        .external
+        .extended_descriptor
+        .at_derivation_index(0)
+        .expect("index 0 derives")
+        .script_pubkey()
+}
+
+fn scan_complete_txids(observed: &Observed) -> Vec<Vec<bitcoin::Txid>> {
+    observed
+        .seen
+        .iter()
+        .filter_map(|message| match message {
+            Msg::ScanComplete(transactions) => {
+                Some(transactions.iter().map(|transaction| transaction.id().0).collect())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 fn scan_complete_transactions(observed: &Observed) -> Vec<Transaction> {
     observed
         .seen
@@ -309,6 +337,142 @@ async fn unused_signet_wallet_initial_scan_completes() {
         scripthash_history_requests(&fx.node).len() > 1,
         "the scan must have asked the signet node about the wallet's addresses"
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn signet_initial_scan_counts_checked_addresses_before_it_completes() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = fixture_on(Network::Signet);
+    fx.node.select_esplora();
+
+    // slow every address lookup so progress reports land before the scan finishes
+    let _slow = fx.node.on("/scripthash/").delay(Duration::from_millis(25));
+
+    send!(fx.addr.wallet_scan_and_notify(false));
+    fx.observed.until("the scan to complete", is_scan_complete).await;
+    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.settle();
+
+    let completed_at = fx.observed.seen.iter().position(is_scan_complete).expect("scan completed");
+    let checked_before_completion = fx.observed.seen[..completed_at]
+        .iter()
+        .filter_map(|message| match message {
+            Msg::WalletScanStatusChanged(WalletScanStatus::Scanning(progress))
+                if progress.phase == WalletScanPhase::Full =>
+            {
+                Some(progress.checked)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    // the wallet screen shows this count as "N addresses checked" while the scan runs
+    assert!(
+        checked_before_completion.iter().any(|checked| *checked > 0),
+        "the scan must report checked addresses before it completes, got {checked_before_completion:?}"
+    );
+
+    assert!(
+        checked_before_completion.windows(2).all(|pair| pair[0] <= pair[1]),
+        "the checked count must never go backwards, got {checked_before_completion:?}"
+    );
+
+    assert!(
+        checked_before_completion.iter().collect::<std::collections::HashSet<_>>().len() > 1,
+        "the checked count must advance while the scan runs, got {checked_before_completion:?}"
+    );
+
+    assert!(
+        checked_before_completion.last().copied().unwrap_or_default()
+            <= scripthash_history_requests(&fx.node).len() as u32,
+        "the scan cannot claim more addresses than it asked the node about"
+    );
+
+    assert_eq!(fx.observed.ledger_states().last(), Some(&WalletLedgerState::Complete));
+    assert_eq!(fx.observed.scan_statuses().last(), Some(&WalletScanStatus::Idle));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn address_type_switch_during_discovery_rescans_the_chosen_type_history() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = fixture();
+
+    // a hot wallet keeps its words, which a switch needs to derive the other address types
+    test_keychain().save_wallet_key(&fx.wallet_id, test_mnemonic()).expect("mnemonic is saved");
+
+    // each address type of the same words has its own history
+    fx.node.chain().mine(5);
+    let mut paid = std::collections::HashMap::new();
+    for (address_type, sats) in [
+        (WalletAddressType::NativeSegwit, 50_000),
+        (WalletAddressType::WrappedSegwit, 30_000),
+        (WalletAddressType::Legacy, 20_000),
+    ] {
+        let txid = fx.node.chain().pay(&first_receive_script(address_type), Amount::from_sat(sats));
+        fx.node.chain().confirm(txid);
+        paid.insert(address_type, (txid, sats));
+    }
+    fx.node.select_esplora();
+
+    // hold the discovery of the native segwit history the wallet starts on
+    let (gate, rule) = fx.node.on("/scripthash/").hold();
+    send!(fx.addr.wallet_scan_and_notify(false));
+    wait_until("the first scan to reach the node", || gate.waiting() > 0).await;
+
+    call!(fx.addr.switch_private_wallet_to_new_address_type(WalletAddressType::WrappedSegwit))
+        .await
+        .expect("actor responds")
+        .expect("the switch to wrapped segwit succeeds");
+
+    drop(rule);
+    gate.open();
+
+    let (wrapped_txid, wrapped_sats) = paid[&WalletAddressType::WrappedSegwit];
+    fx.observed
+        .until("the wrapped segwit history to be scanned", |message| {
+            matches!(message, Msg::ScanComplete(transactions)
+                if transactions.iter().any(|transaction| transaction.id().0 == wrapped_txid))
+        })
+        .await;
+
+    fx.observed.until("the scan status to go idle", is_idle).await;
+
+    // give the interrupted scan time to report, which it must not
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    fx.observed.settle();
+
+    assert_eq!(
+        scan_complete_txids(&fx.observed),
+        vec![vec![wrapped_txid]],
+        "only the restarted scan may complete, and only with the chosen type's history"
+    );
+
+    assert_eq!(fx.observed.last_balance_sats(), Some(wrapped_sats));
+    assert_eq!(fx.observed.ledger_states().last(), Some(&WalletLedgerState::Complete));
+    assert!(
+        fx.observed.seen.iter().any(|message| matches!(
+            message,
+            Msg::WalletMetadataChanged(metadata)
+                if metadata.address_type == WalletAddressType::WrappedSegwit
+        )),
+        "the screen must learn the new address type"
+    );
+
+    // a second change, once discovery settled, restarts the scan on legacy
+    fx.observed.seen.clear();
+    call!(fx.addr.switch_private_wallet_to_new_address_type(WalletAddressType::Legacy))
+        .await
+        .expect("actor responds")
+        .expect("the switch to legacy succeeds");
+
+    let (legacy_txid, legacy_sats) = paid[&WalletAddressType::Legacy];
+    fx.observed.until("the legacy scan to complete", is_scan_complete).await;
+    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.settle();
+
+    assert_eq!(scan_complete_txids(&fx.observed), vec![vec![legacy_txid]]);
+    assert_eq!(fx.observed.last_balance_sats(), Some(legacy_sats));
+    assert_eq!(fx.observed.ledger_states().last(), Some(&WalletLedgerState::Complete));
 }
 
 #[tokio::test(flavor = "current_thread")]

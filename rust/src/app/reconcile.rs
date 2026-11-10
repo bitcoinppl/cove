@@ -71,15 +71,78 @@ crate::manager::reconcile_channel::impl_reconcile_sink!(dyn FfiReconcile, AppSta
 #[cfg(test)]
 pub(crate) mod test_support {
     use super::*;
-    use crate::manager::reconcile_channel::ReconcileChannel;
+    use crate::manager::{deferred_sender::SingleOrMany, reconcile_channel::ReconcileChannel};
 
+    static APP_UPDATE_TAP: parking_lot::Mutex<Option<flume::Sender<AppStateReconcileMessage>>> =
+        parking_lot::Mutex::new(None);
+
+    /// Installs the test updater, which drops every app update unless an [`AppUpdateTap`] is open
+    ///
+    /// Storage bootstrap in tests runs this before anything can build the `App`, so it is the
+    /// updater every test process ends up with
     pub(crate) fn init_noop_updater() {
         let channel = ReconcileChannel::<AppStateReconcileMessage>::new(1000);
         let receiver = channel.receiver();
         std::thread::Builder::new()
             .name("noop-app-updater-drain".into())
-            .spawn(move || while receiver.recv().is_ok() {})
+            .spawn(move || {
+                while let Ok(batch) = receiver.recv() {
+                    let messages = match batch {
+                        SingleOrMany::Single(message) => vec![message],
+                        SingleOrMany::Many(messages) => messages,
+                    };
+
+                    let tap = APP_UPDATE_TAP.lock();
+                    let Some(tap) = tap.as_ref() else { continue };
+                    for message in messages {
+                        let _ = tap.send(message);
+                    }
+                }
+            })
             .expect("spawn noop app updater drain");
         Updater::init(channel.sender().clone());
+    }
+
+    /// The app updates sent while it is open, as the frontends' app reconciler receives them
+    ///
+    /// Only one tap can be open at a time, so hold the global-state test lock while using one
+    pub(crate) struct AppUpdateTap(flume::Receiver<AppStateReconcileMessage>);
+
+    impl AppUpdateTap {
+        pub(crate) fn open() -> Self {
+            let (sender, receiver) = flume::unbounded();
+            let previous = APP_UPDATE_TAP.lock().replace(sender);
+            assert!(previous.is_none(), "another app update tap is already open");
+
+            Self(receiver)
+        }
+
+        /// Waits until the drain thread has forwarded every update sent so far, then returns them
+        pub(crate) fn drain(&self) -> Vec<AppStateReconcileMessage> {
+            // the marker goes through the same channel, so everything sent before it comes first,
+            // and names a wallet that cannot exist, so no real update is taken for it
+            let marker = WalletId::new();
+            Updater::send_update(AppStateReconcileMessage::ClearCachedWalletManager(
+                marker.clone(),
+            ));
+
+            let timeout = crate::test_support::loaded_host_wait(std::time::Duration::from_secs(2));
+            let mut updates = Vec::new();
+            loop {
+                match self.0.recv_timeout(timeout).expect("the app updater drain forwards updates")
+                {
+                    AppStateReconcileMessage::ClearCachedWalletManager(id) if id == marker => {
+                        return updates;
+                    }
+                    update => updates.push(update),
+                }
+            }
+        }
+    }
+
+    impl Drop for AppUpdateTap {
+        fn drop(&mut self) {
+            APP_UPDATE_TAP.lock().take();
+        }
     }
 }

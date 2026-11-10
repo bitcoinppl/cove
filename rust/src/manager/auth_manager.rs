@@ -654,7 +654,13 @@ crate::manager::reconcile_channel::impl_reconcile_sink!(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr as _;
+
     use super::*;
+    use crate::{
+        app::reconcile::test_support::AppUpdateTap, database::test_support::RestoreSignetWallets,
+        network::Network, wallet::Wallet,
+    };
 
     /// Sets the global auth type for one test and restores the previous one afterward
     struct AuthTypeGuard(AuthType);
@@ -758,6 +764,127 @@ mod tests {
         with_unlocked_manager(AuthType::None, |manager| {
             assert!(!manager.lock(AppLockReason::Background));
             assert!(manager.lock_for_send_confirmation().is_none());
+        });
+    }
+
+    /// Restores the app PIN and decoy PIN a test replaced
+    struct PinGuard {
+        hashed_pin: Option<String>,
+        decoy_pin: Option<String>,
+    }
+
+    impl PinGuard {
+        fn capture() -> Self {
+            let config = &Database::global().global_config;
+            let hashed_pin = config.hashed_pin_code().ok().filter(|pin| !pin.is_empty());
+            let decoy_pin = config.decoy_pin().ok().filter(|pin| !pin.is_empty());
+
+            Self { hashed_pin, decoy_pin }
+        }
+    }
+
+    impl Drop for PinGuard {
+        fn drop(&mut self) {
+            let config = &Database::global().global_config;
+            let _ = match self.hashed_pin.take() {
+                Some(hashed_pin) => config.set_hashed_pin_code(hashed_pin),
+                None => config.delete_hashed_pin_code(),
+            };
+
+            let _ = match self.decoy_pin.take() {
+                Some(decoy_pin) => config.set_decoy_pin(decoy_pin),
+                None => config.delete_decoy_pin(),
+            };
+        }
+    }
+
+    /// The wallets the sidebar and Settings → All Wallets list for the current mode
+    fn visible_wallet_ids() -> Vec<WalletId> {
+        let wallets = Database::global().wallets().all().expect("wallets load");
+        wallets.into_iter().map(|wallet| wallet.id).collect()
+    }
+
+    fn wallet_mode_changes(tap: &AppUpdateTap) -> Vec<WalletMode> {
+        tap.drain()
+            .into_iter()
+            .filter_map(|update| match update {
+                AppStateReconcileMessage::WalletModeChanged(mode) => Some(mode),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Pastes a watch-only export for `words` into the current mode and selects it
+    fn import_and_select_watch(words: &str) -> WalletId {
+        let mnemonic = bip39::Mnemonic::from_str(words).expect("valid test mnemonic");
+        let export =
+            crate::wallet::test_support::public_descriptor_export(&mnemonic, Network::Signet);
+
+        let id = Wallet::try_new_persisted_from_xpub(export).expect("watch import").id;
+        Database::global().global_config.select_wallet(id.clone()).expect("select wallet");
+
+        id
+    }
+
+    // the platform unlock screens route a PIN by checking the app PIN, then the decoy PIN, and
+    // switch modes through these calls, so this follows the same order
+    #[test]
+    fn decoy_pin_enters_and_main_pin_leaves_a_separate_wallet_scope() {
+        with_unlocked_manager(AuthType::Pin, |manager| {
+            crate::test_support::ensure_tokio_runtime();
+            crate::test_support::init_test_keychain();
+            let _wallets = RestoreSignetWallets::empty();
+            let _pins = PinGuard::capture();
+            let config = &Database::global().global_config;
+
+            let main_pin = AuthPin::new();
+            main_pin.set("111111".to_string()).unwrap();
+            assert_eq!(
+                manager.set_decoy_pin("111111".to_string()),
+                Err(AuthManagerError::DecoySet(TrickPinError::SameAsCurrentPin))
+            );
+
+            manager.set_decoy_pin("222222".to_string()).expect("a distinct decoy pin saves");
+            assert!(manager.is_decoy_pin_enabled());
+
+            let main = import_and_select_watch(
+                "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            );
+
+            let main_before = visible_wallet_ids();
+            assert_eq!(main_before, vec![main.clone()]);
+
+            // the decoy pin is not the app pin, so the unlock screen enters decoy mode
+            assert!(!main_pin.check("222222"));
+            assert!(manager._check_decoy_pin("222222".to_string()));
+            assert!(!manager._check_decoy_pin("111111".to_string()));
+            assert!(!manager._check_decoy_pin(String::new()));
+
+            let tap = AppUpdateTap::open();
+            manager.switch_to_decoy_mode();
+            assert_eq!(wallet_mode_changes(&tap), vec![WalletMode::Decoy]);
+            assert!(manager.is_in_decoy_mode());
+            assert!(visible_wallet_ids().is_empty(), "decoy mode lists no main wallet");
+            assert_eq!(config.selected_wallet(), None);
+
+            let decoy =
+                import_and_select_watch("zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong");
+
+            assert_eq!(visible_wallet_ids(), vec![decoy.clone()]);
+
+            // the app pin in decoy mode switches back to main
+            assert!(main_pin.check("111111"));
+            manager.switch_to_main_mode();
+            assert_eq!(wallet_mode_changes(&tap), vec![WalletMode::Main]);
+            assert!(!manager.is_in_decoy_mode());
+            assert_eq!(visible_wallet_ids(), main_before);
+            assert_eq!(config.selected_wallet(), Some(main));
+
+            // re-entering decoy mode restores its own wallet and selection
+            manager.switch_to_decoy_mode();
+            assert_eq!(wallet_mode_changes(&tap), vec![WalletMode::Decoy]);
+            assert_eq!(visible_wallet_ids(), vec![decoy.clone()]);
+            assert_eq!(config.selected_wallet(), Some(decoy));
         });
     }
 }
