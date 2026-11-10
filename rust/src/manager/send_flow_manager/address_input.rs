@@ -370,7 +370,7 @@ mod tests {
 
                 // the apps only learn the address and amount from these messages, and show Next
                 // once they have them
-                let sent = drain_reconcile_messages(&manager);
+                let mut sent = drain_reconcile_messages(&manager);
                 let sent_address = sent.iter().any(|message| {
                     matches!(message, Message::UpdateAddress(Some(sent)) if sent.to_string() == address)
                 });
@@ -385,16 +385,19 @@ mod tests {
                     "{label}: the apps were not sent the URI's amount: {sent:?}"
                 );
 
+                // fee work runs on another task, so its message may already be in `sent`
+                wait_for("the apps to be sent the fee total", || {
+                    sent.extend(drain_reconcile_messages(&manager));
+                    sent.iter().any(|message| {
+                        matches!(message, Message::UpdateFeeSelection(selection) if selection.selected.total_fee.is_some())
+                    })
+                })
+                .await;
+
                 wait_for("the fee total for the entered address", || {
                     manager.selected_fee_rate().is_some_and(|fee| fee.total_fee.is_some())
                 })
                 .await;
-
-                let sent_fee_total = drain_reconcile_messages(&manager).iter().any(|message| {
-                    matches!(message, Message::UpdateFeeSelection(selection) if selection.selected.total_fee.is_some())
-                });
-
-                assert!(sent_fee_total, "{label}: the apps were not sent the fee total");
 
                 manager.clone().dispatch(Action::FinalizeAndGoToNextScreen);
                 wait_for("the confirm screen", || pushed_confirm_route().is_some()).await;
