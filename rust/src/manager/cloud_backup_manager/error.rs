@@ -522,18 +522,28 @@ impl CloudBackupError {
     /// a log leaves nothing in a diagnostics report to explain it
     pub(crate) fn logged_reader_message(&self, operation: impl fmt::Display) -> String {
         match self {
-            // local state or app bugs, which retrying will not fix
-            Self::Internal(_) | Self::Compatibility(_) | Self::LocalWalletConflict(_) => {
-                error!("{operation}: {self}");
+            // a locked device keeps the keychain unreadable until unlock, and callers retry
+            Self::Internal(_) if self.is_keychain_unreadable() => warn!("{operation}: {self}"),
+
+            // local storage or app bugs, which retrying will not fix
+            Self::Internal(_) => error!("{operation}: {self}"),
+
+            // the passkey sheet was dismissed, which is an expected outcome
+            Self::Passkey(error)
+                if matches!(error.passkey_error(), Some(PasskeyError::UserCancelled)) =>
+            {
+                info!("{operation}: {self}");
             }
 
-            // the reader chose to stop, so it is an expected outcome
+            // the reader stopped the operation, so it is an expected outcome
             Self::Cancelled | Self::PasskeyDiscoveryCancelled => info!("{operation}: {self}"),
 
             Self::NotSupported(_)
             | Self::UnsupportedPasskeyProvider
             | Self::RecoveryRequired(_)
             | Self::Passkey(_)
+            | Self::Compatibility(_)
+            | Self::LocalWalletConflict(_)
             | Self::Crypto(_)
             | Self::Cloud(_)
             | Self::CloudStorage(_)
