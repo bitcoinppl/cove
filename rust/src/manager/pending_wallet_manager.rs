@@ -255,7 +255,10 @@ fn post_save_routes(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Barrier};
+
     use crate::{
+        database::{Database, test_support::RestoreSignetWallets},
         keychain::Keychain,
         router::{HotWalletRoute, NewWalletRoute, Route},
         wallet::metadata::WalletId,
@@ -269,20 +272,49 @@ mod tests {
         Keychain::global()
     }
 
+    // a double tap on Save can reach rust from two threads, so both taps race into save_wallet
     #[test]
-    fn save_wallet_returns_same_result_after_success() {
+    fn two_save_taps_at_once_add_and_select_one_wallet() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::test_support::ensure_tokio_runtime();
-        crate::database::test_support::init_test_database();
         test_keychain();
+        let _wallets = RestoreSignetWallets::empty();
 
-        let manager = RustPendingWalletManager::new(NumberOfBip39Words::Twelve);
+        let database = Database::global();
+        let wallet_ids = || -> Vec<WalletId> {
+            let wallets = database.wallets().all().expect("wallets load");
+            wallets.into_iter().map(|wallet| wallet.id).collect()
+        };
 
-        let first = manager.save_wallet().expect("first save should succeed");
-        let second = manager.save_wallet().expect("second save should return cached result");
+        let manager = Arc::new(RustPendingWalletManager::new(NumberOfBip39Words::Twelve));
+        let both_tapped = Arc::new(Barrier::new(2));
+        let taps: Vec<_> = (0..2)
+            .map(|_| {
+                let manager = manager.clone();
+                let both_tapped = both_tapped.clone();
+                std::thread::spawn(move || {
+                    both_tapped.wait();
+                    manager.save_wallet()
+                })
+            })
+            .collect();
 
+        let results: Vec<_> =
+            taps.into_iter().map(|tap| tap.join().expect("the save tap finishes")).collect();
+
+        let added = wallet_ids();
+        let selected = database.global_config.selected_wallet();
+        for id in &added {
+            crate::wallet::test_support::remove_wallet(id);
+        }
+
+        let [first, second] = results.try_into().expect("two taps");
+        let first = first.expect("the first save succeeds");
+        let second = second.expect("the second save returns the same wallet");
         assert_eq!(second.metadata, first.metadata);
         assert_eq!(second.routes, first.routes);
+        assert_eq!(added, vec![first.metadata.id.clone()]);
+        assert_eq!(selected, Some(first.metadata.id));
     }
 
     #[test]

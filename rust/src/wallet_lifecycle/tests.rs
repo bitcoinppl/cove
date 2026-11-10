@@ -968,10 +968,9 @@ mod deletion_and_restore {
         database::{Database, test_support::RestoreWalletTarget},
         manager::import_wallet_manager::import_mnemonic_with_target,
         wallet::{
-            Wallet, WalletAddressType,
+            Wallet,
             metadata::{WalletId, WalletMetadata, WalletMode, WalletType},
         },
-        wallet_secret::WalletSecretExt as _,
     };
 
     const MNEMONIC_A: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -1013,24 +1012,13 @@ mod deletion_and_restore {
             .collect()
     }
 
-    /// Public descriptor export of a key whose private material never enters the app
-    fn public_export(words: &str) -> String {
-        let secret = WalletSecret::Mnemonic(mnemonic(words));
-        let descriptors = secret.into_descriptors(Network::Signet, WalletAddressType::NativeSegwit);
-
-        // the app imports the multipath form that hardware wallets export
-        let external = descriptors.external.extended_descriptor.to_string();
-        let multipath = external.split('#').next().unwrap().replace("/0/*", "/<0;1>/*");
-
-        bdk_wallet::miniscript::Descriptor::<bdk_wallet::miniscript::DescriptorPublicKey>::from_str(
-            &multipath,
-        )
-        .unwrap()
-        .to_string()
-    }
-
     fn import_watch_wallet(words: &str) -> WalletMetadata {
-        Wallet::try_new_persisted_from_xpub(public_export(words)).unwrap().metadata
+        let export = crate::wallet::test_support::public_descriptor_export(
+            &mnemonic(words),
+            Network::Signet,
+        );
+
+        Wallet::try_new_persisted_from_xpub(export).unwrap().metadata
     }
 
     async fn delete(id: &WalletId) {

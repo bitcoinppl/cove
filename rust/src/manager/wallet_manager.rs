@@ -3,6 +3,8 @@ pub mod balance_presentation;
 mod construction;
 mod display;
 mod exports;
+#[cfg(test)]
+mod fake_node_tests;
 pub mod ledger_state;
 mod payjoin;
 pub mod receive_address;

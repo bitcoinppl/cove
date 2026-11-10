@@ -1359,15 +1359,17 @@ mod tests {
 
         use super::{App, FfiApp, LOAD_AND_RESET_DELAY_MS, Route, wallet_selection_loading_route};
         use crate::{
-            database::{
-                Database, global_config::GlobalConfigKey, test_support::RestoreWalletTarget,
-            },
+            app::reconcile::{AppStateReconcileMessage, test_support::AppUpdateTap},
+            database::{Database, test_support::RestoreSignetWallets},
             manager::{
                 import_wallet_manager::import_mnemonic_with_target,
                 wallet_manager::RustWalletManager,
             },
             router::{Router, SettingsRoute, WalletSettingsRoute},
-            wallet::metadata::{WalletId, WalletMetadata, WalletMode},
+            wallet::{
+                Wallet,
+                metadata::{WalletId, WalletMetadata, WalletMode, WalletType},
+            },
         };
 
         const MNEMONIC_A: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -1376,19 +1378,14 @@ mod tests {
         const MNEMONIC_C: &str =
             "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
 
-        const SELECTION_KEYS: [GlobalConfigKey; 3] = [
-            GlobalConfigKey::SelectedWalletId,
-            GlobalConfigKey::MainSelectedWalletId,
-            GlobalConfigKey::DecoySelectedWalletId,
-        ];
-
         /// Restores the wallets, selections, wallet target, and router these tests change
         ///
         /// Hold it after the global-state lock so it restores before the lock is released
         struct RestoreDeletionTestState {
-            target: Option<RestoreWalletTarget>,
-            selections: Vec<(GlobalConfigKey, Option<String>)>,
             router: Router,
+
+            // dropped after `drop` restores the router
+            _wallets: RestoreSignetWallets,
         }
 
         impl RestoreDeletionTestState {
@@ -1396,56 +1393,48 @@ mod tests {
             fn empty_signet() -> Self {
                 crate::test_support::ensure_tokio_runtime();
                 crate::test_support::init_test_keychain();
-                crate::database::test_support::init_test_database();
+                let wallets = RestoreSignetWallets::empty();
 
-                let config = &Database::global().global_config;
-                let restore = Self {
-                    target: Some(RestoreWalletTarget::capture()),
-                    selections: SELECTION_KEYS
-                        .into_iter()
-                        .map(|key| (key, config.get(key).unwrap()))
-                        .collect(),
-                    router: App::global().get_state().router,
-                };
-
-                config.set_selected_network(Network::Signet).unwrap();
-                config.set_main_mode().unwrap();
-                config.clear_selected_wallet().unwrap();
-                clear_signet_wallets();
-
-                restore
+                Self { router: App::global().get_state().router, _wallets: wallets }
             }
         }
 
         impl Drop for RestoreDeletionTestState {
             fn drop(&mut self) {
-                clear_signet_wallets();
-
-                // a mode switch moves selection keys, so restore the target before the selections
-                drop(self.target.take());
-
-                let config = &Database::global().global_config;
-                for (key, value) in self.selections.drain(..) {
-                    let _ = match value {
-                        Some(value) => config.set(key, value),
-                        None => config.delete(key),
-                    };
-                }
-
                 App::global().state.write().router = self.router.clone();
-            }
-        }
-
-        fn clear_signet_wallets() {
-            for mode in [WalletMode::Main, WalletMode::Decoy] {
-                let _ =
-                    Database::global().wallets.save_all_wallets(Network::Signet, mode, Vec::new());
             }
         }
 
         fn import(words: &str) -> WalletMetadata {
             let mnemonic = Mnemonic::from_str(words).unwrap();
             import_mnemonic_with_target(mnemonic, Network::Signet, WalletMode::Main).unwrap()
+        }
+
+        /// Imports a hardware wallet's public export into the current mode, as Paste does
+        fn import_watch(words: &str) -> WalletMetadata {
+            let mnemonic = Mnemonic::from_str(words).unwrap();
+            let export =
+                crate::wallet::test_support::public_descriptor_export(&mnemonic, Network::Signet);
+            let metadata = Wallet::try_new_persisted_from_xpub(export).unwrap().metadata;
+            assert_ne!(metadata.wallet_type, WalletType::Hot, "a public export imports watch-only");
+
+            metadata
+        }
+
+        /// The wallet ids the cached-manager eviction named, in order
+        fn evicted_managers(updates: &[AppStateReconcileMessage]) -> Vec<WalletId> {
+            updates
+                .iter()
+                .filter_map(|update| match update {
+                    AppStateReconcileMessage::ClearCachedWalletManager(id) => Some(id.clone()),
+                    _ => None,
+                })
+                .collect()
+        }
+
+        /// The wallets the sidebar and Settings → All Wallets list for the current mode
+        fn visible_wallet_ids() -> Vec<WalletId> {
+            Database::global().wallets().all().unwrap().into_iter().map(|w| w.id).collect()
         }
 
         /// Delete through the wallet settings path, whose screen pops itself afterwards
@@ -1482,11 +1471,12 @@ mod tests {
             (router.default, router.routes)
         }
 
-        // the selected wallet sits between two others so a first-wallet fallback is visible
+        // the selected wallet sits between two others so a first-wallet fallback is visible, and
+        // the last is a public watch wallet so deleting a non-selected watch-only wallet is covered
         fn import_three_wallets() -> (WalletMetadata, WalletMetadata, WalletMetadata) {
             let first = import(MNEMONIC_A);
             let selected = import(MNEMONIC_B);
-            let last = import(MNEMONIC_C);
+            let last = import_watch(MNEMONIC_C);
 
             (first, selected, last)
         }
@@ -1506,6 +1496,7 @@ mod tests {
                 }),
             ];
             select_with_routes(&selected.id, settings_routes.clone());
+            let updates = AppUpdateTap::open();
 
             delete_from_wallet_settings(&last.id).await;
 
@@ -1515,6 +1506,16 @@ mod tests {
                 router(),
                 (Route::SelectedWallet(selected.id), settings_routes),
                 "the settings screen pops itself back to the untouched route"
+            );
+
+            let evicted = evicted_managers(&updates.drain());
+            assert!(
+                evicted.contains(&last.id),
+                "eviction is requested for the deleted wallet's cached manager"
+            );
+            assert!(
+                evicted.iter().all(|id| *id == last.id),
+                "only the deleted wallet's cached manager is dropped, got {evicted:?}"
             );
         }
 
@@ -1541,6 +1542,7 @@ mod tests {
             let remaining = import(MNEMONIC_A);
             let selected = import(MNEMONIC_B);
             select_with_routes(&selected.id, vec![Route::Settings(SettingsRoute::Main)]);
+            let updates = AppUpdateTap::open();
 
             delete_from_wallet_settings(&selected.id).await;
 
@@ -1551,10 +1553,21 @@ mod tests {
                 (wallet_selection_loading_route(remaining.id.clone(), None), vec![])
             );
 
+            let evicted = evicted_managers(&updates.drain());
+            assert!(
+                evicted.contains(&selected.id),
+                "eviction is requested for the deleted wallet's cached manager"
+            );
+            assert!(
+                !evicted.contains(&remaining.id),
+                "no eviction is requested for the newly selected wallet, got {evicted:?}"
+            );
+
             delete_from_wallet_settings(&remaining.id).await;
 
             assert_eq!(signet_wallet_ids(), Vec::<WalletId>::new());
             assert_eq!(selected_wallet(), None);
+            assert!(evicted_managers(&updates.drain()).contains(&remaining.id));
             assert_eq!(
                 router(),
                 (
@@ -1563,6 +1576,116 @@ mod tests {
                     vec![]
                 )
             );
+        }
+
+        #[tokio::test]
+        async fn deleting_the_last_decoy_wallet_shows_new_wallet_and_leaves_main_alone() {
+            let _guard = crate::test_support::global_state_test_lock().lock().await;
+            let _restore = RestoreDeletionTestState::empty_signet();
+            let config = &Database::global().global_config;
+
+            let main = import(MNEMONIC_A);
+            assert_eq!(selected_wallet(), Some(main.id.clone()));
+
+            config.set_decoy_mode().unwrap();
+            let decoy = import_watch(MNEMONIC_C);
+            assert_eq!(visible_wallet_ids(), vec![decoy.id.clone()]);
+            select_with_routes(
+                &decoy.id,
+                vec![
+                    Route::Settings(SettingsRoute::Main),
+                    Route::Settings(SettingsRoute::Wallet {
+                        id: decoy.id.clone(),
+                        route: WalletSettingsRoute::Main,
+                    }),
+                ],
+            );
+
+            let updates = AppUpdateTap::open();
+            delete_from_wallet_settings(&decoy.id).await;
+
+            assert_eq!(visible_wallet_ids(), Vec::<WalletId>::new());
+            assert_eq!(selected_wallet(), None);
+            assert_eq!(
+                router(),
+                (
+                    Route::NewWallet(Default::default())
+                        .load_and_reset_after(LOAD_AND_RESET_DELAY_MS),
+                    vec![]
+                ),
+                "an empty decoy scope offers a new wallet instead of a stale wallet route"
+            );
+
+            let evicted = evicted_managers(&updates.drain());
+            assert!(
+                evicted.contains(&decoy.id),
+                "eviction is requested for the deleted wallet's cached manager"
+            );
+            assert!(
+                evicted.iter().all(|id| *id == decoy.id),
+                "only the deleted wallet's cached manager is dropped, got {evicted:?}"
+            );
+
+            // the main scope never saw the decoy deletion
+            config.set_main_mode().unwrap();
+            assert_eq!(visible_wallet_ids(), vec![main.id.clone()]);
+            assert_eq!(selected_wallet(), Some(main.id));
+        }
+
+        #[tokio::test]
+        async fn main_and_decoy_wallet_lists_stay_separate() {
+            let _guard = crate::test_support::global_state_test_lock().lock().await;
+            let _restore = RestoreDeletionTestState::empty_signet();
+            let config = &Database::global().global_config;
+
+            let main_hot = import(MNEMONIC_A);
+            let main_watch = import_watch(MNEMONIC_C);
+            let main_ids = vec![main_hot.id, main_watch.id.clone()];
+            config.select_wallet(main_watch.id.clone()).unwrap();
+
+            // the decoy scope gets its own copy of a watch wallet main also holds
+            config.set_decoy_mode().unwrap();
+            assert_eq!(visible_wallet_ids(), Vec::<WalletId>::new(), "decoy mode starts empty");
+            let decoy_watch = import_watch(MNEMONIC_C);
+            let decoy_hot = import_mnemonic_with_target(
+                Mnemonic::from_str(MNEMONIC_B).unwrap(),
+                Network::Signet,
+                WalletMode::Decoy,
+            )
+            .unwrap();
+
+            let decoy_ids = vec![decoy_watch.id.clone(), decoy_hot.id.clone()];
+            assert_ne!(decoy_watch.id, main_watch.id);
+            config.select_wallet(decoy_hot.id.clone()).unwrap();
+
+            assert_eq!(visible_wallet_ids(), decoy_ids);
+            assert_eq!(
+                Database::global()
+                    .wallets
+                    .get_all(Network::Signet, WalletMode::Main)
+                    .unwrap()
+                    .len(),
+                2,
+                "importing in decoy mode adds nothing to the main list"
+            );
+
+            // leave and enter decoy mode again: each list keeps its own wallets and order
+            config.set_main_mode().unwrap();
+            assert_eq!(visible_wallet_ids(), main_ids);
+            assert_eq!(selected_wallet(), Some(main_watch.id));
+
+            config.set_decoy_mode().unwrap();
+            assert_eq!(visible_wallet_ids(), decoy_ids);
+            assert_eq!(selected_wallet(), Some(decoy_hot.id));
+
+            let launch_order = Database::global().wallets().all_sorted_active().unwrap();
+            assert!(
+                launch_order.iter().all(|wallet| decoy_ids.contains(&wallet.id)),
+                "launch selection only picks from the decoy list"
+            );
+
+            config.set_main_mode().unwrap();
+            assert_eq!(visible_wallet_ids(), main_ids);
         }
     }
 }

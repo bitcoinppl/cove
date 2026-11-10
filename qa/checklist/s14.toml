@@ -155,9 +155,11 @@ paths = [
 ]
 coverage = [
     "agent",
+    "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::address_type_switch_during_discovery_rescans_the_chosen_type_history",
+    "rust:rust/src/manager/wallet_manager/fake_node_tests.rs::choosing_a_discovered_address_type_during_the_initial_scan_loads_its_history",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# the actor restarts the scan on an address type switch
+# agent: only the platform Choose Wallet Type sheet that discovery's found types open
 
 [[row]]
 id = "s14-initial-unused-scan-starts-and-progresses"
@@ -296,8 +298,8 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/**",
 ]
 coverage = [
-    "agent",
     "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::pending_transaction_refreshes_to_confirmed_when_the_node_confirms_it",
+    "rust:rust/src/manager/wallet_manager/fake_node_tests.rs::details_opened_during_a_refresh_belong_to_their_transaction_and_confirm_in_place",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 
@@ -321,9 +323,10 @@ paths = [
 coverage = [
     "agent",
     "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::sending_is_refused_until_the_initial_scan_completes",
+    "rust:rust/src/manager/wallet_manager/fake_node_tests.rs::send_opens_only_after_the_initial_scan_completes",
 ]
 # 1.4.0: ios PASS, android PASS
-# the rust spend guard decides; the alert wiring is platform code
+# agent: only the platform catch that turns InitialScanIncomplete into the alert and pops Send
 
 [[row]]
 id = "s14-unused-signet-wallet-initial-scan-completes"
@@ -394,10 +397,11 @@ paths = [
     "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
 ]
 coverage = [
-    "agent",
     "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::unused_wallet_initial_scan_reports_progress_then_completes",
+    "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::signet_initial_scan_counts_checked_addresses_before_it_completes",
 ]
 # 1.4.0: ios PASS, android N/A
+# the addresses-checked count the iOS card shows grows before the scan completes
 
 [[row]]
 id = "s14-ios-initial-scan-continues-after-background"
@@ -432,8 +436,10 @@ paths = [
 ]
 coverage = [
     "agent",
+    "rust:rust/src/manager/wallet_manager/fake_node_tests.rs::receipt_label_survives_coin_control_and_transaction_lock_changes",
 ]
 # 1.4.0: ios PASS, android N/A
+# agent: only the iOS label field committing its text on Return before Back
 
 [[row]]
 id = "s14-beta-currency-change-preserves-satoshi-balance"
