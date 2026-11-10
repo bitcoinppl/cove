@@ -159,24 +159,7 @@ impl RustSendFlowManager {
         debug!("selected_fee_rate_changed: {fee_rate:?}");
         let mut sender = self.reconciler.deferred_sender();
         if let Some(options) = self.fee_rate_options() {
-            let selection = FeeSelection::new(options, fee_rate);
-            {
-                let mut state = self.state.lock();
-                if state.fee_selection.as_ref() != Some(&selection) {
-                    state.clear_warning_acknowledgements();
-                }
-                state.fee_selection = Some(selection.clone());
-            }
-            sender.queue(Message::UpdateFeeSelection(selection));
-        }
-
-        self.reconcile_coin_control_amount_for_selected_fee();
-
-        // max was selected before, so we need to update it to match the new fee rate
-        let max_selected = self.state.lock().max_selected.clone();
-        if max_selected.is_some() {
-            let me = self.clone();
-            cove_tokio::task::spawn(async move { me.select_max_send_report_error().await });
+            self.apply_fee_selection(FeeSelection::new(options, fee_rate), &mut sender);
         }
 
         if self.validate_amount_internal(false) && self.validate_address_internal(false) {
@@ -321,8 +304,15 @@ impl RustSendFlowManager {
         debug!("select_max_send");
         let mut sender = self.reconciler.deferred_sender();
 
+        // load the options first, so Max drains at the rate the selection settles on rather than
+        // a fallback rate read before they arrived
+        let has_fee_selection = self.state.lock().fee_selection.is_some();
+        if !has_fee_selection {
+            self.get_or_update_fee_rate_options().await;
+        }
+
         // access the mutex once
-        let (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base) = {
+        let (address, selected_fee_rate, selected_fee_rate_base) = {
             let state = self.state.lock();
 
             let address = state.address.clone();
@@ -334,18 +324,12 @@ impl RustSendFlowManager {
                 .or_else(|| state.first_address.clone().map(Arc::unwrap_or_clone));
 
             let selected_fee_rate_base = state.fee_rate_options_base.clone();
-            let fee_rate_options =
-                state.fee_selection.as_ref().map(|selection| selection.options.clone());
             let selected_fee_rate =
                 state.fee_selection.as_ref().map(|selection| selection.selected.clone());
             let address = address.ok_or(Error::InvalidAddress(address_string.to_string()))?;
 
-            (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base)
+            (address, selected_fee_rate, selected_fee_rate_base)
         };
-
-        if fee_rate_options.is_none() {
-            self.get_or_update_fee_rate_options().await;
-        }
 
         let wallet_actor = self.wallet_actor();
 

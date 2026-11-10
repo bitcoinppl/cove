@@ -132,11 +132,11 @@ section = "6"
 title = "Max while fee or balance is loading"
 platforms = ["ios", "android"]
 target = "rust"
-paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/validation.rs", "rust/src/manager/send_flow_manager/state.rs", "rust/src/manager/send_flow_manager/amount_or_max.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
-coverage = ["agent", "rust:rust/src/manager/send_flow_manager.rs::max_selected_while_fees_and_balance_load_waits_then_sends_the_full_balance", "rust:rust/src/manager/send_flow_manager.rs::finalize_blocks_when_selected_fee_total_is_missing"]
+paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/validation.rs", "rust/src/manager/send_flow_manager/state.rs", "rust/src/manager/send_flow_manager/amount_or_max.rs", "rust/src/manager/send_flow_manager/amount_input.rs", "rust/src/manager/send_flow_manager/fee_selection.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::max_selected_while_fees_and_balance_load_waits_then_sends_the_full_balance", "rust:rust/src/manager/send_flow_manager.rs::max_follows_refreshed_fee_rates_for_the_same_speed_and_sends_the_full_balance", "rust:rust/src/manager/send_flow_manager.rs::finalize_blocks_when_selected_fee_total_is_missing"]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# rust decides max before the fee total and balance load; an agent still checks max picked before
-# fresher fee rates load, which keeps the old amount and sends change instead of the full balance
+# rust decides max picked before the fee total and balance load, and max picked before fresher fee
+# rates load, which must drain again at the new rate and send the full balance with no change
 
 [[row]]
 id = "s06-second-secondary-utxo-for-coin-change-warning"
