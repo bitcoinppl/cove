@@ -18,8 +18,8 @@ use super::{
     CoordinatorPhase, DestructiveClaim, DestructiveIntent, ORDINARY_CLOSE_RETRY_BACKOFF,
     OrdinaryCloseOutcome, RegistrationState, ResumedRegistrationState, ShutdownDeadlineTier,
     WalletActorKind, WalletLifecycleCoordinator, WalletLifecycleFailure,
-    WalletManagerLifecycleToken, cache_clear_after_ordinary_close, terminal_shutdown,
-    test_support::enter_wallet_deletion,
+    WalletManagerLifecycleToken, cache_clear_after_ordinary_close,
+    shutdown::TerminalShutdownFailure, terminal_shutdown, test_support::enter_wallet_deletion,
 };
 
 #[derive(Debug)]
@@ -143,7 +143,7 @@ async fn failed_terminal_request_leaves_actor_active() {
     )
     .await;
 
-    assert_eq!(result, Err(()));
+    assert_eq!(result, Err(TerminalShutdownFailure::Quiesce("blocked".to_string())));
     call!(actor.probe()).await.expect("actor remains active");
 }
 
@@ -166,7 +166,7 @@ async fn cancelled_queued_terminal_request_cannot_terminate_actor_later() {
         |_actor| Box::pin(async { Ok(()) }),
     )
     .await;
-    assert_eq!(result, Err(()));
+    assert_eq!(result, Err(TerminalShutdownFailure::NotStarted));
 
     release.notify_one();
     call!(actor.probe()).await.expect("actor remains active");
@@ -185,7 +185,7 @@ async fn cancelled_running_terminal_request_cannot_terminate_actor_later() {
     })
     .await;
 
-    assert_eq!(result, Err(()));
+    assert_eq!(result, Err(TerminalShutdownFailure::TimedOut));
     call!(actor.probe()).await.expect("actor remains active");
 }
 
@@ -219,7 +219,10 @@ async fn non_cooperative_terminal_request_still_obeys_deadline() {
 
     releaser.join().expect("deadline test releaser joins");
 
-    assert_eq!(result, Err(()));
+    assert!(matches!(
+        result,
+        Err(TerminalShutdownFailure::NotStarted | TerminalShutdownFailure::TimedOut)
+    ));
     assert!(elapsed < Duration::from_millis(250), "terminal shutdown exceeded its deadline");
     call!(actor.probe()).await.expect("actor remains active");
 }
