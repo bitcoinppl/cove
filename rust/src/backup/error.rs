@@ -1,5 +1,6 @@
 use crate::wallet_identity::WalletIdentityError;
 use cove_types::WalletId;
+use tracing::{error, warn};
 
 #[derive(Debug, Clone, uniffi::Error, thiserror::Error)]
 #[uniffi::export(Display)]
@@ -120,6 +121,40 @@ impl BackupError {
                     .to_string()
             }
         }
+    }
+}
+
+impl BackupError {
+    /// Log a failure once at the `BackupManager` boundary and return it unchanged
+    ///
+    /// Display never carries the backup password or decrypted payload, so it is safe to log
+    pub(crate) fn logged(self, operation: &str) -> Self {
+        match &self {
+            // caused by the selected file, its password or a stale review, the user can retry
+            Self::PasswordTooShort
+            | Self::DecryptionFailed
+            | Self::InvalidFormat
+            | Self::FileTooLarge
+            | Self::UnsupportedVersion(_)
+            | Self::UnsupportedPayloadVersion(_)
+            | Self::Truncated
+            | Self::ImportApprovalStale(_)
+            | Self::ImportApprovalRequired(_)
+            | Self::ImportApprovalUsed
+            | Self::WalletIdOccupied(_) => warn!("backup {operation} failed: {self}"),
+
+            Self::Encryption(_)
+            | Self::Serialization(_)
+            | Self::Deserialization(_)
+            | Self::Gather(_)
+            | Self::Restore(_)
+            | Self::Keychain(_)
+            | Self::Database(_)
+            | Self::InvalidWalletId(_)
+            | Self::Decompression(_) => error!("backup {operation} failed: {self}"),
+        }
+
+        self
     }
 }
 

@@ -81,7 +81,7 @@ impl BackupManager {
     }
 
     pub async fn export(&self, password: String) -> Result<BackupResult, BackupError> {
-        export::export_all(password).await
+        export::export_all(password).await.map_err(|error| error.logged("export"))
     }
 
     /// Decrypt and preflight a backup without changing local wallet state
@@ -91,7 +91,10 @@ impl BackupManager {
         data: Vec<u8>,
         password: String,
     ) -> Result<Arc<BackupImportPreparation>, BackupError> {
-        let state = import::prepare_import(data, password).await?;
+        let state = import::prepare_import(data, password)
+            .await
+            .map_err(|error| error.logged("prepare import"))?;
+
         Ok(BackupImportPreparation::new(state))
     }
 
@@ -101,44 +104,48 @@ impl BackupManager {
         &self,
         preparation: Arc<BackupImportPreparation>,
     ) -> Result<Arc<BackupImportApproval>, BackupError> {
-        let (payload_digest, requested_snapshots) = {
-            let guard = preparation.state.lock();
-            let state = guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
-            let requested_snapshots = state
-                .wallets
-                .iter()
-                .filter(|wallet| wallet.snapshot.has_markerless_conflict())
-                .map(|wallet| (wallet.metadata.id.clone(), wallet.snapshot.clone()))
-                .collect::<Vec<_>>();
+        async move {
+            let (payload_digest, requested_snapshots) = {
+                let guard = preparation.state.lock();
+                let state = guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+                let requested_snapshots = state
+                    .wallets
+                    .iter()
+                    .filter(|wallet| wallet.snapshot.has_markerless_conflict())
+                    .map(|wallet| (wallet.metadata.id.clone(), wallet.snapshot.clone()))
+                    .collect::<Vec<_>>();
 
-            (state.payload_digest.clone(), requested_snapshots)
-        };
+                (state.payload_digest.clone(), requested_snapshots)
+            };
 
-        let snapshots = tokio::task::spawn_blocking(move || {
-            let mut snapshots = std::collections::HashMap::new();
-            for (wallet_id, expected) in requested_snapshots {
-                let validated = recovery::ValidatedRestoreWalletId::validate(&wallet_id)?;
-                let current = recovery::RestoreArtifactSnapshot::capture(&validated)?;
-                if current != expected {
-                    return Err(BackupError::ImportApprovalStale(wallet_id));
+            let snapshots = tokio::task::spawn_blocking(move || {
+                let mut snapshots = std::collections::HashMap::new();
+                for (wallet_id, expected) in requested_snapshots {
+                    let validated = recovery::ValidatedRestoreWalletId::validate(&wallet_id)?;
+                    let current = recovery::RestoreArtifactSnapshot::capture(&validated)?;
+                    if current != expected {
+                        return Err(BackupError::ImportApprovalStale(wallet_id));
+                    }
+
+                    snapshots.insert(wallet_id.as_str().to_string(), expected);
                 }
 
-                snapshots.insert(wallet_id.as_str().to_string(), expected);
-            }
+                Ok::<_, BackupError>(snapshots)
+            })
+            .await
+            .map_err(|error| {
+                BackupError::Restore(format!("approval snapshot task failed: {error}"))
+            })??;
 
-            Ok::<_, BackupError>(snapshots)
-        })
+            Ok(Arc::new(BackupImportApproval {
+                state: Arc::new(Mutex::new(Some(import::ImportApprovalState {
+                    payload_digest,
+                    snapshots,
+                }))),
+            }))
+        }
         .await
-        .map_err(|error| {
-            BackupError::Restore(format!("approval snapshot task failed: {error}"))
-        })??;
-
-        Ok(Arc::new(BackupImportApproval {
-            state: Arc::new(Mutex::new(Some(import::ImportApprovalState {
-                payload_digest,
-                snapshots,
-            }))),
-        }))
+        .map_err(|error: BackupError| error.logged("approve import"))
     }
 
     /// Consume a preparation and optional one-use approval to import the backup
@@ -148,43 +155,47 @@ impl BackupManager {
         preparation: Arc<BackupImportPreparation>,
         approval: Option<Arc<BackupImportApproval>>,
     ) -> Result<BackupImportReport, BackupError> {
-        let (state, approval) = match approval {
-            Some(approval) => {
-                let mut preparation_guard = preparation.state.lock();
-                let mut approval_guard = approval.state.lock();
-                let preparation_state =
-                    preparation_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+        async move {
+            let (state, approval) = match approval {
+                Some(approval) => {
+                    let mut preparation_guard = preparation.state.lock();
+                    let mut approval_guard = approval.state.lock();
+                    let preparation_state =
+                        preparation_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
 
-                let approval_state =
-                    approval_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+                    let approval_state =
+                        approval_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
 
-                import::validate_prepared_import(preparation_state, Some(approval_state))?;
+                    import::validate_prepared_import(preparation_state, Some(approval_state))?;
 
-                let state = preparation_guard
-                    .take()
-                    .expect("preparation was checked as present while holding its mutex");
+                    let state = preparation_guard
+                        .take()
+                        .expect("preparation was checked as present while holding its mutex");
 
-                let approval = approval_guard
-                    .take()
-                    .expect("approval was checked as present while holding its mutex");
-                (state, Some(approval))
-            }
+                    let approval = approval_guard
+                        .take()
+                        .expect("approval was checked as present while holding its mutex");
+                    (state, Some(approval))
+                }
 
-            None => {
-                let mut preparation_guard = preparation.state.lock();
-                let preparation_state =
-                    preparation_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
+                None => {
+                    let mut preparation_guard = preparation.state.lock();
+                    let preparation_state =
+                        preparation_guard.as_ref().ok_or(BackupError::ImportApprovalUsed)?;
 
-                import::validate_prepared_import(preparation_state, None)?;
+                    import::validate_prepared_import(preparation_state, None)?;
 
-                let state = preparation_guard
-                    .take()
-                    .expect("preparation was checked as present while holding its mutex");
-                (state, None)
-            }
-        };
+                    let state = preparation_guard
+                        .take()
+                        .expect("preparation was checked as present while holding its mutex");
+                    (state, None)
+                }
+            };
 
-        import::import_prepared(state, approval).await
+            import::import_prepared(state, approval).await
+        }
+        .await
+        .map_err(|error: BackupError| error.logged("import"))
     }
 
     #[uniffi::method(name = "verifyBackup")]
@@ -193,12 +204,12 @@ impl BackupManager {
         data: Vec<u8>,
         password: String,
     ) -> Result<BackupVerifyReport, BackupError> {
-        verify::verify_backup(data, password).await
+        verify::verify_backup(data, password).await.map_err(|error| error.logged("verify"))
     }
 
     /// Validate the file format without decrypting
     pub fn validate_format(&self, data: Vec<u8>) -> Result<(), BackupError> {
-        crypto::validate_header(&data)
+        crypto::validate_header(&data).map_err(|error| error.logged("validate format"))
     }
 
     /// Generate a 12-word BIP39 mnemonic to use as the backup password
