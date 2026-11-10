@@ -641,6 +641,7 @@ mod tests {
     use std::str::FromStr as _;
 
     use bip39::Mnemonic;
+    use rand::RngExt as _;
 
     use super::*;
     use crate::database::test_support::RestoreWalletTarget;
@@ -1421,5 +1422,51 @@ mod tests {
 
         assert_eq!(second.err(), Some(WalletError::WalletAlreadyExists(first.id)));
         assert_eq!(added_count, 1, "a duplicate wallet was saved");
+    }
+
+    /// Signet wallets in the current mode, as the sidebar and All Wallets list them
+    fn signet_wallet_ids() -> Vec<WalletId> {
+        let mode = Database::global().global_config.wallet_target().mode;
+        let wallets = Database::global().wallets.get_all(Network::Signet, mode).unwrap();
+
+        wallets.into_iter().map(|wallet| wallet.id).collect()
+    }
+
+    // both apps run Paste on the main thread, so a double tap reaches rust as two calls in a row
+    #[test]
+    fn pasting_the_same_signet_watch_key_twice_adds_one_wallet() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        let _wallets = crate::database::test_support::RestoreSignetWallets::empty();
+
+        // a bare upub carries no fingerprint, so only its public identity can match it, while the
+        // descriptor export carries one
+        let mnemonic = Mnemonic::from_entropy(&rand::rng().random::<[u8; 16]>()).unwrap();
+        let descriptor_export =
+            crate::wallet::test_support::public_descriptor_export(&mnemonic, Network::Signet);
+
+        for (pasted, wallet_type) in [
+            (BIP49_TESTNET_UPUB.to_string(), WalletType::XpubOnly),
+            (descriptor_export, WalletType::Cold),
+        ] {
+            let first = Wallet::new_from_xpub(pasted.clone()).expect("the first paste imports");
+            let second = Wallet::new_from_xpub(pasted.clone());
+            let after = signet_wallet_ids();
+
+            crate::wallet::test_support::remove_wallet(&first.id);
+            if let Ok(second) = &second {
+                crate::wallet::test_support::remove_wallet(&second.id);
+            }
+
+            assert_eq!(first.metadata.wallet_type, wallet_type, "{pasted}");
+            assert_eq!(
+                second.err(),
+                Some(WalletError::WalletAlreadyExists(first.id.clone())),
+                "{pasted}"
+            );
+
+            assert_eq!(after, vec![first.id], "{pasted}");
+        }
     }
 }

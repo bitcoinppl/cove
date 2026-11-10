@@ -2,11 +2,15 @@ use std::time::Duration;
 
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use bdk_wallet::KeychainKind;
+use bitcoin::hashes::{Hash as _, sha256};
 use bitcoin::{Amount, Network, ScriptBuf};
+
+use cove_device::keychain::WalletSecret;
 
 use super::{
     SingleOrMany, WalletManagerReconcileMessage, drain_reconcile_messages, new_test_wallet_actor,
-    one_sat_vbyte_fee_rate, persisted_preview_wallet, restore_default_bitcoin_node,
+    one_sat_vbyte_fee_rate, persisted_preview_wallet, restore_default_bitcoin_node, test_keychain,
+    test_mnemonic,
 };
 use crate::{
     manager::wallet_manager::{
@@ -18,12 +22,22 @@ use crate::{
     test_support::fake_node::{FakeNode, Protocol, wait_until},
     transaction::Transaction,
     wallet::{
-        Address,
+        Address, WalletAddressType,
         metadata::{WalletId, WalletMetadata},
     },
+    wallet_secret::WalletSecretExt as _,
 };
 
 type Msg = WalletManagerReconcileMessage;
+
+/// Deletes a test wallet's keychain items when dropped
+struct ForgetWalletKeys(WalletId);
+
+impl Drop for ForgetWalletKeys {
+    fn drop(&mut self) {
+        test_keychain().delete_wallet_items(&self.0);
+    }
+}
 
 struct Fixture {
     node: FakeNode,
@@ -31,6 +45,7 @@ struct Fixture {
     observed: Observed,
     wallet_id: WalletId,
     first_receive: ScriptBuf,
+    later_receive: ScriptBuf,
 }
 
 impl Drop for Fixture {
@@ -82,6 +97,7 @@ fn fixture_on(network: Network) -> Fixture {
         .expect("selected network is set");
     let wallet = persisted_preview_wallet(metadata.clone());
     let first_receive = wallet.bdk.peek_address(KeychainKind::External, 0).script_pubkey();
+    let later_receive = wallet.bdk.peek_address(KeychainKind::External, 15).script_pubkey();
 
     let (sender, receiver) = flume::unbounded();
     let addr = spawn_actor(new_test_wallet_actor(wallet, sender));
@@ -93,6 +109,7 @@ fn fixture_on(network: Network) -> Fixture {
         observed: Observed { receiver, seen: Vec::new() },
         wallet_id: metadata.id,
         first_receive,
+        later_receive,
     }
 }
 
@@ -104,12 +121,23 @@ impl Observed {
         }
     }
 
-    async fn until(&mut self, what: &str, done: impl Fn(&Msg) -> bool) {
+    async fn until(&mut self, what: &str, done: impl Fn(&Msg) -> bool) -> usize {
+        self.until_after(0, what, done).await
+    }
+
+    /// Waits for a message matching `done` at or after position `start` in `seen`, returning its
+    /// position
+    async fn until_after(
+        &mut self,
+        start: usize,
+        what: &str,
+        done: impl Fn(&Msg) -> bool,
+    ) -> usize {
         let timeout = crate::test_support::loaded_host_wait(Duration::from_secs(20));
         tokio::time::timeout(timeout, async {
             loop {
-                if self.seen.iter().any(&done) {
-                    return;
+                if let Some(found) = self.seen.iter().skip(start).position(&done) {
+                    return start + found;
                 }
 
                 let batch = self.receiver.recv_async().await.expect("reconciler stays open");
@@ -117,7 +145,14 @@ impl Observed {
             }
         })
         .await
-        .unwrap_or_else(|_| panic!("timed out waiting for {what}; saw {:#?}", self.seen));
+        .unwrap_or_else(|_| panic!("timed out waiting for {what}; saw {:#?}", self.seen))
+    }
+
+    /// Waits for a message matching `done`, then for the scan status to go idle after it, so an
+    /// idle status from before that message does not count
+    async fn until_then_idle(&mut self, what: &str, done: impl Fn(&Msg) -> bool) {
+        let found = self.until(what, done).await;
+        self.until_after(found + 1, "the scan status to go idle", is_idle).await;
     }
 
     /// Pulls in everything the actor has already reconciled
@@ -191,6 +226,31 @@ fn full_scan_basis_points(statuses: &[WalletScanStatus]) -> Vec<u32> {
         .collect()
 }
 
+/// The first receive script of the test mnemonic's mainnet account for `address_type`
+fn first_receive_script(address_type: WalletAddressType) -> ScriptBuf {
+    WalletSecret::Mnemonic(test_mnemonic())
+        .into_descriptors(CoveNetwork::Bitcoin, address_type)
+        .external
+        .extended_descriptor
+        .at_derivation_index(0)
+        .expect("index 0 derives")
+        .script_pubkey()
+}
+
+fn scan_complete_txids(observed: &Observed) -> Vec<Vec<bitcoin::Txid>> {
+    observed
+        .seen
+        .iter()
+        .filter_map(|message| match message {
+            Msg::ScanComplete(transactions) => {
+                Some(transactions.iter().map(|transaction| transaction.id().0).collect())
+            }
+
+            _ => None,
+        })
+        .collect()
+}
+
 fn scan_complete_transactions(observed: &Observed) -> Vec<Transaction> {
     observed
         .seen
@@ -243,8 +303,7 @@ async fn unused_wallet_initial_scan_reports_progress_then_completes() {
     );
 
     gate.open();
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     let basis_points = full_scan_basis_points(&fx.observed.scan_statuses());
@@ -285,8 +344,7 @@ async fn unused_signet_wallet_initial_scan_completes() {
     fx.node.select_esplora();
 
     send!(fx.addr.wallet_scan_and_notify(false));
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     assert!(scan_complete_transactions(&fx.observed).is_empty());
@@ -312,6 +370,176 @@ async fn unused_signet_wallet_initial_scan_completes() {
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn signet_initial_scan_counts_checked_addresses_before_it_completes() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = fixture_on(Network::Signet);
+    fx.node.select_esplora();
+
+    // hold a later address's lookup, so the count must be reported while the scan still runs, and
+    // slow the others so the throttled reports land between lookups; the first matching rule wins
+    let later = fx.later_receive.clone();
+    let digest = sha256::Hash::hash(later.as_bytes());
+    let (gate, rule) = fx.node.on(&format!("/scripthash/{digest}/")).hold();
+    let _slow = fx.node.on("/scripthash/").delay(Duration::from_millis(25));
+
+    send!(fx.addr.wallet_scan_and_notify(false));
+    let full_scan_checked = |message: &Msg| match message {
+        Msg::WalletScanStatusChanged(WalletScanStatus::Scanning(progress))
+            if progress.phase == WalletScanPhase::Full =>
+        {
+            Some(progress.checked)
+        }
+
+        _ => None,
+    };
+
+    let first = fx
+        .observed
+        .until("a first checked count", |message| {
+            full_scan_checked(message).is_some_and(|checked| checked > 0)
+        })
+        .await;
+
+    // a count that stalls after its first report would never reach this second, larger one
+    let first_checked = full_scan_checked(&fx.observed.seen[first]).unwrap();
+    fx.observed
+        .until_after(first + 1, "a larger checked count", |message| {
+            full_scan_checked(message).is_some_and(|checked| checked > first_checked)
+        })
+        .await;
+
+    wait_until("the scan to reach the later address", || gate.waiting() > 0).await;
+    fx.observed.settle();
+    assert_eq!(fx.observed.count(is_scan_complete), 0, "the scan is still waiting on the node");
+
+    drop(rule);
+    gate.open();
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
+    fx.observed.settle();
+
+    let completed_at = fx.observed.seen.iter().position(is_scan_complete).expect("scan completed");
+    let checked_before_completion = fx.observed.seen[..completed_at]
+        .iter()
+        .filter_map(|message| match message {
+            Msg::WalletScanStatusChanged(WalletScanStatus::Scanning(progress))
+                if progress.phase == WalletScanPhase::Full =>
+            {
+                Some(progress.checked)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    // the wallet screen shows this count as "N addresses checked" while the scan runs
+    assert!(
+        checked_before_completion.iter().any(|checked| *checked > 0),
+        "the scan must report checked addresses before it completes, got {checked_before_completion:?}"
+    );
+
+    assert!(
+        checked_before_completion.windows(2).all(|pair| pair[0] <= pair[1]),
+        "the checked count must never go backwards, got {checked_before_completion:?}"
+    );
+
+    assert!(
+        checked_before_completion.iter().collect::<std::collections::HashSet<_>>().len() > 1,
+        "the checked count must advance while the scan runs, got {checked_before_completion:?}"
+    );
+
+    assert!(
+        checked_before_completion.last().copied().unwrap_or_default()
+            <= scripthash_history_requests(&fx.node).len() as u32,
+        "the scan cannot claim more addresses than it asked the node about"
+    );
+
+    assert_eq!(fx.observed.ledger_states().last(), Some(&WalletLedgerState::Complete));
+    assert_eq!(fx.observed.scan_statuses().last(), Some(&WalletScanStatus::Idle));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn address_type_switch_during_discovery_rescans_the_chosen_type_history() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = fixture();
+
+    // a hot wallet keeps its words, which a switch needs to derive the other address types, and the
+    // switch saves descriptors too, so forget both even when the test fails
+    test_keychain().save_wallet_key(&fx.wallet_id, test_mnemonic()).expect("mnemonic is saved");
+    let _forget_keys = ForgetWalletKeys(fx.wallet_id.clone());
+
+    // each address type of the same words has its own history
+    fx.node.chain().mine(5);
+    let mut paid = std::collections::HashMap::new();
+    for (address_type, sats) in [
+        (WalletAddressType::NativeSegwit, 50_000),
+        (WalletAddressType::WrappedSegwit, 30_000),
+        (WalletAddressType::Legacy, 20_000),
+    ] {
+        let txid = fx.node.chain().pay(&first_receive_script(address_type), Amount::from_sat(sats));
+        fx.node.chain().confirm(txid);
+        paid.insert(address_type, (txid, sats));
+    }
+
+    fx.node.select_esplora();
+
+    // hold the discovery of the native segwit history the wallet starts on
+    let (gate, rule) = fx.node.on("/scripthash/").hold();
+    send!(fx.addr.wallet_scan_and_notify(false));
+    wait_until("the first scan to reach the node", || gate.waiting() > 0).await;
+
+    call!(fx.addr.switch_private_wallet_to_new_address_type(WalletAddressType::WrappedSegwit))
+        .await
+        .expect("actor responds")
+        .expect("the switch to wrapped segwit succeeds");
+
+    drop(rule);
+    gate.open();
+
+    let (wrapped_txid, wrapped_sats) = paid[&WalletAddressType::WrappedSegwit];
+    fx.observed
+        .until_then_idle("the wrapped segwit history to be scanned", |message| {
+            matches!(message, Msg::ScanComplete(transactions)
+                if transactions.iter().any(|transaction| transaction.id().0 == wrapped_txid))
+        })
+        .await;
+
+    // give the interrupted scan time to report, which it must not
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    fx.observed.settle();
+
+    assert_eq!(
+        scan_complete_txids(&fx.observed),
+        vec![vec![wrapped_txid]],
+        "only the restarted scan may complete, and only with the chosen type's history"
+    );
+
+    assert_eq!(fx.observed.last_balance_sats(), Some(wrapped_sats));
+    assert_eq!(fx.observed.ledger_states().last(), Some(&WalletLedgerState::Complete));
+    assert!(
+        fx.observed.seen.iter().any(|message| matches!(
+            message,
+            Msg::WalletMetadataChanged(metadata)
+                if metadata.address_type == WalletAddressType::WrappedSegwit
+        )),
+        "the screen must learn the new address type"
+    );
+
+    // a second change, once discovery settled, restarts the scan on legacy
+    fx.observed.seen.clear();
+    call!(fx.addr.switch_private_wallet_to_new_address_type(WalletAddressType::Legacy))
+        .await
+        .expect("actor responds")
+        .expect("the switch to legacy succeeds");
+
+    let (legacy_txid, legacy_sats) = paid[&WalletAddressType::Legacy];
+    fx.observed.until_then_idle("the legacy scan to complete", is_scan_complete).await;
+    fx.observed.settle();
+
+    assert_eq!(scan_complete_txids(&fx.observed), vec![vec![legacy_txid]]);
+    assert_eq!(fx.observed.last_balance_sats(), Some(legacy_sats));
+    assert_eq!(fx.observed.ledger_states().last(), Some(&WalletLedgerState::Complete));
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn repeated_scan_requests_during_the_first_scan_run_it_once() {
     let _guard = crate::test_support::global_state_test_lock().lock().await;
     let mut fx = fixture();
@@ -327,8 +555,7 @@ async fn repeated_scan_requests_during_the_first_scan_run_it_once() {
     wait_until("the scan to reach the node", || gate.waiting() > 0).await;
     gate.open();
 
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
 
     // give any duplicate scan time to surface before counting
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -369,8 +596,7 @@ async fn scan_reports_confirmed_funds_found_on_chain() {
     fx.node.select_esplora();
 
     send!(fx.addr.wallet_scan_and_notify(false));
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     let transactions = scan_complete_transactions(&fx.observed);
@@ -399,8 +625,7 @@ async fn custom_electrum_node_scans_the_wallet_after_being_saved() {
         .expect("the fake electrum node is accepted");
 
     send!(fx.addr.wallet_scan_and_notify(false));
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     let transactions = scan_complete_transactions(&fx.observed);
@@ -444,8 +669,7 @@ async fn sending_is_refused_until_the_initial_scan_completes() {
     );
 
     gate.open();
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
 
     let after_scan = call!(fx.addr.build_tx(
         Amount::from_sat(10_000),
@@ -470,8 +694,7 @@ async fn pending_transaction_refreshes_to_confirmed_when_the_node_confirms_it() 
     let (gate, _rule) = fx.node.on(&status_path).hold();
 
     send!(fx.addr.wallet_scan_and_notify(false));
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     let scanned = scan_complete_transactions(&fx.observed);
@@ -592,8 +815,7 @@ async fn scan_against_an_offline_node_reports_the_failure_and_recovers_on_a_new_
     working.select_esplora();
 
     send!(fx.addr.wallet_scan_and_notify(false));
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     assert_eq!(fx.observed.last_balance_sats(), Some(20_000));

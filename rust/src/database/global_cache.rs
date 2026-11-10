@@ -67,6 +67,33 @@ impl GlobalCacheTable {
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    impl GlobalCacheTable {
+        /// Restores a network's cached block height to a value captured earlier, removing the
+        /// entry when there was none
+        pub(crate) fn restore_block_height(
+            &self,
+            network: Network,
+            previous: Option<BlockSizeLast>,
+        ) {
+            if let Some(previous) = previous {
+                let _ = self.set_block_height(network, previous);
+                return;
+            }
+
+            let Ok(write_txn) = self.db.begin_write() else { return };
+            if let Ok(mut table) = write_txn.open_table(TABLE) {
+                let _ = table.remove(GlobalCacheKey::BlockHeight(network).key().as_str());
+            }
+
+            let _ = write_txn.commit();
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::fee_client::{FeeFetchedAt, FeeSnapshot};

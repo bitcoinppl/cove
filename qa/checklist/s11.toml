@@ -237,9 +237,10 @@ coverage = [
     "agent",
     "rust:rust/src/database/global_config.rs::forget_wallet_clears_every_matching_selection",
     "rust:rust/src/wallet_lifecycle/tests.rs::deleting_the_current_hot_wallet_clears_it_and_the_words_restore_it",
+    "rust:rust/src/app.rs::deleting_the_selected_wallet_moves_to_a_remaining_wallet_then_new_wallet",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# selection cleanup is asserted; reselecting a valid wallet and cache eviction are not
+# rust selects the next wallet and requests eviction of the deleted wallet's manager; agent: only the platform dropping its cached manager and finishing the loading route on a usable screen
 
 [[row]]
 id = "s11-restore-deleted-current-wallet-from-words"
@@ -282,9 +283,10 @@ coverage = [
     "agent",
     "rust:rust/src/database/global_config.rs::forget_wallet_clears_every_matching_selection",
     "rust:rust/src/wallet_lifecycle/tests.rs::deleting_a_non_current_watch_wallet_keeps_the_selection_and_the_export_restores_it",
+    "rust:rust/src/app.rs::deleting_a_non_selected_wallet_from_settings_keeps_the_selection_and_route",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# selection cleanup is asserted; reselecting a valid wallet and cache eviction are not
+# rust keeps the selection and route and requests eviction only for the deleted wallet; agent: only the platform dropping the deleted wallet's cached manager and dismissing its settings screen back to the unchanged route
 
 [[row]]
 id = "s11-restore-deleted-non-current-watch-wallet"
@@ -326,9 +328,10 @@ paths = [
 coverage = [
     "agent",
     "rust:rust/src/wallet_lifecycle/tests.rs::deleting_the_last_decoy_wallet_leaves_main_alone_and_the_export_restores_it",
+    "rust:rust/src/app.rs::deleting_the_last_decoy_wallet_shows_new_wallet_and_leaves_main_alone",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# last-wallet fallback to onboarding or new wallet is in app.rs select_latest_or_new_wallet
+# rust routes an empty decoy scope to New Wallet and leaves main alone; agent: only the platform dropping its cached manager and finishing the loading route on a usable screen
 
 [[row]]
 id = "s11-restore-last-decoy-wallet-from-public-export"
@@ -360,12 +363,12 @@ paths = [
   "rust/src/database/global_config.rs",
 ]
 coverage = [
-    "agent",
     "rust:rust/src/database/wallet.rs::wallet_key_strings_cover_every_network_and_mode",
     "rust:rust/src/database/wallet.rs::reorder_and_append_in_one_scope_leave_every_other_scope_untouched",
+    "rust:rust/src/app.rs::main_and_decoy_wallet_lists_stay_separate",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# separate storage keys per network and mode are asserted; the visible lists are not
+# the visible lists and each mode's selection are asserted across mode switches
 
 [[row]]
 id = "s11-network-order-isolation-follow-up"
