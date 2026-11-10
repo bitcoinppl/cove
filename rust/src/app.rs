@@ -1073,6 +1073,17 @@ enum SelectLatestWalletError {
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use super::{App, Route};
+
+    /// The routes pushed on top of the default route, for tests outside this module that
+    /// check where a flow navigated
+    pub(crate) fn routes() -> Vec<Route> {
+        App::global().state.read().router.routes.clone()
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupResetRecovery};
@@ -1678,10 +1689,20 @@ mod tests {
             assert_eq!(visible_wallet_ids(), decoy_ids);
             assert_eq!(selected_wallet(), Some(decoy_hot.id));
 
-            let launch_order = Database::global().wallets().all_sorted_active().unwrap();
-            assert!(
-                launch_order.iter().all(|wallet| decoy_ids.contains(&wallet.id)),
-                "launch selection only picks from the decoy list"
+            let mut launch_choices = Database::global()
+                .wallets()
+                .all_sorted_active()
+                .unwrap()
+                .into_iter()
+                .map(|wallet| wallet.id)
+                .collect::<Vec<_>>();
+
+            launch_choices.sort();
+            let mut expected_choices = decoy_ids;
+            expected_choices.sort();
+            assert_eq!(
+                launch_choices, expected_choices,
+                "launch selection picks from exactly the decoy list"
             );
 
             config.set_main_mode().unwrap();

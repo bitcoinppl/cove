@@ -280,7 +280,6 @@ private struct SendFlowCoinControlContent: View {
                             sendAmountFiat: sendFlowManager.sendAmountFiat,
                             unit: manager.unit,
                             offset: offset,
-                            canEditCustomAmount: sendFlowManager.feeSelection != nil,
                             showCustomAmount: showCustomAmount,
                             updateUnit: updateUnit
                         )

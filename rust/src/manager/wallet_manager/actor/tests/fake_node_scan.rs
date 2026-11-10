@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use act_zero::{runtimes::tokio::spawn_actor, *};
 use bdk_wallet::KeychainKind;
+use bitcoin::hashes::{Hash as _, sha256};
 use bitcoin::{Amount, Network, ScriptBuf};
 
 use cove_device::keychain::WalletSecret;
@@ -29,12 +30,22 @@ use crate::{
 
 type Msg = WalletManagerReconcileMessage;
 
+/// Deletes a test wallet's keychain items when dropped
+struct ForgetWalletKeys(WalletId);
+
+impl Drop for ForgetWalletKeys {
+    fn drop(&mut self) {
+        test_keychain().delete_wallet_items(&self.0);
+    }
+}
+
 struct Fixture {
     node: FakeNode,
     addr: Addr<super::super::WalletActor>,
     observed: Observed,
     wallet_id: WalletId,
     first_receive: ScriptBuf,
+    later_receive: ScriptBuf,
 }
 
 impl Drop for Fixture {
@@ -86,6 +97,7 @@ fn fixture_on(network: Network) -> Fixture {
         .expect("selected network is set");
     let wallet = persisted_preview_wallet(metadata.clone());
     let first_receive = wallet.bdk.peek_address(KeychainKind::External, 0).script_pubkey();
+    let later_receive = wallet.bdk.peek_address(KeychainKind::External, 15).script_pubkey();
 
     let (sender, receiver) = flume::unbounded();
     let addr = spawn_actor(new_test_wallet_actor(wallet, sender));
@@ -97,6 +109,7 @@ fn fixture_on(network: Network) -> Fixture {
         observed: Observed { receiver, seen: Vec::new() },
         wallet_id: metadata.id,
         first_receive,
+        later_receive,
     }
 }
 
@@ -362,10 +375,25 @@ async fn signet_initial_scan_counts_checked_addresses_before_it_completes() {
     let mut fx = fixture_on(Network::Signet);
     fx.node.select_esplora();
 
-    // slow every address lookup so progress reports land before the scan finishes
-    let _slow = fx.node.on("/scripthash/").delay(Duration::from_millis(25));
+    // hold a later address's lookup, so the count must be reported while the scan still runs
+    let later = fx.later_receive.clone();
+    let digest = sha256::Hash::hash(later.as_bytes());
+    let (gate, rule) = fx.node.on(&format!("/scripthash/{digest}/")).hold();
 
     send!(fx.addr.wallet_scan_and_notify(false));
+    wait_until("the scan to reach the later address", || gate.waiting() > 0).await;
+    fx.observed
+        .until("a checked count while the scan waits on the node", |message| {
+            matches!(message, Msg::WalletScanStatusChanged(WalletScanStatus::Scanning(progress))
+                if progress.phase == WalletScanPhase::Full && progress.checked > 0)
+        })
+        .await;
+
+    fx.observed.settle();
+    assert_eq!(fx.observed.count(is_scan_complete), 0, "the scan is still waiting on the node");
+
+    drop(rule);
+    gate.open();
     fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
@@ -413,8 +441,10 @@ async fn address_type_switch_during_discovery_rescans_the_chosen_type_history() 
     let _guard = crate::test_support::global_state_test_lock().lock().await;
     let mut fx = fixture();
 
-    // a hot wallet keeps its words, which a switch needs to derive the other address types
+    // a hot wallet keeps its words, which a switch needs to derive the other address types, and the
+    // switch saves descriptors too, so forget both even when the test fails
     test_keychain().save_wallet_key(&fx.wallet_id, test_mnemonic()).expect("mnemonic is saved");
+    let _forget_keys = ForgetWalletKeys(fx.wallet_id.clone());
 
     // each address type of the same words has its own history
     fx.node.chain().mine(5);
@@ -428,6 +458,7 @@ async fn address_type_switch_during_discovery_rescans_the_chosen_type_history() 
         fx.node.chain().confirm(txid);
         paid.insert(address_type, (txid, sats));
     }
+
     fx.node.select_esplora();
 
     // hold the discovery of the native segwit history the wallet starts on

@@ -27,14 +27,19 @@ paths = [
     "rust/src/manager/wallet_manager/payjoin.rs",
     "rust/src/manager/wallet_manager/actor.rs",
     "rust/src/manager/wallet_manager/actor/**",
+    "rust/src/manager/send_flow_manager/address_input.rs",
+    "rust/src/manager/send_flow_manager/finalize.rs",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/EnterAddressView.kt",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/send_flow_manager/address_input.rs::payjoin_uris_entered_as_the_address_become_an_ordinary_draft",
+    "rust:rust/src/manager/wallet_manager/actor.rs::payjoin_uri_completes_via_normal_broadcast_when_gated",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# rust gates payjoin off; the ui half is one broadcast with no payjoin screen
+# rust gates payjoin off: on mainnet and Signet the uri becomes a confirm route with no payjoin
+# endpoint, which both apps send as an ordinary payment, and the wallet broadcasts it once and
+# keeps no payjoin session
 
 [[row]]
 id = "s17-sender-rejects-psbt-text-without-secret-import"
@@ -50,9 +55,15 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/**",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::sender_rejects_psbt_text_without_reading_or_importing_a_secret",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPasteRejectionTest.kt::senderRejectsARawPsbtPasteByAskingForTheReceiverRequest",
+    "android-instrumented:android/app/src/androidTest/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportPasteRejectionTest.kt::senderRejectsAKeyTeleportPsbtPacketPasteByAskingForTheReceiverRequest",
+    "agent:ios",
 ]
 # 1.4.0: ios BLOCKED, android PASS
+# rust asserts the sender refuses PSBT text, both as the apps route a paste and when handed straight
+# to the manager, and keeps waiting for the request without reading the secret or importing
+# anything; ios has no KeyTeleport ui harness, so an agent still checks the ios rejection alert
 
 [[row]]
 id = "s17-coldcard-psbt-vault-and-backup-scan-wrappers"
@@ -124,12 +135,16 @@ target = "rust"
 paths = [
     "rust/crates/cove-types/src/address.rs",
     "rust/src/manager/wallet_manager/payjoin.rs",
+    "rust/src/manager/send_flow_manager/address_input.rs",
+    "rust/src/manager/send_flow_manager/finalize.rs",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/send_flow_manager/address_input.rs::payjoin_uris_entered_as_the_address_become_an_ordinary_draft",
 ]
 # 1.4.0: ios PASS, android N/A
+# EnterAddressView only strips spaces before the address binding hands the text to rust, which
+# the test drives from that action to the confirm route
 
 [[row]]
 id = "s17-ios-pjos-uri-parses-to-ordinary-draft"
@@ -140,11 +155,14 @@ target = "rust"
 paths = [
     "rust/crates/cove-types/src/address.rs",
     "rust/src/manager/wallet_manager/payjoin.rs",
+    "rust/src/manager/send_flow_manager/address_input.rs",
+    "rust/src/manager/send_flow_manager/finalize.rs",
     "ios/Cove/Flows/SendFlow/SetAmountScreen/EnterAddressView.swift",
 ]
 coverage = [
     "rust:rust/crates/cove-types/src/address.rs::test_parse_bitcoin_uri_pjos_without_pj",
-    "agent:ios",
+    "rust:rust/src/manager/send_flow_manager/address_input.rs::payjoin_uris_entered_as_the_address_become_an_ordinary_draft",
 ]
 # 1.4.0: ios PASS, android N/A
-# the rust test covers only the URI parser, so an agent still checks the address validation and EnterAddressView draft
+# EnterAddressView only strips spaces before the address binding hands the text to rust, which
+# the test drives with pjos, with and without pj, from that action to the confirm route
