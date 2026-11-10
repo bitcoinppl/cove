@@ -1385,3 +1385,128 @@ fn received_xprv_is_stored_in_the_wallet_network_form_and_sent_on_as_an_xprv() {
     let DecodedPayload::Xprv(sent) = sent else { panic!("expected xprv") };
     assert_eq!(sent.expose_string(), xprv.to_string());
 }
+
+/// The unsigned PSBT from the BIP 174 test vectors, as text someone might paste
+const BIP174_UNSIGNED_PSBT_BASE64: &str = "cHNidP8BAJoCAAAAAljoeiG1ba8MI76OcHBFbDNvfLqlyHV5JPVFiHuyq911AAAAAAD/////g40EJ9DsZQpoqka7CwmK6kQiwHGyyng1Kgd5WdB86h0BAAAAAP////8CcKrwCAAAAAAWABTYXCtx0AYLCcmIauuBXlCZHdoSTQDh9QUAAAAAFgAUAK6pouXw+HaliN9VRuh0LR2HAI8AAAAAAAAAAAA=";
+
+/// What pasted text became once both apps routed it into the KeyTeleport sender
+#[derive(Debug, PartialEq, Eq)]
+enum SenderPaste {
+    /// a receiver request, handed to the manager
+    Ingested,
+    /// parsed as some other format, which the apps reject without calling the manager
+    OtherFormat,
+    /// failed to parse, which the apps also reject
+    Unparsed(crate::multi_format::MultiFormatError),
+}
+
+/// Routes text the way both apps route a paste into the KeyTeleport sender: parse it, then
+/// hand only a receiver request to the manager
+fn paste_into_sender(manager: &RustKeyTeleportManager, text: &str) -> SenderPaste {
+    use crate::multi_format::MultiFormat;
+
+    match MultiFormat::try_from_string(text) {
+        Ok(MultiFormat::KeyTeleportReceiver(packet)) => {
+            manager.ingest(KeyTeleportInput::Receiver(packet)).expect("receiver request ingests");
+            SenderPaste::Ingested
+        }
+
+        Ok(_) => SenderPaste::OtherFormat,
+        Err(error) => SenderPaste::Unparsed(error),
+    }
+}
+
+#[test]
+fn sender_rejects_psbt_text_without_reading_or_importing_a_secret() {
+    use base64::{Engine as _, prelude::BASE64_STANDARD};
+    use bdk_wallet::bitcoin::Network as BitcoinNetwork;
+    use keyteleport::{Packet, PsbtPacket};
+
+    use crate::{
+        multi_format::MultiFormatError,
+        test_support::hardware_signing::{SIGNER_MNEMONIC, TestSigner, external_address},
+    };
+
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let fixture = SendWalletFixture::new();
+    let manager = RustKeyTeleportManager::new();
+    let database = Database::global();
+    let wallets_before =
+        database.wallets.get_all(fixture.wallet.network, fixture.wallet.wallet_mode).unwrap();
+
+    manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
+
+    let unsigned = BASE64_STANDARD.decode(BIP174_UNSIGNED_PSBT_BASE64).unwrap();
+    let signed = TestSigner::new(SIGNER_MNEMONIC, BitcoinNetwork::Signet)
+        .signed_spend_of_its_own_funds(&external_address(BitcoinNetwork::Signet))
+        .serialize();
+    let packet = Packet::Psbt(PsbtPacket::new(unsigned.clone()));
+
+    let pastes = [
+        (
+            "unsigned base64",
+            BIP174_UNSIGNED_PSBT_BASE64.to_string(),
+            SenderPaste::Unparsed(MultiFormatError::PsbtNotSigned),
+        ),
+        (
+            "unsigned hex",
+            hex::encode(&unsigned),
+            SenderPaste::Unparsed(MultiFormatError::PsbtNotSigned),
+        ),
+        ("signed base64", BASE64_STANDARD.encode(&signed), SenderPaste::OtherFormat),
+        (
+            "KeyTeleport PSBT packet",
+            packet.to_bbqr_part().unwrap(),
+            SenderPaste::Unparsed(MultiFormatError::KeyTeleportPsbtNotSupported),
+        ),
+        (
+            "KeyTeleport PSBT link",
+            packet.to_url().unwrap(),
+            SenderPaste::Unparsed(MultiFormatError::KeyTeleportPsbtNotSupported),
+        ),
+    ];
+
+    for (label, text, expected) in pastes {
+        assert_eq!(paste_into_sender(&manager, &text), expected, "{label}");
+
+        // text handed straight to the manager is refused too, so its state below is the state
+        // after it saw the PSBT and not only after the apps filtered it out
+        let ingested = manager.ingest(KeyTeleportInput::MultiFormat(
+            crate::multi_format::StringOrData::String(text.clone()),
+        ));
+
+        assert!(
+            matches!(
+                ingested,
+                Err(KeyTeleportAlert::UnsupportedPsbt | KeyTeleportAlert::ParseFailed)
+            ),
+            "{label}: the sender did not refuse PSBT text: {ingested:?}"
+        );
+
+        // the sender keeps waiting for the receiver's request with its wallet fixed, and never
+        // reaches the step that reads and encrypts the wallet secret
+        let model = manager.model.lock();
+        let Phase::Send(SendPhase::AwaitReceiver { wallet }) = &model.phase else {
+            panic!("{label}: the sender left the receiver request step")
+        };
+
+        assert_eq!(wallet, &fixture.wallet, "{label}");
+    }
+
+    // nothing was imported, and no receive session was started on this device
+    assert_eq!(
+        database.wallets.get_all(fixture.wallet.network, fixture.wallet.wallet_mode).unwrap(),
+        wallets_before
+    );
+
+    assert_eq!(Keychain::global().get_key_teleport_receive_session().unwrap(), None);
+
+    // the sender is still usable: the receiver's real request moves it on to the code step
+    let receiver = ReceiverSession::from_private_key_bytes([12; 32]).unwrap();
+    let request = receiver.request().unwrap();
+    let request = KeyTeleportReceiverPacket::from(request.packet).bbqr_part().unwrap();
+
+    assert_eq!(paste_into_sender(&manager, &request), SenderPaste::Ingested);
+    assert!(matches!(manager.state(), KeyTeleportManagerState::SendEnterCode(_)));
+}
