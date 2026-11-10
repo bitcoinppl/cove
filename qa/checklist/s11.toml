@@ -234,12 +234,13 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
 ]
 coverage = [
+    "agent",
     "rust:rust/src/database/global_config.rs::forget_wallet_clears_every_matching_selection",
     "rust:rust/src/wallet_lifecycle/tests.rs::deleting_the_current_hot_wallet_clears_it_and_the_words_restore_it",
     "rust:rust/src/app.rs::deleting_the_selected_wallet_moves_to_a_remaining_wallet_then_new_wallet",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# the next wallet is selected and eviction of the deleted wallet's cached manager is requested
+# rust selects the next wallet and requests eviction of the deleted wallet's manager; agent: only the platform dropping its cached manager and finishing the loading route on a usable screen
 
 [[row]]
 id = "s11-restore-deleted-current-wallet-from-words"
@@ -279,12 +280,13 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
 ]
 coverage = [
+    "agent",
     "rust:rust/src/database/global_config.rs::forget_wallet_clears_every_matching_selection",
     "rust:rust/src/wallet_lifecycle/tests.rs::deleting_a_non_current_watch_wallet_keeps_the_selection_and_the_export_restores_it",
     "rust:rust/src/app.rs::deleting_a_non_selected_wallet_from_settings_keeps_the_selection_and_route",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# the selection and route stay and eviction is requested only for the deleted wallet
+# rust keeps the selection and route and requests eviction only for the deleted wallet; agent: only the platform dropping its cached manager and finishing the loading route on a usable screen
 
 [[row]]
 id = "s11-restore-deleted-non-current-watch-wallet"
@@ -324,11 +326,12 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/AndroidManagerCache.kt",
 ]
 coverage = [
+    "agent",
     "rust:rust/src/wallet_lifecycle/tests.rs::deleting_the_last_decoy_wallet_leaves_main_alone_and_the_export_restores_it",
     "rust:rust/src/app.rs::deleting_the_last_decoy_wallet_shows_new_wallet_and_leaves_main_alone",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# the decoy scope falls back to New Wallet and main mode keeps its list and selection
+# rust routes an empty decoy scope to New Wallet and leaves main alone; agent: only the platform dropping its cached manager and finishing the loading route on a usable screen
 
 [[row]]
 id = "s11-restore-last-decoy-wallet-from-public-export"

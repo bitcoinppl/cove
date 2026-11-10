@@ -300,8 +300,10 @@ paths = [
 coverage = [
     "rust:rust/src/manager/wallet_manager/actor/tests/fake_node_scan.rs::pending_transaction_refreshes_to_confirmed_when_the_node_confirms_it",
     "rust:rust/src/manager/wallet_manager/fake_node_tests.rs::details_opened_during_a_refresh_belong_to_their_transaction_and_confirm_in_place",
+    "rust:rust/src/manager/wallet_manager/fake_node_tests.rs::sent_payment_details_keep_amount_destination_and_fee_as_it_confirms",
 ]
 # 1.4.0: ios BLOCKED, android PASS
+# received and sent payments keep their amount, destination, fee and label through the refresh that confirms them
 
 [[row]]
 id = "s14-initial-scan-blocks-send-before-completion"
