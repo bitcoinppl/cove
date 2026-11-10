@@ -306,6 +306,73 @@ pub(crate) mod test_support {
         }
     }
 
+    /// Restores the wallet target and every wallet selection a test changes, and empties the
+    /// signet wallet lists of both modes before and after the test
+    ///
+    /// Hold it after the global-state lock so it restores before the lock is released, even when
+    /// the test panics
+    pub(crate) struct RestoreSignetWallets {
+        target: Option<RestoreWalletTarget>,
+        selections: Vec<(global_config::GlobalConfigKey, Option<String>)>,
+    }
+
+    impl RestoreSignetWallets {
+        /// Captures the current state, then starts from empty signet wallet lists in main mode
+        /// with no wallet selected
+        pub(crate) fn empty() -> Self {
+            use global_config::GlobalConfigKey;
+
+            init_test_database();
+
+            let config = &Database::global().global_config;
+            let selections = [
+                GlobalConfigKey::SelectedWalletId,
+                GlobalConfigKey::MainSelectedWalletId,
+                GlobalConfigKey::DecoySelectedWalletId,
+            ]
+            .into_iter()
+            .map(|key| (key, config.get(key).expect("the selection reads")))
+            .collect();
+
+            let restore = Self { target: Some(RestoreWalletTarget::capture()), selections };
+            config.set_selected_network(cove_types::Network::Signet).unwrap();
+            config.set_main_mode().unwrap();
+            config.clear_selected_wallet().unwrap();
+            Self::clear_wallets();
+
+            restore
+        }
+
+        fn clear_wallets() {
+            use crate::wallet::metadata::WalletMode;
+
+            for mode in [WalletMode::Main, WalletMode::Decoy] {
+                let _ = Database::global().wallets.save_all_wallets(
+                    cove_types::Network::Signet,
+                    mode,
+                    Vec::new(),
+                );
+            }
+        }
+    }
+
+    impl Drop for RestoreSignetWallets {
+        fn drop(&mut self) {
+            Self::clear_wallets();
+
+            // a mode switch moves selection keys, so restore the target before the selections
+            drop(self.target.take());
+
+            let config = &Database::global().global_config;
+            for (key, value) in self.selections.drain(..) {
+                let _ = match value {
+                    Some(value) => config.set(key, value),
+                    None => config.delete(key),
+                };
+            }
+        }
+    }
+
     pub(crate) fn delete_database() {
         init_test_database();
         let root = process_test_data_dir();

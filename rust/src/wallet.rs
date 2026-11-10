@@ -485,6 +485,25 @@ pub(crate) mod test_support {
         let _ = Database::global().wallets.delete(id);
     }
 
+    /// The public descriptor a hardware wallet exports for a mnemonic's native segwit account,
+    /// in the multipath form Cove imports, so the private key never enters the app
+    pub(crate) fn public_descriptor_export(mnemonic: &Mnemonic, network: Network) -> String {
+        use cove_device::keychain::WalletSecret;
+
+        use crate::wallet_secret::WalletSecretExt as _;
+
+        let secret = WalletSecret::Mnemonic(mnemonic.clone());
+        let descriptors = secret.into_descriptors(network, WalletAddressType::NativeSegwit);
+        let external = descriptors.external.extended_descriptor.to_string();
+        let multipath = external.split('#').next().unwrap().replace("/0/*", "/<0;1>/*");
+
+        bdk_wallet::miniscript::Descriptor::<bdk_wallet::miniscript::DescriptorPublicKey>::from_str(
+            &multipath,
+        )
+        .expect("the multipath descriptor parses")
+        .to_string()
+    }
+
     impl Wallet {
         pub(crate) fn try_new_persisted_from_mnemonic_segwit(
             metadata: WalletMetadata,

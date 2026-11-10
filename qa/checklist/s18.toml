@@ -16,7 +16,7 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/**",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/fake_node_tests.rs::receipt_label_survives_coin_control_and_transaction_lock_changes",
 ]
 # 1.4.0: ios BLOCKED, android PASS
 
@@ -159,7 +159,7 @@ paths = [
     "ios/Cove/Flows/CoinControlFlow/**",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/fake_node_tests.rs::receipt_label_survives_coin_control_and_transaction_lock_changes",
 ]
 # 1.4.0: ios PASS, android N/A
 
@@ -179,6 +179,6 @@ paths = [
     "ios/Cove/Flows/CoinControlFlow/**",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/fake_node_tests.rs::receipt_label_survives_coin_control_and_transaction_lock_changes",
 ]
 # 1.4.0: ios PASS, android N/A
