@@ -5,14 +5,19 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
+import org.bitcoinppl.cove.utils.writeExportBytes
 import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.util.hexEncode
+
+private const val TAG = "TapSignerBackupExport"
 
 /**
  * Creates a launcher for exporting TapSigner backups as hex-encoded text files
@@ -38,9 +43,7 @@ fun rememberBackupExportLauncher(
                     withContext(Dispatchers.IO) {
                         val backup = getBackup()
                         val hexBackup = hexEncode(backup)
-                        context.contentResolver.openOutputStream(uri)?.use { output ->
-                            output.write(hexBackup.toByteArray())
-                        } ?: throw java.io.IOException("Failed to open output stream")
+                        writeExportBytes({ context.contentResolver.openOutputStream(uri) }, hexBackup.toByteArray())
                     }
                     app.alertState =
                         TaggedItem(
@@ -49,7 +52,10 @@ fun rememberBackupExportLauncher(
                                 message = "Your backup has been saved successfully!",
                             ),
                         )
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
+                    Log.e(TAG, "Failed to save TAPSIGNER backup", e)
                     app.alertState =
                         TaggedItem(
                             AppAlertState.General(
