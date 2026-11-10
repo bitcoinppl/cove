@@ -8,7 +8,10 @@ use crate::{
 };
 use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee};
 
-use super::{EnterMode, Message, RustSendFlowManager, SendFlowAlertState, SendFlowError};
+use super::{
+    EnterMode, Message, RustSendFlowManager, SendFlowAlertState, SendFlowError,
+    amount_input::MaxTrigger,
+};
 
 #[derive(Clone)]
 struct FinalizeSnapshot {
@@ -25,18 +28,45 @@ impl RustSendFlowManager {
             return;
         }
 
-        let Some(amount_sats) = self.state.lock().amount_sats else {
+        // read in one lock, so a Max amount is never paired with a fee rate set after its check
+        let (max_is_stale, amount_sats, address, selected_fee_rate, entering_address) = {
+            let state = self.state.lock();
+            (
+                state.max_is_stale(),
+                state.amount_sats,
+                state.address.clone(),
+                state.fee_selection.as_ref().map(|selection| selection.selected.clone()),
+                state.entering_address.clone(),
+            )
+        };
+
+        // a Max amount drained at an older fee rate or address would be sent as a plain amount
+        // with change, so drain again first and finalize with the fresh amount
+        if max_is_stale {
+            let me = self.clone();
+            cove_tokio::task::spawn(async move {
+                match me.drain_max_send(MaxTrigger::Refresh).await {
+                    Ok(Some(_)) => me.finalize_and_go_to_next_screen(),
+
+                    // the user cleared Max meanwhile, so the next Next sends what they entered
+                    Ok(None) => {}
+                    Err(error) => me.report_max_send_error(Err(error)),
+                }
+            });
+            return;
+        }
+
+        let Some(amount_sats) = amount_sats else {
             return self.send_alert(SendFlowError::InvalidNumber);
         };
 
         let amount = Amount::from_sat(amount_sats);
 
-        let Some(address) = self.state.lock().address.clone() else {
-            let invalid_address = self.state.lock().entering_address.clone();
-            return self.send_alert(SendFlowError::InvalidAddress(invalid_address));
+        let Some(address) = address else {
+            return self.send_alert(SendFlowError::InvalidAddress(entering_address));
         };
 
-        let Some(selected_fee_rate) = self.selected_fee_rate() else {
+        let Some(selected_fee_rate) = selected_fee_rate else {
             return self.send_alert(SendFlowError::UnableToGetFeeRate);
         };
 

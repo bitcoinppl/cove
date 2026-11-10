@@ -75,7 +75,7 @@ impl RustSendFlowManager {
             me.get_or_update_fee_rate_options().await;
 
             if is_max_selected {
-                me.select_max_send_report_error().await;
+                me.refresh_max_send_report_error().await;
             }
         });
     }
@@ -209,7 +209,7 @@ impl RustSendFlowManager {
         cove_tokio::task::spawn(async move {
             me.get_or_update_fee_rate_options().await;
             if is_max_selected {
-                me.select_max_send_report_error().await;
+                me.refresh_max_send_report_error().await;
             }
         });
     }

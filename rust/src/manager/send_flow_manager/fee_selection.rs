@@ -12,8 +12,8 @@ use cove_types::{
 };
 
 use super::{
-    Error, Message, Result, RustSendFlowManager, SendFlowError, remote_fee_rate_options,
-    state::EnterMode, state::FeeSelection,
+    DeferredSender, Error, Message, Result, RustSendFlowManager, SendFlowError,
+    remote_fee_rate_options, state::EnterMode, state::FeeSelection,
 };
 
 fn selected_fee_rate_for_options(
@@ -190,18 +190,71 @@ impl RustSendFlowManager {
             &fee_rate_options_with_total_fee,
             selected_fee_rate.as_ref(),
         );
+
         let fee_selection = FeeSelection::new(fee_rate_options_with_total_fee, selected);
-        {
-            let mut state = state.lock();
-            if state.fee_selection.as_ref() != Some(&fee_selection) {
+        self.apply_fee_selection(fee_selection, &mut sender);
+    }
+
+    /// Stores a fee selection and brings along everything derived from the selected rate
+    ///
+    /// Every write of the fee selection goes through here, whether the user picked a rate or a
+    /// refresh replaced the options, so a selected Max always matches the rate it is sent at
+    pub(crate) fn apply_fee_selection(
+        self: &Arc<Self>,
+        selection: FeeSelection,
+        sender: &mut DeferredSender,
+    ) {
+        let selected = selection.selected.clone();
+        let max_is_stale = {
+            let mut state = self.state.lock();
+            if state.fee_selection.as_ref() != Some(&selection) {
                 state.clear_warning_acknowledgements();
             }
-            state.fee_selection = Some(fee_selection.clone());
+
+            state.fee_selection = Some(selection.clone());
+            state.max_is_stale()
+        };
+
+        sender.queue(Message::UpdateFeeSelection(selection));
+
+        // refreshed rates arrive without totals, and coin-control Max and the fee checks need one
+        if selected.total_fee.is_none() {
+            self.schedule_fee_rate_update();
         }
 
         self.reconcile_coin_control_amount_for_selected_fee();
 
-        sender.queue(Message::UpdateFeeSelection(fee_selection));
+        // a Max amount is drained at one rate, so at any other rate it leaves change or overspends;
+        // a totals-only update keeps the rate, so it does not drain again
+        if max_is_stale {
+            let me = self.clone();
+            cove_tokio::task::spawn(async move { me.refresh_max_send_report_error().await });
+        }
+    }
+
+    /// Applies rates just fetched from the fee server, keeping the selected speed
+    pub(crate) fn apply_fetched_fee_rates(self: &Arc<Self>, base_options: FeeRateOptions) {
+        let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
+        let selected = self
+            .selected_fee_rate()
+            .and_then(|selected| match selected.fee_speed {
+                FeeSpeed::Fast => Some(Arc::new(fee_options.fast)),
+                FeeSpeed::Medium => Some(Arc::new(fee_options.medium)),
+                FeeSpeed::Slow => Some(Arc::new(fee_options.slow)),
+                FeeSpeed::Custom { .. } => {
+                    fee_options.get_fee_rate_with(selected.fee_rate.sat_per_vb())
+                }
+            })
+            .unwrap_or_else(|| Arc::new(fee_options.medium));
+
+        let fee_selection = FeeSelection::new(Arc::new(fee_options), selected);
+        self.state.lock().fee_rate_options_base = Some(Arc::new(base_options));
+
+        let mut sender = self.reconciler.deferred_sender();
+        self.apply_fee_selection(fee_selection, &mut sender);
+
+        // set last so Set Amount, which waits on it, opens with the refreshed selection in place
+        self.state.lock().has_base_fees = true;
     }
 
     /// Returns the fee rate options with the updated custom fee

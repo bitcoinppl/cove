@@ -39,7 +39,7 @@ use btc_on_change::BtcOnChangeHandler;
 use cove_common::consts::LOW_SEND_WARNING_SATS;
 use cove_types::{
     amount::Amount,
-    fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee, FeeSpeed},
+    fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
     unit::BitcoinUnit,
     utxo::Utxo,
 };
@@ -341,7 +341,9 @@ impl RustSendFlowManager {
 
                 if is_max_selected {
                     let me = self.clone();
-                    cove_tokio::task::spawn(async move { me.select_max_send_report_error().await });
+                    cove_tokio::task::spawn(
+                        async move { me.refresh_max_send_report_error().await },
+                    );
                     return false;
                 }
 
@@ -480,7 +482,7 @@ impl RustSendFlowManager {
     ) -> Option<String> {
         let prices = self.app.prices()?;
         let selected_currency = self.state.lock().selected_fiat_currency;
-        let max_selected = self.state.lock().max_selected.as_deref().copied();
+        let max_selected = self.state.lock().max_selected.as_ref().map(|max| *max.amount);
 
         let handler = FiatOnChangeHandler::new(prices, selected_currency, max_selected);
         let changed = handler.on_change(old_value, new_value).ok()?.entering_fiat_amount?;
@@ -573,15 +575,8 @@ impl RustSendFlowManager {
 
             Action::ChangeFeeRateOptions(fee_options) => {
                 let selection = self.fee_selection_for_options(fee_options);
-                {
-                    let mut state = self.state.lock();
-                    if state.fee_selection.as_ref() != Some(&selection) {
-                        state.clear_warning_acknowledgements();
-                    }
-                    state.fee_selection = Some(selection.clone());
-                }
-                self.reconcile_coin_control_amount_for_selected_fee();
-                self.reconciler.send(Message::UpdateFeeSelection(selection));
+                let mut sender = self.reconciler.deferred_sender();
+                self.apply_fee_selection(selection, &mut sender);
             }
 
             Action::ChangeEnteringAddress(string) => {
@@ -670,7 +665,7 @@ impl RustSendFlowManager {
             );
         });
 
-        let state = self.state.clone();
+        let me = self.clone();
         cove_tokio::task::spawn(async move {
             let result = (|| crate::fee_client::get_and_update_fees()).retry(
                 ExponentialBuilder::default()
@@ -690,28 +685,8 @@ impl RustSendFlowManager {
             let Some(base_options) = remote_fee_rate_options(fee_response) else {
                 return;
             };
-            let fee_options = FeeRateOptionsWithTotalFee::without_totals(base_options);
-            let previous_selected =
-                state.lock().fee_selection.as_ref().map(|selection| selection.selected.clone());
-            let selected = previous_selected
-                .and_then(|selected| match selected.fee_speed {
-                    FeeSpeed::Fast => Some(Arc::new(fee_options.fast)),
-                    FeeSpeed::Medium => Some(Arc::new(fee_options.medium)),
-                    FeeSpeed::Slow => Some(Arc::new(fee_options.slow)),
-                    FeeSpeed::Custom { .. } => {
-                        fee_options.get_fee_rate_with(selected.fee_rate.sat_per_vb())
-                    }
-                })
-                .unwrap_or_else(|| Arc::new(fee_options.medium));
-            let fee_selection = FeeSelection::new(Arc::new(fee_options), selected);
 
-            let mut state_guard = state.lock();
-            state_guard.fee_rate_options_base = Some(Arc::new(base_options));
-            if state_guard.fee_selection.as_ref() != Some(&fee_selection) {
-                state_guard.clear_warning_acknowledgements();
-            }
-            state_guard.fee_selection = Some(fee_selection);
-            state_guard.has_base_fees = true;
+            me.apply_fetched_fee_rates(base_options);
         });
     }
 
@@ -1840,14 +1815,18 @@ mod tests {
         panic!("Next kept raising warnings after each one was acknowledged");
     }
 
-    /// Fee rates loaded from the fee server, before any total fee is estimated for this send
-    fn set_base_fee_rates(manager: &super::RustSendFlowManager, sat_per_vb: f32) {
-        let base = FeeRateOptions {
+    /// The fee server's rates, with every speed at one rate
+    fn base_fee_rates(sat_per_vb: f32) -> FeeRateOptions {
+        FeeRateOptions {
             fast: FeeRateOption::new(FeeSpeed::Fast, sat_per_vb),
             medium: FeeRateOption::new(FeeSpeed::Medium, sat_per_vb),
             slow: FeeRateOption::new(FeeSpeed::Slow, sat_per_vb),
-        };
+        }
+    }
 
+    /// Fee rates loaded from the fee server, before any total fee is estimated for this send
+    fn set_base_fee_rates(manager: &super::RustSendFlowManager, sat_per_vb: f32) {
+        let base = base_fee_rates(sat_per_vb);
         let options = FeeRateOptionsWithTotalFee::without_totals(base);
         let selected = Arc::new(options.medium);
 
@@ -2038,7 +2017,7 @@ mod tests {
         manager.select_max_send().await.expect("max is selected from the wallet itself");
         let max_sats = {
             let state = manager.state.lock();
-            let max_sats = state.max_selected.as_ref().expect("max is selected").as_sats();
+            let max_sats = state.max_selected.as_ref().expect("max is selected").amount.as_sats();
             assert_eq!(state.amount_sats, Some(max_sats));
             max_sats
         };
@@ -2071,5 +2050,231 @@ mod tests {
         assert_eq!(details.fee_total.as_sats(), 100_000 - max_sats);
         assert_eq!(spent_outpoints(&details).len(), 2);
         assert_eq!(output_values(&details), vec![max_sats]);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn max_follows_refreshed_fee_rates_for_the_same_speed_and_sends_the_full_balance() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let manager = manager_for_spending(&[60_000, 40_000]);
+        clear_routes();
+
+        set_base_fee_rates(&manager, 5.0);
+        manager.state.lock().address = Some(Arc::new(Address::preview_new()));
+        manager.get_wallet_balance().await;
+        manager.get_or_update_fee_rate_options().await;
+
+        manager.select_max_send().await.expect("max is selected at 5 sat/vB");
+        let stale_max_sats =
+            manager.state.lock().max_selected.as_ref().map(|max| max.amount.as_sats());
+        assert_eq!(stale_max_sats, Some(99_112));
+
+        // the fee server now reports 2 sat/vB for the same Medium speed, before Next is tapped
+        manager.apply_fetched_fee_rates(base_fee_rates(2.0));
+
+        // Max drains again at the new rate, then the fee total for that amount follows
+        let deadline =
+            crate::test_support::LoadedHostDeadline::after(std::time::Duration::from_secs(5));
+
+        let max_sats = loop {
+            let settled = {
+                let state = manager.state.lock();
+                let selected = state.fee_selection.as_ref().map(|fee| fee.selected.clone());
+                let max_sats = state.max_selected.as_ref().map(|max| max.amount.as_sats());
+                let fee_sats = selected
+                    .filter(|fee| fee.fee_rate.sat_per_vb() == 2.0)
+                    .and_then(|fee| fee.total_fee)
+                    .map(|fee| fee.as_sats());
+
+                match (max_sats, fee_sats) {
+                    (Some(max_sats), Some(fee_sats))
+                        if state.amount_sats == Some(max_sats)
+                            && max_sats + fee_sats == 100_000 =>
+                    {
+                        Some(max_sats)
+                    }
+                    _ => None,
+                }
+            };
+
+            if let Some(max_sats) = settled {
+                break max_sats;
+            }
+
+            assert!(
+                !deadline.has_passed(),
+                "Max stayed at {:?} after the rate dropped to 2 sat/vB",
+                manager.state.lock().max_selected
+            );
+
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        };
+
+        assert!(max_sats > 99_112, "a lower rate leaves more to send");
+
+        let NextOutcome::Confirm(details) = next_past_warnings(&manager).await else {
+            panic!("Max at the refreshed rate must reach confirm");
+        };
+
+        assert_eq!(details.sending_amount.as_sats(), max_sats);
+        assert_eq!(details.fee_total.as_sats(), 100_000 - max_sats);
+        assert_eq!(spent_outpoints(&details).len(), 2);
+        assert_eq!(output_values(&details), vec![max_sats], "Max sends with no change output");
+    }
+
+    /// Waits for the selected fee rate's total fee to satisfy `accept`, returning it
+    async fn wait_for_selected_total_fee(
+        manager: &super::RustSendFlowManager,
+        accept: impl Fn(u64) -> bool,
+    ) -> u64 {
+        let deadline =
+            crate::test_support::LoadedHostDeadline::after(std::time::Duration::from_secs(5));
+
+        loop {
+            if let Some(fee) = selected_total_fee_sats(manager).filter(|fee| accept(*fee)) {
+                return fee;
+            }
+
+            assert!(
+                !deadline.has_passed(),
+                "the selected fee total stayed at {:?}",
+                selected_total_fee_sats(manager)
+            );
+
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }
+
+    /// Set amount in sats with Max drained at 5 sat/vB over a wallet of 60,000 and 40,000 sats
+    async fn manager_with_max_at_5_sat_per_vb() -> Arc<super::RustSendFlowManager> {
+        let manager = manager_for_spending(&[60_000, 40_000]);
+        clear_routes();
+
+        set_base_fee_rates(&manager, 5.0);
+        {
+            let mut state = manager.state.lock();
+            state.address = Some(Arc::new(Address::preview_new()));
+            state.metadata.selected_unit = super::BitcoinUnit::Sat;
+            state.metadata.fiat_or_btc = super::FiatOrBtc::Btc;
+        }
+
+        manager.get_wallet_balance().await;
+        manager.get_or_update_fee_rate_options().await;
+        manager.select_max_send().await.expect("max is selected at 5 sat/vB");
+        assert_eq!(manager.state.lock().amount_sats, Some(99_112));
+
+        manager
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn next_while_max_trails_a_new_fee_rate_drains_again_and_sends_the_full_balance() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let manager = manager_with_max_at_5_sat_per_vb().await;
+
+        // a 2 sat/vB rate with its total already known lands, and Next is tapped before any
+        // refresh of Max runs; written directly so no refresh starts, with the base rates moved
+        // too so the fee update Max left pending can't bring back 5 sat/vB
+        {
+            let mut options = FeeRateOptionsWithTotalFee::without_totals(base_fee_rates(2.0));
+            options.medium.total_fee = Some(cove_types::amount::Amount::from_sat(355));
+            let selected = Arc::new(options.medium);
+
+            let mut state = manager.state.lock();
+            state.fee_rate_options_base = Some(Arc::new(base_fee_rates(2.0)));
+            state.fee_selection = Some(super::FeeSelection::new(Arc::new(options), selected));
+        }
+
+        let NextOutcome::Confirm(details) = next_past_warnings(&manager).await else {
+            panic!("Max at the new rate must reach confirm");
+        };
+
+        let max_sats = manager.state.lock().max_selected.as_ref().map(|max| max.amount.as_sats());
+        assert_eq!(max_sats, Some(99_645), "Next drained Max again at 2 sat/vB");
+        assert_eq!(details.sending_amount.as_sats(), 99_645);
+        assert_eq!(output_values(&details), vec![99_645], "Max sends with no change output");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn max_drains_that_finish_after_newer_edits_yield_to_them() {
+        use super::{
+            amount_input::{MaxCommit, MaxTrigger},
+            state::MaxSelection,
+        };
+
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let manager = manager_with_max_at_5_sat_per_vb().await;
+        let drain_at_5 = manager.state.lock().max_selected.clone().expect("max is selected");
+
+        // the rate moves to 2 sat/vB while a drain at 5 sat/vB is still being built, so it has
+        // to be built again
+        set_base_fee_rates(&manager, 2.0);
+        assert_eq!(manager.commit_max_drain(MaxTrigger::Refresh, drain_at_5), MaxCommit::Stale);
+        assert_eq!(manager.state.lock().amount_sats, Some(99_112));
+
+        // while the drain at 2 sat/vB is built, the user types more than the old Max, which keeps
+        // Max selected, but less than the new Max of 99,645 sats
+        let drain_at_2 = MaxSelection {
+            amount: Arc::new(cove_types::amount::Amount::from_sat(99_645)),
+            request: manager.state.lock().max_send_request().expect("address and rate are set"),
+        };
+
+        manager.clone().dispatch(super::Action::NotifyEnteringBtcAmountChanged("99500".into()));
+        assert_eq!(manager.state.lock().amount_sats, Some(99_500));
+
+        // the fee update typing schedules runs while Max is still selected, so it prices a drain
+        let drain_fee_sats = wait_for_selected_total_fee(&manager, |_| true).await;
+
+        // the drain lands after the edit, so the typed amount stands and Max is cleared, and a
+        // second late drain finds Max cleared
+        for _ in 0..2 {
+            let commit = manager.commit_max_drain(MaxTrigger::Refresh, drain_at_2.clone());
+            assert_eq!(commit, MaxCommit::Dropped);
+
+            let state = manager.state.lock();
+            assert_eq!((state.amount_sats, state.max_selected.clone()), (Some(99_500), None));
+        }
+
+        // with Max cleared, the typed amount is priced again rather than keeping the drain's fee
+        let fee_sats = wait_for_selected_total_fee(&manager, |fee| fee != drain_fee_sats).await;
+
+        let outcome = next_past_warnings(&manager).await;
+        let NextOutcome::Confirm(details) = outcome else {
+            panic!("the typed amount must reach confirm, got {outcome:?}");
+        };
+
+        assert_eq!(details.sending_amount.as_sats(), 99_500);
+        assert_eq!(details.fee_total.as_sats(), fee_sats, "Next priced what it confirmed");
+    }
+
+    // the fee server override is compiled out of release builds
+    #[cfg(debug_assertions)]
+    #[tokio::test(flavor = "current_thread")]
+    async fn max_picked_before_any_fee_rates_drains_at_the_rate_that_loads() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let node = crate::test_support::fake_node::FakeNode::start(bitcoin::Network::Signet);
+        let manager = manager_for_spending(&[60_000, 40_000]);
+        clear_routes();
+
+        manager.state.lock().address = Some(Arc::new(Address::preview_new()));
+        manager.get_wallet_balance().await;
+        assert!(manager.state.lock().fee_selection.is_none());
+        assert!(manager.state.lock().fee_rate_options_base.is_none());
+
+        // tests hold global_state_test_lock while mutating process environment
+        let url = format!("{}/api/v1/fees/recommended", node.esplora_url());
+        unsafe { std::env::set_var("COVE_FEE_URL", &url) };
+        let selected = manager.select_max_send().await;
+        unsafe { std::env::remove_var("COVE_FEE_URL") };
+        selected.expect("max is selected once fee rates load");
+
+        let state = manager.state.lock();
+        let max = state.max_selected.clone().expect("max is selected");
+        let loaded_rate = state.fee_selection.as_ref().map(|fee| fee.selected.fee_rate);
+
+        // the 50 sat/vB fallback would leave about 91,000 sats
+        assert_eq!(Some(max.request.fee_rate), loaded_rate, "Max drained at the loaded rate");
+        assert!(max.request.fee_rate.sat_per_vb() < 10.0);
+        assert!(max.amount.as_sats() > 98_000, "max is {:?}", max.amount);
+        assert_eq!(state.amount_sats, Some(max.amount.as_sats()));
     }
 }

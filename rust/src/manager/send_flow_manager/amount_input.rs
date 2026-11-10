@@ -1,16 +1,17 @@
 use crate::fiat::FiatCurrency;
 use std::sync::Arc;
 
-use crate::{fiat::client::PriceResponse, transaction::FeeRate, wallet::Address};
+use crate::fiat::client::PriceResponse;
 use act_zero::call;
 use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee, psbt::Psbt, unit::BitcoinUnit};
 use cove_util::format::NumberFormatter as _;
-use tracing::{debug, trace, warn};
+use tracing::{debug, trace};
 
 use super::{
     BtcOnChangeHandler, DeferredSender, Error, FeeSelection, FiatOnChangeHandler, FiatOrBtc,
     Message, Result, RustSendFlowManager, SendFlowError, SetAmountFocusField, State, btc_on_change,
     fiat_on_change,
+    state::{MaxSelection, SendFlowManagerState},
 };
 
 impl RustSendFlowManager {
@@ -99,7 +100,7 @@ impl RustSendFlowManager {
 
         let prices = self.app.prices()?;
         let selected_currency = self.state.lock().selected_fiat_currency;
-        let max_selected = self.state.lock().max_selected.as_deref().copied();
+        let max_selected = self.state.lock().max_selected.as_ref().map(|max| *max.amount);
 
         let handler = FiatOnChangeHandler::new(prices, selected_currency, max_selected);
         let Ok(result) = handler.on_change(&old_value, &new_value) else {
@@ -146,10 +147,7 @@ impl RustSendFlowManager {
     }
 
     fn unset_max_selected(&self, sender: &mut DeferredSender) {
-        let was_max_selected = self.state.lock().max_selected.take().is_some();
-        if was_max_selected {
-            sender.queue(Message::UnsetMaxSelected);
-        }
+        unset_max_selected(&mut self.state.lock(), sender);
     }
 
     pub(crate) fn selected_fee_rate_changed(
@@ -159,24 +157,7 @@ impl RustSendFlowManager {
         debug!("selected_fee_rate_changed: {fee_rate:?}");
         let mut sender = self.reconciler.deferred_sender();
         if let Some(options) = self.fee_rate_options() {
-            let selection = FeeSelection::new(options, fee_rate);
-            {
-                let mut state = self.state.lock();
-                if state.fee_selection.as_ref() != Some(&selection) {
-                    state.clear_warning_acknowledgements();
-                }
-                state.fee_selection = Some(selection.clone());
-            }
-            sender.queue(Message::UpdateFeeSelection(selection));
-        }
-
-        self.reconcile_coin_control_amount_for_selected_fee();
-
-        // max was selected before, so we need to update it to match the new fee rate
-        let max_selected = self.state.lock().max_selected.clone();
-        if max_selected.is_some() {
-            let me = self.clone();
-            cove_tokio::task::spawn(async move { me.select_max_send_report_error().await });
+            self.apply_fee_selection(FeeSelection::new(options, fee_rate), &mut sender);
         }
 
         if self.validate_amount_internal(false) && self.validate_address_internal(false) {
@@ -190,49 +171,9 @@ impl RustSendFlowManager {
         debug!("handle_amount_changed: {amount:?}");
 
         let mut sender = self.reconciler.deferred_sender();
-        let (unit, fiat_or_btc, btc_price_in_fiat) = {
-            let state = self.state.lock();
-
-            let unit = state.metadata.selected_unit;
-            let fiat_or_btc = state.metadata.fiat_or_btc;
-            let btc_price_in_fiat = state.btc_price_in_fiat;
-
-            (unit, fiat_or_btc, btc_price_in_fiat)
-        };
-
-        match fiat_or_btc {
-            FiatOrBtc::Fiat => {
-                if let Some(price) = btc_price_in_fiat {
-                    let currency = self.state.lock().selected_fiat_currency;
-                    let entering_fiat_amount = fiat_entry_text(fiat_value(amount, price), currency);
-                    self.set_and_send_entering_fiat_amount(entering_fiat_amount, &mut sender);
-                }
-            }
-
-            FiatOrBtc::Btc => {
-                self.set_and_send_entering_btc_amount(btc_entry_text(amount, unit), &mut sender);
-            }
-        }
-
-        let old_amount_sats = self.state.lock().amount_sats;
-        let amount_sats = amount.to_sat();
-        {
-            let mut state = self.state.lock();
-            if old_amount_sats != Some(amount_sats) {
-                state.clear_warning_acknowledgements();
-            }
-            state.amount_sats = Some(amount_sats);
-        }
-
-        if old_amount_sats != Some(amount_sats) {
-            sender.queue(Message::UpdateAmountSats(amount_sats));
+        let amount_changed = apply_amount(&mut self.state.lock(), amount, &mut sender);
+        if amount_changed {
             self.schedule_fee_rate_update();
-        }
-
-        if let Some(price) = btc_price_in_fiat {
-            let amount_fiat = fiat_value(amount, price);
-            self.state.lock().amount_fiat = Some(amount_fiat);
-            sender.queue(Message::UpdateAmountFiat(amount_fiat));
         }
     }
 
@@ -305,7 +246,17 @@ impl RustSendFlowManager {
     }
 
     pub(crate) async fn select_max_send_report_error(self: &Arc<Self>) {
-        match self.select_max_send().await {
+        let result = self.select_max_send().await;
+        self.report_max_send_error(result);
+    }
+
+    pub(crate) async fn refresh_max_send_report_error(self: &Arc<Self>) {
+        let result = self.refresh_max_send().await;
+        self.report_max_send_error(result);
+    }
+
+    pub(crate) fn report_max_send_error(&self, result: Result<()>) {
+        match result {
             Ok(()) => {}
             Err(SendFlowError::SendBelowDustLimit) => {
                 self.reconciler.send(Message::SetAlert(SendFlowError::SendBelowDustLimit.into()));
@@ -317,64 +268,14 @@ impl RustSendFlowManager {
         }
     }
 
+    /// Selects Max at the selected fee rate, as when the user taps Max
     pub(crate) async fn select_max_send(self: &Arc<Self>) -> Result<()> {
         debug!("select_max_send");
+        if self.drain_max_send(MaxTrigger::Tap).await?.is_none() {
+            return Ok(());
+        }
+
         let mut sender = self.reconciler.deferred_sender();
-
-        // access the mutex once
-        let (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base) = {
-            let state = self.state.lock();
-
-            let address = state.address.clone();
-            let address_string = &state.entering_address;
-
-            let address = address
-                .map(Arc::unwrap_or_clone)
-                .or_else(|| Address::from_string(address_string, state.metadata.network).ok())
-                .or_else(|| state.first_address.clone().map(Arc::unwrap_or_clone));
-
-            let selected_fee_rate_base = state.fee_rate_options_base.clone();
-            let fee_rate_options =
-                state.fee_selection.as_ref().map(|selection| selection.options.clone());
-            let selected_fee_rate =
-                state.fee_selection.as_ref().map(|selection| selection.selected.clone());
-            let address = address.ok_or(Error::InvalidAddress(address_string.to_string()))?;
-
-            (address, fee_rate_options, selected_fee_rate, selected_fee_rate_base)
-        };
-
-        if fee_rate_options.is_none() {
-            self.get_or_update_fee_rate_options().await;
-        }
-
-        let wallet_actor = self.wallet_actor();
-
-        // use the selected fee rate if we have have
-        // or the medium base fee rate
-        // or a default of 50 sat/vb
-        let fee_rate = selected_fee_rate
-            .map(|selected| selected.fee_rate)
-            .or_else(|| selected_fee_rate_base.map(|base| base.medium.fee_rate));
-
-        if fee_rate.is_none() {
-            warn!("unable to get selected fee rate or base fee rate using default of 50 sat/vb");
-        }
-
-        let fee_rate = fee_rate.unwrap_or_else(|| FeeRate::from_sat_per_vb(50.0));
-        if fee_rate.is_below_minimum() {
-            return Err(SendFlowError::FeeRateBelowMinimum);
-        }
-
-        let psbt: Psbt =
-            call!(wallet_actor.build_ephemeral_drain_tx(address, fee_rate)).await.unwrap()?.into();
-
-        let total = Arc::new(psbt.output_total_amount());
-        trace!("psbt: {psbt:?}, total: {total:?}, fee_rate: {fee_rate:?}");
-
-        self.state.lock().max_selected = Some(total.clone());
-        sender.queue(Message::SetMaxSelected(total.clone()));
-        self.handle_amount_changed(*total);
-
         let address_is_valid = self.state.lock().address.is_some();
         if address_is_valid {
             self.state.lock().focus_field = None;
@@ -385,6 +286,101 @@ impl RustSendFlowManager {
         }
 
         Ok(())
+    }
+
+    /// Drains a selected Max again after its address or fee rate changed
+    ///
+    /// The user did not ask for this, so it leaves focus alone, and it is dropped when the
+    /// user cleared Max, such as by typing an amount, while the drain was being built
+    pub(crate) async fn refresh_max_send(self: &Arc<Self>) -> Result<()> {
+        debug!("refresh_max_send");
+        self.drain_max_send(MaxTrigger::Refresh).await?;
+        Ok(())
+    }
+
+    /// Drains the wallet for Max until a drain still matches the address and fee rate when it
+    /// finishes, and stores it, returning the amount unless a refresh was dropped
+    pub(crate) async fn drain_max_send(
+        self: &Arc<Self>,
+        trigger: MaxTrigger,
+    ) -> Result<Option<Arc<Amount>>> {
+        // load the options first, so Max drains at the rate the selection settles on rather than
+        // a fallback rate read before they arrived
+        let has_fee_selection = self.state.lock().fee_selection.is_some();
+        if !has_fee_selection {
+            self.get_or_update_fee_rate_options().await;
+        }
+
+        let wallet_actor = self.wallet_actor();
+        loop {
+            let request = self.state.lock().max_send_request()?;
+            if request.fee_rate.is_below_minimum() {
+                return Err(SendFlowError::FeeRateBelowMinimum);
+            }
+
+            let drain = call!(
+                wallet_actor.build_ephemeral_drain_tx(request.address.clone(), request.fee_rate)
+            );
+
+            let psbt: Psbt = drain.await.unwrap()?.into();
+            let amount = Arc::new(psbt.output_total_amount());
+            trace!("max drain: {amount:?} at {:?}", request.fee_rate);
+
+            match self.commit_max_drain(trigger, MaxSelection { amount, request }) {
+                MaxCommit::Applied(amount) => return Ok(Some(amount)),
+                MaxCommit::Dropped => return Ok(None),
+
+                // the address or fee rate changed while the drain was built
+                MaxCommit::Stale => continue,
+            }
+        }
+    }
+
+    /// Stores a drained Max with the amount it sets, under one lock, if it still answers the
+    /// current request, so no edit or newer drain can land between the check and the write
+    pub(crate) fn commit_max_drain(
+        self: &Arc<Self>,
+        trigger: MaxTrigger,
+        selection: MaxSelection,
+    ) -> MaxCommit {
+        let mut sender = self.reconciler.deferred_sender();
+        let amount = selection.amount.clone();
+        let (commit, needs_fee_update) = {
+            let mut state = self.state.lock();
+            if trigger == MaxTrigger::Refresh && state.max_selected.is_none() {
+                return MaxCommit::Dropped;
+            }
+
+            if state.max_send_request().ok().as_ref() != Some(&selection.request) {
+                return MaxCommit::Stale;
+            }
+
+            // typing at or above the old Max kept it selected, but the new Max can land above
+            // what was typed, and then the typed amount stands, as if typed after it
+            let typed_sats = state
+                .max_selected
+                .as_ref()
+                .filter(|_| trigger == MaxTrigger::Refresh)
+                .and_then(|max| state.amount_sats.filter(|sats| *sats != max.amount.to_sat()));
+
+            if typed_sats.is_some_and(|sats| sats < selection.amount.to_sat()) {
+                unset_max_selected(&mut state, &mut sender);
+                (MaxCommit::Dropped, true)
+            } else {
+                state.max_selected = Some(selection);
+                sender.queue(Message::SetMaxSelected(amount.clone()));
+                let amount_changed = apply_amount(&mut state, *amount, &mut sender);
+                (MaxCommit::Applied(amount), amount_changed)
+            }
+        };
+
+        // a new amount needs its own fee total, and a Max cleared for a typed amount leaves a
+        // total priced as a drain; replacing the fee task also aborts a drain estimate in flight
+        if needs_fee_update {
+            self.schedule_fee_rate_update();
+        }
+
+        commit
     }
 
     pub(crate) fn handle_selected_unit_changed(
@@ -471,18 +467,9 @@ impl RustSendFlowManager {
     pub(crate) fn set_and_send_entering_btc_amount(
         self: &Arc<Self>,
         new_entering_btc_amount: String,
-        deffered_sender: &mut DeferredSender,
+        deferred_sender: &mut DeferredSender,
     ) {
-        let is_changed = {
-            let mut state = self.state.lock();
-            let current = std::mem::take(&mut state.entering_btc_amount);
-            state.entering_btc_amount = new_entering_btc_amount.clone();
-            current != new_entering_btc_amount
-        };
-
-        if is_changed {
-            deffered_sender.queue(Message::UpdateEnteringBtcAmount(new_entering_btc_amount));
-        }
+        set_entering_btc_amount(&mut self.state.lock(), new_entering_btc_amount, deferred_sender);
     }
 
     pub(crate) fn set_and_send_entering_fiat_amount(
@@ -490,16 +477,98 @@ impl RustSendFlowManager {
         new_entering_fiat_amount: String,
         deferred_sender: &mut DeferredSender,
     ) {
-        let is_changed = {
-            let mut state = self.state.lock();
-            let current = std::mem::take(&mut state.entering_fiat_amount);
-            state.entering_fiat_amount = new_entering_fiat_amount.clone();
-            current != new_entering_fiat_amount
-        };
+        set_entering_fiat_amount(&mut self.state.lock(), new_entering_fiat_amount, deferred_sender);
+    }
+}
 
-        if is_changed {
-            deferred_sender.queue(Message::UpdateEnteringFiatAmount(new_entering_fiat_amount));
+/// Who asked for a Max drain
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MaxTrigger {
+    /// The user tapped Max, so the drain always lands
+    Tap,
+
+    /// The address or fee rate changed under a selected Max, so the drain lands only while Max
+    /// is still selected
+    Refresh,
+}
+
+/// What became of a finished Max drain
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum MaxCommit {
+    /// Stored as the Max amount and the amount to send
+    Applied(Arc<Amount>),
+
+    /// The address or fee rate changed while it was built, so it must be drained again
+    Stale,
+
+    /// A refresh whose Max the user cleared or typed under meanwhile
+    Dropped,
+}
+
+fn unset_max_selected(state: &mut SendFlowManagerState, sender: &mut DeferredSender) {
+    if state.max_selected.take().is_some() {
+        sender.queue(Message::UnsetMaxSelected);
+    }
+}
+
+/// Sets the amount to send and the text and fiat value shown for it, queueing the updates and
+/// returning whether the amount changed
+fn apply_amount(
+    state: &mut SendFlowManagerState,
+    amount: Amount,
+    sender: &mut DeferredSender,
+) -> bool {
+    let btc_price_in_fiat = state.btc_price_in_fiat;
+    match state.metadata.fiat_or_btc {
+        FiatOrBtc::Fiat => {
+            if let Some(price) = btc_price_in_fiat {
+                let text = fiat_entry_text(fiat_value(amount, price), state.selected_fiat_currency);
+                set_entering_fiat_amount(state, text, sender);
+            }
         }
+
+        FiatOrBtc::Btc => {
+            let text = btc_entry_text(amount, state.metadata.selected_unit);
+            set_entering_btc_amount(state, text, sender);
+        }
+    }
+
+    let amount_sats = amount.to_sat();
+    let amount_changed = state.amount_sats != Some(amount_sats);
+    if amount_changed {
+        state.clear_warning_acknowledgements();
+        state.amount_sats = Some(amount_sats);
+        sender.queue(Message::UpdateAmountSats(amount_sats));
+    }
+
+    if let Some(price) = btc_price_in_fiat {
+        let amount_fiat = fiat_value(amount, price);
+        state.amount_fiat = Some(amount_fiat);
+        sender.queue(Message::UpdateAmountFiat(amount_fiat));
+    }
+
+    amount_changed
+}
+
+fn set_entering_btc_amount(
+    state: &mut SendFlowManagerState,
+    entering_btc_amount: String,
+    sender: &mut DeferredSender,
+) {
+    if state.entering_btc_amount != entering_btc_amount {
+        state.entering_btc_amount = entering_btc_amount.clone();
+        sender.queue(Message::UpdateEnteringBtcAmount(entering_btc_amount));
+    }
+}
+
+fn set_entering_fiat_amount(
+    state: &mut SendFlowManagerState,
+    entering_fiat_amount: String,
+    sender: &mut DeferredSender,
+) {
+    if state.entering_fiat_amount != entering_fiat_amount {
+        state.entering_fiat_amount = entering_fiat_amount.clone();
+        sender.queue(Message::UpdateEnteringFiatAmount(entering_fiat_amount));
     }
 }
 

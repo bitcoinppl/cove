@@ -4,11 +4,12 @@ use parking_lot::{Mutex, MutexGuard};
 
 use cove_types::{
     amount::Amount,
-    fees::{FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
+    fees::{FeeRate, FeeRateOptionWithTotalFee, FeeRateOptions, FeeRateOptionsWithTotalFee},
     utxo::UtxoList,
 };
+use tracing::warn;
 
-use super::{SendFlowWarningKind, SetAmountFocusField};
+use super::{SendFlowError, SendFlowWarningKind, SetAmountFocusField};
 use crate::{
     app::App,
     database::Database,
@@ -44,7 +45,7 @@ pub struct SendFlowManagerState {
     pub amount_sats: Option<u64>,
     pub amount_fiat: Option<f64>,
 
-    pub max_selected: Option<Arc<Amount>>,
+    pub max_selected: Option<MaxSelection>,
 
     pub address: Option<Arc<Address>>,
     pub focus_field: Option<SetAmountFocusField>,
@@ -52,6 +53,20 @@ pub struct SendFlowManagerState {
     pub fee_selection: Option<FeeSelection>,
 
     pub payjoin_endpoint: Option<String>,
+}
+
+/// A Max amount and the drain it was built from
+#[derive(Debug, Clone, PartialEq)]
+pub struct MaxSelection {
+    pub amount: Arc<Amount>,
+    pub request: MaxSendRequest,
+}
+
+/// What a Max amount depends on: a drain of the wallet to this address at this fee rate
+#[derive(Debug, Clone, PartialEq)]
+pub struct MaxSendRequest {
+    pub address: Address,
+    pub fee_rate: FeeRate,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, uniffi::Record)]
@@ -154,6 +169,43 @@ impl SendFlowManagerState {
             has_base_fees: false,
             payjoin_endpoint: None,
         }
+    }
+
+    /// The drain a Max amount needs now: the entered address, or the wallet's first address
+    /// before one is entered, at the selected fee rate
+    pub(crate) fn max_send_request(&self) -> Result<MaxSendRequest, SendFlowError> {
+        let address = self
+            .address
+            .as_deref()
+            .cloned()
+            .or_else(|| Address::from_string(&self.entering_address, self.metadata.network).ok())
+            .or_else(|| self.first_address.as_deref().cloned())
+            .ok_or_else(|| SendFlowError::InvalidAddress(self.entering_address.clone()))?;
+
+        // the selected rate, or the medium base rate, or a default of 50 sat/vB
+        let fee_rate = self
+            .fee_selection
+            .as_ref()
+            .map(|selection| selection.selected.fee_rate)
+            .or_else(|| self.fee_rate_options_base.as_ref().map(|base| base.medium.fee_rate))
+            .unwrap_or_else(|| {
+                warn!(
+                    "unable to get selected fee rate or base fee rate using default of 50 sat/vb"
+                );
+                FeeRate::from_sat_per_vb(50.0)
+            });
+
+        Ok(MaxSendRequest { address, fee_rate })
+    }
+
+    /// Whether Max is selected but its amount was drained for another address or fee rate
+    pub(crate) fn max_is_stale(&self) -> bool {
+        let Some(max) = &self.max_selected else {
+            return false;
+        };
+
+        // an address that no longer resolves is for address validation to report
+        self.max_send_request().is_ok_and(|request| request != max.request)
     }
 
     pub(crate) fn acknowledge_warning(&mut self, kind: SendFlowWarningKind) {

@@ -28,7 +28,7 @@ impl BtcOnChangeHandler {
         let state = state.lock();
 
         let metadata = state.metadata.clone();
-        let max_selected = state.max_selected.clone();
+        let max_selected = state.max_selected.as_ref().map(|max| max.amount.clone());
         let btc_price_in_fiat = state.btc_price_in_fiat;
 
         Self { metadata, max_selected, btc_price_in_fiat }
