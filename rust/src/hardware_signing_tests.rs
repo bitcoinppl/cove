@@ -27,10 +27,11 @@ use crate::{
     multi_format::{MultiFormat, StringOrData},
     qr_scanner::{QrScannerFFI, ScanProgress, ScanResult},
     test_support::hardware_signing::{
-        FUNDING_SATS, SIGNER_MNEMONIC, TestSigner, UNRELATED_SIGNER_MNEMONIC, assert_matches_draft,
-        external_address, external_recipient, fund_offline, init_signet_globals,
-        save_hardware_draft,
+        FEE_RATE_SAT_PER_VB, FUNDING_SATS, SEND_SATS, SIGNER_MNEMONIC, TestSigner,
+        UNRELATED_SIGNER_MNEMONIC, assert_matches_draft, external_address, external_recipient,
+        fund_offline, init_signet_globals, save_hardware_draft,
     },
+    transaction::{Amount, FeeRate},
     wallet::{
         Address, Wallet,
         metadata::{WalletId, WalletType},
@@ -433,6 +434,59 @@ async fn a_saved_draft_keeps_its_change_address_across_a_relaunch() {
     );
 
     manager.delete_unsigned_transaction(Arc::new(next.psbt.tx_id())).expect("draft deletes");
+    close_manager(manager).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn deleting_one_of_two_drafts_that_share_change_keeps_it_reserved() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+    // the wallet's node client builds a TLS config when the wallet opens
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let Fixture { manager, recipient, details: first, _restore, .. } =
+        hardware_wallet_with_draft().await;
+
+    let shared_change = change_script(&first, &recipient);
+    let id = manager.id.clone();
+    close_manager(manager).await;
+
+    // recreate what builds before this fix left behind: two saved drafts with one change
+    // address, by hiding the first draft while the second is built after a relaunch
+    let drafts = Database::global().unsigned_transactions();
+    let first_record =
+        drafts.get_tx(&first.psbt.tx_id()).expect("draft reads").expect("first draft is saved");
+    drafts.delete_tx(&first.psbt.tx_id()).expect("first draft hides");
+
+    let manager = reopen_manager(&id).await;
+    let second = manager
+        .confirm_txn(
+            Amount::from_sat(SEND_SATS + 1_000),
+            Arc::new(recipient.clone()),
+            FeeRate::from_sat_per_vb(FEE_RATE_SAT_PER_VB),
+        )
+        .await
+        .expect("second draft builds");
+
+    manager.save_unsigned_transaction(Arc::new(second.clone())).expect("second draft saves");
+    drafts.save_tx(first.psbt.tx_id(), first_record).expect("first draft returns");
+    assert_eq!(change_script(&second, &recipient), shared_change, "the drafts share change");
+    close_manager(manager).await;
+
+    // deleting one of them must leave the shared change address reserved for the other
+    let manager = reopen_manager(&id).await;
+    manager.delete_unsigned_transaction(Arc::new(first.psbt.tx_id())).expect("draft deletes");
+
+    let next = save_hardware_draft(&manager, &recipient).await;
+    assert_ne!(
+        change_script(&next, &recipient),
+        shared_change,
+        "the remaining draft keeps the change address it shares"
+    );
+
+    for draft in [&second, &next] {
+        manager.delete_unsigned_transaction(Arc::new(draft.psbt.tx_id())).expect("draft deletes");
+    }
+
     close_manager(manager).await;
 }
 

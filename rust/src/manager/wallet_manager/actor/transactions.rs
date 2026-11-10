@@ -207,6 +207,10 @@ impl WalletActor {
     // already deleted its record, so the next load does not reserve them again
     pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
         self.wallet.unreserve_tx_change_addresses(&txn);
+
+        // drafts saved before reservations survived a reload can share a change address, and
+        // the release above must not free one that a remaining draft still holds
+        self.wallet.reserve_saved_draft_change_addresses();
     }
 
     /// Delete saved unsigned transactions that the wallet graph shows can no longer be signed
@@ -235,9 +239,10 @@ impl WalletActor {
             self.wallet.unreserve_tx_change_addresses(&record.confirm_details.psbt.0.unsigned_tx);
         }
 
-        // the wallet graph that settles these records is what keeps their change addresses used
-        // once the records are gone, so it must be durable before they are deleted, otherwise
-        // a restart could hand a settled transaction's change address to a new draft
+        // a record settled by its own broadcast keeps its change address used through the wallet
+        // graph once the record is gone, so the graph must be durable before the delete,
+        // otherwise a restart could hand that change address to a new draft. a record settled by
+        // a conflicting spend never used its change address, so releasing it is correct
         if let Err(error) = self.wallet.persist() {
             warn!("failed to persist released change addresses, keeping settled records: {error}");
             return;
@@ -255,6 +260,8 @@ impl WalletActor {
         }
 
         if pruned {
+            // a remaining draft may share a change address with a pruned one
+            self.wallet.reserve_saved_draft_change_addresses();
             self.send(WalletManagerReconcileMessage::UnsignedTransactionsChanged);
         }
     }
