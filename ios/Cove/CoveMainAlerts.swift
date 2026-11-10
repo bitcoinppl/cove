@@ -501,8 +501,13 @@ private struct TapSignerNoBackupActions: View {
     let app: AppManager
 
     var body: some View {
+        // the card refuses a PIN change until it has been backed up, so take the backup here
         Button("Yes") {
-            print("TODO: go to backup screen \(tapSigner)}")
+            app.sheetState = .init(
+                .tapSigner(
+                    .enterPin(tapSigner: tapSigner, action: .backup)
+                )
+            )
         }
 
         Button("Cancel", role: .cancel) {
