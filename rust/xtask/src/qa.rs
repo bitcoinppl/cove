@@ -435,6 +435,7 @@ struct RawRow {
     #[serde(default)]
     pending: Vec<String>,
     pending_pr: Option<u32>,
+    skip: Option<String>,
 }
 
 #[derive(Debug)]
@@ -449,6 +450,9 @@ pub struct Row {
     pub coverage: Vec<Coverage>,
     pub pending: Vec<Coverage>,
     pub pending_pr: Option<u32>,
+    /// Why release passes no longer send an agent or a person to this row, such as a
+    /// developer-only beta feature. Automated tests listed in `coverage` still run
+    pub skip: Option<String>,
 }
 
 impl Row {
@@ -480,6 +484,7 @@ impl Row {
             coverage,
             pending,
             pending_pr: raw.pending_pr,
+            skip: raw.skip,
         })
     }
 
@@ -574,11 +579,17 @@ impl Manifest {
         let mut agent = Vec::new();
         let mut human = Vec::new();
         let mut pending = Vec::new();
+        let mut skipped = Vec::new();
         let mut automated = 0;
 
         let rows =
             self.rows.iter().filter(|row| changed.is_none_or(|changed| row.touches(changed)));
         for row in rows {
+            if let Some(reason) = &row.skip {
+                skipped.push((row, reason));
+                continue;
+            }
+
             let mut agent_platforms = Vec::new();
             let mut human_platforms = Vec::new();
 
@@ -640,6 +651,13 @@ impl Manifest {
         push_group(&mut out, "Agent", &agent);
         push_group(&mut out, "Human", &human);
 
+        if !skipped.is_empty() {
+            out.push_str(&format!("\n## Skipped, do not test ({} rows)\n\n", skipped.len()));
+            for (row, reason) in skipped {
+                out.push_str(&format!("- §{} `{}` {}: {reason}\n", row.section, row.id, row.title));
+            }
+        }
+
         if !pending.is_empty() {
             out.push_str("\n## Covered once open PRs land\n\n");
             for (row, platforms) in pending {
@@ -657,9 +675,13 @@ impl Manifest {
         let mut counts: BTreeMap<(Platform, Layer), usize> = BTreeMap::new();
         let mut targets: BTreeMap<(Platform, &'static str), usize> = BTreeMap::new();
 
+        let mut skipped: BTreeMap<Platform, usize> = BTreeMap::new();
+
         for row in &self.rows {
             for &platform in &row.platforms {
-                if let Some(layer) = row.best_layer(platform) {
+                if row.skip.is_some() {
+                    *skipped.entry(platform).or_default() += 1;
+                } else if let Some(layer) = row.best_layer(platform) {
                     *counts.entry((platform, layer)).or_default() += 1;
                 }
 
@@ -696,7 +718,15 @@ impl Manifest {
         }
 
         out.push_str(&format!("| **automated** | {} | {} |\n", automated[0], automated[1]));
-        out.push_str(&format!("| **total** | {} | {} |\n", totals[0], totals[1]));
+        let [ios_skipped, android_skipped] =
+            Platform::ALL.map(|platform| skipped.get(&platform).copied().unwrap_or(0));
+
+        out.push_str(&format!("| skipped | {ios_skipped} | {android_skipped} |\n"));
+        out.push_str(&format!(
+            "| **total** | {} | {} |\n",
+            totals[0] + ios_skipped,
+            totals[1] + android_skipped
+        ));
 
         out.push_str("\n| Target | iOS | Android |\n|---|---|---|\n");
         for target in ["rust", "ui", "device", "manual"] {
@@ -731,9 +761,28 @@ impl Manifest {
                 report.errors.push(format!("{at} lists no platforms"));
             }
 
-            for &platform in &row.platforms {
-                if row.best_layer(platform).is_none() {
-                    report.errors.push(format!("{at} has no coverage entry for {platform}"));
+            match &row.skip {
+                Some(reason) if reason.trim().is_empty() => {
+                    report.errors.push(format!("{at} skips the row without a reason"));
+                }
+
+                // a skipped row sends no one to it, so an agent or human entry contradicts it
+                Some(_) => {
+                    if row.coverage.iter().any(|coverage| !coverage.layer.is_automated()) {
+                        report.errors.push(format!(
+                            "{at} is skipped but still lists agent or human coverage"
+                        ));
+                    }
+                }
+
+                None => {
+                    for &platform in &row.platforms {
+                        if row.best_layer(platform).is_none() {
+                            report
+                                .errors
+                                .push(format!("{at} has no coverage entry for {platform}"));
+                        }
+                    }
                 }
             }
 

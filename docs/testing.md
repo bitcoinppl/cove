@@ -7,6 +7,7 @@ Cove is tested in layers. Each row of the release checklist is decided by the ch
 - [Layers](#layers)
 - [Hardware signer tests](#hardware-signer-tests)
 - [Planning a release pass](#planning-a-release-pass)
+- [Features left out of release passes](#features-left-out-of-release-passes)
 - [Fixtures](#fixtures)
 - [Hardware signing UI tests](#hardware-signing-ui-tests)
 - [Cloud Backup UI tests](#cloud-backup-ui-tests)
@@ -87,6 +88,12 @@ These Rust tests run the PSBT signing loops that a release pass would otherwise 
 3. **Run the automated layers first.** Green CI and a device-script run on each phone remove rows from the agent's list.
 4. **Hand the agent rows to an agent per phone.** One agent per device at a time; WebDriverAgent serves every client on one session, so two drivers interfere.
 5. **Batch the human rows** into one sitting after the agents finish, with the fixtures ready.
+
+## Features left out of release passes
+
+Manual backup export and import (Settings → Backup) is not tested by hand or by an agent. It is a beta feature mostly for development, hidden behind Beta Features and its own import/export switch, so regular users never see it. Its checklist rows carry `skip` in the manifest, and `just qa-plan` lists them under "Skipped, do not test" instead of assigning them. The Rust tests in `rust/src/backup/` still run in `just test`. Cloud Backup is a separate, user-facing feature and is still tested.
+
+To leave another feature out, give its rows a `skip` reason as described in [qa/README.md](../qa/README.md#row-format).
 
 ## Fixtures
 
