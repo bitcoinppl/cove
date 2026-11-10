@@ -71,28 +71,45 @@ impl HistoricalPriceService {
             .map(|(block_number, _)| *block_number)
             .collect::<Vec<_>>();
 
-        let fetched_prices: HashMap<u32, HistoricalPrice> = stream::iter(blocks_to_fetch)
+        let requested = blocks_to_fetch.len();
+        let fetch_results = stream::iter(blocks_to_fetch)
             .map(|block_number| {
                 let timestamp = *block_number_timestamp
                     .get(&block_number)
                     .expect("bug in creating block_number_timestamp");
 
                 async move {
-                    match self
-                        .get_and_save_price_for_timestamp(network, block_number, timestamp)
+                    self.get_and_save_price_for_timestamp(network, block_number, timestamp)
                         .await
-                    {
-                        Ok(price) => Some((block_number, price)),
-                        Err(_) => None,
-                    }
+                        .map(|price| (block_number, price))
                 }
             })
             .buffer_unordered(4)
             .collect::<Vec<_>>()
-            .await
-            .into_iter()
-            .flatten()
-            .collect();
+            .await;
+
+        let mut fetched_prices: HashMap<u32, HistoricalPrice> = HashMap::default();
+        let mut failed = 0;
+        let mut first_error = None;
+        for result in fetch_results {
+            match result {
+                Ok((block_number, price)) => {
+                    fetched_prices.insert(block_number, price);
+                }
+                Err(error) => {
+                    failed += 1;
+                    first_error.get_or_insert(error);
+                }
+            }
+        }
+
+        // one summary per batch, those transactions show no fiat value until a later load
+        if let Some(error) = first_error {
+            tracing::warn!(
+                "fetched historical prices for {} of {requested} blocks, first error: {error}",
+                requested - failed
+            );
+        }
 
         let txns_with_prices = txns
             .iter()
