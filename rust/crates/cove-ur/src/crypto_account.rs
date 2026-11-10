@@ -154,11 +154,13 @@ impl CryptoAccount {
         let mut bip49: Option<Descriptors> = None;
         let mut bip84: Option<Descriptors> = None;
         let mut bip86: Option<Descriptors> = None;
+        let mut skipped = Vec::new();
 
         for output_desc in &self.output_descriptors {
             // use CryptoOutput to generate descriptor string
             let crypto_output = CryptoOutput { descriptor: output_desc.clone() };
             let Ok(desc_string) = crypto_output.descriptor_string(network) else {
+                skipped.push((&output_desc.script_type, "descriptor string"));
                 continue;
             };
 
@@ -166,6 +168,7 @@ impl CryptoAccount {
             let Ok(Format::Descriptor(descriptors) | Format::KeyExpression(descriptors)) =
                 Format::try_new_from_str(&desc_string)
             else {
+                skipped.push((&output_desc.script_type, "descriptor parse"));
                 continue;
             };
 
@@ -175,6 +178,15 @@ impl CryptoAccount {
                 ScriptType::P2wpkh => bip84 = Some(descriptors),
                 ScriptType::P2tr => bip86 = Some(descriptors),
             }
+        }
+
+        // one summary per account, the descriptor strings themselves are never logged
+        if !skipped.is_empty() {
+            tracing::warn!(
+                "crypto-account skipped {} of {} descriptors: {skipped:?}",
+                skipped.len(),
+                self.output_descriptors.len()
+            );
         }
 
         // require at least one supported descriptor (non-taproot)
@@ -348,6 +360,20 @@ fn decode_hdkey_untagged(cbor: &[u8]) -> Result<CryptoHdkey> {
             expected: expected_len as u64,
             actual: key_data.len() as u64,
         });
+    }
+
+    // optional metadata that fails to decode is dropped, one summary per key names which
+    let dropped = [
+        ("use_info", matches!(use_info, Some(None))),
+        ("origin", matches!(origin, Some(None))),
+        ("children", matches!(children, Some(None))),
+    ]
+    .into_iter()
+    .filter_map(|(field, dropped)| dropped.then_some(field))
+    .collect::<Vec<_>>();
+
+    if !dropped.is_empty() {
+        tracing::warn!("crypto-account hdkey dropped malformed optional fields: {dropped:?}");
     }
 
     Ok(CryptoHdkey {
