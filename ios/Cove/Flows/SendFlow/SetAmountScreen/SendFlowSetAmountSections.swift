@@ -232,7 +232,6 @@ struct SendFlowCoinControlAmountSection: View {
     let sendAmountFiat: String
     let unit: String
     let offset: CGFloat
-    let canEditCustomAmount: Bool
     let showCustomAmount: () -> Void
     let updateUnit: (Unit) -> Void
 
@@ -242,7 +241,6 @@ struct SendFlowCoinControlAmountSection: View {
                 SendFlowCoinControlAmountDisplay(
                     totalSending: totalSending,
                     offset: offset,
-                    canEditCustomAmount: canEditCustomAmount,
                     showCustomAmount: showCustomAmount
                 )
 
@@ -263,7 +261,6 @@ struct SendFlowCoinControlAmountSection: View {
 private struct SendFlowCoinControlAmountDisplay: View {
     let totalSending: String
     let offset: CGFloat
-    let canEditCustomAmount: Bool
     let showCustomAmount: () -> Void
 
     var body: some View {
@@ -277,13 +274,7 @@ private struct SendFlowCoinControlAmountDisplay: View {
             .offset(x: offset)
             .padding(.horizontal, 30)
             .frame(height: UIFont.boldSystemFont(ofSize: 48).lineHeight)
-            .onTapGesture(perform: showCustomAmountIfAvailable)
-    }
-
-    private func showCustomAmountIfAvailable() {
-        guard canEditCustomAmount else { return }
-
-        showCustomAmount()
+            .onTapGesture(perform: showCustomAmount)
     }
 }
 
