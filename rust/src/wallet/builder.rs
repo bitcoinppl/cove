@@ -1364,10 +1364,13 @@ mod tests {
         let descriptor_export =
             crate::wallet::test_support::public_descriptor_export(&mnemonic, Network::Signet);
 
-        for (pasted, wallet_type) in [
+        // a start barrier makes the checks overlap on most runs, not all, so repeat the race
+        let pastes = [
             (BIP49_TESTNET_UPUB.to_string(), WalletType::XpubOnly),
             (descriptor_export, WalletType::Cold),
-        ] {
+        ];
+
+        for (pasted, wallet_type) in pastes.iter().cycle().take(pastes.len() * 4).cloned() {
             // both taps check for a duplicate at the same moment, as two threads would
             let start = std::sync::Barrier::new(2);
             let (first, second) = std::thread::scope(|scope| {
@@ -1383,6 +1386,7 @@ mod tests {
             });
 
             let after = signet_wallet_ids();
+
             for wallet in [&first, &second].into_iter().flatten() {
                 crate::wallet::test_support::remove_wallet(&wallet.id);
             }
