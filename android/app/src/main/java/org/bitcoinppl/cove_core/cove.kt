@@ -51669,9 +51669,12 @@ sealed class MnemonicException: kotlin.Exception() {
             get() = "v1=${ v1 }"
     }
 
+    /**
+     * Carries the word's position, never the word itself
+     */
     class UnknownWord(
 
-        val v1: kotlin.String
+        val v1: kotlin.UInt
         ) : MnemonicException() {
         override val message
             get() = "v1=${ v1 }"
@@ -51712,7 +51715,7 @@ public object FfiConverterTypeMnemonicError : FfiConverterRustBuffer<MnemonicExc
                 FfiConverterTypeWalletId.read(buf),
                 )
             3 -> MnemonicException.UnknownWord(
-                FfiConverterString.read(buf),
+                FfiConverterUInt.read(buf),
                 )
             else -> throw RuntimeException("invalid error enum value, something is very wrong!!")
         }
@@ -51733,7 +51736,7 @@ public object FfiConverterTypeMnemonicError : FfiConverterRustBuffer<MnemonicExc
             is MnemonicException.UnknownWord -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
+                + FfiConverterUInt.allocationSize(value.v1)
             )
         }
     }
@@ -51752,7 +51755,7 @@ public object FfiConverterTypeMnemonicError : FfiConverterRustBuffer<MnemonicExc
             }
             is MnemonicException.UnknownWord -> {
                 buf.putInt(3)
-                FfiConverterString.write(value.v1, buf)
+                FfiConverterUInt.write(value.v1, buf)
                 Unit
             }
         }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
@@ -56443,6 +56446,10 @@ sealed class SendFlowException: kotlin.Exception() {
             get() = ""
     }
 
+    /**
+     * The entered text is kept for the alert but left out of Display, since a mistaken paste
+     * can be a recovery phrase and Display text reaches logs
+     */
     class InvalidAddress(
 
         val v1: kotlin.String
@@ -56892,6 +56899,9 @@ public object FfiConverterTypeSendFlowErrorAlert : FfiConverterRustBuffer<SendFl
 
 sealed class SendFlowFiatOnChangeException: kotlin.Exception() {
 
+    /**
+     * Display leaves out the raw input, which can be pasted text
+     */
     class InvalidFiatAmount(
 
         val `error`: kotlin.String,

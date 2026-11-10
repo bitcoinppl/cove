@@ -396,11 +396,12 @@ private enum SendFlowManagerAccessError: LocalizedError {
     }
 
     func logReconcile(message: Message) {
-        logger.debug("reconcile: \(message)")
+        // log only the case name: messages carry typed amounts and addresses
+        logger.debug("reconcile: \(String(describing: message).prefix { $0 != "(" })")
     }
 
     func logReconcileMany(messages: [Message]) {
-        logger.debug("reconcile_messages: \(messages)")
+        logger.debug("reconcile_messages: \(messages.count) messages")
     }
 
     public func dispatch(action: Action) {
@@ -411,7 +412,8 @@ private enum SendFlowManagerAccessError: LocalizedError {
         rustBridge.async { [weak self] in
             guard let self, let rust = self.rust else { return }
 
-            self.logger.debug("dispatch: \(action)")
+            // log only the case name: actions carry typed or scanned text, which can be a pasted seed
+            self.logger.debug("dispatch: \(String(describing: action).prefix { $0 != "(" })")
             rust.dispatch(action: action)
         }
     }

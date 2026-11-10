@@ -42,8 +42,10 @@ pub enum Field {
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Error {
-    #[error("not a valid url, must start with tapsigner.com or getsatscard.com: {0}")]
-    InvalidUrl(String),
+    /// Carries no input: every scanned or pasted string is tried as a card URL, so it can be a
+    /// recovery phrase
+    #[error("not a valid url, must start with tapsigner.com or getsatscard.com")]
+    InvalidUrl,
 
     #[error("not in encoded url format: {0}")]
     NotUrlEncoded(#[from] serde_urlencoded::de::Error),
@@ -99,7 +101,7 @@ pub fn parse_card(url_encoded: &str) -> Result<TapCard> {
     let url_encoded = url_encoded
         .strip_prefix("tapsigner.com/start#")
         .or_else(|| url_encoded.strip_prefix("getsatscard.com/start#"))
-        .ok_or_else(|| Error::InvalidUrl(url_encoded.to_string()))?;
+        .ok_or(Error::InvalidUrl)?;
 
     // Parse URL-encoded string into a HashMap
     let params: HashMap<&str, &str> = serde_urlencoded::from_str(url_encoded)?;
@@ -417,7 +419,7 @@ mod tests {
     #[test]
     fn test_parse_rejects_unknown_host() {
         let url = format!("https://example.com/start#{SATSCARD_SEALED_FRAGMENT}");
-        assert!(matches!(TapCard::parse(&url).unwrap_err(), Error::InvalidUrl(_)));
+        assert!(matches!(TapCard::parse(&url).unwrap_err(), Error::InvalidUrl));
     }
 
     #[test]

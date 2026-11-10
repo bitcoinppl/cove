@@ -33,7 +33,7 @@ class PendingWalletManager(
             handleName = "RustPendingWalletManager",
             isClosed = isClosed,
         ) {
-            android.util.Log.w(tag, it)
+            Log.w(tag, it)
         }
 
     private val rust: RustPendingWalletManager = RustPendingWalletManager(numberOfWords)
@@ -51,7 +51,7 @@ class PendingWalletManager(
     }
 
     private fun logDebug(message: String) {
-        android.util.Log.d(tag, message)
+        Log.d(tag, message)
     }
 
     private fun <T> withRust(

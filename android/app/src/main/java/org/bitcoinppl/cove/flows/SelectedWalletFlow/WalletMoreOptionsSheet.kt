@@ -45,6 +45,7 @@ import org.bitcoinppl.cove_core.Route
 import org.bitcoinppl.cove_core.SettingsRoute
 import org.bitcoinppl.cove_core.TapSignerRoute
 import org.bitcoinppl.cove_core.WalletSettingsRoute
+import org.bitcoinppl.cove.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -215,7 +216,7 @@ fun WalletMoreOptionsSheet(
                                 app.sheetState = TaggedItem(AppSheetState.TapSigner(route))
                             }
                         } catch (e: Exception) {
-                            android.util.Log.e("WalletMoreOptions", "Failed to retrieve tap signer backup", e)
+                            Log.e("WalletMoreOptions", "Failed to retrieve tap signer backup", e)
                             app.alertState = TaggedItem(
                                 AppAlertState.General(
                                     title = "Error",

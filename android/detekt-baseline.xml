@@ -897,7 +897,6 @@
     <ID>MaxLineLength:AboutSettingsScreen.kt:Text(&quot;Clears local keychain and DB backup state but keeps Google Drive files intact. Use this to test the recovery flow.&quot;)</ID>
     <ID>MaxLineLength:AboutSettingsScreen.kt:text = { Text(if (currentlyEnabled) &quot;This will hide experimental features&quot; else &quot;This will enable experimental features&quot;) }</ID>
     <ID>MaxLineLength:AndroidCloudStorageAccessTest.kt:AndroidCloudStorageAccessTest.RecordingDriveAuthorization$var account: DriveAccountIdentity? = DriveAccountIdentity(googleAccountId = &quot;account-1&quot;, email = &quot;person@example.com&quot;)</ID>
-    <ID>MaxLineLength:BackupExportScreen.kt:android.util.Log.w(&quot;BackupExport&quot;, &quot;Failed to save to password manager: ${e.type}: ${e.message}&quot;)</ID>
     <ID>MaxLineLength:BackupExportScreen.kt:infoMessage = &quot;Unable to save to password manager. Make sure a password manager is set up on your device. Password has been copied to your clipboard.&quot;</ID>
     <ID>MaxLineLength:BackupExportScreen.kt:text = { Text(&quot;Save the backup password to your password manager so you can retrieve it later during import.&quot;) }</ID>
     <ID>MaxLineLength:BackupExportScreen.kt:text = { Text(&quot;This backup will contain all your wallet private keys. Make sure you keep the file and password secure.&quot;) }</ID>
@@ -938,7 +937,6 @@
     <ID>MaxLineLength:CoinControlContainer.kt:message = &quot;The wallet could not be opened for coin control. Please try again from the wallet screen.&quot;</ID>
     <ID>MaxLineLength:CoinControlSetAmountScreen.kt:AsyncText(text = feeAmount, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)</ID>
     <ID>MaxLineLength:CoveApplication.kt:CoveApplication$Log.d(TAG, &quot;[LIFECYCLE] &lt; ${AUTO_UNLOCK_THRESHOLD_PIN_ONLY}s since lock (PIN only, no decoy), auto-unlocking&quot;)</ID>
-    <ID>MaxLineLength:CustomFeeRateSheet.kt:android.util.Log.e(&quot;CustomFeeRateSheet&quot;, &quot;Unexpected error calculating fee: ${e.javaClass.simpleName} - ${e.message}&quot;, e)</ID>
     <ID>MaxLineLength:CustomFeeRateSheet.kt:message = &quot;The fee rate you entered is too high, we automatically selected a lower fee&quot;</ID>
     <ID>MaxLineLength:CustomFeeRateSheet.kt:val computed = presenter.erroredFeeRate?.let { minOf(it + CustomFeeRateConstants.FEE_RATE_EPSILON, fast3) } ?: fast3</ID>
     <ID>MaxLineLength:DisableCloudBackupSection.kt:&quot;Disabling Cloud Backup will permanently delete your current Cove cloud backups from cloud storage. Wallets already on this device will stay on this device, but they will no longer be backed up to cloud storage.&quot;</ID>
@@ -1000,7 +998,6 @@
     <ID>MaxLineLength:ReceiveAddressSheet.kt:Text(&quot;This address has already received funds. For better privacy, create a new address before sharing.&quot;)</ID>
     <ID>MaxLineLength:RouterManager.kt:RouteHelpers$fun</ID>
     <ID>MaxLineLength:SecretWordsScreen.kt:&quot;Your seed words are sensitive and control access to your Bitcoin. QR codes are machine-readable, so be careful who or what device you show this to.&quot;</ID>
-    <ID>MaxLineLength:SelectedWalletContainer.kt:android.util.Log.d(&quot;SelectedWalletContainer&quot;, &quot;canGoBack=$canGoBack, routes=${app.router.routes.size}, default=${app.router.default}&quot;)</ID>
     <ID>MaxLineLength:SelectedWalletScreen.kt:onToggleSensitive = { manager.dispatch(WalletManagerAction.ToggleSensitiveVisibility) }</ID>
     <ID>MaxLineLength:SelectedWalletScreen.kt:onToggleUnit = { manager.dispatch(WalletManagerAction.ToggleFiatBtcPrimarySecondary) }</ID>
     <ID>MaxLineLength:SendFlowContainer.kt:message = &quot;The wallet could not be opened for sending. Please try again from the wallet screen.&quot;</ID>
@@ -1032,7 +1029,6 @@
     <ID>MaxLineLength:WalletBalanceHeaderView.kt:contentColor = if (receiveUnavailable) CoveColor.midnightBlue.copy(alpha = 0.6f) else CoveColor.midnightBlue</ID>
     <ID>MaxLineLength:WalletBalanceHeaderView.kt:contentColor = if (sendUnavailable) CoveColor.midnightBlue.copy(alpha = 0.6f) else CoveColor.midnightBlue</ID>
     <ID>MaxLineLength:WalletManager.kt:WalletManager$var</ID>
-    <ID>MaxLineLength:WalletSettingsContainer.kt:android.util.Log.e(tag, &quot;failed to leave wallet settings after recovery failure&quot;, result.navigationError)</ID>
     <ID>MaxLineLength:WalletSettingsScreen.kt:if</ID>
     <ID>MaxLineLength:WalletSheets.kt:snackbarHostState.showSnackbar(&quot;Unable to share labels: ${e.localizedMessage ?: e.message}&quot;)</ID>
     <ID>MaxLineLength:WalletSheets.kt:snackbarHostState.showSnackbar(&quot;Unable to share transactions: ${e.localizedMessage ?: e.message}&quot;)</ID>

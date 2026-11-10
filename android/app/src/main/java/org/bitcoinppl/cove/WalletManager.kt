@@ -291,7 +291,7 @@ class WalletManager :
         operator fun invoke(id: WalletId): WalletManager {
             val bootstrap = Bootstrap.create(id)
             val manager = bootstrap.install()
-            android.util.Log.d("WalletManager", "Initialized WalletManager for $id")
+            Log.d("WalletManager", "Initialized WalletManager for $id")
             return manager
         }
 
@@ -306,7 +306,7 @@ class WalletManager :
                     pendingBootstrap =
                         withContext(NonCancellable + rustDispatcher) {
                             val bootstrap = Bootstrap.create(id)
-                            android.util.Log.d(
+                            Log.d(
                                 "WalletManager",
                                 "Initialized WalletManager for $id",
                             )
@@ -353,7 +353,7 @@ class WalletManager :
                     birthday,
                 )
             val initialState = rust.initialState()
-            android.util.Log.d("WalletManager", "Initialized WalletManager from TapSigner")
+            Log.d("WalletManager", "Initialized WalletManager from TapSigner")
             return WalletManager(initialState.metadata.id, rust, initialState)
         }
 
@@ -365,14 +365,14 @@ class WalletManager :
     }
 
     private fun logDebug(message: String) {
-        android.util.Log.d(tag, message)
+        Log.d(tag, message)
     }
 
     private fun logError(message: String, throwable: Throwable? = null) {
         if (throwable != null) {
-            android.util.Log.e(tag, message, throwable)
+            Log.e(tag, message, throwable)
         } else {
-            android.util.Log.e(tag, message)
+            Log.e(tag, message)
         }
     }
 
@@ -382,7 +382,7 @@ class WalletManager :
             handleName = "RustWalletManager",
             isClosed = isClosed,
         ) {
-            android.util.Log.w(tag, it)
+            Log.w(tag, it)
         }
 
     private fun <T> withRust(

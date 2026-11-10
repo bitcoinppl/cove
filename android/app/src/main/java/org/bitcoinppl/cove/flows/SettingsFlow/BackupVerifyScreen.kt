@@ -85,6 +85,7 @@ import org.bitcoinppl.cove_core.WalletType
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import org.bitcoinppl.cove.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -237,7 +238,7 @@ fun BackupVerifyScreen(
                                 } catch (e: androidx.credentials.exceptions.NoCredentialException) {
                                     infoMessage = "No saved passwords found"
                                 } catch (e: GetCredentialException) {
-                                    android.util.Log.w("BackupVerify", "Password retrieval failed: ${e.message}")
+                                    Log.w("BackupVerify", "Password retrieval failed: ${e.message}")
                                 }
                             }
                         },

@@ -758,10 +758,10 @@ impl WalletActor {
             return Err(Error::PsbtFinalizeError("Failed to finalize PSBT".to_string()));
         }
 
-        let tx = psbt.extract_tx().map_err(|e| {
-            let err = format!("Failed to extract tx from PSBT: {e:?}");
-            Error::PsbtFinalizeError(err)
-        })?;
+        // use Display, since the Debug form embeds the whole PSBT or transaction
+        let tx = psbt
+            .extract_tx()
+            .map_err_prefix("Failed to extract tx from PSBT", Error::PsbtFinalizeError)?;
 
         Ok(tx)
     }

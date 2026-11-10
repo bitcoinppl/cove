@@ -16,6 +16,7 @@ import org.bitcoinppl.cove.components.FullPageLoadingView
 import org.bitcoinppl.cove_core.HotWalletRoute
 import org.bitcoinppl.cove_core.ImportType
 import org.bitcoinppl.cove_core.NumberOfBip39Words
+import org.bitcoinppl.cove.Log
 
 /**
  * New hot wallet container - routes to hot wallet flow screens
@@ -79,7 +80,7 @@ private fun PendingWalletContainer(
             manager?.close()
             manager = newManager
         } catch (e: Exception) {
-            android.util.Log.e("PendingWalletContainer", "failed to init pending manager", e)
+            Log.e("PendingWalletContainer", "failed to init pending manager", e)
         } finally {
             loading = false
         }
@@ -127,7 +128,7 @@ private fun ImportWalletContainer(
             manager?.close()
             manager = newManager
         } catch (e: Exception) {
-            android.util.Log.e("ImportWalletContainer", "failed to init import manager", e)
+            Log.e("ImportWalletContainer", "failed to init import manager", e)
         } finally {
             loading = false
         }

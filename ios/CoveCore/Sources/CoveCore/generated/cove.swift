@@ -32347,7 +32347,10 @@ enum MnemonicError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
     )
     case NotAvailable(WalletId
     )
-    case UnknownWord(String
+    /**
+     * Carries the word's position, never the word itself
+     */
+    case UnknownWord(UInt32
     )
 
 
@@ -32396,7 +32399,7 @@ public struct FfiConverterTypeMnemonicError: FfiConverterRustBuffer {
             try FfiConverterTypeWalletId.read(from: &buf)
             )
         case 3: return .UnknownWord(
-            try FfiConverterString.read(from: &buf)
+            try FfiConverterUInt32.read(from: &buf)
             )
 
          default: throw UniffiInternalError.unexpectedEnumCase
@@ -32422,7 +32425,7 @@ public struct FfiConverterTypeMnemonicError: FfiConverterRustBuffer {
 
         case let .UnknownWord(v1):
             writeInt(&buf, Int32(3))
-            FfiConverterString.write(v1, into: &buf)
+            FfiConverterUInt32.write(v1, into: &buf)
 
         }
     }
@@ -36276,6 +36279,10 @@ enum SendFlowError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError 
 
     case EmptyAddress
     case InvalidNumber
+    /**
+     * The entered text is kept for the alert but left out of Display, since a mistaken paste
+     * can be a recovery phrase and Display text reaches logs
+     */
     case InvalidAddress(String
     )
     case WrongNetwork(address: String, validFor: Network, current: Network
@@ -36573,6 +36580,9 @@ enum SendFlowFiatOnChangeError: Swift.Error, Equatable, Hashable, Foundation.Loc
 
 
 
+    /**
+     * Display leaves out the raw input, which can be pasted text
+     */
     case InvalidFiatAmount(error: String, input: String
     )
     case Converter(ConverterError

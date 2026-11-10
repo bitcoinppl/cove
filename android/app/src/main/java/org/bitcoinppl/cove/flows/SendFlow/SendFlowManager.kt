@@ -18,6 +18,7 @@ import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.types.*
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
+import org.bitcoinppl.cove.Log
 
 /**
  * send flow manager - manages send transaction flow state
@@ -107,11 +108,11 @@ class SendFlowManager internal constructor(
     }
 
     private fun logDebug(message: String) {
-        android.util.Log.d(tag, message)
+        Log.d(tag, message)
     }
 
     private fun logWarn(message: String) {
-        android.util.Log.w(tag, message)
+        Log.w(tag, message)
     }
 
     private suspend fun <T> withRustSuspend(
@@ -355,7 +356,8 @@ class SendFlowManager internal constructor(
     }
 
     override fun reconcile(message: SendFlowManagerReconcileMessage) {
-        logDebug("reconcile: $message")
+        // log only the kind: messages carry typed amounts and addresses
+        logDebug("reconcile: ${message::class.simpleName}")
         mainScope.launch { apply(message) }
     }
 
@@ -366,7 +368,9 @@ class SendFlowManager internal constructor(
 
     fun dispatch(action: SendFlowManagerAction) {
         if (isClosed.get()) return
-        logDebug("dispatch: $action")
+
+        // log only the kind: actions carry typed or scanned text, which can be a pasted seed
+        logDebug("dispatch: ${action::class.simpleName}")
         mainScope.launch {
             withRustOr(Unit) {
                 dispatch(action)

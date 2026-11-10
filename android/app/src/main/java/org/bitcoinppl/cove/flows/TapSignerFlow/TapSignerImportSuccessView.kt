@@ -37,6 +37,7 @@ import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove_core.types.WalletId
+import org.bitcoinppl.cove.Log
 
 private suspend fun persistWallet(
     tapSigner: org.bitcoinppl.cove_core.tapcard.TapSigner,
@@ -72,7 +73,7 @@ fun TapSignerImportSuccessView(
         try {
             walletId = persistWallet(tapSigner, deriveInfo)
         } catch (e: Exception) {
-            android.util.Log.e("TapSignerImportSuccess", "Failed to save TapSigner wallet")
+            Log.e("TapSignerImportSuccess", "Failed to save TapSigner wallet")
             error = "Failed to save wallet"
         } finally {
             saving = false
@@ -156,7 +157,7 @@ fun TapSignerImportSuccessView(
                                 try {
                                     walletId = persistWallet(tapSigner, deriveInfo)
                                 } catch (e: Exception) {
-                                    android.util.Log.e(
+                                    Log.e(
                                         "TapSignerImportSuccess",
                                         "Failed to save TapSigner wallet",
                                     )

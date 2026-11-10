@@ -234,14 +234,18 @@ class NfcReader(
                                     Charset.forName(textEncoding),
                                 )
                             textContent = text
-                            Log.d("NfcReader", "Found text: $text")
+
+                            // only the length, since a tag's text can be a key or a recovery phrase
+                            Log.d("NfcReader", "Found text record, ${text.length} characters")
                         }
                         // URI record (type "U") - used by ColdCard PushTx
                         "U" -> {
                             val uri = record.toUri()?.toString()
                             if (uri != null) {
                                 textContent = uri
-                                Log.d("NfcReader", "Found URI: $uri")
+
+                                // only the length, since a PushTx URI carries the signed transaction
+                                Log.d("NfcReader", "Found URI, ${uri.length} characters")
                             }
                         }
                         else -> {
@@ -250,7 +254,7 @@ class NfcReader(
                                 val text = String(payload, Charsets.UTF_8)
                                 if (text.isNotBlank()) {
                                     textContent = text
-                                    Log.d("NfcReader", "Found raw text: $text")
+                                    Log.d("NfcReader", "Found raw text, ${text.length} characters")
                                 }
                             } catch (e: Exception) {
                                 Log.d("NfcReader", "Not text, storing as binary")
@@ -264,7 +268,7 @@ class NfcReader(
                         val text = String(payload, Charsets.UTF_8)
                         if (text.isNotBlank()) {
                             textContent = text
-                            Log.d("NfcReader", "Found raw text: $text")
+                            Log.d("NfcReader", "Found raw text, ${text.length} characters")
                         }
                     } catch (e: Exception) {
                         Log.d("NfcReader", "Not text, storing as binary")

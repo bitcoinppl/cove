@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import org.bitcoinppl.cove.AppManager
 import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove_core.types.WalletId
+import org.bitcoinppl.cove.Log
 
 /**
  * setup success screen
@@ -58,7 +59,7 @@ fun TapSignerSetupSuccessView(
                     walletId = walletManager.id
                 }
         } catch (e: Exception) {
-            android.util.Log.e("TapSignerSetupSuccess", "Failed to save TapSigner wallet")
+            Log.e("TapSignerSetupSuccess", "Failed to save TapSigner wallet")
         }
     }
 

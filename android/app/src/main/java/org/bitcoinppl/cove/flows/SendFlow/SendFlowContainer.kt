@@ -36,6 +36,7 @@ import org.bitcoinppl.cove.views.lockaware.ModalBottomSheet
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.types.*
+import org.bitcoinppl.cove.Log
 
 /** UI state for tracking send transaction progress */
 sealed interface SendState {
@@ -74,7 +75,7 @@ fun SendFlowContainer(
     // initialize managers on appear
     LaunchedEffect(sendRoute) {
         try {
-            android.util.Log.d(tag, "getting wallet for SendRoute $walletId")
+            Log.d(tag, "getting wallet for SendRoute $walletId")
 
             val wm = app.getWalletManagerLoaded(walletId)
             val presenter = SendFlowPresenter(app, wm)
@@ -100,18 +101,18 @@ fun SendFlowContainer(
                 initCompleted = true
             }
         } catch (e: WalletManagerException.InitialScanIncomplete) {
-            android.util.Log.e(tag, "initial scan incomplete", e)
+            Log.e(tag, "initial scan incomplete", e)
             app.showInitialScanIncompleteAlert()
             app.popRoute()
         } catch (e: WalletManagerException.DatabaseCorruption) {
-            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
+            Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
             app.alertState =
                 TaggedItem(
                     AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`, error = e.`error`),
                 )
             app.popRoute()
         } catch (e: WalletManagerException.WalletDoesNotExist) {
-            android.util.Log.e(tag, "wallet does not exist for SendRoute $walletId", e)
+            Log.e(tag, "wallet does not exist for SendRoute $walletId", e)
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(
@@ -121,7 +122,7 @@ fun SendFlowContainer(
                 )
             app.trySelectLatestOrNewWallet()
         } catch (e: WalletManagerException) {
-            android.util.Log.e(tag, "unable to open wallet for send flow", e)
+            Log.e(tag, "unable to open wallet for send flow", e)
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(
@@ -131,7 +132,7 @@ fun SendFlowContainer(
                 )
             app.popRoute()
         } catch (e: Exception) {
-            android.util.Log.e(tag, "unable to initialize send flow", e)
+            Log.e(tag, "unable to initialize send flow", e)
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(

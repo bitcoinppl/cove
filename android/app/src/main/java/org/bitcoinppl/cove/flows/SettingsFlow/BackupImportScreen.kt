@@ -76,6 +76,7 @@ import org.bitcoinppl.cove_core.BackupImportReport
 import org.bitcoinppl.cove_core.BackupImportPreparation
 import org.bitcoinppl.cove_core.BackupManager
 import org.bitcoinppl.cove_core.BackupVerifyReport
+import org.bitcoinppl.cove.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -430,7 +431,7 @@ fun BackupImportScreen(
                                 } catch (e: androidx.credentials.exceptions.NoCredentialException) {
                                     infoMessage = "No saved passwords found"
                                 } catch (e: GetCredentialException) {
-                                    android.util.Log.w("BackupImport", "Password retrieval failed: ${e.message}")
+                                    Log.w("BackupImport", "Password retrieval failed: ${e.message}")
                                 }
                             }
                         },

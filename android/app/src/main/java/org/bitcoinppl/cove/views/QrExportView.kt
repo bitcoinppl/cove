@@ -66,6 +66,7 @@ import org.bitcoinppl.cove.QrCodeGenerator
 import org.bitcoinppl.cove_core.types.ConfirmDetails
 import org.bitcoinppl.cove_core.types.QrDensity
 import org.bitcoinppl.cove_core.types.QrExportFormat
+import org.bitcoinppl.cove.Log
 
 /**
  * Generic QR export view that can display animated BBQr or UR QR codes.
@@ -151,7 +152,7 @@ fun QrExportView(
                                 clipboard.setPrimaryClip(ClipData.newPlainText("QR Data", data))
                                 Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                             } catch (e: Exception) {
-                                android.util.Log.e("QrExportView", "Failed to copy data", e)
+                                Log.e("QrExportView", "Failed to copy data", e)
                             }
                         }
                     },

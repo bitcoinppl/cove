@@ -9,7 +9,8 @@ impl RustSendFlowManager {
     /// Called when the user types or pastes into the address field.
     /// Handles plain addresses and full bitcoin: URIs (extracts amount if present).
     pub(crate) fn handle_entering_address_changed(self: &Arc<Self>, address: String) {
-        debug!("handle_entering_address_changed: {address}");
+        // only the length, since a mistaken paste can be a recovery phrase
+        debug!("handle_entering_address_changed: {} chars", address.len());
 
         let mut sender = self.reconciler.deferred_sender();
 
@@ -130,7 +131,7 @@ impl RustSendFlowManager {
         _old_value: String,
         new_value: String,
     ) {
-        debug!("handle_scan_code_changed {new_value}");
+        debug!("handle_scan_code_changed: {} chars", new_value.len());
         let mut sender = self.reconciler.deferred_sender();
 
         let network = self.state.lock().metadata.network;

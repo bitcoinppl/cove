@@ -921,7 +921,7 @@ fn restore_settings(settings: &super::model::AppSettings) -> Result<(), BackupEr
 
     for (network_str, node_json) in &settings.selected_nodes {
         let Ok(network) = Network::try_from(network_str.as_str()) else {
-            warn!("skipping unknown network in selected_nodes: {network_str}");
+            warn!("skipping unknown network in selected_nodes, {} chars", network_str.len());
             continue;
         };
 
@@ -952,7 +952,10 @@ fn restore_custom_block_explorers(
 
     for (network_str, template) in custom_block_explorers {
         let Ok(network) = Network::try_from(network_str.as_str()) else {
-            warn!("skipping unknown network in custom_block_explorers: {network_str}");
+            warn!(
+                "skipping unknown network in custom_block_explorers, {} chars",
+                network_str.len()
+            );
             continue;
         };
 

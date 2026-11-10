@@ -1636,11 +1636,9 @@ public object FfiConverterTypeTapCard : FfiConverterRustBuffer<TapCard>{
 sealed class TapCardParseException: kotlin.Exception() {
 
     class InvalidUrl(
-
-        val v1: kotlin.String
         ) : TapCardParseException() {
         override val message
-            get() = "v1=${ v1 }"
+            get() = ""
     }
 
     class NotUrlEncoded(
@@ -1714,9 +1712,7 @@ public object FfiConverterTypeTapCardParseError : FfiConverterRustBuffer<TapCard
 
 
         return when(buf.getInt()) {
-            1 -> TapCardParseException.InvalidUrl(
-                FfiConverterString.read(buf),
-                )
+            1 -> TapCardParseException.InvalidUrl()
             2 -> TapCardParseException.NotUrlEncoded(
                 FfiConverterString.read(buf),
                 )
@@ -1743,7 +1739,6 @@ public object FfiConverterTypeTapCardParseError : FfiConverterRustBuffer<TapCard
             is TapCardParseException.InvalidUrl -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
                 4UL
-                + FfiConverterString.allocationSize(value.v1)
             )
             is TapCardParseException.NotUrlEncoded -> (
                 // Add the size for the Int that specifies the variant plus the size needed for all fields
@@ -1785,7 +1780,6 @@ public object FfiConverterTypeTapCardParseError : FfiConverterRustBuffer<TapCard
         when(value) {
             is TapCardParseException.InvalidUrl -> {
                 buf.putInt(1)
-                FfiConverterString.write(value.v1, buf)
                 Unit
             }
             is TapCardParseException.NotUrlEncoded -> {

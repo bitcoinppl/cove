@@ -10,6 +10,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import org.bitcoinppl.cove.nfc.TapCardNfcManager
 import java.util.UUID
+import org.bitcoinppl.cove.Log
 
 /**
  * manages TapSigner flow navigation and state
@@ -58,7 +59,7 @@ class TapSignerManager(
             return
         }
 
-        android.util.Log.d(
+        Log.d(
             tag,
             "Navigating to ${routeKind(to)}, current path count: ${path.size}",
         )

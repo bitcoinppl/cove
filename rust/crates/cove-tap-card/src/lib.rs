@@ -76,8 +76,8 @@ impl TapSigner {
 // For uniffi
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq, uniffi::Error)]
 pub enum TapCardParseError {
-    #[error("not a valid url: {0}")]
-    InvalidUrl(String),
+    #[error("not a valid url")]
+    InvalidUrl,
 
     #[error("not in encoded url format: {0}")]
     NotUrlEncoded(String),
@@ -105,7 +105,7 @@ impl From<parse::Error> for TapCardParseError {
     fn from(error: parse::Error) -> Self {
         use parse::Error;
         match error {
-            Error::InvalidUrl(error) => Self::InvalidUrl(error),
+            Error::InvalidUrl => Self::InvalidUrl,
             Error::NotUrlEncoded(error) => Self::NotUrlEncoded(error.to_string()),
             Error::MissingField(field) => Self::MissingField(field),
             Error::UnknownCardState(state) => Self::UnknownCardState(state.to_string()),

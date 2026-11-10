@@ -19,6 +19,7 @@ import org.bitcoinppl.cove.WalletManager
 import org.bitcoinppl.cove_core.*
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.types.*
+import org.bitcoinppl.cove.Log
 
 /**
  * coin control container - manages WalletManager + CoinControlManager lifecycle
@@ -43,7 +44,7 @@ fun CoinControlContainer(
     // async initialize managers
     LaunchedEffect(walletId) {
         try {
-            android.util.Log.d(tag, "getting wallet for CoinControlRoute $walletId")
+            Log.d(tag, "getting wallet for CoinControlRoute $walletId")
 
             val wm = app.getWalletManagerLoaded(walletId)
             val ccm = wm.newCoinControlManager()
@@ -52,18 +53,18 @@ fun CoinControlContainer(
             manager = ccm
             app.setCoinControlManager(ccm)
         } catch (e: WalletManagerException.InitialScanIncomplete) {
-            android.util.Log.e(tag, "initial scan incomplete", e)
+            Log.e(tag, "initial scan incomplete", e)
             app.showInitialScanIncompleteAlert()
             app.popRoute()
         } catch (e: WalletManagerException.DatabaseCorruption) {
-            android.util.Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
+            Log.e(tag, "wallet database corrupted for ${e.`id`}: ${e.`error`}", e)
             app.alertState =
                 TaggedItem(
                     AppAlertState.WalletDatabaseCorrupted(walletId = e.`id`, error = e.`error`),
                 )
             app.popRoute()
         } catch (e: WalletManagerException.WalletDoesNotExist) {
-            android.util.Log.e(tag, "wallet does not exist for CoinControlRoute $walletId", e)
+            Log.e(tag, "wallet does not exist for CoinControlRoute $walletId", e)
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(
@@ -73,7 +74,7 @@ fun CoinControlContainer(
                 )
             app.trySelectLatestOrNewWallet()
         } catch (e: WalletManagerException) {
-            android.util.Log.e(tag, "unable to open wallet for coin control", e)
+            Log.e(tag, "unable to open wallet for coin control", e)
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(
@@ -83,7 +84,7 @@ fun CoinControlContainer(
                 )
             app.popRoute()
         } catch (e: Exception) {
-            android.util.Log.e(tag, "unable to initialize coin control", e)
+            Log.e(tag, "unable to initialize coin control", e)
             app.alertState =
                 TaggedItem(
                     AppAlertState.General(

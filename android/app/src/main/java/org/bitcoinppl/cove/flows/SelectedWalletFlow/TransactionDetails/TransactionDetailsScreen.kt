@@ -39,6 +39,7 @@ import org.bitcoinppl.cove.views.lockaware.AlertDialog
 import org.bitcoinppl.cove_core.TransactionDetailsPresentation
 import org.bitcoinppl.cove_core.WalletManagerAction
 import org.bitcoinppl.cove_core.types.TxId
+import org.bitcoinppl.cove.Log
 
 private const val LOCK_STATE_UPDATE_REVEAL_DELAY_MS = 200L
 private const val LOCK_STATE_UPDATE_MIN_VISIBLE_MS = 350L
@@ -138,7 +139,7 @@ fun TransactionDetailsScreen(
                 isUpdatingLockState = false
                 throw e
             } catch (e: Exception) {
-                android.util.Log.e("TransactionDetails", "error updating transaction lock state", e)
+                Log.e("TransactionDetails", "error updating transaction lock state", e)
                 updateFailed = true
             }
 

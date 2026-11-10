@@ -72,6 +72,7 @@ import org.bitcoinppl.cove.views.rememberLockAwareLauncherForActivityResult
 import org.bitcoinppl.cove_core.BackupException
 import org.bitcoinppl.cove_core.BackupManager
 import org.bitcoinppl.cove_core.BackupResult
+import org.bitcoinppl.cove.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -238,7 +239,7 @@ fun BackupExportScreen(
                         } catch (e: androidx.credentials.exceptions.NoCredentialException) {
                             infoMessage = "No saved passwords found"
                         } catch (e: GetCredentialException) {
-                            android.util.Log.w("BackupExport", "Failed to retrieve password: ${e.message}")
+                            Log.w("BackupExport", "Failed to retrieve password: ${e.message}")
                         }
                     }
                 },
@@ -405,7 +406,7 @@ fun BackupExportScreen(
                         } catch (_: CreateCredentialCancellationException) {
                             // user cancelled, do nothing
                         } catch (e: CreateCredentialException) {
-                            android.util.Log.w("BackupExport", "Failed to save to password manager: ${e.type}: ${e.message}")
+                            Log.w("BackupExport", "Failed to save to password manager: ${e.type}: ${e.message}")
                             val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
                             val clipData = android.content.ClipData.newPlainText("password", password)
                             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {

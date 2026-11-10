@@ -278,7 +278,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             return .incomplete
 
         case let .success(.complete(_, records)):
-            Log.debug("succesfully scanned records \(records)")
+            Log.debug("succesfully scanned \(records.count) records")
             isScanning = false
             resetReader()
 
@@ -344,7 +344,7 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
     }
 
     func processNDEFMessage(_ message: NFCNDEFMessage) {
-        Log.debug("processing NDEF message, \(message)")
+        Log.debug("processing NDEF message, \(message.length) bytes")
         var textMessage: String? = nil
         var binaryData: Data? = nil
 
@@ -367,7 +367,8 @@ class NFCReader: NSObject, NFCTagReaderSessionDelegate {
             if record.typeNameFormat == .nfcWellKnown {
                 // URI record (type "U") - used by ColdCard PushTx
                 if typeString == "U", let uri = record.wellKnownTypeURIPayload()?.absoluteString {
-                    Log.debug("Found URI: \(uri)")
+                    // only the length, since a PushTx URI carries the signed transaction
+                    Log.debug("Found URI, \(uri.count) characters")
                     textMessage = uri
                     continue
                 }

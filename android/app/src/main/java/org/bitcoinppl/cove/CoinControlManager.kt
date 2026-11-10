@@ -36,7 +36,7 @@ class CoinControlManager internal constructor(
             handleName = "RustCoinControlManager",
             isClosed = isClosed,
         ) {
-            android.util.Log.w(tag, it)
+            Log.w(tag, it)
         }
 
     val id: WalletId = rust.id()
@@ -73,7 +73,7 @@ class CoinControlManager internal constructor(
     }
 
     private fun logDebug(message: String) {
-        android.util.Log.d(tag, message)
+        Log.d(tag, message)
     }
 
     private fun <T> withRust(
@@ -239,7 +239,8 @@ class CoinControlManager internal constructor(
     }
 
     fun dispatch(action: CoinControlManagerAction) {
-        logDebug("dispatch: $action")
+        // log only the kind: search actions carry typed text
+        logDebug("dispatch: ${action::class.simpleName}")
         mainScope.launch(Dispatchers.IO) {
             withRustOr(Unit) {
                 dispatch(action)
