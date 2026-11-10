@@ -147,7 +147,7 @@ impl CloudBackupSupervisor {
             }
             Err(error) => {
                 manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Failed(
-                    error.reader_message(),
+                    error.logged_reader_message("Failed to prepare cloud wallet delete"),
                 ));
                 self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
@@ -181,7 +181,7 @@ impl CloudBackupSupervisor {
             }
             Err(error) => {
                 manager.apply_cloud_only_wallet_outcome(CloudBackupCloudOnlyWalletOutcome::Failed(
-                    error.reader_message(),
+                    error.logged_reader_message("Failed to delete cloud wallet"),
                 ));
                 self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
@@ -228,7 +228,7 @@ impl CloudBackupSupervisor {
                 manager.apply_cloud_only_wallet_outcome(
                     CloudBackupCloudOnlyWalletOutcome::RestoreFailed {
                         record_id,
-                        error: error.reader_message(),
+                        error: error.logged_reader_message("Failed to restore cloud-only wallet"),
                     },
                 );
                 self.active_operation.clear();

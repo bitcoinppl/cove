@@ -177,9 +177,10 @@ impl RustCloudBackupManager {
 
             Err(error) => {
                 let error = CloudBackupError::internal_context("load local master key", error);
-                return Err(Box::new(
-                    self.pending_verification_failure(&completion, error.reader_message()),
-                ));
+                return Err(Box::new(self.pending_verification_failure(
+                    &completion,
+                    error.logged_reader_message("Pending upload verification failed"),
+                )));
             }
         };
 
@@ -258,7 +259,8 @@ impl RustCloudBackupManager {
             .download_master_key_backup(completion.namespace_id().to_string())
             .await
             .map_err(|error| {
-                let message = CloudBackupError::from(error).reader_message();
+                let message = CloudBackupError::from(error)
+                    .logged_reader_message("Pending upload verification failed");
                 Box::new(self.pending_verification_failure(completion, message))
             })?;
         let actual_revision = master_key_wrapper_revision_hash(&bytes);

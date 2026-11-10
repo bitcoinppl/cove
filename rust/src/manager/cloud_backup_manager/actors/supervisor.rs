@@ -837,7 +837,9 @@ impl CloudBackupSupervisor {
                 });
             }
             Err(error) => {
-                manager.apply_sync_state(SyncState::Failed(error.reader_message()));
+                manager.apply_sync_state(SyncState::Failed(
+                    error.logged_reader_message("Cloud backup sync failed"),
+                ));
                 self.active_sync_request = None;
             }
         }

@@ -598,7 +598,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RecreateManifest,
-                    error: error.reader_message(),
+                    error: error.logged_reader_message("Recreate manifest failed"),
                 });
                 self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
@@ -631,7 +631,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RecreateManifest,
-                    error: error.reader_message(),
+                    error: error.logged_reader_message("Recreate manifest failed"),
                 });
                 self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
@@ -688,7 +688,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RepairPasskey,
-                    error: error.reader_message(),
+                    error: error.logged_reader_message("Repair passkey failed"),
                 });
                 self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
@@ -720,7 +720,7 @@ impl CloudBackupSupervisor {
                 {
                     manager.apply_recovery_state(RecoveryState::Failed {
                         action: RecoveryAction::RepairPasskey,
-                        error: error.reader_message(),
+                        error: error.logged_reader_message("Repair passkey failed"),
                     });
                     self.active_operation.clear();
                     manager.project_exclusive_operation_finished(claim);
@@ -731,7 +731,7 @@ impl CloudBackupSupervisor {
                 if let Err(error) = manager.finish_passkey_wrapper_repair(uploaded) {
                     manager.apply_recovery_state(RecoveryState::Failed {
                         action: RecoveryAction::RepairPasskey,
-                        error: error.reader_message(),
+                        error: error.logged_reader_message("Repair passkey failed"),
                     });
                     self.active_operation.clear();
                     manager.project_exclusive_operation_finished(claim);
@@ -745,7 +745,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RepairPasskey,
-                    error: error.reader_message(),
+                    error: error.logged_reader_message("Repair passkey failed"),
                 });
                 self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);
@@ -777,7 +777,7 @@ impl CloudBackupSupervisor {
             Err(error) => {
                 manager.apply_recovery_state(RecoveryState::Failed {
                     action: RecoveryAction::RepairPasskey,
-                    error: error.reader_message(),
+                    error: error.logged_reader_message("Repair passkey failed"),
                 });
                 self.active_operation.clear();
                 manager.project_exclusive_operation_finished(claim);

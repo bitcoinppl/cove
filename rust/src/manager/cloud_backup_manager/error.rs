@@ -4,6 +4,7 @@ use cove_device::passkey::{PasskeyFailureReason, PasskeyOperation};
 use cove_device::{
     cloud_storage::CloudStorageError, keychain::KeychainError, passkey::PasskeyError,
 };
+use tracing::warn;
 
 use crate::backup::import::LocalWalletConflict;
 use crate::database::cloud_backup::CloudStorageIssue;
@@ -512,6 +513,15 @@ impl CloudBackupError {
             Self::PasskeyDiscoveryCancelled => PASSKEY_REQUEST_INCOMPLETE_MESSAGE.into(),
             Self::PasskeyMismatch | Self::NoBackupFound | Self::Cancelled => self.to_string(),
         }
+    }
+
+    /// Logs the full error under `operation`, then returns the message shown to the reader
+    ///
+    /// The reader message drops the underlying cause, so a failure that reaches the UI without
+    /// a log leaves nothing in a diagnostics report to explain it
+    pub(crate) fn logged_reader_message(&self, operation: impl fmt::Display) -> String {
+        warn!("{operation}: {self}");
+        self.reader_message()
     }
 }
 

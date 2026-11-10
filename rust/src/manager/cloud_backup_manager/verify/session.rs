@@ -541,7 +541,7 @@ impl VerificationSession {
                     return Ok(MasterKeyResolution::Finished(
                         self.retry_result(
                             CloudBackupError::internal_context("save cloud backup passkey", error)
-                                .reader_message(),
+                                .logged_reader_message("Verify failed"),
                         ),
                     ));
                 }
@@ -949,14 +949,16 @@ impl VerificationSession {
         let retry_action =
             is_connectivity_related_issue(&error).then_some(self.connectivity_retry_action());
 
-        self.retry_result_with_context(error.reader_message(), retry_action)
+        self.retry_result_with_context(error.logged_reader_message("Verify failed"), retry_action)
     }
 
     fn cloud_backup_retry_result(
         &self,
-        _context: &'static str,
+        context: &'static str,
         error: &CloudBackupError,
     ) -> DeepVerificationResult {
+        warn!("Verify: {context}: {error}");
+
         if is_connectivity_related_issue(error) {
             return self.retry_result_with_context(
                 offline_error_for_step(BlockingCloudStep::Verify).reader_message(),
