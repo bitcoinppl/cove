@@ -2121,6 +2121,29 @@ mod tests {
         assert_eq!(output_values(&details), vec![max_sats], "Max sends with no change output");
     }
 
+    /// Waits for the selected fee rate's total fee to satisfy `accept`, returning it
+    async fn wait_for_selected_total_fee(
+        manager: &super::RustSendFlowManager,
+        accept: impl Fn(u64) -> bool,
+    ) -> u64 {
+        let deadline =
+            crate::test_support::LoadedHostDeadline::after(std::time::Duration::from_secs(5));
+
+        loop {
+            if let Some(fee) = selected_total_fee_sats(manager).filter(|fee| accept(*fee)) {
+                return fee;
+            }
+
+            assert!(
+                !deadline.has_passed(),
+                "the selected fee total stayed at {:?}",
+                selected_total_fee_sats(manager)
+            );
+
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }
+
     /// Set amount in sats with Max drained at 5 sat/vB over a wallet of 60,000 and 40,000 sats
     async fn manager_with_max_at_5_sat_per_vb() -> Arc<super::RustSendFlowManager> {
         let manager = manager_for_spending(&[60_000, 40_000]);
@@ -2148,13 +2171,16 @@ mod tests {
         let manager = manager_with_max_at_5_sat_per_vb().await;
 
         // a 2 sat/vB rate with its total already known lands, and Next is tapped before any
-        // refresh of Max runs; written directly so no refresh starts
+        // refresh of Max runs; written directly so no refresh starts, with the base rates moved
+        // too so the fee update Max left pending can't bring back 5 sat/vB
         {
             let mut options = FeeRateOptionsWithTotalFee::without_totals(base_fee_rates(2.0));
             options.medium.total_fee = Some(cove_types::amount::Amount::from_sat(355));
             let selected = Arc::new(options.medium);
-            manager.state.lock().fee_selection =
-                Some(super::FeeSelection::new(Arc::new(options), selected));
+
+            let mut state = manager.state.lock();
+            state.fee_rate_options_base = Some(Arc::new(base_fee_rates(2.0)));
+            state.fee_selection = Some(super::FeeSelection::new(Arc::new(options), selected));
         }
 
         let NextOutcome::Confirm(details) = next_past_warnings(&manager).await else {
@@ -2194,6 +2220,9 @@ mod tests {
         manager.clone().dispatch(super::Action::NotifyEnteringBtcAmountChanged("99500".into()));
         assert_eq!(manager.state.lock().amount_sats, Some(99_500));
 
+        // the fee update typing schedules runs while Max is still selected, so it prices a drain
+        let drain_fee_sats = wait_for_selected_total_fee(&manager, |_| true).await;
+
         // the drain lands after the edit, so the typed amount stands and Max is cleared, and a
         // second late drain finds Max cleared
         for _ in 0..2 {
@@ -2204,13 +2233,16 @@ mod tests {
             assert_eq!((state.amount_sats, state.max_selected.clone()), (Some(99_500), None));
         }
 
-        manager.get_or_update_fee_rate_options().await;
+        // with Max cleared, the typed amount is priced again rather than keeping the drain's fee
+        let fee_sats = wait_for_selected_total_fee(&manager, |fee| fee != drain_fee_sats).await;
+
         let outcome = next_past_warnings(&manager).await;
         let NextOutcome::Confirm(details) = outcome else {
             panic!("the typed amount must reach confirm, got {outcome:?}");
         };
 
         assert_eq!(details.sending_amount.as_sats(), 99_500);
+        assert_eq!(details.fee_total.as_sats(), fee_sats, "Next priced what it confirmed");
     }
 
     // the fee server override is compiled out of release builds

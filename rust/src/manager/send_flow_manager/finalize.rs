@@ -28,9 +28,20 @@ impl RustSendFlowManager {
             return;
         }
 
+        // read in one lock, so a Max amount is never paired with a fee rate set after its check
+        let (max_is_stale, amount_sats, address, selected_fee_rate, entering_address) = {
+            let state = self.state.lock();
+            (
+                state.max_is_stale(),
+                state.amount_sats,
+                state.address.clone(),
+                state.fee_selection.as_ref().map(|selection| selection.selected.clone()),
+                state.entering_address.clone(),
+            )
+        };
+
         // a Max amount drained at an older fee rate or address would be sent as a plain amount
         // with change, so drain again first and finalize with the fresh amount
-        let max_is_stale = self.state.lock().max_is_stale();
         if max_is_stale {
             let me = self.clone();
             cove_tokio::task::spawn(async move {
@@ -45,18 +56,17 @@ impl RustSendFlowManager {
             return;
         }
 
-        let Some(amount_sats) = self.state.lock().amount_sats else {
+        let Some(amount_sats) = amount_sats else {
             return self.send_alert(SendFlowError::InvalidNumber);
         };
 
         let amount = Amount::from_sat(amount_sats);
 
-        let Some(address) = self.state.lock().address.clone() else {
-            let invalid_address = self.state.lock().entering_address.clone();
-            return self.send_alert(SendFlowError::InvalidAddress(invalid_address));
+        let Some(address) = address else {
+            return self.send_alert(SendFlowError::InvalidAddress(entering_address));
         };
 
-        let Some(selected_fee_rate) = self.selected_fee_rate() else {
+        let Some(selected_fee_rate) = selected_fee_rate else {
             return self.send_alert(SendFlowError::UnableToGetFeeRate);
         };
 

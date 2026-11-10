@@ -345,7 +345,7 @@ impl RustSendFlowManager {
     ) -> MaxCommit {
         let mut sender = self.reconciler.deferred_sender();
         let amount = selection.amount.clone();
-        let amount_changed = {
+        let (commit, needs_fee_update) = {
             let mut state = self.state.lock();
             if trigger == MaxTrigger::Refresh && state.max_selected.is_none() {
                 return MaxCommit::Dropped;
@@ -365,19 +365,22 @@ impl RustSendFlowManager {
 
             if typed_sats.is_some_and(|sats| sats < selection.amount.to_sat()) {
                 unset_max_selected(&mut state, &mut sender);
-                return MaxCommit::Dropped;
+                (MaxCommit::Dropped, true)
+            } else {
+                state.max_selected = Some(selection);
+                sender.queue(Message::SetMaxSelected(amount.clone()));
+                let amount_changed = apply_amount(&mut state, *amount, &mut sender);
+                (MaxCommit::Applied(amount), amount_changed)
             }
-
-            state.max_selected = Some(selection);
-            sender.queue(Message::SetMaxSelected(amount.clone()));
-            apply_amount(&mut state, *amount, &mut sender)
         };
 
-        if amount_changed {
+        // a new amount needs its own fee total, and a Max cleared for a typed amount leaves a
+        // total priced as a drain; replacing the fee task also aborts a drain estimate in flight
+        if needs_fee_update {
             self.schedule_fee_rate_update();
         }
 
-        MaxCommit::Applied(amount)
+        commit
     }
 
     pub(crate) fn handle_selected_unit_changed(
