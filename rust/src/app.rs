@@ -1073,6 +1073,17 @@ enum SelectLatestWalletError {
 }
 
 #[cfg(test)]
+pub(crate) mod test_support {
+    use super::{App, Route};
+
+    /// The routes pushed on top of the default route, for tests outside this module that
+    /// check where a flow navigated
+    pub(crate) fn routes() -> Vec<Route> {
+        App::global().state.read().router.routes.clone()
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupResetRecovery};

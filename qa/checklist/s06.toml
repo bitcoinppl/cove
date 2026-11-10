@@ -5,7 +5,7 @@ title = "Amounts below dust blocked"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "rust/src/manager/wallet_manager/actor/transactions.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
-coverage = ["agent", "rust:rust/src/manager/send_flow_manager/error.rs::wallet_output_below_dust_maps_to_send_below_dust"]
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::below_dust_amount_is_blocked_before_confirm_and_the_dust_limit_is_not", "rust:rust/src/manager/send_flow_manager/error.rs::wallet_output_below_dust_maps_to_send_below_dust"]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -15,8 +15,11 @@ title = "Small payment warning Cancel and Send Anyway"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
-coverage = ["agent", "rust:rust/src/manager/send_flow_manager.rs::pending_warning_returns_small_amount_before_high_fee", "rust:rust/src/manager/send_flow_manager.rs::acknowledging_final_warning_through_finalize_proceeds_past_warning_gate"]
+coverage = ["agent", "rust:rust/src/manager/send_flow_manager.rs::small_payment_warning_holds_the_send_until_send_anyway", "rust:rust/src/manager/send_flow_manager.rs::pending_warning_returns_small_amount_before_high_fee", "rust:rust/src/manager/send_flow_manager.rs::acknowledging_final_warning_through_finalize_proceeds_past_warning_gate"]
 # 1.4.0: ios BLOCKED, android PASS
+# rust decides the warning, that a dismissed warning leaves the send unconfirmed and warns again,
+# and that Send Anyway reaches confirm; an agent still checks that the alert's Cancel button only
+# dismisses and Send Anyway acknowledges the warning
 
 [[row]]
 id = "s06-one-small-payment-funds-secondary"
@@ -119,7 +122,7 @@ title = "Selected coins cannot silently add inputs for high fee"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/*.rs", "rust/src/manager/send_flow_manager/coin_control.rs", "rust/src/manager/coin_control_manager.rs", "rust/src/manager/coin_control_manager/*.rs", "rust/src/manager/wallet_manager/actor/transactions.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "ios/Cove/Flows/CoinControlFlow/*.swift", "ios/Cove/Flows/SendFlow/SendFlowCoinControlSetAmountScreen.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/CoinControlFlow/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/CoinControlSetAmountScreen.kt"]
-coverage = ["agent", "rust:rust/src/manager/wallet_manager/actor.rs::actor_manual_tx_never_adds_unselected_inputs_to_cover_a_high_fee"]
+coverage = ["rust:rust/src/manager/send_flow_manager.rs::coin_control_send_never_adds_unselected_coins_to_pay_a_high_fee", "rust:rust/src/manager/wallet_manager/actor.rs::actor_manual_tx_never_adds_unselected_inputs_to_cover_a_high_fee"]
 # 1.4.0: ios BLOCKED, android PASS
 # coin control psbt uses manually selected inputs only
 
@@ -130,8 +133,10 @@ title = "Max while fee or balance is loading"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/send_flow_manager.rs", "rust/src/manager/send_flow_manager/validation.rs", "rust/src/manager/send_flow_manager/state.rs", "rust/src/manager/send_flow_manager/amount_or_max.rs", "ios/Cove/Flows/SendFlow/SendFlowSetAmountScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowAlerts.swift", "ios/Cove/Flows/SendFlow/SendFlowConfirmScreen.swift", "ios/Cove/Flows/SendFlow/SendFlowPresenter.swift", "ios/Cove/Flows/SendFlow/SetAmountScreen/*.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowContainer.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SendFlowPresenter.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/SetAmountScreen/*.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/SendFlow/ConfirmScreen/SendFlowConfirmScreen.kt"]
-coverage = ["agent"]
+coverage = ["agent", "rust:rust/src/manager/send_flow_manager.rs::max_selected_while_fees_and_balance_load_waits_then_sends_the_full_balance", "rust:rust/src/manager/send_flow_manager.rs::finalize_blocks_when_selected_fee_total_is_missing"]
 # 1.4.0: ios BLOCKED, android BLOCKED
+# rust decides max before the fee total and balance load; an agent still checks max picked before
+# fresher fee rates load, which keeps the old amount and sends change instead of the full balance
 
 [[row]]
 id = "s06-second-secondary-utxo-for-coin-change-warning"
