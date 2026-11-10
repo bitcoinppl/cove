@@ -51,7 +51,7 @@ pub enum KeychainError {
     Delete,
 
     /// A stored value could not be parsed
-    #[error("unable to parse saved value")]
+    #[error("unable to parse saved value: {0}")]
     ParseSavedValue(String),
 
     /// A value could not be encrypted

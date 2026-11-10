@@ -25,7 +25,7 @@ pub type Error = MnemonicError;
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi::export(Display)]
 pub enum MnemonicError {
-    #[error("failed to get wallet keychain")]
+    #[error("failed to get wallet keychain: {0}")]
     GetWalletKeychain(#[from] KeychainError),
 
     #[error("mnemonic is not available available for wallet id: {0}")]
@@ -119,7 +119,10 @@ impl Mnemonic {
 
     #[uniffi::constructor(name = "new")]
     pub fn _ffi_try_from_id(id: WalletId) -> Result<Self, Error> {
-        Self::try_from_id(&id)
+        // only the error is logged, never the words
+        Self::try_from_id(&id).inspect_err(|error| {
+            tracing::error!("unable to load recovery words for wallet {id}: {error}");
+        })
     }
 
     #[uniffi::method]
