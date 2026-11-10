@@ -19,7 +19,7 @@ use rust_cktap::{
     tap_signer::TapSignerShared as _,
 };
 use tokio::sync::Mutex;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::{
     database::Database,
@@ -465,6 +465,9 @@ pub struct TapSignerSetupContinuation {
 
 impl TapSignerSetupContinuation {
     fn new(card_identity: String, stage: SetupContinuationStage) -> Arc<Self> {
+        // logged once when the command becomes uncertain, later retries reuse the continuation
+        warn!("TAPSIGNER setup needs a retry at {}: {}", stage.kind(), stage.error());
+
         Arc::new(Self {
             id: Nanoid::<21>::new().to_string(),
             card_identity,
@@ -639,6 +642,9 @@ pub struct TapSignerOperationContinuation {
 
 impl TapSignerOperationContinuation {
     fn new(card_identity: String, stage: OperationContinuationStage) -> Arc<Self> {
+        // logged once when the command becomes uncertain, later retries reuse the continuation
+        warn!("TAPSIGNER operation needs a retry at {}: {}", stage.kind(), stage.error());
+
         Arc::new(Self {
             id: Nanoid::<21>::new().to_string(),
             card_identity,
@@ -1373,7 +1379,12 @@ impl TapSignerReader {
             Err(error) if error.is_transport_uncertainty() => {
                 return Ok(SetupCmdResponse::Retry(continuation.retry_with_error(error)));
             }
-            Err(_) => return Err(TapSignerReaderError::ManualRecoveryRequired),
+            Err(error) => {
+                warn!(
+                    "TAPSIGNER init reconcile needs manual recovery, status read failed: {error}"
+                );
+                return Err(TapSignerReaderError::ManualRecoveryRequired);
+            }
         };
 
         if path.is_some() {
@@ -1409,6 +1420,7 @@ impl TapSignerReader {
         };
 
         if path.is_none() {
+            warn!("TAPSIGNER backup retry needs manual recovery, the card has no derivation path");
             return Err(TapSignerReaderError::ManualRecoveryRequired);
         }
 
@@ -1533,6 +1545,9 @@ impl TapSignerReader {
             Ok(()) => Ok(ChangeProbe::OldCvcStillValid(new_cvc_error)),
             // neither CVC authenticates, so no command can establish the card state
             Err(error) if error.is_auth_error() => {
+                warn!(
+                    "TAPSIGNER CVC change needs manual recovery, neither CVC authenticates: new CVC {new_cvc_error}, current CVC {error}"
+                );
                 Err(TapSignerReaderError::ManualRecoveryRequired)
             }
             Err(error) if error.is_transport_uncertainty() => Ok(ChangeProbe::Uncertain(error)),
