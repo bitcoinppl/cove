@@ -37,8 +37,9 @@ coverage = [
     "rust:rust/src/manager/wallet_manager/actor.rs::payjoin_uri_completes_via_normal_broadcast_when_gated",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# rust gates payjoin off: the uri becomes a confirm route with no payjoin endpoint, which both apps
-# send as an ordinary payment, and the wallet broadcasts it once and keeps no payjoin session
+# rust gates payjoin off: on mainnet and Signet the uri becomes a confirm route with no payjoin
+# endpoint, which both apps send as an ordinary payment, and the wallet broadcasts it once and
+# keeps no payjoin session
 
 [[row]]
 id = "s17-sender-rejects-psbt-text-without-secret-import"

@@ -1985,10 +1985,12 @@ mod tests {
             .await
             .expect("wallet actor responds")
             .expect("wallet lists its outputs");
+
         let (selected, unselected): (Vec<_>, Vec<_>) = unspent
             .into_iter()
             .filter_map(|output| super::Utxo::try_from_local(output, network).ok())
             .partition(|utxo| utxo.amount.as_sats() == 50_000);
+
         let selected_outpoint = bitcoin::OutPoint::from(selected[0].outpoint.as_ref());
         let unselected_outpoint = bitcoin::OutPoint::from(unselected[0].outpoint.as_ref());
 
@@ -2002,6 +2004,7 @@ mod tests {
         let unpayable = manager
             .get_custom_fee_option(Arc::new(FeeRate::from_sat_per_vb(500.0)), custom_fee_speed())
             .await;
+
         assert!(
             unpayable.is_err(),
             "a fee the selected coin cannot pay was priced: {:?}",

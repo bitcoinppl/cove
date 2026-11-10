@@ -1425,11 +1425,13 @@ fn sender_rejects_psbt_text_without_reading_or_importing_a_secret() {
         database.wallets.get_all(fixture.wallet.network, fixture.wallet.wallet_mode).unwrap();
 
     manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
+    let reads_before = crate::test_support::shared_mock_keychain().read_keys().len();
 
     let unsigned = BASE64_STANDARD.decode(BIP174_UNSIGNED_PSBT_BASE64).unwrap();
     let signed = TestSigner::new(SIGNER_MNEMONIC, BitcoinNetwork::Signet)
         .signed_spend_of_its_own_funds(&external_address(BitcoinNetwork::Signet))
         .serialize();
+
     let packet = Packet::Psbt(PsbtPacket::new(unsigned.clone()));
 
     let pastes = [
@@ -1482,6 +1484,17 @@ fn sender_rejects_psbt_text_without_reading_or_importing_a_secret() {
 
         assert_eq!(wallet, &fixture.wallet, "{label}");
     }
+
+    // no key of the wallet being sent, its secret included, was read while refusing the pastes
+    let wallet_key_prefix = fixture.wallet.id.to_string();
+    let wallet_reads: Vec<_> = crate::test_support::shared_mock_keychain()
+        .read_keys()
+        .into_iter()
+        .skip(reads_before)
+        .filter(|key| key.starts_with(&wallet_key_prefix))
+        .collect();
+
+    assert_eq!(wallet_reads, Vec::<String>::new(), "refusing PSBT text read the wallet's keys");
 
     // nothing was imported, and no receive session was started on this device
     assert_eq!(

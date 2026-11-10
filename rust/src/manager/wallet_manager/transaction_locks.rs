@@ -251,6 +251,7 @@ mod tests {
 
         let unlocked_balance =
             manager.unlocked_spendable_balance().await.expect("unlocked balance reads");
+
         assert_eq!(unlocked_balance.as_sats(), 70_000);
 
         // a normal send funds itself from the other coin only
@@ -259,6 +260,7 @@ mod tests {
             .confirm_txn(Amount::from_sat(40_000), recipient.clone(), fee_rate())
             .await
             .expect("the unlocked coin funds the send");
+
         assert_eq!(psbt_inputs(&details.psbt.0), HashSet::from([other]));
 
         // a send only the locked outputs could complete fails instead of spending them
@@ -266,6 +268,7 @@ mod tests {
             .confirm_txn(Amount::from_sat(90_000), recipient.clone(), fee_rate())
             .await
             .expect_err("locked outputs cannot top up a send");
+
         assert!(matches!(error, WalletManagerError::InsufficientFunds(_)), "{error:?}");
 
         // Max drains only the other coin
@@ -274,17 +277,20 @@ mod tests {
                 .await
                 .expect("wallet actor responds")
                 .expect("max send builds");
+
         assert_eq!(psbt_inputs(&max), HashSet::from([other]));
 
         // coin control shows both outputs locked, Select All skips them, and naming them in a
         // manual send is rejected
         let coin_control =
             manager.new_coin_control_manager().await.expect("coin control manager opens");
+
         let locked_rows = coin_control
             .utxos()
             .into_iter()
             .filter(|utxo| received.contains(&bitcoin::OutPoint::from(utxo.outpoint.as_ref())))
             .collect::<Vec<_>>();
+
         assert_eq!(locked_rows.len(), received.len());
         assert!(locked_rows.iter().all(|utxo| !utxo.spendable));
 
@@ -294,12 +300,14 @@ mod tests {
             .iter()
             .map(|utxo| bitcoin::OutPoint::from(utxo.outpoint.as_ref()))
             .collect::<Vec<_>>();
+
         assert_eq!(selected, vec![other]);
 
         let error = manager
             .confirm_manual_txn(received.clone(), Amount::from_sat(45_000), recipient, fee_rate())
             .await
             .expect_err("locked outputs cannot be selected by hand");
+
         assert!(matches!(error, WalletManagerError::LockedOutputsSelected), "{error:?}");
     }
 
@@ -314,10 +322,12 @@ mod tests {
         // one output locked from coin control, and an unrelated lock elsewhere in the wallet
         let coin_control =
             manager.new_coin_control_manager().await.expect("coin control manager opens");
+
         coin_control
             .set_utxo_spendability(Arc::new(first.into()), false)
             .await
             .expect("coin control locks the output");
+
         wallet.lock(&[fixture.separate]);
 
         assert_eq!(lock_state(manager, fixture.txid()).await, TransactionLockState::Mixed);

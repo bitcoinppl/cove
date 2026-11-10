@@ -99,6 +99,7 @@ pub(crate) struct MockKeychain {
     delete_count: Arc<Mutex<usize>>,
     after_save: Arc<Mutex<Option<AfterSaveHook>>>,
     unreadable_keys: Arc<Mutex<HashSet<String>>>,
+    read_keys: Arc<Mutex<Vec<String>>>,
 }
 
 // the after-save hook is a closure, which has no Debug impl
@@ -111,6 +112,7 @@ impl std::fmt::Debug for MockKeychain {
             .field("save_count", &self.save_count)
             .field("delete_count", &self.delete_count)
             .field("unreadable_keys", &self.unreadable_keys)
+            .field("read_keys", &self.read_keys)
             .finish_non_exhaustive()
     }
 }
@@ -124,6 +126,12 @@ impl MockKeychain {
         *self.delete_count.lock() = 0;
         *self.after_save.lock() = None;
         self.unreadable_keys.lock().clear();
+        self.read_keys.lock().clear();
+    }
+
+    /// Every key read so far, in order, so a test can check which secrets a flow touched
+    pub(crate) fn read_keys(&self) -> Vec<String> {
+        self.read_keys.lock().clone()
     }
 
     /// Makes reads of `key` fail the way a locked platform keychain does
@@ -180,6 +188,8 @@ impl KeychainAccess for MockKeychain {
     }
 
     fn get(&self, key: String) -> Result<Option<String>, KeychainError> {
+        self.read_keys.lock().push(key.clone());
+
         if self.unreadable_keys.lock().contains(&key) {
             return Err(KeychainError::Read(format!("{key} is unreadable")));
         }

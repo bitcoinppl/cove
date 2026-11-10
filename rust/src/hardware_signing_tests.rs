@@ -390,6 +390,7 @@ async fn a_saved_draft_resumes_after_relaunch_and_deleting_it_releases_its_chang
     let manager = reopen_manager(&id).await;
     let listed: Vec<_> =
         manager.initial_state().unsigned_transactions.iter().map(|draft| draft.id()).collect();
+
     assert_eq!(listed, vec![next.psbt.tx_id()]);
 }
 
