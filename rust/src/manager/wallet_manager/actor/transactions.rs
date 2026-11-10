@@ -203,14 +203,22 @@ impl WalletActor {
         Ok(psbt)
     }
 
-    // release reserved change addresses for a discarded unsigned transaction
+    // release reserved change addresses for a discarded unsigned transaction; the caller
+    // already deleted its record, so the next load does not reserve them again
     pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
-        self.wallet.unreserve_tx_change_addresses(&txn);
+        // drafts saved before reservations survived a reload can share a change address, so
+        // read the remaining drafts first and keep the reservation when that read fails
+        let table = Database::global().unsigned_transactions();
+        let remaining = match table.get_by_wallet_id(&self.wallet.id) {
+            Ok(remaining) => remaining,
+            Err(error) => {
+                warn!("failed to load unsigned transactions, keeping change reserved: {error}");
+                return;
+            }
+        };
 
-        // the caller already deleted the record, so persist now or a restart keeps the reservation
-        if let Err(error) = self.wallet.persist() {
-            warn!("failed to persist released change addresses for discarded transaction: {error}");
-        }
+        self.wallet.unreserve_tx_change_addresses(&txn);
+        self.wallet.reserve_draft_change_addresses(&remaining);
     }
 
     /// Delete saved unsigned transactions that the wallet graph shows can no longer be signed
@@ -230,36 +238,43 @@ impl WalletActor {
             }
         };
 
-        let settled = settled_unsigned_transactions(&self.wallet.bdk, records);
+        let settled = settled_unsigned_transactions(&self.wallet.bdk, records.clone());
         if settled.is_empty() {
             return;
         }
 
-        for record in &settled {
-            self.wallet.unreserve_tx_change_addresses(&record.confirm_details.psbt.0.unsigned_tx);
-        }
-
-        // released change reservations must be durable before the records that own them are
-        // deleted, otherwise a restart restores the reservations with nothing left to release them
+        // a record settled by its own broadcast keeps its change address used through the wallet
+        // graph once the record is gone, so the graph must be durable before the delete,
+        // otherwise a restart could hand that change address to a new draft. a record settled by
+        // a conflicting spend never used its change address, so releasing it is correct
         if let Err(error) = self.wallet.persist() {
-            warn!("failed to persist released change addresses, keeping settled records: {error}");
+            warn!("failed to persist the wallet graph, keeping settled records: {error}");
             return;
         }
 
-        let mut pruned = false;
+        let mut pruned = HashSet::new();
         for record in settled {
             if let Err(error) = table.delete_tx(&record.tx_id) {
                 warn!("failed to prune settled unsigned transaction {}: {error}", record.tx_id);
                 continue;
             }
 
+            // release only what a deleted record held, since a kept record still owns its change
+            self.wallet.unreserve_tx_change_addresses(&record.confirm_details.psbt.0.unsigned_tx);
             debug!("pruned settled unsigned transaction {}", record.tx_id);
-            pruned = true;
+            pruned.insert(record.tx_id);
         }
 
-        if pruned {
-            self.send(WalletManagerReconcileMessage::UnsignedTransactionsChanged);
+        if pruned.is_empty() {
+            return;
         }
+
+        // a kept draft may share a change address with a pruned one
+        let kept: Vec<_> =
+            records.into_iter().filter(|record| !pruned.contains(&record.tx_id)).collect();
+
+        self.wallet.reserve_draft_change_addresses(&kept);
+        self.send(WalletManagerReconcileMessage::UnsignedTransactionsChanged);
     }
 
     pub async fn list_unspent(&mut self) -> ActorResult<Result<Vec<LocalOutput>, Error>> {

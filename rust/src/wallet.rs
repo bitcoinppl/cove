@@ -243,13 +243,17 @@ impl Wallet {
 
         metadata = metadata_with_repaired_origin(metadata, &wallet);
 
-        Ok(Self {
+        let mut wallet = Self {
             id,
             network,
             metadata,
             bdk: wallet,
             storage: WalletStorage::persistent(store.conn),
-        })
+        };
+
+        // without its drafts' reservations the wallet could hand their change to a new draft
+        wallet.reserve_saved_draft_change_addresses()?;
+        Ok(wallet)
     }
 
     /// Create a new watch-only wallet from the given xpub

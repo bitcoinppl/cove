@@ -235,6 +235,7 @@ paths = [
   "rust/src/manager/wallet_manager.rs",
   "rust/src/manager/wallet_manager/unsigned_transactions.rs",
   "rust/src/manager/wallet_manager/actor/transactions.rs",
+  "rust/src/wallet.rs",
   "rust/src/wallet/addressing.rs",
   "rust/src/database/unsigned_transactions.rs",
   "rust/crates/cove-types/src/psbt.rs",
@@ -251,11 +252,14 @@ coverage = [
   "rust:rust/src/database/unsigned_transactions.rs::delete_tx_removes_the_record_and_its_wallet_index_entry",
   "rust:rust/src/hardware_signing_tests.rs::signed_psbts_that_match_no_saved_draft_are_rejected",
   "rust:rust/src/hardware_signing_tests.rs::a_saved_draft_resumes_after_relaunch_and_deleting_it_releases_its_change_address",
+  "rust:rust/src/hardware_signing_tests.rs::a_saved_draft_keeps_its_change_address_across_a_relaunch",
+  "rust:rust/src/hardware_signing_tests.rs::deleting_one_of_two_drafts_that_share_change_keeps_it_reserved",
   "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testSignaturesThatMatchNoDraftAreRejected",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::signaturesThatMatchNoDraftAreRejected",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# rust asserts the draft is listed unchanged after a relaunch and still finalizes, that deleting it
-# removes the record and releases its change address, and that deleted-draft and unrelated
-# signatures match nothing; the ui tests assert the no-draft alert. an agent still taps the draft's
-# Pending Signature row to check it reopens the hardware screen
+# rust asserts the draft is listed unchanged after a relaunch and still finalizes, that it keeps
+# its change address from new drafts across a relaunch, that deleting it removes the record and
+# releases its change address unless another saved draft shares it, and that deleted-draft and
+# unrelated signatures match nothing; the ui tests assert the no-draft alert. an agent still taps
+# the draft's Pending Signature row to check it reopens the hardware screen
