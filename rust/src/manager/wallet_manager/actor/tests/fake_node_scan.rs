@@ -108,12 +108,23 @@ impl Observed {
         }
     }
 
-    async fn until(&mut self, what: &str, done: impl Fn(&Msg) -> bool) {
+    async fn until(&mut self, what: &str, done: impl Fn(&Msg) -> bool) -> usize {
+        self.until_after(0, what, done).await
+    }
+
+    /// Waits for a message matching `done` at or after position `start` in `seen`, returning its
+    /// position
+    async fn until_after(
+        &mut self,
+        start: usize,
+        what: &str,
+        done: impl Fn(&Msg) -> bool,
+    ) -> usize {
         let timeout = crate::test_support::loaded_host_wait(Duration::from_secs(20));
         tokio::time::timeout(timeout, async {
             loop {
-                if self.seen.iter().any(&done) {
-                    return;
+                if let Some(found) = self.seen.iter().skip(start).position(&done) {
+                    return start + found;
                 }
 
                 let batch = self.receiver.recv_async().await.expect("reconciler stays open");
@@ -121,7 +132,14 @@ impl Observed {
             }
         })
         .await
-        .unwrap_or_else(|_| panic!("timed out waiting for {what}; saw {:#?}", self.seen));
+        .unwrap_or_else(|_| panic!("timed out waiting for {what}; saw {:#?}", self.seen))
+    }
+
+    /// Waits for a message matching `done`, then for the scan status to go idle after it, so an
+    /// idle status from before that message does not count
+    async fn until_then_idle(&mut self, what: &str, done: impl Fn(&Msg) -> bool) {
+        let found = self.until(what, done).await;
+        self.until_after(found + 1, "the scan status to go idle", is_idle).await;
     }
 
     /// Pulls in everything the actor has already reconciled
@@ -272,8 +290,7 @@ async fn unused_wallet_initial_scan_reports_progress_then_completes() {
     );
 
     gate.open();
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     let basis_points = full_scan_basis_points(&fx.observed.scan_statuses());
@@ -314,8 +331,7 @@ async fn unused_signet_wallet_initial_scan_completes() {
     fx.node.select_esplora();
 
     send!(fx.addr.wallet_scan_and_notify(false));
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     assert!(scan_complete_transactions(&fx.observed).is_empty());
@@ -350,8 +366,7 @@ async fn signet_initial_scan_counts_checked_addresses_before_it_completes() {
     let _slow = fx.node.on("/scripthash/").delay(Duration::from_millis(25));
 
     send!(fx.addr.wallet_scan_and_notify(false));
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     let completed_at = fx.observed.seen.iter().position(is_scan_complete).expect("scan completed");
@@ -430,13 +445,11 @@ async fn address_type_switch_during_discovery_rescans_the_chosen_type_history() 
 
     let (wrapped_txid, wrapped_sats) = paid[&WalletAddressType::WrappedSegwit];
     fx.observed
-        .until("the wrapped segwit history to be scanned", |message| {
+        .until_then_idle("the wrapped segwit history to be scanned", |message| {
             matches!(message, Msg::ScanComplete(transactions)
                 if transactions.iter().any(|transaction| transaction.id().0 == wrapped_txid))
         })
         .await;
-
-    fx.observed.until("the scan status to go idle", is_idle).await;
 
     // give the interrupted scan time to report, which it must not
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -467,8 +480,7 @@ async fn address_type_switch_during_discovery_rescans_the_chosen_type_history() 
         .expect("the switch to legacy succeeds");
 
     let (legacy_txid, legacy_sats) = paid[&WalletAddressType::Legacy];
-    fx.observed.until("the legacy scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the legacy scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     assert_eq!(scan_complete_txids(&fx.observed), vec![vec![legacy_txid]]);
@@ -492,8 +504,7 @@ async fn repeated_scan_requests_during_the_first_scan_run_it_once() {
     wait_until("the scan to reach the node", || gate.waiting() > 0).await;
     gate.open();
 
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
 
     // give any duplicate scan time to surface before counting
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -534,8 +545,7 @@ async fn scan_reports_confirmed_funds_found_on_chain() {
     fx.node.select_esplora();
 
     send!(fx.addr.wallet_scan_and_notify(false));
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     let transactions = scan_complete_transactions(&fx.observed);
@@ -564,8 +574,7 @@ async fn custom_electrum_node_scans_the_wallet_after_being_saved() {
         .expect("the fake electrum node is accepted");
 
     send!(fx.addr.wallet_scan_and_notify(false));
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     let transactions = scan_complete_transactions(&fx.observed);
@@ -609,8 +618,7 @@ async fn sending_is_refused_until_the_initial_scan_completes() {
     );
 
     gate.open();
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
 
     let after_scan = call!(fx.addr.build_tx(
         Amount::from_sat(10_000),
@@ -635,8 +643,7 @@ async fn pending_transaction_refreshes_to_confirmed_when_the_node_confirms_it() 
     let (gate, _rule) = fx.node.on(&status_path).hold();
 
     send!(fx.addr.wallet_scan_and_notify(false));
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     let scanned = scan_complete_transactions(&fx.observed);
@@ -757,8 +764,7 @@ async fn scan_against_an_offline_node_reports_the_failure_and_recovers_on_a_new_
     working.select_esplora();
 
     send!(fx.addr.wallet_scan_and_notify(false));
-    fx.observed.until("the scan to complete", is_scan_complete).await;
-    fx.observed.until("the scan status to go idle", is_idle).await;
+    fx.observed.until_then_idle("the scan to complete", is_scan_complete).await;
     fx.observed.settle();
 
     assert_eq!(fx.observed.last_balance_sats(), Some(20_000));
