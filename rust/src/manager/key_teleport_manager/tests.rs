@@ -1483,7 +1483,7 @@ fn sender_rejects_psbt_text_without_reading_or_importing_a_secret() {
                 ingested,
                 Err(KeyTeleportAlert::UnsupportedPsbt | KeyTeleportAlert::ParseFailed)
             ),
-            "{label}: the sender did not refuse PSBT text: {ingested:?}"
+            "{label}: the sender did not refuse PSBT text"
         );
 
         // the sender keeps waiting for the receiver's request with its wallet fixed, and never
