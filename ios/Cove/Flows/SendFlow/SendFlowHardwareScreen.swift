@@ -215,6 +215,7 @@ struct SendFlowHardwareScreen: View {
 
             app.pushRoute(route)
         } catch {
+            Log.warn("signed transaction file import failed: \(error.logSummary)")
             presentationCoordinator.present(.alert(.fileError(error.localizedDescription)))
         }
     }
@@ -236,6 +237,7 @@ struct SendFlowHardwareScreen: View {
             )
             app.pushRoute(route)
         } catch {
+            Log.warn("signed transaction paste import failed: \(error.logSummary)")
             presentationCoordinator.present(.alert(.pasteError(error.localizedDescription)))
         }
     }
@@ -256,7 +258,8 @@ struct SendFlowHardwareScreen: View {
 
             app.pushRoute(route)
         } catch {
-            Log.error("Failed to handle scanned transaction: \(error)")
+            // the scanned message is a signed transaction or PSBT, so only the error kind is logged
+            Log.warn("signed transaction NFC import failed: \(error.logSummary)")
             presentationCoordinator.present(.alert(.nfcError(error.localizedDescription)))
         }
     }

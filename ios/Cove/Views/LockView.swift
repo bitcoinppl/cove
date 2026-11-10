@@ -159,6 +159,27 @@ struct LockView<Content: View>: View {
         )
     }
 
+    /// Runs the biometric prompt, logging why it did not unlock
+    ///
+    /// The lock screen stays up on any failure, so the log is the only record of a system error
+    private func biometricUnlockResult() async -> Bool {
+        do {
+            return try await bioMetricUnlock()
+        } catch let error as LAError {
+            switch error.code {
+            case .userCancel, .appCancel, .systemCancel, .userFallback:
+                Log.info("biometric unlock cancelled: LAError code=\(error.code.rawValue)")
+            default:
+                Log.warn("biometric unlock failed: LAError code=\(error.code.rawValue)")
+            }
+
+            return false
+        } catch {
+            Log.warn("biometric unlock failed: \(error.logSummary)")
+            return false
+        }
+    }
+
     private func tryUnlockingView() {
         guard lockType == .biometric || lockType == .both else { return }
         guard !auth.isUsingBiometrics else { return }
@@ -170,7 +191,7 @@ struct LockView<Content: View>: View {
             // Requesting Biometric Unlock
             auth.isUsingBiometrics = true
 
-            if await (try? bioMetricUnlock()) ?? false {
+            if await biometricUnlockResult() {
                 await MainActor.run {
                     withAnimation(.snappy, completionCriteria: .logicallyComplete) {
                         lockState.wrappedValue = .unlocked

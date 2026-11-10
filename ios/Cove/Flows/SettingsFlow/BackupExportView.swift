@@ -195,10 +195,12 @@ struct BackupExportView: View {
             password as CFString
         ) { error in
             DispatchQueue.main.async {
-                guard error != nil else {
+                guard let error else {
                     continuePendingExportIfReady()
                     return
                 }
+
+                Log.warn("saving backup password failed, copying it instead: \((error as Error).logSummary)")
 
                 UIPasteboard.general.setItems(
                     [["public.utf8-plain-text": password]],
@@ -271,6 +273,12 @@ struct BackupExportView: View {
                     }
                 }
             } catch {
+                if error is CancellationError {
+                    Log.info("backup export cancelled")
+                } else {
+                    Log.warn("backup export failed: \(error.logSummary)")
+                }
+
                 for url in [tempFileURL, localFileURL].compactMap(\.self) {
                     try? FileManager.default.removeItem(at: url)
                 }

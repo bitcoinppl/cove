@@ -486,11 +486,11 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
         }
 
         session.connect(to: tag) { error in
-            let didConnect = error == nil
+            let connectError = error?.logSummary
 
-            Task { @MainActor [weak self, session, tag, operation, didConnect] in
+            Task { @MainActor [weak self, session, tag, operation, connectError] in
                 self?.handleConnectionResult(
-                    didConnect: didConnect,
+                    connectError: connectError,
                     tag: tag,
                     session: session,
                     operation: operation
@@ -500,14 +500,15 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
     }
 
     private func handleConnectionResult(
-        didConnect: Bool,
+        connectError: String?,
         tag: NFCTag,
         session: NFCTagReaderSession,
         operation: TapSignerOperationToken
     ) {
         guard self.session === session, activeOperation === operation else { return }
 
-        guard didConnect else {
+        if let connectError {
+            logger.warn("TapSigner connect failed: \(connectError)")
             finish(
                 operation,
                 result: .failure(.Unknown("Unable to connect to TapSigner")),
@@ -635,7 +636,9 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             let message = error.isAuthError()
                 ? "Wrong PIN, please try again"
                 : "TapSigner operation failed. Please try again."
-            logger.error("TapSigner operation failed: \(operationKind(command))")
+            logger.error(
+                "TapSigner operation failed: \(operationKind(command)), \(error.logSummary)"
+            )
             finish(
                 operation,
                 result: .failure(error),
@@ -651,7 +654,7 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
                 session: session
             )
         } catch {
-            logger.error("TapSigner operation failed while creating reader")
+            logger.error("TapSigner operation failed while creating reader: \(error.logSummary)")
             finish(
                 operation,
                 result: .failure(.Unknown("Unable to read TapSigner")),
@@ -685,14 +688,21 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             .failure(.Unknown("Unable to read NFC tag, try again"))
         }
 
-        Task { @MainActor [weak self, session, result] in
-            self?.handleInvalidation(session: session, result: result)
+        let invalidationError = error.logSummary
+
+        Task { @MainActor [weak self, session, result, invalidationError] in
+            self?.handleInvalidation(
+                session: session,
+                result: result,
+                invalidationError: invalidationError
+            )
         }
     }
 
     private func handleInvalidation(
         session: NFCTagReaderSession,
-        result: TapSignerOperationResult
+        result: TapSignerOperationResult,
+        invalidationError: String
     ) {
         guard self.session === session, let operation = activeOperation else { return }
 
@@ -701,8 +711,12 @@ private class TapCardNFC: NSObject, NFCTagReaderSessionDelegate {
             return
         }
 
+        // only invalidations that end an operation before its command started reach here, so
+        // this is the one log for that failure
         if case .failure(.Unknown("TapSigner operation cancelled")) = result {
-            logger.debug("tapcard reader session ended normally")
+            logger.info("TapSigner NFC session cancelled by user")
+        } else {
+            logger.warn("TapSigner NFC session invalidated: \(invalidationError)")
         }
 
         finish(operation, result: result, invalidateSession: false, session: session)
@@ -739,8 +753,8 @@ class TapCardTransport: TapcardTransportProtocol, @unchecked Sendable {
             tag.sendCommand(apdu: apdu) { response, sw1Value, sw2Value, error in
                 Log.debug("APDU response: \(response.count) bytes")
 
-                if error != nil {
-                    logger.error("TapSigner APDU transmission failed")
+                if let error {
+                    logger.error("TapSigner APDU transmission failed: \(error.logSummary)")
                     continuation.resume(
                         throwing: TransportError.Transport(
                             "Unable to communicate with TapSigner, please try again"

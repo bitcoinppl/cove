@@ -2,6 +2,8 @@ import AuthenticationServices
 import SwiftUI
 import UniformTypeIdentifiers
 
+private let logger = Log(id: "BackupVerify")
+
 struct BackupVerifyView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -108,12 +110,14 @@ struct BackupVerifyView: View {
                 fileData = data
                 fileName = url.lastPathComponent
             } catch {
+                logger.warn("backup file rejected: \(error.logSummary)")
                 fileData = nil
                 fileName = nil
                 errorMessage = (error as? BackupError)?.userMessage() ?? error.localizedDescription
             }
 
         case let .failure(error):
+            logger.warn("backup file picker failed: \(error.logSummary)")
             errorMessage = error.localizedDescription
         }
     }
@@ -129,6 +133,7 @@ struct BackupVerifyView: View {
                     verifyReport = report
                 }
             } catch {
+                logger.warn("backup verify failed: \(error.logSummary)")
                 await MainActor.run {
                     isVerifying = false
                     errorMessage = (error as? BackupError)?.userMessage() ?? error.localizedDescription

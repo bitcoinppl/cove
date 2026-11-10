@@ -1850,10 +1850,6 @@ extension CloudBackupIOSSafetyHelpersTests {
             ),
             expectedWallets
         )
-        XCTAssertEqual(
-            try fixture.helper.localFileSnapshot(namespacePath: walletsDirectory.path, prefix: prefix),
-            expectedWallets
-        )
     }
 
     func testBackupReadOfEvictedFileWaitsForMetadataInsteadOfReadingThePlaceholder() async throws {

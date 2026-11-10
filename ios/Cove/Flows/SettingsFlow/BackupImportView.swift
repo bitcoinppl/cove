@@ -2,6 +2,8 @@ import AuthenticationServices
 import SwiftUI
 import UniformTypeIdentifiers
 
+private let logger = Log(id: "BackupImport")
+
 struct BackupImportView: View {
     private enum ImportReview: Sendable {
         case awaitingApproval(preparation: BackupImportPreparation, conflictWalletCount: Int)
@@ -220,12 +222,14 @@ struct BackupImportView: View {
                 fileData = data
                 fileName = url.lastPathComponent
             } catch {
+                logger.warn("backup file rejected: \(error.logSummary)")
                 fileData = nil
                 fileName = nil
                 errorMessage = safeBackupImportErrorMessage(error)
             }
 
         case let .failure(error):
+            logger.warn("backup file picker failed: \(error.logSummary)")
             errorMessage = safeBackupImportErrorMessage(error)
         }
     }
@@ -256,6 +260,7 @@ struct BackupImportView: View {
 
                     isVerifying = false
                     if !isCancelled {
+                        logger.warn("backup verify failed: \(error.logSummary)")
                         errorMessage = safeBackupImportErrorMessage(error)
                     }
                 }
@@ -312,6 +317,7 @@ struct BackupImportView: View {
                     isImporting = false
                     invalidateImportReview(clearVerifyReport: false)
                     if !isCancelled {
+                        logger.warn("backup import failed: \(error.logSummary)")
                         errorMessage = safeBackupImportErrorMessage(error)
                     }
                 }
@@ -359,6 +365,7 @@ struct BackupImportView: View {
                     isImporting = false
                     invalidateImportReview(clearVerifyReport: false)
                     if !isCancelled {
+                        logger.warn("backup import failed: \(error.logSummary)")
                         errorMessage = safeBackupImportErrorMessage(error)
                     }
                 }
@@ -528,10 +535,13 @@ class PasswordRetrievalDelegate: NSObject, ASAuthorizationControllerDelegate {
     }
 
     func authorizationController(controller _: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
-        if let credential = authorization.credential as? ASPasswordCredential {
-            DispatchQueue.main.async {
-                self.onPassword(credential.password)
-            }
+        guard let credential = authorization.credential as? ASPasswordCredential else {
+            logger.warn("password provider returned \(type(of: authorization.credential))")
+            return
+        }
+
+        DispatchQueue.main.async {
+            self.onPassword(credential.password)
         }
     }
 
@@ -539,8 +549,12 @@ class PasswordRetrievalDelegate: NSObject, ASAuthorizationControllerDelegate {
         let nsError = error as NSError
         // ASAuthorizationError.canceled = 1001, don't show error for user cancellation
         if nsError.domain == ASAuthorizationError.errorDomain, nsError.code == ASAuthorizationError.canceled.rawValue {
+            logger.info("password provider request cancelled")
             return
         }
+
+        // every other failure is shown as no saved passwords, so keep the real cause for reports
+        logger.warn("password provider request failed: \(error.logSummary)")
         DispatchQueue.main.async {
             self.onError?("No saved passwords found")
         }
