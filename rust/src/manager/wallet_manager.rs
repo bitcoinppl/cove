@@ -306,8 +306,11 @@ pub enum WalletManagerError {
     #[error("unable to retrieve the secret words for the wallet {0}")]
     SecretRetrievalError(#[from] KeychainError),
 
-    #[error("unable to mark wallet as verified")]
-    MarkWalletAsVerifiedError(#[from] DatabaseError),
+    #[error("unable to save unsigned transaction: {0}")]
+    SaveUnsignedTransactionError(DatabaseError),
+
+    #[error("unable to delete unsigned transaction: {0}")]
+    DeleteUnsignedTransactionError(DatabaseError),
 
     #[error("unable to load wallet: {0}")]
     LoadWalletError(#[from] WalletError),
