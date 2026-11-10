@@ -231,7 +231,7 @@ impl RustSendFlowManager {
         // comparing only the rate keeps a totals-only update from draining again
         if rate_changed && max_selected {
             let me = self.clone();
-            cove_tokio::task::spawn(async move { me.select_max_send_report_error().await });
+            cove_tokio::task::spawn(async move { me.refresh_max_send_report_error().await });
         }
     }
 

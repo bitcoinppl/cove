@@ -288,7 +288,17 @@ impl RustSendFlowManager {
     }
 
     pub(crate) async fn select_max_send_report_error(self: &Arc<Self>) {
-        match self.select_max_send().await {
+        let result = self.select_max_send().await;
+        self.report_max_send_error(result);
+    }
+
+    pub(crate) async fn refresh_max_send_report_error(self: &Arc<Self>) {
+        let result = self.refresh_max_send().await;
+        self.report_max_send_error(result);
+    }
+
+    fn report_max_send_error(&self, result: Result<()>) {
+        match result {
             Ok(()) => {}
             Err(SendFlowError::SendBelowDustLimit) => {
                 self.reconciler.send(Message::SetAlert(SendFlowError::SendBelowDustLimit.into()));
@@ -300,10 +310,54 @@ impl RustSendFlowManager {
         }
     }
 
+    /// Selects Max at the selected fee rate, as when the user taps Max
     pub(crate) async fn select_max_send(self: &Arc<Self>) -> Result<()> {
         debug!("select_max_send");
-        let mut sender = self.reconciler.deferred_sender();
+        let total = self.max_send_amount().await?;
 
+        let mut sender = self.reconciler.deferred_sender();
+        self.state.lock().max_selected = Some(total.clone());
+        sender.queue(Message::SetMaxSelected(total.clone()));
+        self.handle_amount_changed(*total);
+
+        let address_is_valid = self.state.lock().address.is_some();
+        if address_is_valid {
+            self.state.lock().focus_field = None;
+            sender.queue(Message::UpdateFocusField(None));
+        } else {
+            self.state.lock().focus_field = Some(SetAmountFocusField::Address);
+            sender.queue(Message::UpdateFocusField(Some(SetAmountFocusField::Address)));
+        }
+
+        Ok(())
+    }
+
+    /// Drains a selected Max again after the fee rate changed under it
+    ///
+    /// The user did not ask for this, so it leaves focus alone, and it is dropped when the
+    /// user cleared Max, such as by typing an amount, while the drain was being built
+    pub(crate) async fn refresh_max_send(self: &Arc<Self>) -> Result<()> {
+        debug!("refresh_max_send");
+        let total = self.max_send_amount().await?;
+
+        {
+            let mut state = self.state.lock();
+            if state.max_selected.is_none() {
+                return Ok(());
+            }
+
+            state.max_selected = Some(total.clone());
+        }
+
+        let mut sender = self.reconciler.deferred_sender();
+        sender.queue(Message::SetMaxSelected(total.clone()));
+        self.handle_amount_changed(*total);
+
+        Ok(())
+    }
+
+    /// The amount a drain of the wallet sends at the selected fee rate
+    async fn max_send_amount(self: &Arc<Self>) -> Result<Arc<Amount>> {
         // load the options first, so Max drains at the rate the selection settles on rather than
         // a fallback rate read before they arrived
         let has_fee_selection = self.state.lock().fee_selection.is_some();
@@ -354,21 +408,7 @@ impl RustSendFlowManager {
 
         let total = Arc::new(psbt.output_total_amount());
         trace!("psbt: {psbt:?}, total: {total:?}, fee_rate: {fee_rate:?}");
-
-        self.state.lock().max_selected = Some(total.clone());
-        sender.queue(Message::SetMaxSelected(total.clone()));
-        self.handle_amount_changed(*total);
-
-        let address_is_valid = self.state.lock().address.is_some();
-        if address_is_valid {
-            self.state.lock().focus_field = None;
-            sender.queue(Message::UpdateFocusField(None));
-        } else {
-            self.state.lock().focus_field = Some(SetAmountFocusField::Address);
-            sender.queue(Message::UpdateFocusField(Some(SetAmountFocusField::Address)));
-        }
-
-        Ok(())
+        Ok(total)
     }
 
     pub(crate) fn handle_selected_unit_changed(

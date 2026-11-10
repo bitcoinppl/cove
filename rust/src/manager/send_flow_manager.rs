@@ -341,7 +341,9 @@ impl RustSendFlowManager {
 
                 if is_max_selected {
                     let me = self.clone();
-                    cove_tokio::task::spawn(async move { me.select_max_send_report_error().await });
+                    cove_tokio::task::spawn(
+                        async move { me.refresh_max_send_report_error().await },
+                    );
                     return false;
                 }
 
@@ -2116,5 +2118,62 @@ mod tests {
         assert_eq!(details.fee_total.as_sats(), 100_000 - max_sats);
         assert_eq!(spent_outpoints(&details).len(), 2);
         assert_eq!(output_values(&details), vec![max_sats], "Max sends with no change output");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn amount_typed_while_max_follows_a_fee_refresh_is_kept_and_sent() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let manager = manager_for_spending(&[60_000, 40_000]);
+        clear_routes();
+
+        set_base_fee_rates(&manager, 5.0);
+        {
+            let mut state = manager.state.lock();
+            state.address = Some(Arc::new(Address::preview_new()));
+            state.metadata.selected_unit = super::BitcoinUnit::Sat;
+            state.metadata.fiat_or_btc = super::FiatOrBtc::Btc;
+        }
+
+        manager.get_wallet_balance().await;
+        manager.get_or_update_fee_rate_options().await;
+        manager.select_max_send().await.expect("max is selected at 5 sat/vB");
+
+        // the refresh starts draining Max again at 2 sat/vB, and the user types an amount before
+        // that drain is built
+        manager.apply_fetched_fee_rates(base_fee_rates(2.0));
+        manager.clone().dispatch(super::Action::NotifyEnteringBtcAmountChanged("50000".into()));
+
+        let deadline =
+            crate::test_support::LoadedHostDeadline::after(std::time::Duration::from_secs(5));
+
+        loop {
+            let settled = {
+                let state = manager.state.lock();
+                let fee_known_at_new_rate = state.fee_selection.as_ref().is_some_and(|fee| {
+                    fee.selected.fee_rate.sat_per_vb() == 2.0 && fee.selected.total_fee.is_some()
+                });
+
+                fee_known_at_new_rate
+                    && state.amount_sats == Some(50_000)
+                    && state.max_selected.is_none()
+            };
+
+            if settled {
+                break;
+            }
+
+            assert!(!deadline.has_passed(), "the typed amount was replaced: {:?}", {
+                let state = manager.state.lock();
+                (state.amount_sats, state.max_selected.clone())
+            });
+
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+
+        let NextOutcome::Confirm(details) = next_past_warnings(&manager).await else {
+            panic!("the typed amount must reach confirm");
+        };
+
+        assert_eq!(details.sending_amount.as_sats(), 50_000);
     }
 }
