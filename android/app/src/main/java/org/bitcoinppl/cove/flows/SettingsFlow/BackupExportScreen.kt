@@ -116,6 +116,9 @@ fun BackupExportScreen(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri ->
         val result = pendingResult ?: run {
+            // the export result lives only in composition state, so a recreated screen loses it
+            // and the picked document stays empty
+            if (uri != null) Log.w("BackupExport", "Backup save location returned with no pending export")
             isExporting = false
             return@rememberLockAwareLauncherForActivityResult
         }
@@ -323,6 +326,7 @@ fun BackupExportScreen(
                             isExporting = false
                             throw e
                         } catch (e: Exception) {
+                            logUnexpectedBackupFailure("export", e)
                             isExporting = false
                             errorMessage = backupExportErrorMessage(e)
                         }

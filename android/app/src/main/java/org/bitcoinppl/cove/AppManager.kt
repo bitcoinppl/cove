@@ -171,7 +171,7 @@ class AppManager private constructor() : FfiReconcile {
     init {
         Log.d(tag, "Initializing AppManager")
         rust.listenForUpdates(this)
-        wallets = runCatching { Database().wallets().all() }.getOrElse { emptyList() }
+        wallets = readWallets(Database())
     }
 
     private fun <T> withRust(
@@ -477,8 +477,14 @@ class AppManager private constructor() : FfiReconcile {
     }
 
     fun loadWallets() {
-        wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
+        wallets = readWallets(database)
     }
+
+    // an empty list keeps the sidebar usable, but the read failure must still reach diagnostics
+    private fun readWallets(source: Database): List<WalletMetadata> =
+        runCatchingCancellable(tag, "Failed to read the wallet list") {
+            source.wallets().all()
+        }.getOrElse { emptyList() }
 
     fun reorderWallets(ids: List<WalletId>) {
         val currentWalletsById = wallets.associateBy { it.id }
@@ -929,7 +935,7 @@ class AppManager private constructor() : FfiReconcile {
                 }
 
                 is AppStateReconcileMessage.WalletsChanged -> {
-                    wallets = runCatching { database.wallets().all() }.getOrElse { emptyList() }
+                    wallets = readWallets(database)
                 }
 
                 is AppStateReconcileMessage.ClearCachedWalletManager -> {

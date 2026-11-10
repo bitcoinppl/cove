@@ -139,6 +139,7 @@ fun LockView(
                         super.onAuthenticationError(errorCode, errString)
                         biometricTimeoutJob?.cancel()
                         auth.isUsingBiometrics = false
+                        logBiometricError(errorCode, errString)
                     }
 
                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
@@ -446,4 +447,24 @@ private fun BiometricView(
             }
         }
     }
+}
+
+private val userCancelledBiometricErrors =
+    setOf(
+        BiometricPrompt.ERROR_USER_CANCELED,
+        BiometricPrompt.ERROR_NEGATIVE_BUTTON,
+        BiometricPrompt.ERROR_CANCELED,
+    )
+
+// the prompt ends for good here, so a lockout or hardware error must be visible in diagnostics
+private fun logBiometricError(
+    errorCode: Int,
+    errString: CharSequence,
+) {
+    if (errorCode in userCancelledBiometricErrors) {
+        Log.i("LockView", "Biometric prompt dismissed: code $errorCode")
+        return
+    }
+
+    Log.w("LockView", "Biometric prompt ended with error code $errorCode: $errString")
 }

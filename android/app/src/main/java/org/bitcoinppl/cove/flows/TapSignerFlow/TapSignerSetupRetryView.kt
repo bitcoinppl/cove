@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.launch
 import org.bitcoinppl.cove.AppManager
+import org.bitcoinppl.cove.Log
 import org.bitcoinppl.cove.TaggedItem
 import org.bitcoinppl.cove_core.AppAlertState
 import org.bitcoinppl.cove_core.SetupCmdResponse
@@ -112,7 +113,8 @@ fun TapSignerSetupRetryView(
                         }
                     } catch (error: CancellationException) {
                         throw error
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        Log.w("TapSignerSetupRetry", "TAPSIGNER setup retry failed", e)
                         app.sheetState = null
                         app.alertState =
                             TaggedItem(
