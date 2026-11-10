@@ -14,6 +14,9 @@ mod sanitize;
 pub mod state;
 mod validation;
 
+#[cfg(test)]
+mod coin_control_lock_tests;
+
 use std::{sync::Arc, time::Duration};
 
 use cove_tokio::DebouncedTask;
