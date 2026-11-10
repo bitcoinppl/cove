@@ -14,6 +14,7 @@ use bitcoin::{
     secp256k1::Secp256k1,
 };
 use cove_fake_node::{Gate, RuleHandle};
+use cove_types::BlockSizeLast;
 use rand::RngExt as _;
 
 use super::{
@@ -45,6 +46,7 @@ struct Fixture {
     node: FakeNode,
     network: Network,
     previous_node: Node,
+    previous_block_height: Option<BlockSizeLast>,
     wallet_id: Option<WalletId>,
 
     // dropped after `drop` restores the node
@@ -64,7 +66,17 @@ impl Fixture {
         node.chain().mine(5);
         node.select_esplora();
 
-        Self { node, network, previous_node, wallet_id: None, _wallets: wallets }
+        let previous_block_height =
+            Database::global().global_cache.get_block_height(network).ok().flatten();
+
+        Self {
+            node,
+            network,
+            previous_node,
+            previous_block_height,
+            wallet_id: None,
+            _wallets: wallets,
+        }
     }
 
     /// Makes the fixture remove `id`'s wallet data when it drops
@@ -88,7 +100,11 @@ impl Drop for Fixture {
             crate::wallet::test_support::remove_wallet(id);
         }
 
-        let _ = Database::global().global_config.set_selected_node(&self.previous_node);
+        let database = Database::global();
+        let _ = database.global_config.set_selected_node(&self.previous_node);
+
+        // confirmations cache the fake chain's height, which later wallets would take as a birthday
+        database.global_cache.restore_block_height(self.network, self.previous_block_height);
     }
 }
 
@@ -410,6 +426,7 @@ async fn receipt_label_survives_coin_control_and_transaction_lock_changes() {
     // unlock from the transaction details screen's locked badge
     let lock =
         manager.unlock_transaction_outputs(tx_id(receipt_txid)).await.expect("the receipt unlocks");
+
     assert_eq!(lock, TransactionLockState::Unlocked);
 
     let unlocked = open_details(&manager, receipt_txid).await;
@@ -461,6 +478,7 @@ async fn details_opened_during_a_refresh_belong_to_their_transaction_and_confirm
 
     let wallet =
         import_mnemonic_with_target(fresh_mnemonic(), fx.network, WalletMode::Main).unwrap();
+
     let (manager, mut screen) = fx.open(wallet.id.clone());
 
     let first_address = manager.address_at(0).await.unwrap().address.to_string();

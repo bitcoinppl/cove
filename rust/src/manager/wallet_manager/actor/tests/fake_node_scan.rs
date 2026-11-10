@@ -375,20 +375,40 @@ async fn signet_initial_scan_counts_checked_addresses_before_it_completes() {
     let mut fx = fixture_on(Network::Signet);
     fx.node.select_esplora();
 
-    // hold a later address's lookup, so the count must be reported while the scan still runs
+    // hold a later address's lookup, so the count must be reported while the scan still runs, and
+    // slow the others so the throttled reports land between lookups; the first matching rule wins
     let later = fx.later_receive.clone();
     let digest = sha256::Hash::hash(later.as_bytes());
     let (gate, rule) = fx.node.on(&format!("/scripthash/{digest}/")).hold();
+    let _slow = fx.node.on("/scripthash/").delay(Duration::from_millis(25));
 
     send!(fx.addr.wallet_scan_and_notify(false));
-    wait_until("the scan to reach the later address", || gate.waiting() > 0).await;
-    fx.observed
-        .until("a checked count while the scan waits on the node", |message| {
-            matches!(message, Msg::WalletScanStatusChanged(WalletScanStatus::Scanning(progress))
-                if progress.phase == WalletScanPhase::Full && progress.checked > 0)
+    let full_scan_checked = |message: &Msg| match message {
+        Msg::WalletScanStatusChanged(WalletScanStatus::Scanning(progress))
+            if progress.phase == WalletScanPhase::Full =>
+        {
+            Some(progress.checked)
+        }
+
+        _ => None,
+    };
+
+    let first = fx
+        .observed
+        .until("a first checked count", |message| {
+            full_scan_checked(message).is_some_and(|checked| checked > 0)
         })
         .await;
 
+    // a count that stalls after its first report would never reach this second, larger one
+    let first_checked = full_scan_checked(&fx.observed.seen[first]).unwrap();
+    fx.observed
+        .until_after(first + 1, "a larger checked count", |message| {
+            full_scan_checked(message).is_some_and(|checked| checked > first_checked)
+        })
+        .await;
+
+    wait_until("the scan to reach the later address", || gate.waiting() > 0).await;
     fx.observed.settle();
     assert_eq!(fx.observed.count(is_scan_complete), 0, "the scan is still waiting on the node");
 
