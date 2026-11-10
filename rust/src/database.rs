@@ -246,7 +246,10 @@ pub(crate) mod test_support {
     use std::sync::OnceLock;
     use std::time::Duration;
 
+    use cove_types::Network;
+
     use super::*;
+    use crate::wallet::metadata::{WalletMetadata, WalletMode};
 
     const TEST_DATA_DIR_PREFIX: &str = "cove-test-";
     const STALE_TEST_DATA_DIR_AGE: Duration = Duration::from_secs(60 * 60);
@@ -306,14 +309,15 @@ pub(crate) mod test_support {
         }
     }
 
-    /// Restores the wallet target and every wallet selection a test changes, and empties the
-    /// signet wallet lists of both modes before and after the test
+    /// Restores the wallet target, every wallet selection and both signet wallet lists a test
+    /// changes, and removes the data of signet wallets the test created
     ///
     /// Hold it after the global-state lock so it restores before the lock is released, even when
     /// the test panics
     pub(crate) struct RestoreSignetWallets {
         target: Option<RestoreWalletTarget>,
         selections: Vec<(global_config::GlobalConfigKey, Option<String>)>,
+        lists: Vec<(WalletMode, Vec<WalletMetadata>)>,
     }
 
     impl RestoreSignetWallets {
@@ -334,31 +338,40 @@ pub(crate) mod test_support {
             .map(|key| (key, config.get(key).expect("the selection reads")))
             .collect();
 
-            let restore = Self { target: Some(RestoreWalletTarget::capture()), selections };
-            config.set_selected_network(cove_types::Network::Signet).unwrap();
+            let lists =
+                Self::MODES.into_iter().map(|mode| (mode, Self::signet_wallets(mode))).collect();
+
+            let restore = Self { target: Some(RestoreWalletTarget::capture()), selections, lists };
+
+            config.set_selected_network(Network::Signet).unwrap();
             config.set_main_mode().unwrap();
             config.clear_selected_wallet().unwrap();
-            Self::clear_wallets();
+            for mode in Self::MODES {
+                let _ = Database::global().wallets.save_all_wallets(Network::Signet, mode, vec![]);
+            }
 
             restore
         }
 
-        fn clear_wallets() {
-            use crate::wallet::metadata::WalletMode;
+        const MODES: [WalletMode; 2] = [WalletMode::Main, WalletMode::Decoy];
 
-            for mode in [WalletMode::Main, WalletMode::Decoy] {
-                let _ = Database::global().wallets.save_all_wallets(
-                    cove_types::Network::Signet,
-                    mode,
-                    Vec::new(),
-                );
-            }
+        fn signet_wallets(mode: WalletMode) -> Vec<WalletMetadata> {
+            Database::global().wallets.get_all(Network::Signet, mode).unwrap_or_default()
         }
     }
 
     impl Drop for RestoreSignetWallets {
         fn drop(&mut self) {
-            Self::clear_wallets();
+            for (mode, original) in self.lists.drain(..) {
+                for created in Self::signet_wallets(mode) {
+                    if !original.iter().any(|wallet| wallet.id == created.id) {
+                        crate::wallet::test_support::remove_wallet(&created.id);
+                    }
+                }
+
+                let _ =
+                    Database::global().wallets.save_all_wallets(Network::Signet, mode, original);
+            }
 
             // a mode switch moves selection keys, so restore the target before the selections
             drop(self.target.take());

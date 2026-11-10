@@ -214,6 +214,7 @@ fn scan_complete_txids(observed: &Observed) -> Vec<Vec<bitcoin::Txid>> {
             Msg::ScanComplete(transactions) => {
                 Some(transactions.iter().map(|transaction| transaction.id().0).collect())
             }
+
             _ => None,
         })
         .collect()

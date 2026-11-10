@@ -109,12 +109,17 @@ pub(crate) mod test_support {
     pub(crate) struct AppUpdateTap(flume::Receiver<AppStateReconcileMessage>);
 
     impl AppUpdateTap {
+        /// Opens the tap once every update sent before it has been drained and dropped, so the
+        /// tap holds only updates sent after it opens
         pub(crate) fn open() -> Self {
             let (sender, receiver) = flume::unbounded();
             let previous = APP_UPDATE_TAP.lock().replace(sender);
             assert!(previous.is_none(), "another app update tap is already open");
 
-            Self(receiver)
+            let tap = Self(receiver);
+            tap.drain();
+
+            tap
         }
 
         /// Waits until the drain thread has forwarded every update sent so far, then returns them
@@ -134,6 +139,7 @@ pub(crate) mod test_support {
                     AppStateReconcileMessage::ClearCachedWalletManager(id) if id == marker => {
                         return updates;
                     }
+
                     update => updates.push(update),
                 }
             }
