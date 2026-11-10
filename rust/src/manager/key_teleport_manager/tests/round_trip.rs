@@ -301,10 +301,16 @@ fn new_request_changes_the_receiver_code_and_only_the_new_code_completes_a_trans
     let _target = WalletTargetGuard::new(Network::Signet, WalletMode::Main);
     let mnemonic = Mnemonic::from_str(ABANDON_ABOUT).unwrap();
     let (receiver, old_request) = start_receiver();
+    let mut screen = Screen::open(&receiver);
 
     // both apps dispatch this from their Create New Request button
     receiver.clone().dispatch(Action::RestartReceive);
+    screen.apply(&receiver);
     let new_request = receive_request(&receiver);
+
+    // the open Receive screen swaps to the new request instead of keeping the old code
+    assert_eq!(screen.state, KeyTeleportManagerState::ReceiveReady(new_request.clone()));
+    assert_eq!(screen.alert, None);
 
     // two random 8-digit codes match about once in 10^8 runs, which is rare enough to assert
     assert_ne!(new_request.numeric_code, old_request.numeric_code);
@@ -394,11 +400,14 @@ fn ending_the_session_discards_the_request_so_its_response_no_longer_opens() {
     let (receiver, request) = start_receiver();
     let (packet, password) = sender_transfer(&request);
     let wallets_before = all_wallet_ids();
+    let mut screen = Screen::open(&receiver);
 
     // both apps dispatch this from their End Session button
     receiver.clone().dispatch(Action::EndReceive);
+    screen.apply(&receiver);
 
     assert!(matches!(receiver.state(), KeyTeleportManagerState::Idle));
+    assert_eq!(screen.state, KeyTeleportManagerState::Idle, "the ended request stayed on screen");
     assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_none());
     assert_eq!(
         deliver_response(&receiver, &packet, &password),
@@ -570,12 +579,14 @@ fn expired_request_reports_expiry_when_its_response_is_scanned_after_a_relaunch(
 
     // the response is scanned before Receive is open, which hands it straight to a new manager
     let relaunched = RustKeyTeleportManager::new();
-    let mut displayed = None;
+    let mut screen = Screen::open(&relaunched);
     relaunched.clone().dispatch(Action::Ingest(KeyTeleportInput::Sender(packet.clone())));
-    apply_alert_messages(&relaunched, &mut displayed);
+    screen.apply(&relaunched);
 
-    assert_eq!(displayed, Some(KeyTeleportAlert::ReceiveSessionExpired));
+    // the expiry banner shows over the replacement request, so the user can scan it again
+    assert_eq!(screen.alert, Some(KeyTeleportAlert::ReceiveSessionExpired));
     let replacement = receive_request(&relaunched);
+    assert_eq!(screen.state, KeyTeleportManagerState::ReceiveReady(replacement.clone()));
     assert_ne!(replacement.packet, request.packet);
     assert!(deliver_response(&relaunched, &packet, &password).is_err());
     assert_eq!(receive_request(&relaunched), replacement);

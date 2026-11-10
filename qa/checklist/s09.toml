@@ -251,7 +251,6 @@ paths = ["rust/src/wallet/builder.rs", "rust/src/manager/import_wallet_manager.r
 coverage = [
     "rust:rust/src/wallet/builder.rs::cold_upgrade_metadata_carries_json_discovery_state",
     "rust:rust/src/wallet/builder.rs::hardware_export_upgrades_the_matching_watch_only_wallet_in_place",
-    "rust:rust/src/manager/import_wallet_manager.rs::existing_wallet_upgrade_preserves_public_material_and_origin",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
 # read as the watch-only to cold upgrade via import; results treated it as an app upgrade

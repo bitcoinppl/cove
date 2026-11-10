@@ -819,12 +819,12 @@ mod tests {
 
     use super::*;
     use crate::{
-        database::test_support::RestoreWalletTarget,
         manager::{
             deferred_sender::SingleOrMany,
             wallet_manager::{RustWalletManager, WalletScanStatus},
         },
-        test_support::fake_node::FakeNode,
+        test_support::{fake_node::FakeNode, wallet_target::WalletTargetGuard},
+        transaction::Transaction,
         wallet::Wallet,
     };
 
@@ -1016,29 +1016,31 @@ mod tests {
         );
     }
 
-    /// The fake node selected as the Bitcoin node, which puts back the node, network and wallet
-    /// mode it found when it drops, since later tests share these settings
+    /// The fake node selected as the Bitcoin node on an empty Bitcoin main wallet list, which
+    /// puts back the node, network, wallet mode, wallets and selections it found when it drops,
+    /// since later tests share these settings
+    ///
+    /// The list starts empty because the import's duplicate check would match a wallet another
+    /// test left with this fingerprint
     struct SelectedFakeNode {
         node: FakeNode,
         previous_node: crate::node::Node,
 
-        // dropped after `drop` restores the node, which restores the network and mode
-        _previous_target: RestoreWalletTarget,
+        // dropped after `drop` restores the node, which restores the target and wallets
+        _target: WalletTargetGuard,
     }
 
     impl SelectedFakeNode {
         fn start() -> Self {
-            let config = &Database::global().global_config;
-            let previous_target = RestoreWalletTarget::capture();
-            let previous_node = config.selected_node_for_network(CoveNetwork::Bitcoin);
-            config.set_selected_network(CoveNetwork::Bitcoin).expect("select Bitcoin");
-            config.set_main_mode().expect("select the main wallet mode");
+            let target = WalletTargetGuard::new(CoveNetwork::Bitcoin, WalletMode::Main);
+            let previous_node =
+                Database::global().global_config.selected_node_for_network(CoveNetwork::Bitcoin);
 
             let node = FakeNode::start(Network::Bitcoin);
             node.chain().mine(5);
             node.select_esplora();
 
-            Self { node, previous_node, _previous_target: previous_target }
+            Self { node, previous_node, _target: target }
         }
     }
 
@@ -1073,7 +1075,9 @@ mod tests {
             .unwrap_or_else(|_| panic!("timed out waiting for {what}; saw {:#?}", self.seen));
         }
 
-        async fn until_scan_settles(&mut self) {
+        /// Waits for a scan to complete and go idle, then returns the transactions of the last
+        /// completed scan, which both apps put on the wallet screen as is
+        async fn until_scan_settles(&mut self) -> Vec<Transaction> {
             self.seen.clear();
             self.until("the scan to complete", |message| {
                 matches!(message, WalletManagerReconcileMessage::ScanComplete(_))
@@ -1087,6 +1091,17 @@ mod tests {
                 )
             })
             .await;
+
+            self.seen
+                .iter()
+                .rev()
+                .find_map(|message| match message {
+                    WalletManagerReconcileMessage::ScanComplete(transactions) => {
+                        Some(transactions.clone())
+                    }
+                    _ => None,
+                })
+                .expect("the scan completed")
         }
     }
 
@@ -1114,6 +1129,15 @@ mod tests {
             .collect()
     }
 
+    /// Transaction ids in sorted order, keeping duplicates so a repeated transaction shows up
+    fn sorted_txids(transactions: &[Transaction]) -> Vec<bdk_wallet::bitcoin::Txid> {
+        let mut txids =
+            transactions.iter().map(|transaction| transaction.id().0).collect::<Vec<_>>();
+
+        txids.sort();
+        txids
+    }
+
     // past the first legacy address, so discovery has to walk to it
     const LEGACY_HISTORY_INDEX: u32 = 2;
 
@@ -1124,12 +1148,6 @@ mod tests {
         crate::database::test_support::init_test_database();
         crate::test_support::init_test_keychain();
         let fake = SelectedFakeNode::start();
-
-        // the import's duplicate check would match a wallet another test left with this fingerprint
-        let wallets = &Database::global().wallets;
-        for leftover in wallets.get_all(CoveNetwork::Bitcoin, WalletMode::Main).unwrap() {
-            crate::wallet::test_support::remove_wallet(&leftover.id);
-        }
 
         let json = descriptor_json(
             Some(bip44_descriptors()),
@@ -1224,27 +1242,29 @@ mod tests {
             .switch_to_different_wallet_address_type(WalletAddressType::Legacy)
             .await
             .expect("the wallet switches to the legacy account");
-        screen.until_scan_settles().await;
 
-        let mut txids = call!(manager.actor.transactions())
-            .await
-            .expect("the wallet actor answers")
-            .iter()
-            .map(|transaction| transaction.id().0)
-            .collect::<Vec<_>>();
+        let shown = screen.until_scan_settles().await;
+
+        let stored_transactions =
+            call!(manager.actor.transactions()).await.expect("the wallet actor answers");
 
         let mut expected_txids = vec![found_txid, later_txid];
-        txids.sort();
         expected_txids.sort();
 
         let balance = manager.balance().await.expect("the wallet has a balance").0;
         let metadata = manager.wallet_metadata();
         let late_discovery_checks = discovery_address_checks(&fake.node);
 
-        drop(manager);
-        crate::wallet::test_support::remove_wallet(&id);
-
-        assert_eq!(txids, expected_txids, "each legacy transaction must show exactly once");
+        assert_eq!(
+            sorted_txids(&shown),
+            expected_txids,
+            "the wallet screen must show each legacy transaction exactly once"
+        );
+        assert_eq!(
+            sorted_txids(&stored_transactions),
+            expected_txids,
+            "the wallet must hold each legacy transaction exactly once"
+        );
         assert_eq!(balance.confirmed.to_sat(), 100_000);
         assert_eq!(metadata.address_type, WalletAddressType::Legacy);
         assert_eq!(metadata.discovery_state, DiscoveryState::ChoseAdressType);

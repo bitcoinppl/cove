@@ -552,6 +552,7 @@ mod tests {
             &home.to_string_lossy(),
             &root_dir.to_string_lossy(),
         ];
+
         for raw in raw_values {
             assert!(!preview.contains(raw), "preview leaks {raw}");
             assert!(!upload.contains(raw), "upload leaks {raw}");

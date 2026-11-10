@@ -176,9 +176,11 @@ coverage = [
     "rust:rust/src/diagnostics.rs::submit_persists_redacted_history_description",
     "rust:rust/src/diagnostics.rs::submit_persists_successful_report_history",
     "rust:rust/src/diagnostics.rs::failed_then_retried_submissions_keep_one_redacted_record_each",
+    "agent",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# both history screens list the stored records as rust returns them
+# rust decides the stored records; reloading the history after the send sheet closes and one
+# tap saving one record are app code no test runs
 
 [[row]]
 id = "s04-copy-id-exact-value"

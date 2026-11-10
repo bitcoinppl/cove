@@ -644,6 +644,7 @@ mod tests {
 
     use super::*;
     use crate::database::test_support::RestoreWalletTarget;
+    use crate::test_support::wallet_target::WalletTargetGuard;
 
     const BIP49_YPUB: &str = "ypub6Ww3ibxVfGzLrAH1PNcjyAWenMTbbAosGNB6VvmSEgytSER9azLDWCxoJwW7Ke7icmizBMXrzBx9979FfaHxHcrArf3zbeJJJUZPf663zsP";
     const BIP84_ZPUB: &str = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
@@ -1313,16 +1314,13 @@ mod tests {
     fn hardware_export_upgrades_the_matching_watch_only_wallet_in_place() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         let _restore_target = init_import_globals();
+        let main = metadata::WalletMode::Main;
+
+        // the import's duplicate check would match a wallet another test left with this
+        // fingerprint, so start from an empty list and put the wallets back afterwards
+        let _target = WalletTargetGuard::new(Network::Bitcoin, main);
         let database = Database::global();
         let keychain = Keychain::global();
-        let main = metadata::WalletMode::Main;
-        database.global_config.set_selected_network(Network::Bitcoin).unwrap();
-        database.global_config.set_main_mode().unwrap();
-
-        // the import's duplicate check would match a wallet another test left with this fingerprint
-        for leftover in database.wallets.get_all(Network::Bitcoin, main).unwrap() {
-            crate::wallet::test_support::remove_wallet(&leftover.id);
-        }
 
         let id = {
             let export = pubport::Format::Descriptor(bip84_descriptors());
@@ -1349,8 +1347,6 @@ mod tests {
         let upgraded_xpub = keychain.get_wallet_xpub(&id).unwrap();
         let upgraded_public_descriptors = keychain.get_public_descriptor(&id).unwrap();
         let upgraded_history = stored_history(&id);
-
-        crate::wallet::test_support::remove_wallet(&id);
 
         assert_eq!(upgraded_id, Ok(id), "the export must upgrade the watch-only wallet");
         assert_eq!(wallet_count, 1, "the upgrade must not add a second wallet");

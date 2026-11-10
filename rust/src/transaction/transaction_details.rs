@@ -634,24 +634,47 @@ mod tests {
     use super::*;
     use cove_types::unit::BitcoinUnit;
 
-    use crate::custom_block_explorer::BlockExplorerOption;
+    use crate::{
+        custom_block_explorer::BlockExplorerOption, database::global_config::GlobalConfigKey,
+    };
     use strum::IntoEnumIterator as _;
 
     // the first bitcoin payment, so the url points at a transaction that really exists
     const MAINNET_TXID: &str = "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16";
 
-    /// Clears every network's explorer override and restores the selected network when dropped,
-    /// since both live in the process-global database
-    struct RestoreExplorerConfig(Network);
+    /// Puts back every network's stored explorer override and the selected network when
+    /// dropped, since both live in the process-global database
+    struct RestoreExplorerConfig {
+        selected_network: Network,
+        explorers: Vec<(Network, Option<String>)>,
+    }
+
+    impl RestoreExplorerConfig {
+        fn capture() -> Self {
+            let config = &Database::global().global_config;
+            let explorers = Network::iter()
+                .map(|network| {
+                    let key = GlobalConfigKey::CustomBlockExplorer(network);
+                    (network, config.get(key).expect("the explorer override reads"))
+                })
+                .collect();
+
+            Self { selected_network: config.selected_network(), explorers }
+        }
+    }
 
     impl Drop for RestoreExplorerConfig {
         fn drop(&mut self) {
             let config = &Database::global().global_config;
-            for network in Network::iter() {
-                let _ = config.clear_custom_block_explorer(network);
+            for (network, explorer) in &self.explorers {
+                let key = GlobalConfigKey::CustomBlockExplorer(*network);
+                let _ = match explorer {
+                    Some(explorer) => config.set(key, explorer.clone()),
+                    None => config.delete(key),
+                };
             }
 
-            let _ = config.set_selected_network(self.0);
+            let _ = config.set_selected_network(self.selected_network);
         }
     }
 
@@ -669,7 +692,7 @@ mod tests {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::database::test_support::init_test_database();
         let config = &Database::global().global_config;
-        let _restore = RestoreExplorerConfig(config.selected_network());
+        let _restore = RestoreExplorerConfig::capture();
 
         config.set_selected_network(Network::Bitcoin).unwrap();
         config
@@ -702,7 +725,7 @@ mod tests {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::database::test_support::init_test_database();
         let config = &Database::global().global_config;
-        let _restore = RestoreExplorerConfig(config.selected_network());
+        let _restore = RestoreExplorerConfig::capture();
 
         for placeholder in ["{txid}", "{0}", "{tx_id}"] {
             for network in [Network::Bitcoin, Network::Signet] {
@@ -731,7 +754,7 @@ mod tests {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::database::test_support::init_test_database();
         let config = &Database::global().global_config;
-        let _restore = RestoreExplorerConfig(config.selected_network());
+        let _restore = RestoreExplorerConfig::capture();
 
         let cases = [
             (BlockExplorerOption::MempoolSpace, Network::Bitcoin, "https://mempool.space/tx/"),

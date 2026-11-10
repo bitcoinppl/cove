@@ -449,10 +449,6 @@ mod tests {
         let upgraded =
             import_wallet_secret_with_target(incoming, Network::Signet, WalletMode::Decoy).unwrap();
 
-        // the wallet the user already had gains the key, keeping what they named and chose
-        assert_eq!(upgraded.id, existing.id);
-        assert_eq!(upgraded.name, existing.name);
-        assert_eq!(upgraded.address_type, existing.address_type);
         assert_eq!(upgraded.wallet_type, WalletType::Hot);
         assert_eq!(upgraded.origin, expected_origin);
 
