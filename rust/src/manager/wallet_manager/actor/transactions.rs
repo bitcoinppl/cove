@@ -235,16 +235,12 @@ impl WalletActor {
             return;
         }
 
-        for record in &settled {
-            self.wallet.unreserve_tx_change_addresses(&record.confirm_details.psbt.0.unsigned_tx);
-        }
-
         // a record settled by its own broadcast keeps its change address used through the wallet
         // graph once the record is gone, so the graph must be durable before the delete,
         // otherwise a restart could hand that change address to a new draft. a record settled by
         // a conflicting spend never used its change address, so releasing it is correct
         if let Err(error) = self.wallet.persist() {
-            warn!("failed to persist released change addresses, keeping settled records: {error}");
+            warn!("failed to persist the wallet graph, keeping settled records: {error}");
             return;
         }
 
@@ -255,6 +251,8 @@ impl WalletActor {
                 continue;
             }
 
+            // release only what a deleted record held, since a kept record still owns its change
+            self.wallet.unreserve_tx_change_addresses(&record.confirm_details.psbt.0.unsigned_tx);
             debug!("pruned settled unsigned transaction {}", record.tx_id);
             pruned = true;
         }
