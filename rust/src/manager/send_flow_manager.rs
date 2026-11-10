@@ -659,7 +659,8 @@ impl RustSendFlowManager {
         let me = self.clone();
         cove_tokio::task::spawn(async move {
             // run all refreshes concurrently
-            tokio::join!(
+            // the fee update below records a first address failure when it blocks fees
+            let _ = tokio::join!(
                 me.get_first_address(),
                 me.get_or_update_fee_rate_options(),
                 me.get_wallet_balance(),
@@ -691,11 +692,14 @@ impl RustSendFlowManager {
         });
     }
 
-    async fn get_first_address(self: &Arc<Self>) {
-        if let Ok(first_address) = self.wallet_manager.first_address().await {
-            let address = first_address.address.clone().into();
-            self.state.lock().first_address = Some(Arc::new(address));
-        }
+    async fn get_first_address(
+        self: &Arc<Self>,
+    ) -> Result<(), crate::manager::wallet_manager::WalletManagerError> {
+        let first_address = self.wallet_manager.first_address().await?;
+        let address = first_address.address.clone().into();
+        self.state.lock().first_address = Some(Arc::new(address));
+
+        Ok(())
     }
 
     fn schedule_fee_rate_update(self: &Arc<Self>) {

@@ -36,6 +36,8 @@ pub struct SendFlowManagerState {
     /// UI can show immediately once this is true (total fees pending calculation)
     pub(crate) has_base_fees: bool,
     pub(crate) mode: EnterMode,
+    /// Last fee update failure, kept so recalculations on every edit log only when it changes
+    pub(crate) last_fee_failure: Option<String>,
 
     // public
     pub entering_btc_amount: String,
@@ -167,6 +169,7 @@ impl SendFlowManagerState {
             btc_price_in_fiat,
             selected_fiat_currency,
             has_base_fees: false,
+            last_fee_failure: None,
             payjoin_endpoint: None,
         }
     }

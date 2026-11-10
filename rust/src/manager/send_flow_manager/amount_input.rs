@@ -1,7 +1,7 @@
 use crate::fiat::FiatCurrency;
 use std::sync::Arc;
 
-use crate::fiat::client::PriceResponse;
+use crate::{fiat::client::PriceResponse, manager::wallet_manager::WalletManagerError};
 use act_zero::call;
 use cove_types::{amount::Amount, fees::FeeRateOptionWithTotalFee, psbt::Psbt, unit::BitcoinUnit};
 use cove_util::format::NumberFormatter as _;
@@ -323,7 +323,7 @@ impl RustSendFlowManager {
                 wallet_actor.build_ephemeral_drain_tx(request.address.clone(), request.fee_rate)
             );
 
-            let psbt: Psbt = drain.await.unwrap()?.into();
+            let psbt: Psbt = drain.await.unwrap_or(Err(WalletManagerError::ActorNotFound))?.into();
             let amount = Arc::new(psbt.output_total_amount());
             trace!("max drain: {amount:?} at {:?}", request.fee_rate);
 

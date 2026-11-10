@@ -2,7 +2,7 @@ use act_zero::call;
 use cove_types::{amount::Amount, psbt::Psbt};
 use tracing::trace;
 
-use crate::{transaction::FeeRate, wallet::Address};
+use crate::{manager::wallet_manager::WalletManagerError, transaction::FeeRate, wallet::Address};
 
 use super::{AmountOrMax, CoinControlMode, EnterMode, Result, RustSendFlowManager, SendFlowError};
 
@@ -63,12 +63,14 @@ impl RustSendFlowManager {
         let psbt = match amount {
             AmountOrMax::Amount(amount) => {
                 let amount = amount.as_ref().0;
-                call!(actor.build_ephemeral_tx(amount, address, fee_rate)).await.unwrap()
+                call!(actor.build_ephemeral_tx(amount, address, fee_rate))
+                    .await
+                    .unwrap_or(Err(WalletManagerError::ActorNotFound))
             }
 
-            AmountOrMax::Max => {
-                call!(actor.build_ephemeral_drain_tx(address, fee_rate)).await.unwrap()
-            }
+            AmountOrMax::Max => call!(actor.build_ephemeral_drain_tx(address, fee_rate))
+                .await
+                .unwrap_or(Err(WalletManagerError::ActorNotFound)),
         }?;
 
         Ok(psbt.into())
