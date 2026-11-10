@@ -10,6 +10,7 @@ use parking_lot::Mutex;
 pub(crate) mod fake_node;
 pub(crate) mod hardware_signing;
 pub(crate) mod tap_signer_emulator;
+pub(crate) mod wallet_target;
 
 use crate::wallet::fingerprint::Fingerprint;
 use crate::wallet::metadata::{WalletId, WalletMetadata, WalletType};
@@ -98,6 +99,7 @@ pub(crate) struct MockKeychain {
     delete_count: Arc<Mutex<usize>>,
     after_save: Arc<Mutex<Option<AfterSaveHook>>>,
     unreadable_keys: Arc<Mutex<HashSet<String>>>,
+    recorded_reads: Arc<Mutex<Option<Vec<String>>>>,
 }
 
 // the after-save hook is a closure, which has no Debug impl
@@ -110,6 +112,7 @@ impl std::fmt::Debug for MockKeychain {
             .field("save_count", &self.save_count)
             .field("delete_count", &self.delete_count)
             .field("unreadable_keys", &self.unreadable_keys)
+            .field("recorded_reads", &self.recorded_reads)
             .finish_non_exhaustive()
     }
 }
@@ -123,6 +126,17 @@ impl MockKeychain {
         *self.delete_count.lock() = 0;
         *self.after_save.lock() = None;
         self.unreadable_keys.lock().clear();
+        *self.recorded_reads.lock() = None;
+    }
+
+    /// Starts recording the key of every read, dropping any earlier recording
+    pub(crate) fn record_reads(&self) {
+        *self.recorded_reads.lock() = Some(Vec::new());
+    }
+
+    /// Stops recording reads and returns the keys read since [`Self::record_reads`]
+    pub(crate) fn take_recorded_reads(&self) -> Vec<String> {
+        self.recorded_reads.lock().take().unwrap_or_default()
     }
 
     /// Makes reads of `key` fail the way a locked platform keychain does
@@ -179,6 +193,10 @@ impl KeychainAccess for MockKeychain {
     }
 
     fn get(&self, key: String) -> Result<Option<String>, KeychainError> {
+        if let Some(reads) = self.recorded_reads.lock().as_mut() {
+            reads.push(key.clone());
+        }
+
         if self.unreadable_keys.lock().contains(&key) {
             return Err(KeychainError::Read(format!("{key} is unreadable")));
         }

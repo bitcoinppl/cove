@@ -408,6 +408,11 @@ mod tests {
     }
 
     async fn upload_server_response(status: &'static str, body: String) -> String {
+        upload_server_responses(vec![(status, body)]).await
+    }
+
+    /// Serves one canned collector response per request, in order
+    async fn upload_server_responses(responses: Vec<(&'static str, String)>) -> String {
         use tokio::{
             io::{AsyncReadExt as _, AsyncWriteExt as _},
             net::TcpListener,
@@ -417,19 +422,204 @@ mod tests {
         let addr = listener.local_addr().expect("test server has local addr");
 
         tokio::spawn(async move {
-            let (mut socket, _) = listener.accept().await.expect("test server accepts request");
-            let mut buffer = [0; 4096];
-            let _ = socket.read(&mut buffer).await.expect("test server reads request");
+            for (status, body) in responses {
+                let (mut socket, _) = listener.accept().await.expect("test server accepts request");
+                let mut buffer = [0; 4096];
+                let _ = socket.read(&mut buffer).await.expect("test server reads request");
 
-            let response = format!(
-                "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-                body.len(),
-            );
+                let response = format!(
+                    "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len(),
+                );
 
-            socket.write_all(response.as_bytes()).await.expect("test server writes response");
+                socket.write_all(response.as_bytes()).await.expect("test server writes response");
+            }
         });
 
         format!("http://{addr}/reports")
+    }
+
+    fn section_body<'a>(report: &'a DiagnosticsReport, title: &str) -> &'a str {
+        report
+            .sections
+            .iter()
+            .find(|section| section.title == title)
+            .map(|section| section.body.as_str())
+            .unwrap_or_else(|| panic!("report has a {title} section"))
+    }
+
+    #[test]
+    fn controlled_values_logged_by_rust_and_platforms_are_redacted_in_report_and_upload() {
+        use tracing_subscriber::layer::SubscriberExt as _;
+
+        // the rust log capture and the data dir statics are process-global
+        let _global_guard = crate::test_support::global_state_test_lock().blocking_lock();
+
+        let segwit_address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
+        let taproot_address = "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0";
+        let legacy_address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT";
+        let testnet_address = "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7";
+        let xpub = "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
+        let xprv = "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi";
+        let uncompressed_wif = "5JYkZjmN7PVMjJUfJWfRFwtuXTGB439XV6faajeHPAM9Z2PT2R3";
+        let compressed_wif = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn";
+        let rust_txid = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+        let platform_txid = "4d3c2b1a".repeat(8);
+        let multiline_mnemonic = "abandon abandon abandon abandon abandon abandon\nabandon abandon abandon abandon abandon about";
+        let numbered_mnemonic = (1..=24)
+            .map(|index| format!("{index}. {}", if index == 24 { "art" } else { "abandon" }))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let home = dirs::home_dir().expect("test machine has a home dir");
+        let root_dir = cove_common::consts::ROOT_DATA_DIR.clone();
+        let wallet_db = cove_common::consts::WALLET_DATA_DIR.join("wallet-id").join("bdk.db");
+        let root_db = root_dir.join("cove.encrypted.db");
+        let home_export = home.join("Downloads").join("cove-export.psbt");
+
+        // log through the same capture layer the app installs, so field formatting such as
+        // debug-escaped newlines reaches the redactor exactly as it does on device
+        let subscriber =
+            tracing_subscriber::registry().with(cove_common::logging::capture::layer());
+
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(
+                wallet_db = %wallet_db.display(),
+                "rust-source loaded wallet {xpub} next address {segwit_address}"
+            );
+            tracing::warn!(
+                words = ?multiline_mnemonic,
+                "rust-source restore failed for {rust_txid} amount=5000 sats"
+            );
+            tracing::error!("rust-source import rejected {uncompressed_wif} and {xprv}");
+        });
+
+        // shaped like SwiftLogStore lines on iOS and logcat lines on Android
+        let platform_logs = [
+            format!(
+                "2026-11-10T12:00:00.000Z INFO WalletManager: platform-source receive {taproot_address} db {}",
+                root_db.display()
+            ),
+            format!(
+                "11-10 12:00:01.000  1234  5678 D CoveSend: platform-source broadcast {platform_txid} change {legacy_address} amount=5000 sats"
+            ),
+            format!(
+                "11-10 12:00:02.000  1234  5678 W CoveImport: platform-source sweep {compressed_wif} to {testnet_address} from {}",
+                home_export.display()
+            ),
+            format!("2026-11-10T12:00:03.000Z ERROR Restore: platform-source words {numbered_mnemonic}"),
+        ]
+        .join("\n");
+
+        let report =
+            DiagnosticsReport::build(platform_info(), platform_logs).expect("report builds");
+
+        let preview = report.preview_text();
+        let upload = serde_json::to_string(&report.upload_report(None)).unwrap();
+        let rust_logs = section_body(&report, "Rust logs");
+        let platform_section = section_body(&report, "Platform logs");
+        let startup = section_body(&report, "Startup diagnostics");
+
+        // each source reached its section, so the absence checks below are not vacuous
+        assert!(rust_logs.contains("rust-source loaded wallet <redacted-extended-key-"));
+        assert!(rust_logs.contains("next address <redacted-bitcoin-address-"));
+        assert!(rust_logs.contains("words=\"<redacted-seed-phrase-"));
+        assert!(rust_logs.contains("restore failed for <redacted-transaction-id-"));
+        assert!(rust_logs.contains("import rejected <redacted-wif-private-key-"));
+        assert!(rust_logs.contains("wallet_db=<COVE_WALLET_DATA_DIR>"));
+        assert!(rust_logs.contains("amount=5000 sats"));
+        assert!(platform_section.contains("receive <redacted-bitcoin-address-"));
+        assert!(platform_section.contains("db <COVE_ROOT_DATA_DIR>"));
+        assert!(platform_section.contains("broadcast <redacted-transaction-id-"));
+        assert!(platform_section.contains("sweep <redacted-wif-private-key-"));
+        assert!(platform_section.contains("from <HOME_DIR>"));
+        assert!(platform_section.contains("words 1. <redacted-seed-phrase-"));
+        assert!(platform_section.contains("amount=5000 sats"));
+        assert!(startup.contains("<COVE_ROOT_DATA_DIR>"));
+
+        let raw_values = [
+            segwit_address,
+            taproot_address,
+            legacy_address,
+            testnet_address,
+            xpub,
+            xprv,
+            uncompressed_wif,
+            compressed_wif,
+            rust_txid,
+            &platform_txid,
+            "abandon",
+            &home.to_string_lossy(),
+            &root_dir.to_string_lossy(),
+        ];
+
+        for raw in raw_values {
+            assert!(!preview.contains(raw), "preview leaks {raw}");
+            assert!(!upload.contains(raw), "upload leaks {raw}");
+        }
+    }
+
+    #[test]
+    fn shared_plain_report_is_the_redacted_preview_with_the_upload_content() {
+        let address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
+        let xpub = "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
+        let txid = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let report = DiagnosticsReport::build_with_sources(
+            platform_info(),
+            format!("platform saw {address} amount=5000 sats"),
+            "startup ok".to_string(),
+            format!("rust synced {xpub} via {txid}"),
+        )
+        .unwrap();
+
+        let description = format!("  paid {address} then restored {mnemonic}  ");
+
+        // both apps write exactly this string to the shared plain-text file
+        let shared = report.preview_text_for_description(Some(description.clone()));
+        let shared_again = report.preview_text_for_description(Some(description.clone()));
+        let shared_without_description = report.preview_text_for_description(None);
+        let upload =
+            report.upload_report(report.redacted_user_description(Some(description.clone())));
+        let (previewed, described) =
+            shared.split_once("\n## User description\n").expect("shared report has a description");
+
+        assert_eq!(shared, shared_again);
+        assert_eq!(previewed, report.preview_text());
+        assert_eq!(
+            described,
+            "paid <redacted-bitcoin-address-1> then restored <redacted-seed-phrase-1>\n"
+        );
+        assert_eq!(upload.user_description.as_deref(), described.strip_suffix('\n'));
+        assert_eq!(report.size_bytes_for_description(Some(description)), shared.len() as u64);
+        assert_eq!(shared_without_description, report.preview_text());
+        assert!(!shared_without_description.contains("## User description"));
+
+        for section in &upload.sections {
+            assert!(shared.contains(&format!("## {}\n{}", section.title, section.body)));
+        }
+
+        let metadata = &upload.metadata;
+        for line in [
+            format!("Generated: {}", upload.generated_at),
+            format!("Platform: {}", metadata.platform),
+            format!("App version: {}", metadata.app_version),
+            format!("Build number: {}", metadata.build_number),
+            format!("OS version: {}", metadata.os_version),
+            format!("Device model: {}", metadata.device_model),
+            format!("Rust git hash: {}", metadata.rust_git_hash),
+        ] {
+            assert!(shared.contains(&line), "shared report is missing {line}");
+        }
+
+        assert!(shared.contains("platform saw <redacted-bitcoin-address-1> amount=5000 sats"));
+        assert!(
+            shared
+                .contains("rust synced <redacted-extended-key-1> via <redacted-transaction-id-1>")
+        );
+        for raw in [address, xpub, txid, mnemonic] {
+            assert!(!shared.contains(raw), "shared report leaks {raw}");
+        }
     }
 
     #[test]
@@ -609,6 +799,77 @@ mod tests {
         assert!(history_description.contains("<redacted-seed-phrase-1>"));
         assert!(!history_description.contains("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"));
         assert!(!history_description.contains(mnemonic));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn failed_then_retried_submissions_keep_one_redacted_record_each() {
+        let _global_guard = crate::test_support::global_state_test_lock().lock().await;
+        let _env_guard = DIAGNOSTICS_UPLOAD_ENV_LOCK.lock().await;
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        crate::test_support::ensure_tokio_runtime();
+        crate::database::test_support::delete_database();
+        Database::try_reinit().expect("database reinitializes");
+
+        let upload_url = upload_server_responses(vec![
+            ("500 Internal Server Error", r#"{"error":"collector down"}"#.to_string()),
+            ("200 OK", r#"{"id":"report_retried"}"#.to_string()),
+            ("200 OK", r#"{"id":"report_second"}"#.to_string()),
+        ])
+        .await;
+        let _upload_url = EnvVarGuard::set("COVE_DIAGNOSTICS_URL", &upload_url);
+        let address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
+        let txid = "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let report = DiagnosticsReport::build_with_sources(
+            platform_info(),
+            format!("platform saw {address}"),
+            String::new(),
+            String::new(),
+        )
+        .unwrap();
+
+        let second_report = DiagnosticsReport::build_with_sources(
+            platform_info(),
+            String::new(),
+            String::new(),
+            String::new(),
+        )
+        .unwrap();
+
+        let description = format!("  sent to {address} in {txid} after restoring {mnemonic}  ");
+
+        // a collector error is not retried inside submit, so the user retries the same report
+        let failed = report.submit(Some(description.clone())).await;
+        let history_after_failure = Database::global().diagnostics_reports.all().unwrap();
+
+        let retried = report.submit(Some(description)).await.unwrap();
+        let history_after_retry = Database::global().diagnostics_reports.all().unwrap();
+
+        let second = second_report.submit(Some(" \n ".to_string())).await.unwrap();
+        let history = Database::global().diagnostics_reports.all().unwrap();
+        let stored = serde_json::to_string(&history).unwrap();
+
+        assert!(matches!(failed, Err(DiagnosticsError::Submit(_))));
+        assert!(history_after_failure.is_empty());
+        assert_eq!(retried.report_id, "report_retried");
+        assert!(retried.history_saved);
+        assert_eq!(history_after_retry.len(), 1);
+        assert_eq!(history_after_retry[0].report_id, "report_retried");
+        assert_eq!(
+            history_after_retry[0].description.as_deref(),
+            Some(
+                "sent to <redacted-bitcoin-address-1> in <redacted-transaction-id-1> after restoring <redacted-seed-phrase-1>"
+            )
+        );
+        assert_eq!(second.report_id, "report_second");
+        assert!(second.history_saved);
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].report_id, "report_second");
+        assert_eq!(history[0].description, None);
+        assert_eq!(history[1], history_after_retry[0]);
+        for raw in [address, txid, mnemonic] {
+            assert!(!stored.contains(raw), "stored history leaks {raw}");
+        }
     }
 
     #[tokio::test(flavor = "current_thread")]

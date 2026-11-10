@@ -28,9 +28,13 @@ section = "7"
 title = "New Request changes receiver code"
 platforms = ["ios", "android"]
 target = "rust"
-paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt"]
-coverage = ["agent", "rust:rust/src/manager/key_teleport_manager/tests.rs::start_receive_resumes_session_and_restart_replaces_it"]
+paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSharedViews.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportToolbarMenu.kt"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::start_receive_resumes_session_and_restart_replaces_it",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::new_request_changes_the_receiver_code_and_only_the_new_code_completes_a_transfer",
+]
 # 1.4.0: ios BLOCKED, android PASS
+# both apps dispatch RestartReceive from the toolbar after a confirmation and show the state rust sends
 
 [[row]]
 id = "s07-valid-pasted-request-and-correct-receiver-code"
@@ -39,8 +43,15 @@ title = "Valid pasted request and correct receiver code"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/send.rs", "rust/src/manager/key_teleport_manager/controller.rs", "rust/src/key_teleport.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSendViews.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportSendViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["agent", "rust:rust/src/manager/key_teleport_manager/tests.rs::receiver_code_reaches_send_ready_for_mnemonic", "rust:rust/src/manager/key_teleport_manager/tests.rs::wallet_started_send_keeps_wallet_fixed_while_awaiting_receiver", "rust:rust/src/key_teleport.rs::parses_keyteleport_url_receiver_packet"]
+coverage = [
+    "agent",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::receiver_code_reaches_send_ready_for_mnemonic",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::wallet_started_send_keeps_wallet_fixed_while_awaiting_receiver",
+    "rust:rust/src/key_teleport.rs::parses_keyteleport_url_receiver_packet",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::pasted_request_link_or_packet_with_the_shown_code_sends_the_fixed_wallet",
+]
 # 1.4.0: ios BLOCKED, android PASS
+# parsing the paste, the code and the transfer are asserted in rust; a paste inside the flow first passes the ios and android routing checks, so accepting it still needs an agent
 
 [[row]]
 id = "s07-receiver-response-open-with-routing"
@@ -96,9 +107,13 @@ section = "7"
 title = "End Session clears receiver request"
 platforms = ["ios", "android"]
 target = "rust"
-paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt"]
-coverage = ["agent", "rust:rust/src/manager/key_teleport_manager/tests.rs::end_receive_deletes_session_and_returns_to_idle"]
+paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSharedViews.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportToolbarMenu.kt"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::end_receive_deletes_session_and_returns_to_idle",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::ending_the_session_discards_the_request_so_its_response_no_longer_opens",
+]
 # 1.4.0: ios PASS, android PASS
+# both apps dispatch EndReceive from the toolbar after a confirmation and show the state rust sends
 
 [[row]]
 id = "s07-old-responses-rejected-after-new-request-expired"
@@ -151,8 +166,13 @@ title = "Wrong-direction pasted payload gives recoverable error"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/send.rs", "rust/src/manager/key_teleport_manager/controller.rs", "rust/src/key_teleport.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSendViews.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportSendViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["agent", "rust:rust/src/manager/key_teleport_manager/tests.rs::ingest_rejects_packets_that_conflict_with_the_active_direction"]
+coverage = [
+    "agent",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::ingest_rejects_packets_that_conflict_with_the_active_direction",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::wrong_direction_paste_is_refused_and_both_phones_still_finish_their_transfer",
+]
 # 1.4.0: ios BLOCKED, android PASS
+# a paste inside the flow is refused by the ios and android routing checks before rust sees it, so that alert still needs an agent
 
 [[row]]
 id = "s07-malformed-pasted-text-errors-without-leaving-sender"
@@ -206,7 +226,9 @@ title = "Fixed sender avoids unrelated-wallet scan"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/send.rs", "rust/src/manager/key_teleport_manager/controller.rs", "rust/src/key_teleport.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportSendViews.swift", "ios/Cove/ScanManager+KeyTeleport.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportSendViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/KeyTeleportScanHandler.kt"]
-coverage = ["agent"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::fixed_sender_answers_a_request_without_reading_other_wallets",
+]
 # 1.4.0: ios BLOCKED, android BLOCKED
 
 [[row]]
@@ -216,7 +238,11 @@ title = "Main receive request cannot resume in decoy mode"
 platforms = ["ios", "android"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportReceiveViews.kt", "android/app/src/main/java/org/bitcoinppl/cove/flows/keyteleport/KeyTeleportStateContent.kt"]
-coverage = ["agent", "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_resume_and_ingest_refuse_a_changed_network", "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_ingest_refuses_a_changed_wallet_mode"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_resume_and_ingest_refuse_a_changed_network",
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::receive_ingest_refuses_a_changed_wallet_mode",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::main_receive_request_stays_hidden_and_unusable_in_decoy_mode",
+]
 # 1.4.0: ios BLOCKED, android PASS
 
 [[row]]
@@ -226,7 +252,11 @@ title = "iOS expired request reports expiry"
 platforms = ["ios"]
 target = "rust"
 paths = ["rust/src/manager/key_teleport_manager.rs", "rust/src/manager/key_teleport_manager/receive.rs", "rust/src/manager/key_teleport_manager/receive_session.rs", "rust/src/manager/key_teleport_manager/controller.rs", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportReceiveViews.swift", "ios/Cove/Flows/KeyTeleportFlow/KeyTeleportStateContent.swift"]
-coverage = ["agent"]
+coverage = [
+    "rust:rust/src/manager/key_teleport_manager/tests.rs::restarting_receive_after_expiry_clears_the_expired_session_alert",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::response_for_an_expired_request_is_rejected_and_its_replacement_still_works",
+    "rust:rust/src/manager/key_teleport_manager/tests/round_trip.rs::expired_request_reports_expiry_when_its_response_is_scanned_after_a_relaunch",
+]
 # 1.4.0: ios PASS, android N/A
 
 [[row]]

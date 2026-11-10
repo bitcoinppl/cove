@@ -644,6 +644,7 @@ mod tests {
 
     use super::*;
     use crate::database::test_support::RestoreWalletTarget;
+    use crate::test_support::wallet_target::WalletTargetGuard;
 
     const BIP49_YPUB: &str = "ypub6Ww3ibxVfGzLrAH1PNcjyAWenMTbbAosGNB6VvmSEgytSER9azLDWCxoJwW7Ke7icmizBMXrzBx9979FfaHxHcrArf3zbeJJJUZPf663zsP";
     const BIP84_ZPUB: &str = "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs";
@@ -1276,6 +1277,95 @@ mod tests {
         assert_eq!(second.err(), Some(WalletError::WalletAlreadyExists(first.id.clone())));
 
         Database::global().wallets.delete(&first.id).unwrap();
+    }
+
+    // a Coldcard generic JSON export of the account `bip84_descriptors` describes, with its
+    // legacy and wrapped segwit accounts
+    const COLDCARD_GENERIC_EXPORT: &str = r#"{
+  "xfp": "817E7BE0",
+  "account": 0,
+  "bip44": {
+    "deriv": "m/44'/0'/0'",
+    "xpub": "xpub6BoKN14JzSFN1T3cqe9FnrwnXGAsmbgETJyeazoa3F7aMXh4XndvVrJAYyM127FsrH8KFv5XFXDroqXNfZMfsinow7xp93ueYSpnrjBBFs4"
+  },
+  "bip49": {
+    "deriv": "m/49'/0'/0'",
+    "xpub": "xpub6CCKAvUTNursEnaJ8k1d27LfqEUzeAx2N9wFqYE3W1xh7nqgJEBEbLSSmohwDxzsSvcsYqiQqFzRvta65Njbe5o84bF5YXHFqfSH2Dkhonm"
+  },
+  "bip84": {
+    "deriv": "m/84'/0'/0'",
+    "xpub": "xpub6CiKnWv7PPyyeb4kCwK4fidKqVjPfD9TP6MiXnzBVGZYNanNdY3mMvywcrdDc6wK82jyBSd95vsk26QujnJWPrSaPfYeyW7NyX37HHGtfQM"
+  }
+}"#;
+
+    /// The transactions and balance a wallet's store holds, which the transaction list and
+    /// balance show
+    fn stored_history(id: &WalletId) -> (Vec<bdk_wallet::bitcoin::Txid>, bdk_wallet::Balance) {
+        let wallet = Wallet::try_load_persisted(id.clone()).expect("the wallet loads");
+        let mut txids = wallet.bdk.transactions().map(|tx| tx.tx_node.txid).collect::<Vec<_>>();
+        txids.sort();
+
+        (txids, wallet.bdk.balance())
+    }
+
+    // a watch-only wallet is one whose private key is gone, such as a hot wallet whose key went
+    // missing, so the test saves an imported wallet with that type and a name the user chose
+    #[test]
+    fn hardware_export_upgrades_the_matching_watch_only_wallet_in_place() {
+        let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+        let _restore_target = init_import_globals();
+        let main = metadata::WalletMode::Main;
+
+        // the import's duplicate check would match a wallet another test left with this
+        // fingerprint, so start from an empty list and put the wallets back afterwards
+        let _target = WalletTargetGuard::new(Network::Bitcoin, main);
+        let database = Database::global();
+        let keychain = Keychain::global();
+
+        let id = {
+            let export = pubport::Format::Descriptor(bip84_descriptors());
+            Wallet::try_new_persisted_from_pubport(export).unwrap().id
+        };
+
+        crate::test_support::hardware_signing::fund_offline(&id, &[50_000, 25_000]);
+
+        let mut watch_only = database.wallets.get(&id, Network::Bitcoin, main).unwrap().unwrap();
+        watch_only.name = "Savings".to_string();
+        watch_only.wallet_type = WalletType::WatchOnly;
+        database.wallets.replace_wallet_metadata(watch_only.clone()).unwrap();
+
+        let xpub = keychain.get_wallet_xpub(&id).unwrap();
+        let public_descriptors = keychain.get_public_descriptor(&id).unwrap();
+        let history = stored_history(&id);
+
+        // the same call the add wallet screen makes with a pasted, scanned or opened export
+        let upgraded_id =
+            Wallet::try_new_persisted_from_xpub(COLDCARD_GENERIC_EXPORT.to_string()).map(|w| w.id);
+
+        let wallet_count = database.wallets.get_all(Network::Bitcoin, main).unwrap().len();
+        let stored = database.wallets.get(&id, Network::Bitcoin, main).unwrap().unwrap();
+        let upgraded_xpub = keychain.get_wallet_xpub(&id).unwrap();
+        let upgraded_public_descriptors = keychain.get_public_descriptor(&id).unwrap();
+        let upgraded_history = stored_history(&id);
+
+        assert_eq!(upgraded_id, Ok(id), "the export must upgrade the watch-only wallet");
+        assert_eq!(wallet_count, 1, "the upgrade must not add a second wallet");
+        assert_eq!(stored.name, "Savings");
+        assert_eq!(stored.wallet_type, WalletType::Cold);
+        assert_eq!(stored.address_type, WalletAddressType::NativeSegwit);
+        assert_eq!(stored.master_fingerprint, watch_only.master_fingerprint);
+        assert_eq!(stored.origin.as_deref(), Some("wpkh([817e7be0/84'/0'/0'])"));
+        assert_eq!(stored.origin, watch_only.origin);
+        assert_eq!(upgraded_xpub, xpub);
+        assert_eq!(upgraded_public_descriptors, public_descriptors);
+        assert_eq!(history.0.len(), 2, "the watch-only wallet starts with its history");
+        assert_eq!(upgraded_history, history);
+
+        // the export's legacy and wrapped segwit accounts are left for discovery to check
+        assert_eq!(
+            stored.discovery_state,
+            DiscoveryState::StartedJson(Arc::new(json_from_export(COLDCARD_GENERIC_EXPORT).into()))
+        );
     }
 
     #[test]
