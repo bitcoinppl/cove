@@ -181,20 +181,26 @@ impl TransactionDetails {
         let tx_details = wallet.get_tx(txid).ok_or(Error::NotFound)?.tx_node.tx;
         let network = Network::try_from(wallet.network()).map_err(Error::UnsupportedNetwork)?;
 
+        // missing parts degrade the details screen, one line per load names every missing part
+        let mut missing = Vec::new();
         let fee = wallet
             .calculate_fee(&tx_details)
-            .tap_err(|e| tracing::debug!("Failed to calculate fee for {txid}: {e}"))
+            .tap_err(|e| missing.push(format!("fee: {e}")))
             .ok()
             .map(Into::into);
         let fee_rate = wallet
             .calculate_fee_rate(&tx_details)
-            .tap_err(|e| tracing::debug!("Failed to calculate fee rate for {txid}: {e}"))
+            .tap_err(|e| missing.push(format!("fee rate: {e}")))
             .ok()
             .map(Into::into);
 
-        let address = Address::try_new(&tx, wallet)
-            .tap_err(|e| tracing::debug!("Failed to get address for {txid}: {e}"))
-            .ok();
+        let address =
+            Address::try_new(&tx, wallet).tap_err(|e| missing.push(format!("address: {e}"))).ok();
+
+        if !missing.is_empty() {
+            tracing::warn!("transaction details for {txid} are missing {}", missing.join("; "));
+        }
+
         let pending_or_confirmed = PendingOrConfirmed::new(chain_postition);
 
         let change_address = match sent_and_received.direction {
