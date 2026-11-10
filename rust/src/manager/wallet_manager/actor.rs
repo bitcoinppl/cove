@@ -3143,6 +3143,12 @@ mod tests {
         crate::database::test_support::init_test_database();
         let server = set_broadcast_esplora_node(200).await;
 
+        // a BIP 21 URI with a BIP 77 v2 pj= endpoint, from the payjoin crate's own test vectors
+        let uri = "bitcoin:bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm?amount=0.0005&pjos=0&pj=HTTPS://PAYJO.IN/TXJCGKTKXLUUZ%23EX1C4UC6ES-OH1QYPM5JXYNS754Y4R45QWE336QFX6ZR8DQGVQCULVZTV20TFVEYDMFQC-RK1Q0DJS3VVDXWQQTLQ8022QGXSX7ML9PHZ6EDSF6AKEWQG758JPS2EV";
+        let parsed = cove_types::address::AddressWithNetwork::try_new(uri).expect("URI parses");
+        let endpoint = parsed.payjoin.expect("the URI carries a payjoin endpoint").endpoint;
+        let amount = Amount::from_sat(parsed.amount.expect("the URI carries an amount").as_sats());
+
         let metadata = WalletMetadata::preview_new();
         let mut wallet = persisted_preview_wallet(metadata.clone());
         mark_wallet_ledger_ready(&mut wallet);
@@ -3159,21 +3165,20 @@ mod tests {
 
         let (sender, _receiver) = flume::bounded(100);
         let mut actor = new_test_wallet_actor(wallet, sender);
+        let db = actor.db.clone();
 
-        let result = actor
-            .build_tx(Amount::from_sat(50_000), Address::preview_new(), one_sat_vbyte_fee_rate())
-            .await;
+        let result = actor.build_tx(amount, parsed.address, one_sat_vbyte_fee_rate()).await;
         let psbt = actor_value(result).await.expect("psbt is built");
 
         let addr = spawn_actor(actor);
 
-        let result = call!(
-            addr.initiate_payment(psbt, Some("https://payjoin.example.com/endpoint".to_string()))
-        )
-        .await
-        .expect("initiate_payment actor responds");
+        let result = call!(addr.initiate_payment(psbt, Some(endpoint)))
+            .await
+            .expect("initiate_payment actor responds");
 
+        // a payjoin round or a fallback would broadcast later, so give either time to show up
         tokio::time::sleep(Duration::from_millis(200)).await;
+        let payjoin_session = db.get_payjoin_sender_session().expect("payjoin session reads");
 
         restore_default_bitcoin_node();
         server.server.abort();
@@ -3181,6 +3186,7 @@ mod tests {
 
         result.expect("broadcast succeeds");
         assert_eq!(server.broadcast_requests.load(Ordering::SeqCst), 1);
+        assert!(payjoin_session.is_none(), "an ordinary payment leaves no payjoin session");
     }
 
     #[tokio::test(flavor = "current_thread")]
