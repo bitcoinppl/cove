@@ -8,6 +8,7 @@ use bip39::Mnemonic;
 use cove_device::keychain::{WalletSecret, WalletXprv};
 use cove_types::Network;
 use cove_util::result_ext::ResultExt as _;
+use parking_lot::Mutex;
 use pubport::formats::Format;
 use tracing::{error, warn};
 
@@ -37,6 +38,12 @@ use super::{
         WalletType, tap_signer_birthday,
     },
 };
+
+/// Serializes public wallet imports, so one import's duplicate check and the save after it
+/// finish before another import checks for duplicates
+///
+/// Without it, two imports of the same export can both find no match and each save a wallet
+static PUBLIC_WALLET_IMPORT: Mutex<()> = Mutex::new(());
 
 pub(crate) struct WalletBuilder {
     source: WalletSource,
@@ -191,6 +198,7 @@ impl WalletBuilder {
     }
 
     fn build_from_pubport(pubport: pubport::Format) -> Result<Wallet, WalletError> {
+        let _import = PUBLIC_WALLET_IMPORT.lock();
         let keychain = Keychain::global();
         let database = Database::global();
         let SelectedWalletTarget { network, mode } = database.global_config.wallet_target();
@@ -320,6 +328,7 @@ impl WalletBuilder {
         backup: Option<Vec<u8>>,
         birthday: Option<WalletBirthday>,
     ) -> Result<Wallet, WalletError> {
+        let _import = PUBLIC_WALLET_IMPORT.lock();
         let keychain = Keychain::global();
         let database = Database::global();
         let mode = database.global_config.wallet_mode();
@@ -1432,9 +1441,8 @@ mod tests {
         wallets.into_iter().map(|wallet| wallet.id).collect()
     }
 
-    // both apps run Paste on the main thread, so a double tap reaches rust as two calls in a row
     #[test]
-    fn pasting_the_same_signet_watch_key_twice_adds_one_wallet() {
+    fn pasting_the_same_signet_watch_key_twice_at_once_adds_one_wallet() {
         let _guard = crate::test_support::global_state_test_lock().blocking_lock();
         crate::test_support::ensure_tokio_runtime();
         crate::test_support::init_test_keychain();
@@ -1446,27 +1454,46 @@ mod tests {
         let descriptor_export =
             crate::wallet::test_support::public_descriptor_export(&mnemonic, Network::Signet);
 
-        for (pasted, wallet_type) in [
+        // a start barrier makes the checks overlap on most runs, not all, so repeat the race
+        let pastes = [
             (BIP49_TESTNET_UPUB.to_string(), WalletType::XpubOnly),
             (descriptor_export, WalletType::Cold),
-        ] {
-            let first = Wallet::new_from_xpub(pasted.clone()).expect("the first paste imports");
-            let second = Wallet::new_from_xpub(pasted.clone());
+        ];
+
+        for (pasted, wallet_type) in pastes.iter().cycle().take(pastes.len() * 4) {
+            // both taps check for a duplicate at the same moment, as two threads would
+            let start = std::sync::Barrier::new(2);
+            let (first, second) = std::thread::scope(|scope| {
+                let paste = || {
+                    start.wait();
+                    Wallet::new_from_xpub(pasted.clone())
+                };
+
+                let first = scope.spawn(paste);
+                let second = scope.spawn(paste);
+
+                (first.join().unwrap(), second.join().unwrap())
+            });
+
             let after = signet_wallet_ids();
 
-            crate::wallet::test_support::remove_wallet(&first.id);
-            if let Ok(second) = &second {
-                crate::wallet::test_support::remove_wallet(&second.id);
+            for wallet in [&first, &second].into_iter().flatten() {
+                crate::wallet::test_support::remove_wallet(&wallet.id);
             }
 
-            assert_eq!(first.metadata.wallet_type, wallet_type, "{pasted}");
+            let (imported, rejected) = match (first, second) {
+                (Ok(imported), rejected) | (rejected, Ok(imported)) => (imported, rejected),
+                (Err(first), Err(second)) => panic!("neither paste imported: {first}, {second}"),
+            };
+
+            assert_eq!(imported.metadata.wallet_type, *wallet_type, "{pasted}");
             assert_eq!(
-                second.err(),
-                Some(WalletError::WalletAlreadyExists(first.id.clone())),
+                rejected.err(),
+                Some(WalletError::WalletAlreadyExists(imported.id.clone())),
                 "{pasted}"
             );
 
-            assert_eq!(after, vec![first.id], "{pasted}");
+            assert_eq!(after, vec![imported.id], "{pasted}");
         }
     }
 }
