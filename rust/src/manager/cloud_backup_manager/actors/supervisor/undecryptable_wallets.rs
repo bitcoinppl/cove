@@ -86,7 +86,9 @@ impl CloudBackupSupervisor {
         error: CloudBackupError,
     ) {
         manager.apply_undecryptable_wallet_deletion_state(
-            CloudBackupUndecryptableWalletDeletionState::Failed(error.reader_message()),
+            CloudBackupUndecryptableWalletDeletionState::Failed(
+                error.logged_reader_message("Failed to delete undecryptable wallet backups"),
+            ),
         );
         self.active_operation.clear();
         manager.project_exclusive_operation_finished(claim);

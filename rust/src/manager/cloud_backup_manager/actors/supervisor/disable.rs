@@ -35,7 +35,7 @@ impl CloudBackupSupervisor {
                 self.fail_disable_operation(
                     &manager,
                     claim,
-                    error.reader_message(),
+                    error.logged_reader_message("Failed to prepare cloud backup disable"),
                     manager.disable_can_keep_enabled(),
                 );
                 return Produces::ok(());
@@ -98,7 +98,7 @@ impl CloudBackupSupervisor {
                 &manager,
                 claim,
                 disabling,
-                error.reader_message(),
+                error.logged_reader_message("Failed to drain cloud backup writes before disable"),
             );
             return Produces::ok(());
         }
@@ -163,12 +163,12 @@ impl CloudBackupSupervisor {
         };
 
         if let Err(error) = result {
-            let message = error.reader_message();
+            let message = error.logged_reader_message("Cloud backup disable blocker check failed");
             if let Err(error) = manager.rollback_disable_before_delete(&disabling, message) {
                 self.fail_disable_operation(
                     &manager,
                     claim,
-                    error.reader_message(),
+                    error.logged_reader_message("Failed to roll back cloud backup disable"),
                     manager.disable_can_keep_enabled(),
                 );
             } else {
@@ -184,7 +184,9 @@ impl CloudBackupSupervisor {
                 self.fail_disable_operation(
                     &manager,
                     claim,
-                    error.reader_message(),
+                    error.logged_reader_message(
+                        "Failed to mark cloud backup namespace delete started",
+                    ),
                     manager.disable_can_keep_enabled(),
                 );
             }
@@ -227,7 +229,7 @@ impl CloudBackupSupervisor {
             Err(CloudBackupError::CloudStorage(error)) => {
                 let message =
                     CloudBackupError::cloud_storage_context("delete cloud backup namespace", error)
-                        .reader_message();
+                        .logged_reader_message("Failed to delete cloud backup namespace");
                 self.fail_disable_after_namespace_delete_started(
                     &manager, claim, disabling, message,
                 );
@@ -237,7 +239,7 @@ impl CloudBackupSupervisor {
                     &manager,
                     claim,
                     disabling,
-                    error.reader_message(),
+                    error.logged_reader_message("Failed to delete cloud backup namespace"),
                 );
             }
         }
@@ -272,7 +274,7 @@ impl CloudBackupSupervisor {
                 &manager,
                 claim,
                 disabling,
-                error.reader_message(),
+                error.logged_reader_message("Cloud backup disable local cleanup failed"),
             );
             return Produces::ok(());
         }
@@ -282,7 +284,7 @@ impl CloudBackupSupervisor {
                 &manager,
                 claim,
                 disabling,
-                error.reader_message(),
+                error.logged_reader_message("Failed to persist disabled cloud backup state"),
             );
             return Produces::ok(());
         }
@@ -313,7 +315,7 @@ impl CloudBackupSupervisor {
             self.fail_disable_operation(
                 manager,
                 claim,
-                error.reader_message(),
+                error.logged_reader_message("Failed to roll back cloud backup disable"),
                 manager.disable_can_keep_enabled(),
             );
         } else {
@@ -330,7 +332,9 @@ impl CloudBackupSupervisor {
     ) {
         let message = match manager.persist_disabling_failure(disabling, message.clone()) {
             Ok(()) => message,
-            Err(error) => error.reader_message(),
+            Err(error) => {
+                error.logged_reader_message("Failed to persist cloud backup disable failure")
+            }
         };
         self.fail_disable_operation(manager, claim, message, manager.disable_can_keep_enabled());
     }
@@ -429,7 +433,7 @@ impl CloudBackupSupervisor {
             }
             Err(error) => {
                 manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
-                    message: error.reader_message(),
+                    message: error.logged_reader_message("Failed to keep cloud backup enabled"),
                     can_keep_enabled: false,
                 });
             }
@@ -446,7 +450,9 @@ impl CloudBackupSupervisor {
             Ok(restored) => Some(restored),
             Err(error) => {
                 manager.apply_disable_outcome(CloudBackupDisableOutcome::Failed {
-                    message: error.reader_message(),
+                    message: error.logged_reader_message(
+                        "Failed to restore configured cloud backup after disable",
+                    ),
                     can_keep_enabled: false,
                 });
                 None

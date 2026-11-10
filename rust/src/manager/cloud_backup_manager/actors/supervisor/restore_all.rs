@@ -37,7 +37,7 @@ impl CloudBackupSupervisor {
             Ok(_) => manager.reset_restore_all(),
             Err(error) => {
                 manager.apply_cloud_only_operation(CloudOnlyOperation::Failed {
-                    error: error.reader_message(),
+                    error: error.logged_reader_message("Failed to clear Restore All marker"),
                 });
                 manager.apply_restore_all_retry_required();
             }
@@ -237,7 +237,10 @@ impl CloudBackupSupervisor {
             // the worker already projected the must-stop failure and continuing could overwrite it
             Err(error) if restore_all_must_stop(&error) => {}
             Err(error) => {
-                manager.apply_cloud_only_restore_failure(wallet.record_id, error.reader_message());
+                manager.apply_cloud_only_restore_failure(
+                    wallet.record_id,
+                    error.logged_reader_message("Restore All failed to restore a wallet"),
+                );
                 manager.apply_cloud_only_operation(CloudOnlyOperation::Idle);
             }
         }
