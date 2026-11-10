@@ -109,11 +109,10 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/ImportWalletManager.kt",
 ]
 coverage = [
-    "agent",
-    "rust:rust/src/wallet/builder.rs::pasting_the_same_signet_watch_key_twice_adds_one_wallet",
+    "rust:rust/src/wallet/builder.rs::pasting_the_same_signet_watch_key_twice_at_once_adds_one_wallet",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# agent: the rust duplicate check is not atomic, so one wallet relies on both apps running Paste and QR import on the main thread
+# paste and QR import both build through the public import lock, so concurrent taps save one wallet
 
 [[row]]
 id = "s15-file-picker-and-share-cancellation-preserve-route"
