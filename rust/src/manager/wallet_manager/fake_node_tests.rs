@@ -7,11 +7,13 @@ use std::{str::FromStr as _, sync::Arc, time::Duration};
 
 use act_zero::call;
 use bip39::Mnemonic;
+use bitcoin::hashes::{Hash as _, sha256};
 use bitcoin::{
     Amount, CompressedPublicKey, Network as BitcoinNetwork, ScriptBuf, Txid,
     bip32::{DerivationPath, Xpriv},
     secp256k1::Secp256k1,
 };
+use cove_fake_node::{Gate, RuleHandle};
 use rand::RngExt as _;
 
 use super::{
@@ -30,7 +32,7 @@ use crate::{
     network::Network,
     node::Node,
     test_support::fake_node::{FakeNode, wait_until},
-    transaction::{Transaction, TxId},
+    transaction::{Transaction, TxId, ffi::BitcoinTransaction},
     wallet::{
         Wallet, WalletAddressType,
         metadata::{WalletId, WalletMode, WalletType},
@@ -172,6 +174,9 @@ impl Transaction {
 /// What the transaction details screen shows for `txid`
 struct ShownDetails {
     amount_sats: u64,
+    sent: bool,
+    sent_sans_fee_sats: Option<u64>,
+    fee_sats: Option<u64>,
     address: Option<String>,
     label: Option<String>,
     confirmations: Option<u32>,
@@ -185,6 +190,9 @@ async fn open_details(manager: &RustWalletManager, txid: Txid) -> ShownDetails {
 
     ShownDetails {
         amount_sats: details.amount().to_sat(),
+        sent: details.is_sent(),
+        sent_sans_fee_sats: details.sent_sans_fee().map(|amount| amount.to_sat()),
+        fee_sats: details.fee.map(|fee| fee.to_sat()),
         address: details.address().map(|address| address.to_string()),
         label: details.transaction_label(),
         confirmations: presentation.confirmations(),
@@ -212,6 +220,38 @@ fn records_for<'a>(
     reference: &str,
 ) -> Vec<&'a serde_json::Value> {
     records.iter().filter(|record| record["type"] == kind && record["ref"] == reference).collect()
+}
+
+/// Forces a pull-to-refresh and holds its history request for `script`, returning once that
+/// request reached the node, so the refresh is known to be in flight
+async fn hold_a_refresh(
+    fx: &Fixture,
+    manager: &RustWalletManager,
+    script: &ScriptBuf,
+) -> (Gate, RuleHandle) {
+    let digest = sha256::Hash::hash(script.as_bytes());
+    let before = fx.node.history_requests_for(script).len();
+    let (gate, rule) = fx.node.on(&format!("/scripthash/{digest}/")).hold();
+    manager.force_wallet_scan().await.expect("the refresh starts");
+    wait_until("the refresh to ask about the held address", || {
+        fx.node.history_requests_for(script).len() > before && gate.waiting() > 0
+    })
+    .await;
+
+    (gate, rule)
+}
+
+/// Waits for the released refresh to complete and the scan status to settle, counting only
+/// messages seen since the screen was last cleared
+async fn wait_for_refresh_to_settle(screen: &mut ScreenUpdates) {
+    screen
+        .until("the refresh to complete", |message| matches!(message, Msg::ScanComplete(_)))
+        .await;
+    screen
+        .until("the scan status to go idle", |message| {
+            matches!(message, Msg::WalletScanStatusChanged(WalletScanStatus::Idle))
+        })
+        .await;
 }
 
 /// A funded hot wallet with an older 390-sat receipt that is already labeled and locked, whose new
@@ -271,12 +311,14 @@ async fn receipt_label_survives_coin_control_and_transaction_lock_changes() {
                 transaction.id().0 == receipt_txid
                     && transaction.label_opt().as_deref() == Some("Receipt")
             }
+
             Msg::ScanComplete(transactions)
             | Msg::AvailableTransactions(transactions)
             | Msg::UpdatedTransactions(transactions) => transactions.iter().any(|transaction| {
                 transaction.id().0 == receipt_txid
                     && transaction.label_opt().as_deref() == Some("Receipt")
             }),
+
             _ => false,
         })
         .await;
@@ -313,6 +355,7 @@ async fn receipt_label_survives_coin_control_and_transaction_lock_changes() {
         .expect("the receipt is an unspent output");
 
     assert!(receipt_utxo.spendable);
+    assert_eq!(receipt_utxo.label, label, "coin control shows the receipt's label");
     coin_control
         .set_utxo_spendability(receipt_utxo.outpoint.clone(), false)
         .await
@@ -325,6 +368,7 @@ async fn receipt_label_survives_coin_control_and_transaction_lock_changes() {
         utxos.iter().find(|utxo| utxo.outpoint.txid().0 == old_txid).expect("old output listed");
 
     assert!(!locked_receipt.spendable, "coin control shows the receipt locked");
+    assert_eq!(locked_receipt.label, label, "the locked output keeps its label in coin control");
     assert_eq!(locked_receipt.amount.as_sats(), 1_000);
     assert!(!old_utxo.spendable, "the 390 lock is untouched");
     assert_eq!(open_details(&manager, receipt_txid).await.lock, TransactionLockState::Locked);
@@ -343,10 +387,11 @@ async fn receipt_label_survives_coin_control_and_transaction_lock_changes() {
 
     coin_control.reload_labels().await.expect("coin control reloads");
     let utxos = coin_control.utxos();
-    assert!(
-        utxos.iter().any(|utxo| utxo.outpoint == receipt_utxo.outpoint && utxo.spendable),
-        "coin control shows the receipt unlocked again"
-    );
+    let unlocked_receipt =
+        utxos.iter().find(|utxo| utxo.outpoint == receipt_utxo.outpoint).expect("still listed");
+
+    assert!(unlocked_receipt.spendable, "coin control shows the receipt unlocked again");
+    assert_eq!(unlocked_receipt.label, label, "the unlocked output keeps its label");
 
     assert!(
         utxos.iter().any(|utxo| utxo.outpoint.txid().0 == old_txid && !utxo.spendable),
@@ -406,9 +451,8 @@ async fn details_opened_during_a_refresh_belong_to_their_transaction_and_confirm
     // hold the watcher's status poll and a pull-to-refresh scan so both are in flight
     let status_path = format!("/tx/{paid}/status");
     let (status_gate, status_rule) = fx.node.on(&status_path).hold();
-    let (scan_gate, scan_rule) = fx.node.on("/scripthash/").hold();
-    manager.force_wallet_scan().await.expect("the refresh starts");
-    wait_until("the refresh to reach the node", || scan_gate.waiting() > 0).await;
+    let (scan_gate, scan_rule) =
+        hold_a_refresh(&fx, &manager, &receive_script(&manager, 0).await).await;
 
     let opened = open_details(&manager, paid).await;
     assert_eq!(opened.amount_sats, 50_000);
@@ -460,6 +504,9 @@ async fn details_opened_during_a_refresh_belong_to_their_transaction_and_confirm
     assert_eq!(updated_details.transaction_label().as_deref(), Some("Payjoin receive"));
     assert_eq!(updated.confirmations(), Some(fx.node.chain().tip_height() - height + 1));
 
+    // the forced refresh finishes after the watcher, and must not undo the confirmation
+    wait_for_refresh_to_settle(&mut screen).await;
+
     // reopening after the refresh shows the same transaction, now confirmed, with its lock
     let reopened = open_details(&manager, paid).await;
     assert_eq!(reopened.amount_sats, 50_000);
@@ -472,6 +519,112 @@ async fn details_opened_during_a_refresh_belong_to_their_transaction_and_confirm
     assert_eq!(other_reopened.amount_sats, 20_000);
     assert_eq!(other_reopened.confirmations, None, "the other payment is still pending");
     assert_eq!(other_reopened.label, None);
+}
+
+/// A payment this wallet sends keeps its amount, destination and fee while a refresh runs and
+/// the node confirms it, as the open details screen shows them
+#[tokio::test(flavor = "current_thread")]
+async fn sent_payment_details_keep_amount_destination_and_fee_as_it_confirms() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+    let mut fx = Fixture::signet();
+
+    let mnemonic = fresh_mnemonic();
+    let wallet =
+        import_mnemonic_with_target(mnemonic.clone(), fx.network, WalletMode::Main).unwrap();
+
+    let (manager, mut screen) = fx.open(wallet.id.clone());
+    let funding_script = receive_script(&manager, 0).await;
+    let funding = fx.node.chain().pay(&funding_script, Amount::from_sat(100_000));
+    fx.node.chain().confirm(funding);
+    manager.start_wallet_scan().await.expect("the scan starts");
+    screen.until_scan_settles().await;
+
+    // pay someone else's first address, signed with this wallet's own words
+    let destination = fresh_mnemonic()
+        .into_descriptors(None, fx.network, WalletAddressType::NativeSegwit)
+        .external
+        .extended_descriptor
+        .at_derivation_index(0)
+        .unwrap()
+        .script_pubkey();
+
+    let destination = bitcoin::Address::from_script(&destination, BitcoinNetwork::Signet).unwrap();
+    let pay_to = crate::wallet::Address::new(destination.clone());
+    let fee_rate = bitcoin::FeeRate::from_sat_per_vb(2).unwrap();
+    let mut psbt = call!(manager.actor.build_tx(Amount::from_sat(10_000), pay_to, fee_rate))
+        .await
+        .expect("the wallet actor answers")
+        .expect("the payment builds");
+
+    let signer = mnemonic
+        .into_descriptors(None, fx.network, WalletAddressType::NativeSegwit)
+        .into_create_params()
+        .network(fx.network.into())
+        .create_wallet_no_persist()
+        .unwrap();
+
+    assert!(signer.sign(&mut psbt, Default::default()).unwrap(), "the payment is fully signed");
+    let fee = psbt.fee().unwrap().to_sat();
+    let signed = psbt.extract_tx().unwrap();
+    let sent = signed.compute_txid();
+    screen.seen.clear();
+    manager
+        .broadcast_transaction(Arc::new(BitcoinTransaction(signed)))
+        .await
+        .expect("the payment broadcasts");
+
+    wait_for_refresh_to_settle(&mut screen).await;
+
+    // hold the watcher's status poll and a pull-to-refresh scan so both are in flight
+    let (status_gate, status_rule) = fx.node.on(&format!("/tx/{sent}/status")).hold();
+    let (scan_gate, scan_rule) = hold_a_refresh(&fx, &manager, &funding_script).await;
+    let shows_the_payment = |shown: &ShownDetails| {
+        assert!(shown.sent, "the payment shows as sent");
+        assert_eq!(shown.sent_sans_fee_sats, Some(10_000));
+        assert_eq!(shown.fee_sats, Some(fee));
+        assert_eq!(shown.address.as_deref(), Some(destination.to_string().as_str()));
+    };
+
+    let pending = open_details(&manager, sent).await;
+    shows_the_payment(&pending);
+    assert_eq!(pending.confirmations, None, "the payment is still pending");
+
+    // the node confirms the payment while the details screen and the refresh wait on it
+    wait_until("the watcher to poll the node", || status_gate.waiting() > 0).await;
+    screen.seen.clear();
+    fx.node.chain().confirm(sent);
+    drop((status_rule, scan_rule));
+    status_gate.open();
+    scan_gate.open();
+
+    let confirmed = |message: &Msg| {
+        matches!(
+            message,
+            Msg::TransactionDetailsUpdated(details)
+                if details.tx_id().0 == sent && details.confirmations().is_some()
+        )
+    };
+
+    screen.until("the open details to confirm", confirmed).await;
+    let updated = screen
+        .seen
+        .iter()
+        .find_map(|message| match message {
+            Msg::TransactionDetailsUpdated(details) if confirmed(message) => Some(details.clone()),
+            _ => None,
+        })
+        .expect("confirmed details were reconciled");
+
+    let updated = updated.details();
+    assert!(updated.is_sent());
+    assert_eq!(updated.sent_sans_fee().map(|amount| amount.to_sat()), Some(10_000));
+    assert_eq!(updated.fee.map(|amount| amount.to_sat()), Some(fee));
+    assert_eq!(updated.address().map(|address| address.to_string()), Some(destination.to_string()));
+
+    wait_for_refresh_to_settle(&mut screen).await;
+    let reopened = open_details(&manager, sent).await;
+    shows_the_payment(&reopened);
+    assert!(reopened.confirmations.is_some(), "the payment now shows as confirmed");
 }
 
 /// Pastes a hardware wallet's public export, as Add Wallet → Hardware Wallet → Paste does
@@ -640,8 +793,6 @@ async fn send_opens_only_after_the_initial_scan_completes() {
 /// that type's history
 #[tokio::test(flavor = "current_thread")]
 async fn choosing_a_discovered_address_type_during_the_initial_scan_loads_its_history() {
-    use bitcoin::hashes::{Hash as _, sha256};
-
     let _guard = crate::test_support::global_state_test_lock().lock().await;
     let mut fx = Fixture::signet();
 
@@ -687,6 +838,7 @@ async fn choosing_a_discovered_address_type_during_the_initial_scan_loads_its_hi
             types.sort_by_key(|address_type| format!("{address_type:?}"));
             Some(types)
         }
+
         _ => None,
     };
 
