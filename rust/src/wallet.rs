@@ -251,7 +251,8 @@ impl Wallet {
             storage: WalletStorage::persistent(store.conn),
         };
 
-        wallet.reserve_saved_draft_change_addresses();
+        // without its drafts' reservations the wallet could hand their change to a new draft
+        wallet.reserve_saved_draft_change_addresses()?;
         Ok(wallet)
     }
 

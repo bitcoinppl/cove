@@ -13,7 +13,9 @@ use crate::manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER;
 
 use crate::{
     bdk_store::{BdkStore, StoreReplacementActivation},
-    database::Database,
+    database::{
+        Database, Error as DatabaseError, unsigned_transactions::UnsignedTransactionRecord,
+    },
     keychain::{Keychain, KeychainError},
     keys::Descriptors,
     wallet_lifecycle::{WalletLifecycleCoordinator, WalletPersistenceOperation},
@@ -421,15 +423,15 @@ impl Wallet {
     /// BDK keeps change reservations in memory only, so a wallet loaded from its store has
     /// forgotten them. The saved drafts are the durable record of which change addresses are
     /// taken, so every persisted load rebuilds the reservations from them
-    pub(crate) fn reserve_saved_draft_change_addresses(&mut self) {
-        let drafts = match Database::global().unsigned_transactions().get_by_wallet_id(&self.id) {
-            Ok(drafts) => drafts,
-            Err(error) => {
-                warn!("failed to load unsigned transactions to reserve change addresses: {error}");
-                return;
-            }
-        };
+    pub(crate) fn reserve_saved_draft_change_addresses(&mut self) -> Result<(), DatabaseError> {
+        let drafts = Database::global().unsigned_transactions().get_by_wallet_id(&self.id)?;
+        self.reserve_draft_change_addresses(&drafts);
 
+        Ok(())
+    }
+
+    /// Reserves the change addresses of the given saved unsigned transactions
+    pub(crate) fn reserve_draft_change_addresses(&mut self, drafts: &[UnsignedTransactionRecord]) {
         for draft in drafts {
             reserve_tx_change_addresses(&mut self.bdk, &draft.confirm_details.psbt.0.unsigned_tx);
         }
