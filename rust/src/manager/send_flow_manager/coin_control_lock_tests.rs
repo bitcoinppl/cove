@@ -24,6 +24,7 @@ use super::{
 };
 
 use crate::{
+    app::AppAction,
     manager::{
         coin_control_manager::{CoinControlManagerAction, RustCoinControlManager},
         deferred_sender::SingleOrMany,
@@ -56,6 +57,7 @@ async fn coin_control_send_of_two_coins() -> Fixture {
 
     let coin_control =
         wallet.manager.new_coin_control_manager().await.expect("coin control manager opens");
+
     let send = send_flow(&wallet);
 
     // pick two coins in coin control and continue to the send screen
@@ -140,14 +142,15 @@ fn assert_rejects_locked_coin<T: std::fmt::Debug>(result: Result<T, SendFlowErro
     }
 }
 
-/// Taps Next and returns the alert it raises, which must come before any route change
+/// Taps Next and returns the alert it raises, checking that no next screen opens with it
 async fn alert_after_next(send: &Arc<RustSendFlowManager>) -> SendFlowAlertState {
     let receiver = send.reconciler.receiver();
     while receiver.try_recv().is_ok() {}
 
+    App::global().handle_action(AppAction::UpdateRoute { routes: Vec::new() });
     send.finalize_and_go_to_next_screen();
 
-    async {
+    let alert = async {
         loop {
             let messages = match receiver.recv_async().await.expect("reconciler stays open") {
                 SingleOrMany::Single(message) => vec![message],
@@ -164,7 +167,18 @@ async fn alert_after_next(send: &Arc<RustSendFlowManager>) -> SendFlowAlertState
     }
     .with_timeout(loaded_host_wait(Duration::from_secs(5)))
     .await
-    .expect("Next raises an alert")
+    .expect("Next raises an alert");
+
+    // finalizing runs on another task, so watch for a confirm or hardware export route arriving
+    // after the alert; a later route would pass, but this never fails a correct build
+    let watch_until = tokio::time::Instant::now() + Duration::from_millis(250);
+    while tokio::time::Instant::now() < watch_until {
+        let routes = crate::app::test_support::routes();
+        assert_eq!(routes, Vec::new(), "Next left Set Amount with a locked coin");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    alert
 }
 
 fn assert_locked_coin_alert(alert: SendFlowAlertState) {
@@ -187,6 +201,7 @@ async fn coin_control_send_refuses_a_coin_locked_after_going_back_and_changing_t
         .set_utxo_spendability(Arc::new(to_lock.into()), false)
         .await
         .expect("coin control locks the coin");
+
     assert_eq!(coin_control_selection(&coin_control), HashSet::from([kept]));
 
     // the send screen still holds the selection from before the lock
@@ -219,6 +234,7 @@ async fn coin_control_send_refuses_a_coin_locked_after_going_back_and_changing_t
             .build_psbt(None, None, FeeRate::from_sat_per_vb(fee_rate))
             .await
             .expect("the unlocked coin funds the send");
+
         assert_eq!(psbt_inputs(&psbt), HashSet::from([kept]), "at {fee_rate} sat/vB");
     }
 }
@@ -235,6 +251,7 @@ async fn coin_control_send_refuses_a_coin_locked_before_an_amount_edit() {
         .toggle_transaction_lock_state(Arc::new(TxId::from(to_lock.txid)))
         .await
         .expect("transaction lock toggles");
+
     assert_eq!(locked, crate::manager::wallet_manager::TransactionLockState::Locked);
 
     // edit the amount down to one the unlocked coin alone could cover

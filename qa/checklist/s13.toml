@@ -233,8 +233,12 @@ target = "rust"
 paths = [
   "rust/src/transaction/unsigned_transaction.rs",
   "rust/src/manager/wallet_manager/unsigned_transactions.rs",
+  "rust/src/manager/wallet_manager/actor/transactions.rs",
+  "rust/src/wallet/addressing.rs",
   "rust/src/database/unsigned_transactions.rs",
   "rust/crates/cove-types/src/psbt.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
   "ios/Cove/Flows/SendFlow/SendFlowHardwareScreen.swift",
   "ios/Cove/Flows/SendFlow/SendFlowHardwareSections.swift",
   "ios/Cove/Flows/SendFlow/SendFlowHardwareSheets.swift",

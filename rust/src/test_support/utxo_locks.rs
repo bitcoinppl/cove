@@ -118,6 +118,7 @@ impl OfflineChain {
     fn confirm(&mut self, input: Vec<TxIn>, output: Vec<TxOut>) -> Txid {
         let transaction =
             Transaction { version: Version::TWO, lock_time: LockTime::ZERO, input, output };
+
         let txid = transaction.compute_txid();
 
         insert_tx(&mut self.wallet.bdk, transaction);
