@@ -630,7 +630,9 @@ impl FfiApp {
                 return;
             }
 
-            if let Ok(prices) = FIAT_CLIENT.get_or_fetch_prices().await {
+            let fetched = FIAT_CLIENT.get_or_fetch_prices().await;
+            FIAT_CLIENT.record_refresh(&fetched.as_ref().map(|_| ()));
+            if let Ok(prices) = fetched {
                 Updater::send_update(AppMessage::FiatPricesChanged(prices.into()));
             }
         });
