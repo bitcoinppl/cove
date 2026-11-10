@@ -13,6 +13,7 @@ pub mod historical_price;
 pub mod key;
 pub mod macros;
 pub mod migration;
+pub(crate) mod read_health;
 pub mod record;
 pub mod unsigned_transactions;
 pub mod wallet;

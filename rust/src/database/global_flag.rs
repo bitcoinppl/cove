@@ -7,7 +7,7 @@ use cove_util::result_ext::ResultExt as _;
 
 use crate::app::reconcile::{Update, Updater};
 
-use super::Error;
+use super::{Error, read_health};
 
 pub const TABLE: TableDefinition<&'static str, bool> = TableDefinition::new("global_flag");
 const LEGACY_ACCEPTED_TERMS_KEY: &str = "AcceptedTerms";
@@ -130,7 +130,7 @@ impl GlobalFlagTable {
     }
 
     pub fn get_bool_config(&self, key: GlobalFlagKey) -> bool {
-        self.get(key).unwrap_or(false)
+        read_health::observe(format_args!("global flag {key:?}"), self.get(key)).unwrap_or(false)
     }
 
     pub fn set_bool_config(&self, key: GlobalFlagKey, value: bool) -> Result<(), Error> {

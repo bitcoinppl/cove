@@ -17,7 +17,7 @@ use crate::{
     wallet::metadata::{WalletId, WalletMode},
 };
 
-use super::{Error, error::SerdeError};
+use super::{Error, error::SerdeError, read_health};
 use crate::string_config_accessor;
 use cove_util::result_ext::ResultExt as _;
 
@@ -259,17 +259,31 @@ impl GlobalConfigTable {
         network: Network,
         txid: String,
     ) -> String {
-        let stored_template =
-            self.get(GlobalConfigKey::CustomBlockExplorer(network)).ok().flatten();
+        let stored_template = self.stored_custom_block_explorer(network);
 
         effective_transaction_url(network, stored_template.as_deref(), txid)
+    }
+
+    /// The raw stored custom block explorer template, or None when unset or unreadable
+    fn stored_custom_block_explorer(&self, network: Network) -> Option<String> {
+        let read = format!("custom block explorer for {network}");
+        read_health::observe(read, self.get(GlobalConfigKey::CustomBlockExplorer(network)))
+            .flatten()
     }
 
     /// Returns the configured node for `network`, independent of the globally selected network
     pub(crate) fn selected_node_for_network(&self, network: Network) -> Node {
         let selected_node_key = GlobalConfigKey::SelectedNode(network);
-        let node_json = self.get(selected_node_key).unwrap_or(None).unwrap_or_default();
-        let Ok(node) = serde_json::from_str::<Node>(&node_json) else {
+        let read = format!("selected node for {network}");
+        let Some(node_json) = read_health::observe(read, self.get(selected_node_key)).flatten()
+        else {
+            return Node::default(network);
+        };
+
+        // a separate label, so a readable but unparseable node does not flap between states
+        let parse = format!("selected node JSON for {network}");
+        let Some(node) = read_health::observe(parse, serde_json::from_str::<Node>(&node_json))
+        else {
             return Node::default(network);
         };
 
@@ -292,7 +306,9 @@ impl GlobalConfigTable {
     }
 
     pub fn selected_wallet(&self) -> Option<WalletId> {
-        let id = self.get(GlobalConfigKey::SelectedWalletId).unwrap_or(None)?;
+        let id =
+            read_health::observe("selected wallet", self.get(GlobalConfigKey::SelectedWalletId))
+                .flatten()?;
 
         let wallet_id = WalletId::from(id);
 
@@ -306,14 +322,15 @@ impl GlobalConfigTable {
     }
 
     pub fn selected_network(&self) -> Network {
-        let network = self
-            .get(GlobalConfigKey::SelectedNetwork)
-            .unwrap_or(None)
-            .unwrap_or_else(|| "bitcoin".to_string());
+        let network =
+            read_health::observe("selected network", self.get(GlobalConfigKey::SelectedNetwork))
+                .flatten()
+                .unwrap_or_else(|| "bitcoin".to_string());
 
         if let Ok(network) = Network::try_from(network.as_str()) {
             network
         } else {
+            warn!("stored selected network is not a known network, resetting it to bitcoin");
             self.set_selected_network(Network::Bitcoin)
                 .expect("failed to set network, please report this bug");
 
@@ -337,10 +354,9 @@ impl GlobalConfigTable {
     }
 
     pub fn is_in_decoy_mode(&self) -> bool {
-        self.get(GlobalConfigKey::InDecoyMode)
-            .unwrap_or(None)
-            .unwrap_or_else(|| "false".to_string())
-            == "true"
+        read_health::observe("decoy mode", self.get(GlobalConfigKey::InDecoyMode))
+            .flatten()
+            .is_some_and(|value| value == "true")
     }
 
     pub fn selected_node(&self) -> Node {
@@ -361,18 +377,15 @@ impl GlobalConfigTable {
     }
 
     pub fn custom_block_explorer(&self, network: Network) -> Option<String> {
-        self.get(GlobalConfigKey::CustomBlockExplorer(network)).unwrap_or(None).and_then(
-            |template| {
-                CustomBlockExplorerTemplate::parse_stored(&template)
-                    .ok()
-                    .map(|template| template.as_str().to_string())
-            },
-        )
+        self.stored_custom_block_explorer(network).and_then(|template| {
+            CustomBlockExplorerTemplate::parse_stored(&template)
+                .ok()
+                .map(|template| template.as_str().to_string())
+        })
     }
 
     pub fn selected_block_explorer_option(&self, network: Network) -> BlockExplorerOption {
-        let stored_template =
-            self.get(GlobalConfigKey::CustomBlockExplorer(network)).ok().flatten();
+        let stored_template = self.stored_custom_block_explorer(network);
 
         BlockExplorerOption::matching_stored_template(network, stored_template.as_deref())
     }
@@ -437,17 +450,17 @@ impl GlobalConfigTable {
 
     /// The selected fiat currency, falling back to the default when none is saved
     pub fn selected_fiat_currency(&self) -> FiatCurrency {
-        self.fiat_currency().unwrap_or_default()
+        read_health::observe("selected fiat currency", self.fiat_currency()).unwrap_or_default()
     }
 
     #[uniffi::method(name = "authType")]
     pub fn _auth_type(&self) -> AuthType {
-        self.auth_type().unwrap_or_default()
+        read_health::observe("auth type", self.auth_type()).unwrap_or_default()
     }
 
     #[uniffi::method(name = "colorScheme")]
     pub fn _color_scheme(&self) -> ColorSchemeSelection {
-        self.color_scheme().unwrap_or_default()
+        read_health::observe("color scheme", self.color_scheme()).unwrap_or_default()
     }
 
     pub fn hashed_pin_code(&self) -> Result<String> {

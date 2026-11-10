@@ -14,7 +14,7 @@ use backon::{ConstantBuilder, Retryable as _};
 
 use crate::{
     color_scheme::ColorSchemeSelection,
-    database::{Database, error::DatabaseError},
+    database::{Database, error::DatabaseError, read_health},
     fee_client::{FEE_CLIENT, FeeResponse},
     fiat::{
         FiatCurrency,
@@ -465,12 +465,14 @@ impl FfiApp {
     pub fn num_wallets(&self) -> u16 {
         let SelectedWalletTarget { network, mode } =
             Database::global().global_config.wallet_target();
-        Database::global().wallets().len(network, mode).unwrap_or(0)
+        read_health::observe("wallet count", Database::global().wallets().len(network, mode))
+            .unwrap_or(0)
     }
 
     /// Get wallets that have not been backed up and verified
     pub fn unverified_wallet_ids(&self) -> Vec<WalletId> {
-        let all_wallets = Database::global().wallets().all().unwrap_or_default();
+        let all_wallets = read_health::observe("wallet list", Database::global().wallets().all())
+            .unwrap_or_default();
         let cloud_coverage = LazyLock::get(&CLOUD_BACKUP_MANAGER)
             .map(|manager| CloudBackupRecoveryCoverage::load(manager.as_ref()))
             .unwrap_or_default();

@@ -510,25 +510,19 @@ fn check_for_duplicate_wallet(
     mode: metadata::WalletMode,
     fingerprint: Fingerprint,
 ) -> Result<(), WalletError> {
-    let all_fingerprints: Vec<(WalletId, Arc<Fingerprint>)> = Database::global()
-        .wallets
-        .get_all(network, mode)
-        .map(|wallets| {
-            wallets
-                .into_iter()
-                .filter_map(|wallet_metadata| {
-                    let fingerprint = wallet_metadata.master_fingerprint?;
-                    Some((wallet_metadata.id, fingerprint))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    // an unreadable inventory fails the import, skipping the check could save a duplicate wallet
+    let wallets = Database::global().wallets.get_all(network, mode).inspect_err(|error| {
+        error!("unable to read wallets for the duplicate wallet check: {error}");
+    })?;
 
-    if let Some((id, _)) = all_fingerprints.into_iter().find(|(_, f)| f.as_ref() == &fingerprint) {
-        return Err(WalletError::WalletAlreadyExists(id));
+    let duplicate = wallets.into_iter().find(|wallet| {
+        wallet.master_fingerprint.as_deref().is_some_and(|existing| existing == &fingerprint)
+    });
+
+    match duplicate {
+        Some(wallet) => Err(WalletError::WalletAlreadyExists(wallet.id)),
+        None => Ok(()),
     }
-
-    Ok(())
 }
 
 fn metadata_for_cold_upgrade(
