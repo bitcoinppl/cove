@@ -11,10 +11,10 @@ paths = [
     "ios/Cove/Flows/NewWalletFlow/ColdWallet/**",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/fake_node_tests.rs::pasted_hardware_export_imports_its_fingerprint_and_existing_funds",
 ]
 # 1.4.0: ios PASS, android N/A
-# paste parsing and wallet construction are shared rust; the funded signet hww is environment
+# the fake node stands in for the funded signet hww
 
 [[row]]
 id = "setup-hww-first-receive-address"
@@ -29,10 +29,10 @@ paths = [
     "ios/Cove/Flows/SelectedWalletFlow/ReceiveView.swift",
 ]
 coverage = [
-    "agent",
+    "rust:rust/src/manager/wallet_manager/fake_node_tests.rs::fresh_hardware_key_receives_first_at_index_zero",
 ]
 # 1.4.0: ios BLOCKED, android N/A
-# address derivation is rust
+# a freshly generated key with no history stands in for the hww
 
 [[row]]
 id = "setup-android-secondary-after-upgrade"
