@@ -14,6 +14,9 @@ mod sanitize;
 pub mod state;
 mod validation;
 
+#[cfg(test)]
+mod coin_control_lock_tests;
+
 use std::{sync::Arc, time::Duration};
 
 use cove_tokio::DebouncedTask;
@@ -1773,5 +1776,300 @@ mod tests {
         let message = error.to_string();
         // 1,436,722 + 646 - 1,436,900
         assert!(message.contains("468"), "alert does not name the shortfall: {message}");
+    }
+
+    /// What tapping Next led to: the confirm screen, or an alert that kept the user on Set Amount
+    #[derive(Debug)]
+    enum NextOutcome {
+        Confirm(Arc<cove_types::confirm::ConfirmDetails>),
+        Alert(super::SendFlowAlertState),
+    }
+
+    fn clear_routes() {
+        super::App::global().handle_action(crate::app::AppAction::UpdateRoute { routes: vec![] });
+    }
+
+    fn pushed_confirm_details() -> Option<Arc<cove_types::confirm::ConfirmDetails>> {
+        use crate::router::{Route, SendRoute};
+
+        crate::app::test_support::routes().into_iter().rev().find_map(|route| match route {
+            Route::Send(SendRoute::Confirm(args)) => Some(args.details),
+            _ => None,
+        })
+    }
+
+    /// Waits for the result of Next, which builds the transaction on a background task
+    async fn next_outcome(manager: &super::RustSendFlowManager) -> NextOutcome {
+        let deadline =
+            crate::test_support::LoadedHostDeadline::after(std::time::Duration::from_secs(5));
+
+        loop {
+            let alert =
+                drain_reconcile_messages(manager).into_iter().find_map(|message| match message {
+                    super::Message::SetAlert(alert) => Some(alert),
+                    _ => None,
+                });
+
+            if let Some(alert) = alert {
+                return NextOutcome::Alert(alert);
+            }
+
+            if let Some(details) = pushed_confirm_details() {
+                return NextOutcome::Confirm(details);
+            }
+
+            assert!(!deadline.has_passed(), "Next neither confirmed nor raised an alert");
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }
+
+    /// Taps Next and answers Send Anyway to every fee or amount warning on the way
+    async fn next_past_warnings(manager: &Arc<super::RustSendFlowManager>) -> NextOutcome {
+        manager.finalize_and_go_to_next_screen();
+
+        for _ in 0..3 {
+            match next_outcome(manager).await {
+                NextOutcome::Alert(super::SendFlowAlertState::Warning { kind, .. }) => {
+                    manager.clone().dispatch(super::Action::AcknowledgeWarningAndFinalize(kind));
+                }
+
+                outcome => return outcome,
+            }
+        }
+
+        panic!("Next kept raising warnings after each one was acknowledged");
+    }
+
+    /// Fee rates loaded from the fee server, before any total fee is estimated for this send
+    fn set_base_fee_rates(manager: &super::RustSendFlowManager, sat_per_vb: f32) {
+        let base = FeeRateOptions {
+            fast: FeeRateOption::new(FeeSpeed::Fast, sat_per_vb),
+            medium: FeeRateOption::new(FeeSpeed::Medium, sat_per_vb),
+            slow: FeeRateOption::new(FeeSpeed::Slow, sat_per_vb),
+        };
+
+        let options = FeeRateOptionsWithTotalFee::without_totals(base);
+        let selected = Arc::new(options.medium);
+
+        let mut state = manager.state.lock();
+        state.fee_rate_options_base = Some(Arc::new(base));
+        state.fee_selection = Some(super::FeeSelection::new(Arc::new(options), selected));
+        state.has_base_fees = true;
+    }
+
+    fn selected_total_fee_sats(manager: &super::RustSendFlowManager) -> Option<u64> {
+        manager.selected_fee_rate()?.total_fee.map(|fee| fee.as_sats())
+    }
+
+    fn spent_outpoints(details: &cove_types::confirm::ConfirmDetails) -> Vec<bitcoin::OutPoint> {
+        details.psbt.0.unsigned_tx.input.iter().map(|input| input.previous_output).collect()
+    }
+
+    fn output_values(details: &cove_types::confirm::ConfirmDetails) -> Vec<u64> {
+        details.psbt.0.unsigned_tx.output.iter().map(|output| output.value.to_sat()).collect()
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn below_dust_amount_is_blocked_before_confirm_and_the_dust_limit_is_not() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let manager = manager_for_spending(&[100_000]);
+        clear_routes();
+
+        let address = Address::preview_new();
+        let dust_limit = address.script_pubkey().minimal_non_dust().to_sat();
+        set_base_fee_rates(&manager, 1.0);
+        {
+            let mut state = manager.state.lock();
+            state.address = Some(Arc::new(address));
+            state.unlocked_spendable_sats = Some(100_000);
+        }
+
+        // totals are estimated for a default amount when Set Amount opens
+        manager.get_or_update_fee_rate_options().await;
+        let fee = selected_total_fee_sats(&manager).expect("fee total is estimated");
+        assert!(fee < dust_limit, "the fee alone must not be what blocks the send");
+
+        manager.clone().dispatch(super::Action::NotifyAmountChanged(Arc::new(
+            super::Amount::from_sat(dust_limit - 1),
+        )));
+
+        let outcome = next_past_warnings(&manager).await;
+        assert!(
+            matches!(
+                outcome,
+                NextOutcome::Alert(super::SendFlowAlertState::Error(
+                    super::SendFlowError::SendBelowDustLimit
+                ))
+            ),
+            "a below-dust amount must stop at the dust alert, got {outcome:?}"
+        );
+
+        assert!(pushed_confirm_details().is_none(), "a below-dust send reached confirm");
+
+        manager.clone().dispatch(super::Action::NotifyAmountChanged(Arc::new(
+            super::Amount::from_sat(dust_limit),
+        )));
+
+        let NextOutcome::Confirm(details) = next_past_warnings(&manager).await else {
+            panic!("an amount at the dust limit must reach confirm");
+        };
+
+        assert_eq!(details.sending_amount.as_sats(), dust_limit);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn small_payment_warning_holds_the_send_until_send_anyway() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let manager = manager_for_spending(&[100_000]);
+        clear_routes();
+
+        // small enough for the warning, large enough that the fee stays under the high fee warning
+        let amount_sats = super::LOW_SEND_WARNING_SATS - 1_000;
+        set_base_fee_rates(&manager, 1.0);
+        {
+            let mut state = manager.state.lock();
+            state.address = Some(Arc::new(Address::preview_new()));
+            state.unlocked_spendable_sats = Some(100_000);
+            state.amount_sats = Some(amount_sats);
+        }
+
+        manager.get_or_update_fee_rate_options().await;
+        assert!(selected_total_fee_sats(&manager).is_some(), "fee total is estimated");
+
+        manager.finalize_and_go_to_next_screen();
+        let outcome = next_outcome(&manager).await;
+        assert!(
+            matches!(
+                outcome,
+                NextOutcome::Alert(super::SendFlowAlertState::Warning {
+                    kind: super::SendFlowWarningKind::SmallAmount,
+                    ..
+                })
+            ),
+            "Next must warn about a small payment first, got {outcome:?}"
+        );
+
+        // Cancel only dismisses the alert in both apps, so rust sees no further action and the
+        // send must stay unconfirmed and warn again on the next tap
+        assert!(pushed_confirm_details().is_none(), "the send confirmed behind the warning");
+        assert!(
+            !manager.state.lock().has_acknowledged_warning(super::SendFlowWarningKind::SmallAmount)
+        );
+
+        manager.finalize_and_go_to_next_screen();
+        assert_eq!(
+            warning_message_kind(&next_reconcile_message(&manager)),
+            Some(super::SendFlowWarningKind::SmallAmount)
+        );
+
+        assert!(pushed_confirm_details().is_none(), "the send confirmed behind the warning");
+
+        manager.clone().dispatch(super::Action::AcknowledgeWarningAndFinalize(
+            super::SendFlowWarningKind::SmallAmount,
+        ));
+
+        let NextOutcome::Confirm(details) = next_outcome(&manager).await else {
+            panic!("Send Anyway must reach confirm");
+        };
+
+        assert_eq!(details.sending_amount.as_sats(), amount_sats);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn coin_control_send_never_adds_unselected_coins_to_pay_a_high_fee() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let manager = manager_for_spending(&[50_000, 80_000]);
+        clear_routes();
+
+        let network = manager.state.lock().metadata.network;
+        let unspent = act_zero::call!(manager.wallet_manager.actor.list_unspent())
+            .await
+            .expect("wallet actor responds")
+            .expect("wallet lists its outputs");
+
+        let (selected, unselected): (Vec<_>, Vec<_>) = unspent
+            .into_iter()
+            .filter_map(|output| super::Utxo::try_from_local(output, network).ok())
+            .partition(|utxo| utxo.amount.as_sats() == 50_000);
+
+        let selected_outpoint = bitcoin::OutPoint::from(selected[0].outpoint.as_ref());
+        let unselected_outpoint = bitcoin::OutPoint::from(unselected[0].outpoint.as_ref());
+
+        set_base_fee_rates(&manager, 100.0);
+        manager.state.lock().address = Some(Arc::new(Address::preview_new()));
+        manager.clone().dispatch(super::Action::SetCoinControlMode(selected));
+        manager.get_or_update_fee_rate_options().await;
+
+        // at 500 sat/vB the selected coin alone cannot pay the fee, but both coins could, so a
+        // fee sheet that quietly added inputs would price this rate instead of refusing it
+        let unpayable = manager
+            .get_custom_fee_option(Arc::new(FeeRate::from_sat_per_vb(500.0)), custom_fee_speed())
+            .await;
+
+        assert!(
+            unpayable.is_err(),
+            "a fee the selected coin cannot pay was priced: {:?}",
+            unpayable.map(|option| option.total_fee().map(|fee| fee.as_sats()))
+        );
+
+        let fee = selected_total_fee_sats(&manager).expect("fee total is estimated");
+        let NextOutcome::Confirm(details) = next_past_warnings(&manager).await else {
+            panic!("a 100 sat/vB fee the selected coin can pay must reach confirm");
+        };
+
+        assert_eq!(spent_outpoints(&details), vec![selected_outpoint]);
+        assert!(!spent_outpoints(&details).contains(&unselected_outpoint));
+        assert_eq!(details.fee_total.as_sats(), fee);
+        assert_eq!(output_values(&details), vec![50_000 - fee]);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn max_selected_while_fees_and_balance_load_waits_then_sends_the_full_balance() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        let manager = manager_for_spending(&[60_000, 40_000]);
+        clear_routes();
+
+        // fee rates are in but no total fee yet, and the unlocked balance has not loaded
+        set_base_fee_rates(&manager, 2.0);
+        manager.state.lock().address = Some(Arc::new(Address::preview_new()));
+        assert_eq!(selected_total_fee_sats(&manager), None);
+        assert_eq!(manager.state.lock().unlocked_spendable_sats, None);
+
+        manager.select_max_send().await.expect("max is selected from the wallet itself");
+        let max_sats = {
+            let state = manager.state.lock();
+            let max_sats = state.max_selected.as_ref().expect("max is selected").as_sats();
+            assert_eq!(state.amount_sats, Some(max_sats));
+            max_sats
+        };
+
+        assert!(max_sats < 100_000 && max_sats > 99_000, "max is the balance minus a fee");
+
+        manager.finalize_and_go_to_next_screen();
+        let outcome = next_outcome(&manager).await;
+        assert!(
+            matches!(
+                &outcome,
+                NextOutcome::Alert(super::SendFlowAlertState::General { title, .. })
+                    if title == "Balance Still Loading"
+            ),
+            "Next must wait for the balance, got {outcome:?}"
+        );
+
+        assert!(pushed_confirm_details().is_none(), "max confirmed before the balance loaded");
+
+        manager.get_wallet_balance().await;
+        manager.get_or_update_fee_rate_options().await;
+        assert_eq!(manager.state.lock().unlocked_spendable_sats, Some(100_000));
+        assert_eq!(selected_total_fee_sats(&manager), Some(100_000 - max_sats));
+
+        let NextOutcome::Confirm(details) = next_past_warnings(&manager).await else {
+            panic!("max must reach confirm once fees and balance load");
+        };
+
+        assert_eq!(details.sending_amount.as_sats(), max_sats);
+        assert_eq!(details.fee_total.as_sats(), 100_000 - max_sats);
+        assert_eq!(spent_outpoints(&details).len(), 2);
+        assert_eq!(output_values(&details), vec![max_sats]);
     }
 }

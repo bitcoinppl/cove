@@ -1347,7 +1347,16 @@ pub(crate) mod test_support {
 
     /// Builds an in-memory preview wallet manager with one confirmed output per amount
     pub(crate) fn funded_preview_wallet_manager(amounts_sats: &[u64]) -> RustWalletManager {
-        let metadata = preview_ledger_ready_metadata(WalletMetadata::preview_new());
+        funded_preview_wallet_manager_with_metadata(WalletMetadata::preview_new(), amounts_sats)
+    }
+
+    /// Builds an in-memory preview wallet manager from `metadata`, such as one on another
+    /// network, with one confirmed output per amount
+    pub(crate) fn funded_preview_wallet_manager_with_metadata(
+        metadata: WalletMetadata,
+        amounts_sats: &[u64],
+    ) -> RustWalletManager {
+        let metadata = preview_ledger_ready_metadata(metadata);
         let mut wallet = Wallet::preview_new_wallet_with_metadata(metadata.clone());
         insert_checkpoint(
             &mut wallet.bdk,

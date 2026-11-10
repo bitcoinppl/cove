@@ -232,9 +232,14 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
   "rust/src/transaction/unsigned_transaction.rs",
+  "rust/src/manager/wallet_manager.rs",
   "rust/src/manager/wallet_manager/unsigned_transactions.rs",
+  "rust/src/manager/wallet_manager/actor/transactions.rs",
+  "rust/src/wallet/addressing.rs",
   "rust/src/database/unsigned_transactions.rs",
   "rust/crates/cove-types/src/psbt.rs",
+  "ios/Cove/Flows/SelectedWalletFlow/TransactionsCardView.swift",
+  "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionsRows.kt",
   "ios/Cove/Flows/SendFlow/SendFlowHardwareScreen.swift",
   "ios/Cove/Flows/SendFlow/SendFlowHardwareSections.swift",
   "ios/Cove/Flows/SendFlow/SendFlowHardwareSheets.swift",
@@ -245,10 +250,12 @@ coverage = [
   "agent",
   "rust:rust/src/database/unsigned_transactions.rs::delete_tx_removes_the_record_and_its_wallet_index_entry",
   "rust:rust/src/hardware_signing_tests.rs::signed_psbts_that_match_no_saved_draft_are_rejected",
+  "rust:rust/src/hardware_signing_tests.rs::a_saved_draft_resumes_after_relaunch_and_deleting_it_releases_its_change_address",
   "ios-ui:ios/CoveUITests/HardwareSigningFullLaunchUITests.swift::testSignaturesThatMatchNoDraftAreRejected",
   "android-instrumented:android/app/src/androidTestUiTest/java/org/bitcoinppl/cove/flows/SendFlow/HardwareSigningFullLaunchTest.kt::signaturesThatMatchNoDraftAreRejected",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# draft deletion and unrelated or deleted-draft signature rejection are asserted in rust, and the ui
-# tests assert the no-draft alert for deleted, unrelated and mainnet signatures; reservation release
-# is not
+# rust asserts the draft is listed unchanged after a relaunch and still finalizes, that deleting it
+# removes the record and releases its change address, and that deleted-draft and unrelated
+# signatures match nothing; the ui tests assert the no-draft alert. an agent still taps the draft's
+# Pending Signature row to check it reopens the hardware screen

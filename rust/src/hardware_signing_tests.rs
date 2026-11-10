@@ -5,7 +5,7 @@
 //! the scanner, the draft lookup and the finalize call the hardware send screen uses, so a
 //! regression anywhere in that loop fails here instead of in a camera session
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use bbqr::{
     encode::Encoding,
@@ -15,6 +15,7 @@ use bbqr::{
     split::{Split, SplitOptions},
 };
 use bdk_wallet::bitcoin::{self, Psbt as BdkPsbt};
+use cove_tokio::FutureTimeoutExt as _;
 use foundation_ur::{Decoder as UrDecoder, Encoder as UrEncoder, UR};
 
 use crate::{
@@ -30,7 +31,11 @@ use crate::{
         external_address, external_recipient, fund_offline, init_signet_globals,
         save_hardware_draft,
     },
-    wallet::{Address, Wallet, metadata::WalletType},
+    wallet::{
+        Address, Wallet,
+        metadata::{WalletId, WalletType},
+    },
+    wallet_lifecycle::WalletLifecycleFailure,
 };
 use cove_types::{
     confirm::{ConfirmDetails, QrDensity},
@@ -280,6 +285,113 @@ async fn signed_animated_ur_and_bbqr_from_an_external_signer_finalize_the_saved_
     assert_matches_draft(&transaction, &fixture.details, &fixture.recipient, |script| {
         fixture.signer.is_mine(script)
     });
+}
+
+/// The draft's change script, the one output that does not pay the recipient
+fn change_script(details: &ConfirmDetails, recipient: &Address) -> bitcoin::ScriptBuf {
+    let recipient_script = recipient.script_pubkey();
+    let change: Vec<_> = details
+        .psbt
+        .0
+        .unsigned_tx
+        .output
+        .iter()
+        .filter(|output| output.script_pubkey != recipient_script)
+        .collect();
+
+    assert_eq!(change.len(), 1, "the draft has one change output");
+    change[0].script_pubkey.clone()
+}
+
+/// Closes a wallet manager the way leaving the wallet screen does, after its actor has
+/// handled every message queued before the close
+async fn close_manager(manager: RustWalletManager) {
+    // the actor handles messages in order, so a reply here means earlier sends have run
+    manager.balance().await.expect("wallet actor answers before closing");
+    drop(manager);
+}
+
+/// Opens the wallet again as a relaunch does, once the previous manager has finished closing
+async fn reopen_manager(id: &WalletId) -> RustWalletManager {
+    async {
+        loop {
+            match RustWalletManager::try_new(id.clone()) {
+                Err(WalletManagerError::WalletLifecycle(
+                    WalletLifecycleFailure::ManagerClosing { .. },
+                )) => tokio::time::sleep(Duration::from_millis(10)).await,
+                result => return result.expect("wallet manager reopens"),
+            }
+        }
+    }
+    .with_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(2)))
+    .await
+    .expect("the previous wallet manager finishes closing")
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn a_saved_draft_resumes_after_relaunch_and_deleting_it_releases_its_change_address() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+    // the wallet's node client builds a TLS config when the wallet opens
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let Fixture { manager, signer, recipient, details, _restore } =
+        hardware_wallet_with_draft().await;
+
+    let draft_id = details.psbt.tx_id();
+    let id = manager.id.clone();
+    close_manager(manager).await;
+
+    // a relaunch opens the wallet with the draft listed exactly as the user reviewed it
+    let manager = reopen_manager(&id).await;
+    let listed = manager.initial_state().unsigned_transactions;
+    assert_eq!(listed.len(), 1, "the saved draft is listed after a relaunch");
+    assert_eq!(listed[0].id(), draft_id);
+    assert_eq!(listed[0].details(), details, "resuming shows the draft the user reviewed");
+
+    // and its signature still finalizes the resumed draft
+    let signed = Psbt::from(signer.sign(&listed[0].details().psbt.0));
+    let finalized =
+        manager.finalize_psbt(Arc::new(signed.clone())).await.expect("resumed draft finalizes");
+
+    assert_matches_draft(&finalized.0, &details, &recipient, |script| signer.is_mine(script));
+
+    // deleting it removes the record, so its signature now matches nothing
+    manager.delete_unsigned_transaction(Arc::new(draft_id)).expect("draft deletes");
+    assert!(manager.get_unsigned_transactions().expect("drafts list").is_empty());
+    assert_eq!(
+        Database::global().unsigned_transactions()._get_tx_throw(Arc::new(signed.tx_id())).err(),
+        Some(UnsignedTransactionsTableError::NoRecordFound),
+        "a signature for the deleted draft reports the missing draft"
+    );
+
+    // a draft holds its change address until it is deleted, then the next draft reuses it
+    let held = save_hardware_draft(&manager, &recipient).await;
+    let held_change = change_script(&held, &recipient);
+
+    let while_held = save_hardware_draft(&manager, &recipient).await;
+    assert_ne!(
+        change_script(&while_held, &recipient),
+        held_change,
+        "a saved draft keeps its change address from the next draft"
+    );
+
+    manager.delete_unsigned_transaction(Arc::new(while_held.psbt.tx_id())).expect("draft deletes");
+    manager.delete_unsigned_transaction(Arc::new(held.psbt.tx_id())).expect("draft deletes");
+
+    let next = save_hardware_draft(&manager, &recipient).await;
+    assert_eq!(
+        change_script(&next, &recipient),
+        held_change,
+        "deleting a draft releases the change address it reserved"
+    );
+
+    // after another relaunch only the draft that was never deleted is listed
+    close_manager(manager).await;
+    let manager = reopen_manager(&id).await;
+    let listed: Vec<_> =
+        manager.initial_state().unsigned_transactions.iter().map(|draft| draft.id()).collect();
+
+    assert_eq!(listed, vec![next.psbt.tx_id()]);
 }
 
 #[tokio::test(flavor = "current_thread")]

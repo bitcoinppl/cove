@@ -214,3 +214,217 @@ impl RustSendFlowManager {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use cove_tokio::FutureTimeoutExt as _;
+    use cove_types::{address::AddressWithNetwork, fees::FeeRateOptions};
+
+    use crate::{
+        app::{App, AppAction},
+        manager::{
+            deferred_sender::SingleOrMany,
+            wallet_manager::test_support::funded_preview_wallet_manager_with_metadata,
+        },
+        network::Network,
+        router::{Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs},
+        test_support::hardware_signing::external_address,
+        wallet::{balance::Balance, metadata::WalletMetadata},
+    };
+
+    use super::super::{
+        Action, DebouncedTask, Message, ReconcileChannel, RustSendFlowManager, State,
+    };
+
+    const MAINNET_ADDRESS: &str = "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm";
+    const AMOUNT_SATS: u64 = 50_000;
+
+    // a BIP 77 v2 endpoint from the payjoin crate's own session test vectors
+    const PJ_V2_ENDPOINT: &str = "HTTPS://PAYJO.IN/TXJCGKTKXLUUZ%23EX1C4UC6ES-OH1QYPM5JXYNS754Y4R45QWE336QFX6ZR8DQGVQCULVZTV20TFVEYDMFQC-RK1Q0DJS3VVDXWQQTLQ8022QGXSX7ML9PHZ6EDSF6AKEWQG758JPS2EV";
+
+    /// A send flow over a hot wallet on `network` holding one confirmed output, with fee rates
+    /// already fetched so nothing in the test reaches the network
+    fn funded_send_flow(network: Network) -> Arc<RustSendFlowManager> {
+        let mut metadata = WalletMetadata::preview_new();
+        metadata.network = network;
+
+        let wallet_manager =
+            Arc::new(funded_preview_wallet_manager_with_metadata(metadata.clone(), &[100_000]));
+
+        let state = State::new(metadata, Arc::new(Balance::default()));
+        let manager = Arc::new(RustSendFlowManager {
+            app: App::global().clone(),
+            wallet_manager,
+            state: state.into_inner(),
+            reconciler: ReconcileChannel::new(100),
+            fee_check_task: DebouncedTask::new("fee_check", Duration::from_millis(200)),
+        });
+
+        {
+            let mut state = manager.state.lock();
+            state.fee_rate_options_base = Some(Arc::new(FeeRateOptions::_ffi_preview_new()));
+            state.unlocked_spendable_sats = Some(100_000);
+        }
+
+        manager
+    }
+
+    async fn wait_for(description: &str, mut done: impl FnMut() -> bool) {
+        async {
+            while !done() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }
+        .with_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(2)))
+        .await
+        .unwrap_or_else(|_| panic!("timed out waiting for {description}"));
+    }
+
+    fn drain_reconcile_messages(manager: &RustSendFlowManager) -> Vec<Message> {
+        let receiver = manager.reconciler.receiver();
+        let mut messages = Vec::new();
+
+        while let Ok(message) = receiver.try_recv() {
+            match message {
+                SingleOrMany::Single(message) => messages.push(message),
+                SingleOrMany::Many(batch) => messages.extend(batch),
+            }
+        }
+
+        messages
+    }
+
+    fn pushed_confirm_route() -> Option<SendRouteConfirmArgs> {
+        crate::app::test_support::routes().into_iter().find_map(|route| match route {
+            Route::Send(SendRoute::Confirm(args)) => Some(args),
+            _ => None,
+        })
+    }
+
+    /// Payjoin URIs pasted into the address field become an ordinary one-recipient send: the
+    /// field shows the bare address, the amount comes from the URI, and the confirm screen
+    /// gets no payjoin endpoint, so both apps sign and broadcast it as a normal payment
+    #[tokio::test(flavor = "current_thread")]
+    async fn payjoin_uris_entered_as_the_address_become_an_ordinary_draft() {
+        let _guard = crate::test_support::global_state_test_lock().lock().await;
+        crate::test_support::ensure_tokio_runtime();
+        crate::test_support::init_test_keychain();
+        crate::database::test_support::init_test_database();
+        crate::app::reconcile::test_support::init_noop_updater();
+
+        let signet_address = external_address(bitcoin::Network::Signet).to_string();
+        let wallets =
+            [(Network::Bitcoin, MAINNET_ADDRESS.to_string()), (Network::Signet, signet_address)];
+
+        for (network, address) in wallets {
+            let uris = [
+                ("pj v2", format!("bitcoin:{address}?amount=0.0005&pj={PJ_V2_ENDPOINT}"), true),
+                (
+                    "pj v2 with pjos",
+                    format!("bitcoin:{address}?amount=0.0005&pj={PJ_V2_ENDPOINT}&pjos=0"),
+                    true,
+                ),
+                ("pjos without pj", format!("bitcoin:{address}?amount=0.0005&pjos=0"), false),
+                (
+                    "BIP 78 pj",
+                    format!(
+                        "bitcoin:{address}?amount=0.0005&pj=https://example.com/payjoin&pjos=0"
+                    ),
+                    false,
+                ),
+            ];
+
+            for (uri_label, uri, is_payjoin_uri) in uris {
+                let label = format!("{uri_label} on {network:?}");
+
+                // guards the fixture: the v2 URIs must really be read as payjoin requests
+                let parsed = AddressWithNetwork::try_new(&uri).expect("URI parses");
+                assert_eq!(parsed.payjoin.is_some(), is_payjoin_uri, "{label}");
+
+                App::global().handle_action(AppAction::UpdateRoute { routes: Vec::new() });
+                let manager = funded_send_flow(network);
+
+                manager.clone().dispatch(Action::NotifyEnteringAddressChanged(uri.clone()));
+
+                {
+                    let state = manager.state.lock();
+                    assert_eq!(
+                        state.entering_address, address,
+                        "{label}: the field shows the address"
+                    );
+
+                    assert_eq!(
+                        state.address.as_deref().map(ToString::to_string),
+                        Some(address.clone()),
+                        "{label}"
+                    );
+
+                    assert_eq!(
+                        state.amount_sats,
+                        Some(AMOUNT_SATS),
+                        "{label}: the URI sets the amount"
+                    );
+                }
+
+                // the apps only learn the address and amount from these messages, and show Next
+                // once they have them
+                let mut sent = drain_reconcile_messages(&manager);
+                let sent_address = sent.iter().any(|message| {
+                    matches!(message, Message::UpdateAddress(Some(sent)) if sent.to_string() == address)
+                });
+
+                assert!(sent_address, "{label}: the apps were not sent the address: {sent:?}");
+                assert!(
+                    sent.contains(&Message::UpdateEnteringAddress(address.clone())),
+                    "{label}: the apps' field was not set to the bare address: {sent:?}"
+                );
+                assert!(
+                    sent.contains(&Message::UpdateAmountSats(AMOUNT_SATS)),
+                    "{label}: the apps were not sent the URI's amount: {sent:?}"
+                );
+
+                // fee work runs on another task, so its message may already be in `sent`
+                wait_for("the apps to be sent the fee total", || {
+                    sent.extend(drain_reconcile_messages(&manager));
+                    sent.iter().any(|message| {
+                        matches!(message, Message::UpdateFeeSelection(selection) if selection.selected.total_fee.is_some())
+                    })
+                })
+                .await;
+
+                wait_for("the fee total for the entered address", || {
+                    manager.selected_fee_rate().is_some_and(|fee| fee.total_fee.is_some())
+                })
+                .await;
+
+                manager.clone().dispatch(Action::FinalizeAndGoToNextScreen);
+                wait_for("the confirm screen", || pushed_confirm_route().is_some()).await;
+
+                let confirm = pushed_confirm_route().expect("confirm route was pushed");
+                assert_eq!(confirm.payjoin_endpoint, None, "{label}: no payjoin session starts");
+                assert_eq!(confirm.input, SendConfirmationInput::Unsigned, "{label}");
+                assert_eq!(confirm.details.sending_to.to_string(), address, "{label}");
+                assert_eq!(confirm.details.sending_amount.as_sats(), AMOUNT_SATS, "{label}");
+
+                let paid: Vec<_> = confirm
+                    .details
+                    .psbt
+                    .0
+                    .unsigned_tx
+                    .output
+                    .iter()
+                    .filter(|output| {
+                        output.script_pubkey == confirm.details.sending_to.script_pubkey()
+                    })
+                    .map(|output| output.value.to_sat())
+                    .collect();
+
+                assert_eq!(paid, vec![AMOUNT_SATS], "{label}: one output pays the URI amount");
+            }
+        }
+
+        App::global().handle_action(AppAction::UpdateRoute { routes: Vec::new() });
+    }
+}
