@@ -59,6 +59,19 @@ pub enum SignedImportError {
 }
 
 type Error = SignedImportError;
+
+impl SignedImportError {
+    /// A stable name for the failure, safe to log because it never echoes the input
+    pub(crate) const fn kind(&self) -> &'static str {
+        match self {
+            Self::HexDecodeError(_) => "hex_decode",
+            Self::Base64DecodeError(_) => "base64_decode",
+            Self::PsbtParseError(_) => "psbt_parse",
+            Self::UnrecognizedFormat => "unrecognized_format",
+            Self::NotSigned => "not_signed",
+        }
+    }
+}
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub fn psbt_has_signatures(psbt: &Psbt) -> bool {
@@ -77,18 +90,20 @@ impl SignedTransactionOrPsbt {
         let input = input.trim();
 
         // try PSBT first, propagate NotSigned so caller gets a clear error
-        match Self::try_parse_psbt_string(input) {
+        let psbt_error = match Self::try_parse_psbt_string(input) {
             Ok(psbt) => return Ok(psbt),
             Err(Error::NotSigned) => return Err(Error::NotSigned),
-            Err(_) => {}
-        }
+            Err(error) => error,
+        };
 
         // fall back to transaction parsing
         if let Ok(txn) = BitcoinTransaction::try_from_str(input) {
             return Ok(Self::Transaction(Arc::new(txn)));
         }
 
-        Err(Error::UnrecognizedFormat)
+        // a PSBT-prefixed input that failed to decode keeps that cause instead of looking like
+        // an unknown format, the PSBT probe only returns UnrecognizedFormat for other inputs
+        Err(psbt_error)
     }
 
     /// Try to parse from raw bytes
@@ -434,6 +449,21 @@ mod tests {
             let result = SignedTransactionOrPsbt::try_from_nfc_message(&message);
             assert!(matches!(result, Err(SignedImportError::NotSigned)), "{result:?}");
         }
+    }
+
+    #[test]
+    fn corrupt_psbt_text_keeps_its_parse_error() {
+        let base64 = SignedTransactionOrPsbt::try_parse("cHNidP8BAHECAAAAAQ");
+        assert!(
+            matches!(
+                base64,
+                Err(SignedImportError::Base64DecodeError(_) | SignedImportError::PsbtParseError(_))
+            ),
+            "{base64:?}"
+        );
+
+        let hex = SignedTransactionOrPsbt::try_parse("70736274ff0100");
+        assert!(matches!(hex, Err(SignedImportError::PsbtParseError(_))), "{hex:?}");
     }
 
     #[test]

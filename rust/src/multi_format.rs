@@ -196,22 +196,30 @@ impl MultiFormat {
 
         // try to parse as PSBT (base64 or hex); if it fails for any reason other than NotSigned,
         // keep trying other formats — but NotSigned means it's definitely a PSBT so stop here
-        match crate::signed_import::SignedTransactionOrPsbt::try_parse(string) {
-            Ok(parsed) => {
-                if let Some(psbt) = parsed.psbt() {
-                    return Ok(Self::SignedPsbt(psbt));
-                }
-                if let Some(txn) = parsed.transaction() {
-                    return Ok(Self::Transaction(txn));
-                }
-            }
-            Err(SignedImportError::NotSigned) => {
-                return Err(MultiFormatError::PsbtNotSigned);
-            }
-            Err(_) => {}
-        }
+        let signed_import_error =
+            match crate::signed_import::SignedTransactionOrPsbt::try_parse(string) {
+                Ok(parsed) => {
+                    if let Some(psbt) = parsed.psbt() {
+                        return Ok(Self::SignedPsbt(psbt));
+                    }
+                    if let Some(txn) = parsed.transaction() {
+                        return Ok(Self::Transaction(txn));
+                    }
 
-        warn!(input_len = string.len(), "could not parse string as MultiFormat");
+                    None
+                }
+                Err(SignedImportError::NotSigned) => {
+                    return Err(MultiFormatError::PsbtNotSigned);
+                }
+                Err(error) => Some(error),
+            };
+
+        // only the probe error kind is logged, its message can echo characters of the input
+        warn!(
+            input_len = string.len(),
+            signed_import_error = signed_import_error.as_ref().map(SignedImportError::kind),
+            "could not parse string as MultiFormat"
+        );
         Err(MultiFormatError::UnrecognizedFormat)
     }
 
