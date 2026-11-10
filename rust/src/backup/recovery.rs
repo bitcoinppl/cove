@@ -16,7 +16,7 @@ use cove_device::keychain::Keychain;
 use cove_types::WalletId;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
-use tracing::error;
+use tracing::{error, warn};
 use zeroize::Zeroizing;
 
 use crate::{database::Database, wallet::metadata::WalletMetadata};
@@ -99,12 +99,24 @@ impl RestoreFileLock {
 
         let file = open_lock_file(&path)?;
         if unsafe { flock(file.as_raw_fd(), LOCK_EX | LOCK_NB) } != 0 {
+            // the occupied error also covers local artifacts, so log that the lock refused it
+            let error = io::Error::last_os_error();
+            warn!(
+                "restore lock refused wallet id={}: another restore holds it or flock failed: {error}",
+                id.as_wallet_id()
+            );
+
             return Err(BackupError::WalletIdOccupied(id.as_wallet_id().clone()));
         }
 
         // the lock is released by unlinking the lock file, so a handle opened
         // before another holder unlinked it guards an inode nobody consults
         if !lock_file_is_current(&file, &path) {
+            warn!(
+                "restore lock refused wallet id={}: lock file was replaced while acquiring it",
+                id.as_wallet_id()
+            );
+
             return Err(BackupError::WalletIdOccupied(id.as_wallet_id().clone()));
         }
 

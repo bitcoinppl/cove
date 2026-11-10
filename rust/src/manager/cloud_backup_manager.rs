@@ -282,6 +282,9 @@ pub struct RustCloudBackupManager {
     cloud_writes: Addr<CloudBackupWriteSupervisor>,
     pub(crate) supervisor: Addr<CloudBackupSupervisor>,
     local_reset_in_progress: Arc<AtomicBool>,
+    /// Whether the last pending verification read of blob sync states failed, so a lasting
+    /// database error logs once per change instead of on every queue pass
+    pending_sync_states_unreadable: Arc<AtomicBool>,
 }
 
 static NEXT_LOCAL_RESET_ID: AtomicU64 = AtomicU64::new(0);
@@ -635,6 +638,7 @@ impl RustCloudBackupManager {
                 cloud_writes: cloud_writes.clone(),
                 supervisor: spawn_actor(CloudBackupSupervisor::new(manager.clone(), cloud_writes)),
                 local_reset_in_progress: Arc::new(AtomicBool::new(false)),
+                pending_sync_states_unreadable: Arc::new(AtomicBool::new(false)),
             }
         });
 

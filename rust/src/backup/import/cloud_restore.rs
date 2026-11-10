@@ -47,6 +47,8 @@ pub(crate) enum CloudRestoreError {
 ///
 /// Returns the value to write, or `None` when the restore writes nothing
 fn plan_entry<T: PartialEq>(
+    metadata: &WalletMetadata,
+    item: &str,
     local: Option<T>,
     incoming: Option<T>,
 ) -> Result<Option<T>, LocalWalletConflict> {
@@ -54,8 +56,23 @@ fn plan_entry<T: PartialEq>(
         (None, None) => Ok(None),
         (None, Some(incoming)) => Ok(Some(incoming)),
         (Some(local), Some(incoming)) if local == incoming => Ok(None),
-        _ => Err(LocalWalletConflict::Mismatch),
+        (Some(_), incoming) => {
+            // the conflict error is shared by every item, so only this log says which one differed
+            let backup = if incoming.is_some() { "a different" } else { "no" };
+            warn!(
+                "cloud restore refused wallet id={}: local {item} differs, backup has {backup} {item}",
+                metadata.id
+            );
+
+            Err(LocalWalletConflict::Mismatch)
+        }
     }
+}
+
+/// Log a local item the backup kind cannot hold, then refuse the restore
+fn unverifiable_local_item(metadata: &WalletMetadata, item: &str) -> CloudRestoreError {
+    warn!("cloud restore refused wallet id={}: local {item} has no backup to verify", metadata.id);
+    LocalWalletConflict::Mismatch.into()
 }
 
 /// A cloud restore whose every pre-existing local item was checked against the backup
@@ -104,6 +121,14 @@ fn capture_local_wallet_state(
     };
 
     if snapshot.metadata || !snapshot.bdk_paths.is_empty() || snapshot.wallet_data_occupied {
+        // the error names only the wallet id, so log which artifacts reserve it
+        warn!(
+            "cloud restore refused wallet id={wallet_id}: id already occupied (metadata={}, bdk_stores={}, wallet_data={})",
+            snapshot.metadata,
+            snapshot.bdk_paths.len(),
+            snapshot.wallet_data_occupied
+        );
+
         return Err(BackupError::WalletIdOccupied(wallet_id.clone()).into());
     }
 
@@ -126,7 +151,7 @@ impl VerifiedCloudRestorePlan<HotWalletWrites> {
 
         // a hot wallet backup carries no TapSigner backup, so a local one is data we cannot verify
         if local.tap_signer_backup.is_some() {
-            return Err(LocalWalletConflict::Mismatch.into());
+            return Err(unverifiable_local_item(metadata, "TapSigner backup"));
         }
 
         // a key restored before #988 can be stored in the backup's network form, which is the
@@ -135,9 +160,14 @@ impl VerifiedCloudRestorePlan<HotWalletWrites> {
             local.secret.map(|secret| secret.into_network_kind(metadata.network.into()));
         let PreparedHotWallet { secret, xpub, descriptors } = prepared;
         let writes = HotWalletWrites {
-            secret: plan_entry(local_secret, Some(secret))?,
-            xpub: plan_entry(local.xpub, Some(xpub))?,
-            descriptors: plan_entry(local.descriptors, Some(public_descriptor_pair(&descriptors)))?,
+            secret: plan_entry(metadata, "secret", local_secret, Some(secret))?,
+            xpub: plan_entry(metadata, "xpub", local.xpub, Some(xpub))?,
+            descriptors: plan_entry(
+                metadata,
+                "descriptors",
+                local.descriptors,
+                Some(public_descriptor_pair(&descriptors)),
+            )?,
             bdk_descriptors: descriptors,
         };
 
@@ -154,15 +184,17 @@ impl VerifiedCloudRestorePlan<PublicWalletWrites> {
 
         // a public wallet backup carries no private key, so a local secret is data we cannot verify
         if local.secret.is_some() {
-            return Err(LocalWalletConflict::Mismatch.into());
+            return Err(unverifiable_local_item(metadata, "secret"));
         }
 
         let PreparedPublicWallet { xpub, descriptors, tap_signer_backup, .. } = prepared;
         let writes = PublicWalletWrites {
             bdk_descriptors: descriptors.clone(),
-            xpub: plan_entry(local.xpub, xpub)?,
-            descriptors: plan_entry(local.descriptors, descriptors)?,
+            xpub: plan_entry(metadata, "xpub", local.xpub, xpub)?,
+            descriptors: plan_entry(metadata, "descriptors", local.descriptors, descriptors)?,
             tap_signer_backup: plan_entry(
+                metadata,
+                "TapSigner backup",
                 local.tap_signer_backup,
                 tap_signer_backup.map(Zeroizing::new),
             )?,

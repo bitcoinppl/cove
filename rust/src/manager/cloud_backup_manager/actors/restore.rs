@@ -663,8 +663,9 @@ impl RestoreOperation {
                     if is_provider_wide_interruption(&error) {
                         return Err(blocking_cloud_error(BlockingCloudStep::Restore, error));
                     }
+                    // the restore report keeps generic copy, so only this log keeps the cause
+                    warn!("Failed to download wallet backup {record_name}: {error}");
                     let error = GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.to_string();
-                    warn!("Failed to download wallet backup: {error}");
                     report.wallets_failed += 1;
                     failed_wallet_errors.push((index, error));
                 }
