@@ -108,10 +108,27 @@ impl ScreenUpdates {
         Self { receiver: manager.reconciler.receiver(), seen: Vec::new() }
     }
 
-    async fn until(&mut self, what: &str, done: impl Fn(&Msg) -> bool) {
+    /// Waits for a message matching `done` among those seen since the screen was last cleared,
+    /// returning its position in `seen`
+    async fn until(&mut self, what: &str, done: impl Fn(&Msg) -> bool) -> usize {
+        self.until_after(0, what, done).await
+    }
+
+    /// Waits for a message matching `done` at or after position `start` in `seen`, returning its
+    /// position
+    async fn until_after(
+        &mut self,
+        start: usize,
+        what: &str,
+        done: impl Fn(&Msg) -> bool,
+    ) -> usize {
         let timeout = crate::test_support::loaded_host_wait(Duration::from_secs(20));
         tokio::time::timeout(timeout, async {
-            while !self.seen.iter().any(&done) {
+            loop {
+                if let Some(found) = self.seen.iter().skip(start).position(&done) {
+                    return start + found;
+                }
+
                 match self.receiver.recv_async().await.expect("the reconciler stays open") {
                     SingleOrMany::Single(message) => self.seen.push(message),
                     SingleOrMany::Many(messages) => self.seen.extend(messages),
@@ -119,15 +136,24 @@ impl ScreenUpdates {
             }
         })
         .await
-        .unwrap_or_else(|_| panic!("timed out waiting for {what}; saw {:#?}", self.seen));
+        .unwrap_or_else(|_| panic!("timed out waiting for {what}; saw {:#?}", self.seen))
+    }
+
+    /// Waits for a message matching `done`, then for the scan status to go idle after it, so an
+    /// idle status from before that message does not count
+    async fn until_then_idle(&mut self, what: &str, done: impl Fn(&Msg) -> bool) {
+        let found = self.until(what, done).await;
+        self.until_after(found + 1, "the scan status to go idle", |message| {
+            matches!(message, Msg::WalletScanStatusChanged(WalletScanStatus::Idle))
+        })
+        .await;
     }
 
     /// Waits for a scan to complete and the scan status to settle back to idle after it
     async fn until_scan_settles(&mut self) {
         self.seen.clear();
-        self.until("the scan to complete", |message| matches!(message, Msg::ScanComplete(_))).await;
-        self.until("the scan status to go idle", |message| {
-            matches!(message, Msg::WalletScanStatusChanged(WalletScanStatus::Idle))
+        self.until_then_idle("the scan to complete", |message| {
+            matches!(message, Msg::ScanComplete(_))
         })
         .await;
     }
@@ -245,11 +271,8 @@ async fn hold_a_refresh(
 /// messages seen since the screen was last cleared
 async fn wait_for_refresh_to_settle(screen: &mut ScreenUpdates) {
     screen
-        .until("the refresh to complete", |message| matches!(message, Msg::ScanComplete(_)))
-        .await;
-    screen
-        .until("the scan status to go idle", |message| {
-            matches!(message, Msg::WalletScanStatusChanged(WalletScanStatus::Idle))
+        .until_then_idle("the refresh to complete", |message| {
+            matches!(message, Msg::ScanComplete(_))
         })
         .await;
 }
@@ -863,17 +886,11 @@ async fn choosing_a_discovered_address_type_during_the_initial_scan_loads_its_hi
     screen.seen.clear();
     drop(scan_rule);
     scan_gate.open();
-    screen
-        .until("the wrapped segwit history to load", |message| {
-            matches!(message, Msg::ScanComplete(transactions)
-                if transactions.iter().any(|transaction| transaction.id().0 == wrapped))
-        })
-        .await;
-
     // a late result from the interrupted native segwit scan would land before the status settles
     screen
-        .until("the scan status to go idle", |message| {
-            matches!(message, Msg::WalletScanStatusChanged(WalletScanStatus::Idle))
+        .until_then_idle("the wrapped segwit history to load", |message| {
+            matches!(message, Msg::ScanComplete(transactions)
+                if transactions.iter().any(|transaction| transaction.id().0 == wrapped))
         })
         .await;
 
