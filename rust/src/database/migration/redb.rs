@@ -1726,7 +1726,11 @@ mod tests {
         assert!(result.is_err());
         assert!(bad_db.exists(), "known corrupt source should be preserved");
 
-        let report = crate::bootstrap::diagnostics::text_report_for_paths(dir.path(), dir.path());
+        let report = crate::bootstrap::diagnostics::text_report_for_paths(
+            dir.path(),
+            dir.path(),
+            &crate::bootstrap::diagnostics::LiveStorage::default(),
+        );
         assert!(report.contains(&bad_db.display().to_string()));
         assert!(report.contains("failed to open plaintext wallet database"));
     }

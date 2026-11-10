@@ -427,10 +427,13 @@ pub fn root_data_dir_path() -> String {
     cove_common::consts::ROOT_DATA_DIR.to_string_lossy().to_string()
 }
 
-/// Return a plain text diagnostic report for startup storage failures
+/// Return a redacted plain text diagnostic report for the startup error screen
+///
+/// Includes the storage diagnostics and the captured Rust log history, redacted the same way
+/// as an uploaded diagnostics report
 #[uniffi::export]
 pub fn startup_diagnostic_text_report() -> String {
-    diagnostics::text_report()
+    crate::diagnostics::startup_error_report_text()
 }
 
 fn map_database_key_verification_error(

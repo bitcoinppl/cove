@@ -164,6 +164,22 @@ impl DiagnosticsReport {
     }
 }
 
+/// Storage diagnostics and Rust logs for the startup error screen, which has no full report
+pub(crate) fn startup_error_report_text() -> String {
+    let startup = crate::bootstrap::diagnostics::text_report();
+    let rust_logs = cove_common::logging::capture::snapshot_text();
+    let mut redactor = redact::Redactor::with_default_paths();
+
+    let mut text = redactor.redact(&startup);
+    if !text.ends_with('\n') {
+        text.push('\n');
+    }
+
+    text.push_str("\nRust logs\n");
+    text.push_str(&redactor.redact(&rust_logs));
+    text
+}
+
 fn user_description_for_upload(description: Option<String>) -> Option<String> {
     description
         .map(|description| description.trim().to_string())
@@ -205,7 +221,7 @@ impl DiagnosticsReport {
         platform: DiagnosticsPlatformInfo,
         platform_logs: String,
     ) -> Result<Self, DiagnosticsError> {
-        let startup = crate::bootstrap::startup_diagnostic_text_report();
+        let startup = crate::bootstrap::diagnostics::text_report();
         let rust_logs = cove_common::logging::capture::snapshot_text();
 
         Self::build_with_sources(platform, platform_logs, startup, rust_logs)

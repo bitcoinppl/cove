@@ -233,7 +233,7 @@ fn get_or_create_main_database() -> Result<redb::Database, error::DatabaseError>
     encrypted_backend::open_or_create_database(&database_location())
 }
 
-fn database_location() -> PathBuf {
+pub(crate) fn database_location() -> PathBuf {
     DATABASE_LOCATION_OVERRIDE
         .get()
         .cloned()
