@@ -296,7 +296,7 @@ impl RustAuthManager {
 
     /// Check if decoy pin is enabled, not if the user is in decoy mode
     pub fn is_decoy_pin_enabled(&self) -> bool {
-        let pin = Database::global().global_config.decoy_pin().unwrap_or_default();
+        let pin = pin_setting_or_unset("decoy", Database::global().global_config.decoy_pin());
 
         !pin.is_empty()
     }
@@ -352,7 +352,8 @@ impl RustAuthManager {
 
     /// Check if the wipe data pin is enabled
     pub fn is_wipe_data_pin_enabled(&self) -> bool {
-        let pin = Database::global().global_config.wipe_data_pin().unwrap_or_default();
+        let pin =
+            pin_setting_or_unset("wipe data", Database::global().global_config.wipe_data_pin());
 
         !pin.is_empty()
     }
@@ -625,7 +626,8 @@ impl RustAuthManager {
             return false;
         }
 
-        let wipe_data_pin = Database::global().global_config.wipe_data_pin().unwrap_or_default();
+        let wipe_data_pin =
+            pin_setting_or_unset("wipe data", Database::global().global_config.wipe_data_pin());
 
         pin == wipe_data_pin
     }
@@ -635,10 +637,18 @@ impl RustAuthManager {
             return false;
         }
 
-        let decoy_pin = Database::global().global_config.decoy_pin().unwrap_or_default();
+        let decoy_pin = pin_setting_or_unset("decoy", Database::global().global_config.decoy_pin());
 
         pin == decoy_pin
     }
+}
+
+/// Treats an unreadable PIN setting as unset, logging the read error but never the PIN
+fn pin_setting_or_unset(kind: &str, read: Result<String, crate::database::Error>) -> String {
+    read.unwrap_or_else(|error| {
+        error!("failed to read {kind} PIN setting, treating it as unset: {error}");
+        String::new()
+    })
 }
 
 #[uniffi::export(callback_interface)]

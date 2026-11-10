@@ -508,6 +508,14 @@ impl WalletActor {
         let psbt = cove_types::psbt::Psbt::from(psbt);
         let labels_db = self.db.labels.clone();
 
+        // label reads run per input, so failures are counted and logged once below
+        let mut label_read_failures = 0_usize;
+        let mut last_label_read_error = None;
+        let mut record_label_error = |error: crate::database::wallet_data::label::LabelDbError| {
+            label_read_failures += 1;
+            last_label_read_error = Some(error);
+        };
+
         let extras = psbt
             .utxos_iter()
             .map(|(tx_in, tx_out)| {
@@ -521,24 +529,35 @@ impl WalletActor {
                     bitcoin::Address::from_script(&tx_out.script_pubkey, Params::from(network))
                         .ok();
 
-                let label = labels_db
+                let txn_label = labels_db
                     .get_txn_label_record(outpoint.txid)
-                    .ok()
-                    .flatten()
-                    .map(|record| record.item.label)
-                    .unwrap_or_else(|| match address {
-                        Some(address) => labels_db
-                            .get_address_record(address.into_unchecked())
-                            .ok()
-                            .flatten()
-                            .and_then(|record| record.item.label),
-                        None => None,
-                    });
+                    .unwrap_or_else(|error| {
+                        record_label_error(error);
+                        None
+                    })
+                    .map(|record| record.item.label);
+
+                let label = txn_label.unwrap_or_else(|| {
+                    let address = address?;
+                    labels_db
+                        .get_address_record(address.into_unchecked())
+                        .unwrap_or_else(|error| {
+                            record_label_error(error);
+                            None
+                        })
+                        .and_then(|record| record.item.label)
+                });
 
                 let extra = ExtraItem::new(label, utxo_type);
                 (&outpoint.txid, extra)
             })
             .collect();
+
+        if let Some(error) = last_label_read_error {
+            warn!(
+                "confirm details missing labels, {label_read_failures} label reads failed, last: {error}"
+            );
+        }
 
         let more_details = InputOutputDetails::new_with_labels(&psbt, self.wallet.network, extras);
         let fee_percentage = fee.to_sat() * 100 / output_amount.to_sat();

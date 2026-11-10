@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use act_zero::call;
 use cove_util::result_ext::ResultExt as _;
+use tracing::warn;
 
 use crate::{
     database::Database,
@@ -31,6 +32,7 @@ impl RustWalletManager {
             Ok(LabelExportResult { content, filename })
         })
         .await
+        .inspect_err(|error| warn!("failed to export labels for share: {error}"))
     }
 
     /// Export labels as QR codes with conditional loading popup
@@ -41,7 +43,9 @@ impl RustWalletManager {
     ) -> Result<Vec<String>, LabelManagerError> {
         let lm = self.label_manager.clone();
 
-        with_loading_popup(async move { lm.export_to_bbqr_with_density(&density).await }).await
+        with_loading_popup(async move { lm.export_to_bbqr_with_density(&density).await })
+            .await
+            .inspect_err(|error| warn!("failed to export labels as QR: {error}"))
     }
 
     /// Export public descriptors (xpub) for share
@@ -71,6 +75,7 @@ impl RustWalletManager {
             Ok(XpubExportResult { content, filename })
         })
         .await
+        .inspect_err(|error| warn!("failed to export xpub for share: {error}"))
     }
 
     /// Export public descriptors (xpub) as QR codes
@@ -117,6 +122,7 @@ impl RustWalletManager {
             .map_err_str(Error::UnknownError)?
         })
         .await
+        .inspect_err(|error| warn!("failed to export xpub as QR: {error}"))
     }
 
     /// Export transactions as CSV with conditional loading popup
@@ -152,6 +158,7 @@ impl RustWalletManager {
             .map_err_str(Error::CsvCreationError)?
         })
         .await
+        .inspect_err(|error| warn!("failed to export transactions CSV: {error}"))
     }
 }
 

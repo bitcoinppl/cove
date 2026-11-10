@@ -722,10 +722,17 @@ impl WalletActor {
         }
 
         if failures.is_empty() {
-            Ok(())
-        } else {
-            Err(Error::AddressTypeSwitchCommittedWithRecoveryPending { address_type, failures })
+            return Ok(());
         }
+
+        for failure in &failures {
+            error!(
+                "address type switch to {address_type} committed but {:?} recovery failed: {}",
+                failure.stage, failure.source_detail
+            );
+        }
+
+        Err(Error::AddressTypeSwitchCommittedWithRecoveryPending { address_type, failures })
     }
 
     #[into_actor_result]
