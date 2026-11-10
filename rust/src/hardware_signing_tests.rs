@@ -395,6 +395,48 @@ async fn a_saved_draft_resumes_after_relaunch_and_deleting_it_releases_its_chang
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_saved_draft_keeps_its_change_address_across_a_relaunch() {
+    let _guard = crate::test_support::global_state_test_lock().lock().await;
+
+    // the wallet's node client builds a TLS config when the wallet opens
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let Fixture { manager, recipient, details: saved, _restore, .. } =
+        hardware_wallet_with_draft().await;
+
+    let saved_change = change_script(&saved, &recipient);
+    let id = manager.id.clone();
+    close_manager(manager).await;
+
+    // the relaunched wallet must not hand the saved draft's change address to a new draft
+    let manager = reopen_manager(&id).await;
+    let after_relaunch = save_hardware_draft(&manager, &recipient).await;
+    assert_ne!(
+        change_script(&after_relaunch, &recipient),
+        saved_change,
+        "a saved draft keeps its change address after a relaunch"
+    );
+
+    let listed = manager.get_unsigned_transactions().expect("drafts list");
+    assert_eq!(listed.len(), 2, "both drafts stay saved");
+
+    // deleting the saved draft after a relaunch still frees its change address
+    manager.delete_unsigned_transaction(Arc::new(saved.psbt.tx_id())).expect("draft deletes");
+    manager
+        .delete_unsigned_transaction(Arc::new(after_relaunch.psbt.tx_id()))
+        .expect("draft deletes");
+
+    let next = save_hardware_draft(&manager, &recipient).await;
+    assert_eq!(
+        change_script(&next, &recipient),
+        saved_change,
+        "deleting a draft after a relaunch releases the change address it reserved"
+    );
+
+    manager.delete_unsigned_transaction(Arc::new(next.psbt.tx_id())).expect("draft deletes");
+    close_manager(manager).await;
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn signed_psbts_that_match_no_saved_draft_are_rejected() {
     let _guard = crate::test_support::global_state_test_lock().lock().await;
     let fixture = hardware_wallet_with_draft().await;

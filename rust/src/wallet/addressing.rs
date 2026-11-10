@@ -13,6 +13,7 @@ use crate::manager::cloud_backup_manager::CLOUD_BACKUP_MANAGER;
 
 use crate::{
     bdk_store::{BdkStore, StoreReplacementActivation},
+    database::Database,
     keychain::{Keychain, KeychainError},
     keys::Descriptors,
     wallet_lifecycle::{WalletLifecycleCoordinator, WalletPersistenceOperation},
@@ -413,6 +414,41 @@ impl Wallet {
 
     pub fn unreserve_tx_change_addresses(&mut self, tx: &bdk_wallet::bitcoin::Transaction) {
         unreserve_tx_change_addresses(&mut self.bdk, tx);
+    }
+
+    /// Reserves the change addresses of this wallet's saved unsigned transactions
+    ///
+    /// BDK keeps change reservations in memory only, so a wallet loaded from its store has
+    /// forgotten them. The saved drafts are the durable record of which change addresses are
+    /// taken, so every persisted load rebuilds the reservations from them
+    pub(crate) fn reserve_saved_draft_change_addresses(&mut self) {
+        let drafts = match Database::global().unsigned_transactions().get_by_wallet_id(&self.id) {
+            Ok(drafts) => drafts,
+            Err(error) => {
+                warn!("failed to load unsigned transactions to reserve change addresses: {error}");
+                return;
+            }
+        };
+
+        for draft in drafts {
+            reserve_tx_change_addresses(&mut self.bdk, &draft.confirm_details.psbt.0.unsigned_tx);
+        }
+    }
+}
+
+fn reserve_tx_change_addresses(
+    wallet: &mut bdk_wallet::Wallet,
+    tx: &bdk_wallet::bitcoin::Transaction,
+) {
+    for txout in &tx.output {
+        if let Some((KeychainKind::Internal, index)) =
+            wallet.derivation_of_spk(txout.script_pubkey.clone())
+        {
+            // a draft can hold a lookahead index the store never recorded as revealed, and
+            // mark_used only reserves revealed indexes
+            wallet.reveal_addresses_to(KeychainKind::Internal, index).for_each(drop);
+            wallet.mark_used(KeychainKind::Internal, index);
+        }
     }
 }
 

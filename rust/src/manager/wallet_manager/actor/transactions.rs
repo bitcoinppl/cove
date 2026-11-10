@@ -203,14 +203,10 @@ impl WalletActor {
         Ok(psbt)
     }
 
-    // release reserved change addresses for a discarded unsigned transaction
+    // release reserved change addresses for a discarded unsigned transaction; the caller
+    // already deleted its record, so the next load does not reserve them again
     pub async fn cancel_txn(&mut self, txn: BdkTransaction) {
         self.wallet.unreserve_tx_change_addresses(&txn);
-
-        // the caller already deleted the record, so persist now or a restart keeps the reservation
-        if let Err(error) = self.wallet.persist() {
-            warn!("failed to persist released change addresses for discarded transaction: {error}");
-        }
     }
 
     /// Delete saved unsigned transactions that the wallet graph shows can no longer be signed
@@ -239,8 +235,9 @@ impl WalletActor {
             self.wallet.unreserve_tx_change_addresses(&record.confirm_details.psbt.0.unsigned_tx);
         }
 
-        // released change reservations must be durable before the records that own them are
-        // deleted, otherwise a restart restores the reservations with nothing left to release them
+        // the wallet graph that settles these records is what keeps their change addresses used
+        // once the records are gone, so it must be durable before they are deleted, otherwise
+        // a restart could hand a settled transaction's change address to a new draft
         if let Err(error) = self.wallet.persist() {
             warn!("failed to persist released change addresses, keeping settled records: {error}");
             return;
