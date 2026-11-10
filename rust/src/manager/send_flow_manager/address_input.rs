@@ -224,14 +224,19 @@ mod tests {
 
     use crate::{
         app::{App, AppAction},
-        manager::wallet_manager::test_support::funded_preview_wallet_manager_with_metadata,
+        manager::{
+            deferred_sender::SingleOrMany,
+            wallet_manager::test_support::funded_preview_wallet_manager_with_metadata,
+        },
         network::Network,
         router::{Route, SendConfirmationInput, SendRoute, SendRouteConfirmArgs},
         test_support::hardware_signing::external_address,
         wallet::{balance::Balance, metadata::WalletMetadata},
     };
 
-    use super::super::{Action, DebouncedTask, ReconcileChannel, RustSendFlowManager, State};
+    use super::super::{
+        Action, DebouncedTask, Message, ReconcileChannel, RustSendFlowManager, State,
+    };
 
     const MAINNET_ADDRESS: &str = "bc1q00000002ltfnxz6lt9g655akfz0lm6k9wva2rm";
     const AMOUNT_SATS: u64 = 50_000;
@@ -275,6 +280,20 @@ mod tests {
         .with_timeout(crate::test_support::loaded_host_wait(Duration::from_secs(2)))
         .await
         .unwrap_or_else(|_| panic!("timed out waiting for {description}"));
+    }
+
+    fn drain_reconcile_messages(manager: &RustSendFlowManager) -> Vec<Message> {
+        let receiver = manager.reconciler.receiver();
+        let mut messages = Vec::new();
+
+        while let Ok(message) = receiver.try_recv() {
+            match message {
+                SingleOrMany::Single(message) => messages.push(message),
+                SingleOrMany::Many(batch) => messages.extend(batch),
+            }
+        }
+
+        messages
     }
 
     fn pushed_confirm_route() -> Option<SendRouteConfirmArgs> {
@@ -349,10 +368,33 @@ mod tests {
                     );
                 }
 
+                // the apps only learn the address and amount from these messages, and show Next
+                // once they have them
+                let sent = drain_reconcile_messages(&manager);
+                let sent_address = sent.iter().any(|message| {
+                    matches!(message, Message::UpdateAddress(Some(sent)) if sent.to_string() == address)
+                });
+
+                assert!(sent_address, "{label}: the apps were not sent the address: {sent:?}");
+                assert!(
+                    sent.contains(&Message::UpdateEnteringAddress(address.clone())),
+                    "{label}: the apps' field was not set to the bare address: {sent:?}"
+                );
+                assert!(
+                    sent.contains(&Message::UpdateAmountSats(AMOUNT_SATS)),
+                    "{label}: the apps were not sent the URI's amount: {sent:?}"
+                );
+
                 wait_for("the fee total for the entered address", || {
                     manager.selected_fee_rate().is_some_and(|fee| fee.total_fee.is_some())
                 })
                 .await;
+
+                let sent_fee_total = drain_reconcile_messages(&manager).iter().any(|message| {
+                    matches!(message, Message::UpdateFeeSelection(selection) if selection.selected.total_fee.is_some())
+                });
+
+                assert!(sent_fee_total, "{label}: the apps were not sent the fee total");
 
                 manager.clone().dispatch(Action::FinalizeAndGoToNextScreen);
                 wait_for("the confirm screen", || pushed_confirm_route().is_some()).await;

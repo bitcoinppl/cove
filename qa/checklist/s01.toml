@@ -214,9 +214,8 @@ target = "rust"
 paths = [
     "rust/src/backup/**",
 ]
-coverage = [
-    "agent",
-]
+coverage = []
+skip = "manual backup export and import is a developer-only beta feature behind Beta Features and its own import/export switch; regular users never see it"
 # 1.4.0: ios N/A, android N/A
 
 [[row]]

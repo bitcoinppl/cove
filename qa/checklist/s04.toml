@@ -37,9 +37,10 @@ paths = [
 coverage = [
     "agent",
     "rust:rust/src/diagnostics.rs::assembly_includes_sections_and_redacts_sensitive_values",
+    "rust:rust/src/diagnostics.rs::controlled_values_logged_by_rust_and_platforms_are_redacted_in_report_and_upload",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# redaction is rust; proving the app logged each controlled value is the agent part
+# rust log capture, both platforms' line formats and redaction are asserted; each app trims its log at a token boundary before rust sees it, and that platform trim still needs an agent
 
 [[row]]
 id = "s04-encrypted-transport-request-inspection"
@@ -98,16 +99,19 @@ paths = [
     "ios/Cove/Flows/SettingsFlow/SendDiagnosticsSheet.swift",
     "ios/Cove/Flows/SettingsFlow/SubmittedDiagnosticsSheet.swift",
     "ios/Cove/Flows/SettingsFlow/AboutScreen.swift",
+    "ios/Cove/ShareSheet.swift",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SendDiagnostics*.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/SubmittedDiagnosticsScreen.kt",
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
 ]
 coverage = [
-    "agent",
     "rust:rust/src/diagnostics.rs::assembly_includes_sections_and_redacts_sensitive_values",
+    "rust:rust/src/diagnostics.rs::shared_plain_report_is_the_redacted_preview_with_the_upload_content",
+    "agent",
 ]
 # 1.4.0: ios BLOCKED, android BLOCKED
-# shared file is the rust preview text; reading the shared file on device stays agent
+# rust decides the shared text; writing it to a file and sharing it is app code no other row
+# checks
 
 [[row]]
 id = "s04-offline-diagnostic-submission-keeps-preview"
@@ -171,12 +175,14 @@ paths = [
     "android/app/src/main/java/org/bitcoinppl/cove/flows/SettingsFlow/AboutSettingsScreen.kt",
 ]
 coverage = [
-    "agent",
     "rust:rust/src/diagnostics.rs::submit_persists_redacted_history_description",
     "rust:rust/src/diagnostics.rs::submit_persists_successful_report_history",
+    "rust:rust/src/diagnostics.rs::failed_then_retried_submissions_keep_one_redacted_record_each",
+    "agent",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# rust asserts the stored record; the history screen stays agent
+# rust decides the stored records; reloading the history after the send sheet closes and one
+# tap saving one record are app code no test runs
 
 [[row]]
 id = "s04-copy-id-exact-value"

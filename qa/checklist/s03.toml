@@ -192,9 +192,8 @@ target = "rust"
 paths = [
     "rust/src/backup/**",
 ]
-coverage = [
-    "agent",
-]
+coverage = []
+skip = "manual backup export and import is a developer-only beta feature behind Beta Features and its own import/export switch; regular users never see it"
 # 1.4.0: ios N/A, android N/A
 
 [[row]]
@@ -209,9 +208,9 @@ paths = [
     "rust/src/label_manager.rs",
 ]
 coverage = [
-    "agent",
     "rust:rust/src/backup/import.rs::backup_import_restores_labels_and_output_locks_into_a_fresh_wallet",
 ]
+skip = "manual backup export and import is a developer-only beta feature behind Beta Features and its own import/export switch; regular users never see it"
 # 1.4.0: ios N/A, android N/A
 
 [[row]]
@@ -357,6 +356,7 @@ platforms = ["ios", "android"]
 target = "rust"
 paths = [
     "rust/src/manager/wallet_manager/transaction_locks.rs",
+    "rust/src/manager/wallet_manager/actor.rs",
     "rust/src/manager/wallet_manager/actor/transactions.rs",
     "rust/src/database/wallet_data/label.rs",
     "ios/Cove/Flows/SelectedWalletFlow/TransactionDetails/**",

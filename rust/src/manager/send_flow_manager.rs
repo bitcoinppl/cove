@@ -1832,6 +1832,7 @@ mod tests {
                 NextOutcome::Alert(super::SendFlowAlertState::Warning { kind, .. }) => {
                     manager.clone().dispatch(super::Action::AcknowledgeWarningAndFinalize(kind));
                 }
+
                 outcome => return outcome,
             }
         }

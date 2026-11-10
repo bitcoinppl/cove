@@ -194,9 +194,10 @@ paths = [
 coverage = [
   "agent",
   "rust:rust/src/custom_block_explorer/template.rs::placeholders_are_normalized_and_all_occurrences_render",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_substitutes_each_placeholder_spelling_once",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# substitution is rust; opening the link in a browser is not asserted
+# the opened url is asserted in rust; that one tap opens it in the browser once still needs an agent
 
 [[row]]
 id = "s10-template-0-opens-correct-transaction-once"
@@ -215,9 +216,10 @@ paths = [
 coverage = [
   "agent",
   "rust:rust/src/custom_block_explorer/template.rs::placeholders_are_normalized_and_all_occurrences_render",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_substitutes_each_placeholder_spelling_once",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# substitution is rust; opening the link in a browser is not asserted
+# the opened url is asserted in rust; that one tap opens it in the browser once still needs an agent
 
 [[row]]
 id = "s10-template-tx-id-opens-correct-transaction-once"
@@ -236,9 +238,10 @@ paths = [
 coverage = [
   "agent",
   "rust:rust/src/custom_block_explorer/template.rs::placeholders_are_normalized_and_all_occurrences_render",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_substitutes_each_placeholder_spelling_once",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# substitution is rust; opening the link in a browser is not asserted
+# the opened url is asserted in rust; that one tap opens it in the browser once still needs an agent
 
 [[row]]
 id = "s10-invalid-scheme-preserves-saved-explorer"
@@ -352,12 +355,12 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
 ]
 coverage = [
-  "agent",
   "rust:rust/src/custom_block_explorer/template.rs::defaults_match_existing_transaction_urls",
   "rust:rust/src/database/global_config.rs::explicit_reset_to_default_restores_network_default_url",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_follows_each_saved_preset",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# url rendering is asserted; opening the browser is not
+# both apps open the rust transaction url unchanged with the system opener
 
 [[row]]
 id = "s10-preset-transaction-url-mempool-guide"
@@ -376,10 +379,11 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
 ]
 coverage = [
-  "agent",
   "rust:rust/src/database/global_config.rs::preset_explorer_selection_renders_preview_and_transaction_url",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_follows_each_saved_preset",
 ]
 # 1.4.0: ios BLOCKED, android PASS
+# both apps open the rust transaction url unchanged with the system opener
 
 [[row]]
 id = "s10-preset-transaction-url-mempool-bullbitcoin-com"
@@ -398,10 +402,11 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
 ]
 coverage = [
-  "agent",
   "rust:rust/src/database/global_config.rs::preset_explorer_selection_renders_preview_and_transaction_url",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_follows_each_saved_preset",
 ]
 # 1.4.0: ios BLOCKED, android PASS
+# both apps open the rust transaction url unchanged with the system opener
 
 [[row]]
 id = "s10-preset-transaction-url-blockstream-info"
@@ -420,12 +425,12 @@ paths = [
   "android/app/src/main/java/org/bitcoinppl/cove/flows/SelectedWalletFlow/TransactionDetails/TransactionDetailsScreen.kt",
 ]
 coverage = [
-  "agent",
   "rust:rust/src/database/global_config.rs::block_explorer_option_setter_selects_presets_and_clears_default",
   "rust:rust/src/database/global_config.rs::preset_explorer_selection_renders_preview_and_transaction_url",
+  "rust:rust/src/transaction/transaction_details.rs::transaction_url_follows_each_saved_preset",
 ]
 # 1.4.0: ios BLOCKED, android PASS
-# preset template is asserted; opening the browser is not
+# both apps open the rust transaction url unchanged with the system opener
 
 [[row]]
 id = "s10-custom-explorer-persists-after-cold-relaunch"

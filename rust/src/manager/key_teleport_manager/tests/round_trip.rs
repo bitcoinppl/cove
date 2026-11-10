@@ -10,12 +10,17 @@ use bdk_wallet::{
 };
 use cove_device::keychain::WalletXprv;
 
-use crate::wallet::{Wallet, metadata::WalletType};
+use crate::{
+    multi_format::MultiFormat,
+    test_support::{WALLET_MNEMONIC_KEY_SUFFIX, shared_mock_keychain},
+    wallet::{Wallet, metadata::WalletType},
+};
 
 use super::{
     support::{
         ABANDON_ABOUT, ExpectedWallet, WalletTargetGuard, all_wallet_ids, deliver_response,
-        every_scope, import_new_wallet, select_target, send_from_cove, start_receiver, wallets_in,
+        every_scope, import_new_wallet, select_target, send_from_cove, start_receiver,
+        try_send_from_cove, wallets_in,
     },
     *,
 };
@@ -287,4 +292,306 @@ fn response_for_an_expired_request_is_rejected_and_its_replacement_still_works()
     let (packet, password) = sender_transfer(&replacement);
     deliver_response(&receiver, &packet, &password).unwrap();
     assert!(matches!(receiver.state(), KeyTeleportManagerState::ReceiveMnemonicReview(_)));
+}
+
+#[test]
+fn new_request_changes_the_receiver_code_and_only_the_new_code_completes_a_transfer() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let _target = WalletTargetGuard::new(Network::Signet, WalletMode::Main);
+    let mnemonic = Mnemonic::from_str(ABANDON_ABOUT).unwrap();
+    let (receiver, old_request) = start_receiver();
+    let mut screen = Screen::open(&receiver);
+
+    // both apps dispatch this from their Create New Request button
+    receiver.clone().dispatch(Action::RestartReceive);
+    screen.apply(&receiver);
+    let new_request = receive_request(&receiver);
+
+    // the open Receive screen swaps to the new request instead of keeping the old code
+    assert_eq!(screen.state, KeyTeleportManagerState::ReceiveReady(new_request.clone()));
+    assert_eq!(screen.alert, None);
+
+    // two random 8-digit codes match about once in 10^8 runs, which is rare enough to assert
+    assert_ne!(new_request.numeric_code, old_request.numeric_code);
+    assert_ne!(new_request.packet, old_request.packet);
+
+    // both apps show the grouped code, so it must be the new request's code and not a stale one
+    let shown_digits: String =
+        new_request.grouped_numeric_code.chars().filter(char::is_ascii_digit).collect();
+    assert_eq!(shown_digits, new_request.numeric_code);
+
+    // reopening Receive shows the new request, not the one it replaced
+    let (_, reopened_request) = start_receiver();
+    assert_eq!(reopened_request, new_request);
+
+    // a sender who copied the old code either has it refused or produces a response the
+    // receiver cannot open
+    let old_code_transfer = try_send_from_cove(
+        WalletSecret::Mnemonic(mnemonic.clone()),
+        &new_request.packet,
+        &old_request.grouped_numeric_code,
+    )
+    .and_then(|(packet, password)| deliver_response(&receiver, &packet, &password));
+
+    assert!(old_code_transfer.is_err(), "the replaced code unlocked the new request");
+    assert_eq!(receive_request(&receiver), new_request);
+
+    let (packet, password) = send_from_cove(WalletSecret::Mnemonic(mnemonic.clone()), &new_request);
+    deliver_response(&receiver, &packet, &password).unwrap();
+    assert_eq!(receiver.reveal_mnemonic_words().join(" "), mnemonic.to_string());
+}
+
+#[test]
+fn pasted_request_link_or_packet_with_the_shown_code_sends_the_fixed_wallet() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let _target = WalletTargetGuard::new(Network::Signet, WalletMode::Main);
+    let mnemonic = Mnemonic::from_str(ABANDON_ABOUT).unwrap();
+
+    // the receiver shares its request as a link and shows it as a BBQr packet, and the sender
+    // types the code either as shown or as bare digits
+    let link = |request: &KeyTeleportReceiveState| {
+        (request.packet.url().unwrap(), request.grouped_numeric_code.clone())
+    };
+    let packet = |request: &KeyTeleportReceiveState| {
+        (request.packet.bbqr_part().unwrap(), request.numeric_code.clone())
+    };
+
+    for pasted_form in [link, packet] {
+        let (receiver, request) = start_receiver();
+        let (pasted, code) = pasted_form(&request);
+        let fixture = SendWalletFixture::with_secret(WalletSecret::Mnemonic(mnemonic.clone()));
+        let sender = RustKeyTeleportManager::new();
+        sender.handle_action(Action::StartSendFromWallet(fixture.wallet.id.clone())).unwrap();
+
+        // both apps parse the pasted text with this call and hand the receiver packet over;
+        // clipboard text often carries surrounding whitespace
+        let clipboard = StringOrData::String(format!("  {pasted}\n"));
+        let MultiFormat::KeyTeleportReceiver(parsed) = MultiFormat::try_from(clipboard).unwrap()
+        else {
+            panic!("pasted request did not parse as a receiver request")
+        };
+
+        sender.handle_action(Action::Ingest(KeyTeleportInput::Receiver(parsed))).unwrap();
+        let KeyTeleportManagerState::SendEnterCode(entry) = sender.state() else {
+            panic!("expected receiver code entry, got {:?}", sender.state())
+        };
+
+        assert_eq!(entry.selected_wallet.id, fixture.wallet.id);
+
+        sender.handle_action(Action::EnterReceiverCode(code)).unwrap();
+        let KeyTeleportManagerState::SendReady(ready) = sender.state() else {
+            panic!("expected the sender response, got {:?}", sender.state())
+        };
+
+        assert_eq!(ready.selected_wallet.id, fixture.wallet.id);
+        deliver_response(&receiver, &ready.packet, &ready.password.display_text()).unwrap();
+        assert_eq!(receiver.reveal_mnemonic_words().join(" "), mnemonic.to_string());
+        receiver.handle_action(Action::FinishReview).unwrap();
+    }
+}
+
+#[test]
+fn ending_the_session_discards_the_request_so_its_response_no_longer_opens() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let _target = WalletTargetGuard::new(Network::Signet, WalletMode::Main);
+    let (receiver, request) = start_receiver();
+    let (packet, password) = sender_transfer(&request);
+    let wallets_before = all_wallet_ids();
+    let mut screen = Screen::open(&receiver);
+
+    // both apps dispatch this from their End Session button
+    receiver.clone().dispatch(Action::EndReceive);
+    screen.apply(&receiver);
+
+    assert!(matches!(receiver.state(), KeyTeleportManagerState::Idle));
+    assert_eq!(screen.state, KeyTeleportManagerState::Idle, "the ended request stayed on screen");
+    assert!(Keychain::global().get_key_teleport_receive_session().unwrap().is_none());
+    assert_eq!(
+        deliver_response(&receiver, &packet, &password),
+        Err(KeyTeleportAlert::NoActiveReceiveSession)
+    );
+
+    // reopening Receive starts a new request instead of resuming the ended one
+    let (reopened, new_request) = start_receiver();
+    assert_ne!(new_request.packet, request.packet);
+    assert!(deliver_response(&reopened, &packet, &password).is_err());
+    assert_eq!(receive_request(&reopened), new_request);
+    assert_eq!(all_wallet_ids(), wallets_before);
+}
+
+#[test]
+fn wrong_direction_paste_is_refused_and_both_phones_still_finish_their_transfer() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let _target = WalletTargetGuard::new(Network::Signet, WalletMode::Main);
+    let mnemonic = Mnemonic::from_str(ABANDON_ABOUT).unwrap();
+
+    // the receiving phone is pasted another phone's request
+    let (receiver, request) = start_receiver();
+    let stray_request = ReceiverSession::new().request().unwrap();
+    let stray_request = KeyTeleportReceiverPacket::from(stray_request.packet).url().unwrap();
+    let pasted = KeyTeleportInput::MultiFormat(StringOrData::String(stray_request));
+
+    assert_eq!(
+        receiver.handle_action(Action::Ingest(pasted)),
+        Err(KeyTeleportAlert::ConflictingTransferDirection)
+    );
+    assert_eq!(receive_request(&receiver), request);
+
+    // the sending phone is pasted a sender response while it waits for a request
+    let fixture = SendWalletFixture::with_secret(WalletSecret::Mnemonic(mnemonic.clone()));
+    let sender = RustKeyTeleportManager::new();
+    sender.handle_action(Action::StartSendFromWallet(fixture.wallet.id.clone())).unwrap();
+    let (stray_response, _) = sender_transfer(&request);
+    let pasted = StringOrData::String(stray_response.bbqr_part().unwrap());
+
+    assert_eq!(
+        sender.handle_action(Action::Ingest(KeyTeleportInput::MultiFormat(pasted))),
+        Err(KeyTeleportAlert::ConflictingTransferDirection)
+    );
+    assert!(matches!(sender.state(), KeyTeleportManagerState::SendAwaitReceiver));
+
+    // after the alert both phones carry on with the packets they expect
+    let pasted = StringOrData::String(request.packet.url().unwrap());
+    sender.handle_action(Action::Ingest(KeyTeleportInput::MultiFormat(pasted))).unwrap();
+    sender.handle_action(Action::EnterReceiverCode(request.grouped_numeric_code)).unwrap();
+    let KeyTeleportManagerState::SendReady(ready) = sender.state() else {
+        panic!("expected the sender response, got {:?}", sender.state())
+    };
+
+    deliver_response(&receiver, &ready.packet, &ready.password.display_text()).unwrap();
+    assert_eq!(receiver.reveal_mnemonic_words().join(" "), mnemonic.to_string());
+}
+
+#[test]
+fn fixed_sender_answers_a_request_without_reading_other_wallets() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let _target = WalletTargetGuard::new(Network::Signet, WalletMode::Main);
+    let (receiver, request) = start_receiver();
+    let mnemonic = Mnemonic::from_str(ABANDON_ABOUT).unwrap();
+    let fixed = SendWalletFixture::with_secret(WalletSecret::Mnemonic(mnemonic.clone()));
+
+    // the sending phone also holds a healthy hot wallet and one whose secret cannot be read
+    let other_words = Mnemonic::from_entropy(&[0x42; 16]).unwrap();
+    let other = SendWalletFixture::with_secret(WalletSecret::Mnemonic(other_words));
+    let mut unreadable = WalletMetadata::preview_new();
+    unreadable.network = fixed.wallet.network;
+    unreadable.wallet_mode = fixed.wallet.wallet_mode;
+    shared_mock_keychain().fail_reads_for(format!("{}{WALLET_MNEMONIC_KEY_SUFFIX}", unreadable.id));
+    Database::global()
+        .wallets
+        .save_all_wallets(
+            fixed.wallet.network,
+            fixed.wallet.wallet_mode,
+            vec![fixed.wallet.clone(), other.wallet.clone(), unreadable.clone()],
+        )
+        .unwrap();
+
+    shared_mock_keychain().record_reads();
+    let sender = RustKeyTeleportManager::new();
+    let scanned = StringOrData::String(request.packet.url().unwrap());
+    sender.handle_action(Action::StartSendFromWallet(fixed.wallet.id.clone())).unwrap();
+    sender.handle_action(Action::Ingest(KeyTeleportInput::MultiFormat(scanned))).unwrap();
+    let after_scan = sender.state();
+    sender.handle_action(Action::EnterReceiverCode(request.grouped_numeric_code)).unwrap();
+    let reads = shared_mock_keychain().take_recorded_reads();
+
+    let KeyTeleportManagerState::SendEnterCode(entry) = after_scan else {
+        panic!("a fixed sender was asked to choose a wallet: {after_scan:?}")
+    };
+
+    assert_eq!(entry.selected_wallet.id, fixed.wallet.id);
+
+    // the send must read the fixed wallet's secret, which shows the recording saw keychain reads
+    let fixed_secret = format!("{}{WALLET_MNEMONIC_KEY_SUFFIX}", fixed.wallet.id);
+    assert!(reads.contains(&fixed_secret), "no read of the fixed wallet's secret was recorded");
+
+    for wallet_id in [&other.wallet.id, &unreadable.id] {
+        let prefix = format!("{wallet_id}::");
+        let read = reads.iter().find(|key| key.starts_with(&prefix));
+        assert_eq!(read, None, "the fixed send read an unrelated wallet's keychain entry");
+    }
+
+    let KeyTeleportManagerState::SendReady(ready) = sender.state() else {
+        panic!("expected the sender response, got {:?}", sender.state())
+    };
+
+    deliver_response(&receiver, &ready.packet, &ready.password.display_text()).unwrap();
+    assert_eq!(receiver.reveal_mnemonic_words().join(" "), mnemonic.to_string());
+}
+
+#[test]
+fn main_receive_request_stays_hidden_and_unusable_in_decoy_mode() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let _target = WalletTargetGuard::new(Network::Signet, WalletMode::Main);
+    let (main_receiver, request) = start_receiver();
+    let (packet, password) = sender_transfer(&request);
+    let wallets_before = all_wallet_ids();
+
+    select_target(Network::Signet, WalletMode::Decoy);
+    let decoy_receiver = RustKeyTeleportManager::new();
+
+    assert_eq!(
+        decoy_receiver.handle_action(Action::StartReceive),
+        Err(KeyTeleportAlert::ReceiveSessionScopeChanged)
+    );
+    assert!(matches!(decoy_receiver.state(), KeyTeleportManagerState::ReceiveError));
+    assert_eq!(
+        deliver_response(&decoy_receiver, &packet, &password),
+        Err(KeyTeleportAlert::NoActiveReceiveSession)
+    );
+
+    // the main Receive screen left open behind the mode switch refuses the response too
+    assert_eq!(
+        deliver_response(&main_receiver, &packet, &password),
+        Err(KeyTeleportAlert::ReceiveSessionScopeChanged)
+    );
+    assert_eq!(all_wallet_ids(), wallets_before);
+
+    // back in main mode the request was kept, so the sender's response still lands there
+    select_target(Network::Signet, WalletMode::Main);
+    let (resumed, resumed_request) = start_receiver();
+    assert_eq!(resumed_request, request);
+    deliver_response(&resumed, &packet, &password).unwrap();
+    let wallet = import_new_wallet(&resumed);
+    assert_eq!((wallet.network, wallet.wallet_mode), (Network::Signet, WalletMode::Main));
+}
+
+#[test]
+fn expired_request_reports_expiry_when_its_response_is_scanned_after_a_relaunch() {
+    let _guard = crate::test_support::global_state_test_lock().blocking_lock();
+    init_globals();
+    let _target = WalletTargetGuard::new(Network::Signet, WalletMode::Main);
+    let (_, request) = start_receiver();
+    let (packet, password) = sender_transfer(&request);
+
+    // the request outlives its 24-hour lifetime while the app is closed
+    let stored = Keychain::global().get_key_teleport_receive_session().unwrap().unwrap();
+    let mut persisted: serde_json::Value = serde_json::from_str(&stored).unwrap();
+    let created_at_secs = persisted["created_at_secs"].as_u64().unwrap();
+    persisted["created_at_secs"] = (created_at_secs - 24 * 60 * 60 - 1).into();
+    Keychain::global().save_key_teleport_receive_session(&persisted.to_string()).unwrap();
+
+    // the response is scanned before Receive is open, which hands it straight to a new manager
+    let relaunched = RustKeyTeleportManager::new();
+    let mut screen = Screen::open(&relaunched);
+    relaunched.clone().dispatch(Action::Ingest(KeyTeleportInput::Sender(packet.clone())));
+    screen.apply(&relaunched);
+
+    // the expiry banner shows over the replacement request, so the user can scan it again
+    assert_eq!(screen.alert, Some(KeyTeleportAlert::ReceiveSessionExpired));
+    let replacement = receive_request(&relaunched);
+    assert_eq!(screen.state, KeyTeleportManagerState::ReceiveReady(replacement.clone()));
+    assert_ne!(replacement.packet, request.packet);
+    assert!(deliver_response(&relaunched, &packet, &password).is_err());
+    assert_eq!(receive_request(&relaunched), replacement);
+
+    let (packet, password) = sender_transfer(&replacement);
+    deliver_response(&relaunched, &packet, &password).unwrap();
+    assert!(matches!(relaunched.state(), KeyTeleportManagerState::ReceiveMnemonicReview(_)));
 }

@@ -97,6 +97,82 @@ fn coverage_counts_each_platform_by_its_best_layer() {
 }
 
 #[test]
+fn skipped_rows_leave_the_plan_and_coverage_counts() {
+    let manifest = manifest(
+        r#"
+[[row]]
+id = "beta-backup"
+section = "3"
+title = "Manual backup export"
+platforms = ["ios", "android"]
+target = "rust"
+paths = ["rust/src/backup/**"]
+coverage = []
+skip = "developer-only beta feature"
+
+[[row]]
+id = "send"
+section = "6"
+title = "Send warning"
+platforms = ["ios", "android"]
+target = "ui"
+paths = ["rust/src/backup/**"]
+coverage = ["agent"]
+"#,
+    );
+
+    let changed = vec!["rust/src/backup/export.rs".to_string()];
+    let plan = manifest.plan(Some(&changed), Some("master...HEAD")).unwrap();
+
+    assert!(plan.contains("## Agent (1 rows)\n\n- §6 `send`"), "{plan}");
+    assert!(
+        plan.contains(
+            "## Skipped, do not test (1 rows)\n\n- §3 `beta-backup` Manual backup export: developer-only beta feature"
+        ),
+        "{plan}"
+    );
+
+    let report = manifest.coverage_report();
+    assert!(report.contains("| skipped | 1 | 1 |"), "{report}");
+    assert!(report.contains("| **total** | 2 | 2 |"), "{report}");
+
+    let root = tempfile::tempdir().unwrap();
+    let tracked = vec!["rust/src/backup/export.rs".to_string()];
+    assert!(manifest.check(root.path(), &tracked).errors.is_empty());
+}
+
+#[test]
+fn check_rejects_skipped_rows_that_still_need_someone() {
+    let manifest = manifest(
+        r#"
+[[row]]
+id = "still-agent"
+section = "3"
+title = "still agent"
+platforms = ["ios"]
+target = "rust"
+coverage = ["agent"]
+skip = "beta"
+
+[[row]]
+id = "no-reason"
+section = "3"
+title = "no reason"
+platforms = ["ios"]
+target = "rust"
+coverage = []
+skip = " "
+"#,
+    );
+
+    let root = tempfile::tempdir().unwrap();
+    let errors = manifest.check(root.path(), &[]).errors.join("\n");
+
+    assert!(errors.contains("`still-agent` is skipped but still lists agent or human"), "{errors}");
+    assert!(errors.contains("`no-reason` skips the row without a reason"), "{errors}");
+}
+
+#[test]
 fn check_reports_missing_tests_paths_and_platforms() {
     let root = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(root.path().join("rust/src")).unwrap();

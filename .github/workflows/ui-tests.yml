@@ -49,10 +49,10 @@ env:
   # every iOS suite a full run covers, comma-separated; the rest of CoveCloudBackupUITests stays
   # out until its inventory scenarios pass on master, see #947, and the two classes here use the
   # scripted cloud host only to restore a fixture wallet or reach a screen
-  # WatchOnlyUpgradeFullLaunchUITests is quarantined, since it failed in every full run, see #1076
   IOS_UI_SUITES: >-
     CoveUITests/OnboardingFullLaunchUITests,
     CoveUITests/ReceiveTextSizeFullLaunchUITests,
+    CoveUITests/WatchOnlyUpgradeFullLaunchUITests,
     CoveUITests/UtxoLockFullLaunchUITests,
     CoveUITests/NfcScanPrivacyCoverFullLaunchUITests,
     CoveUITests/BiometricLockFullLaunchUITests,

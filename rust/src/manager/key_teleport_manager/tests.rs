@@ -624,22 +624,33 @@ fn expired_receive_session_is_deleted_and_not_resumed() {
     assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveReady(_)));
 }
 
-/// Applies pending alert messages the way both apps do, starting from what is on screen
-fn apply_alert_messages(
-    manager: &RustKeyTeleportManager,
-    displayed: &mut Option<KeyTeleportAlert>,
-) {
-    while let Ok(message) = manager.reconciler.receiver().try_recv() {
-        let messages = match message {
-            SingleOrMany::Single(message) => vec![message],
-            SingleOrMany::Many(messages) => messages,
-        };
+/// What an app shows for a manager: it opens with the manager's snapshot, then replaces its
+/// state and alert with each reconcile message in order, as both apps do
+#[derive(Debug)]
+struct Screen {
+    state: KeyTeleportManagerState,
+    alert: Option<KeyTeleportAlert>,
+}
 
-        for message in messages {
-            match message {
-                Message::SetAlert(alert) => *displayed = Some(alert),
-                Message::ClearAlert => *displayed = None,
-                Message::UpdateState(_) => {}
+impl Screen {
+    fn open(manager: &RustKeyTeleportManager) -> Self {
+        Self { state: manager.state(), alert: None }
+    }
+
+    /// Applies every message the manager sent since the last call
+    fn apply(&mut self, manager: &RustKeyTeleportManager) {
+        while let Ok(message) = manager.reconciler.receiver().try_recv() {
+            let messages = match message {
+                SingleOrMany::Single(message) => vec![message],
+                SingleOrMany::Many(messages) => messages,
+            };
+
+            for message in messages {
+                match message {
+                    Message::UpdateState(state) => self.state = state,
+                    Message::SetAlert(alert) => self.alert = Some(alert),
+                    Message::ClearAlert => self.alert = None,
+                }
             }
         }
     }
@@ -662,17 +673,17 @@ fn restarting_receive_after_expiry_clears_the_expired_session_alert() {
     Keychain::global().save_key_teleport_receive_session(&persisted.to_string()).unwrap();
     let manager = RustKeyTeleportManager::new();
 
-    let mut displayed = None;
+    let mut screen = Screen::open(&manager);
 
     manager.clone().dispatch(Action::StartReceive);
-    apply_alert_messages(&manager, &mut displayed);
-    assert_eq!(displayed, Some(KeyTeleportAlert::ReceiveSessionExpired));
+    screen.apply(&manager);
+    assert_eq!(screen.alert, Some(KeyTeleportAlert::ReceiveSessionExpired));
 
     manager.clone().dispatch(Action::RestartReceive);
-    apply_alert_messages(&manager, &mut displayed);
+    screen.apply(&manager);
 
     assert!(matches!(manager.state(), KeyTeleportManagerState::ReceiveReady(_)));
-    assert_eq!(displayed, None, "the expiry alert outlived the new request");
+    assert_eq!(screen.alert, None, "the expiry alert outlived the new request");
 }
 
 #[test]
@@ -1381,11 +1392,11 @@ const BIP174_UNSIGNED_PSBT_BASE64: &str = "cHNidP8BAJoCAAAAAljoeiG1ba8MI76OcHBFb
 /// What pasted text became once both apps routed it into the KeyTeleport sender
 #[derive(Debug, PartialEq, Eq)]
 enum SenderPaste {
-    /// a receiver request, handed to the manager
+    /// A receiver request, handed to the manager
     Ingested,
-    /// parsed as some other format, which the apps reject without calling the manager
+    /// Parsed as some other format, which the apps reject without calling the manager
     OtherFormat,
-    /// failed to parse, which the apps also reject
+    /// Failed to parse, which the apps also reject
     Unparsed(crate::multi_format::MultiFormatError),
 }
 
@@ -1425,7 +1436,7 @@ fn sender_rejects_psbt_text_without_reading_or_importing_a_secret() {
         database.wallets.get_all(fixture.wallet.network, fixture.wallet.wallet_mode).unwrap();
 
     manager.start_send_from_wallet(fixture.wallet.id.clone()).unwrap();
-    let reads_before = crate::test_support::shared_mock_keychain().read_keys().len();
+    crate::test_support::shared_mock_keychain().record_reads();
 
     let unsigned = BASE64_STANDARD.decode(BIP174_UNSIGNED_PSBT_BASE64).unwrap();
     let signed = TestSigner::new(SIGNER_MNEMONIC, BitcoinNetwork::Signet)
@@ -1488,9 +1499,8 @@ fn sender_rejects_psbt_text_without_reading_or_importing_a_secret() {
     // no key of the wallet being sent, its secret included, was read while refusing the pastes
     let wallet_key_prefix = fixture.wallet.id.to_string();
     let wallet_reads: Vec<_> = crate::test_support::shared_mock_keychain()
-        .read_keys()
+        .take_recorded_reads()
         .into_iter()
-        .skip(reads_before)
         .filter(|key| key.starts_with(&wallet_key_prefix))
         .collect();
 
