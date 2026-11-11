@@ -31,8 +31,11 @@ use std::{
 use std::{fs::Permissions, os::unix::fs::PermissionsExt};
 use xshell::{cmd, Shell};
 
+mod quarantine;
 mod testflight;
 
+pub use quarantine::{run as run_quarantine, QuarantineCommand};
+use quarantine::{IosTestQuarantine, QuarantinedTest};
 use testflight::{BuildIdentity, Distribution};
 
 // iOS build constants
@@ -620,7 +623,10 @@ pub fn run_ios_ui_tests(options: IosUiOptions, verbose: bool) -> Result<()> {
     let results_dir = options.results_dir.map(std::path::absolute).transpose()?;
     sh.change_dir("../ios");
 
-    let runs = ios_ui_shard_runs(&sh, &options.tests, options.shard)?;
+    let quarantine = IosTestQuarantine::load(&sh)?;
+    let plan = ios_ui_shard_runs(&sh, &options.tests, options.shard, &quarantine)?;
+    plan.report_quarantined();
+    let runs = plan.runs;
 
     // CI lists a shard's tests before building, so a shard with none skips the build
     if options.list {
@@ -2050,11 +2056,33 @@ impl IosUiRun {
     }
 }
 
+/// The runs one shard makes, and the quarantined tests the listed classes left out
+struct IosUiPlan<'q> {
+    runs: Vec<IosUiRun>,
+    quarantined: Vec<&'q QuarantinedTest>,
+}
+
+impl IosUiPlan<'_> {
+    /// Prints the quarantined tests left out to stderr, since `--list` prints tests to stdout
+    fn report_quarantined(&self) {
+        for test in &self.quarantined {
+            eprintln!("{} Not running quarantined {}", "!".yellow(), test.summary());
+        }
+    }
+}
+
 /// Expands a comma-separated list of tests into the runs that cover them, then keeps the shard's
 /// share of the runs, dealt out longest first by the seconds each took in CI
 ///
-/// A run's tests stay together on one shard, since they share one simulator
-fn ios_ui_shard_runs(sh: &Shell, tests: &str, shard: UiTestShard) -> Result<Vec<IosUiRun>> {
+/// A listed class leaves out its quarantined methods, before sharding since they cost nothing, but
+/// a listed method runs even when quarantined, so a run can check a fix. A run's tests stay
+/// together on one shard, since they share one simulator
+fn ios_ui_shard_runs<'q>(
+    sh: &Shell,
+    tests: &str,
+    shard: UiTestShard,
+    quarantine: &'q IosTestQuarantine,
+) -> Result<IosUiPlan<'q>> {
     let seconds = IosUiRunSeconds::checked_in()?;
     let project = sh
         .read_file(IOS_PROJECT_FILE)
@@ -2062,22 +2090,40 @@ fn ios_ui_shard_runs(sh: &Shell, tests: &str, shard: UiTestShard) -> Result<Vec<
 
     let mut expanded = Vec::new();
     let mut whole_classes = HashSet::new();
-    for test in tests.split(',').map(str::trim).filter(|test| !test.is_empty()) {
-        expanded.extend(ios_ui_tests_to_run(sh, &project, test)?);
+    let mut quarantined = Vec::new();
+    for listed in tests.split(',').map(str::trim).filter(|test| !test.is_empty()) {
+        let tests = ios_ui_tests_to_run(sh, &project, listed)?;
+        if tests == [listed] {
+            expanded.extend(tests);
+            continue;
+        }
 
         // a `<Target>/<Class>` expands to every method of the class
-        if test.split('/').count() == 2 {
-            whole_classes.insert(test);
+        whole_classes.insert(listed);
+        for test in tests {
+            match quarantine.find(&test) {
+                Some(entry) => quarantined.push(entry),
+                None => expanded.push(test),
+            }
         }
     }
 
-    if expanded.is_empty() {
+    if expanded.is_empty() && quarantined.is_empty() {
         color_eyre::eyre::bail!("No iOS UI tests given");
     }
 
     // a class and one of its methods can both be listed, and running a test twice only costs time
     let mut seen = HashSet::new();
     expanded.retain(|test| seen.insert(test.clone()));
+
+    // a quarantined method listed on its own runs, so it isn't reported as left out
+    quarantined.retain(|entry| seen.insert(entry.id().to_string()));
+
+    // a class left without a quarantined method runs only some of its methods, so like any such
+    // run it gets the estimate and records no timing under the class's name
+    for entry in &quarantined {
+        whole_classes.remove(test_class(&entry.id().to_string()));
+    }
 
     let mut runs: Vec<IosUiRun> = Vec::new();
     for test in expanded {
@@ -2098,10 +2144,12 @@ fn ios_ui_shard_runs(sh: &Shell, tests: &str, shard: UiTestShard) -> Result<Vec<
         }
     }
 
-    Ok(shard.take(runs.into_iter().map(|run| {
+    let runs = shard.take(runs.into_iter().map(|run| {
         let cost = run.cost(&seconds);
         (run, cost)
-    })))
+    }));
+
+    Ok(IosUiPlan { runs, quarantined })
 }
 
 /// The `<Target>/<Class>` part of a `<Target>/<Class>/<method>` test
@@ -2143,20 +2191,49 @@ fn ios_ui_tests_to_run(sh: &Shell, project: &str, test: &str) -> Result<Vec<Stri
         return Err(usage());
     }
 
-    let file_name = format!("{class}.swift");
-    if !target_source_files(project, suite.target()).contains(&file_name.as_str()) {
-        color_eyre::eyre::bail!("{test} names no test class: {target} doesn't build {file_name}");
-    }
-
-    let file = format!("{IOS_UI_TEST_SOURCE_DIR}/{file_name}");
-    let contents = sh.read_file(&file).wrap_err_with(|| format!("Failed to read {file}"))?;
-    let methods = contents.lines().filter_map(test_method_name).collect::<Vec<_>>();
+    let source = TestClassSource::read(sh, project, suite.target(), IOS_UI_TEST_SOURCE_DIR, class)
+        .wrap_err_with(|| format!("{test} names no test class"))?;
 
     match method {
-        Some(method) if methods.contains(&method) => Ok(vec![test.to_string()]),
-        Some(_) => Err(eyre!("{test} names no test method in {file}")),
-        None if methods.is_empty() => Err(eyre!("No test methods found in {file}")),
-        None => Ok(methods.into_iter().map(|method| format!("{test}/{method}")).collect()),
+        Some(method) if source.has_method(method) => Ok(vec![test.to_string()]),
+        Some(_) => Err(eyre!("{test} names no test method in {}", source.file)),
+        None if source.methods.is_empty() => Err(eyre!("No test methods found in {}", source.file)),
+        None => Ok(source.methods.into_iter().map(|method| format!("{test}/{method}")).collect()),
+    }
+}
+
+/// A test class's source file and the test methods declared in it
+struct TestClassSource {
+    file: String,
+    methods: Vec<String>,
+}
+
+impl TestClassSource {
+    /// Reads `<source_dir>/<class>.swift`, failing unless `target` builds that file
+    ///
+    /// The file's directory alone can't say which target builds it, since the UI test targets share
+    /// one directory and a file can be in both
+    fn read(
+        sh: &Shell,
+        project: &str,
+        target: &str,
+        source_dir: &str,
+        class: &str,
+    ) -> Result<Self> {
+        let file_name = format!("{class}.swift");
+        if !target_source_files(project, target).contains(&file_name.as_str()) {
+            color_eyre::eyre::bail!("{target} doesn't build {file_name}");
+        }
+
+        let file = format!("{source_dir}/{file_name}");
+        let contents = sh.read_file(&file).wrap_err_with(|| format!("Failed to read {file}"))?;
+        let methods = contents.lines().filter_map(test_method_name).map(String::from).collect();
+
+        Ok(Self { file, methods })
+    }
+
+    fn has_method(&self, method: &str) -> bool {
+        self.methods.iter().any(|name| name == method)
     }
 }
 
@@ -2659,7 +2736,7 @@ fn available_device_context(devices: &[ResolvedDevice]) -> String {
 #[cfg(test)]
 mod tests {
     mod ui_test_plan {
-        use crate::ios::{ios_ui_shard_runs, IosUiSuite};
+        use crate::ios::{ios_ui_shard_runs, IosTestQuarantine, IosUiSuite};
         use crate::ios_ui_shard::IosUiRunSeconds;
         use crate::ui_test_shard::UiTestShard;
         use color_eyre::Result;
@@ -2678,8 +2755,21 @@ mod tests {
             value.parse().unwrap()
         }
 
+        fn none() -> IosTestQuarantine {
+            IosTestQuarantine::default()
+        }
+
+        fn quarantining(test: &str) -> IosTestQuarantine {
+            IosTestQuarantine::parse(&format!(
+                "[[test]]\nid = \"{test}\"\n\
+                 issue = \"https://github.com/bitcoinppl/cove/issues/1\"\n\
+                 expires = 2026-12-09\nreason = \"flaky\"\n"
+            ))
+            .unwrap()
+        }
+
         fn ios_ui_shard_tests(sh: &Shell, tests: &str, shard: UiTestShard) -> Result<Vec<String>> {
-            let runs = ios_ui_shard_runs(sh, tests, shard)?;
+            let runs = ios_ui_shard_runs(sh, tests, shard, &none())?.runs;
             Ok(runs.into_iter().flat_map(|run| run.tests).collect())
         }
 
@@ -2783,35 +2873,46 @@ mod tests {
             list.split(',').map(|value| shard(value.trim().trim_matches('"'))).collect()
         }
 
-        // the real suites, matrix and checked-in timings: the workflow's shards run every test
-        // once, keep each cloud backup class on one, and get close to the same estimated time,
-        // which its timeout is sized from
+        // the real suites, matrix, quarantine and checked-in timings: the workflow's shards run
+        // every test but the quarantined ones once, keep each cloud backup class on one, and get
+        // close to the same estimated time, which its timeout is sized from
         #[test]
         fn the_nightly_shards_cover_every_test_once_and_stay_balanced() {
             let sh = ios_shell();
             let suites = nightly_suites();
             let seconds = IosUiRunSeconds::checked_in().unwrap();
+            let quarantine = IosTestQuarantine::load(&sh).unwrap();
             assert!(suites.split(',').count() > 20, "read the suites: {suites}");
 
-            let all = ios_ui_shard_runs(&sh, &suites, shard("1/1")).unwrap();
+            let unfiltered = ios_ui_shard_tests(&sh, &suites, shard("1/1")).unwrap();
+            let all = ios_ui_shard_runs(&sh, &suites, shard("1/1"), &quarantine).unwrap();
+            let left_out = all.quarantined.iter().map(|test| test.id().to_string());
+            let left_out = left_out.collect::<HashSet<_>>();
             let shards = nightly_shards();
             assert_eq!(shards.len(), 5);
 
             let slices = shards
                 .iter()
-                .map(|&value| ios_ui_shard_runs(&sh, &suites, value).unwrap())
+                .map(|&value| ios_ui_shard_runs(&sh, &suites, value, &quarantine).unwrap().runs)
                 .collect::<Vec<_>>();
 
             let mut covered = HashSet::new();
             for run in slices.iter().flatten() {
                 for test in &run.tests {
+                    assert!(!left_out.contains(test), "quarantined {test} runs");
                     assert!(covered.insert(test.clone()), "{test} is on two shards");
                 }
             }
-            let every_test = all.iter().flat_map(|run| run.tests.iter().cloned());
-            assert_eq!(covered, every_test.collect::<HashSet<_>>());
 
-            for cloud in all.iter().filter(|run| run.suite == IosUiSuite::CloudBackup) {
+            let every_test = all.runs.iter().flat_map(|run| run.tests.iter().cloned());
+            assert_eq!(covered, every_test.collect::<HashSet<_>>());
+            assert_eq!(
+                covered.union(&left_out).cloned().collect::<HashSet<_>>(),
+                unfiltered.into_iter().collect::<HashSet<_>>(),
+                "every test either runs or is quarantined"
+            );
+
+            for cloud in all.runs.iter().filter(|run| run.suite == IosUiSuite::CloudBackup) {
                 let holding = slices.iter().filter(|runs| runs.contains(cloud)).count();
                 assert_eq!(holding, 1, "{} is not whole on one shard", cloud.name());
             }
@@ -2832,7 +2933,7 @@ mod tests {
             let cloud = "CoveCloudBackupUITests/PrivateKeyExportFullAppUITests";
             let listed = format!("{ONBOARDING},{cloud}");
 
-            let all = ios_ui_shard_runs(&sh, &listed, shard("1/1")).unwrap();
+            let all = ios_ui_shard_runs(&sh, &listed, shard("1/1"), &none()).unwrap().runs;
             let cloud_runs: Vec<_> =
                 all.iter().filter(|run| run.suite == IosUiSuite::CloudBackup).collect();
             assert_eq!(cloud_runs.len(), 1, "the cloud class is one run");
@@ -2844,7 +2945,7 @@ mod tests {
                 .all(|run| run.tests.len() == 1));
 
             let slices = ["1/3", "2/3", "3/3"]
-                .map(|value| ios_ui_shard_runs(&sh, &listed, shard(value)).unwrap());
+                .map(|value| ios_ui_shard_runs(&sh, &listed, shard(value), &none()).unwrap().runs);
             let holding_cloud = slices
                 .iter()
                 .filter(|runs| runs.iter().any(|run| run.suite == IosUiSuite::CloudBackup))
@@ -2852,6 +2953,33 @@ mod tests {
 
             assert_eq!(holding_cloud.len(), 1, "one shard holds the cloud class");
             assert_eq!(slices.iter().map(Vec::len).sum::<usize>(), all.len());
+        }
+
+        // a quarantined test costs no simulator in a class run, while naming it runs it, so a
+        // manual run can check its fix
+        #[test]
+        fn a_listed_class_leaves_out_its_quarantined_methods() {
+            let sh = ios_shell();
+            let method = format!("{ONBOARDING}/testWelcomeScreenShowsFirstLaunchEntryPoint");
+            let quarantine = quarantining(&method);
+
+            let all = ios_ui_shard_tests(&sh, ONBOARDING, shard("1/1")).unwrap();
+            let plan = ios_ui_shard_runs(&sh, ONBOARDING, shard("1/1"), &quarantine).unwrap();
+            let tests = plan.runs.iter().flat_map(|run| &run.tests).collect::<Vec<_>>();
+            let left_out = plan.quarantined.iter().map(|test| test.id().to_string());
+
+            assert!(all.contains(&method));
+            assert!(!tests.contains(&&method));
+            assert_eq!(tests.len(), all.len() - 1);
+            assert_eq!(left_out.collect::<Vec<_>>(), std::slice::from_ref(&method));
+
+            let listed = format!("{ONBOARDING},{method}");
+            let plan = ios_ui_shard_runs(&sh, &listed, shard("1/1"), &quarantine).unwrap();
+            let tests = plan.runs.iter().flat_map(|run| &run.tests).collect::<Vec<_>>();
+
+            assert!(tests.contains(&&method));
+            assert_eq!(tests.len(), all.len());
+            assert!(plan.quarantined.is_empty());
         }
 
         // methods of one cloud class listed apart still share its run, in the order listed
@@ -2866,7 +2994,7 @@ mod tests {
                 "{},{ONBOARDING}/testWelcomeScreenShowsFirstLaunchEntryPoint,{}",
                 methods[1], methods[0]
             );
-            let runs = ios_ui_shard_runs(&sh, &listed, shard("1/1")).unwrap();
+            let runs = ios_ui_shard_runs(&sh, &listed, shard("1/1"), &none()).unwrap().runs;
 
             assert_eq!(runs.len(), 2);
             let cloud = runs.iter().find(|run| run.suite == IosUiSuite::CloudBackup).unwrap();
@@ -2883,16 +3011,29 @@ mod tests {
             let methods = ios_ui_shard_tests(&sh, class, shard("1/1")).unwrap();
             assert!(methods.len() >= 3);
 
-            let whole = ios_ui_shard_runs(&sh, class, shard("1/1")).unwrap();
+            let whole = ios_ui_shard_runs(&sh, class, shard("1/1"), &none()).unwrap().runs;
             assert_eq!(whole[0].timing_name(), Some(class));
             assert_eq!(whole[0].cost(&seconds), seconds.of(class, whole[0].tests.len()));
 
             let listed = format!("{},{}", methods[0], methods[1]);
-            let partial = ios_ui_shard_runs(&sh, &listed, shard("1/1")).unwrap();
+            let partial = ios_ui_shard_runs(&sh, &listed, shard("1/1"), &none()).unwrap().runs;
             assert_eq!(partial[0].name(), class);
             assert_eq!(partial[0].timing_name(), None);
             assert_eq!(partial[0].cost(&seconds), IosUiRunSeconds::estimate(2));
             assert_ne!(partial[0].cost(&seconds), whole[0].cost(&seconds));
+
+            // a class left without a quarantined method is such a run too, until the method is
+            // named as well
+            let quarantine = quarantining(&methods[0]);
+            let filtered = ios_ui_shard_runs(&sh, class, shard("1/1"), &quarantine).unwrap().runs;
+            assert_eq!(filtered[0].tests.len(), methods.len() - 1);
+            assert_eq!(filtered[0].timing_name(), None);
+            assert_eq!(filtered[0].cost(&seconds), IosUiRunSeconds::estimate(methods.len() - 1));
+
+            let listed = format!("{class},{}", methods[0]);
+            let rejoined = ios_ui_shard_runs(&sh, &listed, shard("1/1"), &quarantine).unwrap().runs;
+            assert_eq!(rejoined[0].tests.len(), methods.len());
+            assert_eq!(rejoined[0].timing_name(), Some(class));
         }
     }
 

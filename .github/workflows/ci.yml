@@ -293,8 +293,15 @@ jobs:
       - name: Compile iOS
         run: cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -arch arm64 build
 
+      # tests in ios/test-quarantine.toml are skipped, and the step's log names each with its issue;
+      # each argument is one line of letters, digits, '_', '/', ':' and '-', so splitting the list on
+      # whitespace gives one argument a line
       - name: Run iOS unit tests
-        run: cd ios && xcodebuild -scheme Cove -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' -only-testing:CoveTests -parallel-testing-enabled NO test
+        run: |
+          skip_args=$(cd rust && cargo run --locked -q -p xtask -- ios-quarantine skip-args --target CoveTests)
+          cd ios
+          # shellcheck disable=SC2086
+          xcodebuild -scheme Cove -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' -only-testing:CoveTests $skip_args -parallel-testing-enabled NO test
 
   # each Rust change on master saves a new iOS library entry that no later run reads, and the
   # repository's caches share 10 GB, so once compile-ios saves one the older master entries go;
@@ -367,6 +374,30 @@ jobs:
 
       - name: Check quarantined tests
         run: python3 -I .github/scripts/ci_quarantine.py
+
+  # fails once an entry in ios/test-quarantine.toml is past its expiry, so a quarantined test can't
+  # be forgotten; expiry depends on the date rather than on what a change touches, so this runs on
+  # every pull request and push without waiting on the changes job
+  ios-quarantine:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # shares qa-manifest's cache, which builds the same xtask
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust -> target
+          cache-bin: false
+          prefix-key: v1-rust
+          save-if: false
+
+      # lists each quarantined test as an annotation on the run
+      - name: Check quarantined iOS tests
+        run: cd rust && cargo run --locked -q -p xtask -- ios-quarantine check
 
   # one job per runner, not a matrix: a matrix job its if skips reports a single check without the
   # runner in its name, while branch protection waits on these two names

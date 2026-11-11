@@ -381,12 +381,11 @@ jobs:
       # it starts at first launch; each CoveCloudBackupUITests class shares one clone and one
       # xcodebuild call, since its host app wipes its data at every launch. It keeps
       # cove-fake-node up on the first port block, 39100-39102, for the tests that fund a wallet
-      # from it and the hardware signer host on 39110-39111 for the hardware signing tests
-      # xcodebuild passes TEST_RUNNER_-prefixed variables to the test process without the prefix
+      # from it and the hardware signer host on 39110-39111 for the hardware signing tests. Tests
+      # in ios/test-quarantine.toml are left out of the classes listed, and the log names each
       - name: Run iOS UI tests
         if: steps.plan.outputs.run == 'true' && steps.shard.outputs.count != '0'
         env:
-          TEST_RUNNER_COVE_SKIP_QUARANTINED: "1"
           TESTS: ${{ steps.plan.outputs.tests }}
           SHARD: ${{ steps.plan.outputs.shard }}
         run: cd rust && cargo run --locked -p xtask -- ios-ui --device "iPhone 17" --test "$TESTS" --shard "$SHARD" --results-dir "$RUNNER_TEMP/ios-ui-results"
