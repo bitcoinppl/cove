@@ -104,6 +104,33 @@ fn settle_waits_for_an_effect_running_off_the_runtime() {
     });
 }
 
+/// An upload exports its wallet's labels on a blocking thread, which parks the runtime while
+/// the export runs; settle waits for the answer, so the step after a wake sees the upload done
+#[test]
+fn settle_waits_for_a_blocking_task_a_runtime_task_awaits() {
+    let test = concat!(module_path!(), "::settle_waits_for_a_blocking_task_a_runtime_task_awaits");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let answered = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        let flag = answered.clone();
+        app.event("a task waits on slow blocking work", |_| {
+            cove_tokio::task::spawn(async move {
+                let slow = || std::thread::sleep(Duration::from_millis(100));
+                cove_tokio::task::spawn_blocking(slow).await.expect("the blocking work");
+                flag.store(true, std::sync::atomic::Ordering::Release);
+            });
+        })
+        .then_can(&[N::Enable])
+        .then_cannot(&[N::TurnOff]);
+
+        assert!(
+            answered.load(std::sync::atomic::Ordering::Acquire),
+            "settle returned while the blocking work ran"
+        );
+    });
+}
+
 /// An operation in an `Effecting` stage keeps authority until its completion arrives, and a reset
 /// that begins meanwhile waits for that completion, then frees the operation without letting it
 /// go on
