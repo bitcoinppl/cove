@@ -335,10 +335,7 @@ Deep verification checks the cloud master-key wrapper, local keychain state,
 wallet blobs, and pending uploads. Some verification results prepare follow-up
 work, such as repairing the passkey wrapper or uploading missing wallet blobs.
 The supervisor owns those continuations so each follow-up remains tied to the
-same exclusive-operation claim. A verification the user or the detail screen
-starts claims a `Verify` operation in the turn that admits it, before it shows,
-and holds it through repair, sync and its connectivity retry. Each attempt
-carries the wallet set it read, and its evidence is checked against that set.
+same exclusive-operation claim.
 
 ## Related Notes
 

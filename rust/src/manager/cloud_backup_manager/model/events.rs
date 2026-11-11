@@ -41,11 +41,6 @@ pub(crate) enum CloudBackupExclusiveOperation {
     /// only reads the cloud for an enabled backup
     VerifyReinitializedBackup,
     RepairPasskey,
-    /// A verification the user or the detail screen started
-    ///
-    /// It holds the slot from the start, through any wrapper repair, upload sync and connectivity
-    /// retry it finds needed, so the wallet set it checks and the keys it repairs stay this
-    /// configuration's
     Verify,
     RecoverOtherBackups,
     DeleteOtherBackups,

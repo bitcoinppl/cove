@@ -474,7 +474,7 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
             Accepted if snapshot.sync_running => Coalesced(CoalescibleIntent::SyncUnsynced),
             admission => admission,
         },
-        I::StartVerification { .. } => configured_and_idle(snapshot, Some(Op::Verify)),
+        I::StartVerification { .. } => configured_and_idle(snapshot, None),
         I::RepairPasskey { .. } => configured_and_idle(snapshot, Some(Op::RepairPasskey)),
         I::DeleteUndecryptableWalletBackups => {
             configured_and_idle(snapshot, Some(Op::DeleteUndecryptableWalletBackups))

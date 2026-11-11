@@ -228,27 +228,41 @@ impl RustCloudBackupManager {
         )
     }
 
-    /// Clears the verification prompt a verification the user started answers
-    pub(crate) fn dismiss_verification_prompt_to_verify(&self, lifecycle: &LifecycleWriter) {
+    pub(crate) fn start_verification(
+        &self,
+        lifecycle: &LifecycleWriter,
+        source: CloudBackupVerificationSource,
+    ) {
         if let Err(error) = self.dismiss_verification_prompt_impl(lifecycle) {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
-    }
 
-    /// Confirms uploads the cloud has not listed yet in the background; false when none wait
-    pub(crate) fn start_background_upload_confirmation(
-        &self,
-        source: CloudBackupVerificationSource,
-    ) -> bool {
-        if !self.has_pending_cloud_upload_verification() {
-            return false;
+        if self.has_pending_cloud_upload_verification() {
+            self.apply_verification_effect(
+                CloudBackupVerificationCoordinator::begin_background_confirmation(source),
+            );
+            self.resume_pending_cloud_upload_verification();
+            return;
         }
 
         self.apply_verification_effect(
-            CloudBackupVerificationCoordinator::begin_background_confirmation(source),
+            CloudBackupVerificationCoordinator::begin_manual_presentation(source),
         );
-        self.resume_pending_cloud_upload_verification();
-        true
+        send!(self.supervisor.start_verification(false));
+    }
+
+    pub(crate) fn start_verification_discoverable(
+        &self,
+        lifecycle: &LifecycleWriter,
+        source: CloudBackupVerificationSource,
+    ) {
+        if let Err(error) = self.dismiss_verification_prompt_impl(lifecycle) {
+            error!("Failed to dismiss verification prompt before verification: {error}");
+        }
+        self.apply_verification_effect(
+            CloudBackupVerificationCoordinator::begin_manual_presentation(source),
+        );
+        send!(self.supervisor.start_verification(true));
     }
 
     pub(crate) fn dismiss_verification_prompt(&self, lifecycle: &LifecycleWriter) {

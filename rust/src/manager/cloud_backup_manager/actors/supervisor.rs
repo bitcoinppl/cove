@@ -70,14 +70,14 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupStatus, CloudBackupUndecryptableWalletDeletionState,
     CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
     CloudBackupVerificationSource, CloudBackupWalletItem, CloudOnlyOperation, CloudReachable,
-    DeepVerificationReport, DeepVerificationResult, DriveAccountSwitchPlatformState,
-    DriveAccountSwitchReconcileAction, EnablePasskeyRegistrationFlow,
-    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation, PendingEnableJournal,
-    PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
-    PendingEnableSession, PendingUploadVerificationState, PendingVerificationCompletion,
-    PendingVerificationUpload, RecoveryAction, RecoveryState, RustCloudBackupManager,
-    SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId, blocking_cloud_error,
-    is_provider_wide_interruption,
+    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
+    DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction,
+    EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation,
+    PendingEnableJournal, PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot,
+    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
+    PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction, RecoveryState,
+    RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId,
+    blocking_cloud_error, is_provider_wide_interruption,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -304,6 +304,8 @@ pub(crate) struct CloudBackupSupervisor {
     detail_workflow: DetailWorkflow,
     /// Counts local wallet-set changes this process has seen
     wallet_set: WalletSetGeneration,
+    /// The wallet set the running verification read when it started
+    verification_basis: WalletSetGeneration,
     last_outcome: Option<DispatchOutcome>,
     /// What the harness invariants read about dispatch since their last check
     #[cfg(test)]
@@ -391,6 +393,7 @@ impl CloudBackupSupervisor {
             active_other_backups_scan: None,
             detail_workflow: DetailWorkflow::default(),
             wallet_set: WalletSetGeneration::default(),
+            verification_basis: WalletSetGeneration::default(),
             last_outcome: None,
             #[cfg(test)]
             invariant_log: test_support::DispatchLog::default(),
@@ -1184,7 +1187,8 @@ impl CloudBackupSupervisor {
         let plan = self.detail_workflow.entry_plan(&manager);
         match plan {
             DetailEntryPlan::StartPasskeyVerification { force_discoverable } => {
-                self.begin_manual_verification(manager, force_discoverable);
+                let addr = self.addr();
+                send!(addr.start_verification(force_discoverable));
                 return Produces::ok(());
             }
             DetailEntryPlan::UseFreshEnableProof(authorization) => {
