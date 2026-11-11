@@ -771,7 +771,7 @@ enum WalletManagerPreview {
         rustBridge.async { [weak self] in
             guard let self, let rust = self.rust else { return }
 
-            self.logger.debug("dispatch: \(action)")
+            self.logger.debug("dispatch: \(String(describing: action).prefix { $0 != "(" })")
             try? rust.dispatch(action: action)
         }
     }
