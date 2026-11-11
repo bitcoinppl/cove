@@ -91,8 +91,9 @@ fn finish_wipe(
 ) {
     app.block_on("the owner to clear local state", permit.clear_local_state())
         .expect("clear local state");
-    // the wipe's database reset, which `wipe_all_data_with_tier` commits before finishing
-    Database::global().cloud_backup_state.delete().expect("reset the record");
+    // the wipe's commit point: `wipe_all_data_with_tier` resets the whole database, so every
+    // Cloud Backup table, the blob sync rows included, is gone before the reset finishes
+    Database::global().dangerous_reset_all_data().expect("reset the database");
     app.block_on("the reset to finish", permit.complete_after_database_reset())
         .expect("finish the reset");
 }

@@ -1769,7 +1769,13 @@ async fn wipe_while_enable_awaits_its_saved_passkey_returns_enable_to_idle() {
 
     let permit = manager.prepare_local_reset().await.unwrap();
     permit.clear_local_state().await.unwrap();
-    Database::global().cloud_backup_state.delete().unwrap();
+
+    // the wipe's commit point for Cloud Backup's tables; the production wipe resets the whole
+    // database, but this test shares its process database with other tests, so the wallet,
+    // config, cache, price and diagnostics tables stay
+    let db = Database::global();
+    db.cloud_backup_state.delete().unwrap();
+    db.cloud_blob_sync_states.delete_all().unwrap();
     permit.complete_after_database_reset().await.unwrap();
 
     assert_eq!(manager.model_snapshot().enable_state, CloudBackupEnableState::Idle);
