@@ -788,7 +788,8 @@ fn abandoned_reset_keeps_the_pending_enable_recovery() {
         // staged material without its journal is evidence restart can only hand to recovery
         cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate())
             .expect("stage a master key");
-        app.relaunch().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
+        // recovery draws only its cleanup, so Enable is admitted but has no control here
+        app.relaunch().then_cannot(&[N::TurnOff]);
 
         let recovery = match app.manager().model_state().lifecycle {
             CloudBackupLifecycle::PendingEnableRecovery(recovery) => recovery,
@@ -812,7 +813,6 @@ fn abandoned_reset_keeps_the_pending_enable_recovery() {
             app.block_on("the reset to end", permit.resume_after_failed_reset())
                 .expect("abandon the reset");
         })
-        .then_can(&[N::Enable])
         .then_cannot(&[N::TurnOff]);
 
         assert_eq!(

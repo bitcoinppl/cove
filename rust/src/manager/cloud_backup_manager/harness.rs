@@ -26,7 +26,7 @@ pub(crate) use self::fakes::{
     CallId, CloudCall, CloudFault, HarnessCloud, HarnessPasskey, Hold, PasskeyCall, PasskeyMode,
 };
 pub(crate) use self::fixtures::{
-    FakeAccount, SeededRecord, change_a_wallet, keychain_namespace, load_detail, persisted,
-    seed_legacy_stuck_disabling, seed_verifiable_master_key, verifiable_wrapper,
+    FakeAccount, change_a_wallet, keychain_namespace, load_detail, persisted,
+    seed_corrupted_record, seed_legacy_stuck_disabling, seed_verifiable_master_key,
 };
 pub(crate) use self::process::{PhaseEnd, run_case};

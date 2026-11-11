@@ -138,6 +138,11 @@ impl LifecycleWriter {
         Self::bootstrap_with_heal(ownership, Self::heal_legacy_disabling)
     }
 
+    /// Reads and normalizes the record again after a failed load, as a launch would
+    pub(crate) fn retry_load(&self) -> LifecycleLoad {
+        self.normalize_on_load(Self::heal_legacy_disabling)
+    }
+
     // the heal is a parameter so tests can make its write fail without a seam in this path
     fn bootstrap_with_heal(
         ownership: &CloudBackupRuntimeOwnership,
@@ -625,6 +630,21 @@ impl LifecycleWriter {
             true
         })
         .map(|mutation| mutation.outcome)
+    }
+
+    /// Replaces a corrupted record with Cloud Backup off; false when the record isn't corrupted
+    ///
+    /// Only a corrupted record is replaced, so a reset that raced a repair never turns a readable
+    /// configuration off
+    pub(crate) fn reset_corrupted(&self) -> Result<Committed<bool>, DatabaseError> {
+        self.mutate(|state| {
+            if !matches!(state, PersistedCloudBackupState::Corrupted { .. }) {
+                return false;
+            }
+
+            *state = PersistedCloudBackupState::Disabled;
+            true
+        })
     }
 
     /// A committed disable deleted the namespace and cleaned up locally

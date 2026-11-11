@@ -18,19 +18,31 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
     @ObservationIgnored private let rustBridge: DispatchQueue
     @ObservationIgnored private let syncHealthObserver: SyncHealthObserver
 
-    /// The screen Rust last published; every update replaces it in one assignment
-    var screen: CloudBackupScreen
+    /// The screen Rust last published, with its revision; every update replaces it in one assignment
+    private(set) var published: CloudBackupPublishedScreen
     var enableCompletion: TaggedItem<CloudBackupEnableContext>?
 
-    private init() {
-        let rust = RustCloudBackupManager()
+    var screen: CloudBackupScreen {
+        published.screen
+    }
+
+    /// A manager that shows `published` and is not listening yet; the shared one listens next
+    init(rust: RustCloudBackupManager, published: CloudBackupPublishedScreen) {
         let rustBridge = DispatchQueue(label: "cove.CloudBackupManager.rustbridge", qos: .userInitiated)
         self.rust = rust
         self.rustBridge = rustBridge
-        self.screen = rust.state()
+        self.published = published
         self.syncHealthObserver = ICloudDriveHelper.shared.makeSyncHealthObserver {
             rustBridge.async { rust.cloudStorageDidChange() }
         }
+    }
+
+    private convenience init() {
+        let rust = RustCloudBackupManager()
+
+        // the snapshot is read before listening, so the deltas still queued from before it are
+        // at or before its revision, and applying skips them instead of replaying them over it
+        self.init(rust: rust, published: rust.state())
         rust.listenForUpdates(reconciler: WeakReconciler(self))
         syncHealthObserver.start()
         // Keep the initial iCloud health probe off the main startup path.
@@ -63,7 +75,7 @@ final class CloudBackupManager: ReconcilingManager, CloudBackupManagerReconciler
         switch message {
         case let .screen(delta):
             // one assignment, so no frame shows the new body with the old actions
-            screen = screen.applying(delta: delta)
+            published = published.applying(delta: delta)
 
             // a completion from an enable that has since been turned off, such as by a full wipe, is stale
             if case .disabled = screen.body { enableCompletion = nil }

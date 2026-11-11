@@ -124,9 +124,13 @@ impl Hold {
         self.wait_for(HoldStage::Finished, "to return after release").await;
     }
 
-    /// Name the held call in deadline failures
+    /// Name the held call in deadline failures and pending boundaries
     fn label(&self, call: String) {
         *self.0.call.lock() = call;
+    }
+
+    fn name(&self) -> String {
+        self.0.call.lock().clone()
     }
 
     async fn wait_for(&self, stage: HoldStage, step: &str) {
@@ -136,8 +140,9 @@ impl Hold {
         receiver.wait_for(|current| rank(current) >= rank(&stage)).await.expect("hold dropped");
     }
 
-    /// Starts waiting for the test, unless the test already released this hold
-    fn enter(&self) {
+    async fn enter_and_wait(&self) {
+        HELD_CALLS.send_modify(|held| held.push(self.clone()));
+
         // a hold the test released before its call started lets that call through: overwriting
         // the release would strand the call with nothing left to release it
         self.0.stage.send_if_modified(|stage| {
@@ -153,18 +158,12 @@ impl Hold {
     async fn enter_and_wait(&self) {
         self.enter();
         self.wait_for(HoldStage::Released, "to be released by the test").await;
-    }
-
-    /// Waits for the release on the thread a fake's call blocks
-    ///
-    /// On a blocking-pool thread, the thread counts as waiting for the test exactly as long as
-    /// the call counts as held, so settling sees every other moment of the call as a blocking
-    /// job in flight
-    fn block_until_released(&self) {
-        self.enter();
-        futures::executor::block_on(
-            self.wait_for(HoldStage::Released, "to be released by the test"),
-        );
+        HELD_CALLS.send_modify(|held| {
+            let position = held.iter().position(|other| Arc::ptr_eq(&other.0, &self.0));
+            if let Some(position) = position {
+                held.remove(position);
+            }
+        });
     }
 
     fn finish(&self) {
@@ -172,18 +171,33 @@ impl Hold {
     }
 }
 
-/// Fake calls of any kind waiting on a [`Hold`]
-static HELD_CALLS: LazyLock<watch::Sender<usize>> = LazyLock::new(|| watch::Sender::new(0));
+/// Fake calls of any kind waiting on a [`Hold`], oldest first
+static HELD_CALLS: LazyLock<watch::Sender<Vec<Hold>>> =
+    LazyLock::new(|| watch::Sender::new(Vec::new()));
 
-/// How many fake calls are waiting for the test to release them
-pub(crate) fn held_calls() -> usize {
-    *HELD_CALLS.borrow()
+/// The fake calls waiting for the test to release them, by name, oldest first
+pub(crate) fn held_calls() -> Vec<String> {
+    HELD_CALLS.borrow().iter().map(Hold::name).collect()
+}
+
+/// Whether any fake call is waiting for the test to release it
+pub(crate) fn any_call_held() -> bool {
+    !HELD_CALLS.borrow().is_empty()
+}
+
+/// Releases every fake call waiting on a hold now, the way quiescence delivers what is held
+pub(crate) fn release_held_calls() {
+    // a released call removes itself from the list, so the list is copied before releasing
+    let held = HELD_CALLS.borrow().clone();
+    for hold in held {
+        hold.release();
+    }
 }
 
 /// Resolves once some fake call is waiting for the test to release it
 pub(crate) async fn until_a_call_is_held() {
     let mut held = HELD_CALLS.subscribe();
-    let _ = held.wait_for(|held| *held > 0).await;
+    let _ = held.wait_for(|held| !held.is_empty()).await;
 }
 
 fn write_json(path: &PathBuf, value: &impl serde::Serialize) {

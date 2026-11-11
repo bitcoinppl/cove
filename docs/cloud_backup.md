@@ -19,20 +19,37 @@ newer operation.
 
 ## Screen Contract
 
-Swift and Kotlin draw only `CloudBackupScreen`. `state()` returns the first
-one. After every reducer change the supervisor projects the screen again from
-its runtime, the reducer, the inventory facts and the notices, diffs it against
-the one it last sent, and sends what changed as one `Screen` reconcile message
-holding a `CloudBackupScreenDelta`. Each platform applies it with
-`CloudBackupScreen.applying(delta)` in a single state assignment, so no frame
-shows half an update.
+Swift and Kotlin draw only `CloudBackupScreen`. `state()` returns the one last
+published as a `CloudBackupPublishedScreen`, with its revision. `project()` builds it from the supervisor's runtime, the same
+`AdmissionSnapshot` dispatch decides with, the inventory facts, the notices and
+the reducer, which supplies presentation only: the body comes from the runtime,
+never from the reducer. After every runtime or reducer change the supervisor
+projects the screen again, diffs it against the one it last sent, and sends what
+changed as one `Screen` reconcile message holding a `CloudBackupScreenDelta`
+at the next revision. Changes made while a publish is queued join it, and inputs
+are read after the queued request is cleared, so a change that lands
+mid-projection queues another publish instead of being lost. Each platform
+applies the delta with `CloudBackupPublishedScreen.applying(delta)` in a single
+state assignment, so no frame shows half an update.
+
+The manager is a process singleton, so it can publish several screens before the
+platform listens. The platform reads `state()` before it calls
+`listen_for_updates`, and the deltas published before that read are still
+queued for the listener. They are at or before the snapshot's revision, and
+`applying` skips them instead of replaying them over it, so the screen never
+goes back to an older or mixed one and no platform reaction, such as Android
+clearing its Drive account binding on a Turn Off reaching Disabled, fires for a
+transition the snapshot already includes. Messages that are events, such as
+`EnableCompleted`, have no revision and arrive in the order they were sent.
 
 The screen has a body (`Disabled`, `Enabling`, `Restoring`, `Configured`,
 `FinishingDisable`, `DriveAccountSwitch`, `PendingEnableRecovery`, `LoadFailed`
 or `Corrupted`), the Settings row, the persisted heal notice, the last outcome,
 the root prompt and the global actions. A configured body lists its sections in
 the order they are drawn, and Turn Off is in every one. Listed cloud rows carry
-their own row actions.
+their own row actions. An extra copy offers Delete only while the wallet it
+copies has its own current backup; until then it offers Back up first and Check
+Again.
 
 Every action is an entry with its availability, decided by the same admission
 dispatch uses. A platform draws a control only for an action in the list and
@@ -54,14 +71,64 @@ per-view local facts, such as the setup checkboxes or a Cancel that waits on an
 Enable with no cancel action, listed with their reasons in
 `rust/xtask/src/qa/availability_gates.rs`.
 
+Each section names the controls it draws: the verification, wallets,
+other-backups and incomplete-inventory sections carry a typed `controls` list,
+and the passkey card, Not On Device's Restore All state and the Turn Off section
+draw theirs by kind. Android's top-bar `menu`, the Turn Off dialogs, the heal
+notice and every other body's exits are named the same way.
+`CloudBackupScreen.drawnControls()` lists each control with the surface that
+draws it, and the action list holds exactly the actions it names, so Rust never
+offers an action with no control. Both platforms draw a section's controls from
+its list and decide nothing about which controls exist from what the section
+shows. `screen/contract.rs` holds each control to its surface's content, written
+from the platform views, and the fixture test and harness invariant 4a hold
+every screen to it. In particular:
+
+- `Verify` is offered with every verification state except a running one, one
+  waiting for an upload to be confirmed, and a backup only a newer Cove can
+  read, which nothing on this device can fix.
+- `RecreateManifest` and `ReinitializeBackup` are offered only as the recovery
+  a failed verification names, on its failure card on both platforms. A backup
+  that verifies offers neither: Android's menu no longer lists them on a healthy
+  backup and holds only Switch Google Account.
+- `SyncUnsynced` is Sync Now under the wallets waiting to upload, or the Try
+  Again of an upload confirmation that failed. With every wallet up to date it
+  isn't offered.
+- `DeleteUnreadableBackups` is offered with a verification report that counts
+  backups this key can't decrypt.
+- `RefreshDetail` is offered only with the Check Again of the incomplete
+  inventory section or of an other-backups check that failed. Opening detail is
+  `EnterDetail`, which loads inventory without a control, and a row's Check
+  Again is a row action.
+- `DiscardPendingEnable` is the Cancel of the force-new and passkey-choice
+  prompts and of the saved-passkey wait. Pending-enable recovery offers only
+  its cleanup, when cleanup is available.
+- Restore All's start, retry and cancel follow the Not On Device section's
+  Restore All state.
+
+The supervisor owns the last outcome. It comes from dispatch rejections,
+operation failures and a Turn Off that ended before its commit, which shows
+next to Turn Off. A later accepted tap replaces it, and
+`DismissNotice(LastOutcome)` clears it.
+
 The Settings row shows `TurnOffIncomplete` while a committed Turn Off still has
-to finish, and `TurnedOnAgain` while the heal notice is on a configured backup.
-Dismissing the notice dispatches `DismissNotice(Heal)`, which clears it from
-the stored record.
+to finish, `TurnedOnAgain` while the heal notice is on a configured backup, and
+an error row while the record failed to load or is corrupted. Dismissing the
+notice dispatches `DismissNotice(Heal)`, which clears it from the stored record.
+
+A record that failed to load shows `LoadFailed` with `RetryLoad`, which loads
+it again in place; a successful retry resumes as a launch would, including an
+unfinished Turn Off. A corrupted record shows `Corrupted` with
+`ResetOnThisDevice`, which runs the local reset and then stores Disabled, so
+Cloud Backup can be turned on again without reinstalling.
 
 Debug builds export `cloud_backup_screen_fixtures()`, a named screen for each
 body and the main configured states, which the platform contract tests render.
-Release builds return none.
+Release builds return none. The iOS test requires an enabled control on the
+detail for each available action unless every control Rust names for it is
+Android's or iOS draws it off the detail form. The Android test reaches each
+available control on its own surface, opening the overflow menu only for a
+control Rust puts in the menu.
 
 `PendingEnableCoordinator` owns the local keychain transaction for fresh and
 recovered enables. It keeps CSPP staging and promotion ordered with the durable
@@ -359,8 +426,9 @@ the configured backup. Confirm Saved Passkey restarts the owner's operation, so
 a paused reinitialize goes on as a reinitialize: it uploads the new backup,
 switches to it and verifies it. Admission accepts Confirm Saved Passkey and
 Discard only for a continuation that belongs to the current lifecycle, and
-Discard also for the existing-backup prompt. A Discard that arrives after
-Enable finished is rejected and changes nothing. Discarding a stopped
+Discard also for an Enable waiting on one of its prompts, the existing-backup
+prompt or the passkey choice. A Discard that arrives after Enable finished is
+rejected and changes nothing. Discarding a stopped
 reinitialize deletes only the namespace it wrote, and the configured backup
 stays on its own.
 

@@ -37,6 +37,9 @@ use crate::manager::cloud_backup_manager::model::{
 };
 use crate::manager::cloud_backup_manager::owner::lifecycle::LifecycleWriter;
 use crate::manager::cloud_backup_manager::owner::operation::OperationId;
+use crate::manager::cloud_backup_manager::screen::{
+    CloudBackupScreenAction, LastOutcome, Notices, ScreenInputs,
+};
 use crate::manager::cloud_backup_manager::turn_off::AutomaticResume;
 use crate::manager::cloud_backup_manager::verify::coordinator::CloudBackupVerificationCoordinator;
 use crate::manager::cloud_backup_manager::verify::{
@@ -104,7 +107,7 @@ mod workers;
 
 use enable::EnableContinuation;
 
-pub(crate) use dispatch::{DispatchOutcome, enable_prompt_answers};
+pub(crate) use dispatch::DispatchOutcome;
 pub(crate) use lifecycle_results::OwnedKeychainWrite;
 pub(crate) use verification::DeepVerificationContinuation;
 
@@ -311,6 +314,8 @@ pub(crate) struct CloudBackupSupervisor {
     /// generation it read, so there is no supervisor-wide verification basis
     wallet_set: WalletSetGeneration,
     last_outcome: Option<DispatchOutcome>,
+    /// The outcome the screen shows next to the control the user last tapped
+    screen_outcome: LastOutcome,
     /// What the harness invariants read about dispatch since their last check
     #[cfg(test)]
     invariant_log: test_support::DispatchLog,
@@ -391,6 +396,7 @@ impl CloudBackupSupervisor {
             detail_workflow: DetailWorkflow::default(),
             wallet_set: WalletSetGeneration::default(),
             last_outcome: None,
+            screen_outcome: LastOutcome::default(),
             #[cfg(test)]
             invariant_log: test_support::DispatchLog::default(),
         }
@@ -534,13 +540,23 @@ impl CloudBackupSupervisor {
         Some(claim)
     }
 
-    /// Publishes the screen for the runtime and the reducer as they stand now
+    /// Publishes the screen for the runtime, its admission and the notices as they stand now
     pub async fn publish_screen(&mut self) -> ActorResult<()> {
         if let Some(manager) = self.manager() {
-            manager.publish_screen(&self.runtime);
+            manager.publish_screen(&self.runtime, || self.screen_inputs(&manager));
         }
 
         Produces::ok(())
+    }
+
+    /// What the projection reads besides the runtime, as it stands now
+    pub(crate) fn screen_inputs(&self, manager: &RustCloudBackupManager) -> ScreenInputs {
+        let inventory = manager.inventory_facts();
+        let admission = self.admission_snapshot(manager, &inventory);
+        let notices =
+            Notices::new(&RustCloudBackupManager::load_persisted_state(), &self.screen_outcome);
+
+        ScreenInputs { admission, inventory, notices }
     }
 
     /// Shows the runtime through the read-only adapter onto today's exported types
@@ -591,7 +607,9 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        self.runtime.finish(claim);
+        // clearing the runtime publishes, so the screen shows the failure with the body it left
+        self.screen_outcome.operation_failed(claim, &error);
+        self.runtime.clear();
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_failed(claim, &error);
         }
@@ -1525,7 +1543,58 @@ impl CloudBackupSupervisor {
         Produces::ok(result)
     }
 
-    /// Ends a local reset with the body it left, and reopens admission; `None` when no reset ran
+    /// Resets Cloud Backup on this device under a ready reset, after its record was corrupted
+    ///
+    /// Clears this device's Cloud Backup keychain items and sync rows, then replaces the corrupted
+    /// record with Cloud Backup off. Nothing in the cloud is touched, so the backup there can
+    /// still be restored or enabled again
+    pub async fn reset_corrupted_on_this_device(
+        &mut self,
+    ) -> ActorResult<Result<(), CloudBackupError>> {
+        if !matches!(*self.runtime, Runtime::Resetting { held: None, .. }) {
+            return Produces::ok(Err(CloudBackupError::Internal(
+                "cloud backup can only be reset on this device by a ready reset".into(),
+            )));
+        }
+
+        let owner = OwnerToken::mint();
+        if let Err(error) =
+            RustCloudBackupManager::run_disable_local_cleanup(&LocalStateOwner::Lifecycle(&owner))
+        {
+            return Produces::ok(Err(error));
+        }
+
+        let reset = self.runtime.commit(LifecycleWriter::reset_corrupted).map_err(|source| {
+            CloudBackupError::internal_context("reset corrupted cloud backup record", source)
+        });
+
+        let result = match reset {
+            Ok(committed) if committed.outcome => Ok(()),
+            Ok(_) => Err(CloudBackupError::Internal(
+                "cloud backup record was no longer corrupted when it was reset".into(),
+            )),
+            Err(error) => Err(error),
+        };
+
+        Produces::ok(result)
+    }
+
+    /// A reset on this device failed before it committed; the failure shows by its control
+    pub async fn reset_on_this_device_failed(
+        &mut self,
+        error: CloudBackupError,
+    ) -> ActorResult<()> {
+        warn!("Cloud Backup could not reset on this device: {error}");
+        if self.screen_outcome.action_failed(CloudBackupScreenAction::ResetOnThisDevice, &error)
+            && let Some(manager) = self.manager()
+        {
+            manager.request_screen_publish();
+        }
+
+        Produces::ok(())
+    }
+
+    /// Ends a local reset with the body it left, and reopens admission
     ///
     /// After a wipe Cloud Backup is off, whatever the record said before; the owner sets that
     /// here so an idle body never waits for the next admission to catch up with the wipe
@@ -1588,6 +1657,13 @@ pub(crate) mod test_support {
     use super::verification::VerificationRun;
     use super::*;
     use crate::manager::cloud_backup_manager::actors::uploads::CloudBackupUploadWorker;
+    use crate::manager::{
+        cloud_backup_manager::{
+            CloudBackupPublishedScreen, CloudBackupReconcileMessage, CloudBackupScreenDelta,
+            screen::CloudBackupScreen,
+        },
+        deferred_sender::SingleOrMany,
+    };
 
     impl CloudBackupKeychain {
         /// Clears local state the way the lifecycle owner does, for test setup
@@ -1596,6 +1672,16 @@ pub(crate) mod test_support {
         ) -> Result<(), crate::manager::cloud_backup_manager::keychain::CloudBackupKeychainError>
         {
             self.clear_local_state(&LocalStateOwner::Lifecycle(&OwnerToken::mint()))
+        }
+    }
+
+    impl CloudBackupSupervisor {
+        /// The screen this supervisor would publish now, for tests that drive it directly
+        pub(crate) fn projected_screen(
+            &self,
+            manager: &RustCloudBackupManager,
+        ) -> CloudBackupScreen {
+            manager.project_screen(&self.runtime, &self.screen_inputs(manager))
         }
     }
 
@@ -1643,6 +1729,27 @@ pub(crate) mod test_support {
         /// The operation the reducer shows as running
         pub(crate) shown_operation: Option<CloudBackupExclusiveOperationClaim>,
         pub(crate) uploads: Addr<CloudBackupUploadWorker>,
+        /// The screen as the platform sees it, while the manager is alive
+        pub(crate) screen: Option<ScreenView>,
+        /// A local reset holds the body, so the screen's exits are closed on purpose
+        pub(crate) resetting: bool,
+    }
+
+    /// The published screen and the deltas that reached the platform, read in one handler so no
+    /// publish lands between them
+    #[derive(Debug)]
+    pub(crate) struct ScreenView {
+        /// What `state()` gave at the start of this view, before its publish and drain, as a
+        /// platform starting now reads it: every delta sent before it is still queued
+        pub(crate) snapshot: CloudBackupPublishedScreen,
+        /// The screen last sent to the platform
+        pub(crate) published: CloudBackupScreen,
+        /// The revision `published` was sent at
+        pub(crate) revision: u64,
+        /// The screen a projection gives now
+        pub(crate) fresh: CloudBackupScreen,
+        /// Every screen delta sent since the last view, oldest first
+        pub(crate) sent: Vec<CloudBackupScreenDelta>,
     }
 
     impl CloudBackupSupervisor {
@@ -1708,12 +1815,50 @@ pub(crate) mod test_support {
             let shown_operation =
                 self.manager().and_then(|manager| manager.state.read().active_operation());
 
+            let screen = self.manager().map(|manager| self.harness_screen_view(&manager));
             Produces::ok(SupervisorView {
                 owner: self.runtime.take_view(),
                 dispatches: std::mem::take(&mut self.invariant_log.dispatches),
                 shown_operation,
                 uploads: self.uploads.addr_for_test().clone(),
+                screen,
+                resetting: matches!(*self.runtime, Runtime::Resetting { .. }),
             })
+        }
+
+        /// The screen view at this boundary
+        ///
+        /// A publish already requested runs first, as its queued handler would once this one
+        /// returns; one never requested is left out, so a change that forgets to publish still
+        /// shows up as a published screen behind the projection
+        fn harness_screen_view(&self, manager: &RustCloudBackupManager) -> ScreenView {
+            let snapshot = manager.state();
+            if manager.screen_publish_requested() {
+                manager.publish_screen(&self.runtime, || self.screen_inputs(manager));
+            }
+
+            let sent = manager
+                .reconciler
+                .receiver()
+                .try_iter()
+                .flat_map(|field| match field {
+                    SingleOrMany::Single(message) => vec![message],
+                    SingleOrMany::Many(messages) => messages,
+                })
+                .filter_map(|message| match message {
+                    CloudBackupReconcileMessage::Screen(delta) => Some(*delta),
+                    _ => None,
+                })
+                .collect();
+
+            let CloudBackupPublishedScreen { revision, screen: published } = manager.state();
+            ScreenView {
+                snapshot,
+                published,
+                revision,
+                fresh: self.projected_screen(manager),
+                sent,
+            }
         }
 
         /// What dispatch would do with `intent` now, without doing it

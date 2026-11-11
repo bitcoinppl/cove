@@ -8,13 +8,13 @@ use std::collections::{BTreeMap, HashSet};
 use super::admission::DetailInventory;
 use super::screen::{
     CloudBackupInventoryAssessment, CloudBackupListedRecord, CloudBackupOwnRecord,
-    CloudBackupOwnRow, CloudBackupProgressSection,
+    CloudBackupOwnRow,
 };
 use super::{
     CloudBackupDetailState, CloudBackupInventoryIncompleteReason, CloudBackupOtherBackupsState,
     CloudBackupRestoreAllState, CloudBackupStateReducer, CloudBackupWalletItem,
     CloudBackupWalletStatus, CloudOnlyOperation, InventoryOwner, LoadedCloudBackupDetail,
-    OtherBackupsOperation, OwnSecretFacts, RecordId,
+    OtherBackupsOperation, OwnSecretFacts, RecordId, RustCloudBackupManager,
 };
 use crate::wallet_identity::CoveringWallets;
 
@@ -32,9 +32,10 @@ pub(crate) struct InventoryFacts {
 /// The inventory as the screen draws it
 #[derive(Debug, Clone)]
 pub(crate) struct InventoryView {
+    /// How far the inventory has loaded
     pub(crate) readiness: DetailInventory,
     /// Shown while the inventory loads or after a load failed
-    pub(crate) progress: Option<CloudBackupProgressSection>,
+    pub(crate) progress: Option<InventoryProgress>,
     /// The rows of the last finished load, kept through a refresh or a failure
     pub(crate) rows: Option<InventoryRows>,
     pub(crate) restore_all: CloudBackupRestoreAllState,
@@ -42,6 +43,13 @@ pub(crate) struct InventoryView {
     /// The restore or delete running on a listed record
     pub(crate) cloud_only_operation: CloudOnlyOperation,
     pub(crate) other_backups_operation: OtherBackupsOperation,
+}
+
+/// A load still running, or one that failed, which the screen draws as its progress section
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InventoryProgress {
+    Checking,
+    Incomplete(CloudBackupInventoryIncompleteReason),
 }
 
 /// The rows of a loaded inventory
@@ -118,7 +126,7 @@ impl InventoryView {
     /// checked. With no loaded rows the inventory knows nothing, so it's unknown
     pub(crate) fn impact_inputs(&self) -> InventoryImpactInputs {
         let reason = match self.progress {
-            Some(CloudBackupProgressSection::InventoryIncomplete { reason }) => reason,
+            Some(InventoryProgress::Incomplete(reason)) => reason,
             _ => CloudBackupInventoryIncompleteReason::Unknown,
         };
 
@@ -176,6 +184,22 @@ pub(crate) struct ListedRecord {
     pub(crate) covered_by: Vec<RecordId>,
 }
 
+impl InventoryRows {
+    /// Any row is drawn, so progress over them shows inline rather than in their place
+    pub(crate) fn has_rows(&self) -> bool {
+        !self.up_to_date.is_empty() || !self.needs_sync.is_empty() || !self.listed.is_empty()
+    }
+}
+
+impl RustCloudBackupManager {
+    /// The inventory facts as the owner and the reducer hold them now
+    pub(crate) fn inventory_facts(&self) -> InventoryFacts {
+        // the reducer's lock is taken first, as every reader holding both does
+        let reducer = self.state.read();
+        InventoryFacts::new(&self.inventory.read(), &reducer)
+    }
+}
+
 impl InventoryFacts {
     /// The facts as the owner holds them, with Restore All's run read from the reducer
     pub(crate) fn new(owner: &InventoryOwner, reducer: &CloudBackupStateReducer) -> Self {
@@ -190,13 +214,21 @@ impl InventoryFacts {
         }
     }
 
+    /// How far the inventory has loaded, which admission reads
+    pub(crate) fn readiness(&self) -> DetailInventory {
+        self.readiness
+    }
+
+    /// Whether an inventory load is running, which a repeated Check Again joins
+    pub(crate) fn checking(&self) -> bool {
+        matches!(self.detail, CloudBackupDetailState::Checking { .. })
+    }
+
     pub(crate) fn view(&self) -> InventoryView {
         let progress = match &self.detail {
-            CloudBackupDetailState::Checking { .. } => {
-                Some(CloudBackupProgressSection::InventoryChecking)
-            }
+            CloudBackupDetailState::Checking { .. } => Some(InventoryProgress::Checking),
             CloudBackupDetailState::Failed { reason, .. } => {
-                Some(CloudBackupProgressSection::InventoryIncomplete { reason: *reason })
+                Some(InventoryProgress::Incomplete(*reason))
             }
             CloudBackupDetailState::NotLoaded | CloudBackupDetailState::Complete { .. } => None,
         };

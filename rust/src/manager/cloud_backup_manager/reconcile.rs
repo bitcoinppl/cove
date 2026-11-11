@@ -9,10 +9,9 @@ use super::verify::coordinator::{
     CloudBackupVerificationCoordinator, CloudBackupVerificationEffect, VerificationDetail,
 };
 use super::{
-    CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupHealNotice,
-    CloudBackupScreenDelta, CloudBackupStatus, CloudBackupVerificationMetadata,
-    CloudBackupVerificationPresentation, CloudBackupVerificationSource,
-    PendingUploadVerificationState, RustCloudBackupManager,
+    CloudBackupDetailOutcome, CloudBackupEnableContext, CloudBackupScreenDelta, CloudBackupStatus,
+    CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
+    CloudBackupVerificationSource, PendingUploadVerificationState, RustCloudBackupManager,
 };
 
 /// Durable Google Drive account-switch state owned by the platform
@@ -42,7 +41,8 @@ pub enum DriveAccountSwitchReconcileAction {
 /// Typed state delta sent from Rust to Swift and Kotlin reconcilers
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CloudBackupReconcileMessage {
-    /// What changed on the screen; the platform applies it with `CloudBackupScreen::applying`
+    /// What changed on the screen; the platform applies it with
+    /// `CloudBackupPublishedScreen::applying`, which skips one its snapshot already includes
     Screen(Box<CloudBackupScreenDelta>),
     EnableCompleted(CloudBackupEnableContext),
     /// Android must atomically commit its staged Google Drive identity
@@ -66,17 +66,9 @@ crate::manager::reconcile_channel::impl_reconcile_sink!(
 type Message = CloudBackupReconcileMessage;
 
 impl RustCloudBackupManager {
-    fn load_persisted_flags()
-    -> (CloudBackupVerificationMetadata, bool, Option<CloudBackupHealNotice>) {
+    fn load_persisted_flags() -> (CloudBackupVerificationMetadata, bool) {
         let db_state = Self::load_persisted_state();
-        let heal_notice = match &db_state {
-            PersistedCloudBackupState::Configured(configured) => {
-                configured.heal_notice.map(CloudBackupHealNotice::from)
-            }
-            _ => None,
-        };
-
-        ((&db_state).into(), db_state.should_prompt_verification(), heal_notice)
+        ((&db_state).into(), db_state.should_prompt_verification())
     }
 
     pub(crate) fn send(&self, message: Message) {
@@ -179,14 +171,12 @@ impl RustCloudBackupManager {
     }
 
     pub(crate) fn refresh_persisted_flags(&self) {
-        let (verification_metadata, should_prompt_verification, heal_notice) =
-            Self::load_persisted_flags();
+        let (verification_metadata, should_prompt_verification) = Self::load_persisted_flags();
 
         self.apply_model_event(CloudBackupStateReducerEvent::VerificationFlagsReconciled {
             metadata: verification_metadata,
             should_prompt: should_prompt_verification,
         });
-        self.apply_model_event(CloudBackupStateReducerEvent::HealNoticeReconciled(heal_notice));
     }
 
     /// Projects a just-persisted cloud backup state into runtime status and flags
@@ -218,7 +208,7 @@ impl RustCloudBackupManager {
         pending: PendingUploadVerificationState,
         source: CloudBackupVerificationSource,
     ) {
-        let (verification_metadata, should_prompt_verification, _) = Self::load_persisted_flags();
+        let (verification_metadata, should_prompt_verification) = Self::load_persisted_flags();
         let event = CloudBackupStateReducerEvent::PendingUploadVerificationAndFlagsReconciled {
             pending,
             metadata: verification_metadata,
@@ -261,6 +251,11 @@ impl RustCloudBackupManager {
 
 #[uniffi::export]
 impl RustCloudBackupManager {
+    /// Delivers every message, in the order it was sent, starting with those queued before this
+    /// call
+    ///
+    /// Screen deltas a platform's `state()` snapshot already includes are among them; it skips
+    /// those by revision. The other messages are events with no revision, delivered in order
     pub fn listen_for_updates(&self, reconciler: Box<dyn CloudBackupManagerReconciler>) {
         self.reconciler.listen_sink(reconciler);
     }

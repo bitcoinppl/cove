@@ -10,12 +10,13 @@ use std::time::Duration;
 
 use act_zero::call;
 use cove_device::cloud_storage::CloudStorageError;
+use cove_device::passkey::PasskeyError;
 
 use super::process::child_root;
 use super::{
     CallId, CloudCall, CloudFault, FakeAccount, HarnessCloud, Hold, NextAction as N, PasskeyMode,
     PhaseEnd, TestApp, keychain_namespace, load_detail, open_durable_state, persisted, run_case,
-    seed_legacy_stuck_disabling,
+    seed_corrupted_record, seed_legacy_stuck_disabling, seed_verifiable_master_key,
 };
 use crate::database::cloud_backup::{PersistedCloudBackupState, PersistedCloudBackupStatus};
 use crate::manager::cloud_backup_manager::actors::write::Decision;
@@ -27,13 +28,17 @@ use crate::manager::cloud_backup_manager::ops::test_support::MockCloudStorage;
 use crate::manager::cloud_backup_manager::owner::lifecycle::test_support::bootstrap_with_failed_heal;
 use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record;
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupDisableConfirmation, CloudBackupScreenAction,
+    CloudBackupActionAvailability, CloudBackupDisableConfirmation, CloudBackupScreenAction,
+    CloudBackupScreenBody, CloudBackupSection, CloudBackupVerificationControl,
 };
 use crate::manager::cloud_backup_manager::{
-    CloudBackupManagerAction, CloudBackupNoticeKind, CloudBackupSettingsRowStatus,
-    CloudBackupVerificationSource,
+    CloudBackupEnableContext, CloudBackupManagerAction, CloudBackupNoticeKind,
+    CloudBackupSettingsRowStatus, CloudBackupVerificationSource, CloudBackupVerificationState,
+    DeepVerificationFailure,
 };
 use crate::manager::cloud_backup_manager::{CloudBackupStatus, RustCloudBackupManager};
+
+use CloudBackupScreenAction as A;
 
 #[test]
 fn paused_clock_moves_only_when_the_test_advances_it() {
@@ -96,9 +101,7 @@ fn soft_relaunch_keeps_durable_state_without_prompting() {
         let namespace = FakeAccount::new(2, 0).seed(&app);
 
         // the relaunched app has not loaded its detail inventory, and Turn Off is still admitted
-        app.relaunch()
-            .then_can(&[N::Verify, N::SyncUnsynced, N::TurnOff])
-            .then_cannot(&[N::Enable]);
+        app.relaunch().then_can(&[N::Verify, N::TurnOff]).then_cannot(&[N::Enable]);
 
         assert_eq!(persisted().status(), PersistedCloudBackupStatus::Enabled);
         assert_eq!(keychain_namespace().as_deref(), Some(namespace.as_str()));
@@ -153,6 +156,44 @@ fn a_hold_released_before_its_call_starts_lets_the_call_through() {
     });
 }
 
+/// Restore and Enable each end their operation once their held calls answer and the clock moves
+/// past their timers: at quiescence nothing is live, and the body they left offers its exits
+#[test]
+fn restore_and_enable_leave_nothing_live_at_quiescence() {
+    let test = concat!(module_path!(), "::restore_and_enable_leave_nothing_live_at_quiescence");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+
+        // quiescence releases the held listing, which finds no backup
+        app.cloud.script_next(CloudCall::ListNamespaces, CloudFault::Hold(Hold::default()));
+        app.dispatch(CloudBackupManagerAction::RestoreFromCloudBackup).then_cannot(&[N::Enable]);
+        assert!(app.runs_operation(), "the held listing holds the restore\n{}", app.describe());
+        app.quiesce().then_can(&[N::Enable, N::RestoreFromCloudBackup]);
+
+        // Enable registers a passkey, then gives it time on the paused clock before asking the
+        // user to confirm it was saved; quiescence advances past that wait
+        app.passkey.inner.set_discover_result(Err(PasskeyError::NoCredentialFound));
+        app.passkey.inner.set_create_result(Ok(vec![4, 5, 6]));
+        app.dispatch(CloudBackupManagerAction::EnableCloudBackup(
+            CloudBackupEnableContext::settings_manual(),
+        ))
+        .then_cannot(&[N::RestoreFromCloudBackup]);
+        assert!(app.runs_operation(), "Enable waits on the clock\n{}", app.describe());
+        app.quiesce().then_cannot(&[N::TurnOff]);
+        assert!(!app.runs_operation(), "{}", app.describe());
+        assert_eq!(app.admission_of(UserIntent::ConfirmSavedPasskey), Admission::Accepted);
+
+        app.passkey.inner.set_authenticate_result(Ok(vec![7; 32]));
+        app.dispatch(CloudBackupManagerAction::ConfirmSavedPasskey).then_cannot(&[N::Enable]);
+        app.quiesce().then_can(&[N::TurnOff]).then_cannot(&[N::Enable]);
+        assert!(
+            matches!(persisted(), PersistedCloudBackupState::Configured(_)),
+            "{}",
+            app.describe()
+        );
+    });
+}
+
 #[test]
 fn held_namespace_delete_reports_entered_and_finished() {
     let test = concat!(module_path!(), "::held_namespace_delete_reports_entered_and_finished");
@@ -191,6 +232,7 @@ fn scripted_namespace_delete_failure_then_retry_disables() {
         );
         load_detail(&mut app);
 
+        // the committed Turn Off failed, so the screen offers to resume it
         app.dispatch(CloudBackupManagerAction::DisableCloudBackup).then_can(&[N::ConfirmDisable]);
         app.confirm_turn_off().then_can(&[N::ResumeDisable]).then_cannot(&[
             N::TurnOff,
@@ -237,7 +279,7 @@ fn turn_off_review_of_a_wallet_not_on_device_leaves_the_actions_that_clear_its_r
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
 
         app.dispatch(CloudBackupManagerAction::CancelDisable)
-            .then_can(&[N::TurnOff, N::Verify, N::SyncUnsynced])
+            .then_can(&[N::TurnOff, N::Verify])
             .then_cannot(&[N::ConfirmDisable, N::Enable]);
         let delete = UserIntent::DeleteCloudWallet(elsewhere.clone().into());
         assert_eq!(app.admission_of(delete), Admission::Accepted, "{}", app.describe());
@@ -310,7 +352,7 @@ fn legacy_stuck_disabling_record_heals_at_load() {
         let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
 
         // writes are allowed again; Turn Off still waits for the detail inventory today
-        app.current().then_can(&[N::Verify, N::SyncUnsynced]).then_cannot(&[N::Enable]);
+        app.current().then_can(&[N::Verify]).then_cannot(&[N::Enable]);
         let PersistedCloudBackupState::Configured(configured) = persisted() else {
             panic!("the legacy record did not heal:\n{}", app.describe());
         };
@@ -360,7 +402,7 @@ fn ui_test_seam_seeds_the_legacy_record_that_the_launch_heals() {
         };
         assert!(configured.heal_notice.is_some(), "the heal persisted its notice");
 
-        let screen = app.manager().state();
+        let screen = app.manager().published_screen();
         assert!(screen.heal_notice.is_some(), "the screen shows the heal notice");
         assert_eq!(screen.settings_row, CloudBackupSettingsRowStatus::TurnedOnAgain);
         assert!(screen.actions.is_available(CloudBackupScreenAction::DismissHealNotice));
@@ -372,7 +414,7 @@ fn ui_test_seam_seeds_the_legacy_record_that_the_launch_heals() {
         };
         assert_eq!(configured.heal_notice, None);
 
-        let screen = app.manager().state();
+        let screen = app.manager().published_screen();
         assert_eq!(screen.heal_notice, None);
         assert!(screen.actions.availability(CloudBackupScreenAction::DismissHealNotice).is_none());
         assert!(app.passkey.interactive_calls().is_empty());
@@ -423,11 +465,92 @@ fn failed_heal_write_keeps_the_legacy_record_and_fails_the_load() {
         }
 
         let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
-        app.current().then_can(&[N::Verify, N::SyncUnsynced]);
+        app.current().then_can(&[N::Verify]);
         let PersistedCloudBackupState::Configured(configured) = persisted() else {
             panic!("the relaunch did not heal:\n{}", app.describe());
         };
         assert!(configured.heal_notice.is_some());
+    });
+}
+
+/// A failed load offers Retry, which reads and heals the record as a launch would, with no
+/// relaunch
+#[test]
+fn retry_after_a_failed_load_heals_without_a_relaunch() {
+    let test = concat!(module_path!(), "::retry_after_a_failed_load_heals_without_a_relaunch");
+    run_case(test, &[PhaseEnd::Exit, PhaseEnd::Exit], |phase| {
+        if phase == 0 {
+            let app = TestApp::launch();
+            let namespace = FakeAccount::new(2, 0).seed(&app);
+            seed_legacy_stuck_disabling(&namespace, app.clock.now_secs());
+            return;
+        }
+
+        let mut app = TestApp::launch_with_bootstrap(
+            PasskeyMode::FailOnAnyInteractiveCall,
+            bootstrap_with_failed_heal,
+        );
+        app.current().then_can(&[N::RetryLoad]).then_cannot(&[N::Enable, N::Verify, N::TurnOff]);
+        assert_eq!(app.manager().published_screen().body, CloudBackupScreenBody::LoadFailed);
+
+        app.dispatch(CloudBackupManagerAction::RetryLoad)
+            .then_can(&[N::Verify, N::TurnOff])
+            .then_cannot(&[N::RetryLoad, N::Enable]);
+
+        let PersistedCloudBackupState::Configured(configured) = persisted() else {
+            panic!("the retry did not heal the record:\n{}", app.describe());
+        };
+        assert!(configured.heal_notice.is_some());
+
+        let screen = app.manager().published_screen();
+        assert!(matches!(screen.body, CloudBackupScreenBody::Configured(_)), "{screen:#?}");
+        assert!(screen.heal_notice.is_some());
+        assert_eq!(screen.settings_row, CloudBackupSettingsRowStatus::TurnedOnAgain);
+        assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
+    });
+}
+
+/// A corrupted record holds Enable and Restore, and its one exit resets Cloud Backup on this
+/// device without touching the cloud, after which it can be turned on again
+#[test]
+fn corrupted_record_resets_on_this_device_before_enable() {
+    let test = concat!(module_path!(), "::corrupted_record_resets_on_this_device_before_enable");
+    run_case(test, &[PhaseEnd::Exit, PhaseEnd::Exit], |phase| {
+        if phase == 0 {
+            let app = TestApp::launch();
+            FakeAccount::new(2, 0).seed(&app);
+            seed_corrupted_record("decode failed");
+            return;
+        }
+
+        let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
+        let namespace = keychain_namespace().expect("the seeded namespace");
+        app.current().then_can(&[N::ResetOnThisDevice]).then_cannot(&[
+            N::Enable,
+            N::RestoreFromCloudBackup,
+            N::TurnOff,
+        ]);
+
+        let screen = app.manager().published_screen();
+        assert_eq!(screen.body, CloudBackupScreenBody::Corrupted);
+        assert!(matches!(screen.settings_row, CloudBackupSettingsRowStatus::Error(_)));
+        assert_eq!(
+            app.admission_of(N::Enable.intent(None)),
+            Admission::Rejected(Rejection::Corrupted)
+        );
+
+        app.dispatch(CloudBackupManagerAction::ResetOnThisDevice)
+            .then_can(&[N::Enable, N::RestoreFromCloudBackup])
+            .then_cannot(&[N::ResetOnThisDevice, N::TurnOff]);
+
+        assert_eq!(persisted(), PersistedCloudBackupState::Disabled, "{}", app.describe());
+        assert_eq!(keychain_namespace(), None);
+        assert_eq!(app.manager().published_screen().body, CloudBackupScreenBody::Disabled);
+        assert_eq!(app.manager().published_screen().last_outcome, None);
+
+        // the backup in the cloud is untouched, so it can still be restored
+        assert!(app.cloud.inner.has_namespace(&namespace));
+        assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0);
     });
 }
 
@@ -738,4 +861,121 @@ fn silent_inventory_paths_never_prompt() {
             app.passkey.interactive_calls()
         );
     });
+}
+
+/// The state the published screen's verification section shows
+fn verification_state(app: &TestApp) -> Option<CloudBackupVerificationState> {
+    configured_sections(app).into_iter().find_map(|section| match section {
+        CloudBackupSection::Verification(section) => Some(section.view.state),
+        _ => None,
+    })
+}
+
+/// The controls the published screen's verification section draws
+fn verification_controls(app: &TestApp) -> Vec<CloudBackupVerificationControl> {
+    configured_sections(app)
+        .into_iter()
+        .find_map(|section| match section {
+            CloudBackupSection::Verification(section) => Some(section.controls),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
+fn configured_sections(app: &TestApp) -> Vec<CloudBackupSection> {
+    match app.manager().published_screen().body {
+        CloudBackupScreenBody::Configured(configured) => configured.sections,
+        _ => Vec::new(),
+    }
+}
+
+/// Whether the published screen draws `action`, and whether it is enabled
+fn control(
+    app: &TestApp,
+    action: CloudBackupScreenAction,
+) -> Option<CloudBackupActionAvailability> {
+    app.manager().published_screen().actions.availability(action)
+}
+
+fn verify() -> CloudBackupManagerAction {
+    CloudBackupManagerAction::StartVerification(CloudBackupVerificationSource::CloudBackupDetail)
+}
+
+/// A backup whose wallet is uploaded and that verifies offers Verify and Turn Off; it offers no
+/// Sync Now with nothing to sync and no rebuild with nothing broken, since nothing draws them
+#[test]
+fn a_clean_backup_offers_no_sync_and_no_rebuild() {
+    let test = concat!(module_path!(), "::a_clean_backup_offers_no_sync_and_no_rebuild");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(1, 0).seed(&app);
+        seed_verifiable_master_key(&app);
+        load_detail(&mut app);
+
+        app.dispatch(verify()).then_can(&[N::Verify, N::TurnOff]);
+        assert!(matches!(
+            verification_state(&app),
+            Some(CloudBackupVerificationState::Verified { .. })
+        ));
+        assert_eq!(verification_controls(&app), vec![CloudBackupVerificationControl::Verify]);
+
+        for action in [A::SyncUnsynced, A::RecreateManifest, A::ReinitializeBackup] {
+            assert_eq!(control(&app, action), None, "a clean backup offers {action:?}");
+        }
+    });
+}
+
+/// A backup with no wallets has nothing to sync, so it offers no Sync Now
+#[test]
+fn an_empty_backup_offers_no_sync() {
+    let test = concat!(module_path!(), "::an_empty_backup_offers_no_sync");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        FakeAccount::new(0, 0).seed(&app);
+        load_detail(&mut app);
+
+        app.current().then_can(&[N::Verify, N::TurnOff]);
+        for action in [A::SyncUnsynced, A::RecreateManifest, A::ReinitializeBackup] {
+            assert_eq!(control(&app, action), None, "an empty backup offers {action:?}");
+        }
+    });
+}
+
+/// A backup only a newer Cove can read fails verification with no recovery here: verifying
+/// again can't read it either, and a rebuild would overwrite it, so the screen offers neither
+#[test]
+fn a_backup_from_a_newer_version_offers_no_verify_and_no_rebuild() {
+    let test =
+        concat!(module_path!(), "::a_backup_from_a_newer_version_offers_no_verify_and_no_rebuild");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        seed_verifiable_master_key(&app);
+        write_newer_master_key_version(&app, &namespace);
+        load_detail(&mut app);
+
+        app.dispatch(verify()).then_can(&[N::TurnOff]);
+        assert!(matches!(
+            verification_state(&app),
+            Some(CloudBackupVerificationState::Failed(
+                DeepVerificationFailure::UnsupportedVersion { .. }
+            ))
+        ));
+        assert_eq!(verification_controls(&app), Vec::new());
+
+        for action in [A::Verify, A::RecreateManifest, A::ReinitializeBackup] {
+            assert_eq!(control(&app, action), None, "an unreadable backup offers {action:?}");
+        }
+    });
+}
+
+/// Marks the cloud's master key backup as written by a newer Cove's format
+fn write_newer_master_key_version(app: &TestApp, namespace: &str) {
+    let bytes = app.cloud.inner.master_key_backup_bytes(namespace).expect("a master key backup");
+    let mut json: serde_json::Value = serde_json::from_slice(&bytes).expect("master key json");
+    json["version"] = serde_json::json!(99);
+
+    let bytes = serde_json::to_vec(&json).expect("encode master key json");
+    app.cloud.inner.set_master_key_backup(namespace.to_string(), bytes);
+    app.cloud.persist();
 }

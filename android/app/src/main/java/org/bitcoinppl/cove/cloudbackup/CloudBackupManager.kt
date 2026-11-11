@@ -21,6 +21,7 @@ import org.bitcoinppl.cove_core.CloudBackupEnableContext
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupManagerReconciler
 import org.bitcoinppl.cove_core.CloudBackupOnboardingCompletionReadiness
+import org.bitcoinppl.cove_core.CloudBackupPublishedScreen
 import org.bitcoinppl.cove_core.CloudBackupReconcileMessage
 import org.bitcoinppl.cove_core.CloudBackupScreen
 import org.bitcoinppl.cove_core.CloudBackupScreenBody
@@ -40,7 +41,7 @@ internal data class DriveAccountSwitchPlatformFailure(
 @Stable
 class CloudBackupManager private constructor(
     private val rust: RustCloudBackupManager?,
-    initialScreen: CloudBackupScreen,
+    initialPublished: CloudBackupPublishedScreen,
     startLiveUpdates: Boolean,
 ) : CloudBackupManagerReconciler, Closeable {
     private val mainScope =
@@ -65,9 +66,13 @@ class CloudBackupManager private constructor(
             Log.w(TAG, it)
         }
 
-    /** Everything the Cloud Backup UI draws; views read nothing else from this manager */
-    var screen by mutableStateOf(initialScreen)
+    /** The screen Rust last published, with its revision; every update replaces it in one assignment */
+    internal var published by mutableStateOf(initialPublished)
         private set
+
+    /** Everything the Cloud Backup UI draws; views read nothing else from this manager */
+    val screen: CloudBackupScreen
+        get() = published.screen
 
     var isCloudBackupEnabled by mutableStateOf(runCatching { rust?.isCloudBackupEnabled() == true }.getOrDefault(false))
         private set
@@ -133,7 +138,9 @@ class CloudBackupManager private constructor(
         return rustGuard.withHandleSuspend(rust, block)
     }
 
-    internal constructor(initialScreen: CloudBackupScreen) : this(null, initialScreen, false)
+    internal constructor(initialPublished: CloudBackupPublishedScreen) : this(null, initialPublished, false)
+
+    internal constructor(initialScreen: CloudBackupScreen) : this(CloudBackupPublishedScreen(0UL, initialScreen))
 
     fun dispatch(action: CloudBackupManagerAction) {
         rustScope.launch {
@@ -288,16 +295,18 @@ class CloudBackupManager private constructor(
         }
     }
 
-    private fun apply(message: CloudBackupReconcileMessage) {
+    internal fun apply(message: CloudBackupReconcileMessage) {
         val wasTurningOff = screen.isTurningOff
         when (message) {
             is CloudBackupReconcileMessage.Screen -> {
-                val next = screen.applying(message.v1)
+                // a delta the snapshot already includes leaves it as it is, so a Turn Off that
+                // finished before the snapshot is never replayed as a transition to Disabled
+                val next = published.applying(message.v1)
 
                 // a completion from an enable that has since been turned off, such as by a full wipe, is stale
-                if (next.body is CloudBackupScreenBody.Disabled) enableCompletion = null
+                if (next.screen.body is CloudBackupScreenBody.Disabled) enableCompletion = null
 
-                screen = next
+                published = next
             }
 
             is CloudBackupReconcileMessage.EnableCompleted ->
@@ -562,6 +571,9 @@ class CloudBackupManager private constructor(
 
         private fun liveManager(): CloudBackupManager {
             val rust = RustCloudBackupManager()
+
+            // the snapshot is read before init listens, so the deltas still queued from before it
+            // are at or before its revision, and applying skips them instead of replaying them
             return CloudBackupManager(rust, rust.state(), true)
         }
 

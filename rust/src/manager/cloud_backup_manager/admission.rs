@@ -168,8 +168,11 @@ pub(crate) enum CoalescibleIntent {
 pub(crate) enum Rejection {
     CloudBackupOff,
     NotConfigured,
-    /// The stored record could not be loaded; a relaunch retries
+    /// The stored record could not be loaded; Try Again runs the load again
     LoadFailed,
+    /// The stored record can't be read as a backup; only resetting Cloud Backup on this device
+    /// runs on it
+    Corrupted,
     /// Turn Off already deleted remote data, so it only goes forward
     TurnOffCommitted,
     OperationRunning(CloudBackupExclusiveOperation),
@@ -225,6 +228,8 @@ pub(crate) enum AdmissionBody {
     /// A recorded Google Drive account switch; only its Retry and Cancel reach it
     DriveAccountSwitch,
     LoadFailed,
+    /// The stored record can't be read as a backup
+    Corrupted,
     /// A local reset closed admission until it finishes
     Resetting,
 }
@@ -337,8 +342,9 @@ pub(crate) enum ContinuationStage {
     AwaitingSavedPasskey,
     /// An upload failed after the passkey was ready, and keeps its material for a retry
     RetryUpload,
-    /// Enable found an existing backup and asks whether to replace it; nothing is held
-    ExistingBackupPrompt,
+    /// Enable asks the user how to go on, at the existing-backup prompt or the passkey choice;
+    /// nothing is held
+    EnablePrompt,
 }
 
 impl ContinuationOwner {
@@ -366,6 +372,7 @@ impl ContinuationOwner {
             | AdmissionBody::PendingEnableRecovery
             | AdmissionBody::DriveAccountSwitch
             | AdmissionBody::LoadFailed
+            | AdmissionBody::Corrupted
             | AdmissionBody::Resetting => Self::Enable,
         }
     }
@@ -393,6 +400,7 @@ impl ContinuationOwner {
                 | AdmissionBody::PendingEnableRecovery
                 | AdmissionBody::DriveAccountSwitch
                 | AdmissionBody::LoadFailed
+                | AdmissionBody::Corrupted
                 | AdmissionBody::Resetting,
             ) => false,
         }
@@ -431,7 +439,7 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
             ) => Accepted,
             (
                 Some(PausedContinuation {
-                    stage: ContinuationStage::RetryUpload | ContinuationStage::ExistingBackupPrompt,
+                    stage: ContinuationStage::RetryUpload | ContinuationStage::EnablePrompt,
                     ..
                 })
                 | None,
@@ -560,12 +568,15 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
             (AdmissionBody::FinishingDisable, None, _) => Rejected(Rejection::TryAgainFirst),
             _ => Rejected(Rejection::NothingToContinue),
         },
-        // a relaunch runs the load again until Try Again can rebuild the runtime in place
+        // each is the one exit of its body, and nothing elsewhere for it to continue
         I::RetryLoad => match snapshot.body {
-            AdmissionBody::LoadFailed => Rejected(Rejection::LoadFailed),
+            AdmissionBody::LoadFailed => Accepted,
             _ => Rejected(Rejection::NothingToContinue),
         },
-        I::ResetOnThisDevice => Rejected(Rejection::NothingToContinue),
+        I::ResetOnThisDevice => match snapshot.body {
+            AdmissionBody::Corrupted => Accepted,
+            _ => Rejected(Rejection::NothingToContinue),
+        },
         I::DismissNotice(_) | I::LeaveDetail => Accepted,
         // Reconnect runs the detail verification, so a repeat joins the one already running
         I::ReconnectDrive => configured_and_idle(snapshot, Some(Op::Verify)),
@@ -624,6 +635,7 @@ fn starts_while_off(
         }
         (AdmissionBody::FinishingDisable, None) => Admission::Rejected(Rejection::TurnOffCommitted),
         (AdmissionBody::LoadFailed, None) => Admission::Rejected(Rejection::LoadFailed),
+        (AdmissionBody::Corrupted, None) => Admission::Rejected(Rejection::Corrupted),
         (AdmissionBody::Resetting, None) => Admission::Rejected(Rejection::Resetting),
     }
 }
@@ -693,6 +705,7 @@ fn not_configured(body: AdmissionBody) -> Rejection {
     match body {
         AdmissionBody::Disabled => Rejection::CloudBackupOff,
         AdmissionBody::LoadFailed => Rejection::LoadFailed,
+        AdmissionBody::Corrupted => Rejection::Corrupted,
         AdmissionBody::FinishingDisable => Rejection::TurnOffCommitted,
         AdmissionBody::Resetting => Rejection::Resetting,
         AdmissionBody::DriveAccountSwitch => Rejection::DriveAccountSwitch,

@@ -2,14 +2,20 @@
 
 use super::types::{
     CloudBackupActionAvailability, CloudBackupActions, CloudBackupHealNoticeUpdate,
-    CloudBackupLastOutcomeUpdate, CloudBackupScreen, CloudBackupScreenAction,
-    CloudBackupScreenDelta,
+    CloudBackupLastOutcomeUpdate, CloudBackupPublishedScreen, CloudBackupScreen,
+    CloudBackupScreenAction, CloudBackupScreenDelta,
 };
 
 impl CloudBackupScreenDelta {
-    /// The parts of `next` that differ from `previous`, or `None` when nothing changed
-    pub(crate) fn between(previous: &CloudBackupScreen, next: &CloudBackupScreen) -> Option<Self> {
+    /// The delta that publishes `next` over `previous`, at the revision after it, or `None`
+    /// when nothing changed
+    pub(crate) fn between(
+        previous: &CloudBackupPublishedScreen,
+        next: &CloudBackupScreen,
+    ) -> Option<Self> {
+        let CloudBackupPublishedScreen { revision, screen: previous } = previous;
         let delta = Self {
+            revision: revision + 1,
             body: (previous.body != next.body).then(|| next.body.clone()),
             settings_row: (previous.settings_row != next.settings_row)
                 .then(|| next.settings_row.clone()),
@@ -22,26 +28,40 @@ impl CloudBackupScreenDelta {
             actions: (previous.actions != next.actions).then(|| next.actions.clone()),
         };
 
-        (delta != Self::default()).then_some(delta)
+        delta.changes_anything().then_some(delta)
     }
-}
 
-#[uniffi::export]
-impl CloudBackupScreen {
-    /// This screen with `delta` applied
-    ///
-    /// The only way a platform updates its screen, so both apps and the Rust test reconciler
-    /// apply a delta the same way
-    pub fn applying(&self, delta: CloudBackupScreenDelta) -> CloudBackupScreen {
-        let mut screen = self.clone();
-        let CloudBackupScreenDelta {
+    fn changes_anything(&self) -> bool {
+        let Self {
+            revision: _,
             body,
             settings_row,
             heal_notice,
             last_outcome,
             root_prompt,
             actions,
-        } = delta;
+        } = self;
+
+        body.is_some()
+            || settings_row.is_some()
+            || heal_notice.is_some()
+            || last_outcome.is_some()
+            || root_prompt.is_some()
+            || actions.is_some()
+    }
+
+    /// `screen` with this delta's parts replaced
+    fn apply_to(self, screen: &CloudBackupScreen) -> CloudBackupScreen {
+        let mut screen = screen.clone();
+        let Self {
+            revision: _,
+            body,
+            settings_row,
+            heal_notice,
+            last_outcome,
+            root_prompt,
+            actions,
+        } = self;
 
         if let Some(body) = body {
             screen.body = body;
@@ -68,6 +88,25 @@ impl CloudBackupScreen {
         }
 
         screen
+    }
+}
+
+#[uniffi::export]
+impl CloudBackupPublishedScreen {
+    /// This screen advanced by `delta`, or this screen as it is when it already includes `delta`
+    ///
+    /// The only way a platform updates its screen, so both apps and the Rust test reconciler
+    /// apply a delta the same way. The platform's first screen is a snapshot, and deltas
+    /// published before it was read can still be queued behind it; replaying one would show
+    /// an older or mixed screen, so a delta at or before this revision changes nothing. Deltas
+    /// arrive in revision order, so the next one after the snapshot is the one this revision
+    /// precedes
+    pub fn applying(&self, delta: CloudBackupScreenDelta) -> CloudBackupPublishedScreen {
+        if delta.revision <= self.revision {
+            return self.clone();
+        }
+
+        Self { revision: delta.revision, screen: delta.apply_to(&self.screen) }
     }
 }
 

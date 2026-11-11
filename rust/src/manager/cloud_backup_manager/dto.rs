@@ -435,14 +435,10 @@ pub enum CloudBackupRetryAction {
 #[derive(Debug, Clone)]
 pub struct CloudBackupState {
     pub lifecycle: super::CloudBackupLifecycle,
-    pub settings_row_status: CloudBackupSettingsRowStatus,
 }
 
 impl Default for CloudBackupState {
     fn default() -> Self {
-        Self {
-            lifecycle: super::CloudBackupLifecycle::Disabled,
-            settings_row_status: CloudBackupSettingsRowStatus::Disabled,
-        }
+        Self { lifecycle: super::CloudBackupLifecycle::Disabled }
     }
 }

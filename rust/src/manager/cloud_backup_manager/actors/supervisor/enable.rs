@@ -83,6 +83,7 @@ impl CloudBackupSupervisor {
         }
 
         warn!("Enable failed: {error}");
+        self.screen_outcome.operation_failed(claim, &error);
         manager.clear_enable_progress_report();
         manager.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
         manager.apply_enable_state(CloudBackupEnableState::Idle);
@@ -99,6 +100,7 @@ impl CloudBackupSupervisor {
         error: CloudBackupError,
     ) {
         warn!("Reinitialize backup enable failed: {error}");
+        self.screen_outcome.operation_failed(claim, &error);
         match error {
             CloudBackupError::UnsupportedPasskeyProvider => {
                 manager.apply_recovery_state(RecoveryState::Idle);

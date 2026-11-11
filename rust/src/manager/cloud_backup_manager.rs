@@ -101,11 +101,11 @@ pub(crate) use self::model::{
     CloudBackupStateReducer, CloudBackupStateReducerEvent, CloudBackupStatus, OwnSecretFacts,
 };
 pub use self::model::{
-    CloudBackupConfiguredState, CloudBackupDestructiveOperationState, CloudBackupEnableFlow,
-    CloudBackupInventoryIncompleteReason, CloudBackupLifecycle, CloudBackupPasskeyState,
-    CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
-    CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupSyncState,
-    CloudBackupUndecryptableWalletDeletionState, CloudBackupVerificationState,
+    CloudBackupConfiguredState, CloudBackupEnableFlow, CloudBackupInventoryIncompleteReason,
+    CloudBackupLifecycle, CloudBackupPasskeyState, CloudBackupPendingEnableCleanupState,
+    CloudBackupPendingEnableRecovery, CloudBackupRestoreAllState, CloudBackupRestoreFlow,
+    CloudBackupSyncState, CloudBackupUndecryptableWalletDeletionState,
+    CloudBackupVerificationState,
 };
 #[cfg(test)]
 pub(crate) use self::ops::test_support::rebase_owners_after_test_write;
@@ -138,11 +138,11 @@ use self::reconcile::CloudBackupReconcileMessage;
 pub use self::reconcile::{DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction};
 pub(crate) use self::recovery_coverage::CloudBackupRecoveryCoverage;
 pub(crate) use self::remote_inventory::current_namespace_wallet_record_ids;
+use self::screen::PublishedScreen;
 pub use self::screen::{
-    CloudBackupDriveAccountSwitchRecovery, CloudBackupHealNotice, CloudBackupNoticeKind,
-    CloudBackupScreen, CloudBackupScreenDelta,
+    CloudBackupDriveAccountSwitchRecovery, CloudBackupNoticeKind, CloudBackupPublishedScreen,
+    CloudBackupScreenDelta,
 };
-use self::screen::{CloudBackupLastOutcome, PublishedScreen};
 pub(crate) use self::store::CloudBackupStore;
 pub(crate) use self::sync_health::SYNC_HEALTH_MISSING_MASTER_KEY_MESSAGE;
 use self::turn_off::AutomaticResume;
@@ -515,7 +515,6 @@ impl RustCloudBackupManager {
         self.clear_enable_progress_report();
         self.apply_restore_outcome(CloudBackupRestoreOutcome::ProgressCleared);
         self.observe_sync_health(CloudSyncHealth::Unknown);
-        self.apply_enable_state(CloudBackupEnableState::Idle);
         self.reconcile_pending_upload_verification(PendingUploadVerificationState::Idle);
         self.apply_detail_outcome(CloudBackupDetailOutcome::Cleared);
         self.apply_verification_state(VerificationState::Idle);
@@ -773,8 +772,9 @@ impl RustCloudBackupManager {
         });
     }
 
-    pub(crate) fn clear_existing_backup_found_prompt(&self) {
-        self.apply_model_event(CloudBackupStateReducerEvent::ExistingBackupFoundPromptCleared);
+    /// Ends the prompt an Enable waits on, back to off
+    pub(crate) fn clear_enable_prompt(&self) {
+        self.apply_model_event(CloudBackupStateReducerEvent::EnablePromptCleared);
     }
 
     pub(crate) fn present_passkey_choice_prompt(&self, intent: CloudBackupPasskeyChoiceIntent) {
@@ -849,13 +849,29 @@ impl RustCloudBackupManager {
         self.apply_model_event(CloudBackupStateReducerEvent::RecoveryStateResolved(recovery));
     }
 
-    /// Shows the last control that didn't do what it was asked, replacing any earlier one
-    pub(crate) fn record_last_outcome(&self, outcome: CloudBackupLastOutcome) {
-        self.apply_model_event(CloudBackupStateReducerEvent::LastOutcomeRecorded(Some(outcome)));
-    }
+    /// Resets Cloud Backup on this device after its record was corrupted
+    ///
+    /// The same fence as a full wipe: admission closes and the write lane drains, then the
+    /// supervisor clears this device's Cloud Backup state and leaves it off. A failure before the
+    /// record is replaced resumes the corrupted body, which offers the reset again
+    pub(crate) async fn reset_corrupted_on_this_device(
+        self: &Arc<Self>,
+    ) -> Result<(), CloudBackupError> {
+        let permit = self.prepare_local_reset().await?;
+        let reset = call!(self.supervisor.reset_corrupted_on_this_device())
+            .await
+            .map_err(CloudBackupError::internal)
+            .and_then(|reset| reset);
 
-    pub(crate) fn dismiss_last_outcome(&self) {
-        self.apply_model_event(CloudBackupStateReducerEvent::LastOutcomeRecorded(None));
+        if let Err(error) = reset {
+            if let Err(resume) = permit.resume_after_failed_reset().await {
+                error!("Cloud Backup could not resume after a failed reset: {resume}");
+            }
+
+            return Err(error);
+        }
+
+        permit.complete_after_database_reset().await
     }
 
     pub(crate) async fn prepare_local_reset(
@@ -1102,9 +1118,14 @@ impl RustCloudBackupManager {
         CLOUD_BACKUP_MANAGER.clone()
     }
 
-    /// The screen the platform starts from; every later change arrives as a `Screen` delta
-    pub fn state(&self) -> CloudBackupScreen {
-        self.published_screen()
+    /// The screen the platform starts from, with its revision
+    ///
+    /// Read it before `listen_for_updates`, then advance it only with
+    /// [`CloudBackupPublishedScreen::applying`]: every later change arrives as a `Screen` delta,
+    /// and the deltas published before this read, still queued for the listener, are at or
+    /// before its revision, so they are skipped instead of replayed over it
+    pub fn state(&self) -> CloudBackupPublishedScreen {
+        self.published_snapshot()
     }
 
     /// Number of wallets in the cloud backup
@@ -1703,10 +1724,9 @@ mod tests {
         let manager = init_manager();
         let db = Database::global();
 
-        // restore starts only while backup is off, and a corrupted record is the off state with
-        // something a stale write could still clobber
-        let persisted_state =
-            PersistedCloudBackupState::Corrupted { error: "unreadable record".into() };
+        // restore starts only while backup is off; the stale write is refused before it writes,
+        // which its Cancelled error shows
+        let persisted_state = PersistedCloudBackupState::Disabled;
         db.cloud_backup_state.set(&persisted_state).unwrap();
         manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
 

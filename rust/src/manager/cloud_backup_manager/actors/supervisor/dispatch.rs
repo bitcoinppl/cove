@@ -4,10 +4,11 @@ use crate::manager::cloud_backup_manager::admission::{
     EnablePromptAnswers, PausedContinuation, Rejection, RestoreAllAdmission, UserIntent,
     evaluate_admission,
 };
+use crate::manager::cloud_backup_manager::inventory::InventoryFacts;
 use crate::manager::cloud_backup_manager::turn_off::FinishStart;
 use crate::manager::cloud_backup_manager::{
-    CloudBackupAcceptedEnablePrompt, CloudBackupDetailState, CloudBackupEnableContext,
-    CloudBackupEnablePromptChoice, CloudBackupNoticeKind, CloudBackupStateReducer,
+    CloudBackupAcceptedEnablePrompt, CloudBackupEnableContext, CloudBackupEnablePromptChoice,
+    CloudBackupNoticeKind, CloudBackupStateReducer,
 };
 use tracing::debug;
 
@@ -30,7 +31,7 @@ impl CloudBackupSupervisor {
         let record = self.begin_dispatch_record(&intent);
 
         let started = match self.admit(&manager, &intent) {
-            Admission::Accepted => self.start_admitted(manager, intent).await,
+            Admission::Accepted => self.start_and_attribute(manager, intent).await,
             Admission::Coalesced(_) | Admission::Rejected(_) => Produces::ok(()),
         };
 
@@ -63,6 +64,10 @@ impl CloudBackupSupervisor {
 
         self.last_outcome = Some(DispatchOutcome { intent: intent.clone(), admission });
 
+        if self.screen_outcome.admitted(intent, admission) {
+            manager.request_screen_publish();
+        }
+
         #[cfg(test)]
         {
             self.invariant_log.admissions += 1;
@@ -77,20 +82,16 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         intent: &UserIntent,
     ) -> Admission {
-        evaluate_admission(intent, &self.admission_snapshot(manager))
+        let inventory = manager.inventory_facts();
+        evaluate_admission(intent, &self.admission_snapshot(manager, &inventory))
     }
 
-    pub(crate) fn admission_snapshot(&self, manager: &RustCloudBackupManager) -> AdmissionSnapshot {
+    pub(crate) fn admission_snapshot(
+        &self,
+        manager: &RustCloudBackupManager,
+        inventory: &InventoryFacts,
+    ) -> AdmissionSnapshot {
         let body = self.runtime.admission_body();
-
-        let (detail_inventory, detail_checking) = {
-            let inventory = manager.inventory.read();
-            let checking =
-                matches!(inventory.detail_state(), CloudBackupDetailState::Checking { .. });
-
-            (inventory.readiness(), checking)
-        };
-
         let restore_all = match manager.projected_restore_all_state() {
             CloudBackupRestoreAllState::StartAvailable { .. } => {
                 RestoreAllAdmission::StartAvailable
@@ -106,8 +107,8 @@ impl CloudBackupSupervisor {
             body,
             running: self.runtime.claim().map(CloudBackupExclusiveOperationClaim::operation),
             sync_running: self.active_sync_request.is_some(),
-            detail_inventory,
-            detail_checking,
+            detail_inventory: inventory.readiness(),
+            detail_checking: inventory.checking(),
             other_backups_loaded: manager.other_backups_inventory_is_ready(),
             restore_all,
             continuation: self.paused_continuation(manager),
@@ -118,17 +119,37 @@ impl CloudBackupSupervisor {
 
     /// The paused Enable or reinitialize admission decides Confirm Saved Passkey and Discard on
     ///
-    /// The existing-backup prompt is a paused Enable that holds no material; the reducer still
-    /// holds that prompt until the screen projection owns it
+    /// An Enable waiting on one of its prompts, the existing-backup prompt or the passkey choice,
+    /// is a paused Enable that holds no material; the reducer still holds those prompts until the
+    /// screen projection owns them
     fn paused_continuation(&self, manager: &RustCloudBackupManager) -> Option<PausedContinuation> {
         if let Some(continuation) = &self.enable_continuation {
             return Some(continuation.paused());
         }
 
-        manager.state.read().shows_existing_backup_prompt().then_some(PausedContinuation {
+        manager.state.read().is_awaiting_enable_prompt().then_some(PausedContinuation {
             owner: ContinuationOwner::Enable,
-            stage: ContinuationStage::ExistingBackupPrompt,
+            stage: ContinuationStage::EnablePrompt,
         })
+    }
+
+    /// Starts an admitted intent, and remembers which control started the operation it claimed,
+    /// so a failure is drawn next to that control
+    async fn start_and_attribute(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        intent: UserIntent,
+    ) -> ActorResult<()> {
+        let before = self.runtime.claim();
+        let started = self.start_admitted(manager.clone(), intent.clone()).await;
+
+        if let Some(claim) = self.runtime.claim()
+            && Some(claim) != before
+        {
+            self.screen_outcome.started(claim, &intent);
+        }
+
+        started
     }
 
     /// Admits an intent that answers its caller, as a typed error on anything but `Accepted`
@@ -168,13 +189,13 @@ impl CloudBackupSupervisor {
                 self.confirm_saved_passkey().await?;
             }
             I::DiscardPendingEnable => {
-                // admitted with no continuation only for the existing-backup prompt, which holds
-                // no material, so clearing the prompt ends it
+                // admitted with no continuation only for an Enable waiting on one of its prompts,
+                // which holds no material, so clearing the prompt ends it
                 if let Some(continuation) = self.enable_continuation.take() {
                     self.discard_enable_continuation(continuation);
                 }
 
-                manager.clear_existing_backup_found_prompt();
+                manager.clear_enable_prompt();
             }
             I::ConfirmPendingEnableCleanup => {
                 self.confirm_pending_enable_cleanup().await?;
@@ -235,7 +256,11 @@ impl CloudBackupSupervisor {
             I::DismissNotice(CloudBackupNoticeKind::Heal) => {
                 self.runtime.commit(|lifecycle| manager.dismiss_heal_notice(lifecycle));
             }
-            I::DismissNotice(CloudBackupNoticeKind::LastOutcome) => manager.dismiss_last_outcome(),
+            I::DismissNotice(CloudBackupNoticeKind::LastOutcome) => {
+                if self.screen_outcome.dismiss() {
+                    manager.request_screen_publish();
+                }
+            }
             // Google Drive authorization runs through the detail verification, as it did before
             // it had its own intent
             I::ReconnectDrive => {
@@ -278,13 +303,38 @@ impl CloudBackupSupervisor {
             | I::LocalReset => {
                 warn!("Cloud Backup {intent:?} reached dispatch, which can't answer it");
             }
-            // admission rejects these until their flows exist
-            I::RetryLoad | I::ResetOnThisDevice => {
-                warn!("Cloud Backup admitted {intent:?}, which has no flow yet");
+            I::RetryLoad => self.retry_load(&manager),
+            // the reset fences the supervisor through calls to it, so it runs off this handler
+            I::ResetOnThisDevice => {
+                cove_tokio::task::spawn(async move {
+                    if let Err(error) = manager.reset_corrupted_on_this_device().await {
+                        send!(manager.supervisor.reset_on_this_device_failed(error));
+                    }
+                });
             }
         }
 
         Produces::ok(())
+    }
+
+    /// Loads the lifecycle record again after a failed load, as a launch would
+    ///
+    /// The record's other owners reconcile from it the way they do at launch, and a committed
+    /// Turn Off it reveals resumes as one would after a relaunch
+    fn retry_load(&mut self, manager: &RustCloudBackupManager) {
+        if let Err(error) = self.runtime.retry_load() {
+            warn!("Cloud Backup could not load its lifecycle record again: {error}");
+            let error = CloudBackupError::internal_context("load cloud backup lifecycle", error);
+            if self.screen_outcome.action_failed(CloudBackupScreenAction::RetryLoad, &error) {
+                manager.request_screen_publish();
+            }
+
+            return;
+        }
+
+        info!("Cloud Backup loaded its lifecycle record on retry");
+        manager.sync_persisted_state();
+        manager.resume_persisted_disable_if_needed();
     }
 }
 

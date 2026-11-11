@@ -959,7 +959,7 @@ async fn a_recorded_drive_account_switch_admits_only_its_retry_and_cancel() {
         spawn_actor(CloudBackupWriteSupervisor::new(Arc::downgrade(&manager))),
     );
 
-    let snapshot = supervisor.admission_snapshot(&manager);
+    let snapshot = supervisor.admission_snapshot(&manager, &manager.inventory_facts());
     let switch_holds = Admission::Rejected(Rejection::DriveAccountSwitch);
     assert_eq!(evaluate_admission(&UserIntent::TurnOff, &snapshot), switch_holds);
     assert_eq!(evaluate_admission(&UserIntent::SyncUnsynced, &snapshot), switch_holds);
@@ -2776,7 +2776,7 @@ async fn pending_enable_restart_projects_privacy_safe_recovery_lifecycle() {
             cleanup: CloudBackupPendingEnableCleanupState::Available,
         }) if support_code == "CB-PE-001"
     ));
-    assert_eq!(manager.model_state().settings_row_status, CloudBackupSettingsRowStatus::RecoveryRequired);
+    assert_eq!(supervisor.projected_screen(&manager).settings_row, CloudBackupSettingsRowStatus::RecoveryRequired);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -2801,7 +2801,7 @@ async fn pending_enable_recovery_survives_platform_persisted_state_sync() {
             cleanup: CloudBackupPendingEnableCleanupState::Available,
         }) if support_code == "CB-PE-001"
     ));
-    assert_eq!(manager.model_state().settings_row_status, CloudBackupSettingsRowStatus::RecoveryRequired);
+    assert_eq!(manager.published_screen().settings_row, CloudBackupSettingsRowStatus::RecoveryRequired);
 
     call!(manager.supervisor.confirm_pending_enable_cleanup()).await.unwrap();
 
@@ -3199,7 +3199,7 @@ async fn a_configuration_change_makes_the_turn_off_review_stale() {
     supervisor.runtime.set_turn_off_review(Some(TurnOffReview::Reviewing(review)));
     let confirm = UserIntent::ConfirmDisable { review_id };
     assert_eq!(
-        evaluate_admission(&confirm, &supervisor.admission_snapshot(&manager)),
+        evaluate_admission(&confirm, &supervisor.admission_snapshot(&manager, &manager.inventory_facts())),
         Admission::Accepted
     );
 
@@ -3212,7 +3212,7 @@ async fn a_configuration_change_makes_the_turn_off_review_stale() {
     assert_ne!(supervisor.runtime.generation(), generation);
     assert_eq!(supervisor.runtime.turn_off_review(), None);
     assert_eq!(
-        evaluate_admission(&confirm, &supervisor.admission_snapshot(&manager)),
+        evaluate_admission(&confirm, &supervisor.admission_snapshot(&manager, &manager.inventory_facts())),
         Admission::Rejected(Rejection::ReviewStale)
     );
 }
@@ -3242,7 +3242,7 @@ async fn an_operation_started_from_the_review_ends_it() {
 
     // while that operation runs, Turn Off waits for it instead of reviewing beside it
     assert!(matches!(
-        evaluate_admission(&UserIntent::TurnOff, &supervisor.admission_snapshot(&manager)),
+        evaluate_admission(&UserIntent::TurnOff, &supervisor.admission_snapshot(&manager, &manager.inventory_facts())),
         Admission::Rejected(Rejection::OperationRunning(_))
     ));
 
@@ -3250,7 +3250,7 @@ async fn an_operation_started_from_the_review_ends_it() {
 
     assert_eq!(supervisor.runtime.turn_off_review(), None);
     assert_eq!(
-        evaluate_admission(&UserIntent::TurnOff, &supervisor.admission_snapshot(&manager)),
+        evaluate_admission(&UserIntent::TurnOff, &supervisor.admission_snapshot(&manager, &manager.inventory_facts())),
         Admission::Accepted
     );
 }
@@ -3283,7 +3283,7 @@ async fn turn_off_drain_failure_before_commit_leaves_backup_configured() {
         PersistedCloudBackupState::Configured(_)
     ));
     assert_eq!(
-        manager.state.read().last_outcome().map(|last| last.outcome.clone()),
+        supervisor.projected_screen(&manager).last_outcome.map(|last| last.outcome),
         Some(CloudBackupOutcome::DisableNotStarted {
             reason: CloudBackupDisableNotStartedReason::WritesDidNotDrain,
         })
@@ -5186,7 +5186,7 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
     let verification_claim = supervisor.runtime.claim().unwrap();
 
     assert_eq!(manager.state.read().status(), CloudBackupStatus::Enabled);
-    assert_ne!(manager.model_state().settings_row_status, CloudBackupSettingsRowStatus::SettingUp);
+    assert_ne!(supervisor.projected_screen(manager).settings_row, CloudBackupSettingsRowStatus::SettingUp);
     assert_ne!(verification_claim, reinitialize_claim);
     assert_eq!(
         verification_claim.operation(),

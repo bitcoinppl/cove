@@ -15,7 +15,8 @@ use crate::database::Database;
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     enable_cloud_backup_without_reset, encrypted_wallet_backup_bytes_for_entry,
-    wallet_entry_with_labels, xpub_only_wallet_metadata,
+    seed_verifiable_cloud_master_key, test_globals, wallet_entry_with_labels,
+    xpub_only_wallet_metadata,
 };
 use crate::manager::cloud_backup_manager::owner::ui_test_legacy_record::legacy_stuck_record;
 use crate::manager::cloud_backup_manager::{
@@ -139,6 +140,13 @@ impl DistinctWallet {
     }
 }
 
+/// Replace the seeded account's placeholder master key backup with a real wrapper, and set up
+/// the passkey that opens it, so a verification reaches the passkey and can verify
+pub(crate) fn seed_verifiable_master_key(app: &TestApp) {
+    seed_verifiable_cloud_master_key(test_globals());
+    app.cloud.persist();
+}
+
 /// Persist the reporter's stuck record: a disable that never deleted anything
 pub(crate) fn seed_legacy_stuck_disabling(namespace: &str, started_at: u64) {
     let table = &Database::global().cloud_backup_state;
@@ -151,6 +159,14 @@ pub(crate) fn seed_legacy_stuck_disabling(namespace: &str, started_at: u64) {
     table
         .set(&legacy_stuck_record(previous_configured, namespace.to_string(), started_at))
         .expect("persist legacy disabling record");
+}
+
+/// Persist a lifecycle record that no longer decodes, as a damaged database leaves it
+pub(crate) fn seed_corrupted_record(error: &str) {
+    Database::global()
+        .cloud_backup_state
+        .set(&PersistedCloudBackupState::corrupted(error))
+        .expect("persist corrupted record");
 }
 
 /// Changes the first local wallet's backed-up metadata the way the wallet screens report it, and

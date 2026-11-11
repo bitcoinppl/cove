@@ -5,14 +5,11 @@ use crate::manager::cloud_backup_manager::owner::operation::OperationId;
 
 use crate::manager::cloud_backup_manager::{
     CloudBackupDriveAccountSwitchRecovery, CloudBackupEnableContext, CloudBackupEnableState,
-    CloudBackupHealNotice, CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint,
-    CloudBackupProgress, CloudBackupSettingsRowStatus, CloudBackupStatus,
-    CloudBackupUndecryptableWalletDeletionState, CloudBackupVerificationMetadata,
-    CloudBackupVerificationPresentation, PendingUploadVerificationState, RecoveryState, SyncState,
-    VerificationState,
+    CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyHint, CloudBackupProgress,
+    CloudBackupSettingsRowStatus, CloudBackupStatus, CloudBackupUndecryptableWalletDeletionState,
+    CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
+    PendingUploadVerificationState, RecoveryState, SyncState, VerificationState,
 };
-
-use crate::manager::cloud_backup_manager::screen::CloudBackupLastOutcome;
 
 use super::{CloudBackupLifecycle, CloudBackupPendingEnableRecovery, CloudBackupRestoreFlow};
 
@@ -135,7 +132,8 @@ pub(crate) enum CloudBackupStateReducerEvent {
         context: CloudBackupEnableContext,
         passkey_hint: Option<CloudBackupPasskeyHint>,
     },
-    ExistingBackupFoundPromptCleared,
+    /// Ends the prompt an Enable waits on, the existing-backup prompt or the passkey choice
+    EnablePromptCleared,
     PasskeyChoicePromptSet(CloudBackupPasskeyChoiceIntent),
     PasskeyChoicePromptCleared,
     MissingPasskeyPromptDismissed,
@@ -175,9 +173,6 @@ pub(crate) enum CloudBackupStateReducerEvent {
     VerificationStateResolved(VerificationState),
     SyncStateResolved(SyncState),
     RecoveryStateResolved(RecoveryState),
-    /// The last control that didn't do what it was asked; `None` dismisses it
-    LastOutcomeRecorded(Option<CloudBackupLastOutcome>),
-    HealNoticeReconciled(Option<CloudBackupHealNotice>),
     /// Rust and the platform disagree about a Google Drive account switch; `None` clears it
     DriveAccountSwitchRecoveryReported(Option<CloudBackupDriveAccountSwitchRecovery>),
     UndecryptableWalletDeletionStateResolved(CloudBackupUndecryptableWalletDeletionState),

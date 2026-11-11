@@ -12,15 +12,13 @@ use super::runtime::{ConfiguredBody, ConfiguredOp};
 use super::*;
 use crate::database::cloud_backup::CloudStorageIssue;
 use crate::manager::cloud_backup_manager::admission::TurnOffAdmission;
-use crate::manager::cloud_backup_manager::inventory::InventoryFacts;
 use crate::manager::cloud_backup_manager::ops::next_disable_generation;
 use crate::manager::cloud_backup_manager::owner::lifecycle::{
     CommitDisable, CommittedDisable, DisableCommitReview,
 };
 use crate::manager::cloud_backup_manager::screen::{
     CloudBackupDisableNotStartedReason, CloudBackupDisableScreen, CloudBackupFinishingDisableStage,
-    CloudBackupLastOutcome, CloudBackupOutcome, CloudBackupOutcomeTarget, CloudBackupRejection,
-    CloudBackupScreenAction, CloudBackupTurnOffFailure,
+    CloudBackupOutcome, CloudBackupRejection, CloudBackupScreenAction, CloudBackupTurnOffFailure,
 };
 use crate::manager::cloud_backup_manager::turn_off::{
     AutomaticResume, DisableEvidence, DisableImpact, DisableReview, EvidenceUnavailable,
@@ -36,7 +34,6 @@ impl CloudBackupSupervisor {
     pub(crate) fn begin_turn_off_review(&mut self, manager: Arc<RustCloudBackupManager>) {
         let review_id = ReviewId::next();
         self.runtime.set_turn_off_review(Some(TurnOffReview::Preparing { review_id }));
-        manager.clear_turn_off_outcome();
         self.addr.send_fut_with(move |addr| async move {
             let evidence = manager.gather_disable_evidence().await;
             send!(addr.complete_turn_off_review(review_id, evidence));
@@ -72,7 +69,7 @@ impl CloudBackupSupervisor {
             }
             Err(EvidenceUnavailable::Offline) => Some(TurnOffReview::Offline),
             Err(EvidenceUnavailable::Local(message)) => {
-                manager.record_turn_off_outcome(CloudBackupOutcome::Failed { message });
+                self.record_turn_off_outcome(&manager, CloudBackupOutcome::Failed { message });
                 None
             }
         };
@@ -283,7 +280,18 @@ impl CloudBackupSupervisor {
     ) {
         warn!("Cloud Backup Turn Off ended before it deleted anything: {outcome:?}");
         self.end_turn_off(manager, claim);
-        manager.record_turn_off_outcome(outcome);
+        self.record_turn_off_outcome(manager, outcome);
+    }
+
+    /// Shows how a Turn Off that never committed ended, next to the Turn Off control
+    fn record_turn_off_outcome(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        outcome: CloudBackupOutcome,
+    ) {
+        if self.screen_outcome.action_ended(CloudBackupScreenAction::TurnOff, outcome) {
+            manager.request_screen_publish();
+        }
     }
 
     /// A committed Turn Off resumes silently at launch, and on reconnect or a cloud change once
@@ -520,11 +528,7 @@ fn assess(manager: &RustCloudBackupManager, evidence: &DisableEvidence) -> Disab
 
 /// The inventory's facts a Turn Off impact reads, as they stand now
 pub(crate) fn impact_facts(manager: &RustCloudBackupManager) -> ImpactFacts {
-    // the reducer's lock is taken first, as every reader holding both does
-    let reducer = manager.state.read();
-    let inputs = InventoryFacts::new(&manager.inventory.read(), &reducer).view().impact_inputs();
-
-    ImpactFacts::from(inputs)
+    ImpactFacts::from(manager.inventory_facts().view().impact_inputs())
 }
 
 impl Runtime {
@@ -580,22 +584,6 @@ impl Runtime {
                 TurnOffAdmission::TryAgainFailed
             }
             _ => TurnOffAdmission::None,
-        }
-    }
-}
-
-impl RustCloudBackupManager {
-    /// Records how a Turn Off that never committed ended, next to the Turn Off control
-    pub(crate) fn record_turn_off_outcome(&self, outcome: CloudBackupOutcome) {
-        let target = CloudBackupOutcomeTarget::Action(CloudBackupScreenAction::TurnOff);
-        self.record_last_outcome(CloudBackupLastOutcome { target, outcome });
-    }
-
-    /// A new Turn Off replaces what the last one left next to the control
-    fn clear_turn_off_outcome(&self) {
-        let target = CloudBackupOutcomeTarget::Action(CloudBackupScreenAction::TurnOff);
-        if self.state.read().last_outcome().is_some_and(|last| last.target == target) {
-            self.dismiss_last_outcome();
         }
     }
 }

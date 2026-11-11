@@ -1,8 +1,8 @@
 //! The exported Cloud Backup screen: everything Swift and Kotlin draw, decided in Rust
 //!
-//! Platforms read only [`CloudBackupScreen`]. Which body and which sections are on screen, and
-//! whether each control is enabled, come from here; a platform never derives availability from
-//! the content these types carry
+//! Platforms read only [`CloudBackupScreen`]. Which body and which sections are on screen, which
+//! controls each section draws, and whether each control is enabled, come from here; a platform
+//! never derives a control's presence or availability from the content these types carry
 
 use cove_device::cloud_storage::CloudSyncHealth;
 
@@ -17,8 +17,9 @@ use crate::manager::cloud_backup_manager::{
 
 /// Everything the Cloud Backup UI draws, projected by Rust from the facts it owns
 ///
-/// `state()` returns the first one; every later change arrives as one [`CloudBackupScreenDelta`],
-/// which each platform applies with [`CloudBackupScreen::applying`] in a single assignment
+/// `state()` returns the one last published as a [`CloudBackupPublishedScreen`]; every later
+/// change arrives as one [`CloudBackupScreenDelta`], which each platform applies with
+/// [`CloudBackupPublishedScreen::applying`] in a single assignment
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CloudBackupScreen {
     pub body: CloudBackupScreenBody,
@@ -55,6 +56,9 @@ pub enum CloudBackupScreenBody {
 pub struct CloudBackupConfiguredScreen {
     /// In the order they are drawn; Turn Off is in every configured screen
     pub sections: Vec<CloudBackupSection>,
+    /// Android's top-bar menu, in the order it lists them; iOS has no menu, and every entry is an
+    /// Android-only action
+    pub menu: Vec<CloudBackupMenuControl>,
     pub last_sync: Option<u64>,
     pub sync_health: CloudSyncHealth,
     /// Turn Off's presentation state, which drives its dialogs
@@ -62,16 +66,21 @@ pub struct CloudBackupConfiguredScreen {
 }
 
 /// One section of the configured screen
+///
+/// Each section names the controls it draws: a section with a fixed control draws it by its kind,
+/// and every other section carries the list of its controls, so a platform draws exactly what the
+/// section names
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum CloudBackupSection {
-    /// Missing, unsupported or needs-repair passkey card, above the list
+    /// Missing, unsupported or needs-repair passkey card, above the list; draws the passkey repair
     PasskeyCard(CloudBackupPasskeyState),
     Progress(CloudBackupProgressSection),
-    Verification(CloudBackupVerificationView),
+    Verification(CloudBackupVerificationSection),
     Wallets(CloudBackupWalletsSection),
     NotOnDevice(CloudBackupNotOnDeviceSection),
     ExtraCopies(CloudBackupExtraCopiesSection),
     OtherBackups(CloudBackupOtherBackupsSection),
+    /// Draws Turn Off
     TurnOff,
 }
 
@@ -80,12 +89,25 @@ pub enum CloudBackupSection {
 pub enum CloudBackupProgressSection {
     /// The silent inventory is loading, inline above the rows it will fill
     InventoryChecking,
-    /// The inventory could not be confirmed complete; Check Again retries
+    /// The inventory could not be confirmed complete
     InventoryIncomplete {
         reason: CloudBackupInventoryIncompleteReason,
+        /// In the order they are drawn
+        controls: Vec<CloudBackupInventoryControl>,
     },
+    /// A running verification in place of the rows; it draws no control
     VerificationCard(CloudBackupVerificationView),
+    /// A running verification above the rows it will update; it draws no control
     VerificationInline(CloudBackupVerificationView),
+}
+
+/// A control the incomplete-inventory section draws
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupInventoryControl {
+    /// Check Again: a silent inventory refresh
+    CheckAgain,
+    /// Android only: Google Drive needs authorizing before the inventory can load
+    ReconnectDrive,
 }
 
 /// Verification status and the recovery work that hangs off it
@@ -94,6 +116,49 @@ pub struct CloudBackupVerificationView {
     pub state: CloudBackupVerificationState,
     pub presentation: CloudBackupVerificationPresentation,
     pub recovery: CloudBackupRecoveryOperation,
+}
+
+/// The verification section: the verification Rust reports and the controls drawn with it
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CloudBackupVerificationSection {
+    pub view: CloudBackupVerificationView,
+    /// In the order they are drawn; empty while verification runs, while an upload waits to be
+    /// confirmed with nothing to act on, and for a backup only a newer Cove can read
+    pub controls: Vec<CloudBackupVerificationControl>,
+}
+
+/// A control the verification section draws
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupVerificationControl {
+    /// Verify Now, Verify Again, or Try Again after a failure another verification can fix
+    Verify,
+    /// The rebuild a failed verification names as the only way to recover the backup
+    Recover { kind: CloudBackupRecoveryKind },
+    /// Deletes the wallet backups the verified key couldn't decrypt, drawn on the issue that
+    /// counts them
+    DeleteUnreadableBackups,
+    /// Try Again on a latest upload Cove couldn't confirm
+    RetryUpload,
+    /// Android only: the latest upload waits on Google Drive access
+    ReconnectDrive,
+}
+
+/// Which rebuild recovers a backup that verification can't use
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupRecoveryKind {
+    /// The index is missing and the master key is intact: rebuild the index from this device
+    RecreateManifest,
+    /// No verified master key is left: replace the backup with this device's wallets
+    ReinitializeBackup,
+}
+
+/// An entry in Android's top-bar menu
+///
+/// The rebuilds are not here: a rebuild is offered only as the recovery a failed verification
+/// names, on both platforms
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupMenuControl {
+    SwitchDriveAccount,
 }
 
 /// A manifest or backup rebuild in progress
@@ -110,6 +175,15 @@ pub struct CloudBackupWalletsSection {
     pub up_to_date: Vec<CloudBackupOwnRow>,
     pub needs_sync: Vec<CloudBackupOwnRow>,
     pub sync: CloudBackupSyncState,
+    /// In the order they are drawn
+    pub controls: Vec<CloudBackupWalletsControl>,
+}
+
+/// A control the wallets section draws
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupWalletsControl {
+    /// Uploads the wallets that need sync, under the list of them
+    SyncNow,
 }
 
 /// A local wallet and its own cloud record
@@ -197,6 +271,17 @@ pub enum CloudBackupKeyTrust {
 pub struct CloudBackupOtherBackupsSection {
     pub state: CloudBackupOtherBackupsState,
     pub operation: OtherBackupsOperation,
+    /// In the order they are drawn
+    pub controls: Vec<CloudBackupOtherBackupsControl>,
+}
+
+/// A control the other-backups section draws
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupOtherBackupsControl {
+    Recover,
+    Delete,
+    /// Checks for other backups again after a check that failed
+    CheckAgain,
 }
 
 /// Turn Off's presentation state inside a configured backup
@@ -411,9 +496,41 @@ pub enum CloudBackupOperationKind {
 }
 
 /// The screen's global actions; a missing action has no control on this screen
+///
+/// Derived from the controls the body and its sections name
+/// ([`CloudBackupScreen::drawn_controls`]), one entry for each action however many surfaces draw
+/// it; a platform reads an action's availability here and draws it where the shape names it
 #[derive(Debug, Clone, PartialEq, Eq, Default, uniffi::Record)]
 pub struct CloudBackupActions {
     pub entries: Vec<CloudBackupActionEntry>,
+}
+
+/// Where on screen a control is drawn
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Enum)]
+pub enum CloudBackupControlSurface {
+    /// The content of a body other than a configured backup, whose exits it draws
+    Body,
+    HealNotice,
+    PasskeyCard,
+    InventoryIncomplete,
+    Verification,
+    Wallets,
+    NotOnDevice,
+    OtherBackups,
+    TurnOff,
+    /// The Turn Off dialogs, while a review or the work before it is open
+    TurnOffDialogs,
+    /// Android's top-bar menu
+    Menu,
+    /// The prompt over the screen: the Enable, passkey and verification prompts' choices
+    RootPrompt,
+}
+
+/// One control the screen's shape draws, and where
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, uniffi::Record)]
+pub struct CloudBackupDrawnControl {
+    pub action: CloudBackupScreenAction,
+    pub surface: CloudBackupControlSurface,
 }
 
 /// One global action and whether it can run now
@@ -547,12 +664,29 @@ pub enum CloudBackupDeleteConfirmation {
     MayBeOnlyCopy,
 }
 
+/// A screen as it was published, with the revision that orders it against every delta
+///
+/// The platform starts from the one `state()` returns and advances it only with
+/// [`CloudBackupPublishedScreen::applying`]. Deltas sent before that snapshot was read can
+/// still be queued for the platform; the revision is how they are told apart from the ones
+/// that come after it
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CloudBackupPublishedScreen {
+    /// How many deltas the manager had published when this screen was current; the screen
+    /// before anything is loaded is revision 0
+    pub revision: u64,
+    pub screen: CloudBackupScreen,
+}
+
 /// A change to the screen, with only the parts that changed
 ///
-/// Each platform applies it with [`CloudBackupScreen::applying`] in one state assignment, so no
-/// frame shows a half-applied update
-#[derive(Debug, Clone, PartialEq, Eq, Default, uniffi::Record)]
+/// Each platform applies it with [`CloudBackupPublishedScreen::applying`] in one state
+/// assignment, so no frame shows a half-applied update
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct CloudBackupScreenDelta {
+    /// The revision of the screen this delta publishes; it changes the screen published at the
+    /// revision before it
+    pub revision: u64,
     pub body: Option<CloudBackupScreenBody>,
     pub settings_row: Option<CloudBackupSettingsRowStatus>,
     pub heal_notice: Option<CloudBackupHealNoticeUpdate>,

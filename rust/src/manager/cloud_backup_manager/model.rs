@@ -6,12 +6,11 @@
 
 use super::{
     CloudBackupDetail, CloudBackupDriveAccountSwitchRecovery, CloudBackupEnableContext,
-    CloudBackupEnablePromptChoice, CloudBackupError, CloudBackupHealNotice,
-    CloudBackupInventoryAuthority, CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt,
-    CloudBackupSettingsRowStatus, CloudBackupVerificationMetadata,
-    CloudBackupVerificationPresentation, CloudBackupVerificationReason, DeepVerificationReport,
-    PendingUploadVerificationState, RecoveryAction, RecoveryState, SyncState, VerificationState,
-    is_connectivity_related_issue, screen::CloudBackupLastOutcome,
+    CloudBackupEnablePromptChoice, CloudBackupError, CloudBackupInventoryAuthority,
+    CloudBackupPasskeyChoiceIntent, CloudBackupRootPrompt, CloudBackupSettingsRowStatus,
+    CloudBackupVerificationMetadata, CloudBackupVerificationPresentation,
+    CloudBackupVerificationReason, DeepVerificationReport, PendingUploadVerificationState,
+    RecoveryAction, RecoveryState, SyncState, VerificationState, is_connectivity_related_issue,
 };
 
 use super::verify::coordinator::CloudBackupVerificationCoordinator;
@@ -191,10 +190,6 @@ struct CloudBackupReducerState {
     should_prompt_verification: bool,
     verification_metadata: CloudBackupVerificationMetadata,
     verification_presentation: CloudBackupVerificationPresentation,
-    /// The persisted heal notice, mirrored for the screen until the owner projects it
-    heal_notice: Option<CloudBackupHealNotice>,
-    /// The last control that didn't do what it was asked, until it is dismissed or replaced
-    last_outcome: Option<CloudBackupLastOutcome>,
     /// A Google Drive account switch Rust and the platform disagree on, until it is retried
     drive_account_switch_recovery: Option<CloudBackupDriveAccountSwitchRecovery>,
 }
@@ -239,8 +234,6 @@ impl Default for CloudBackupReducerState {
             should_prompt_verification: false,
             verification_metadata: CloudBackupVerificationMetadata::NotConfigured,
             verification_presentation: CloudBackupVerificationPresentation::Hidden { source: None },
-            heal_notice: None,
-            last_outcome: None,
             drive_account_switch_recovery: None,
         }
     }
@@ -262,10 +255,7 @@ impl Default for CloudBackupConfiguredReducerState {
 
 impl CloudBackupReducerState {
     fn public_state(&self) -> super::CloudBackupState {
-        super::CloudBackupState {
-            lifecycle: self.public_lifecycle(),
-            settings_row_status: self.settings_row_status(),
-        }
+        super::CloudBackupState { lifecycle: self.public_lifecycle() }
     }
 
     fn public_lifecycle(&self) -> CloudBackupLifecycle {
@@ -358,6 +348,19 @@ impl CloudBackupReducerState {
             | CloudBackupVerificationMetadata::NeedsAttention { .. }
             | CloudBackupVerificationMetadata::NeedsVerification => None,
         }
+    }
+
+    fn is_awaiting_enable_prompt(&self) -> bool {
+        matches!(
+            self.phase,
+            CloudBackupLifecyclePhase::Enabling(
+                CloudBackupEnableFlow::AwaitingForceNewConfirmation(_, _)
+                    | CloudBackupEnableFlow::AwaitingPasskeyChoice(
+                        CloudBackupPasskeyChoiceIntent::Enable(_, _)
+                            | CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(_, _)
+                    )
+            )
+        )
     }
 
     fn root_prompt(&self) -> CloudBackupRootPrompt {
@@ -552,6 +555,24 @@ impl CloudBackupReducerState {
             CloudBackupStatus::Enabled => {}
         }
 
+        self.configured_sync_row()
+    }
+
+    /// The row a configured backup shows: a passkey that needs the user first, then the
+    /// verification and sync health
+    fn configured_settings_row(&self) -> CloudBackupSettingsRowStatus {
+        match &self.configured.passkey {
+            CloudBackupPasskeyState::Missing | CloudBackupPasskeyState::NeedsRepair { .. } => {
+                CloudBackupSettingsRowStatus::PasskeyMissing
+            }
+            CloudBackupPasskeyState::UnsupportedProvider => {
+                CloudBackupSettingsRowStatus::PasskeyProviderUnsupported
+            }
+            CloudBackupPasskeyState::Available => self.configured_sync_row(),
+        }
+    }
+
+    fn configured_sync_row(&self) -> CloudBackupSettingsRowStatus {
         if !matches!(
             self.configured.pending_upload_verification,
             PendingUploadVerificationState::Idle
@@ -1152,16 +1173,6 @@ impl CloudBackupStateReducer {
         self.state.enable_prompt_answer(choice)
     }
 
-    /// Whether Enable stopped at the prompt that asks whether to replace an existing backup
-    pub(crate) fn shows_existing_backup_prompt(&self) -> bool {
-        matches!(
-            self.state.phase,
-            CloudBackupLifecyclePhase::Enabling(
-                CloudBackupEnableFlow::AwaitingForceNewConfirmation(..)
-            )
-        )
-    }
-
     /// The recovery the lifecycle shows, as the supervisor last projected it
     pub(crate) fn projected_pending_enable_recovery(
         &self,
@@ -1185,12 +1196,38 @@ impl CloudBackupStateReducer {
         &self.state.restore_all
     }
 
-    pub(crate) fn heal_notice(&self) -> Option<CloudBackupHealNotice> {
-        self.state.heal_notice
+    /// The prompt over the root screen: a paused Enable's question, or a configured reminder
+    pub(crate) fn root_prompt(&self) -> CloudBackupRootPrompt {
+        self.state.root_prompt()
     }
 
-    pub(crate) fn last_outcome(&self) -> Option<&CloudBackupLastOutcome> {
-        self.state.last_outcome.as_ref()
+    /// The Enable flow the reducer shows, if it shows one
+    pub(crate) fn enable_flow(&self) -> Option<&CloudBackupEnableFlow> {
+        match &self.state.phase {
+            CloudBackupLifecyclePhase::Enabling(flow) => Some(flow),
+            _ => None,
+        }
+    }
+
+    /// The restore progress the reducer shows, if it shows one
+    pub(crate) fn restore_flow(&self) -> Option<&CloudBackupRestoreFlow> {
+        match &self.state.phase {
+            CloudBackupLifecyclePhase::Restoring(flow) => Some(flow),
+            _ => None,
+        }
+    }
+
+    /// The configured presentation: passkey, verification, sync and the section content
+    ///
+    /// Read whatever the reducer's own phase says, since the supervisor's runtime decides whether
+    /// the backup is configured; the reducer only holds what a configured screen draws
+    pub(crate) fn configured_presentation(&self) -> CloudBackupConfiguredState {
+        self.state.public_configured_state()
+    }
+
+    /// The Settings row of a configured backup, from its passkey, verification and sync health
+    pub(crate) fn configured_settings_row(&self) -> CloudBackupSettingsRowStatus {
+        self.state.configured_settings_row()
     }
 
     pub(crate) fn drive_account_switch_recovery(
@@ -1203,17 +1240,10 @@ impl CloudBackupStateReducer {
         self.state.active_operation()
     }
 
+    /// Whether Enable stopped at one of its prompts, the existing-backup prompt or the passkey
+    /// choice, and waits on the user's answer with nothing held
     pub(crate) fn is_awaiting_enable_prompt(&self) -> bool {
-        matches!(
-            self.state.phase,
-            CloudBackupLifecyclePhase::Enabling(
-                CloudBackupEnableFlow::AwaitingForceNewConfirmation(_, _)
-                    | CloudBackupEnableFlow::AwaitingPasskeyChoice(
-                        CloudBackupPasskeyChoiceIntent::Enable(_, _)
-                            | CloudBackupPasskeyChoiceIntent::EnableExistingPasskeyOnly(_, _)
-                    )
-            )
-        )
+        self.state.is_awaiting_enable_prompt()
     }
 
     pub(crate) fn apply_event(
@@ -1269,13 +1299,8 @@ impl CloudBackupStateReducer {
                     CloudBackupEnableFlow::AwaitingForceNewConfirmation(context, passkey_hint),
                 );
             }
-            CloudBackupStateReducerEvent::ExistingBackupFoundPromptCleared => {
-                if matches!(
-                    self.state.phase,
-                    CloudBackupLifecyclePhase::Enabling(
-                        CloudBackupEnableFlow::AwaitingForceNewConfirmation(_, _)
-                    )
-                ) {
+            CloudBackupStateReducerEvent::EnablePromptCleared => {
+                if self.state.is_awaiting_enable_prompt() {
                     self.state.active_enable_context = None;
                     self.state.phase = CloudBackupLifecyclePhase::Disabled;
                 }
@@ -1400,12 +1425,6 @@ impl CloudBackupStateReducer {
             }
             CloudBackupStateReducerEvent::RecoveryStateResolved(recovery) => {
                 self.state.resolve_recovery(recovery);
-            }
-            CloudBackupStateReducerEvent::LastOutcomeRecorded(outcome) => {
-                self.state.last_outcome = outcome;
-            }
-            CloudBackupStateReducerEvent::HealNoticeReconciled(notice) => {
-                self.state.heal_notice = notice;
             }
             CloudBackupStateReducerEvent::DriveAccountSwitchRecoveryReported(recovery) => {
                 self.state.drive_account_switch_recovery = recovery;

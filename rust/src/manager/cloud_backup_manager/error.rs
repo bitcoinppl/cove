@@ -87,6 +87,7 @@ impl From<crate::manager::cloud_backup_manager::admission::Rejection>
                 Self::InvalidTransition
             }
             R::LoadFailed => Self::Internal("cloud backup lifecycle record failed to load".into()),
+            R::Corrupted => Self::Internal("cloud backup lifecycle record is corrupted".into()),
             // a committed Turn Off is still finishing, so the platform retries later
             R::TurnOffCommitted
             | R::OperationRunning(_)
@@ -512,6 +513,11 @@ impl CloudBackupError {
             Self::CloudStorage(source) => Self::cloud_storage_context(context, source),
             error => error,
         }
+    }
+
+    /// The user didn't finish a passkey request; nothing changed and nothing is wrong
+    pub(crate) fn is_passkey_not_completed(&self) -> bool {
+        matches!(self, Self::Passkey(error) if matches!(error.passkey_error(), Some(PasskeyError::NotCompleted)))
     }
 
     pub(crate) fn is_cloud_error(&self) -> bool {

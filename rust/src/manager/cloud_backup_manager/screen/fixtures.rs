@@ -28,21 +28,27 @@ mod debug {
         CloudBackupDriveAccountSwitchRecovery, CloudBackupDriveAccountSwitchScreen,
         CloudBackupExtraCopiesSection, CloudBackupFinishingDisableScreen,
         CloudBackupFinishingDisableStage, CloudBackupHealNotice, CloudBackupInventoryAssessment,
-        CloudBackupListedRecord, CloudBackupListedRow, CloudBackupNamedCount,
-        CloudBackupNotOnDeviceSection, CloudBackupOperationKind, CloudBackupOwnRecord,
-        CloudBackupOwnRow, CloudBackupRecoveryOperation, CloudBackupRejection,
+        CloudBackupInventoryControl, CloudBackupListedRecord, CloudBackupListedRow,
+        CloudBackupMenuControl, CloudBackupNamedCount, CloudBackupNotOnDeviceSection,
+        CloudBackupOperationKind, CloudBackupOtherBackupsControl, CloudBackupOtherBackupsSection,
+        CloudBackupOwnRecord, CloudBackupOwnRow, CloudBackupProgressSection,
+        CloudBackupRecoveryKind, CloudBackupRecoveryOperation, CloudBackupRejection,
         CloudBackupRowAction, CloudBackupRowActionKind, CloudBackupScreen, CloudBackupScreenAction,
         CloudBackupScreenBody, CloudBackupScreenFixture, CloudBackupSection,
-        CloudBackupTurnOffFailure, CloudBackupVerificationView, CloudBackupWalletsSection,
+        CloudBackupTurnOffFailure, CloudBackupVerificationControl, CloudBackupVerificationSection,
+        CloudBackupVerificationView, CloudBackupWalletsControl, CloudBackupWalletsSection,
     };
+    use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
     use crate::manager::cloud_backup_manager::{
-        CloudBackupEnableContext, CloudBackupEnableFlow, CloudBackupInventoryIncompleteReason,
-        CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyState,
+        CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupEnableContext, CloudBackupEnableFlow,
+        CloudBackupInventoryIncompleteReason, CloudBackupOtherBackupsState,
+        CloudBackupOtherBackupsSummary, CloudBackupPasskeyChoiceIntent, CloudBackupPasskeyState,
         CloudBackupPendingEnableCleanupState, CloudBackupPendingEnableRecovery,
         CloudBackupRestoreAllState, CloudBackupRestoreFlow, CloudBackupRootPrompt,
         CloudBackupSettingsRowStatus, CloudBackupSyncState, CloudBackupVerificationPresentation,
         CloudBackupVerificationState, CloudBackupWalletItem, CloudBackupWalletStatus,
-        CloudOnlyOperation, RecordId,
+        CloudBackupWalletVerificationIssues, CloudOnlyOperation, DeepVerificationFailure,
+        DeepVerificationReport, OtherBackupsOperation, RecordId,
     };
 
     /// Prefixes every fixture name; the release-seam check looks for it
@@ -60,9 +66,19 @@ mod debug {
             fixture("enabling-passkey-choice-existing-only", passkey_choice_existing_only()),
             fixture("restoring", restoring()),
             fixture("configured", configured(CloudBackupDisableScreen::Idle, None)),
+            fixture("configured-clean", clean()),
+            fixture("configured-empty-inventory", empty_inventory()),
             fixture("configured-passkey-missing", passkey_missing()),
             fixture("configured-verification-prompt", verification_prompt()),
             fixture("configured-verification-prompt-busy", verification_prompt_busy()),
+            fixture("configured-verification-unsupported-version", unsupported_version()),
+            fixture("configured-verification-recreate-manifest", recreate_manifest()),
+            fixture("configured-verification-reinitialize-backup", reinitialize_backup()),
+            fixture("configured-needs-attention-undecryptable", undecryptable()),
+            fixture("configured-inventory-incomplete", inventory_incomplete()),
+            fixture("configured-other-backups", other_backups()),
+            fixture("configured-other-backups-check-failed", other_backups_check_failed()),
+            fixture("configured-verifying-inventory-incomplete", verifying_inventory_incomplete()),
             fixture("configured-operation-running", operation_running()),
             fixture("configured-heal-notice", heal_notice()),
             fixture("configured-rows-held", rows_held()),
@@ -70,6 +86,10 @@ mod debug {
             fixture("configured-extra-copy-gone", extra_copy_gone()),
             fixture("turn-off-review", turn_off_review()),
             fixture("finishing-disable", finishing_disable()),
+            fixture(
+                "finishing-disable-authorization-required",
+                finishing_disable_authorization_required(),
+            ),
             fixture("drive-account-switch", drive_account_switch()),
             fixture("pending-enable-recovery", pending_enable_recovery()),
             fixture("load-failed", load_failed()),
@@ -210,16 +230,7 @@ mod debug {
     }
 
     fn configured_actions() -> Vec<CloudBackupScreenAction> {
-        vec![
-            A::Verify,
-            A::SyncUnsynced,
-            A::RefreshDetail,
-            A::RecreateManifest,
-            A::ReinitializeBackup,
-            A::SwitchDriveAccount,
-            A::TurnOff,
-            A::StartRestoreAll,
-        ]
+        vec![A::Verify, A::SyncUnsynced, A::SwitchDriveAccount, A::TurnOff, A::StartRestoreAll]
     }
 
     fn configured_sections(passkey: CloudBackupPasskeyState) -> Vec<CloudBackupSection> {
@@ -229,14 +240,13 @@ mod debug {
         }
 
         sections.extend([
-            CloudBackupSection::Verification(CloudBackupVerificationView {
-                state: CloudBackupVerificationState::Verified {
+            verification_section(
+                CloudBackupVerificationState::Verified {
                     report: None,
                     last_verified_at: Some(VERIFIED_AT),
                 },
-                presentation: CloudBackupVerificationPresentation::Hidden { source: None },
-                recovery: CloudBackupRecoveryOperation::Idle,
-            }),
+                vec![CloudBackupVerificationControl::Verify],
+            ),
             CloudBackupSection::Wallets(CloudBackupWalletsSection {
                 up_to_date: vec![CloudBackupOwnRow {
                     wallet: wallet(
@@ -251,6 +261,7 @@ mod debug {
                     record: CloudBackupOwnRecord::Pending,
                 }],
                 sync: CloudBackupSyncState::Idle,
+                controls: vec![CloudBackupWalletsControl::SyncNow],
             }),
             CloudBackupSection::NotOnDevice(CloudBackupNotOnDeviceSection {
                 rows: vec![
@@ -273,7 +284,7 @@ mod debug {
                     row(
                         "record-unchecked",
                         CloudBackupListedRecord::Unchecked,
-                        vec![CloudBackupRowActionKind::CheckAgain],
+                        vec![CloudBackupRowActionKind::Verify],
                     ),
                 ],
                 restore_all: CloudBackupRestoreAllState::StartAvailable { wallet_count: 1 },
@@ -301,16 +312,248 @@ mod debug {
         sections
     }
 
+    fn verification_section(
+        state: CloudBackupVerificationState,
+        controls: Vec<CloudBackupVerificationControl>,
+    ) -> CloudBackupSection {
+        CloudBackupSection::Verification(CloudBackupVerificationSection {
+            view: CloudBackupVerificationView {
+                state,
+                presentation: CloudBackupVerificationPresentation::Hidden { source: None },
+                recovery: CloudBackupRecoveryOperation::Idle,
+            },
+            controls,
+        })
+    }
+
+    /// Android's menu, which every configured screen has
+    fn menu() -> Vec<CloudBackupMenuControl> {
+        vec![CloudBackupMenuControl::SwitchDriveAccount]
+    }
+
+    fn configured_screen(sections: Vec<CloudBackupSection>) -> CloudBackupScreenBody {
+        CloudBackupScreenBody::Configured(CloudBackupConfiguredScreen {
+            sections,
+            menu: menu(),
+            last_sync: Some(VERIFIED_AT),
+            sync_health: CloudSyncHealth::AllUploaded,
+            disable: CloudBackupDisableScreen::Idle,
+        })
+    }
+
     fn configured_body(
         passkey: CloudBackupPasskeyState,
         disable: CloudBackupDisableScreen,
     ) -> CloudBackupScreenBody {
         CloudBackupScreenBody::Configured(CloudBackupConfiguredScreen {
             sections: configured_sections(passkey),
+            menu: menu(),
             last_sync: Some(VERIFIED_AT),
             sync_health: CloudSyncHealth::AllUploaded,
             disable,
         })
+    }
+
+    /// The actions of a configured screen with Turn Off, Android's account switch and `extra`
+    fn minimal_actions(extra: &[CloudBackupScreenAction]) -> CloudBackupActions {
+        let mut actions = vec![A::SwitchDriveAccount, A::TurnOff];
+        actions.extend(extra);
+        available(&actions)
+    }
+
+    /// A verified backup whose wallets are all up to date and that holds nothing else: Verify
+    /// Again and Turn Off, with no Sync Now and no rebuild
+    fn clean() -> CloudBackupScreen {
+        let sections = vec![
+            verification_section(
+                CloudBackupVerificationState::Verified {
+                    report: None,
+                    last_verified_at: Some(VERIFIED_AT),
+                },
+                vec![CloudBackupVerificationControl::Verify],
+            ),
+            CloudBackupSection::Wallets(CloudBackupWalletsSection {
+                up_to_date: vec![CloudBackupOwnRow {
+                    wallet: wallet(
+                        "Spending",
+                        "record-spending",
+                        CloudBackupWalletStatus::Confirmed,
+                    ),
+                    record: CloudBackupOwnRecord::Current,
+                }],
+                needs_sync: Vec::new(),
+                sync: CloudBackupSyncState::Idle,
+                controls: Vec::new(),
+            }),
+            CloudBackupSection::TurnOff,
+        ];
+
+        screen(
+            configured_screen(sections),
+            CloudBackupSettingsRowStatus::Active,
+            minimal_actions(&[A::Verify]),
+        )
+    }
+
+    /// A loaded inventory with no wallets in it: no rows, so nothing to sync
+    fn empty_inventory() -> CloudBackupScreen {
+        let sections = vec![
+            verification_section(
+                CloudBackupVerificationState::NotVerified,
+                vec![CloudBackupVerificationControl::Verify],
+            ),
+            CloudBackupSection::Wallets(CloudBackupWalletsSection {
+                up_to_date: Vec::new(),
+                needs_sync: Vec::new(),
+                sync: CloudBackupSyncState::Idle,
+                controls: Vec::new(),
+            }),
+            CloudBackupSection::TurnOff,
+        ];
+
+        screen(
+            configured_screen(sections),
+            CloudBackupSettingsRowStatus::Active,
+            minimal_actions(&[A::Verify]),
+        )
+    }
+
+    /// A backup only a newer Cove can read: the failure says to update, and nothing on the
+    /// card can fix it, so it draws no Verify
+    fn unsupported_version() -> CloudBackupScreen {
+        let failure = DeepVerificationFailure::UnsupportedVersion {
+            message: "This backup was made by a newer version of Cove".into(),
+            detail: None,
+        };
+        let sections = vec![
+            verification_section(CloudBackupVerificationState::Failed(failure), Vec::new()),
+            CloudBackupSection::TurnOff,
+        ];
+
+        screen(
+            configured_screen(sections),
+            CloudBackupSettingsRowStatus::Active,
+            minimal_actions(&[]),
+        )
+    }
+
+    /// A failed verification whose only recovery is `kind`, drawn on its failure card
+    fn recovery(kind: CloudBackupRecoveryKind) -> CloudBackupScreen {
+        let message = "Cove couldn't use the cloud backup".to_string();
+        let warning =
+            "This replaces what is in the cloud with the wallets on this device".to_string();
+        let failure = match kind {
+            CloudBackupRecoveryKind::RecreateManifest => {
+                DeepVerificationFailure::RecreateManifest { message, warning, detail: None }
+            }
+            CloudBackupRecoveryKind::ReinitializeBackup => {
+                DeepVerificationFailure::ReinitializeBackup { message, warning, detail: None }
+            }
+        };
+        let sections = vec![
+            verification_section(
+                CloudBackupVerificationState::Failed(failure),
+                vec![CloudBackupVerificationControl::Recover { kind }],
+            ),
+            CloudBackupSection::TurnOff,
+        ];
+
+        screen(
+            configured_screen(sections),
+            CloudBackupSettingsRowStatus::Active,
+            minimal_actions(&[kind.action()]),
+        )
+    }
+
+    fn recreate_manifest() -> CloudBackupScreen {
+        recovery(CloudBackupRecoveryKind::RecreateManifest)
+    }
+
+    fn reinitialize_backup() -> CloudBackupScreen {
+        recovery(CloudBackupRecoveryKind::ReinitializeBackup)
+    }
+
+    /// A verification that found wallet backups the verified key can't decrypt: the issue that
+    /// counts them offers to delete them, above Verify Again
+    fn undecryptable() -> CloudBackupScreen {
+        let report = DeepVerificationReport {
+            master_key_wrapper_repaired: false,
+            local_master_key_repaired: false,
+            credential_recovered: false,
+            wallets_verified: 1,
+            wallet_issues: CloudBackupWalletVerificationIssues {
+                decryption_failed: 2,
+                ..CloudBackupWalletVerificationIssues::default()
+            },
+            detail: None,
+        };
+        let sections = vec![
+            verification_section(
+                CloudBackupVerificationState::NeedsAttention {
+                    report,
+                    checked_at: Some(VERIFIED_AT),
+                },
+                vec![
+                    CloudBackupVerificationControl::DeleteUnreadableBackups,
+                    CloudBackupVerificationControl::Verify,
+                ],
+            ),
+            CloudBackupSection::TurnOff,
+        ];
+
+        let actions = minimal_actions(&[A::DeleteUnreadableBackups, A::Verify]);
+        screen(configured_screen(sections), CloudBackupSettingsRowStatus::Active, actions)
+    }
+
+    /// Backups made with another passkey: Try Another Passkey and Delete These Backups
+    fn other_backups() -> CloudBackupScreen {
+        let summary = CloudBackupOtherBackupsSummary {
+            namespace_count: 1,
+            wallet_count: 2,
+            passkey_hints: Vec::new(),
+        };
+        let section = other_backups_section(
+            CloudBackupOtherBackupsState::Loaded { summary },
+            vec![CloudBackupOtherBackupsControl::Recover, CloudBackupOtherBackupsControl::Delete],
+        );
+
+        let actions = minimal_actions(&[A::Verify, A::RecoverOtherBackups, A::DeleteOtherBackups]);
+        screen(configured_screen(section), CloudBackupSettingsRowStatus::Active, actions)
+    }
+
+    /// A check for other backups that failed, with Check Again on its section
+    fn other_backups_check_failed() -> CloudBackupScreen {
+        let section = other_backups_section(
+            CloudBackupOtherBackupsState::LoadFailed {
+                reason: CloudBackupInventoryIncompleteReason::Offline,
+            },
+            vec![CloudBackupOtherBackupsControl::CheckAgain],
+        );
+
+        let actions = minimal_actions(&[A::Verify, A::RefreshDetail]);
+        screen(configured_screen(section), CloudBackupSettingsRowStatus::Active, actions)
+    }
+
+    /// A verified backup's sections with an other-backups section in `state`
+    fn other_backups_section(
+        state: CloudBackupOtherBackupsState,
+        controls: Vec<CloudBackupOtherBackupsControl>,
+    ) -> Vec<CloudBackupSection> {
+        vec![
+            verification_section(
+                CloudBackupVerificationState::Verified {
+                    report: None,
+                    last_verified_at: Some(VERIFIED_AT),
+                },
+                vec![CloudBackupVerificationControl::Verify],
+            ),
+            CloudBackupSection::OtherBackups(CloudBackupOtherBackupsSection {
+                state,
+                operation: OtherBackupsOperation::Idle,
+                controls,
+            }),
+            CloudBackupSection::TurnOff,
+        ]
     }
 
     fn configured(
@@ -442,6 +685,22 @@ mod debug {
             .collect()
     }
 
+    /// The inventory check failed, so its section offers Check Again above the rows it kept
+    fn inventory_incomplete() -> CloudBackupScreen {
+        let mut screen = configured(CloudBackupDisableScreen::Idle, Some(&[A::RefreshDetail]));
+        if let CloudBackupScreenBody::Configured(configured) = &mut screen.body {
+            configured.sections.insert(
+                0,
+                CloudBackupSection::Progress(CloudBackupProgressSection::InventoryIncomplete {
+                    reason: CloudBackupInventoryIncompleteReason::ProviderSyncPending,
+                    controls: vec![CloudBackupInventoryControl::CheckAgain],
+                }),
+            );
+        }
+
+        screen
+    }
+
     fn operation_running() -> CloudBackupScreen {
         let running = CloudBackupActionAvailability::Unavailable {
             reason: CloudBackupRejection::OperationRunning {
@@ -454,7 +713,7 @@ mod debug {
             .map(|action| CloudBackupActionEntry {
                 action,
                 availability: match action {
-                    A::SyncUnsynced | A::RefreshDetail => CloudBackupActionAvailability::Available,
+                    A::SyncUnsynced => CloudBackupActionAvailability::Available,
                     _ => running,
                 },
             })
@@ -465,6 +724,36 @@ mod debug {
             CloudBackupSettingsRowStatus::Active,
             CloudBackupActions { entries },
         )
+    }
+
+    /// Verify runs while the inventory check is still incomplete: the verification holds the one
+    /// progress section, inline above the rows, and the incomplete section's Check Again waits
+    /// until it ends
+    fn verifying_inventory_incomplete() -> CloudBackupScreen {
+        let mut screen = configured(CloudBackupDisableScreen::Idle, None);
+        screen.actions.entries.retain(|entry| entry.action != A::Verify);
+
+        let CloudBackupScreenBody::Configured(configured) = &mut screen.body else {
+            return screen;
+        };
+
+        let mut running = None;
+        for section in &mut configured.sections {
+            if let CloudBackupSection::Verification(verification) = section {
+                verification.view.state = CloudBackupVerificationState::Running;
+                verification.controls.clear();
+                running = Some(verification.view.clone());
+            }
+        }
+
+        if let Some(view) = running {
+            configured.sections.insert(
+                0,
+                CloudBackupSection::Progress(CloudBackupProgressSection::VerificationInline(view)),
+            );
+        }
+
+        screen
     }
 
     fn heal_notice() -> CloudBackupScreen {
@@ -516,6 +805,19 @@ mod debug {
         )
     }
 
+    /// Google Drive stopped the last run for consent, so Reconnect resumes it
+    fn finishing_disable_authorization_required() -> CloudBackupScreen {
+        screen(
+            CloudBackupScreenBody::FinishingDisable(CloudBackupFinishingDisableScreen {
+                stage: CloudBackupFinishingDisableStage::Failed {
+                    reason: CloudBackupTurnOffFailure::AuthorizationRequired,
+                },
+            }),
+            CloudBackupSettingsRowStatus::TurnOffIncomplete,
+            available(&[A::ResumeDisable, A::ReconnectDrive, A::StopUsingOnThisDevice]),
+        )
+    }
+
     fn drive_account_switch() -> CloudBackupScreen {
         screen(
             CloudBackupScreenBody::DriveAccountSwitch(CloudBackupDriveAccountSwitchScreen {
@@ -536,14 +838,14 @@ mod debug {
                 cleanup: CloudBackupPendingEnableCleanupState::Available,
             }),
             CloudBackupSettingsRowStatus::RecoveryRequired,
-            available(&[A::DiscardPendingEnable, A::ConfirmPendingEnableCleanup]),
+            available(&[A::ConfirmPendingEnableCleanup]),
         )
     }
 
     fn load_failed() -> CloudBackupScreen {
         screen(
             CloudBackupScreenBody::LoadFailed,
-            CloudBackupSettingsRowStatus::RecoveryRequired,
+            CloudBackupSettingsRowStatus::Error(CLOUD_BACKUP_LOAD_FAILED_MESSAGE.into()),
             available(&[A::RetryLoad]),
         )
     }
@@ -551,7 +853,7 @@ mod debug {
     fn corrupted() -> CloudBackupScreen {
         screen(
             CloudBackupScreenBody::Corrupted,
-            CloudBackupSettingsRowStatus::RecoveryRequired,
+            CloudBackupSettingsRowStatus::Error(CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE.into()),
             available(&[A::ResetOnThisDevice]),
         )
     }

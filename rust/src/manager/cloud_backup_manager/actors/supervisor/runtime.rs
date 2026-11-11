@@ -7,8 +7,8 @@
 //! a review beside a running operation has no value either
 //!
 //! The body moves in three ways only:
-//! - at load: `LifecycleLoad::Failed` gives `LoadFailed`, which nothing leaves; retry is a relaunch.
-//!   An idle body with no record the owner ever read becomes `LoadFailed` the same way
+//! - at load: `LifecycleLoad::Failed` gives `LoadFailed`, which only a load that succeeds leaves,
+//!   at launch or when the user retries it
 //! - while idle: the supervisor rebases the body on its own committed record when it starts work
 //! - while an operation runs, the operation holds its body until it ends or hands off
 //! - a local reset replaces the body with `Resetting`, which nothing can start in, and the owner
@@ -70,10 +70,10 @@ pub(crate) enum Runtime {
     LoadFailed {
         error: DatabaseError,
     },
-    /// The stored record can't be read as a backup; Enable or Restore replaces it, as from off
+    /// The stored record can't be read as a backup; nothing runs on it, and its one exit is a
+    /// local reset of Cloud Backup on this device, after which the body is off
     Corrupted {
         error: String,
-        op: Option<DisabledOp>,
     },
     /// A local reset closed admission; an effect that was in flight finishes here, and nothing
     /// else can start until the owner sets the body the reset left
@@ -347,9 +347,16 @@ impl Runtime {
             State::ExclusiveTransition(PersistedCloudBackupTransition::DriveAccountSwitch(_)) => {
                 Self::DriveAccountSwitch { op: None }
             }
-            State::Corrupted { error } => Self::Corrupted { error: error.clone(), op: None },
+            State::Corrupted { error } => Self::Corrupted { error: error.clone() },
             State::Configured(_) => Self::Configured(ConfiguredBody::IDLE),
             State::Disabled => Self::Disabled { op: None },
+        }
+    }
+
+    /// Leaves `LoadFailed` for the body the record loads as, once the owner read it again
+    pub(crate) fn loaded(&mut self, facts: IdleFacts<'_>) {
+        if matches!(self, Self::LoadFailed { .. }) {
+            *self = Self::idle(facts);
         }
     }
 
@@ -473,14 +480,12 @@ impl Runtime {
     /// The body admission decides on, with the running operation's kind
     pub(crate) fn admission_body(&self) -> AdmissionBody {
         match self {
-            Self::Disabled { op: None | Some(DisabledOp::DiscardEnable(_)) }
-            | Self::Corrupted { op: None | Some(DisabledOp::DiscardEnable(_)), .. } => {
+            Self::Disabled { op: None | Some(DisabledOp::DiscardEnable(_)) } => {
                 AdmissionBody::Disabled
             }
-            Self::Disabled { op: Some(DisabledOp::Enable(_)) }
-            | Self::Corrupted { op: Some(DisabledOp::Enable(_)), .. } => AdmissionBody::Enabling,
-            Self::Disabled { op: Some(DisabledOp::Restore(_)) }
-            | Self::Corrupted { op: Some(DisabledOp::Restore(_)), .. } => AdmissionBody::Restoring,
+            Self::Disabled { op: Some(DisabledOp::Enable(_)) } => AdmissionBody::Enabling,
+            Self::Disabled { op: Some(DisabledOp::Restore(_)) } => AdmissionBody::Restoring,
+            Self::Corrupted { .. } => AdmissionBody::Corrupted,
             Self::Configured(_) => AdmissionBody::Configured,
             Self::DriveAccountSwitch { .. } => AdmissionBody::DriveAccountSwitch,
             Self::FinishingDisable { .. } => AdmissionBody::FinishingDisable,
@@ -501,16 +506,14 @@ impl Runtime {
     /// The claim of the running operation, which carries its `OperationId`
     pub(crate) fn claim(&self) -> Option<CloudBackupExclusiveOperationClaim> {
         match self {
-            Self::Disabled { op } | Self::Corrupted { op, .. } => {
-                op.as_ref().map(DisabledOp::claim)
-            }
+            Self::Disabled { op } => op.as_ref().map(DisabledOp::claim),
             Self::Configured(ConfiguredBody::Running(op)) => Some(op.claim()),
             Self::Configured(ConfiguredBody::Idle { .. }) => None,
             Self::FinishingDisable { op, .. } => op.as_ref().map(|op| op.run.claim),
             Self::DriveAccountSwitch { op } => op.as_ref().map(|op| op.0.claim),
             Self::PendingEnableRecovery { op, .. } => op.as_ref().map(RecoveryOp::claim),
             // the held effect answers only through `accepts_completion`; nothing else may use it
-            Self::LoadFailed { .. } | Self::Resetting { .. } => None,
+            Self::Corrupted { .. } | Self::LoadFailed { .. } | Self::Resetting { .. } => None,
         }
     }
 
@@ -519,10 +522,6 @@ impl Runtime {
         match self {
             Self::Disabled {
                 op: Some(DisabledOp::Enable(run) | DisabledOp::DiscardEnable(run)),
-            }
-            | Self::Corrupted {
-                op: Some(DisabledOp::Enable(run) | DisabledOp::DiscardEnable(run)),
-                ..
             }
             | Self::FinishingDisable { op: Some(ResumeDisable { run, .. }), .. }
             | Self::DriveAccountSwitch { op: Some(SwitchOp(run)) }
@@ -647,19 +646,17 @@ impl Runtime {
         }
 
         match (&mut *self, new) {
-            (Self::Disabled { op } | Self::Corrupted { op, .. }, NewOp::Standard(run))
+            (Self::Disabled { op }, NewOp::Standard(run))
                 if matches!(operation, Op::Enable | Op::EnableForceNew | Op::EnableNoDiscovery) =>
             {
                 *op = Some(DisabledOp::Enable(run));
             }
-            (Self::Disabled { op } | Self::Corrupted { op, .. }, NewOp::Standard(run))
+            (Self::Disabled { op }, NewOp::Standard(run))
                 if operation == Op::DiscardPendingEnable =>
             {
                 *op = Some(DisabledOp::DiscardEnable(run));
             }
-            (Self::Disabled { op } | Self::Corrupted { op, .. }, NewOp::Restore(run))
-                if operation == Op::Restore =>
-            {
+            (Self::Disabled { op }, NewOp::Restore(run)) if operation == Op::Restore => {
                 *op = Some(DisabledOp::Restore(run));
             }
             (Self::Configured(body), NewOp::Restore(run))
@@ -869,7 +866,6 @@ impl Runtime {
     pub(crate) fn restore(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreRun> {
         match self {
             Self::Disabled { op: Some(DisabledOp::Restore(run)) }
-            | Self::Corrupted { op: Some(DisabledOp::Restore(run)), .. }
             | Self::PendingEnableRecovery { op: Some(RecoveryOp::Restore(run)), .. }
                 if run.claim == claim =>
             {
@@ -968,7 +964,7 @@ impl Runtime {
 
     fn take_op(&mut self) -> Option<TakenOp> {
         match self {
-            Self::Disabled { op } | Self::Corrupted { op, .. } => op.take().map(|op| match op {
+            Self::Disabled { op } => op.take().map(|op| match op {
                 DisabledOp::Enable(run) | DisabledOp::DiscardEnable(run) => TakenOp::Standard(run),
                 DisabledOp::Restore(run) => TakenOp::Restore(run),
             }),
@@ -995,7 +991,7 @@ impl Runtime {
                 RecoveryOp::Restore(run) => TakenOp::Restore(run),
             }),
             Self::Resetting { held, .. } => held.take().map(TakenOp::Standard),
-            Self::LoadFailed { .. } => None,
+            Self::Corrupted { .. } | Self::LoadFailed { .. } => None,
         }
     }
 
@@ -1016,7 +1012,7 @@ impl Runtime {
     /// Ends the running operation, whichever it is
     fn clear(&mut self) {
         match self {
-            Self::Disabled { op } | Self::Corrupted { op, .. } => *op = None,
+            Self::Disabled { op } => *op = None,
             // an idle body keeps its review; a running one has none to keep
             Self::Configured(body @ ConfiguredBody::Running(_)) => *body = ConfiguredBody::IDLE,
             Self::Configured(ConfiguredBody::Idle { .. }) => {}
@@ -1028,7 +1024,7 @@ impl Runtime {
                     run.effect_reported();
                 }
             }
-            Self::LoadFailed { .. } => {}
+            Self::Corrupted { .. } | Self::LoadFailed { .. } => {}
         }
     }
 
@@ -1046,7 +1042,8 @@ impl Runtime {
     /// Derived, never stored: the supervisor publishes it after every runtime change
     pub(crate) fn write_policy(&self, generation: ConfigGeneration) -> WritePolicy {
         let body = match self {
-            Self::Disabled { op } | Self::Corrupted { op, .. } => PolicyBody::Off {
+            Self::Corrupted { .. } => PolicyBody::Off { op: None },
+            Self::Disabled { op } => PolicyBody::Off {
                 op: op.as_ref().map(|op| match op {
                     DisabledOp::Enable(run) => OffWrites::Enable(run.claim),
                     DisabledOp::DiscardEnable(run) => OffWrites::Discard(run.claim),

@@ -14,7 +14,7 @@ use tokio::runtime::Handle;
 use super::clock::HarnessClock;
 use super::deadline::Deadline;
 use super::fakes::{self, HarnessCloud, HarnessKeychain, HarnessPasskey};
-use super::invariants::{Invariants, Violation};
+use super::invariants::{Boundary, Invariants, PendingWork};
 use super::process::child_root;
 use super::runtime;
 use crate::database::Database;
@@ -26,7 +26,8 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
 };
 use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
 use crate::manager::cloud_backup_manager::screen::{
-    CloudBackupDisableReview, CloudBackupDisableScreen, CloudBackupScreenBody,
+    CloudBackupActionAvailability, CloudBackupDisableReview, CloudBackupDisableScreen,
+    CloudBackupScreenAction, CloudBackupScreenBody,
 };
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
@@ -37,7 +38,8 @@ use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivitySta
 
 /// A user-visible next action, written as a literal in tests
 ///
-/// The set grows as tests need it; [`NextAction::intent`] maps each one to its `UserIntent`
+/// The set grows as tests need it; [`NextAction::intent`] maps each one to its `UserIntent`, and
+/// [`NextAction::control`] to the screen control that sends it
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum NextAction {
     Enable,
@@ -51,6 +53,8 @@ pub(crate) enum NextAction {
     StopUsingOnThisDevice,
     Verify,
     SyncUnsynced,
+    RetryLoad,
+    ResetOnThisDevice,
 }
 
 impl NextAction {
@@ -73,6 +77,25 @@ impl NextAction {
                 discoverable: false,
             },
             Self::SyncUnsynced => UserIntent::SyncUnsynced,
+            Self::RetryLoad => UserIntent::RetryLoad,
+            Self::ResetOnThisDevice => UserIntent::ResetOnThisDevice,
+        }
+    }
+
+    /// The screen control the user taps for this action
+    pub(crate) fn control(self) -> CloudBackupScreenAction {
+        match self {
+            Self::Enable => CloudBackupScreenAction::Enable,
+            Self::RestoreFromCloudBackup => CloudBackupScreenAction::RestoreFromCloudBackup,
+            Self::TurnOff => CloudBackupScreenAction::TurnOff,
+            Self::ConfirmDisable => CloudBackupScreenAction::ConfirmDisable,
+            Self::CancelDisable => CloudBackupScreenAction::CancelDisable,
+            Self::ResumeDisable => CloudBackupScreenAction::ResumeDisable,
+            Self::StopUsingOnThisDevice => CloudBackupScreenAction::StopUsingOnThisDevice,
+            Self::Verify => CloudBackupScreenAction::Verify,
+            Self::SyncUnsynced => CloudBackupScreenAction::SyncUnsynced,
+            Self::RetryLoad => CloudBackupScreenAction::RetryLoad,
+            Self::ResetOnThisDevice => CloudBackupScreenAction::ResetOnThisDevice,
         }
     }
 }
@@ -140,6 +163,19 @@ pub(crate) struct TestApp {
 }
 
 const SETTLE_ROUNDS: usize = 500;
+
+/// How far quiescence moves the clock at a time: past the longest single timer an operation waits
+/// on, a passkey authorization retry's 15 s budget or a restore's last namespace refresh at 15 s
+const QUIESCE_TICK: Duration = Duration::from_secs(61);
+
+/// The most clock advances quiescence makes for a live operation; an operation's timers run one
+/// after another, and none chains more than a few, so one still live after these has nothing
+/// left that would end it
+const QUIESCE_ADVANCES: usize = 10;
+
+/// The most pending boundaries quiescence settles at, each releasing what is held or advancing
+/// the clock once; a provider that holds every new call would otherwise never let it finish
+const QUIESCE_ROUNDS: usize = 50;
 
 impl TestApp {
     /// Launch the app on this phase's durable state
@@ -314,21 +350,57 @@ impl TestApp {
         Step(self)
     }
 
-    /// Settles, then checks the invariants at that boundary
-    fn settle_and_check(&mut self) {
-        self.settle();
-        self.check_invariants();
+    /// Drives the app to quiescence and checks the invariants there, 4a with no exemption
+    ///
+    /// Releases every held fake call and advances the clock while an operation is live, checking
+    /// each pending boundary on the way, until nothing is held and no operation is live or the
+    /// advances run out. At that boundary no operation may be live and the body must have a named
+    /// exit (PLAN §4.1); an operation still live there has nothing left that would end it
+    pub(crate) fn quiesce(&mut self) -> Step<'_> {
+        self.begin_event("quiesce".into());
+        let mut advances = 0;
+
+        for _ in 0..QUIESCE_ROUNDS {
+            let work = self.settle();
+            self.check_invariants(&Boundary::Pending(work.clone()));
+
+            match work {
+                PendingWork::HeldCalls(_) => fakes::release_held_calls(),
+                PendingWork::PausedClock
+                    if advances < QUIESCE_ADVANCES && self.runs_operation() =>
+                {
+                    advances += 1;
+                    self.block_on("the paused clock to advance", self.clock.advance(QUIESCE_TICK));
+                }
+                PendingWork::PausedClock => {
+                    self.check_invariants(&Boundary::Quiescent);
+                    return Step(self);
+                }
+            }
+        }
+
+        panic!(
+            "quiescence still had held calls {:?} after {QUIESCE_ROUNDS} releases\n{}",
+            fakes::held_calls(),
+            self.describe()
+        );
     }
 
-    /// Checks the harness invariants now; every event does this after it settles
-    pub(crate) fn check_invariants(&mut self) {
+    /// Settles, then checks the invariants at the pending boundary it reached
+    fn settle_and_check(&mut self) {
+        let work = self.settle();
+        self.check_invariants(&Boundary::Pending(work));
+    }
+
+    /// Checks the harness invariants at `boundary`
+    fn check_invariants(&mut self, boundary: &Boundary) {
         let mut invariants = std::mem::take(&mut self.invariants);
-        let checked = invariants.check(self);
+        let checked = invariants.check(self, boundary);
         self.invariants = invariants;
 
         if let Err(violation) = checked {
             panic!(
-                "invariant {:?} ({}) broken after {}: {}\n{}",
+                "invariant {:?} ({}) broken at {boundary:?} after {}: {}\n{}",
                 violation.invariant,
                 violation.invariant as u8,
                 self.last_event,
@@ -362,19 +434,18 @@ impl TestApp {
         }
     }
 
-    /// Wait until the actors have handled every message and no off-runtime work is in flight
+    /// Wait until the actors have handled every message and no provider call is running, and
+    /// name the work left for the test to move
     ///
-    /// A round waits for the runtime's blocking pool to go quiet, runs a mailbox barrier on both
-    /// actors, and waits for the runtime thread to park. A current-thread runtime parks only
-    /// with an empty run queue, so after a round every task the event woke has run as far as it
-    /// can. A blocking job runs off the runtime, where the park can't see it, and its answer
-    /// wakes a task later. So a round counts only if the pool stayed quiet from before its
-    /// barrier until the park: then no job existed that could still wake a task. The app is
-    /// settled after such a round in which no cloud call is answering and the supervisor's stage
-    /// checkpoint shows no operation in an `Effecting` stage. Calls waiting on a `Hold` and
-    /// tasks waiting on the paused clock count as settled, so tests release holds and advance
-    /// time as events
-    pub(crate) fn settle(&self) {
+    /// A round is a mailbox barrier on both actors followed by a wait for the runtime thread to
+    /// park. A current-thread runtime parks only with an empty run queue, so after a round every
+    /// task the event woke has run as far as it can. The app is settled after a round in which
+    /// no fake call is answering, no blocking call is in flight or answered, and the
+    /// supervisor's stage checkpoint shows no operation in an `Effecting` stage. An effect or a
+    /// blocking call runs off the runtime, so the park alone can't see it. Calls
+    /// waiting on a `Hold` and tasks waiting on the paused clock count as settled, so tests
+    /// release holds and advance time as events
+    pub(crate) fn settle(&self) -> PendingWork {
         let supervisor = self.manager.supervisor.clone();
         let writes = self.manager.cloud_writes.clone();
 
@@ -400,8 +471,9 @@ impl TestApp {
             }
 
             // an effect waiting on a held call is settled; the test releases it as an event
-            if fakes::held_calls() != 0 {
-                return;
+            let held = fakes::held_calls();
+            if !held.is_empty() {
+                return PendingWork::HeldCalls(held);
             }
 
             let checkpoint = format!("the supervisor's stage checkpoint after {}", self.last_event);
@@ -409,7 +481,7 @@ impl TestApp {
                 .block_on(&checkpoint, call!(supervisor.harness_effects_settled()))
                 .expect("stage checkpoint");
             if effects_settled.try_recv().is_ok() {
-                return;
+                return PendingWork::PausedClock;
             }
 
             let effect = format!("the in-flight effect to report after {}", self.last_event);
@@ -427,9 +499,32 @@ impl TestApp {
         panic!("cloud backup did not settle after {SETTLE_ROUNDS} barrier rounds");
     }
 
+    /// Waits until a blocking call seen in `before` answers its caller, one answered already, or
+    /// a call is held
+    ///
+    /// The answer comes from another thread, so the wait polls. A blocking call that enters a
+    /// hold answers only when the test releases it, so a hold ends the wait and the next round
+    /// settles on it; an in-flight call that never answers fails on the deadline instead of using
+    /// up the settle rounds
+    fn wait_for_blocking_answer(&self, before: cove_tokio::task::BlockingCalls) {
+        let _deadline =
+            Deadline::arm(format!("a blocking call to answer after {}", self.last_event));
+        while cove_tokio::task::blocking_calls() == before && !fakes::any_call_held() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    /// Asserts what dispatch would do with each action, and that the published screen agrees
+    ///
+    /// An admitted action has an available control. A rejected one has no control or an
+    /// unavailable one; a tap that coalesces into running work may still show enabled, since it
+    /// joins that work
     fn assert_admission(&self, actions: &[NextAction], expect_admitted: bool) {
+        let screen = self.manager.published_screen();
+
         for action in actions {
             let admission = self.admission(*action);
+            let control = screen.actions.availability(action.control());
             // a coalesced repeat starts nothing new, so it counts as not admitted
             let admitted = matches!(admission, Admission::Accepted);
             if admitted != expect_admitted {
@@ -440,6 +535,19 @@ impl TestApp {
                     self.describe()
                 );
             }
+
+            let shown = matches!(control, Some(CloudBackupActionAvailability::Available));
+            let agrees = match admission {
+                Admission::Accepted => shown,
+                Admission::Rejected(_) => !shown,
+                Admission::Coalesced(_) => true,
+            };
+            assert!(
+                agrees,
+                "after {}: {action:?} was {admission:?} but the screen shows {control:?}\n{}",
+                self.last_event,
+                self.describe()
+            );
         }
     }
 
@@ -492,10 +600,11 @@ impl TestApp {
         });
 
         format!(
-            "active operation: {active:?}\npersisted: {:?}\ncloud calls: {:?}\nlifecycle: {:#?}",
+            "active operation: {active:?}\npersisted: {:?}\ncloud calls: {:?}\nlifecycle: {:#?}\nscreen: {:#?}",
             Database::global().cloud_backup_state.get(),
             self.cloud.calls(),
             self.manager.model_state().lifecycle,
+            self.manager.published_screen(),
         )
     }
 }

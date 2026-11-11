@@ -367,48 +367,6 @@ async fn enable_create_new_succeeds_with_new_passkey_auth() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn enable_create_new_recovers_from_corrupted_persisted_state() {
-    let _guard = async_test_lock().lock().await;
-    let globals = test_globals();
-    let manager = init_manager();
-
-    reset_cloud_backup_test_state(&manager, globals);
-    manager
-        .persist_cloud_backup_state(
-            &PersistedCloudBackupState::corrupted("decode failed"),
-            "persist corrupt state for test",
-        )
-        .unwrap();
-    CONNECTIVITY_MANAGER.set_connection_state(true);
-    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
-    globals.passkey.set_authenticate_result(Ok(vec![7; 32]));
-
-    enable_cloud_backup_create_new(&manager).await.unwrap();
-
-    // the pending upload worker settles Enable's upload confirmation, and so verifies the new
-    // record, as soon as the cloud reports the master key uploaded; holding it as syncing keeps
-    // the record unverified while the test reads it
-    globals.cloud.set_uploaded_master_key_pending_confirmation(true);
-    confirm_saved_passkey_session(&manager).await;
-
-    // a pass of the worker while the upload is still syncing leaves the record needing
-    // verification, whenever the background loop also runs
-    assert!(verify_pending_uploads_once_for_test_async(&manager).await);
-    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
-    let recovered = Database::global().cloud_backup_state.get().unwrap();
-    assert_eq!(recovered.status(), PersistedCloudBackupStatus::Unverified);
-    assert!(recovered.pending_verification_completion().is_some());
-
-    globals.cloud.set_uploaded_master_key_pending_confirmation(false);
-    assert!(!verify_pending_uploads_once_for_test_async(&manager).await);
-
-    let verified = Database::global().cloud_backup_state.get().unwrap();
-    assert_eq!(verified.status(), PersistedCloudBackupStatus::Enabled);
-    assert!(verified.last_verified_at().is_some());
-    assert!(verified.pending_verification_completion().is_none());
-}
-
-#[tokio::test(flavor = "current_thread")]
 async fn detail_entry_loads_the_inventory_without_asking_for_the_passkey() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();

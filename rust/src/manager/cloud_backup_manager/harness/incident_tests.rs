@@ -57,16 +57,14 @@ fn incident_replay_on_the_lived_in_account_always_has_a_way_out() {
         // the reporter opens the app after the stuck Turn Off: the record heals at load, and
         // nothing reaches the passkey provider on any step that follows without a tap
         let mut app = TestApp::launch_with_passkey(PasskeyMode::FailOnAnyInteractiveCall);
-        app.current()
-            .then_can(&[N::Verify, N::SyncUnsynced])
-            .then_cannot(&[N::Enable, N::RestoreFromCloudBackup]);
+        app.current().then_can(&[N::Verify]).then_cannot(&[N::Enable, N::RestoreFromCloudBackup]);
         let namespace = keychain_namespace().expect("the heal keeps the namespace");
         assert!(matches!(persisted(), PersistedCloudBackupState::Configured(_)));
 
         // the device came back online and iCloud changed, again and again
         for _ in 0..3 {
             app.event("foreground with a connection", foreground)
-                .then_can(&[N::Verify, N::SyncUnsynced])
+                .then_can(&[N::Verify])
                 .then_cannot(&[N::Enable]);
         }
         assert_eq!(app.cloud.count(CloudCall::DeleteNamespace), 0, "a resume deleted the backup");

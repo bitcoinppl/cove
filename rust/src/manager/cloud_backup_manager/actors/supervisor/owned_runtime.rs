@@ -25,14 +25,16 @@ use super::runtime::{
 use super::{AbandonedReset, KeyClearRefused, LocalResetOutcome, ResetEnd};
 use crate::database::cloud_backup::PersistedCloudBackupState;
 use crate::database::error::DatabaseError;
+use crate::manager::cloud_backup_manager::RustCloudBackupManager;
 use crate::manager::cloud_backup_manager::actors::write::{
     CloudBackupWriteSupervisor, ConfigGeneration, VersionedPolicy, WritePolicy,
 };
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperationClaim, CloudBackupPendingEnableRecovery,
 };
-use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
-use crate::manager::cloud_backup_manager::owner::lifecycle::{CommittedDisable, LifecycleWriter};
+use crate::manager::cloud_backup_manager::owner::lifecycle::{
+    CommittedDisable, LifecycleLoad, LifecycleWriter,
+};
 use crate::manager::cloud_backup_manager::screen::CloudBackupTurnOffFailure;
 use crate::manager::cloud_backup_manager::turn_off::{
     DisableReview, FinishStart, ReviewId, TurnOffReview,
@@ -118,10 +120,11 @@ impl OwnedRuntime {
         result
     }
 
-    /// Rebases an idle body on the record, then publishes the policy if it changed
+    /// Rebases an idle body on the record, then publishes the policy if it changed and asks for
+    /// the screen to be projected again
     ///
-    /// The screen reads the runtime too, so it is asked to publish after every change; an
-    /// unchanged screen sends nothing
+    /// The screen reads the runtime, so a runtime change is a screen change as much as a reducer
+    /// change is; the request queues behind the handler making this change
     fn publish(&mut self) {
         let record = self.lifecycle.record();
         let pending_enable_recovery = self.held_pending_enable_recovery();
@@ -246,22 +249,22 @@ impl OwnedRuntime {
         self.publish();
     }
 
-    /// Ends the operation `claim` names; the one place an operation finishes
-    ///
-    /// Finishing an operation that no longer runs changes nothing, and the harness ledger
-    /// records the attempt, so a second finish of one operation is visible to invariant 5
-    pub(crate) fn finish(&mut self, claim: CloudBackupExclusiveOperationClaim) -> Finish {
-        let finish = self.mutate(|runtime| runtime.finish(claim));
-        if let Finish::NotCurrent { running } = finish {
-            warn!(
-                "Cloud Backup refused to finish {claim:?}, which no longer runs; running {running:?}"
-            );
+    /// Reads the record again after a failed load and leaves `LoadFailed` once it reads
+    pub(crate) fn retry_load(&mut self) -> Result<(), DatabaseError> {
+        if let LifecycleLoad::Failed(error) = self.lifecycle.retry_load() {
+            return Err(error);
         }
 
-        #[cfg(test)]
-        self.transitions.push(OpTransition::FinishAttempt { claim, finish });
+        let record = RustCloudBackupManager::load_persisted_state();
+        self.mutate(|runtime| {
+            runtime.loaded(IdleFacts { record: &record, pending_enable_recovery: None });
+        });
 
-        finish
+        Ok(())
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.mutate(Runtime::clear);
     }
 
     pub(crate) fn start_standard(
