@@ -13,7 +13,7 @@ use super::{
     CloudBackupStateReducerEvent, CloudBackupStore, CloudBackupWalletItem,
     CloudBackupWalletRestoreFailure, CloudBackupWalletStatus, CloudOnlyFetch,
     CloudOnlyListingUpdate, DeepVerificationFailure, DeepVerificationReport,
-    DeepVerificationResult, OtherBackupsOperation, RustCloudBackupManager,
+    DeepVerificationResult, RustCloudBackupManager,
 };
 
 type Action = CloudBackupManagerAction;
@@ -272,42 +272,6 @@ impl RustCloudBackupManager {
         self.apply_verification_effect(CloudBackupVerificationCoordinator::dismiss_decision(
             self.current_verification_source(),
         ));
-    }
-
-    pub(crate) fn spawn_recover_other_backups(self: std::sync::Arc<Self>) {
-        if !matches!(
-            self.state.read().other_backups_operation(),
-            OtherBackupsOperation::Idle
-                | OtherBackupsOperation::Recovered { .. }
-                | OtherBackupsOperation::Deleted
-                | OtherBackupsOperation::Failed { .. }
-        ) {
-            return;
-        }
-
-        send!(self.supervisor.start_recover_other_backups_operation());
-    }
-
-    pub(crate) fn spawn_delete_other_backups(self: std::sync::Arc<Self>) {
-        if !matches!(
-            self.state.read().other_backups_operation(),
-            OtherBackupsOperation::Idle
-                | OtherBackupsOperation::Recovered { .. }
-                | OtherBackupsOperation::Deleted
-                | OtherBackupsOperation::Failed { .. }
-        ) {
-            return;
-        }
-
-        send!(self.supervisor.start_delete_other_backups_operation());
-    }
-
-    pub(crate) fn spawn_refresh_detail(self: std::sync::Arc<Self>) {
-        send!(self.supervisor.start_refresh_detail());
-    }
-
-    pub(crate) fn spawn_enter_detail(self: std::sync::Arc<Self>) {
-        send!(self.supervisor.start_enter_detail());
     }
 
     pub(crate) fn handle_deep_verification_result(&self, result: DeepVerificationResult) {

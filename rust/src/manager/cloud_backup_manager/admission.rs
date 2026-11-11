@@ -22,11 +22,16 @@ pub(crate) enum UserIntent {
     DismissMissingPasskeyReminder,
     RestoreFromCloudBackup,
     CancelRestore,
-    StartVerification { source: CloudBackupVerificationSource, discoverable: bool },
+    StartVerification {
+        source: CloudBackupVerificationSource,
+        discoverable: bool,
+    },
     DismissVerificationPrompt,
     RecreateManifest,
     ReinitializeBackup,
-    RepairPasskey { no_discovery: bool },
+    RepairPasskey {
+        no_discovery: bool,
+    },
     SyncUnsynced,
     RestoreCloudWallet(RecordId),
     StartRestoreAll,
@@ -42,6 +47,12 @@ pub(crate) enum UserIntent {
     EnterDetail,
     PromptEnablePasskeyChoice(CloudBackupEnableContext),
     AcceptEnablePrompt(CloudBackupEnablePromptChoice),
+    /// The platform starts moving Cloud Backup to another Google Drive account
+    SwitchDriveAccount,
+    /// The user backs out of the Google Drive account picker; the switch's Cancel
+    CancelDriveAccountSwitch,
+    /// The platform reconciles a Google Drive account switch it found unfinished
+    RetryDriveAccountSwitchRecovery,
 }
 
 /// Which Enable the user asked for
@@ -139,6 +150,8 @@ pub(crate) enum Rejection {
     RestoreAllUnavailable,
     NothingToCancel,
     KeepEnabledUnavailable,
+    /// Nothing is waiting to be continued, such as a saved passkey with no paused Enable
+    NothingToContinue,
 }
 
 /// The lifecycle body admission decides on
@@ -191,6 +204,8 @@ pub(crate) struct AdmissionSnapshot {
     pub(crate) detail_inventory: DetailInventory,
     pub(crate) other_backups_loaded: bool,
     pub(crate) restore_all: RestoreAllAdmission,
+    /// An Enable paused for the user to confirm the passkey they saved
+    pub(crate) enable_awaits_saved_passkey: bool,
 }
 
 /// Decides what happens to `intent` in `snapshot`
@@ -202,9 +217,27 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
     use UserIntent as I;
 
     match intent {
+        // the continuation of a paused Enable: it needs the Enable it continues
+        I::ConfirmSavedPasskey => match (snapshot.enable_awaits_saved_passkey, snapshot.running) {
+            (_, Some(Op::Enable)) => Coalesced(CoalescibleIntent::RepeatOfRunning(Op::Enable)),
+            (_, Some(running)) => Rejected(Rejection::OperationRunning(running)),
+            (true, None) => Accepted,
+            (false, None) => Rejected(Rejection::NothingToContinue),
+        },
+
+        // a recorded switch, or a platform one Rust lost, can always be reconciled
+        I::RetryDriveAccountSwitchRecovery => match snapshot.body {
+            AdmissionBody::LoadFailed => Rejected(Rejection::LoadFailed),
+            _ => Accepted,
+        },
+        I::SwitchDriveAccount => configured_and_idle(snapshot, Some(Op::ReinitializeBackup)),
+        I::CancelDriveAccountSwitch => match snapshot.running {
+            Some(Op::ReinitializeBackup) => Accepted,
+            _ => Rejected(Rejection::NothingToCancel),
+        },
+
         // presentation intents answer prompts; their handlers own the prompt they answer
-        I::ConfirmSavedPasskey
-        | I::ConfirmPendingEnableCleanup
+        I::ConfirmPendingEnableCleanup
         | I::DismissPasskeyChoicePrompt
         | I::DismissMissingPasskeyReminder
         | I::DismissVerificationPrompt

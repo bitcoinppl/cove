@@ -33,8 +33,12 @@ impl CloudBackupSupervisor {
                 "cloud backup manager stopped".into(),
             )));
         };
-        if self.runtime.is_some() {
-            return Produces::ok(Err(CloudBackupDriveAccountSwitchError::Busy));
+        if let Err(error) = self.admit_or(
+            &manager,
+            UserIntent::SwitchDriveAccount,
+            CloudBackupDriveAccountSwitchError::Busy,
+        ) {
+            return Produces::ok(Err(error));
         }
         if Self::drive_account_switch().is_some() {
             return Produces::ok(Err(CloudBackupDriveAccountSwitchError::Busy));
@@ -154,16 +158,23 @@ impl CloudBackupSupervisor {
         &mut self,
         transition_id: DriveAccountSwitchId,
     ) -> ActorResult<Result<(), CloudBackupDriveAccountSwitchError>> {
+        let Some(manager) = self.manager() else {
+            return Produces::ok(Err(CloudBackupDriveAccountSwitchError::Internal(
+                "cloud backup manager stopped".into(),
+            )));
+        };
+        if let Err(error) = self.admit_or(
+            &manager,
+            UserIntent::CancelDriveAccountSwitch,
+            CloudBackupDriveAccountSwitchError::InvalidTransition,
+        ) {
+            return Produces::ok(Err(error));
+        }
         if let Err(error) = self.current_drive_account_switch_claim(
             transition_id,
             PersistedDriveAccountSwitchPhase::AwaitingAccountSelection,
         ) {
             return Produces::ok(Err(error));
-        }
-        if self.manager().is_none() {
-            return Produces::ok(Err(CloudBackupDriveAccountSwitchError::Internal(
-                "cloud backup manager stopped".into(),
-            )));
         }
         if let Err(error) = self.set_drive_account_switch_phase(
             transition_id,
@@ -292,6 +303,19 @@ impl CloudBackupSupervisor {
         platform_state: DriveAccountSwitchPlatformState,
     ) -> ActorResult<Result<DriveAccountSwitchReconcileAction, CloudBackupDriveAccountSwitchError>>
     {
+        let Some(manager) = self.manager() else {
+            return Produces::ok(Err(CloudBackupDriveAccountSwitchError::Internal(
+                "cloud backup manager stopped".into(),
+            )));
+        };
+        if let Err(error) = self.admit_or(
+            &manager,
+            UserIntent::RetryDriveAccountSwitchRecovery,
+            CloudBackupDriveAccountSwitchError::Busy,
+        ) {
+            return Produces::ok(Err(error));
+        }
+
         let Some(transition) = Self::drive_account_switch() else {
             let action = match platform_state {
                 DriveAccountSwitchPlatformState::NoTransition => {
@@ -306,11 +330,6 @@ impl CloudBackupSupervisor {
             };
 
             return Produces::ok(Ok(action));
-        };
-        let Some(manager) = self.manager() else {
-            return Produces::ok(Err(CloudBackupDriveAccountSwitchError::Internal(
-                "cloud backup manager stopped".into(),
-            )));
         };
 
         send!(self.write.block(CloudBackupWriteBlocker::DriveAccountSwitch {

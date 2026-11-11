@@ -1,6 +1,6 @@
 use super::*;
 use crate::manager::cloud_backup_manager::admission::{
-    Admission, AdmissionSnapshot, ConfiguredAdmission, DetailInventory, EnableIntent,
+    Admission, AdmissionSnapshot, ConfiguredAdmission, DetailInventory, EnableIntent, Rejection,
     RestoreAllAdmission, UserIntent, evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::model::{
@@ -115,6 +115,24 @@ impl CloudBackupSupervisor {
             detail_inventory,
             other_backups_loaded: manager.other_backups_inventory_is_ready(),
             restore_all,
+            enable_awaits_saved_passkey: self
+                .pending_enable_session
+                .as_ref()
+                .is_some_and(PendingEnableSession::is_awaiting_saved_passkey_confirmation),
+        }
+    }
+
+    /// Admits an intent that answers its caller, as a typed error on anything but `Accepted`
+    pub(crate) fn admit_or<E: From<Rejection>>(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        intent: UserIntent,
+        coalesced: E,
+    ) -> Result<(), E> {
+        match self.admit(manager, &intent) {
+            Admission::Accepted => Ok(()),
+            Admission::Coalesced(_) => Err(coalesced),
+            Admission::Rejected(rejection) => Err(rejection.into()),
         }
     }
 
@@ -193,20 +211,31 @@ impl CloudBackupSupervisor {
             I::DeleteUndecryptableWalletBackups => {
                 self.start_delete_undecryptable_wallet_backups_operation().await?;
             }
-            I::RecoverOtherBackups => manager.spawn_recover_other_backups(),
-            I::DeleteOtherBackups => manager.spawn_delete_other_backups(),
+            // started in this turn, so the operation is allocated with its admission
+            I::RecoverOtherBackups => self.begin_recover_other_backups_operation(),
+            I::DeleteOtherBackups => self.begin_delete_other_backups_operation(),
             I::TurnOff => {
                 self.start_disable_operation().await?;
             }
             I::KeepEnabled => {
                 self.keep_cloud_backup_enabled().await?;
             }
-            I::RefreshDetail => manager.spawn_refresh_detail(),
-            I::EnterDetail => manager.spawn_enter_detail(),
+            I::RefreshDetail => {
+                self.start_refresh_detail().await?;
+            }
+            I::EnterDetail => {
+                self.start_enter_detail().await?;
+            }
             I::PromptEnablePasskeyChoice(context) => manager.present_passkey_choice_prompt(
                 CloudBackupPasskeyChoiceIntent::Enable(context, None),
             ),
             I::AcceptEnablePrompt(choice) => manager.accept_enable_prompt(choice),
+            // these answer their caller, so their own handlers admit them and reply
+            I::SwitchDriveAccount
+            | I::CancelDriveAccountSwitch
+            | I::RetryDriveAccountSwitchRecovery => {
+                warn!("Cloud Backup {intent:?} reached dispatch, which can't answer it");
+            }
         }
 
         Produces::ok(())

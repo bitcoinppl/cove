@@ -766,16 +766,6 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn start_recover_other_backups_operation(&mut self) -> ActorResult<()> {
-        self.begin_recover_other_backups_operation();
-        Produces::ok(())
-    }
-
-    pub async fn start_delete_other_backups_operation(&mut self) -> ActorResult<()> {
-        self.begin_delete_other_backups_operation();
-        Produces::ok(())
-    }
-
     fn start_sync_request(&mut self, manager: Arc<RustCloudBackupManager>) {
         let request_id = self.next_request_id();
         self.active_sync_request = Some(request_id);
