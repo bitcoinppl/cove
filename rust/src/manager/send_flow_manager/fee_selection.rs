@@ -100,7 +100,8 @@ impl RustSendFlowManager {
             (address, amount_sats)
         };
 
-        trace!("get_or_update_fee_rate_options: {address:?}, {amount_sats:?}");
+        // the amount can be a pasted PIN parsed as sats, so only its presence is logged
+        trace!("get_or_update_fee_rate_options: {address:?}, has amount {}", amount_sats.is_some());
         let wallet_actor = self.wallet_actor();
         let state = self.state.clone();
 
