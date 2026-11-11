@@ -233,7 +233,8 @@ impl CloudBackupSupervisor {
                 None,
                 None,
             ));
-            manager.persist_verification_result(&self.lifecycle, &result);
+            self.runtime
+                .commit(|lifecycle| manager.persist_verification_result(lifecycle, &result));
             manager.handle_deep_verification_result(result);
             return None;
         };
@@ -488,8 +489,9 @@ impl CloudBackupSupervisor {
 
         let (result, pending_completion) = completion.into_parts();
         if let Some(pending_completion) = pending_completion
-            && let Err(error) =
-                manager.replace_pending_verification_completion(&self.lifecycle, pending_completion)
+            && let Err(error) = self.runtime.commit(|lifecycle| {
+                manager.replace_pending_verification_completion(lifecycle, pending_completion)
+            })
         {
             self.finish_deep_verification_continuation_with_error(
                 manager,
@@ -739,7 +741,9 @@ impl CloudBackupSupervisor {
                 }
 
                 self.detail_workflow.set_authorization(authorization);
-                if let Err(error) = manager.finish_passkey_wrapper_repair(&self.lifecycle, uploaded)
+                if let Err(error) = self
+                    .runtime
+                    .commit(|lifecycle| manager.finish_passkey_wrapper_repair(lifecycle, uploaded))
                 {
                     manager.apply_recovery_state(RecoveryState::Failed {
                         action: RecoveryAction::RepairPasskey,
@@ -776,8 +780,10 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         };
 
-        match result.and_then(|finalization| {
-            manager.apply_passkey_repair_finalization(&self.lifecycle, finalization)
+        match self.runtime.commit(|lifecycle| {
+            result.and_then(|finalization| {
+                manager.apply_passkey_repair_finalization(lifecycle, finalization)
+            })
         }) {
             Ok(()) => {
                 let detail_claim = self.detail_workflow.start_operation_result();

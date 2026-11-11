@@ -305,6 +305,20 @@ impl Runtime {
         *self = Self::idle(facts);
     }
 
+    /// Loads an idle body again from a record a test seeded, as a launch on it would
+    ///
+    /// Unlike [`Self::rebase_idle`] this leaves `LoadFailed` too: a seed replaces the record the
+    /// failed load read, so a supervisor shared across tests is not stuck on an earlier test's
+    /// legacy record
+    #[cfg(test)]
+    pub(crate) fn reload_idle(&mut self, facts: IdleFacts<'_>) {
+        if self.claim().is_some() || matches!(self, Self::Resetting { .. }) {
+            return;
+        }
+
+        *self = Self::idle(facts);
+    }
+
     /// The interrupted Enable this body holds, running operation or not
     pub(crate) fn pending_enable_recovery(&self) -> Option<&CloudBackupPendingEnableRecovery> {
         match self {

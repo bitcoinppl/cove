@@ -174,7 +174,10 @@ impl CloudBackupSupervisor {
         }
 
         // the commit point: from here on the disable only goes forward
-        match manager.commit_disable_attempt(&self.lifecycle, &review, attempt_id) {
+        match self
+            .runtime
+            .commit(|lifecycle| manager.commit_disable_attempt(lifecycle, &review, attempt_id))
+        {
             Ok(CommitDisable::Committed(committed)) => {
                 self.runtime.commit_turn_off(claim, committed.clone());
                 self.schedule_disable_namespace_delete(claim, committed);
@@ -311,8 +314,9 @@ impl CloudBackupSupervisor {
 
         manager.apply_disable_local_cleanup();
 
-        if let Err(error) =
-            manager.persist_disabled_after_remote_delete(&self.lifecycle, &disabling)
+        if let Err(error) = self
+            .runtime
+            .commit(|lifecycle| manager.persist_disabled_after_remote_delete(lifecycle, &disabling))
         {
             self.fail_disable_after_namespace_delete_started(
                 &manager,
@@ -335,13 +339,15 @@ impl CloudBackupSupervisor {
         disabling: CommittedDisable,
         message: String,
     ) {
-        let message =
-            match manager.persist_disabling_failure(&self.lifecycle, &disabling, message.clone()) {
-                Ok(()) => message,
-                Err(error) => {
-                    error.logged_reader_message("Failed to persist cloud backup disable failure")
-                }
-            };
+        let persisted = self.runtime.commit(|lifecycle| {
+            manager.persist_disabling_failure(lifecycle, &disabling, message.clone())
+        });
+        let message = match persisted {
+            Ok(()) => message,
+            Err(error) => {
+                error.logged_reader_message("Failed to persist cloud backup disable failure")
+            }
+        };
         self.fail_disable_operation(manager, claim, message);
     }
 
@@ -393,11 +399,11 @@ impl CloudBackupSupervisor {
             }
             Ok(CloudBackupKeepEnabledPreparation::AlreadyDisabled) => {}
             Ok(CloudBackupKeepEnabledPreparation::Ready(disabling)) => {
-                let Some(restored) = Self::restore_configured_cloud_backup_after_disable(
-                    &manager,
-                    &self.lifecycle,
-                    &disabling,
-                ) else {
+                let Some(restored) = self.runtime.commit(|lifecycle| {
+                    Self::restore_configured_cloud_backup_after_disable(
+                        &manager, lifecycle, &disabling,
+                    )
+                }) else {
                     return Produces::ok(());
                 };
 
@@ -408,14 +414,13 @@ impl CloudBackupSupervisor {
                 manager.finish_keep_cloud_backup_enabled();
                 manager.refresh_sync_health();
 
-                // the record is configured again; ending or rebasing the body publishes a policy
-                // that runs background writes, and the write lane wakes uploads from it
+                // the record is configured again, and its commit already rebased an idle body and
+                // published a policy that runs background writes; ending a running Turn Off does
+                // the same, and the write lane wakes uploads from it
                 if let Some(claim) = self.runtime.claim()
                     && claim.operation() == CloudBackupExclusiveOperation::Disable
                 {
                     self.finish_disable_operation(&manager, claim);
-                } else {
-                    self.rebase_idle_runtime();
                 }
             }
             Err(error) => {

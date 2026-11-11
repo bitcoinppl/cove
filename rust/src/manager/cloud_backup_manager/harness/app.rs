@@ -19,7 +19,9 @@ use super::runtime;
 use crate::database::Database;
 use crate::manager::cloud_backup_manager::actors::supervisor::DispatchOutcome;
 use crate::manager::cloud_backup_manager::admission::{Admission, EnableIntent, UserIntent};
-use crate::manager::cloud_backup_manager::ops::test_support::{TestGlobals, install_test_globals};
+use crate::manager::cloud_backup_manager::ops::test_support::{
+    TestGlobals, install_test_globals, register_test_supervisor,
+};
 use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
@@ -150,6 +152,7 @@ impl TestApp {
         env.passkey.set_mode(mode);
         let clock = HarnessClock::install();
         let manager = bounded_block_on("launch: the manager to start", async { manager() });
+        register_test_supervisor(manager.supervisor.downgrade());
 
         let app = Self {
             manager,
@@ -203,6 +206,7 @@ impl TestApp {
         self.manager = self.block_on("relaunch: a new manager", async {
             crate::manager::cloud_backup_manager::initialize_cloud_backup_manager()
         });
+        register_test_supervisor(self.manager.supervisor.downgrade());
         self.settle();
         Step(self)
     }

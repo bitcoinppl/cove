@@ -46,7 +46,6 @@ impl CloudBackupSupervisor {
 
         let transition_id = DriveAccountSwitchId::new(rand::random());
         let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition_id);
-        self.rebase_idle_runtime();
         if let Err(unstartable) = self.runtime.start_standard(claim) {
             warn!("Cloud Backup could not start {unstartable:?}");
             return Produces::ok(Err(CloudBackupDriveAccountSwitchError::Busy));
@@ -298,9 +297,6 @@ impl CloudBackupSupervisor {
             return Produces::ok(Ok(action));
         };
 
-        // the switch record gives the switch body, whose policy pauses background writes
-        self.rebase_idle_runtime();
-
         let action = match (transition.phase, platform_state) {
             (
                 PersistedDriveAccountSwitchPhase::AwaitingAccountSelection,
@@ -494,7 +490,6 @@ impl CloudBackupSupervisor {
         }
 
         let claim = CloudBackupExclusiveOperationClaim::drive_account_switch(transition_id);
-        self.rebase_idle_runtime();
         if let Err(unstartable) = self.runtime.start_standard(claim) {
             warn!("Cloud Backup could not resume {unstartable:?}");
             return Err(CloudBackupDriveAccountSwitchError::Busy);
@@ -509,12 +504,12 @@ impl CloudBackupSupervisor {
     }
 
     fn persist_drive_account_switch(
-        &self,
+        &mut self,
         account_switch: PersistedDriveAccountSwitch,
     ) -> Result<(), CloudBackupDriveAccountSwitchError> {
         match self
-            .lifecycle
-            .begin_drive_account_switch(account_switch)
+            .runtime
+            .commit(|lifecycle| lifecycle.begin_drive_account_switch(account_switch))
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?
         {
             DriveAccountSwitchStart::Started => Ok(()),
@@ -526,25 +521,25 @@ impl CloudBackupSupervisor {
     }
 
     fn set_drive_account_switch_phase(
-        &self,
+        &mut self,
         transition_id: DriveAccountSwitchId,
         phase: PersistedDriveAccountSwitchPhase,
     ) -> Result<(), CloudBackupDriveAccountSwitchError> {
         let applied = self
-            .lifecycle
-            .set_drive_account_switch_phase(transition_id, phase)
+            .runtime
+            .commit(|lifecycle| lifecycle.set_drive_account_switch_phase(transition_id, phase))
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?;
 
         applied.then_some(()).ok_or(CloudBackupDriveAccountSwitchError::InvalidTransition)
     }
 
     fn clear_drive_account_switch(
-        &self,
+        &mut self,
         transition_id: DriveAccountSwitchId,
     ) -> Result<(), CloudBackupDriveAccountSwitchError> {
         let cleared = self
-            .lifecycle
-            .clear_drive_account_switch(transition_id)
+            .runtime
+            .commit(|lifecycle| lifecycle.clear_drive_account_switch(transition_id))
             .map_err_str(CloudBackupDriveAccountSwitchError::Internal)?;
 
         cleared.then_some(()).ok_or(CloudBackupDriveAccountSwitchError::InvalidTransition)

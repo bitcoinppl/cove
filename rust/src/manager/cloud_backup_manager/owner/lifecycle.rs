@@ -573,15 +573,41 @@ pub(crate) mod test_support {
         CloudBackupRuntimeOwnership, DatabaseError, LifecycleCapability, LifecycleLoad,
         LifecycleWriter,
     };
+    use crate::manager::cloud_backup_manager::ops::test_support::rebase_owners_after_test_write;
 
     /// A capability for tests that hold a raw transaction open to race the owner
     pub(crate) fn capability() -> LifecycleCapability {
         LifecycleCapability(())
     }
 
-    /// A writer for tests that exercise the owner's writes without a manager
-    pub(crate) fn writer() -> LifecycleWriter {
+    /// The writer a test supervisor owns, as bootstrap would hand it over
+    pub(crate) fn owner_writer() -> LifecycleWriter {
         LifecycleWriter(LifecycleCapability(()))
+    }
+
+    /// A writer for tests that seed the record through the owner's typed writes
+    ///
+    /// It writes beside the supervisor's own writer, so dropping it tells every test supervisor
+    /// to rebase, as the supervisor's commit does
+    pub(crate) fn writer() -> SeedWriter {
+        SeedWriter(LifecycleWriter(LifecycleCapability(())))
+    }
+
+    /// A test writer that tells the owner when it is done writing
+    pub(crate) struct SeedWriter(LifecycleWriter);
+
+    impl std::ops::Deref for SeedWriter {
+        type Target = LifecycleWriter;
+
+        fn deref(&self) -> &LifecycleWriter {
+            &self.0
+        }
+    }
+
+    impl Drop for SeedWriter {
+        fn drop(&mut self) {
+            rebase_owners_after_test_write();
+        }
     }
 
     /// Bootstrap whose legacy heal write fails before it commits

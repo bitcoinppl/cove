@@ -58,7 +58,7 @@ fn test_supervisor(
     CloudBackupSupervisor::new(
         manager,
         writes,
-        crate::manager::cloud_backup_manager::owner::lifecycle::test_support::writer(),
+        crate::manager::cloud_backup_manager::owner::lifecycle::test_support::owner_writer(),
         None,
     )
 }
@@ -79,6 +79,13 @@ fn persist_enabled_for_supervisor_test() {
         .cloud_backup_state
         .set(&PersistedCloudBackupState::mark_enabled_reset_verification(0, 0))
         .unwrap();
+}
+
+/// Seeds a Configured record under a supervisor the test drives directly; it rebases on the
+/// seed as it would on its own commit
+fn persist_enabled_under(supervisor: &mut CloudBackupSupervisor) {
+    persist_enabled_for_supervisor_test();
+    supervisor.rebase_on_seeded_record();
 }
 
 fn test_committed_disable() -> CommittedDisable {
@@ -1176,7 +1183,7 @@ fn begin_configured(
 ) -> impl FnOnce(&mut CloudBackupSupervisor, &Arc<RustCloudBackupManager>) -> CloudBackupExclusiveOperationClaim
 {
     move |supervisor, manager| {
-        persist_enabled_for_supervisor_test();
+        persist_enabled_under(supervisor);
         supervisor.begin_exclusive_operation(manager, operation).unwrap()
     }
 }
@@ -1604,7 +1611,7 @@ async fn supervisor_ignores_stale_disable_local_cleanup_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_recover_other_backups_completion() {
     assert_completion_ignores_stale_claim(|supervisor, manager| {
-            persist_enabled_for_supervisor_test();
+            persist_enabled_under(supervisor);
             CloudBackupSupervisor::begin_other_backups_operation(
                 supervisor,
                 manager,
@@ -1629,7 +1636,7 @@ async fn supervisor_ignores_stale_delete_cloud_wallet_preparation_completion() {
 #[tokio::test(flavor = "current_thread")]
 async fn supervisor_ignores_stale_delete_other_backups_completion() {
     assert_completion_ignores_stale_claim(|supervisor, manager| {
-            persist_enabled_for_supervisor_test();
+            persist_enabled_under(supervisor);
             CloudBackupSupervisor::begin_other_backups_operation(
                 supervisor,
                 manager,
@@ -1658,7 +1665,7 @@ async fn supervisor_ignores_stale_repair_passkey_refresh_completion() {
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
 
-    persist_enabled_for_supervisor_test();
+    persist_enabled_under(&mut supervisor);
     let current = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RepairPasskey)
         .unwrap();
@@ -3049,7 +3056,7 @@ async fn supervisor_ignores_disable_blocker_completion_after_the_record_moved_on
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
 
-    persist_enabled_for_supervisor_test();
+    persist_enabled_under(&mut supervisor);
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
         .unwrap();
@@ -3073,7 +3080,7 @@ async fn stale_completion_is_discarded_without_touching_the_running_operation() 
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
 
-    persist_enabled_for_supervisor_test();
+    persist_enabled_under(&mut supervisor);
     let finished = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::RecreateManifest)
         .unwrap();
@@ -3111,7 +3118,7 @@ async fn keep_enabled_finishes_active_disable_operation() {
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
 
-    persist_enabled_for_supervisor_test();
+    persist_enabled_under(&mut supervisor);
     supervisor.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable).unwrap();
     let disabling = test_disabling_state();
     Database::global()
@@ -3146,7 +3153,7 @@ async fn disable_runtime_drain_failure_before_commit_leaves_backup_configured() 
     );
     supervisor.sync_health = Addr::detached();
 
-    persist_enabled_for_supervisor_test();
+    persist_enabled_under(&mut supervisor);
     let claim = supervisor
         .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Disable)
         .unwrap();

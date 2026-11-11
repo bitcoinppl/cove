@@ -1,9 +1,11 @@
-//! The supervisor's runtime with its write policy published on every change
+//! The supervisor's runtime and durable record, with the write policy published on every change
 //!
-//! [`OwnedRuntime`] is the only way to change the stored [`Runtime`]: it derefs for reads and has
-//! no `DerefMut`, so every mutation goes through a method here, which rebases an idle body on the
-//! owner's record and pushes the derived [`WritePolicy`] to the write supervisor when it changed.
-//! The compiler, not each call site, guarantees the write lane sees every runtime change
+//! [`OwnedRuntime`] is the only way to change the stored [`Runtime`] or the durable lifecycle
+//! record: it derefs for reads and has no `DerefMut`, and it holds the only [`LifecycleWriter`],
+//! which callers reach only through [`OwnedRuntime::commit`]. Every runtime mutation and every
+//! record write therefore ends in the same publish, which rebases an idle body on the owner's
+//! record and pushes the derived [`WritePolicy`] to the write supervisor when it changed. The
+//! compiler, not each call site, guarantees the write lane sees every change of either
 
 use std::ops::Deref;
 use std::sync::Weak;
@@ -21,12 +23,13 @@ use crate::manager::cloud_backup_manager::actors::write::{
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperationClaim, CloudBackupPendingEnableRecovery,
 };
-use crate::manager::cloud_backup_manager::owner::lifecycle::CommittedDisable;
+use crate::manager::cloud_backup_manager::owner::lifecycle::{CommittedDisable, LifecycleWriter};
 
-/// The stored runtime and the write policy last published for it
+/// The stored runtime, the only lifecycle writer, and the write policy last published for them
 #[derive(Debug)]
 pub(crate) struct OwnedRuntime {
     runtime: Runtime,
+    lifecycle: LifecycleWriter,
     write: Addr<CloudBackupWriteSupervisor>,
     manager: Weak<RustCloudBackupManager>,
     /// The configuration generation commands with no operation are matched against
@@ -47,6 +50,7 @@ impl Deref for OwnedRuntime {
 impl OwnedRuntime {
     pub(crate) fn new(
         runtime: Runtime,
+        lifecycle: LifecycleWriter,
         write: Addr<CloudBackupWriteSupervisor>,
         manager: Weak<RustCloudBackupManager>,
     ) -> Self {
@@ -55,6 +59,7 @@ impl OwnedRuntime {
             published: VersionedPolicy { version: 0, policy: WritePolicy::starting() },
             replacing: runtime.replacing_configuration(),
             runtime,
+            lifecycle,
             write,
             manager,
             generation,
@@ -145,8 +150,30 @@ impl OwnedRuntime {
         send!(self.write.apply_policy(self.published.clone()));
     }
 
-    /// Republishes after a lifecycle write moved the record under an idle body
-    pub(crate) fn rebase_idle(&mut self) {
+    /// Writes the durable lifecycle record, then rebases an idle body on it and publishes
+    ///
+    /// The writer is reachable only inside `write`, so no record write can skip the publish that
+    /// keeps the write lane's policy in step with the record
+    pub(crate) fn commit<T>(&mut self, write: impl FnOnce(&LifecycleWriter) -> T) -> T {
+        let result = write(&self.lifecycle);
+        self.publish();
+        result
+    }
+
+    /// Rebases after a change outside the record that an idle body derives from
+    ///
+    /// Only the pending Enable evidence in the keychain is such a fact: the record has one writer,
+    /// [`Self::commit`], which publishes on its own
+    pub(crate) fn rebase_on_keychain(&mut self) {
+        self.publish();
+    }
+
+    /// Loads an idle body again from a record a test seeded without the owner, and publishes
+    #[cfg(test)]
+    pub(crate) fn rebase_after_test_write(&mut self) {
+        let record = RustCloudBackupManager::load_persisted_state();
+        let pending_enable_recovery = self.held_pending_enable_recovery();
+        self.runtime.reload_idle(IdleFacts { record: &record, pending_enable_recovery });
         self.publish();
     }
 

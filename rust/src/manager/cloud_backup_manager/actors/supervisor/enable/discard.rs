@@ -99,7 +99,6 @@ impl CloudBackupSupervisor {
         // the delete is a write-lane command, and the supervisor never waits on the write
         // supervisor, so the delete runs off the mailbox as an operation of its own: Enable meets
         // it running and is rejected as busy, and its completion must still be current
-        self.rebase_idle_runtime();
         let claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::DiscardPendingEnable,
             OperationId::next(),

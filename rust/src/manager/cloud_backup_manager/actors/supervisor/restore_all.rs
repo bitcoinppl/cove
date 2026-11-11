@@ -16,7 +16,7 @@ pub(crate) fn restore_all_marker_matches_active_namespace(
 
 impl CloudBackupSupervisor {
     pub(crate) fn reconcile_restore_all_after_cloud_only_fetch(
-        &self,
+        &mut self,
         manager: &RustCloudBackupManager,
     ) {
         if self.runtime.is_restore_all() || !restore_all_marker_matches_active_namespace(manager) {
@@ -31,7 +31,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        match self.lifecycle.clear_restore_all_marker() {
+        match self.runtime.commit(LifecycleWriter::clear_restore_all_marker) {
             Ok(_) => manager.reset_restore_all(),
             Err(error) => {
                 manager.apply_cloud_only_operation(CloudOnlyOperation::Failed {
@@ -73,7 +73,9 @@ impl CloudBackupSupervisor {
                 return;
             }
         };
-        if let Err(error) = self.lifecycle.persist_restore_all_marker(namespace_id) {
+        if let Err(error) =
+            self.runtime.commit(|lifecycle| lifecycle.persist_restore_all_marker(namespace_id))
+        {
             self.fail_restore_all_before_marker(&manager, claim, error);
             return;
         }
@@ -350,7 +352,7 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
-        if let Err(error) = self.lifecycle.clear_restore_all_marker() {
+        if let Err(error) = self.runtime.commit(LifecycleWriter::clear_restore_all_marker) {
             self.finish_restore_all_retry_required(manager, claim, error);
             return;
         }

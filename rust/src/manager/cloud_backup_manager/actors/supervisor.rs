@@ -259,12 +259,12 @@ impl WalletSetGeneration {
 pub(crate) struct CloudBackupSupervisor {
     addr: WeakAddr<Self>,
     manager: Weak<RustCloudBackupManager>,
-    lifecycle: LifecycleWriter,
     cleanup: Addr<CloudBackupCleanupWorker>,
     sync_health: Addr<CloudBackupSyncHealthWorker>,
     uploads: Addr<CloudBackupUploadWorker>,
     write: Addr<CloudBackupWriteSupervisor>,
-    /// The lifecycle body with the running operation nested in it, published to the write lane
+    /// The lifecycle body with the running operation nested in it, and the only lifecycle
+    /// writer, both published to the write lane
     runtime: OwnedRuntime,
     pending_enable_session: Option<PendingEnableSession>,
     next_request_id: u64,
@@ -343,11 +343,10 @@ impl CloudBackupSupervisor {
             },
         );
 
-        let runtime = OwnedRuntime::new(runtime, cloud_writes.clone(), manager.clone());
+        let runtime = OwnedRuntime::new(runtime, lifecycle, cloud_writes.clone(), manager.clone());
 
         Self {
             addr: WeakAddr::default(),
-            lifecycle,
             cleanup: spawn_actor(CloudBackupCleanupWorker::new(manager.clone())),
             sync_health: spawn_actor(CloudBackupSyncHealthWorker::new(manager.clone())),
             uploads: spawn_actor(CloudBackupUploadWorker::new(manager.clone())),
@@ -439,7 +438,6 @@ impl CloudBackupSupervisor {
             return None;
         }
 
-        self.rebase_idle_runtime();
         let claim = CloudBackupExclusiveOperationClaim::new(operation, OperationId::next());
         let started = if operation == CloudBackupExclusiveOperation::Restore {
             self.runtime.start_restore(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))))
@@ -486,7 +484,6 @@ impl CloudBackupSupervisor {
             return None;
         }
 
-        self.rebase_idle_runtime();
         let claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
             OperationId::next(),
@@ -508,7 +505,6 @@ impl CloudBackupSupervisor {
     pub async fn project_runtime(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        self.rebase_idle_runtime();
         let exported = self.runtime.exported();
         if let Some(status) = exported.status {
             manager.reconcile_runtime_status(status);
@@ -518,14 +514,6 @@ impl CloudBackupSupervisor {
         }
 
         Produces::ok(())
-    }
-
-    /// Moves an idle runtime body onto the supervisor's own committed record
-    ///
-    /// The supervisor holds the only writer, so the record is the owner's state, not a mirror;
-    /// a running operation holds its body and is not moved
-    fn rebase_idle_runtime(&mut self) {
-        self.runtime.rebase_idle();
     }
 
     fn next_request_id(&mut self) -> u64 {
@@ -652,10 +640,12 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         };
 
-        let result = manager.reconcile_committed(
-            "persist empty restored cloud backup state",
-            self.lifecycle.record_restore_without_backup(),
-        );
+        let result = self.runtime.commit(|lifecycle| {
+            manager.reconcile_committed(
+                "persist empty restored cloud backup state",
+                lifecycle.record_restore_without_backup(),
+            )
+        });
 
         Produces::ok(result)
     }
@@ -672,7 +662,10 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         };
 
-        Produces::ok(Self::commit_restored_namespace(&manager, &self.lifecycle, commit))
+        Produces::ok(
+            self.runtime
+                .commit(|lifecycle| Self::commit_restored_namespace(&manager, lifecycle, commit)),
+        )
     }
 
     pub async fn start_enable_operation(
@@ -1259,7 +1252,6 @@ impl CloudBackupSupervisor {
     pub async fn cloud_reachable(&mut self, cause: CloudReachable) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        self.rebase_idle_runtime();
         if matches!(*self.runtime, Runtime::FinishingDisable { op: None, .. }) {
             if cause != CloudReachable::PendingVerification {
                 manager.resume_persisted_disable_if_needed();
@@ -1683,8 +1675,19 @@ pub(crate) mod test_support {
                 manager.project_exclusive_operation_finished(claim);
             }
 
-            self.rebase_idle_runtime();
+            self.runtime.rebase_after_test_write();
             Produces::ok(LeftoverOperationForTest::Ended { orphaned: manager.is_none() })
+        }
+
+        /// Rebases on a record a test seeded without the owner
+        pub async fn rebase_after_test_write(&mut self) -> ActorResult<()> {
+            self.rebase_on_seeded_record();
+            Produces::ok(())
+        }
+
+        /// The same, for a supervisor a test drives directly instead of as an actor
+        pub(crate) fn rebase_on_seeded_record(&mut self) {
+            self.runtime.rebase_after_test_write();
         }
 
         /// Ends any operation a previous test left running and rebases on the reset record
@@ -1694,7 +1697,7 @@ pub(crate) mod test_support {
                 manager.project_exclusive_operation_finished(claim);
             }
 
-            self.rebase_idle_runtime();
+            self.runtime.rebase_after_test_write();
             Produces::ok(())
         }
 

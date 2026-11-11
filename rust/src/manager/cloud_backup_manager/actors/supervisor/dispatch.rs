@@ -60,7 +60,6 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         intent: &UserIntent,
     ) -> Admission {
-        self.rebase_idle_runtime();
         evaluate_admission(intent, &self.admission_snapshot(manager))
     }
 
@@ -174,12 +173,16 @@ impl CloudBackupSupervisor {
                 self.cancel_restore().await?;
             }
             I::StartVerification { source, discoverable: false } => {
-                manager.start_verification(&self.lifecycle, source);
+                self.runtime.commit(|lifecycle| manager.start_verification(lifecycle, source));
             }
             I::StartVerification { source, discoverable: true } => {
-                manager.start_verification_discoverable(&self.lifecycle, source);
+                self.runtime.commit(|lifecycle| {
+                    manager.start_verification_discoverable(lifecycle, source);
+                });
             }
-            I::DismissVerificationPrompt => manager.dismiss_verification_prompt(&self.lifecycle),
+            I::DismissVerificationPrompt => {
+                self.runtime.commit(|lifecycle| manager.dismiss_verification_prompt(lifecycle));
+            }
             I::RecreateManifest => {
                 self.start_recovery_operation(RecoveryAction::RecreateManifest).await?;
             }

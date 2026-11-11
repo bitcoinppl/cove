@@ -603,8 +603,9 @@ impl CloudBackupSupervisor {
         self.pending_enable_session = None;
         manager.clear_enable_progress_report();
 
-        // the evidence is gone, so the rebase leaves the recovery and ends its projection
-        self.rebase_idle_runtime();
+        // only the keychain changed, which no record write publishes: the evidence is gone, so
+        // the rebase leaves the recovery and ends its projection
+        self.runtime.rebase_on_keychain();
         manager.sync_persisted_state();
 
         Produces::ok(())

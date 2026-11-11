@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex as StdMutex, OnceLock};
 use std::time::Duration;
 
-use act_zero::{WeakAddr, call};
+use act_zero::{WeakAddr, call, send};
 use bip39::Mnemonic;
 use cove_cspp::backup_data::{
     MASTER_KEY_RECORD_ID, WalletEntry, WalletMode as CloudWalletMode, WalletSecret,
@@ -1459,6 +1459,26 @@ pub(crate) fn reset_cloud_backup_test_state_with_hook(
 /// reset has to reach the supervisors of earlier tests too, not only its own
 static TEST_SUPERVISORS: StdMutex<Vec<WeakAddr<CloudBackupSupervisor>>> = StdMutex::new(Vec::new());
 
+/// Adds a supervisor to the registry, so test resets and seeded record writes reach it
+pub(crate) fn register_test_supervisor(supervisor: WeakAddr<CloudBackupSupervisor>) {
+    let mut supervisors = TEST_SUPERVISORS.lock().expect("test supervisors lock");
+    if !supervisors.contains(&supervisor) {
+        supervisors.push(supervisor);
+    }
+}
+
+/// Tells every registered supervisor that a test seeded the record without the owner
+///
+/// Production record writes go through `OwnedRuntime::commit`, which rebases and publishes on
+/// its own. A seed bypasses the owner, so the owner rebases on a message queued before the
+/// test's next one, and an idle body never lags the seeded record
+pub(crate) fn rebase_owners_after_test_write() {
+    let supervisors = TEST_SUPERVISORS.lock().expect("test supervisors lock").clone();
+    for supervisor in supervisors {
+        send!(supervisor.rebase_after_test_write());
+    }
+}
+
 /// Ends the operation any test's supervisor left running, waiting, bounded, for its effects
 ///
 /// A supervisor whose test dropped its manager can begin no operation again, so once it is
@@ -1466,15 +1486,9 @@ static TEST_SUPERVISORS: StdMutex<Vec<WeakAddr<CloudBackupSupervisor>>> = StdMut
 /// call, delays a single reset by the bound and is then dropped from the registry too, since
 /// waiting on it again would only delay every later reset
 fn end_leftover_operations_for_test(manager: &RustCloudBackupManager) {
-    let supervisors = {
-        let mut supervisors = TEST_SUPERVISORS.lock().expect("test supervisors lock");
-        let current = manager.supervisor.downgrade();
-        if !supervisors.contains(&current) {
-            supervisors.push(current);
-        }
-
-        supervisors.clone()
-    };
+    let current = manager.supervisor.downgrade();
+    register_test_supervisor(current.clone());
+    let supervisors = TEST_SUPERVISORS.lock().expect("test supervisors lock").clone();
 
     let bound = loaded_host_wait(Duration::from_secs(2));
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
@@ -1497,11 +1511,13 @@ fn end_leftover_operations_for_test(manager: &RustCloudBackupManager) {
         let _ = sender.send(finished);
     });
 
+    // the resetting test keeps using its manager, so its seeded record writes must still reach
+    // that supervisor even when this reset gave up waiting on it
     let finished = receiver.recv().expect("receive ended test supervisors");
     TEST_SUPERVISORS
         .lock()
         .expect("test supervisors lock")
-        .retain(|supervisor| !finished.contains(supervisor));
+        .retain(|supervisor| *supervisor == current || !finished.contains(supervisor));
 }
 
 /// Asks one supervisor until its leftover operation has ended, or `None` once the actor is gone

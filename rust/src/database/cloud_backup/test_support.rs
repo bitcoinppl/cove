@@ -5,6 +5,7 @@ use cove_util::result_ext::ResultExt as _;
 use super::{CLOUD_BACKUP_STATE_TABLE, CURRENT_KEY, CloudBackupStateTable};
 use crate::database::Error;
 use crate::database::cloud_backup::PersistedCloudBackupState;
+use crate::manager::cloud_backup_manager::rebase_owners_after_test_write;
 
 impl CloudBackupStateTable {
     /// Seeds the record directly, bypassing the lifecycle owner
@@ -18,6 +19,7 @@ impl CloudBackupStateTable {
         }
 
         write_txn.commit().map_err_str(Error::DatabaseAccess)?;
+        rebase_owners_after_test_write();
 
         Ok(())
     }
@@ -32,6 +34,7 @@ impl CloudBackupStateTable {
         }
 
         write_txn.commit().map_err_str(Error::DatabaseAccess)?;
+        rebase_owners_after_test_write();
 
         Ok(())
     }

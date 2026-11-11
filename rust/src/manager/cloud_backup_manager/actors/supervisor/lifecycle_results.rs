@@ -45,7 +45,6 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         }
 
-        self.rebase_idle_runtime();
         if !matches!(*self.runtime, Runtime::Configured { .. } | Runtime::DriveAccountSwitch { .. })
         {
             debug!("Cloud Backup refused keychain writes {writes:?} outside a configured backup");
@@ -80,10 +79,12 @@ impl CloudBackupSupervisor {
     pub async fn record_cloud_wallet_count(&mut self, wallet_count: u32) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        if let Err(error) = manager.reconcile_committed(
-            "persist cloud backup wallet count",
-            self.lifecycle.record_wallet_count(wallet_count),
-        ) {
+        if let Err(error) = self.runtime.commit(|lifecycle| {
+            manager.reconcile_committed(
+                "persist cloud backup wallet count",
+                lifecycle.record_wallet_count(wallet_count),
+            )
+        }) {
             warn!("Failed to persist cloud backup wallet count: {error}");
         }
 
@@ -106,17 +107,17 @@ impl CloudBackupSupervisor {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         }
 
-        let result = match state_mode {
+        let result = self.runtime.commit(|lifecycle| match state_mode {
             CloudBackupUploadedWalletsStateMode::PreserveVerification => {
-                self.lifecycle.persist_enabled(wallet_count)
+                lifecycle.persist_enabled(wallet_count)
             }
             CloudBackupUploadedWalletsStateMode::ResetVerificationWithPendingCompletion(
                 completion,
-            ) => self.lifecycle.persist_enabled_reset_verification_with_pending_completion(
+            ) => lifecycle.persist_enabled_reset_verification_with_pending_completion(
                 wallet_count,
                 completion,
             ),
-        };
+        });
 
         Produces::ok(result)
     }
@@ -133,10 +134,12 @@ impl CloudBackupSupervisor {
 
         self.wallet_set = self.wallet_set.next();
 
-        if let Err(error) = manager.reconcile_committed(
-            "mark cloud backup unverified after wallet change",
-            self.lifecycle.require_verification_after_wallet_change(requested_at),
-        ) {
+        if let Err(error) = self.runtime.commit(|lifecycle| {
+            manager.reconcile_committed(
+                "mark cloud backup unverified after wallet change",
+                lifecycle.require_verification_after_wallet_change(requested_at),
+            )
+        }) {
             error!("Failed to mark cloud backup unverified after wallet change: {error}");
         }
 
@@ -150,10 +153,12 @@ impl CloudBackupSupervisor {
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        if let Err(error) = manager.reconcile_committed(
-            "persist backup integrity state",
-            self.lifecycle.apply_integrity_downgrade(downgrade),
-        ) {
+        if let Err(error) = self.runtime.commit(|lifecycle| {
+            manager.reconcile_committed(
+                "persist backup integrity state",
+                lifecycle.apply_integrity_downgrade(downgrade),
+            )
+        }) {
             error!("Failed to persist backup integrity state: {error}");
         }
 
@@ -164,10 +169,12 @@ impl CloudBackupSupervisor {
     pub async fn discard_pending_verification_completion(&mut self) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        let cleared = match manager.reconcile_committed(
-            "clear pending verification completion",
-            self.lifecycle.discard_pending_verification_completion(),
-        ) {
+        let cleared = match self.runtime.commit(|lifecycle| {
+            manager.reconcile_committed(
+                "clear pending verification completion",
+                lifecycle.discard_pending_verification_completion(),
+            )
+        }) {
             Ok(cleared) => cleared,
             Err(error) => {
                 error!("Failed to clear pending verification completion: {error}");
@@ -220,11 +227,15 @@ impl CloudBackupSupervisor {
         }
 
         let verified_at = cove_util::time::unix_timestamp_secs_or_zero();
-        let settled = manager.reconcile_committed(
-            "settle pending verification completion",
-            self.lifecycle
-                .settle_pending_verification_completion(&completion, Some((&result, verified_at))),
-        );
+        let settled = self.runtime.commit(|lifecycle| {
+            manager.reconcile_committed(
+                "settle pending verification completion",
+                lifecycle.settle_pending_verification_completion(
+                    &completion,
+                    Some((&result, verified_at)),
+                ),
+            )
+        });
 
         match settled {
             Ok(true) => {
@@ -243,7 +254,9 @@ impl CloudBackupSupervisor {
         namespace_id: String,
     ) -> ActorResult<()> {
         // the sync that found the marker already projected the reset
-        if let Err(error) = self.lifecycle.clear_stale_restore_all_marker(&namespace_id) {
+        if let Err(error) =
+            self.runtime.commit(|lifecycle| lifecycle.clear_stale_restore_all_marker(&namespace_id))
+        {
             error!("Failed to clear stale Restore All marker: {error}");
         }
 
@@ -253,7 +266,7 @@ impl CloudBackupSupervisor {
     /// Records the running verification's evidence, unless the wallet set changed since it read
     /// the wallets
     pub(crate) fn record_verification_evidence(
-        &self,
+        &mut self,
         manager: &RustCloudBackupManager,
         result: &DeepVerificationResult,
     ) {
@@ -262,7 +275,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        manager.persist_verification_result(&self.lifecycle, result);
+        self.runtime.commit(|lifecycle| manager.persist_verification_result(lifecycle, result));
     }
 
     /// Records a finished verification's evidence and shows its result, or, when the wallet set
@@ -271,7 +284,7 @@ impl CloudBackupSupervisor {
     /// The wallet change already recorded that the backup needs verifying, so showing the older
     /// result would contradict it
     pub(crate) fn settle_verification_evidence(
-        &self,
+        &mut self,
         manager: &RustCloudBackupManager,
         result: DeepVerificationResult,
     ) {
@@ -281,7 +294,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        manager.persist_verification_result(&self.lifecycle, &result);
+        self.runtime.commit(|lifecycle| manager.persist_verification_result(lifecycle, &result));
         manager.handle_deep_verification_result(result);
     }
 }

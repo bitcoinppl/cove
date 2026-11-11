@@ -104,6 +104,8 @@ pub use self::model::{
     CloudBackupRestoreAllState, CloudBackupRestoreFlow,
     CloudBackupUndecryptableWalletDeletionState,
 };
+#[cfg(test)]
+pub(crate) use self::ops::test_support::rebase_owners_after_test_write;
 pub(crate) use self::ops::{
     CloudBackupDisablePreparation, CloudBackupEnablePasskeyPreparation,
     CloudBackupEnablePasskeyRegistration, CloudBackupEnablePreparation,
