@@ -27,8 +27,8 @@ use crate::manager::cloud_backup_manager::ops::test_support::{
 use crate::manager::cloud_backup_manager::owner::lifecycle::{LifecycleLoad, LifecycleWriter};
 use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_MANAGER, CloudBackupEnableContext, CloudBackupManagerAction,
-    CloudBackupResetPermit, CloudBackupRuntimeOwnership, CloudBackupVerificationSource,
-    RustCloudBackupManager, initialize_cloud_backup_manager_with,
+    CloudBackupPendingEnableRecovery, CloudBackupResetPermit, CloudBackupRuntimeOwnership,
+    CloudBackupVerificationSource, RustCloudBackupManager, initialize_cloud_backup_manager_with,
 };
 use crate::manager::connectivity_manager::{CONNECTIVITY_MANAGER, ConnectivityStatus};
 
@@ -244,6 +244,15 @@ impl TestApp {
         let supervisor = self.manager.supervisor.clone();
         self.block_on("whether an operation runs", async move {
             call!(supervisor.harness_runs_operation()).await
+        })
+        .expect("the supervisor answers")
+    }
+
+    /// The interrupted-Enable recovery the runtime body holds now, apart from what is shown
+    pub(crate) fn runtime_recovery(&self) -> Option<CloudBackupPendingEnableRecovery> {
+        let supervisor = self.manager.supervisor.clone();
+        self.block_on("the runtime's recovery", async move {
+            call!(supervisor.harness_recovery()).await
         })
         .expect("the supervisor answers")
     }

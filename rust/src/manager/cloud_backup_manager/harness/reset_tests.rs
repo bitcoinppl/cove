@@ -6,6 +6,7 @@
 
 use std::time::Duration;
 
+use cove_cspp::MasterKeyPromotionStatus;
 use cove_cspp::master_key::MasterKey;
 use cove_device::keychain::Keychain;
 use cove_device::passkey::DiscoveredPasskeyResult;
@@ -21,6 +22,7 @@ use crate::database::cloud_backup::{
 use crate::manager::cloud_backup_manager::actors::supervisor::OwnedKeychainWrite;
 use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
 use crate::manager::cloud_backup_manager::catastrophic_recovery::reset_local_data_for_catastrophic_recovery;
+use crate::manager::cloud_backup_manager::model::CloudBackupLifecycle;
 use crate::manager::cloud_backup_manager::ops::test_support::background_owner;
 use crate::manager::cloud_backup_manager::{
     CloudBackupDriveAccountSwitchError, CloudBackupEnableContext, CloudBackupEnableState,
@@ -517,5 +519,68 @@ fn a_switch_run_a_reset_revoked_cannot_answer_for_the_run_that_resumed_the_switc
             "the resumed run never reported\n{}",
             app.describe()
         );
+    });
+}
+
+/// A reset that is abandoned before its wipe leaves the interrupted Enable's evidence in the
+/// keychain, so the recovery that owns that evidence comes back: it shows through the reset and
+/// after it, and the recovery's cleanup still ends it
+#[test]
+fn abandoned_reset_keeps_the_pending_enable_recovery() {
+    let test = concat!(module_path!(), "::abandoned_reset_keeps_the_pending_enable_recovery");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+
+        // staged material without its journal is evidence restart can only hand to recovery
+        cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate())
+            .expect("stage a master key");
+        app.relaunch().then_can(&[N::Enable]).then_cannot(&[N::TurnOff]);
+
+        let recovery = match app.manager().state().lifecycle {
+            CloudBackupLifecycle::PendingEnableRecovery(recovery) => recovery,
+            lifecycle => panic!("not in recovery after restart: {lifecycle:?}"),
+        };
+        assert_eq!(app.runtime_recovery(), Some(recovery.clone()));
+
+        let manager = app.manager().clone();
+        let permit = app
+            .block_on("the reset to be ready", async move { manager.prepare_local_reset().await })
+            .expect("reset permit");
+
+        // the reset owns the runtime, and the recovery still shows
+        app.current().then_cannot(&[N::Enable, N::TurnOff]);
+        assert_eq!(
+            app.manager().state().lifecycle,
+            CloudBackupLifecycle::PendingEnableRecovery(recovery.clone())
+        );
+
+        app.event("the wipe fails before its commit", |app| {
+            app.block_on("the reset to end", permit.resume_after_failed_reset())
+                .expect("abandon the reset");
+        })
+        .then_can(&[N::Enable])
+        .then_cannot(&[N::TurnOff]);
+
+        assert_eq!(
+            app.manager().state().lifecycle,
+            CloudBackupLifecycle::PendingEnableRecovery(recovery.clone()),
+            "{}",
+            app.describe()
+        );
+        assert_eq!(app.runtime_recovery(), Some(recovery), "{}", app.describe());
+        assert_eq!(
+            cspp.master_key_promotion_status().expect("read"),
+            MasterKeyPromotionStatus::Staged
+        );
+
+        app.dispatch(CloudBackupManagerAction::ConfirmPendingEnableCleanup)
+            .then_can(&[N::Enable])
+            .then_cannot(&[N::TurnOff]);
+        assert_eq!(
+            cspp.master_key_promotion_status().expect("read"),
+            MasterKeyPromotionStatus::None
+        );
+        assert_eq!(app.manager().state().lifecycle, CloudBackupLifecycle::Disabled);
     });
 }

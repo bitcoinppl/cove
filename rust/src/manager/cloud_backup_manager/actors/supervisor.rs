@@ -1546,13 +1546,24 @@ impl CloudBackupSupervisor {
 
         let after = match outcome {
             LocalResetOutcome::Wiped => Runtime::off(),
-            LocalResetOutcome::Abandoned => Runtime::at_load(
-                None,
-                IdleFacts {
-                    record: &RustCloudBackupManager::load_persisted_state(),
-                    pending_enable_recovery: None,
-                },
-            ),
+
+            // the wipe never ran, so a recovery the reset set aside goes on while its evidence
+            // remains; evidence the abandoned wipe did clear ends it
+            LocalResetOutcome::Abandoned => {
+                let pending_enable_recovery = self
+                    .runtime
+                    .recovery_held_by_reset()
+                    .cloned()
+                    .filter(|_| RustCloudBackupManager::pending_enable_evidence_remains());
+
+                Runtime::at_load(
+                    None,
+                    IdleFacts {
+                        record: &RustCloudBackupManager::load_persisted_state(),
+                        pending_enable_recovery,
+                    },
+                )
+            }
         };
         self.runtime.finish_reset(after);
         debug!("Cloud Backup local reset finished: {outcome:?}");
@@ -1686,6 +1697,13 @@ pub(crate) mod test_support {
         /// Whether an operation holds the runtime now
         pub(crate) async fn harness_runs_operation(&mut self) -> ActorResult<bool> {
             Produces::ok(self.runtime.claim().is_some())
+        }
+
+        /// The interrupted-Enable recovery the runtime body holds now
+        pub(crate) async fn harness_recovery(
+            &mut self,
+        ) -> ActorResult<Option<CloudBackupPendingEnableRecovery>> {
+            Produces::ok(self.runtime.pending_enable_recovery().cloned())
         }
 
         pub async fn run_wallet_upload_inline_for_test(

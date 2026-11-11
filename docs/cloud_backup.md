@@ -200,6 +200,8 @@ When an interrupted Enable leaves that evidence behind, the supervisor holds it
 as its own runtime body, `PendingEnableRecovery`, which can run one recovery
 operation at a time. The screen only shows this body. The body ends when the
 supervisor finds the evidence gone. A status update from elsewhere can't end it.
+A local reset sets the recovery aside and keeps it on screen. A reset that is
+abandoned before its wipe returns to the recovery while its evidence remains.
 
 Automatic passkey retry is shared and bounded. It applies only to a typed
 platform-authorization failure that occurred before native presentation.

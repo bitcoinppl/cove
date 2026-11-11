@@ -75,6 +75,9 @@ pub(crate) enum Runtime {
         /// The operation whose off-actor effect was running when the reset began; the reset
         /// waits on its stage, so it continues without blocking a handler
         held: Option<OpRun>,
+        /// The interrupted-Enable recovery the body held when the reset began; a reset that is
+        /// abandoned before its wipe returns to it while the keychain still holds its evidence
+        recovery: Option<CloudBackupPendingEnableRecovery>,
     },
 }
 
@@ -349,6 +352,14 @@ impl Runtime {
         }
     }
 
+    /// The recovery a reset in progress set aside, which an abandoned reset returns to
+    pub(crate) fn recovery_held_by_reset(&self) -> Option<&CloudBackupPendingEnableRecovery> {
+        match self {
+            Self::Resetting { recovery, .. } => recovery.as_ref(),
+            _ => None,
+        }
+    }
+
     /// Enters recovery for an interrupted Enable the owner assessed, or updates the snapshot of
     /// the one it holds
     ///
@@ -503,7 +514,7 @@ impl Runtime {
         claim: CloudBackupExclusiveOperationClaim,
         completion: &'static str,
     ) -> bool {
-        if let Self::Resetting { held } = self
+        if let Self::Resetting { held, .. } = self
             && let Some(mut run) = held.take_if(|run| run.claim == claim)
         {
             debug!("Cloud Backup reset received {completion} for {claim:?}");
@@ -740,6 +751,7 @@ impl Runtime {
     /// cancellation. An operation in an `Effecting` stage is held until its completion arrives,
     /// and `ready` is answered then, so the reset never waits inside a handler
     pub(crate) fn begin_reset(&mut self, ready: oneshot::Sender<()>) -> ResetStart {
+        let recovery = self.pending_enable_recovery().cloned();
         let taken = self.take_op();
         let (held, start) = match taken {
             None => (None, ResetStart::Idle),
@@ -756,7 +768,7 @@ impl Runtime {
             },
         };
 
-        *self = Self::Resetting { held };
+        *self = Self::Resetting { held, recovery };
         self.when_effects_settle(ready);
         start
     }
@@ -814,7 +826,7 @@ impl Runtime {
             Self::FinishingDisable { op, .. } => *op = None,
             Self::DriveAccountSwitch { op } => *op = None,
             Self::PendingEnableRecovery { op, .. } => *op = None,
-            Self::Resetting { held } => {
+            Self::Resetting { held, .. } => {
                 if let Some(mut run) = held.take() {
                     run.effect_reported();
                 }

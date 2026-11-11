@@ -130,6 +130,10 @@ impl OwnedRuntime {
                 }
             }
             Runtime::PendingEnableRecovery { op: Some(_), .. } => {}
+
+            // a reset set the recovery aside, and it shows until the wipe ends its evidence or an
+            // abandoned reset returns to it
+            Runtime::Resetting { recovery: Some(_), .. } => {}
             _ if projected.is_some() => {
                 manager.clear_pending_enable_recovery(RustCloudBackupManager::runtime_status_for(
                     record,
