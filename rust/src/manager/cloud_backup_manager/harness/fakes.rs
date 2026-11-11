@@ -277,12 +277,25 @@ impl HarnessCloud {
         Ok(fault)
     }
 
+    /// Ends a call that may have changed the provider contents, saving them first
     fn finish<T>(
         &self,
         fault: Option<CloudFault>,
         result: Result<T, CloudStorageError>,
     ) -> Result<T, CloudStorageError> {
         self.persist();
+        self.answer(fault, result)
+    }
+
+    /// Ends a call that only read the provider contents
+    ///
+    /// Rewriting the whole file after every download made a refresh of a large account slow
+    /// enough to trip the wait limit under a loaded test run; a kill checkpoint still saves
+    fn answer<T>(
+        &self,
+        fault: Option<CloudFault>,
+        result: Result<T, CloudStorageError>,
+    ) -> Result<T, CloudStorageError> {
         self.calls.lock().in_flight -= 1;
 
         match fault {
@@ -361,7 +374,7 @@ impl CloudStorageAccess for HarnessCloud {
     ) -> Result<Vec<u8>, CloudStorageError> {
         let fault = self.begin(CloudCall::DownloadMasterKey, Some(&namespace)).await?;
         let result = self.inner.download_master_key_backup(namespace, locations, policy).await;
-        self.finish(fault, result)
+        self.answer(fault, result)
     }
 
     async fn download_wallet_backup(
@@ -374,7 +387,7 @@ impl CloudStorageAccess for HarnessCloud {
         let fault = self.begin(CloudCall::DownloadWallet, Some(&namespace)).await?;
         let result =
             self.inner.download_wallet_backup(namespace, record_id, locations, policy).await;
-        self.finish(fault, result)
+        self.answer(fault, result)
     }
 
     async fn delete_wallet_backup(
@@ -410,7 +423,7 @@ impl CloudStorageAccess for HarnessCloud {
     ) -> Result<Vec<String>, CloudStorageError> {
         let fault = self.begin(CloudCall::ListNamespaces, None).await?;
         let result = self.inner.list_namespaces(policy).await;
-        self.finish(fault, result)
+        self.answer(fault, result)
     }
 
     async fn list_wallet_files(
@@ -424,7 +437,7 @@ impl CloudStorageAccess for HarnessCloud {
             None => self.inner.list_wallet_files(namespace, policy).await,
         };
 
-        self.finish(fault, result)
+        self.answer(fault, result)
     }
 
     async fn list_wallet_files_snapshot(
@@ -438,7 +451,7 @@ impl CloudStorageAccess for HarnessCloud {
             None => self.inner.list_wallet_files_snapshot(namespace, policy).await,
         };
 
-        self.finish(fault, result)
+        self.answer(fault, result)
     }
 
     async fn is_backup_uploaded(
@@ -450,14 +463,14 @@ impl CloudStorageAccess for HarnessCloud {
     ) -> Result<CloudBackupUploadStatus, CloudStorageError> {
         let fault = self.begin(CloudCall::IsBackupUploaded, Some(&namespace)).await?;
         let result = self.inner.is_backup_uploaded(namespace, record_id, locations, policy).await;
-        self.finish(fault, result)
+        self.answer(fault, result)
     }
 
     async fn overall_sync_health(&self, policy: CloudAccessPolicy) -> CloudSyncHealth {
         match self.begin(CloudCall::SyncHealth, None).await {
             Ok(fault) => {
                 let health = self.inner.overall_sync_health(policy).await;
-                self.finish(fault, Ok(health)).expect("sync health has no error path")
+                self.answer(fault, Ok(health)).expect("sync health has no error path")
             }
 
             // a scripted failure has no error channel here, so report the provider unavailable
