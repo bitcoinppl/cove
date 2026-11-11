@@ -146,7 +146,18 @@ fn port_is_free(port: u16) -> bool {
 pub struct RunLock {
     // the OS releases the lock when the file closes, including when the run is killed. None when
     // a process that started this run holds the lock for it
-    _file: Option<File>,
+    file: Option<File>,
+}
+
+impl Drop for RunLock {
+    fn drop(&mut self) {
+        // a process another thread is spawning holds a copy of this open file until it execs,
+        // and the lock belongs to the open file, so closing ours alone can leave it held; an
+        // explicit unlock releases it for every copy
+        if let Some(file) = &self.file {
+            let _ = file.unlock();
+        }
+    }
 }
 
 impl RunLock {
@@ -161,7 +172,7 @@ impl RunLock {
 
         if held_by_ancestor(path) {
             print_info(&format!("Using {holder} under the lock a parent process holds"));
-            return Ok(Self { _file: None });
+            return Ok(Self { file: None });
         }
 
         Err(eyre!(
@@ -204,7 +215,7 @@ impl RunLock {
             .wrap_err_with(|| format!("Failed to open lock file {}", path.display()))?;
 
         match file.try_lock() {
-            Ok(()) => Ok(Some(Self { _file: Some(file) })),
+            Ok(()) => Ok(Some(Self { file: Some(file) })),
             Err(TryLockError::WouldBlock) => Ok(None),
             Err(TryLockError::Error(error)) => {
                 Err(error).wrap_err_with(|| format!("Failed to lock {}", path.display()))
@@ -297,6 +308,47 @@ mod tests {
         }
 
         RunLock::acquire(&path, "the test build").unwrap();
+    }
+
+    #[test]
+    fn dropping_the_lock_releases_it_while_a_forked_child_shares_the_file() {
+        use std::io::Read as _;
+        use std::os::unix::process::CommandExt as _;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("run.lock");
+        let held = RunLock::acquire(&path, "the test build").unwrap();
+
+        // another thread spawns a process that stays between fork and exec, holding a copy of
+        // every open file, as any test or xtask thread spawning a command briefly does
+        let (mut forked, child_stdout) = std::io::pipe().unwrap();
+        let spawner = std::thread::spawn(move || {
+            let mut command = Command::new("true");
+            command.stdout(child_stdout);
+
+            // SAFETY: the hook only writes to an inherited pipe and sleeps, both plain syscalls
+            // that are safe between fork and exec
+            unsafe {
+                command.pre_exec(|| {
+                    use std::io::Write as _;
+                    use std::os::fd::FromRawFd as _;
+
+                    let mut stdout = std::mem::ManuallyDrop::new(File::from_raw_fd(1));
+                    stdout.write_all(b"f")?;
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    Ok(())
+                });
+            }
+
+            command.status().unwrap()
+        });
+
+        let mut byte = [0];
+        forked.read_exact(&mut byte).unwrap();
+        drop(held);
+
+        RunLock::acquire(&path, "the test build").unwrap();
+        assert!(spawner.join().unwrap().success());
     }
 
     #[test]
