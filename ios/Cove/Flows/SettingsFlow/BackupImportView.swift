@@ -215,6 +215,7 @@ struct BackupImportView: View {
 
                 let data = try Data(contentsOf: url)
                 if data.count > 50_000_000 {
+                    logger.warn("backup file rejected: too large, bytes=\(data.count)")
                     throw BackupError.FileTooLarge
                 }
                 try backupManager.validateFormat(data: data)
@@ -222,7 +223,7 @@ struct BackupImportView: View {
                 fileData = data
                 fileName = url.lastPathComponent
             } catch {
-                logger.warn("backup file rejected: \(error.logSummary)")
+                logUnexpectedBackupFailure(logger, "file read", error)
                 fileData = nil
                 fileName = nil
                 errorMessage = safeBackupImportErrorMessage(error)
@@ -260,7 +261,7 @@ struct BackupImportView: View {
 
                     isVerifying = false
                     if !isCancelled {
-                        logger.warn("backup verify failed: \(error.logSummary)")
+                        logUnexpectedBackupFailure(logger, "verify", error)
                         errorMessage = safeBackupImportErrorMessage(error)
                     }
                 }
@@ -317,7 +318,7 @@ struct BackupImportView: View {
                     isImporting = false
                     invalidateImportReview(clearVerifyReport: false)
                     if !isCancelled {
-                        logger.warn("backup import failed: \(error.logSummary)")
+                        logUnexpectedBackupFailure(logger, "import", error)
                         errorMessage = safeBackupImportErrorMessage(error)
                     }
                 }
@@ -365,7 +366,7 @@ struct BackupImportView: View {
                     isImporting = false
                     invalidateImportReview(clearVerifyReport: false)
                     if !isCancelled {
-                        logger.warn("backup import failed: \(error.logSummary)")
+                        logUnexpectedBackupFailure(logger, "import", error)
                         errorMessage = safeBackupImportErrorMessage(error)
                     }
                 }

@@ -275,7 +275,8 @@ struct BackupExportView: View {
             } catch {
                 if error is CancellationError {
                     Log.info("backup export cancelled")
-                } else {
+                } else if !(error is BackupError) {
+                    // the Rust backup manager already logged its own errors
                     Log.warn("backup export failed: \(error.logSummary)")
                 }
 

@@ -893,9 +893,9 @@ extension ICloudDriveHelper {
                 .ubiquitousItemIsUploadedKey,
                 .ubiquitousItemUploadingErrorKey,
             ])
-            localReadOutcomes.record("read iCloud upload state", failure: nil)
+            localReadOutcomes.record("read iCloud upload state", file: url, failure: nil)
         } catch {
-            localReadOutcomes.record("read iCloud upload state", failure: error)
+            localReadOutcomes.record("read iCloud upload state", file: url, failure: error)
             return .unknown
         }
 
@@ -922,9 +922,9 @@ extension ICloudDriveHelper {
                 .ubiquitousItemDownloadingStatusKey,
                 .ubiquitousItemDownloadingErrorKey,
             ])
-            localReadOutcomes.record("read iCloud download state", failure: nil)
+            localReadOutcomes.record("read iCloud download state", file: url, failure: nil)
         } catch {
-            localReadOutcomes.record("read iCloud download state", failure: error)
+            localReadOutcomes.record("read iCloud download state", file: url, failure: error)
             return .unknown
         }
 
@@ -1268,15 +1268,19 @@ extension ICloudDriveHelper {
 
 /// Last outcome of each repeated local iCloud read, so a failure logs once when it starts and
 /// once when it clears instead of on every poll
+///
+/// Per-file reads are keyed by file too, so one failing file next to a readable one does not
+/// flip the state on every sweep; the log line names only the operation
 private final class LocalReadOutcomes: @unchecked Sendable {
     private let lock = NSLock()
     private var failures: [String: String] = [:]
 
-    func record(_ operation: String, failure: Error?) {
+    func record(_ operation: String, file: URL? = nil, failure: Error?) {
+        let key = file.map { "\(operation) \($0.path)" } ?? operation
         let summary = failure?.logSummary
         let previous = lock.withLock {
-            let previous = failures[operation]
-            failures[operation] = summary
+            let previous = failures[key]
+            failures[key] = summary
             return previous
         }
 

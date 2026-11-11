@@ -103,6 +103,7 @@ struct BackupVerifyView: View {
 
                 let data = try Data(contentsOf: url)
                 if data.count > 50_000_000 {
+                    logger.warn("backup file rejected: too large, bytes=\(data.count)")
                     throw BackupError.FileTooLarge
                 }
                 try backupManager.validateFormat(data: data)
@@ -110,7 +111,7 @@ struct BackupVerifyView: View {
                 fileData = data
                 fileName = url.lastPathComponent
             } catch {
-                logger.warn("backup file rejected: \(error.logSummary)")
+                logUnexpectedBackupFailure(logger, "file read", error)
                 fileData = nil
                 fileName = nil
                 errorMessage = (error as? BackupError)?.userMessage() ?? error.localizedDescription
@@ -133,7 +134,7 @@ struct BackupVerifyView: View {
                     verifyReport = report
                 }
             } catch {
-                logger.warn("backup verify failed: \(error.logSummary)")
+                logUnexpectedBackupFailure(logger, "verify", error)
                 await MainActor.run {
                     isVerifying = false
                     errorMessage = (error as? BackupError)?.userMessage() ?? error.localizedDescription
