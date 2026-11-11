@@ -271,14 +271,21 @@ async fn backup_wallets_does_not_create_master_key_or_upload_when_missing() {
 async fn upload_wallet_if_dirty_does_not_create_master_key_for_existing_namespace() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
-    globals.reset();
+    let manager = init_manager();
+    reset_cloud_backup_test_state(&manager, globals);
 
-    // a configured backup whose master key is gone; without the record, writes are paused as off
+    // backup is on with a namespace but no master key, the state that needs verification
     let namespace = "0123456789abcdef0123456789abcdef";
     CloudBackupKeychain::global().save_namespace_id(namespace).unwrap();
-    Database::global().cloud_backup_state.set(&persisted_enabled_cloud_backup_state(None)).unwrap();
+    manager
+        .persist_cloud_backup_state(
+            &persisted_enabled_cloud_backup_state(Some(1)),
+            "set cloud backup enabled for test",
+        )
+        .unwrap();
+    manager.sync_persisted_state();
+    supervisor_checkpoint(&manager).await;
 
-    let manager = init_manager();
     let metadata = xpub_only_wallet_metadata();
     let xpub = sample_xpub(&metadata);
     Keychain::global().save_wallet_xpub(&metadata.id, xpub.parse().unwrap()).unwrap();
