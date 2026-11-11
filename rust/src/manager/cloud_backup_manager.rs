@@ -703,10 +703,10 @@ impl RustCloudBackupManager {
 
         match retry_action {
             Some(CloudBackupRetryAction::Verify) => {
-                send!(self.supervisor.start_verification(false))
+                send!(self.supervisor.retry_verification_after_reconnect(false))
             }
             Some(CloudBackupRetryAction::VerifyDiscoverable) => {
-                send!(self.supervisor.start_verification(true));
+                send!(self.supervisor.retry_verification_after_reconnect(true));
             }
             None => {}
         }

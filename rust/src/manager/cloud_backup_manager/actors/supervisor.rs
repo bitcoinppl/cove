@@ -70,14 +70,14 @@ use crate::manager::cloud_backup_manager::{
     CloudBackupStatus, CloudBackupUndecryptableWalletDeletionState,
     CloudBackupUploadedEnableBackup, CloudBackupVerificationPresentation,
     CloudBackupVerificationSource, CloudBackupWalletItem, CloudOnlyOperation, CloudReachable,
-    DeepVerificationFailure, DeepVerificationReport, DeepVerificationResult,
-    DriveAccountSwitchPlatformState, DriveAccountSwitchReconcileAction,
-    EnablePasskeyRegistrationFlow, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation,
-    PendingEnableJournal, PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot,
-    PendingEnableNamespaceOwnership, PendingEnableSession, PendingUploadVerificationState,
-    PendingVerificationCompletion, PendingVerificationUpload, RecoveryAction, RecoveryState,
-    RustCloudBackupManager, SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId,
-    blocking_cloud_error, is_provider_wide_interruption,
+    DeepVerificationReport, DeepVerificationResult, DriveAccountSwitchPlatformState,
+    DriveAccountSwitchReconcileAction, EnablePasskeyRegistrationFlow,
+    GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation, PendingEnableJournal,
+    PendingEnableJournalPhase, PendingEnableLocalMetadataSnapshot, PendingEnableNamespaceOwnership,
+    PendingEnableSession, PendingUploadVerificationState, PendingVerificationCompletion,
+    PendingVerificationUpload, RecoveryAction, RecoveryState, RustCloudBackupManager,
+    SavedPasskeyConfirmationMode, SyncState, VerificationState, WalletId, blocking_cloud_error,
+    is_provider_wide_interruption,
 };
 use crate::manager::connectivity_manager::ConnectivityStatus;
 
@@ -302,10 +302,9 @@ pub(crate) struct CloudBackupSupervisor {
     active_cloud_only_fetch_request: Option<u64>,
     active_other_backups_scan: Option<OtherBackupsScanClaim>,
     detail_workflow: DetailWorkflow,
-    /// Counts local wallet-set changes this process has seen
+    /// Counts local wallet-set changes this process has seen; each verification run carries the
+    /// generation it read, so there is no supervisor-wide verification basis
     wallet_set: WalletSetGeneration,
-    /// The wallet set the running verification read when it started
-    verification_basis: WalletSetGeneration,
     last_outcome: Option<DispatchOutcome>,
     /// What the harness invariants read about dispatch since their last check
     #[cfg(test)]
@@ -393,7 +392,6 @@ impl CloudBackupSupervisor {
             active_other_backups_scan: None,
             detail_workflow: DetailWorkflow::default(),
             wallet_set: WalletSetGeneration::default(),
-            verification_basis: WalletSetGeneration::default(),
             last_outcome: None,
             #[cfg(test)]
             invariant_log: test_support::DispatchLog::default(),
@@ -1186,10 +1184,12 @@ impl CloudBackupSupervisor {
         self.ensure_supplemental_inventory_discovery(manager.clone());
         let plan = self.detail_workflow.entry_plan(&manager);
         match plan {
+            // started in this turn, so nothing takes the slot between entry and the verification;
+            // an operation already running reports its own result, and entry only refreshes
             DetailEntryPlan::StartPasskeyVerification { force_discoverable } => {
-                let addr = self.addr();
-                send!(addr.start_verification(force_discoverable));
-                return Produces::ok(());
+                if self.begin_manual_verification(manager.clone(), force_discoverable) {
+                    return Produces::ok(());
+                }
             }
             DetailEntryPlan::UseFreshEnableProof(authorization) => {
                 debug_assert_eq!(
@@ -1588,6 +1588,7 @@ pub(crate) enum LocalResetOutcome {
 pub(crate) mod test_support {
     #![cfg(test)]
 
+    use super::verification::VerificationRun;
     use super::*;
     use crate::manager::cloud_backup_manager::actors::uploads::CloudBackupUploadWorker;
 
@@ -1610,17 +1611,27 @@ pub(crate) mod test_support {
         Ended { orphaned: bool },
     }
 
-    /// One dispatched intent and how many admissions its handler made
+    /// One dispatched intent, how many admissions its handler made, and what it started
     #[derive(Debug, Clone)]
     pub(crate) struct DispatchRecord {
         pub(crate) intent: UserIntent,
         pub(crate) admissions: u32,
+        /// What the dispatch's admission decided
+        pub(crate) admission: Option<Admission>,
+        /// The operation running when the dispatch began, and when its turn ended
+        pub(crate) running_before: Option<CloudBackupExclusiveOperationClaim>,
+        pub(crate) running_after: Option<CloudBackupExclusiveOperationClaim>,
+        /// A Verify that joined uploads already waiting for confirmation instead of starting
+        /// its own operation
+        pub(crate) joined_upload_confirmation: bool,
     }
 
     /// Admissions counted across every caller of `admit`, and the dispatches since the last read
     #[derive(Debug, Default)]
     pub(crate) struct DispatchLog {
         pub(crate) admissions: u32,
+        /// Set by the dispatch in progress when its Verify joined an upload confirmation
+        pub(crate) joined_upload_confirmation: bool,
         dispatches: Vec<DispatchRecord>,
     }
 
@@ -1638,16 +1649,60 @@ pub(crate) mod test_support {
     }
 
     impl CloudBackupSupervisor {
-        pub(crate) fn begin_dispatch_record(&self, intent: &UserIntent) -> OpenDispatch {
+        pub(crate) fn begin_dispatch_record(&mut self, intent: &UserIntent) -> OpenDispatch {
+            self.invariant_log.joined_upload_confirmation = false;
             OpenDispatch(DispatchRecord {
                 intent: intent.clone(),
                 admissions: self.invariant_log.admissions,
+                admission: None,
+                running_before: self.runtime.claim(),
+                running_after: None,
+                joined_upload_confirmation: false,
             })
         }
 
         pub(crate) fn finish_dispatch_record(&mut self, OpenDispatch(mut record): OpenDispatch) {
             record.admissions = self.invariant_log.admissions - record.admissions;
+            record.admission = self
+                .last_outcome
+                .as_ref()
+                .filter(|outcome| outcome.intent == record.intent)
+                .map(|outcome| outcome.admission);
+            record.running_after = self.runtime.claim();
+            record.joined_upload_confirmation =
+                std::mem::take(&mut self.invariant_log.joined_upload_confirmation);
             self.invariant_log.dispatches.push(record);
+        }
+
+        /// Starts a verification operation outside dispatch, as detail entry does
+        pub async fn start_verification(&mut self, force_discoverable: bool) -> ActorResult<()> {
+            if let Some(manager) = self.manager() {
+                let started = self.begin_manual_verification(manager, force_discoverable);
+                assert!(started, "a test started a verification while {:?} runs", *self.runtime);
+            }
+
+            Produces::ok(())
+        }
+
+        /// Allocates a manual verification's operation and its run without running it, for tests
+        /// that run the verification pass themselves
+        pub async fn begin_verification_run_for_test(
+            &mut self,
+            force_discoverable: bool,
+        ) -> ActorResult<VerificationRun> {
+            let manager = self.manager().expect("cloud backup manager exists");
+            let claim = self
+                .begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Verify)
+                .expect("begin verification operation");
+
+            Produces::ok(VerificationRun {
+                claim,
+                continuation: DeepVerificationContinuation::Manual {
+                    force_discoverable,
+                    attempt: VerificationAttempt::Initial,
+                },
+                basis: self.wallet_set,
+            })
         }
 
         /// Reads the supervisor for the harness invariants, taking what it logged since the

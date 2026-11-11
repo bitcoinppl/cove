@@ -220,13 +220,8 @@ impl CloudBackupSupervisor {
             I::CancelRestore => {
                 self.cancel_restore().await?;
             }
-            I::StartVerification { source, discoverable: false } => {
-                self.runtime.commit(|lifecycle| manager.start_verification(lifecycle, source));
-            }
-            I::StartVerification { source, discoverable: true } => {
-                self.runtime.commit(|lifecycle| {
-                    manager.start_verification_discoverable(lifecycle, source);
-                });
+            I::StartVerification { source, discoverable } => {
+                self.start_verification_intent(manager, source, discoverable);
             }
             I::DismissVerificationPrompt => {
                 self.runtime.commit(|lifecycle| manager.dismiss_verification_prompt(lifecycle));

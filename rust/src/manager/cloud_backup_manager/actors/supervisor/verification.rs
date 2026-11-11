@@ -1,17 +1,11 @@
 use super::*;
 
-/// Deep verification follow-up that keeps repair or recovery tied to one claim
+/// What follows a verification run, which decides how it ends
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DeepVerificationContinuation {
     Manual { force_discoverable: bool, attempt: VerificationAttempt },
     RecreateManifest { attempt: VerificationAttempt },
     ReinitializeBackup { attempt: VerificationAttempt },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DeepVerificationTerminalPolicy {
-    ClearActiveOperationBeforeConnectivityRetry,
-    ClearActiveOperationAfterTerminalHandling,
 }
 
 impl DeepVerificationContinuation {
@@ -41,17 +35,19 @@ impl DeepVerificationContinuation {
     fn connectivity_retry(self) -> Self {
         self.with_attempt(VerificationAttempt::AutomaticConnectivityRetry)
     }
+}
 
-    fn terminal_policy(self) -> DeepVerificationTerminalPolicy {
-        match self {
-            Self::Manual { .. } => {
-                DeepVerificationTerminalPolicy::ClearActiveOperationBeforeConnectivityRetry
-            }
-            Self::RecreateManifest { .. } | Self::ReinitializeBackup { .. } => {
-                DeepVerificationTerminalPolicy::ClearActiveOperationAfterTerminalHandling
-            }
-        }
-    }
+/// One run of a verification operation
+///
+/// Every message of the run carries it, so the run's repair, auto-sync and result are accepted
+/// only while its operation runs, and its evidence is judged against the wallet set this run
+/// read rather than whichever run started last
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct VerificationRun {
+    pub(crate) claim: CloudBackupExclusiveOperationClaim,
+    pub(crate) continuation: DeepVerificationContinuation,
+    /// The local wallet set when this run started reading the wallets
+    pub(crate) basis: WalletSetGeneration,
 }
 
 impl CloudBackupSupervisor {
@@ -111,24 +107,99 @@ impl CloudBackupSupervisor {
         });
     }
 
-    pub async fn start_verification(&mut self, force_discoverable: bool) -> ActorResult<()> {
-        let Some(manager) = self.manager() else { return Produces::ok(()) };
+    /// A dispatched Verify: it joins the uploads already waiting for confirmation, or starts its
+    /// own operation
+    ///
+    /// The operation is allocated before the prompt is dismissed or the screen changes, in the
+    /// admission turn, so nothing can start between the admission and the verification
+    pub(crate) fn start_verification_intent(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        source: CloudBackupVerificationSource,
+        force_discoverable: bool,
+    ) {
+        // the pending upload verifier confirms those uploads and judges its evidence against the
+        // wallet set it read, so this intent only shows that confirmation
+        if !force_discoverable && manager.has_pending_cloud_upload_verification() {
+            self.runtime.commit(|lifecycle| {
+                manager.join_pending_upload_confirmation(lifecycle, source);
+            });
 
+            #[cfg(test)]
+            {
+                self.invariant_log.joined_upload_confirmation = true;
+            }
+
+            return;
+        }
+
+        let Some(claim) =
+            self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Verify)
+        else {
+            warn!("Cloud Backup admitted a verification its body has no place for");
+            return;
+        };
+
+        self.runtime.commit(|lifecycle| manager.present_manual_verification(lifecycle, source));
         self.start_verification_with_context(
             manager,
-            None,
+            claim,
             DeepVerificationContinuation::Manual {
                 force_discoverable,
                 attempt: VerificationAttempt::Initial,
             },
         );
+    }
+
+    /// Retries a verification that failed for lost connectivity, once the cloud is reachable
+    ///
+    /// The retry is its own Verify operation; while another operation holds the slot it waits
+    /// for the next reconnect, since the failure and its retry action stay on screen
+    pub async fn retry_verification_after_reconnect(
+        &mut self,
+        force_discoverable: bool,
+    ) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        if !self.begin_manual_verification(manager, force_discoverable) {
+            debug!(
+                "Cloud Backup reconnect verification retry deferred while another operation runs"
+            );
+        }
+
         Produces::ok(())
+    }
+
+    /// Starts a verification operation from an entry point that admission doesn't decide
+    ///
+    /// Returns false when another operation holds the slot; that operation reports its own
+    /// result, and nothing was shown for this one
+    pub(crate) fn begin_manual_verification(
+        &mut self,
+        manager: Arc<RustCloudBackupManager>,
+        force_discoverable: bool,
+    ) -> bool {
+        let Some(claim) =
+            self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Verify)
+        else {
+            return false;
+        };
+
+        self.start_verification_with_context(
+            manager,
+            claim,
+            DeepVerificationContinuation::Manual {
+                force_discoverable,
+                attempt: VerificationAttempt::Initial,
+            },
+        );
+        true
     }
 
     pub(crate) fn start_verification_with_context(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
-        claim: Option<CloudBackupExclusiveOperationClaim>,
+        claim: CloudBackupExclusiveOperationClaim,
         continuation: DeepVerificationContinuation,
     ) {
         self.detail_workflow.clear_pending_completion();
@@ -145,109 +216,53 @@ impl CloudBackupSupervisor {
         self.schedule_verification(manager, claim, continuation);
     }
 
+    /// Runs one verification pass for the operation with `claim`
+    ///
+    /// Every run reads the wallets afresh, a connectivity retry included, so each run takes the
+    /// wallet set as it is now as its basis
     fn schedule_verification(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
-        claim: Option<CloudBackupExclusiveOperationClaim>,
+        claim: CloudBackupExclusiveOperationClaim,
         continuation: DeepVerificationContinuation,
     ) {
-        // every run reads the wallets afresh, a connectivity retry included
-        self.verification_basis = self.wallet_set;
+        let run = VerificationRun { claim, continuation, basis: self.wallet_set };
         let force_discoverable = continuation.force_discoverable();
         self.addr.send_fut_with(move |addr| async move {
             let result = manager.prepare_deep_verify_cloud_backup(force_discoverable).await;
-            send!(addr.complete_verification(claim, result, continuation));
+            send!(addr.complete_verification(run, result));
         });
     }
 
     pub async fn complete_verification(
         &mut self,
-        claim: Option<CloudBackupExclusiveOperationClaim>,
+        run: VerificationRun,
         result: CloudBackupDeepVerificationStep,
-        continuation: DeepVerificationContinuation,
     ) -> ActorResult<()> {
-        if let Some(claim) = claim
-            && !self.runtime.accepts_completion(claim, "verification")
-        {
-            return Produces::ok(());
-        }
-        let Some(manager) = self.manager() else {
-            if claim.is_some() {
-                self.runtime.clear();
-            }
+        let Some(manager) = self.current(run.claim) else {
             return Produces::ok(());
         };
 
-        let result = match result {
-            CloudBackupDeepVerificationStep::Complete(result) => result,
+        match result {
+            CloudBackupDeepVerificationStep::Complete(result) => {
+                self.finish_deep_verification_continuation(manager, run, result);
+            }
             CloudBackupDeepVerificationStep::PreparedWrapperRepair(prepared) => {
-                let Some(claim) = self.claim_deep_verification_repair(
-                    &manager,
-                    claim,
-                    "cloud backup verification repair is waiting for another operation",
-                ) else {
-                    return Produces::ok(());
-                };
-
-                self.start_deep_verification_wrapper_repair(
-                    manager,
-                    claim,
-                    *prepared,
-                    continuation,
-                );
-                return Produces::ok(());
+                self.start_deep_verification_wrapper_repair(manager, run, *prepared);
             }
             CloudBackupDeepVerificationStep::PreparedAutoSync(prepared) => {
-                let Some(claim) = self.claim_deep_verification_repair(
-                    &manager,
-                    claim,
-                    "cloud backup verification auto-sync is waiting for another operation",
-                ) else {
-                    return Produces::ok(());
-                };
-
-                self.start_deep_verification_auto_sync(manager, claim, *prepared, continuation);
-                return Produces::ok(());
+                self.start_deep_verification_auto_sync(manager, run, *prepared);
             }
-        };
-
-        self.finish_deep_verification_continuation(manager, claim, continuation, result);
-        Produces::ok(())
-    }
-
-    fn claim_deep_verification_repair(
-        &mut self,
-        manager: &RustCloudBackupManager,
-        claim: Option<CloudBackupExclusiveOperationClaim>,
-        waiting_message: &'static str,
-    ) -> Option<CloudBackupExclusiveOperationClaim> {
-        if let Some(claim) = claim {
-            return Some(claim);
         }
 
-        let Some(claim) =
-            self.begin_exclusive_operation(manager, CloudBackupExclusiveOperation::Verify)
-        else {
-            let result = DeepVerificationResult::Failed(DeepVerificationFailure::retry(
-                waiting_message,
-                None,
-                None,
-            ));
-            self.runtime
-                .commit(|lifecycle| manager.persist_verification_result(lifecycle, &result));
-            manager.handle_deep_verification_result(result);
-            return None;
-        };
-
-        Some(claim)
+        Produces::ok(())
     }
 
     fn start_deep_verification_wrapper_repair(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
-        claim: CloudBackupExclusiveOperationClaim,
+        run: VerificationRun,
         prepared: CloudBackupPreparedDeepVerificationWrapperRepair,
-        continuation: DeepVerificationContinuation,
     ) {
         let authorization = RuntimePasskeyAuthorization {
             namespace_id: prepared.namespace_id().to_owned(),
@@ -256,30 +271,25 @@ impl CloudBackupSupervisor {
         };
 
         let (resume, upload) = prepared.into_parts();
-        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), run.claim);
         self.addr.send_fut_with(move |addr| async move {
             let result = manager
                 .upload_passkey_wrapper_repair(upload, writes)
                 .await
                 .map(|_| (resume, authorization));
-            send!(addr.complete_deep_verification_wrapper_repair_upload(
-                claim,
-                continuation,
-                result
-            ));
+            send!(addr.complete_deep_verification_wrapper_repair_upload(run, result));
         });
     }
 
     pub async fn complete_deep_verification_wrapper_repair_upload(
         &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-        continuation: DeepVerificationContinuation,
+        run: VerificationRun,
         result: Result<
             (CloudBackupPendingDeepVerificationResume, RuntimePasskeyAuthorization),
             CloudBackupError,
         >,
     ) -> ActorResult<()> {
-        let Some(manager) = self.current(claim) else {
+        let Some(manager) = self.current(run.claim) else {
             return Produces::ok(());
         };
 
@@ -291,12 +301,7 @@ impl CloudBackupSupervisor {
                         CloudBackupError::internal_context("save cspp credentials", source)
                     })
                 {
-                    self.finish_deep_verification_continuation_with_error(
-                        manager,
-                        claim,
-                        continuation,
-                        error,
-                    );
+                    self.finish_deep_verification_continuation_with_error(manager, run, error);
                     return Produces::ok(());
                 }
 
@@ -305,23 +310,14 @@ impl CloudBackupSupervisor {
                     let result = manager
                         .resume_deep_verify_after_wrapper_repair(
                             resume,
-                            continuation.force_discoverable(),
+                            run.continuation.force_discoverable(),
                         )
                         .await;
-                    send!(addr.complete_deep_verification_wrapper_repair_resume(
-                        claim,
-                        continuation,
-                        result
-                    ));
+                    send!(addr.complete_deep_verification_wrapper_repair_resume(run, result));
                 });
             }
             Err(error) => {
-                self.finish_deep_verification_continuation_with_error(
-                    manager,
-                    claim,
-                    continuation,
-                    error,
-                );
+                self.finish_deep_verification_continuation_with_error(manager, run, error);
             }
         }
 
@@ -330,31 +326,24 @@ impl CloudBackupSupervisor {
 
     pub async fn complete_deep_verification_wrapper_repair_resume(
         &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-        continuation: DeepVerificationContinuation,
+        run: VerificationRun,
         result: CloudBackupDeepVerificationStep,
     ) -> ActorResult<()> {
-        let Some(manager) = self.current(claim) else {
+        let Some(manager) = self.current(run.claim) else {
             return Produces::ok(());
         };
 
         match result {
             CloudBackupDeepVerificationStep::Complete(result) => {
-                self.finish_deep_verification_continuation(
-                    manager,
-                    Some(claim),
-                    continuation,
-                    result,
-                );
+                self.finish_deep_verification_continuation(manager, run, result);
             }
             CloudBackupDeepVerificationStep::PreparedAutoSync(prepared) => {
-                self.start_deep_verification_auto_sync(manager, claim, *prepared, continuation);
+                self.start_deep_verification_auto_sync(manager, run, *prepared);
             }
             CloudBackupDeepVerificationStep::PreparedWrapperRepair(_) => {
                 self.finish_deep_verification_continuation_with_error(
                     manager,
-                    claim,
-                    continuation,
+                    run,
                     CloudBackupError::Internal(
                         "deep verification requested wrapper repair twice".into(),
                     ),
@@ -367,25 +356,23 @@ impl CloudBackupSupervisor {
     fn start_deep_verification_auto_sync(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
-        claim: CloudBackupExclusiveOperationClaim,
+        run: VerificationRun,
         prepared: CloudBackupPreparedDeepVerificationAutoSync,
-        continuation: DeepVerificationContinuation,
     ) {
         let (resume, upload) = prepared.into_parts();
-        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+        let writes = CloudBackupWriteClient::for_operation(self.write.clone(), run.claim);
         self.addr.send_fut_with(move |addr| async move {
             let result = match manager.upload_deep_verification_auto_sync(upload, writes).await {
                 Ok(uploaded) => Ok((resume, uploaded)),
                 Err(error) => Err(resume.upload_error_result(&error)),
             };
-            send!(addr.complete_deep_verification_auto_sync_upload(claim, continuation, result));
+            send!(addr.complete_deep_verification_auto_sync_upload(run, result));
         });
     }
 
     pub async fn complete_deep_verification_auto_sync_upload(
         &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-        continuation: DeepVerificationContinuation,
+        run: VerificationRun,
         result: Result<
             (
                 CloudBackupPendingDeepVerificationAutoSyncResume,
@@ -394,7 +381,7 @@ impl CloudBackupSupervisor {
             DeepVerificationResult,
         >,
     ) -> ActorResult<()> {
-        let Some(manager) = self.current(claim) else {
+        let Some(manager) = self.current(run.claim) else {
             return Produces::ok(());
         };
 
@@ -402,7 +389,7 @@ impl CloudBackupSupervisor {
             Ok((resume, uploaded)) => {
                 let namespace_id = uploaded.namespace_id().to_owned();
                 let uploaded_wallets = uploaded.uploaded_wallets().to_vec();
-                let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
+                let writes = CloudBackupWriteClient::for_operation(self.write.clone(), run.claim);
                 self.addr.send_fut_with(move |addr| async move {
                     let result = match writes
                         .finalize_uploaded_wallets(
@@ -416,20 +403,11 @@ impl CloudBackupSupervisor {
                         Ok(()) => Ok((resume, uploaded)),
                         Err(error) => Err(resume.upload_error_result(&error)),
                     };
-                    send!(addr.complete_deep_verification_auto_sync_finalization(
-                        claim,
-                        continuation,
-                        result
-                    ));
+                    send!(addr.complete_deep_verification_auto_sync_finalization(run, result));
                 });
             }
             Err(result) => {
-                self.finish_deep_verification_continuation(
-                    manager,
-                    Some(claim),
-                    continuation,
-                    result,
-                );
+                self.finish_deep_verification_continuation(manager, run, result);
             }
         }
 
@@ -438,8 +416,7 @@ impl CloudBackupSupervisor {
 
     pub async fn complete_deep_verification_auto_sync_finalization(
         &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-        continuation: DeepVerificationContinuation,
+        run: VerificationRun,
         result: Result<
             (
                 CloudBackupPendingDeepVerificationAutoSyncResume,
@@ -448,7 +425,7 @@ impl CloudBackupSupervisor {
             DeepVerificationResult,
         >,
     ) -> ActorResult<()> {
-        let Some(manager) = self.current(claim) else {
+        let Some(manager) = self.current(run.claim) else {
             return Produces::ok(());
         };
 
@@ -457,20 +434,11 @@ impl CloudBackupSupervisor {
                 self.addr.send_fut_with(move |addr| async move {
                     let completion =
                         manager.resume_deep_verify_after_auto_sync(resume, uploaded).await;
-                    send!(addr.complete_deep_verification_auto_sync_resume(
-                        claim,
-                        continuation,
-                        completion
-                    ));
+                    send!(addr.complete_deep_verification_auto_sync_resume(run, completion));
                 });
             }
             Err(result) => {
-                self.finish_deep_verification_continuation(
-                    manager,
-                    Some(claim),
-                    continuation,
-                    result,
-                );
+                self.finish_deep_verification_continuation(manager, run, result);
             }
         }
 
@@ -479,11 +447,10 @@ impl CloudBackupSupervisor {
 
     pub async fn complete_deep_verification_auto_sync_resume(
         &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-        continuation: DeepVerificationContinuation,
+        run: VerificationRun,
         completion: CloudBackupDeepVerificationAutoSyncCompletion,
     ) -> ActorResult<()> {
-        let Some(manager) = self.current(claim) else {
+        let Some(manager) = self.current(run.claim) else {
             return Produces::ok(());
         };
 
@@ -493,41 +460,36 @@ impl CloudBackupSupervisor {
                 manager.replace_pending_verification_completion(lifecycle, pending_completion)
             })
         {
-            self.finish_deep_verification_continuation_with_error(
-                manager,
-                claim,
-                continuation,
-                error,
-            );
+            self.finish_deep_verification_continuation_with_error(manager, run, error);
             return Produces::ok(());
         }
-        self.finish_deep_verification_continuation(manager, Some(claim), continuation, result);
+        self.finish_deep_verification_continuation(manager, run, result);
         Produces::ok(())
     }
 
     fn finish_deep_verification_continuation_with_error(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
-        claim: CloudBackupExclusiveOperationClaim,
-        continuation: DeepVerificationContinuation,
+        run: VerificationRun,
         error: CloudBackupError,
     ) {
         let result = RustCloudBackupManager::deep_verification_error_result(
-            continuation.force_discoverable(),
+            run.continuation.force_discoverable(),
             error,
         );
-        self.finish_deep_verification_continuation(manager, Some(claim), continuation, result);
+        self.finish_deep_verification_continuation(manager, run, result);
     }
 
+    /// Ends a verification run: one connectivity retry under the same operation, or the result
+    /// and the end of the operation
     fn finish_deep_verification_continuation(
         &mut self,
         manager: Arc<RustCloudBackupManager>,
-        mut claim: Option<CloudBackupExclusiveOperationClaim>,
-        continuation: DeepVerificationContinuation,
+        run: VerificationRun,
         result: DeepVerificationResult,
     ) {
         let should_refresh_open_detail =
-            matches!(continuation, DeepVerificationContinuation::Manual { .. })
+            matches!(run.continuation, DeepVerificationContinuation::Manual { .. })
                 && matches!(
                     &result,
                     DeepVerificationResult::Verified(_)
@@ -537,41 +499,22 @@ impl CloudBackupSupervisor {
                         | DeepVerificationResult::PasskeyMissing(_)
                 );
 
-        if continuation.terminal_policy()
-            == DeepVerificationTerminalPolicy::ClearActiveOperationBeforeConnectivityRetry
-            && let Some(claim) = claim.take()
-        {
-            self.finish_deep_verification_operation(&manager, claim);
-        }
-
-        if verification_needs_connectivity_retry(&manager, continuation.attempt(), &result) {
-            self.record_verification_evidence(&manager, &result);
-            self.schedule_verification(manager, claim, continuation.connectivity_retry());
+        // the retry keeps the operation, so nothing starts between the two runs
+        if verification_needs_connectivity_retry(&manager, run.continuation.attempt(), &result) {
+            self.record_verification_evidence(&manager, run.basis, &result);
+            self.schedule_verification(manager, run.claim, run.continuation.connectivity_retry());
             return;
         }
 
-        self.settle_verification_evidence(&manager, result);
+        self.settle_verification_evidence(&manager, run.basis, result);
 
         if should_refresh_open_detail {
             let plan = self.detail_workflow.request_refresh();
             self.handle_detail_refresh_plan(manager.clone(), plan);
         }
 
-        if continuation.terminal_policy()
-            == DeepVerificationTerminalPolicy::ClearActiveOperationAfterTerminalHandling
-            && let Some(claim) = claim
-        {
-            self.finish_deep_verification_operation(&manager, claim);
-        }
-    }
-
-    fn finish_deep_verification_operation(
-        &mut self,
-        manager: &RustCloudBackupManager,
-        claim: CloudBackupExclusiveOperationClaim,
-    ) {
         self.runtime.clear();
-        manager.project_exclusive_operation_finished(claim);
+        manager.project_exclusive_operation_finished(run.claim);
     }
 
     pub async fn complete_recreate_manifest_recovery(
@@ -635,7 +578,7 @@ impl CloudBackupSupervisor {
                 manager.apply_recovery_state(RecoveryState::Idle);
                 self.start_verification_with_context(
                     manager,
-                    Some(claim),
+                    claim,
                     DeepVerificationContinuation::RecreateManifest {
                         attempt: VerificationAttempt::Initial,
                     },

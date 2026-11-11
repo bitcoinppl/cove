@@ -228,7 +228,9 @@ impl RustCloudBackupManager {
         )
     }
 
-    pub(crate) fn start_verification(
+    /// Shows a Verify that joined the uploads already waiting for confirmation, and resumes
+    /// their confirmation
+    pub(crate) fn join_pending_upload_confirmation(
         &self,
         lifecycle: &LifecycleWriter,
         source: CloudBackupVerificationSource,
@@ -237,21 +239,14 @@ impl RustCloudBackupManager {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
 
-        if self.has_pending_cloud_upload_verification() {
-            self.apply_verification_effect(
-                CloudBackupVerificationCoordinator::begin_background_confirmation(source),
-            );
-            self.resume_pending_cloud_upload_verification();
-            return;
-        }
-
         self.apply_verification_effect(
-            CloudBackupVerificationCoordinator::begin_manual_presentation(source),
+            CloudBackupVerificationCoordinator::begin_background_confirmation(source),
         );
-        send!(self.supervisor.start_verification(false));
+        self.resume_pending_cloud_upload_verification();
     }
 
-    pub(crate) fn start_verification_discoverable(
+    /// Shows a manual verification whose operation already started
+    pub(crate) fn present_manual_verification(
         &self,
         lifecycle: &LifecycleWriter,
         source: CloudBackupVerificationSource,
@@ -259,10 +254,10 @@ impl RustCloudBackupManager {
         if let Err(error) = self.dismiss_verification_prompt_impl(lifecycle) {
             error!("Failed to dismiss verification prompt before verification: {error}");
         }
+
         self.apply_verification_effect(
             CloudBackupVerificationCoordinator::begin_manual_presentation(source),
         );
-        send!(self.supervisor.start_verification(true));
     }
 
     pub(crate) fn dismiss_verification_prompt(&self, lifecycle: &LifecycleWriter) {

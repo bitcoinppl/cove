@@ -9,7 +9,7 @@ use crate::manager::cloud_backup_manager::owner::lifecycle::{
 use super::enable::{
     EnableRecoveryFinalization, EnableUploadFinalization,
 };
-use super::verification::DeepVerificationContinuation;
+use super::verification::{DeepVerificationContinuation, VerificationRun};
 use cove_cspp::{MasterKeyPromotionActiveState, MasterKeyPromotionStatus};
 use cove_tokio::FutureTimeoutExt as _;
 use crate::test_support::loaded_host_wait;
@@ -1307,11 +1307,14 @@ async fn supervisor_ignores_stale_recreate_manifest_verification_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::RecreateManifest), async |supervisor, claim| {
             supervisor
                 .complete_verification(
-                    Some(claim),
-                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-                    DeepVerificationContinuation::RecreateManifest {
-                        attempt: VerificationAttempt::Initial,
+                    VerificationRun {
+                        claim,
+                        continuation: DeepVerificationContinuation::RecreateManifest {
+                            attempt: VerificationAttempt::Initial,
+                        },
+                        basis: supervisor.wallet_set,
                     },
+                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
                 .await
                 .unwrap();
@@ -1327,7 +1330,7 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_upload_comple
                 attempt: VerificationAttempt::Initial,
             };
             supervisor
-                .complete_deep_verification_wrapper_repair_upload(claim, continuation, Err(CloudBackupError::Internal("completion".into())))
+                .complete_deep_verification_wrapper_repair_upload(VerificationRun { claim, continuation, basis: supervisor.wallet_set }, Err(CloudBackupError::Internal("completion".into())))
                 .await
                 .unwrap();
     })
@@ -1343,8 +1346,7 @@ async fn supervisor_ignores_stale_deep_verification_wrapper_repair_resume_comple
             };
             supervisor
                 .complete_deep_verification_wrapper_repair_resume(
-                    claim,
-                    continuation,
+                    VerificationRun { claim, continuation, basis: supervisor.wallet_set },
                     CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
                 .await
@@ -1362,8 +1364,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_upload_completion(
             };
             supervisor
                 .complete_deep_verification_auto_sync_upload(
-                    claim,
-                    continuation,
+                    VerificationRun { claim, continuation, basis: supervisor.wallet_set },
                     Err(DeepVerificationResult::NotEnabled),
                 )
                 .await
@@ -1381,8 +1382,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_finalization_compl
             };
             supervisor
                 .complete_deep_verification_auto_sync_finalization(
-                    claim,
-                    continuation,
+                    VerificationRun { claim, continuation, basis: supervisor.wallet_set },
                     Err(DeepVerificationResult::NotEnabled),
                 )
                 .await
@@ -1400,8 +1400,7 @@ async fn supervisor_ignores_stale_deep_verification_auto_sync_resume_completion(
             };
             supervisor
                 .complete_deep_verification_auto_sync_resume(
-                    claim,
-                    continuation,
+                    VerificationRun { claim, continuation, basis: supervisor.wallet_set },
                     CloudBackupDeepVerificationAutoSyncCompletion::complete(
                         DeepVerificationResult::NotEnabled,
                     ),
@@ -1425,11 +1424,14 @@ async fn supervisor_ignores_stale_reinitialize_verification_completion() {
     assert_completion_ignores_stale_claim(begin_configured(CloudBackupExclusiveOperation::VerifyReinitializedBackup), async |supervisor, claim| {
             supervisor
                 .complete_verification(
-                    Some(claim),
-                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-                    DeepVerificationContinuation::ReinitializeBackup {
-                        attempt: VerificationAttempt::Initial,
+                    VerificationRun {
+                        claim,
+                        continuation: DeepVerificationContinuation::ReinitializeBackup {
+                            attempt: VerificationAttempt::Initial,
+                        },
+                        basis: supervisor.wallet_set,
                     },
+                    CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
                 )
                 .await
                 .unwrap();
@@ -4999,11 +5001,14 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
     // a completion still carrying the reinitialize claim is stale
     supervisor
         .complete_verification(
-            Some(reinitialize_claim),
-            CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
-            DeepVerificationContinuation::ReinitializeBackup {
-                attempt: VerificationAttempt::Initial,
+            VerificationRun {
+                claim: reinitialize_claim,
+                continuation: DeepVerificationContinuation::ReinitializeBackup {
+                    attempt: VerificationAttempt::Initial,
+                },
+                basis: supervisor.wallet_set,
             },
+            CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::NotEnabled),
         )
         .await
         .unwrap();
@@ -5014,11 +5019,14 @@ async fn assert_reinitialized_backup_verification_reads_cloud(
     // the spinner
     supervisor
         .complete_verification(
-            Some(verification_claim),
-            step,
-            DeepVerificationContinuation::ReinitializeBackup {
-                attempt: VerificationAttempt::Initial,
+            VerificationRun {
+                claim: verification_claim,
+                continuation: DeepVerificationContinuation::ReinitializeBackup {
+                    attempt: VerificationAttempt::Initial,
+                },
+                basis: supervisor.wallet_set,
             },
+            step,
         )
         .await
         .unwrap();
@@ -5055,10 +5063,6 @@ async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_res
         Arc::downgrade(&manager),
         spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
     );
-    let manual = DeepVerificationContinuation::Manual {
-        force_discoverable: false,
-        attempt: VerificationAttempt::Initial,
-    };
     let verified = || {
         CloudBackupDeepVerificationStep::Complete(DeepVerificationResult::Verified(
             test_pending_completion(VALID_NAMESPACE_ID.into(), Vec::new()).report(),
@@ -5066,9 +5070,12 @@ async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_res
     };
 
     // a manual verification reads the wallets, then a wallet is added before its evidence lands
-    supervisor.start_verification(false).await.unwrap();
+    let Produces::Value(run) = supervisor.begin_verification_run_for_test(false).await.unwrap()
+    else {
+        panic!("verification run was not produced");
+    };
     supervisor.require_verification_after_wallet_change(20).await.unwrap();
-    supervisor.complete_verification(None, verified(), manual).await.unwrap();
+    supervisor.complete_verification(run, verified()).await.unwrap();
 
     assert!(
         matches!(
@@ -5090,8 +5097,11 @@ async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_res
     );
 
     // a verification that starts after the change reads the new wallet set, so it counts
-    supervisor.start_verification(false).await.unwrap();
-    supervisor.complete_verification(None, verified(), manual).await.unwrap();
+    let Produces::Value(run) = supervisor.begin_verification_run_for_test(false).await.unwrap()
+    else {
+        panic!("verification run was not produced");
+    };
+    supervisor.complete_verification(run, verified()).await.unwrap();
 
     assert!(matches!(persisted_verification(), PersistedBackupVerificationState::Verified { .. }));
     assert!(matches!(

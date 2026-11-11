@@ -332,10 +332,17 @@ revision. Authorization failures pause the verifier without rewriting the blob
 state, so the app can resume after the platform cloud authorization is restored.
 
 Deep verification checks the cloud master-key wrapper, local keychain state,
-wallet blobs, and pending uploads. Some verification results prepare follow-up
-work, such as repairing the passkey wrapper or uploading missing wallet blobs.
-The supervisor owns those continuations so each follow-up remains tied to the
-same exclusive-operation claim.
+wallet blobs, and pending uploads. A verification the user starts, from Verify,
+detail entry or a retry after the connection returns, is an exclusive operation
+like any other: it holds the slot from its admission until its result lands, so
+Turn Off and other operations wait for it, and a second Verify joins the one
+running. Verify only joins the pending upload confirmation when uploads already
+wait for it. Some verification results prepare follow-up work, such as
+repairing the passkey wrapper or uploading missing wallet blobs. The supervisor
+owns those continuations so each follow-up remains tied to the same
+exclusive-operation claim. Each run carries the wallet-set generation it read,
+including across a retry after lost connectivity, so its evidence is judged
+against its own read, never another run's.
 
 ## Related Notes
 

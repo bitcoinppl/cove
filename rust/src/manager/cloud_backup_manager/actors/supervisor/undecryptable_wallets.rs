@@ -61,8 +61,19 @@ impl CloudBackupSupervisor {
         manager.apply_undecryptable_wallet_deletion_state(
             CloudBackupUndecryptableWalletDeletionState::Idle,
         );
-        self.runtime.clear();
-        manager.project_exclusive_operation_finished(claim);
+
+        // the deletion hands its slot to the verification that checks what is left, so nothing
+        // starts in between
+        let Some(verification) = self.hand_off_exclusive_operation(
+            &manager,
+            claim,
+            CloudBackupExclusiveOperation::Verify,
+        ) else {
+            self.runtime.clear();
+            manager.project_exclusive_operation_finished(claim);
+            return Produces::ok(());
+        };
+
         manager.apply_verification_effect(
             CloudBackupVerificationCoordinator::begin_manual_presentation(
                 CloudBackupVerificationSource::CloudBackupDetail,
@@ -70,7 +81,7 @@ impl CloudBackupSupervisor {
         );
         self.start_verification_with_context(
             manager,
-            None,
+            verification,
             DeepVerificationContinuation::Manual {
                 force_discoverable: false,
                 attempt: VerificationAttempt::Initial,

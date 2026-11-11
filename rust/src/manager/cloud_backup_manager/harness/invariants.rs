@@ -24,8 +24,10 @@ use crate::manager::cloud_backup_manager::actors::write::{
     CommandClass, ConfiguredWriter, ConfiguredWrites, Decision, LaneDecision, OffWrites,
     PolicyBody, VersionedPolicy, WritePolicy,
 };
-use crate::manager::cloud_backup_manager::admission::UserIntent;
-use crate::manager::cloud_backup_manager::model::CloudBackupExclusiveOperationClaim;
+use crate::manager::cloud_backup_manager::admission::{Admission, UserIntent};
+use crate::manager::cloud_backup_manager::model::{
+    CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
+};
 use crate::wallet::metadata::WalletId;
 
 /// Which invariant a violation broke, numbered as in `docs/testing.md`
@@ -291,7 +293,8 @@ impl Invariants {
     }
 
     /// 5, admission: each intent the test dispatched reached the supervisor and got exactly one
-    /// admission. Other intents, such as a platform's local reset, may be dispatched in between
+    /// admission, and an accepted Verify started its own operation in that admission's turn.
+    /// Other intents, such as a platform's local reset, may be dispatched in between
     fn check_admissions(&mut self, dispatches: &[DispatchRecord]) -> Result<(), Violation> {
         let violation =
             |detail: String| Err(Violation::new(Invariant::OneFinishOneAdmission, detail));
@@ -302,6 +305,10 @@ impl Invariants {
                     "{:?} got {} admissions",
                     record.intent, record.admissions
                 ));
+            }
+
+            if let Some(detail) = verify_without_its_operation(record) {
+                return violation(detail);
             }
 
             if self.dispatched.first() == Some(&record.intent) {
@@ -350,6 +357,28 @@ impl Invariants {
         }
 
         Ok(())
+    }
+}
+
+/// An accepted Verify that left no Verify operation running at the end of its admission turn
+///
+/// The only accepted Verify that starts no operation is one that joined uploads already waiting
+/// for confirmation, whose verifier owns its own evidence
+fn verify_without_its_operation(record: &DispatchRecord) -> Option<String> {
+    if !matches!(record.intent, UserIntent::StartVerification { .. })
+        || record.admission != Some(Admission::Accepted)
+        || record.joined_upload_confirmation
+    {
+        return None;
+    }
+
+    let started = record.running_after.filter(|after| Some(*after) != record.running_before);
+    match started.map(CloudBackupExclusiveOperationClaim::operation) {
+        Some(CloudBackupExclusiveOperation::Verify) => None,
+        _ => Some(format!(
+            "an accepted {:?} started {started:?}, running {:?} before it",
+            record.intent, record.running_before
+        )),
     }
 }
 

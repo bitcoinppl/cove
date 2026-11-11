@@ -16,10 +16,14 @@ use super::{
 };
 use crate::database::Database;
 use crate::database::cloud_backup::{
-    PersistedCloudBackupState, PersistedCloudBackupStatus, PersistedDriveAccountSwitchPhase,
+    PersistedBackupVerificationState, PersistedCloudBackupState, PersistedCloudBackupStatus,
+    PersistedDriveAccountSwitchPhase,
 };
-use crate::manager::cloud_backup_manager::admission::{Admission, Rejection, UserIntent};
+use crate::manager::cloud_backup_manager::admission::{
+    Admission, CoalescibleIntent, Rejection, UserIntent,
+};
 use crate::manager::cloud_backup_manager::catastrophic_recovery::reset_local_data_for_catastrophic_recovery;
+use crate::manager::cloud_backup_manager::detail::VerificationState;
 use crate::manager::cloud_backup_manager::model::CloudBackupLifecycle;
 use crate::manager::cloud_backup_manager::{
     CloudBackupDriveAccountSwitchError, CloudBackupEnableContext, CloudBackupEnableState,
@@ -229,6 +233,66 @@ fn verification_restores_a_missing_local_master_key_through_the_owner() {
         ))
         .then_cannot(&[N::Enable]);
         assert!(local_master_key_present(), "{}", app.describe());
+    });
+}
+
+/// A manual verification is an operation: it holds the slot while it reads the backup, a second
+/// Verify joins it, and evidence it read before a wallet change can't mark the new wallet set
+/// verified
+#[test]
+fn verification_holds_the_slot_and_judges_its_own_wallet_set() {
+    let test =
+        concat!(module_path!(), "::verification_holds_the_slot_and_judges_its_own_wallet_set");
+    run_case(test, &[PhaseEnd::Exit], |_| {
+        let mut app = TestApp::launch();
+        let namespace = FakeAccount::new(1, 0).seed(&app);
+        seed_verifiable_master_key(&app, &namespace);
+        load_detail(&mut app);
+        let hold = Hold::default();
+        app.cloud.script_next(CloudCall::DownloadWallet, CloudFault::Hold(hold.clone()));
+
+        app.dispatch(CloudBackupManagerAction::StartVerification(
+            CloudBackupVerificationSource::CloudBackupDetail,
+        ))
+        .then_cannot(&[N::Enable, N::TurnOff, N::Verify]);
+        app.block_on("verification's wallet read to start", hold.entered());
+        assert_eq!(
+            app.admission(N::TurnOff),
+            Admission::Rejected(Rejection::OperationRunning(Op::Verify))
+        );
+
+        app.event("a wallet change that needs a new verification lands meanwhile", |app| {
+            let changed = change_a_wallet(app).expect("a local wallet");
+            app.manager().handle_wallet_backup_change_and_reverify(changed);
+        })
+        .then_cannot(&[N::TurnOff]);
+
+        app.dispatch(CloudBackupManagerAction::StartVerification(
+            CloudBackupVerificationSource::CloudBackupDetail,
+        ))
+        .then_cannot(&[N::TurnOff]);
+        let outcome = app.last_outcome().expect("the second Verify is recorded");
+        assert_eq!(
+            outcome.admission,
+            Admission::Coalesced(CoalescibleIntent::RepeatOfRunning(Op::Verify))
+        );
+
+        app.event("release the held wallet read", |_| hold.release()).then_cannot(&[N::Enable]);
+        app.advance_clock(Duration::from_secs(60)).then_can(&[N::TurnOff]);
+        let PersistedCloudBackupState::Configured(configured) = persisted() else {
+            panic!("expected a configured record\n{}", app.describe());
+        };
+
+        assert!(
+            !matches!(configured.verification, PersistedBackupVerificationState::Verified { .. }),
+            "evidence from before the wallet change was kept: {:?}",
+            configured.verification
+        );
+        assert!(
+            !matches!(app.manager().model_snapshot().verification, VerificationState::Verified(_)),
+            "evidence from before the wallet change shows as verified\n{}",
+            app.describe()
+        );
     });
 }
 
