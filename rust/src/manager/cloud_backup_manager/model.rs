@@ -563,7 +563,8 @@ impl CloudBackupReducerState {
                 | CloudBackupExclusiveOperation::RestoreCloudWallet
                 | CloudBackupExclusiveOperation::RestoreAllCloudWallets
                 | CloudBackupExclusiveOperation::DeleteCloudWallet
-                | CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups,
+                | CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups
+                | CloudBackupExclusiveOperation::DiscardPendingEnable,
             )
             | None => {}
         }
@@ -842,7 +843,8 @@ impl CloudBackupReducerState {
             | CloudBackupExclusiveOperation::DeleteOtherBackups
             | CloudBackupExclusiveOperation::RestoreCloudWallet
             | CloudBackupExclusiveOperation::RestoreAllCloudWallets
-            | CloudBackupExclusiveOperation::DeleteCloudWallet => {}
+            | CloudBackupExclusiveOperation::DeleteCloudWallet
+            | CloudBackupExclusiveOperation::DiscardPendingEnable => {}
         }
     }
 

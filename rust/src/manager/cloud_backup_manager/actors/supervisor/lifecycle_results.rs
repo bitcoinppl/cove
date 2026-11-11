@@ -36,7 +36,7 @@ impl CloudBackupSupervisor {
         state_mode: CloudBackupUploadedWalletsStateMode,
     ) -> ActorResult<Result<(), CloudBackupError>> {
         if let Some(origin) = origin
-            && !self.active_operation.accepts_completion(origin, "uploaded wallets")
+            && !self.runtime.accepts_completion(origin, "uploaded wallets")
         {
             return Produces::ok(Err(CloudBackupError::Cancelled));
         }

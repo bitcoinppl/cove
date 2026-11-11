@@ -159,13 +159,13 @@ impl CloudBackupSupervisor {
         continuation: DeepVerificationContinuation,
     ) -> ActorResult<()> {
         if let Some(claim) = claim
-            && !self.active_operation.accepts_completion(claim, "verification")
+            && !self.runtime.accepts_completion(claim, "verification")
         {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
             if claim.is_some() {
-                self.active_operation.clear();
+                self.runtime.clear();
             }
             return Produces::ok(());
         };
@@ -561,7 +561,7 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
-        self.active_operation.clear();
+        self.runtime.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -596,7 +596,7 @@ impl CloudBackupSupervisor {
                         &CloudBackupError::UnsupportedPasskeyProvider,
                     ),
                 );
-                self.active_operation.clear();
+                self.runtime.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
@@ -604,7 +604,7 @@ impl CloudBackupSupervisor {
                     action: RecoveryAction::RecreateManifest,
                     error: error.logged_reader_message("Recreate manifest failed"),
                 });
-                self.active_operation.clear();
+                self.runtime.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -637,7 +637,7 @@ impl CloudBackupSupervisor {
                     action: RecoveryAction::RecreateManifest,
                     error: error.logged_reader_message("Recreate manifest failed"),
                 });
-                self.active_operation.clear();
+                self.runtime.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -676,7 +676,7 @@ impl CloudBackupSupervisor {
                 manager.apply_recovery_state(RecoveryState::Idle);
                 manager
                     .present_passkey_choice_prompt(CloudBackupPasskeyChoiceIntent::RepairPasskey);
-                self.active_operation.clear();
+                self.runtime.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(CloudBackupError::UnsupportedPasskeyProvider) => {
@@ -686,7 +686,7 @@ impl CloudBackupSupervisor {
                         &CloudBackupError::UnsupportedPasskeyProvider,
                     ),
                 );
-                self.active_operation.clear();
+                self.runtime.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
@@ -694,7 +694,7 @@ impl CloudBackupSupervisor {
                     action: RecoveryAction::RepairPasskey,
                     error: error.logged_reader_message("Repair passkey failed"),
                 });
-                self.active_operation.clear();
+                self.runtime.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -726,7 +726,7 @@ impl CloudBackupSupervisor {
                         action: RecoveryAction::RepairPasskey,
                         error: error.logged_reader_message("Repair passkey failed"),
                     });
-                    self.active_operation.clear();
+                    self.runtime.clear();
                     manager.project_exclusive_operation_finished(claim);
                     return Produces::ok(());
                 }
@@ -738,7 +738,7 @@ impl CloudBackupSupervisor {
                         action: RecoveryAction::RepairPasskey,
                         error: error.logged_reader_message("Repair passkey failed"),
                     });
-                    self.active_operation.clear();
+                    self.runtime.clear();
                     manager.project_exclusive_operation_finished(claim);
                     return Produces::ok(());
                 }
@@ -752,7 +752,7 @@ impl CloudBackupSupervisor {
                     action: RecoveryAction::RepairPasskey,
                     error: error.logged_reader_message("Repair passkey failed"),
                 });
-                self.active_operation.clear();
+                self.runtime.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -784,7 +784,7 @@ impl CloudBackupSupervisor {
                     action: RecoveryAction::RepairPasskey,
                     error: error.logged_reader_message("Repair passkey failed"),
                 });
-                self.active_operation.clear();
+                self.runtime.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
         }
@@ -811,7 +811,7 @@ impl CloudBackupSupervisor {
         manager.refresh_sync_health();
         manager.apply_recovery_state(RecoveryState::Idle);
         manager.apply_verification_state(VerificationState::Idle);
-        self.active_operation.clear();
+        self.runtime.clear();
         manager.project_exclusive_operation_finished(claim);
         Produces::ok(())
     }

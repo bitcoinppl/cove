@@ -514,6 +514,88 @@ async fn discard_pending_enable_fresh_owned_remote_writes_delete_entire_namespac
     assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
 }
 
+/// The last dispatched intent's admission, read on the supervisor
+async fn last_admission(
+    manager: &RustCloudBackupManager,
+) -> crate::manager::cloud_backup_manager::admission::Admission {
+    call!(manager.supervisor.harness_last_outcome())
+        .await
+        .expect("supervisor should answer its last outcome")
+        .expect("an intent should have been dispatched")
+        .admission
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn enable_during_a_pending_enable_discard_is_rejected_and_the_discard_finishes_alone() {
+    use crate::manager::cloud_backup_manager::admission::{
+        Admission, CoalescibleIntent, Rejection,
+    };
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    let fixture =
+        prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, true);
+    globals.cloud.set_master_key_backup(fixture.namespace.clone(), vec![1, 2, 3]);
+    install_pending_enable_discard_session(&manager, &fixture).await;
+    let delete = globals.cloud.gate_next_delete_namespace();
+
+    manager.discard_pending_enable_cloud_backup();
+    tokio::time::timeout(Duration::from_secs(10), delete.wait_until_blocked())
+        .await
+        .expect("checkpoint: the discard's remote delete should reach the cloud");
+
+    // the discard is the running operation, so Enable meets it and is rejected as busy
+    dispatch_and_wait(
+        &manager,
+        CloudBackupManagerAction::EnableCloudBackup(CloudBackupEnableContext::settings_manual()),
+    )
+    .await;
+    assert_eq!(
+        last_admission(&manager).await,
+        Admission::Rejected(Rejection::OperationRunning(
+            CloudBackupExclusiveOperation::DiscardPendingEnable
+        ))
+    );
+
+    // a second Discard is the same request, not a second run that settles the state early
+    dispatch_and_wait(&manager, CloudBackupManagerAction::DiscardPendingEnableCloudBackup).await;
+    assert_eq!(
+        last_admission(&manager).await,
+        Admission::Coalesced(CoalescibleIntent::RepeatOfRunning(
+            CloudBackupExclusiveOperation::DiscardPendingEnable
+        ))
+    );
+    assert_eq!(manager.state().lifecycle, CloudBackupLifecycle::Disabled);
+
+    delete.release();
+    wait_for_test_condition(
+        Duration::from_secs(10),
+        "checkpoint: the discard should clear the journal after its delete",
+        || CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none(),
+    )
+    .await;
+    supervisor_checkpoint(&manager).await;
+
+    // the completion was current, so it rolled back the discarded Enable's state exactly once
+    // and nothing else had started that it could roll back over
+    assert!(!globals.cloud.has_namespace(&fixture.namespace));
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 1);
+    assert_active_master_key(&fixture.prior_master_key);
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+    assert_eq!(manager.projected_exclusive_operation(), None);
+
+    // the slot is free again: a new Enable is admitted
+    dispatch_and_wait(
+        &manager,
+        CloudBackupManagerAction::EnableCloudBackup(CloudBackupEnableContext::settings_manual()),
+    )
+    .await;
+    assert_eq!(last_admission(&manager).await, Admission::Accepted);
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_fresh_owned_treats_missing_namespace_as_deleted() {
     let _guard = async_test_lock().lock().await;

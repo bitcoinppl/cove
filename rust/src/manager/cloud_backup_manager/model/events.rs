@@ -62,6 +62,11 @@ pub(crate) enum CloudBackupExclusiveOperation {
     RestoreAllCloudWallets,
     DeleteCloudWallet,
     DeleteUndecryptableWalletBackups,
+    /// Discarding an interrupted Enable, whose remote delete runs off the supervisor mailbox
+    ///
+    /// Only the supervisor's runtime holds it; it is never projected as an exclusive operation,
+    /// since the recovery screen already shows the discard
+    DiscardPendingEnable,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

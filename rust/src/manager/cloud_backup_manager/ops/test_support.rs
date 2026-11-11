@@ -166,6 +166,7 @@ struct MockCloudState {
     wallet_backup_success_count: usize,
     deleted_namespace_policies: Vec<CloudAccessPolicy>,
     delete_namespace_attempts: usize,
+    next_delete_namespace_gate: Option<Arc<MockCloudDownloadGate>>,
     list_wallet_files_attempts: usize,
     list_wallet_files_attempts_by_namespace: HashMap<String, usize>,
     list_wallet_files_snapshot_attempts: usize,
@@ -419,6 +420,13 @@ impl MockCloudStorage {
     pub(crate) fn gate_next_list_namespaces(&self) -> Arc<MockCloudDownloadGate> {
         let gate = Arc::new(MockCloudDownloadGate::default());
         self.state.lock().next_list_namespaces_gate = Some(gate.clone());
+        gate
+    }
+
+    /// Holds the next namespace delete until the test releases it
+    pub(crate) fn gate_next_delete_namespace(&self) -> Arc<MockCloudDownloadGate> {
+        let gate = Arc::new(MockCloudDownloadGate::default());
+        self.state.lock().next_delete_namespace_gate = Some(gate.clone());
         gate
     }
 
@@ -866,6 +874,11 @@ impl CloudStorageAccess for MockCloudStorage {
         namespace: String,
         policy: CloudAccessPolicy,
     ) -> Result<(), CloudStorageError> {
+        let gate = self.state.lock().next_delete_namespace_gate.take();
+        if let Some(gate) = gate {
+            gate.block().await;
+        }
+
         let mut state = self.state.lock();
         state.delete_namespace_attempts += 1;
         if let Some(error) = state.delete_namespace_error.clone() {

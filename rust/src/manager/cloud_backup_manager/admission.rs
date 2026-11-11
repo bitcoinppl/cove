@@ -151,7 +151,6 @@ pub(crate) enum AdmissionBody {
     /// A committed Turn Off that still has to finish
     FinishingDisable,
     PendingEnableRecovery,
-    Failed,
     LoadFailed,
 }
 
@@ -205,7 +204,6 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
     match intent {
         // presentation intents answer prompts; their handlers own the prompt they answer
         I::ConfirmSavedPasskey
-        | I::DiscardPendingEnable
         | I::ConfirmPendingEnableCleanup
         | I::DismissPasskeyChoicePrompt
         | I::DismissMissingPasskeyReminder
@@ -224,6 +222,15 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
             starts_while_off(snapshot, operation)
         }
         I::RestoreFromCloudBackup => starts_while_off(snapshot, Op::Restore),
+
+        // a Discard while one runs is the same request; any other running work is checked by
+        // the discard's own start, which needs the operation slot
+        I::DiscardPendingEnable => match snapshot.running {
+            Some(Op::DiscardPendingEnable) => {
+                Coalesced(CoalescibleIntent::RepeatOfRunning(Op::DiscardPendingEnable))
+            }
+            _ => Accepted,
+        },
 
         I::CancelRestore => match snapshot.running {
             Some(Op::Restore) => Accepted,
@@ -301,8 +308,7 @@ fn starts_while_off(
             AdmissionBody::Disabled
             | AdmissionBody::Enabling
             | AdmissionBody::Restoring
-            | AdmissionBody::PendingEnableRecovery
-            | AdmissionBody::Failed,
+            | AdmissionBody::PendingEnableRecovery,
             None,
         ) => Admission::Accepted,
         (AdmissionBody::Configured(_), None) => Admission::Rejected(Rejection::NotConfigured),
@@ -383,7 +389,6 @@ fn not_configured(body: AdmissionBody) -> Rejection {
         AdmissionBody::Configured(_)
         | AdmissionBody::Enabling
         | AdmissionBody::Restoring
-        | AdmissionBody::PendingEnableRecovery
-        | AdmissionBody::Failed => Rejection::NotConfigured,
+        | AdmissionBody::PendingEnableRecovery => Rejection::NotConfigured,
     }
 }

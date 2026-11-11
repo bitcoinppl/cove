@@ -66,11 +66,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         blocker: CloudBackupWriteBlocker,
     ) -> ActorResult<()> {
-        if !self.active_operation.accepts_completion(claim, "disable write drain") {
+        if !self.runtime.accepts_completion(claim, "disable write drain") {
             return Produces::ok(());
         }
         let Some(manager) = self.manager() else {
-            self.active_operation.clear();
+            self.runtime.clear();
             self.pending_disable_write_drain = None;
             return Produces::ok(());
         };
@@ -104,7 +104,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        if !self.active_operation.accepts_completion(claim, "disable write drain") {
+        if !self.runtime.accepts_completion(claim, "disable write drain") {
             return Produces::ok(());
         }
 
@@ -179,6 +179,7 @@ impl CloudBackupSupervisor {
         // the commit point: from here on the disable only goes forward
         match manager.commit_disable_attempt(&self.lifecycle, &review, attempt_id) {
             Ok(CommitDisable::Committed(committed)) => {
+                self.runtime.commit_turn_off(claim, committed.clone());
                 self.schedule_disable_namespace_delete(claim, committed);
             }
             Ok(CommitDisable::NotConfigured) => {
@@ -327,7 +328,7 @@ impl CloudBackupSupervisor {
         let blocker = CloudBackupWriteBlocker::Disabling { operation_id: disabling.attempt_id };
         send!(self.write.unblock(blocker));
 
-        if !self.active_operation.accepts_completion(claim, "Keep Enabled") {
+        if !self.runtime.accepts_completion(claim, "Keep Enabled") {
             return Produces::ok(());
         }
 
@@ -377,7 +378,7 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
     ) {
         self.pending_disable_write_drain = None;
-        self.active_operation.clear();
+        self.runtime.clear();
         manager.project_exclusive_operation_finished(claim);
     }
 
@@ -439,7 +440,7 @@ impl CloudBackupSupervisor {
                 }
                 manager.refresh_sync_health();
 
-                if let Some(claim) = self.active_operation.claim()
+                if let Some(claim) = self.runtime.claim()
                     && claim.operation() == CloudBackupExclusiveOperation::Disable
                 {
                     self.finish_disable_operation(&manager, claim);

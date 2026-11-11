@@ -654,11 +654,15 @@ impl RustCloudBackupManager {
     }
 
     fn init(lifecycle: LifecycleWriter, load: LifecycleLoad) -> Arc<Self> {
-        if let LifecycleLoad::Failed(error) = &load {
-            // the legacy record stays as it was and projects as a load failure; relaunching
-            // runs normalization again
-            error!("Cloud Backup failed to load its lifecycle record: {error}");
-        }
+        let load_error = match load {
+            LifecycleLoad::Failed(error) => {
+                // the legacy record stays as it was and the runtime is `LoadFailed`; relaunching
+                // runs normalization again
+                error!("Cloud Backup failed to load its lifecycle record: {error}");
+                Some(error)
+            }
+            LifecycleLoad::Loaded | LifecycleLoad::Healed => None,
+        };
 
         let manager = Arc::new_cyclic(|manager| {
             let cloud_writes = spawn_actor(CloudBackupWriteSupervisor::new(manager.clone()));
@@ -672,6 +676,7 @@ impl RustCloudBackupManager {
                     manager.clone(),
                     cloud_writes,
                     lifecycle,
+                    load_error,
                 )),
                 local_reset_in_progress: Arc::new(AtomicBool::new(false)),
                 pending_sync_states_unreadable: Arc::new(AtomicBool::new(false)),
@@ -1147,6 +1152,9 @@ impl RustCloudBackupManager {
         if !self.has_in_flight_operation() {
             self.refresh_pending_upload_verification_state();
         }
+
+        // the runtime owner has the last word for bodies the record alone can't show
+        send!(self.supervisor.project_runtime());
     }
 
     /// Start silent supplemental inventory checks for this app process
@@ -1734,7 +1742,11 @@ mod tests {
         let _guard = test_lock().lock();
         let manager = init_manager();
         let db = Database::global();
-        let persisted_state = persisted_enabled_cloud_backup_state(None);
+
+        // restore starts only while backup is off, and a corrupted record is the off state with
+        // something a stale write could still clobber
+        let persisted_state =
+            PersistedCloudBackupState::Corrupted { error: "unreadable record".into() };
         db.cloud_backup_state.set(&persisted_state).unwrap();
         manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
 

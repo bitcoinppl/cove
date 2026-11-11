@@ -29,6 +29,7 @@ use crate::database::cloud_backup::{
     CloudBackupRecordKey, CloudStorageIssue, DriveAccountSwitchId, PersistedCloudBackupState,
     PersistedCloudBlobSyncState, PersistedDriveAccountSwitch, PersistedDriveAccountSwitchPhase,
 };
+use crate::database::error::DatabaseError;
 use crate::manager::cloud_backup_manager::keychain::CloudBackupKeychain;
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim,
@@ -87,6 +88,9 @@ mod enable;
 mod lifecycle_results;
 mod other_backups;
 mod restore_all;
+mod runtime;
+
+use runtime::{IdleFacts, RestoreRun, Runtime};
 mod undecryptable_wallets;
 mod verification;
 
@@ -214,147 +218,6 @@ struct PendingDisableWriteDrain {
     attempt: crate::manager::cloud_backup_manager::ops::DisableAttempt,
 }
 
-/// A restore or Restore All run, whose worker keeps draining until it observes cancellation
-#[derive(Debug)]
-struct RestoreRun {
-    claim: CloudBackupExclusiveOperationClaim,
-    cancellation: Arc<AtomicBool>,
-    /// Set once the run commits a local wallet, so cloud-only rows are reclassified when it ends
-    committed_local_wallet: bool,
-}
-
-impl RestoreRun {
-    fn new(claim: CloudBackupExclusiveOperationClaim, cancellation: Arc<AtomicBool>) -> Self {
-        Self { claim, cancellation, committed_local_wallet: false }
-    }
-}
-
-#[derive(Debug)]
-enum ActiveOperationRun {
-    Standard(CloudBackupExclusiveOperationClaim),
-    Restore(RestoreRun),
-    RestoreAll(RestoreRun),
-}
-
-#[derive(Debug, Default)]
-struct ActiveOperation(Option<ActiveOperationRun>);
-
-impl ActiveOperation {
-    fn is_some(&self) -> bool {
-        self.0.is_some()
-    }
-
-    fn is_restore_all(&self) -> bool {
-        matches!(self.0.as_ref(), Some(ActiveOperationRun::RestoreAll(_)))
-    }
-
-    fn claim(&self) -> Option<CloudBackupExclusiveOperationClaim> {
-        match self.0.as_ref()? {
-            ActiveOperationRun::Standard(claim) => Some(*claim),
-            ActiveOperationRun::Restore(run) => Some(run.claim),
-            ActiveOperationRun::RestoreAll(run) => Some(run.claim),
-        }
-    }
-
-    /// Whether `claim` still owns the active operation, so completions for superseded claims are ignored
-    fn is_current(&self, claim: CloudBackupExclusiveOperationClaim) -> bool {
-        self.claim() == Some(claim)
-    }
-
-    /// Whether a completion carrying `claim` belongs to the running operation
-    ///
-    /// A completion for an operation that already finished, was cancelled or was handed off is
-    /// stale. It is discarded here with a `debug!` log and is never reported to the user, since
-    /// the user's intent was admitted and the operation that replaced it reports its own result
-    fn accepts_completion(
-        &self,
-        claim: CloudBackupExclusiveOperationClaim,
-        completion: &'static str,
-    ) -> bool {
-        let current = self.claim();
-        if current == Some(claim) {
-            return true;
-        }
-
-        debug!("Cloud Backup discarded stale {completion} for {claim:?}, running {current:?}");
-        false
-    }
-
-    fn start_standard(&mut self, claim: CloudBackupExclusiveOperationClaim) {
-        self.0 = Some(ActiveOperationRun::Standard(claim));
-    }
-
-    fn start_restore(&mut self, run: RestoreRun) {
-        self.0 = Some(ActiveOperationRun::Restore(run));
-    }
-
-    fn start_restore_all(&mut self, run: RestoreRun) {
-        self.0 = Some(ActiveOperationRun::RestoreAll(run));
-    }
-
-    fn restore(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreRun> {
-        match self.0.as_ref()? {
-            ActiveOperationRun::Restore(run) if run.claim == claim => Some(run),
-            ActiveOperationRun::Standard(_)
-            | ActiveOperationRun::Restore(_)
-            | ActiveOperationRun::RestoreAll(_) => None,
-        }
-    }
-
-    fn restore_all(&self, claim: CloudBackupExclusiveOperationClaim) -> Option<&RestoreRun> {
-        match self.0.as_ref()? {
-            ActiveOperationRun::RestoreAll(run) if run.claim == claim => Some(run),
-            ActiveOperationRun::Standard(_)
-            | ActiveOperationRun::Restore(_)
-            | ActiveOperationRun::RestoreAll(_) => None,
-        }
-    }
-
-    fn restore_all_mut(
-        &mut self,
-        claim: CloudBackupExclusiveOperationClaim,
-    ) -> Option<&mut RestoreRun> {
-        match self.0.as_mut()? {
-            ActiveOperationRun::RestoreAll(run) if run.claim == claim => Some(run),
-            ActiveOperationRun::Standard(_)
-            | ActiveOperationRun::Restore(_)
-            | ActiveOperationRun::RestoreAll(_) => None,
-        }
-    }
-
-    /// Cancels draining restore work but releases operations with no retained cancellation owner
-    fn prepare_local_reset(&mut self) -> Option<CloudBackupExclusiveOperationClaim> {
-        match self.0.as_ref()? {
-            ActiveOperationRun::Restore(run) | ActiveOperationRun::RestoreAll(run) => {
-                run.cancellation.store(true, Ordering::Release);
-                None
-            }
-            ActiveOperationRun::Standard(claim) => {
-                let claim = *claim;
-                self.clear();
-                Some(claim)
-            }
-        }
-    }
-
-    fn clear(&mut self) {
-        self.0 = None;
-    }
-
-    #[cfg(test)]
-    fn take_claim(&mut self) -> Option<CloudBackupExclusiveOperationClaim> {
-        let claim = self.claim();
-        self.clear();
-        claim
-    }
-}
-
-impl PartialEq<Option<CloudBackupExclusiveOperationClaim>> for ActiveOperation {
-    fn eq(&self, other: &Option<CloudBackupExclusiveOperationClaim>) -> bool {
-        self.claim() == *other
-    }
-}
-
 /// Which local wallet set a verification checked
 ///
 /// Process-local, like `OperationId`: verification evidence is only valid for the wallet set it
@@ -379,7 +242,7 @@ impl WalletSetGeneration {
 /// Waiting calls go one way only. The write supervisor and other workers may `call!` the
 /// supervisor and wait for the write's outcome, but the supervisor never waits on the write
 /// supervisor: it `send!`s and handles the reply as a later completion message, matched with
-/// `ActiveOperation::accepts_completion`. A wait in both directions would deadlock, because
+/// `Runtime::accepts_completion`. A wait in both directions would deadlock, because
 /// each actor runs one handler at a time
 #[derive(Debug)]
 pub(crate) struct CloudBackupSupervisor {
@@ -390,7 +253,8 @@ pub(crate) struct CloudBackupSupervisor {
     sync_health: Addr<CloudBackupSyncHealthWorker>,
     uploads: Addr<CloudBackupUploadWorker>,
     write: Addr<CloudBackupWriteSupervisor>,
-    active_operation: ActiveOperation,
+    /// The lifecycle body with the running operation nested in it
+    runtime: Runtime,
     pending_enable_session: Option<PendingEnableSession>,
     next_request_id: u64,
     active_sync_request: Option<u64>,
@@ -459,7 +323,16 @@ impl CloudBackupSupervisor {
         manager: Weak<RustCloudBackupManager>,
         cloud_writes: Addr<CloudBackupWriteSupervisor>,
         lifecycle: LifecycleWriter,
+        load_error: Option<DatabaseError>,
     ) -> Self {
+        let runtime = Runtime::at_load(
+            load_error,
+            IdleFacts {
+                record: &RustCloudBackupManager::load_persisted_state(),
+                pending_enable_recovery: false,
+            },
+        );
+
         Self {
             addr: WeakAddr::default(),
             lifecycle,
@@ -468,7 +341,7 @@ impl CloudBackupSupervisor {
             uploads: spawn_actor(CloudBackupUploadWorker::new(manager.clone())),
             write: cloud_writes,
             manager,
-            active_operation: ActiveOperation::default(),
+            runtime,
             pending_enable_session: None,
             next_request_id: 0,
             active_sync_request: None,
@@ -494,13 +367,13 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> Option<Arc<RustCloudBackupManager>> {
-        if !self.active_operation.accepts_completion(claim, "completion") {
+        if !self.runtime.accepts_completion(claim, "completion") {
             return None;
         }
 
         let manager = self.manager();
         if manager.is_none() {
-            self.active_operation.clear();
+            self.runtime.clear();
         }
 
         manager
@@ -561,18 +434,23 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         operation: CloudBackupExclusiveOperation,
     ) -> Option<CloudBackupExclusiveOperationClaim> {
-        if self.active_operation.is_some() {
+        if self.runtime.is_some() {
             return None;
         }
 
+        self.rebase_idle_runtime(manager);
         let claim = CloudBackupExclusiveOperationClaim::new(operation, OperationId::next());
-        manager.project_exclusive_operation_started(claim);
-        if operation == CloudBackupExclusiveOperation::Restore {
-            self.active_operation
-                .start_restore(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))));
+        let started = if operation == CloudBackupExclusiveOperation::Restore {
+            self.runtime.start_restore(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))))
         } else {
-            self.active_operation.start_standard(claim);
+            self.runtime.start_standard(claim)
+        };
+        if let Err(unstartable) = started {
+            warn!("Cloud Backup could not start {unstartable:?}");
+            return None;
         }
+
+        manager.project_exclusive_operation_started(claim);
         Some(claim)
     }
 
@@ -586,31 +464,77 @@ impl CloudBackupSupervisor {
         from: CloudBackupExclusiveOperationClaim,
         operation: CloudBackupExclusiveOperation,
     ) -> Option<CloudBackupExclusiveOperationClaim> {
-        if !self.active_operation.is_current(from) {
+        if !self.runtime.is_current(from) {
             return None;
         }
 
         let to = CloudBackupExclusiveOperationClaim::new(operation, OperationId::next());
-        self.active_operation.start_standard(to);
+        let record = RustCloudBackupManager::load_persisted_state();
+        let facts = IdleFacts {
+            record: &record,
+            pending_enable_recovery: manager.state.read().shows_pending_enable_recovery(),
+        };
+        if let Err(unstartable) = self.runtime.hand_off(from, to, facts) {
+            warn!("Cloud Backup could not hand off to {unstartable:?}");
+            return None;
+        }
+
         manager.project_exclusive_operation_handed_off(from, to);
         Some(to)
     }
 
     fn begin_restore_all_exclusive_operation(
         &mut self,
+        manager: &RustCloudBackupManager,
     ) -> Option<CloudBackupExclusiveOperationClaim> {
-        if self.active_operation.is_some() {
+        if self.runtime.is_some() {
             return None;
         }
 
+        self.rebase_idle_runtime(manager);
         let claim = CloudBackupExclusiveOperationClaim::new(
             CloudBackupExclusiveOperation::RestoreAllCloudWallets,
             OperationId::next(),
         );
-        let cancellation = Arc::new(AtomicBool::new(false));
-        self.active_operation.start_restore_all(RestoreRun::new(claim, cancellation));
+        if let Err(unstartable) =
+            self.runtime.start_restore_all(RestoreRun::new(claim, Arc::new(AtomicBool::new(false))))
+        {
+            warn!("Cloud Backup could not start {unstartable:?}");
+            return None;
+        }
 
         Some(claim)
+    }
+
+    /// Shows the runtime through the read-only adapter onto today's exported types
+    ///
+    /// Bodies the reducer can't tell apart from the record alone, such as `LoadFailed` after a
+    /// failed read, get their exported shape here, so a load failure never shows as Disabled
+    pub async fn project_runtime(&mut self) -> ActorResult<()> {
+        let Some(manager) = self.manager() else { return Produces::ok(()) };
+
+        self.rebase_idle_runtime(&manager);
+        let exported = self.runtime.exported();
+        if let Some(status) = exported.status {
+            manager.reconcile_runtime_status(status);
+        }
+        if let Some(disable) = exported.disable {
+            manager.apply_disable_outcome(disable);
+        }
+
+        Produces::ok(())
+    }
+
+    /// Moves an idle runtime body onto the supervisor's own committed record
+    ///
+    /// The supervisor holds the only writer, so the record is the owner's state, not a mirror;
+    /// a running operation holds its body and is not moved
+    fn rebase_idle_runtime(&mut self, manager: &RustCloudBackupManager) {
+        let record = RustCloudBackupManager::load_persisted_state();
+        self.runtime.rebase_idle(IdleFacts {
+            record: &record,
+            pending_enable_recovery: manager.state.read().shows_pending_enable_recovery(),
+        });
     }
 
     fn next_request_id(&mut self) -> u64 {
@@ -623,11 +547,11 @@ impl CloudBackupSupervisor {
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
     ) -> ActorResult<()> {
-        if !self.active_operation.accepts_completion(claim, "completion") {
+        if !self.runtime.accepts_completion(claim, "completion") {
             return Produces::ok(());
         }
 
-        self.active_operation.clear();
+        self.runtime.clear();
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_finished(claim);
             if claim.operation() == CloudBackupExclusiveOperation::Restore
@@ -646,11 +570,11 @@ impl CloudBackupSupervisor {
         claim: CloudBackupExclusiveOperationClaim,
         error: CloudBackupError,
     ) -> ActorResult<()> {
-        if !self.active_operation.accepts_completion(claim, "failure") {
+        if !self.runtime.accepts_completion(claim, "failure") {
             return Produces::ok(());
         }
 
-        self.active_operation.clear();
+        self.runtime.clear();
         if let Some(manager) = self.manager() {
             manager.project_exclusive_operation_failed(claim, &error);
         }
@@ -659,14 +583,14 @@ impl CloudBackupSupervisor {
     }
 
     fn restore_operation_is_current(&self, claim: CloudBackupExclusiveOperationClaim) -> bool {
-        let Some(run) = self.active_operation.restore(claim) else { return false };
+        let Some(run) = self.runtime.restore(claim) else { return false };
 
         !run.cancellation.load(Ordering::Acquire)
     }
 
     /// The cancellation flag of a restore claim that was just started
     fn restore_cancellation(&self, claim: CloudBackupExclusiveOperationClaim) -> Arc<AtomicBool> {
-        self.active_operation
+        self.runtime
             .restore(claim)
             .map(|run| run.cancellation.clone())
             .expect("restore claim must carry a cancellation state")
@@ -1238,7 +1162,7 @@ impl CloudBackupSupervisor {
             apply_refresh_detail_result(&manager, &result);
         }
 
-        self.active_operation.clear();
+        self.runtime.clear();
         manager.project_exclusive_operation_finished(claim);
         Produces::ok(())
     }
@@ -1414,6 +1338,7 @@ impl CloudBackupSupervisor {
     ) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
         let addr = self.addr();
+
         let Some(claim) =
             self.begin_exclusive_operation(&manager, CloudBackupExclusiveOperation::Restore)
         else {
@@ -1472,7 +1397,7 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn cancel_restore(&mut self) -> ActorResult<()> {
-        let Some(ActiveOperationRun::Restore(run)) = self.active_operation.0.as_ref() else {
+        let Some(run) = self.runtime.claim().and_then(|claim| self.runtime.restore(claim)) else {
             return Produces::ok(());
         };
 
@@ -1500,7 +1425,7 @@ impl CloudBackupSupervisor {
     }
 
     pub async fn prepare_local_reset_runtime(&mut self) -> ActorResult<()> {
-        if let Some(released_claim) = self.active_operation.prepare_local_reset()
+        if let Some(released_claim) = self.runtime.prepare_local_reset()
             && let Some(manager) = self.manager()
         {
             manager.project_exclusive_operation_finished(released_claim);
@@ -1526,12 +1451,7 @@ pub(crate) mod test_support {
             use crate::manager::cloud_backup_manager::admission::{Admission, Rejection};
 
             let admission = match self.manager() {
-                Some(manager) => {
-                    crate::manager::cloud_backup_manager::admission::evaluate_admission(
-                        &intent,
-                        &self.admission_snapshot(&manager),
-                    )
-                }
+                Some(manager) => self.decide(&manager, &intent),
                 None => Admission::Rejected(Rejection::NotConfigured),
             };
             Produces::ok(admission)
@@ -1545,7 +1465,7 @@ pub(crate) mod test_support {
 
         /// The exclusive slot, for harness failure messages only
         pub(crate) async fn harness_active_operation(&mut self) -> ActorResult<String> {
-            Produces::ok(format!("{:?}", self.active_operation))
+            Produces::ok(format!("{:?}", self.runtime))
         }
 
         pub async fn run_wallet_upload_inline_for_test(
@@ -1559,7 +1479,7 @@ pub(crate) mod test_support {
         pub async fn new_restore_operation(&mut self) -> ActorResult<RestoreOperation> {
             let manager = self.manager().expect("cloud backup manager exists");
             let addr = self.addr();
-            if let Some(claim) = self.active_operation.take_claim() {
+            if let Some(claim) = self.runtime.take_claim() {
                 manager.project_exclusive_operation_finished(claim);
             }
             let claim = self

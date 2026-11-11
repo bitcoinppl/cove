@@ -1,12 +1,11 @@
 use super::*;
 use crate::manager::cloud_backup_manager::admission::{
-    Admission, AdmissionBody, AdmissionSnapshot, ConfiguredAdmission, DetailInventory,
-    EnableIntent, RestoreAllAdmission, UserIntent, evaluate_admission,
+    Admission, AdmissionSnapshot, ConfiguredAdmission, DetailInventory, EnableIntent,
+    RestoreAllAdmission, UserIntent, evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupLifecycle,
 };
-use crate::manager::cloud_backup_manager::owner::lifecycle::DisablingRecord;
 use tracing::debug;
 
 /// What the last dispatched intent got, for diagnostics and tests
@@ -24,7 +23,7 @@ impl CloudBackupSupervisor {
     pub async fn dispatch(&mut self, intent: UserIntent) -> ActorResult<()> {
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
-        let admission = evaluate_admission(&intent, &self.admission_snapshot(&manager));
+        let admission = self.decide(&manager, &intent);
         match admission {
             Admission::Accepted => {}
             Admission::Coalesced(into) => {
@@ -43,38 +42,37 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
+    /// What dispatch decides for `intent` now, on the body rebased onto the committed record
+    pub(crate) fn decide(
+        &mut self,
+        manager: &RustCloudBackupManager,
+        intent: &UserIntent,
+    ) -> Admission {
+        self.rebase_idle_runtime(manager);
+        evaluate_admission(intent, &self.admission_snapshot(manager))
+    }
+
     pub(crate) fn admission_snapshot(&self, manager: &RustCloudBackupManager) -> AdmissionSnapshot {
-        let persisted = RustCloudBackupManager::load_persisted_state();
-        let lifecycle = manager.state().lifecycle;
-        let body = match DisablingRecord::of(&persisted) {
-            Some(DisablingRecord::Committed(_)) => AdmissionBody::FinishingDisable,
-            Some(DisablingRecord::Unnormalized) => AdmissionBody::LoadFailed,
-            None => match &lifecycle {
-                CloudBackupLifecycle::Disabled => AdmissionBody::Disabled,
-                CloudBackupLifecycle::Enabling(_) => AdmissionBody::Enabling,
-                CloudBackupLifecycle::Restoring(_) => AdmissionBody::Restoring,
-                CloudBackupLifecycle::PendingEnableRecovery(_) => {
-                    AdmissionBody::PendingEnableRecovery
-                }
-                CloudBackupLifecycle::Failed(_) => AdmissionBody::Failed,
-                CloudBackupLifecycle::Configured(configured) => {
-                    AdmissionBody::Configured(match &configured.destructive_operation {
-                        CloudBackupDestructiveOperationState::DisableFailed {
-                            can_keep_enabled,
-                            ..
-                        } => ConfiguredAdmission::TurnOffFailed {
-                            can_keep_enabled: *can_keep_enabled,
-                        },
-                        CloudBackupDestructiveOperationState::Idle
-                        | CloudBackupDestructiveOperationState::RecreatingManifest
-                        | CloudBackupDestructiveOperationState::ReinitializingBackup
-                        | CloudBackupDestructiveOperationState::Disabling => {
-                            ConfiguredAdmission::Ready
-                        }
-                    })
-                }
+        // whether the last Turn Off failed is presentation the reducer still holds; it moves
+        // into `Configured`'s facts with PR 2's review
+        let configured = match &manager.state().lifecycle {
+            CloudBackupLifecycle::Configured(configured) => match &configured.destructive_operation
+            {
+                CloudBackupDestructiveOperationState::DisableFailed {
+                    can_keep_enabled, ..
+                } => ConfiguredAdmission::TurnOffFailed { can_keep_enabled: *can_keep_enabled },
+                CloudBackupDestructiveOperationState::Idle
+                | CloudBackupDestructiveOperationState::RecreatingManifest
+                | CloudBackupDestructiveOperationState::ReinitializingBackup
+                | CloudBackupDestructiveOperationState::Disabling => ConfiguredAdmission::Ready,
             },
+            CloudBackupLifecycle::Disabled
+            | CloudBackupLifecycle::Enabling(_)
+            | CloudBackupLifecycle::Restoring(_)
+            | CloudBackupLifecycle::PendingEnableRecovery(_)
+            | CloudBackupLifecycle::Failed(_) => ConfiguredAdmission::Ready,
         };
+        let body = self.runtime.admission_body(configured);
 
         let detail_inventory = {
             let state = manager.state.read();
@@ -100,10 +98,7 @@ impl CloudBackupSupervisor {
 
         AdmissionSnapshot {
             body,
-            running: self
-                .active_operation
-                .claim()
-                .map(CloudBackupExclusiveOperationClaim::operation),
+            running: self.runtime.claim().map(CloudBackupExclusiveOperationClaim::operation),
             sync_running: self.active_sync_request.is_some(),
             detail_inventory,
             other_backups_loaded: manager.other_backups_inventory_is_ready(),

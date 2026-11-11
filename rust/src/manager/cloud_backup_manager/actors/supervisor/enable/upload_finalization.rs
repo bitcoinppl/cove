@@ -120,7 +120,7 @@ impl CloudBackupSupervisor {
             }) => {
                 manager.present_existing_backup_found_prompt(context, passkey_hint);
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
-                self.active_operation.clear();
+                self.runtime.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
@@ -165,7 +165,7 @@ impl CloudBackupSupervisor {
                     context, None,
                 ));
                 manager.clear_enable_progress(CloudBackupStatus::Disabled);
-                self.active_operation.clear();
+                self.runtime.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             Err(error) => {
@@ -195,7 +195,7 @@ impl CloudBackupSupervisor {
             manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
                 SavedPasskeyConfirmationMode::Manual,
             ));
-            self.active_operation.clear();
+            self.runtime.clear();
             manager.project_exclusive_operation_finished(claim);
         }
     }

@@ -282,14 +282,15 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
 async fn failed_create_new_enable_does_not_persist_passkey_metadata() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
-    globals.reset();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
     globals.cloud.fail_master_key_upload("boom");
     globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
         prf_output: vec![7; 32],
         credential_id: vec![1, 2, 3],
     }));
 
-    let manager = init_manager();
     let error = enable_cloud_backup_create_new(&manager).await.unwrap_err();
     assert!(matches!(
         error,
@@ -308,14 +309,15 @@ async fn failed_create_new_enable_does_not_persist_passkey_metadata() {
 async fn failed_no_discovery_confirmation_preserves_only_staged_material() {
     let _guard = async_test_lock().lock().await;
     let globals = test_globals();
-    globals.reset();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
     globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
     globals.passkey.set_authenticate_result(Err(PasskeyError::RequestFailed {
         operation: PasskeyOperation::AuthenticateAssertion,
         reason: PasskeyFailureReason::Unknown { diagnostic_message: "boom".into() },
     }));
 
-    let manager = init_manager();
     enable_cloud_backup_no_discovery(&manager).await.unwrap();
     confirm_saved_passkey_session(&manager).await;
 

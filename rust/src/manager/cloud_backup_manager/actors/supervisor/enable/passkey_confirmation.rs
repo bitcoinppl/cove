@@ -18,7 +18,7 @@ impl CloudBackupSupervisor {
         };
 
         if !self.start_saved_passkey_confirmation(manager.clone(), claim, pending) {
-            self.active_operation.clear();
+            self.runtime.clear();
             manager.project_exclusive_operation_finished(claim);
         }
 
@@ -52,7 +52,7 @@ impl CloudBackupSupervisor {
                         SavedPasskeyConfirmationMode::Manual,
                     ),
                 );
-                self.active_operation.clear();
+                self.runtime.clear();
                 manager.project_exclusive_operation_finished(claim);
             }
             CloudBackupSavedPasskeyConfirmation::Failed(error) => {

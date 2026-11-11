@@ -97,11 +97,27 @@ impl CloudBackupSupervisor {
         }
 
         // the delete is a write-lane command, and the supervisor never waits on the write
-        // supervisor, so the delete runs off the mailbox and reports back
+        // supervisor, so the delete runs off the mailbox as an operation of its own: Enable meets
+        // it running and is rejected as busy, and its completion must still be current
+        self.rebase_idle_runtime(&manager);
+        let claim = CloudBackupExclusiveOperationClaim::new(
+            CloudBackupExclusiveOperation::DiscardPendingEnable,
+            OperationId::next(),
+        );
+        if let Err(unstartable) = self.runtime.start_standard(claim) {
+            self.fail_pending_enable_discard(
+                pending,
+                CloudBackupError::Internal(
+                    format!("discard could not start: {unstartable:?}").into(),
+                ),
+            );
+            return Produces::ok(());
+        }
+
         let writes = CloudBackupWriteClient::new(self.write.clone());
         self.addr().send_fut_with(move |addr| async move {
             let result = Self::delete_pending_enable_remote_namespace(writes, &journal).await;
-            send!(addr.complete_pending_enable_remote_discard(pending, journal, result));
+            send!(addr.complete_pending_enable_remote_discard(claim, pending, journal, result));
         });
 
         Produces::ok(())
@@ -109,10 +125,16 @@ impl CloudBackupSupervisor {
 
     pub async fn complete_pending_enable_remote_discard(
         &mut self,
+        claim: CloudBackupExclusiveOperationClaim,
         pending: PendingEnableSession,
         journal: PendingEnableJournal,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
+        if !self.runtime.accepts_completion(claim, "pending enable discard") {
+            return Produces::ok(());
+        }
+
+        self.runtime.clear();
         let Some(manager) = self.manager() else { return Produces::ok(()) };
 
         match result {
