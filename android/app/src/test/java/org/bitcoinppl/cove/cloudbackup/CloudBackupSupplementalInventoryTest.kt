@@ -3,7 +3,9 @@ package org.bitcoinppl.cove.cloudbackup
 import org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary
+import org.bitcoinppl.cove_core.CloudBackupRestoreAllState
 import org.bitcoinppl.cove_core.CloudBackupWalletItem
+import org.bitcoinppl.cove_core.CloudBackupWalletStatus
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -13,23 +15,41 @@ import org.junit.Test
 class CloudBackupSupplementalInventoryTest {
     @Test
     fun cloudOnlySectionRequiresNonemptyLoadedInventory() {
-        assertNull(cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.NotFetched))
-        assertNull(cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.Loading))
-        assertNull(cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.Loaded(emptyList(), incomplete = false)))
-        assertEquals(
-            emptyList<CloudBackupWalletItem>(),
-            cloudBackupVisibleCloudOnlyWallets(CloudOnlyState.Loaded(emptyList(), incomplete = true)),
-        )
+        assertNull(cloudBackupVisibleCloudOnlyRows(CloudOnlyState.NotFetched))
+        assertNull(cloudBackupVisibleCloudOnlyRows(CloudOnlyState.Loading))
+        assertNull(cloudBackupVisibleCloudOnlyRows(CloudOnlyState.Loaded(emptyList(), incomplete = false)))
         assertNull(
-            cloudBackupVisibleCloudOnlyWallets(
+            cloudBackupVisibleCloudOnlyRows(
                 CloudOnlyState.Failed(error = "still syncing"),
             ),
         )
+
+        val emptyIncomplete = cloudBackupVisibleCloudOnlyRows(CloudOnlyState.Loaded(emptyList(), incomplete = true))
+        assertEquals(emptyList<CloudBackupWalletItem>(), emptyIncomplete?.notOnDevice)
+        assertEquals(true, emptyIncomplete?.showsNotOnDevice(CloudBackupRestoreAllState.NotShown))
+    }
+
+    @Test
+    fun cloudOnlyCopiesOfLocalWalletsListApartFromNotOnDevice() {
+        val extraCopy =
+            cloudBackupWallet().copy(
+                recordId = "copy-record",
+                syncStatus = CloudBackupWalletStatus.ALREADY_ON_DEVICE,
+            )
+
+        val rows =
+            cloudBackupVisibleCloudOnlyRows(
+                CloudOnlyState.Loaded(listOf(cloudBackupWallet(), extraCopy), incomplete = false),
+            )
+        assertEquals(listOf(cloudBackupWallet()), rows?.notOnDevice)
+        assertEquals(listOf(extraCopy), rows?.extraCopies)
+
+        val onlyCopies =
+            cloudBackupVisibleCloudOnlyRows(CloudOnlyState.Loaded(listOf(extraCopy), incomplete = false))
+        assertEquals(false, onlyCopies?.showsNotOnDevice(CloudBackupRestoreAllState.NotShown))
         assertEquals(
-            listOf(cloudBackupWallet()),
-            cloudBackupVisibleCloudOnlyWallets(
-                CloudOnlyState.Loaded(listOf(cloudBackupWallet()), incomplete = false),
-            ),
+            true,
+            onlyCopies?.showsNotOnDevice(CloudBackupRestoreAllState.RetryAvailable(walletCount = 1u)),
         )
     }
 

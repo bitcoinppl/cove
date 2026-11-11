@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -55,10 +56,55 @@ import org.bitcoinppl.cove_core.CloudBackupWalletStatus
 import org.bitcoinppl.cove_core.CloudOnlyOperation
 import org.bitcoinppl.cove_core.CloudOnlyState
 
+/**
+ * The loaded cloud-only rows, split so a backup of a wallet this device already holds never
+ * lists under Not on This Device
+ */
+internal data class CloudBackupCloudOnlyRows(
+    /** Backups of wallets missing from this device, which a restore can bring back */
+    val notOnDevice: List<CloudBackupWalletItem>,
+    /** More backups of wallets this device already holds, which only delete applies to */
+    val extraCopies: List<CloudBackupWalletItem>,
+    /** Some listed backups could not be read, so rows may be missing */
+    val incomplete: Boolean,
+) {
+    /**
+     * Not on This Device stays up while it has rows, an incomplete list's Check Again, or a
+     * Restore All control to show
+     */
+    fun showsNotOnDevice(restoreAllState: CloudBackupRestoreAllState): Boolean =
+        notOnDevice.isNotEmpty() ||
+            incomplete ||
+            restoreAllState !is CloudBackupRestoreAllState.NotShown
+}
+
+// an incomplete list shows even when empty, so its Check Again and Restore All retry stay reachable
+internal fun cloudBackupVisibleCloudOnlyRows(
+    cloudOnly: CloudOnlyState,
+): CloudBackupCloudOnlyRows? {
+    val loaded =
+        (cloudOnly as? CloudOnlyState.Loaded)
+            ?.takeIf { it.wallets.isNotEmpty() || it.incomplete }
+            ?: return null
+
+    val (extraCopies, notOnDevice) =
+        loaded.wallets.partition { it.syncStatus == CloudBackupWalletStatus.ALREADY_ON_DEVICE }
+
+    return CloudBackupCloudOnlyRows(
+        notOnDevice = notOnDevice,
+        extraCopies = extraCopies,
+        incomplete = loaded.incomplete,
+    )
+}
+
+/**
+ * Lists cloud-only backups in two sections: wallets missing from this device, and extra copies of
+ * wallets this device already holds, which would read as a contradiction under one header
+ */
 @Composable
 internal fun CloudOnlySection(
     manager: CloudBackupManager,
-    wallets: List<CloudBackupWalletItem>,
+    rows: CloudBackupCloudOnlyRows,
 ) {
     var selectedWallet by remember { mutableStateOf<CloudBackupWalletItem?>(null) }
     var walletToDelete by remember { mutableStateOf<CloudBackupWalletItem?>(null) }
@@ -76,41 +122,70 @@ internal fun CloudOnlySection(
         }
     }
 
-    CloudBackupTitledContentSection(
-        title = "Not on This Device",
-        icon = Icons.Default.PhoneAndroid,
-        tint = cloudBackupVisualColors().primaryText,
-    ) {
-        val operatingRecordId =
-            (manager.cloudOnlyOperation as? CloudOnlyOperation.Operating)?.recordId
+    val operatingRecordId =
+        (manager.cloudOnlyOperation as? CloudOnlyOperation.Operating)?.recordId
+    val rowsEnabled =
+        operatingRecordId == null &&
+            !manager.isRestoreAllRunning &&
+            manager.isDetailInventoryReady
 
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            CloudBackupRestoreAllControl(
-                state = manager.restoreAllState,
-                onAction = manager::dispatch,
-                onCancel = {
-                    manager.dispatch(CloudBackupManagerAction.CancelRestoreAll)
-                },
-            )
+    if (rows.showsNotOnDevice(manager.restoreAllState)) {
+        CloudBackupTitledContentSection(
+            title = "Not on This Device",
+            icon = Icons.Default.PhoneAndroid,
+            tint = cloudBackupVisualColors().primaryText,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                CloudBackupRestoreAllControl(
+                    state = manager.restoreAllState,
+                    onAction = manager::dispatch,
+                    onCancel = {
+                        manager.dispatch(CloudBackupManagerAction.CancelRestoreAll)
+                    },
+                )
 
-            if (wallets.isNotEmpty()) {
+                if (rows.notOnDevice.isNotEmpty()) {
+                    WalletRowsCard(
+                        wallets = rows.notOnDevice,
+                        onWalletClick = { selectedWallet = it },
+                        showChevron = false,
+                        operatingRecordId = operatingRecordId,
+                        rowsEnabled = rowsEnabled,
+                    )
+                }
+
+                if (rows.incomplete) {
+                    CloudOnlyIncompleteNotice(
+                        onCheckAgain = {
+                            manager.dispatch(CloudBackupManagerAction.RefreshDetail)
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    if (rows.extraCopies.isNotEmpty()) {
+        CloudBackupTitledContentSection(
+            title = "Extra Copies in Google Drive",
+            icon = Icons.Default.ContentCopy,
+            tint = cloudBackupVisualColors().primaryText,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 WalletRowsCard(
-                    wallets = wallets,
+                    wallets = rows.extraCopies,
                     onWalletClick = { selectedWallet = it },
                     showChevron = false,
                     operatingRecordId = operatingRecordId,
-                    rowsEnabled =
-                        operatingRecordId == null &&
-                            !manager.isRestoreAllRunning &&
-                            manager.isDetailInventoryReady,
+                    rowsEnabled = rowsEnabled,
                 )
-            }
 
-            if ((manager.cloudOnly as? CloudOnlyState.Loaded)?.incomplete == true) {
-                CloudOnlyIncompleteNotice(
-                    onCheckAgain = {
-                        manager.dispatch(CloudBackupManagerAction.RefreshDetail)
-                    },
+                Text(
+                    "These wallets are already on this device under another backup. " +
+                        "You can delete these extra copies from Cloud Backup.",
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = cloudBackupVisualColors().secondaryText,
                 )
             }
         }

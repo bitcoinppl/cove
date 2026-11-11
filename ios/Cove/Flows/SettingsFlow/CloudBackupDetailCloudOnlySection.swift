@@ -73,74 +73,124 @@ func cloudBackupRestoreAllPresentation(
     }
 }
 
+/// Lists cloud-only backups in two sections: wallets missing from this device, and extra copies
+/// of wallets this device already holds, which would read as a contradiction under one header
 struct CloudOnlySection: View {
-    let wallets: [CloudBackupWalletItem]
+    let rows: CloudBackupCloudOnlyRows
     let manager: CloudBackupManager
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
-    private var isOperating: Bool {
-        manager.cloudOnlyOperation.operatingRecordId != nil
+    private var showsNotOnDevice: Bool {
+        rows.showsNotOnDevice(restoreAllState: manager.restoreAllState)
     }
 
     var body: some View {
-        CloudOnlyFormSection(
-            wallets: wallets,
-            manager: manager,
-            isOperating: isOperating,
-            presentationCoordinator: presentationCoordinator
-        )
-    }
-}
-
-private struct CloudOnlyFormSection: View {
-    let wallets: [CloudBackupWalletItem]
-    let manager: CloudBackupManager
-    let isOperating: Bool
-    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
-
-    var body: some View {
-        Section(header: Text("Not on This Device").uiTestTruncationProbe()) {
-            CloudOnlySectionContent(
-                wallets: wallets,
+        if showsNotOnDevice {
+            CloudOnlyNotOnDeviceSection(
+                rows: rows,
                 manager: manager,
-                isOperating: isOperating,
+                presentationCoordinator: presentationCoordinator
+            )
+        }
+
+        if !rows.extraCopies.isEmpty {
+            CloudOnlyExtraCopiesSection(
+                wallets: rows.extraCopies,
+                showsOperationMessage: !showsNotOnDevice,
+                manager: manager,
                 presentationCoordinator: presentationCoordinator
             )
         }
     }
 }
 
-private struct CloudOnlySectionContent: View {
-    let wallets: [CloudBackupWalletItem]
+private struct CloudOnlyNotOnDeviceSection: View {
+    let rows: CloudBackupCloudOnlyRows
     let manager: CloudBackupManager
-    let isOperating: Bool
     let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
 
     var body: some View {
-        CloudOnlyRestoreAllControl(manager: manager)
+        Section(header: Text("Not on This Device").uiTestTruncationProbe()) {
+            CloudOnlyRestoreAllControl(manager: manager)
+            CloudOnlySectionWalletRows(
+                wallets: rows.notOnDevice,
+                manager: manager,
+                presentationCoordinator: presentationCoordinator
+            )
 
+            if rows.incomplete {
+                CloudOnlyIncompleteNotice(manager: manager)
+            }
+
+            CloudOnlyOperationMessage(operation: manager.cloudOnlyOperation)
+        }
+    }
+}
+
+/// Other backups of wallets this device already holds, kept out of Not on This Device
+private struct CloudOnlyExtraCopiesSection: View {
+    let wallets: [CloudBackupWalletItem]
+
+    /// The operation message shows once, here only while Not on This Device is hidden
+    let showsOperationMessage: Bool
+
+    let manager: CloudBackupManager
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+
+    var body: some View {
+        Section {
+            CloudOnlySectionWalletRows(
+                wallets: wallets,
+                manager: manager,
+                presentationCoordinator: presentationCoordinator
+            )
+
+            if showsOperationMessage {
+                CloudOnlyOperationMessage(operation: manager.cloudOnlyOperation)
+            }
+        } header: {
+            Text("Extra Copies in iCloud").uiTestTruncationProbe()
+        } footer: {
+            Text("These wallets are already on this device under another backup. You can delete these extra copies from iCloud.")
+                .uiTestTruncationProbe()
+        }
+    }
+}
+
+private struct CloudOnlySectionWalletRows: View {
+    let wallets: [CloudBackupWalletItem]
+    let manager: CloudBackupManager
+    let presentationCoordinator: PresentationTransitionCoordinator<CloudBackupDetailPresentation>
+
+    private var operatingRecordId: String? {
+        manager.cloudOnlyOperation.operatingRecordId
+    }
+
+    var body: some View {
         CloudOnlyWalletRows(
             manager: manager,
             wallets: wallets,
-            operatingRecordId: manager.cloudOnlyOperation.operatingRecordId,
-            isOperating: isOperating || manager.restoreAllState.isRunning
+            operatingRecordId: operatingRecordId,
+            isOperating: operatingRecordId != nil || manager.restoreAllState.isRunning
                 || !manager.isDetailInventoryReady,
             presentationCoordinator: presentationCoordinator,
             onRetryWallet: { item in
                 manager.dispatch(action: .restoreCloudWallet(item.recordId))
             }
         )
+    }
+}
 
-        if case .loaded(wallets: _, incomplete: true) = manager.cloudOnly {
-            CloudOnlyIncompleteNotice(manager: manager)
-        }
+private struct CloudOnlyOperationMessage: View {
+    let operation: CloudOnlyOperation
 
-        if case let .failed(error) = manager.cloudOnlyOperation {
+    var body: some View {
+        if case let .failed(error) = operation {
             Text(error)
                 .font(.caption)
                 .uiTestTruncationProbe()
                 .foregroundStyle(Color.statusError)
-        } else if case let .warning(message: message, error: _) = manager.cloudOnlyOperation {
+        } else if case let .warning(message: message, error: _) = operation {
             Text(message)
                 .font(.caption)
                 .uiTestTruncationProbe()

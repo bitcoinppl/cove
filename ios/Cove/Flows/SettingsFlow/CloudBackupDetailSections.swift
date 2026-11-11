@@ -1,12 +1,39 @@
 import SwiftUI
 
-func cloudBackupVisibleCloudOnlyWallets(_ cloudOnly: CloudOnlyState) -> [CloudBackupWalletItem]? {
+/// The loaded cloud-only rows, split so a backup of a wallet this device already holds never
+/// lists under Not on This Device
+struct CloudBackupCloudOnlyRows {
+    /// Backups of wallets missing from this device, which a restore can bring back
+    let notOnDevice: [CloudBackupWalletItem]
+
+    /// More backups of wallets this device already holds, which only delete applies to
+    let extraCopies: [CloudBackupWalletItem]
+
+    /// Some listed backups could not be read, so rows may be missing
+    let incomplete: Bool
+
+    init(wallets: [CloudBackupWalletItem], incomplete: Bool) {
+        notOnDevice = wallets.filter { $0.syncStatus != .alreadyOnDevice }
+        extraCopies = wallets.filter { $0.syncStatus == .alreadyOnDevice }
+        self.incomplete = incomplete
+    }
+
+    /// Not on This Device stays up while it has rows, an incomplete list's Check Again, or a
+    /// Restore All control to show
+    func showsNotOnDevice(restoreAllState: CloudBackupRestoreAllState) -> Bool {
+        if !notOnDevice.isEmpty || incomplete { return true }
+        if case .notShown = restoreAllState { return false }
+        return true
+    }
+}
+
+func cloudBackupVisibleCloudOnlyRows(_ cloudOnly: CloudOnlyState) -> CloudBackupCloudOnlyRows? {
     // an incomplete list shows even when empty, so its Check Again and Restore All retry stay reachable
     guard case let .loaded(wallets, incomplete) = cloudOnly, !wallets.isEmpty || incomplete else {
         return nil
     }
 
-    return wallets
+    return CloudBackupCloudOnlyRows(wallets: wallets, incomplete: incomplete)
 }
 
 func cloudBackupVisibleOtherBackupsSummary(
@@ -52,9 +79,9 @@ struct DetailFormContent: View {
         if !wallets.isEmpty {
             WalletSections(wallets: wallets)
         }
-        if let cloudOnlyWallets = cloudBackupVisibleCloudOnlyWallets(manager.cloudOnly) {
+        if let cloudOnlyRows = cloudBackupVisibleCloudOnlyRows(manager.cloudOnly) {
             CloudOnlySection(
-                wallets: cloudOnlyWallets,
+                rows: cloudOnlyRows,
                 manager: manager,
                 presentationCoordinator: presentationCoordinator
             )

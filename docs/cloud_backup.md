@@ -174,6 +174,12 @@ no wallet rows are visible and an inline row when local or loaded cloud-only
 wallet rows stay on screen. `cloudOnlyCount` is not a visible row by itself.
 The verification section does not render a second running indicator.
 
+Cloud-only rows split into two sections on both platforms. Rows Rust marks
+`AlreadyOnDevice`, another backup record of a wallet this device already holds,
+list under Extra Copies, where only delete applies. Every other cloud-only row
+lists under Not on This Device, which also holds Restore All and the incomplete
+list's Check Again, so it stays up while either has something to show.
+
 ## Passkeys And Enable
 
 Cloud access has an explicit presentation boundary. Silent startup discovery

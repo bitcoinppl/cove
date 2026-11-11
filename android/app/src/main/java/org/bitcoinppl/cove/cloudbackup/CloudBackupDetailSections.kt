@@ -13,17 +13,8 @@ import org.bitcoinppl.cove_core.CloudBackupInventoryIncompleteReason
 import org.bitcoinppl.cove_core.CloudBackupManagerAction
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsState
 import org.bitcoinppl.cove_core.CloudBackupOtherBackupsSummary
-import org.bitcoinppl.cove_core.CloudBackupWalletItem
 import org.bitcoinppl.cove_core.CloudOnlyState
 import org.bitcoinppl.cove_core.device.CloudSyncHealth
-
-// an incomplete list shows even when empty, so its Check Again and Restore All retry stay reachable
-internal fun cloudBackupVisibleCloudOnlyWallets(
-    cloudOnly: CloudOnlyState,
-): List<CloudBackupWalletItem>? =
-    (cloudOnly as? CloudOnlyState.Loaded)
-        ?.takeIf { it.wallets.isNotEmpty() || it.incomplete }
-        ?.wallets
 
 internal fun cloudBackupCloudOnlyFailureMessage(
     cloudOnly: CloudOnlyState,
@@ -63,7 +54,7 @@ internal fun DetailFormContent(
     syncHealth: CloudSyncHealth,
     manager: CloudBackupManager,
 ) {
-    val cloudOnlyWallets = cloudBackupVisibleCloudOnlyWallets(manager.cloudOnly)
+    val cloudOnlyRows = cloudBackupVisibleCloudOnlyRows(manager.cloudOnly)
 
     Column(verticalArrangement = Arrangement.spacedBy(CloudBackupDetailSectionSpacing)) {
         CloudBackupHeaderSection(lastSync = detail.lastSync, syncHealth = syncHealth)
@@ -76,8 +67,8 @@ internal fun DetailFormContent(
             WalletSections(title = "Needs Sync", wallets = detail.needsSync)
         }
 
-        if (cloudOnlyWallets != null) {
-            CloudOnlySection(manager = manager, wallets = cloudOnlyWallets)
+        if (cloudOnlyRows != null) {
+            CloudOnlySection(manager = manager, rows = cloudOnlyRows)
         }
 
         cloudBackupVisibleOtherBackupsSummary(manager.otherBackupsState)?.let { summary ->

@@ -154,15 +154,27 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
     }
 
     func testCloudBackupSupplementalSectionsRequireNonemptyLoadedInventory() {
-        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.notFetched))
-        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.loading))
-        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.failed(error: "cloud inventory failed")))
-        XCTAssertNil(cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [], incomplete: false)))
-        XCTAssertEqual(cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [], incomplete: true))?.count, 0)
-        XCTAssertEqual(
-            cloudBackupVisibleCloudOnlyWallets(.loaded(wallets: [cloudBackupTestWallet], incomplete: false))?.count,
-            1
-        )
+        XCTAssertNil(cloudBackupVisibleCloudOnlyRows(.notFetched))
+        XCTAssertNil(cloudBackupVisibleCloudOnlyRows(.loading))
+        XCTAssertNil(cloudBackupVisibleCloudOnlyRows(.failed(error: "cloud inventory failed")))
+        XCTAssertNil(cloudBackupVisibleCloudOnlyRows(.loaded(wallets: [], incomplete: false)))
+
+        let emptyIncomplete = cloudBackupVisibleCloudOnlyRows(.loaded(wallets: [], incomplete: true))
+        XCTAssertEqual(emptyIncomplete?.notOnDevice.count, 0)
+        XCTAssertEqual(emptyIncomplete?.showsNotOnDevice(restoreAllState: .notShown), true)
+
+        // a copy of a wallet this device holds lists apart, so Not on This Device never shows it
+        let extraCopy = cloudBackupTestWallet(recordId: "copy-record", syncStatus: .alreadyOnDevice)
+        let rows = cloudBackupVisibleCloudOnlyRows(.loaded(
+            wallets: [cloudBackupTestWallet, extraCopy],
+            incomplete: false
+        ))
+        XCTAssertEqual(rows?.notOnDevice.map(\.recordId), ["wallet-record"])
+        XCTAssertEqual(rows?.extraCopies.map(\.recordId), ["copy-record"])
+
+        let onlyCopies = cloudBackupVisibleCloudOnlyRows(.loaded(wallets: [extraCopy], incomplete: false))
+        XCTAssertEqual(onlyCopies?.showsNotOnDevice(restoreAllState: .notShown), false)
+        XCTAssertEqual(onlyCopies?.showsNotOnDevice(restoreAllState: .retryAvailable(walletCount: 1)), true)
 
         let emptySummary = CloudBackupOtherBackupsSummary(
             namespaceCount: 0,
@@ -211,6 +223,13 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
     }
 
     private var cloudBackupTestWallet: CloudBackupWalletItem {
+        cloudBackupTestWallet(recordId: "wallet-record", syncStatus: .confirmed)
+    }
+
+    private func cloudBackupTestWallet(
+        recordId: String,
+        syncStatus: CloudBackupWalletStatus
+    ) -> CloudBackupWalletItem {
         CloudBackupWalletItem(
             name: "Savings",
             network: .bitcoin,
@@ -219,9 +238,9 @@ final class CloudBackupIOSSafetyHelpersTests: XCTestCase {
             fingerprint: nil,
             labelCount: nil,
             backupUpdatedAt: nil,
-            syncStatus: .confirmed,
+            syncStatus: syncStatus,
             restoreFailure: nil,
-            recordId: "wallet-record"
+            recordId: recordId
         )
     }
 
