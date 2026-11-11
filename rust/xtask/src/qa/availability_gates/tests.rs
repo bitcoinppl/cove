@@ -115,6 +115,58 @@ fn only_cloud_backup_views_are_checked() {
 }
 
 #[test]
+fn other_views_are_checked_only_in_declarations_that_read_the_screen() {
+    let kotlin = r#"
+@Composable
+fun OnboardingBackupStep() {
+    Button(enabled = canContinue) {}
+}
+
+@Composable
+internal fun OnboardingCloudBackupStep(screen: CloudBackupScreen) {
+    val primary = screen.actions.lookup(CloudBackupScreenAction.ENABLE)
+    Button(enabled = primary?.isAvailable == true) {}
+    TextButton(enabled = !isBusy) {}
+}
+"#;
+    let onboarding = "android/app/src/main/java/org/bitcoinppl/cove/flows/OnboardingFlow/Step.kt";
+
+    assert_eq!(
+        check_source(onboarding, kotlin),
+        vec!["android/app/src/main/java/org/bitcoinppl/cove/flows/OnboardingFlow/Step.kt:11: \
+             `enabled = !isBusy` gates a Cloud Backup control on something other than an \
+             action's availability; read `isAvailable` on the action or row action, or add a \
+             justified flag to ALLOWED_FLAGS in rust/xtask/src/qa/availability_gates.rs"
+            .to_string(),],
+    );
+
+    let swift = r#"
+struct OnboardingBackupWalletView: View {
+    var body: some View {
+        Button("Continue") {}
+            .disabled(!canContinue)
+    }
+}
+
+@MainActor
+private struct OnboardingCloudBackupDetailsStepView: View {
+    private var primaryAction: CloudBackupScreenAction { .enable }
+
+    var body: some View {
+        Button("Back") {}
+            .disabled(isBusy)
+    }
+}
+"#;
+    let errors = check_source("ios/Cove/Flows/Onboarding/OnboardingBackupViews.swift", swift);
+
+    assert_eq!(errors.len(), 1);
+    assert!(errors[0].starts_with(
+        "ios/Cove/Flows/Onboarding/OnboardingBackupViews.swift:15: `.disabled(isBusy)`"
+    ));
+}
+
+#[test]
 fn allowed_flags_pass_only_in_the_view_that_justifies_them() {
     let enable = "@Composable\nfun Enable() {\n    Button(enabled = allChecked && primary?.isAvailable == true) {}\n}\n";
     let enable_view = "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/CloudBackupEnableOnboardingContent.kt";

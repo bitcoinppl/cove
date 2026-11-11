@@ -40,7 +40,11 @@ to show as its caption. Rust marks the Google Drive actions as Android only.
 
 `just qa-check` enforces this in the Cloud Backup views: every Kotlin
 `enabled =` (or `<name>Enabled =`) and every SwiftUI `.disabled(` must read an
-action's or row action's `isAvailable`. The only other flags allowed are a few
+action's or row action's `isAvailable`. The Cloud Backup views are the files in
+Android's `cloudbackup` package and the iOS files named for Cloud Backup, plus
+any other top-level view that reads the screen's actions or body, such as the
+onboarding Cloud Backup step. The onboarding Continue next to that step follows
+the onboarding flow's own state and isn't checked. The only other flags allowed are a few
 per-view local facts, such as the setup checkboxes or a Cancel that waits on an
 Enable with no cancel action, listed with their reasons in
 `rust/xtask/src/qa/availability_gates.rs`.

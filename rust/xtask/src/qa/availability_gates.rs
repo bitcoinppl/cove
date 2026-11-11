@@ -9,16 +9,29 @@
 //! An operand may only be an availability read, an allowed flag, or, in Kotlin, a bare
 //! `enabled`/`<name>Enabled` that forwards a parameter. The caller's named `<name>Enabled =`
 //! argument is checked in turn
+//!
+//! The Cloud Backup views are every view in Android's `cloudbackup` package and in iOS files
+//! named for Cloud Backup, plus any other top-level view declaration that reads the screen's
+//! actions or body, such as the onboarding Cloud Backup step. A control in another declaration,
+//! such as the onboarding Continue next to it, gates on its own flow's state and isn't checked
 
-use std::{collections::BTreeSet, fs, path::Path};
+use std::{collections::BTreeSet, fs, ops::RangeInclusive, path::Path};
 
 use super::blank_comments_and_strings;
 
-/// The directory of Android's Cloud Backup views; only files that declare a composable count
+/// Android's views; only files that declare a composable count
+const KOTLIN_VIEW_ROOT: &str = "android/app/src/main/java/";
+
+/// The directory of Android's Cloud Backup views
 const KOTLIN_VIEW_DIR: &str = "android/app/src/main/java/org/bitcoinppl/cove/cloudbackup/";
 
 /// iOS keeps its Cloud Backup views among other screens, so they are found by file name
 const SWIFT_VIEW_ROOT: &str = "ios/Cove/";
+
+/// The Rust types a view draws Cloud Backup controls from; a declaration naming one reads the
+/// screen
+const SCREEN_TYPES: [&str; 3] =
+    ["CloudBackupScreenAction", "CloudBackupScreenBody", "CloudBackupActionAvailability"];
 
 /// A local flag one view may gate a control on, and why it isn't an availability
 pub struct AllowedFlag {
@@ -57,6 +70,16 @@ pub const ALLOWED_FLAGS: &[AllowedFlag] = &[
         reason: "the enable prompt answers the setup, so Cancel waits until it is answered",
     },
     AllowedFlag {
+        file: "OnboardingCloudBackupEnableViews.kt",
+        name: "showsBusyOverlay",
+        reason: "Enable has no cancel action, so Back waits while it runs",
+    },
+    AllowedFlag {
+        file: "OnboardingCloudBackupEnableViews.kt",
+        name: "isPromptingForEnableChoice",
+        reason: "the enable prompt answers the setup, so Back waits until it is answered",
+    },
+    AllowedFlag {
         file: "CloudBackupPendingEnableRecoveryContent.kt",
         name: "isCleaning",
         reason: "pending-enable cleanup has no cancel action, so Cancel waits until it finishes",
@@ -69,18 +92,34 @@ enum Language {
     Swift,
 }
 
-impl Language {
-    fn of(path: &str) -> Option<Self> {
-        if path.starts_with(KOTLIN_VIEW_DIR) && path.ends_with(".kt") {
-            return Some(Self::Kotlin);
-        }
+/// Which of a file's views are Cloud Backup views
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Scope {
+    /// Every view, in a file among the Cloud Backup views
+    WholeFile,
+    /// Only the top-level declarations that read the screen, in a file of other views
+    ScreenReaders,
+}
 
-        let is_swift_view = path.starts_with(SWIFT_VIEW_ROOT)
-            && path.ends_with(".swift")
-            && file_name(path).contains("CloudBackup");
-
-        is_swift_view.then_some(Self::Swift)
+/// The language and scope of the view file at `path`, if it is one
+fn view_file(path: &str) -> Option<(Language, Scope)> {
+    if path.starts_with(KOTLIN_VIEW_ROOT) && path.ends_with(".kt") {
+        let scope =
+            if path.starts_with(KOTLIN_VIEW_DIR) { Scope::WholeFile } else { Scope::ScreenReaders };
+        return Some((Language::Kotlin, scope));
     }
+
+    if !path.starts_with(SWIFT_VIEW_ROOT) || !path.ends_with(".swift") {
+        return None;
+    }
+
+    let scope = if file_name(path).contains("CloudBackup") {
+        Scope::WholeFile
+    } else {
+        Scope::ScreenReaders
+    };
+
+    Some((Language::Swift, scope))
 }
 
 /// One `enabled =` or `.disabled(` and the expression it reads
@@ -98,7 +137,7 @@ pub fn check(root: &Path, tracked: &[String]) -> Vec<String> {
     let mut errors = Vec::new();
     let mut used = BTreeSet::new();
 
-    for path in tracked.iter().filter(|path| Language::of(path).is_some()) {
+    for path in tracked.iter().filter(|path| view_file(path).is_some()) {
         let source = fs::read_to_string(root.join(path)).unwrap_or_default();
         errors.extend(check_source(path, &source));
         used.extend(used_flags(path, &source));
@@ -115,9 +154,10 @@ pub fn check(root: &Path, tracked: &[String]) -> Vec<String> {
     errors
 }
 
-/// The gates in one file at `path`, whose contents are `source`, if it is a Cloud Backup view
+/// The Cloud Backup view gates in one file at `path`, whose contents are `source`, if it is a
+/// view file
 fn gates_of(path: &str, source: &str) -> Option<(Language, Vec<Gate>)> {
-    let language = Language::of(path)?;
+    let (language, scope) = view_file(path)?;
 
     // a Kotlin file without composables, such as the manager, assigns state rather than
     // drawing controls
@@ -126,12 +166,45 @@ fn gates_of(path: &str, source: &str) -> Option<(Language, Vec<Gate>)> {
     }
 
     let code = blank_comments_and_strings(source);
-    let gates = match language {
+    let mut gates = match language {
         Language::Kotlin => kotlin_gates(&code),
         Language::Swift => swift_gates(&code),
     };
 
+    if scope == Scope::ScreenReaders {
+        let readers = screen_declarations(&code);
+        gates.retain(|gate| readers.iter().any(|lines| lines.contains(&gate.line)));
+    }
+
     Some((language, gates))
+}
+
+/// The lines of each top-level declaration in `code` that names a screen type
+fn screen_declarations(code: &str) -> Vec<RangeInclusive<usize>> {
+    let lines = code.lines().collect::<Vec<_>>();
+    let mut starts = (0..lines.len())
+        .filter(|&index| {
+            starts_declaration(lines[index], index.checked_sub(1).map(|previous| lines[previous]))
+        })
+        .collect::<Vec<_>>();
+
+    starts.push(lines.len());
+
+    starts
+        .windows(2)
+        .filter(|bounds| {
+            let declaration = &lines[bounds[0]..bounds[1]];
+            SCREEN_TYPES.iter().any(|ty| declaration.iter().any(|line| has_identifier(line, ty)))
+        })
+        .map(|bounds| bounds[0] + 1..=bounds[1])
+        .collect()
+}
+
+/// Whether `line` starts a top-level declaration; formatted Kotlin and Swift put those at the
+/// first column, and an annotation on the line before already started it
+fn starts_declaration(line: &str, previous: Option<&str>) -> bool {
+    let opens = line.starts_with(|char: char| char.is_alphabetic() || char == '@' || char == '#');
+    opens && !previous.is_some_and(|previous| previous.starts_with('@'))
 }
 
 /// Errors for the gates in one file at `path` that don't read an availability
