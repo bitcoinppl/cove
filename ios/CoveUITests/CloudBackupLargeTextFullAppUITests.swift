@@ -93,7 +93,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertTextFits(app.staticTexts["Backup verified"], "verified result", initialWait: 30)
         layout.assertTextFits(layout.staticText(endingWith: "wallet(s) verified"), "verified summary")
         layout.assertActionFits(robot.button(startingWith: "Verify Again"), "Verify Again")
-        layout.assertActionFits(app.buttons["Disable Cloud Backup"], "Disable Cloud Backup")
+        layout.assertActionFits(app.buttons["cloudBackup.action.turnOff"], "Turn Off")
     }
 
     func testRestoreAllProgressKeepsCancelReachable() throws {
@@ -169,7 +169,7 @@ final class CloudBackupLargeTextFullAppUITests: XCTestCase {
         layout.assertTextFits(app.staticTexts.matching(NSPredicate(format: "label == %@", Self.passkeyAccessRecoveryMessage)).firstMatch, "repair failed: error", initialWait: 30)
         assertMissingPasskeyScreenFits("repair failed")
         layout.assertActionFits(app.buttons["Add Passkey"], "repair failed: Add Passkey")
-        layout.assertActionFits(app.buttons["Disable Cloud Backup"], "repair failed: Disable Cloud Backup")
+        layout.assertActionFits(app.buttons["cloudBackup.action.turnOff"], "repair failed: Turn Off")
     }
 
     /// A verification the provider can't serve the master key backup to fails with Try Again and
