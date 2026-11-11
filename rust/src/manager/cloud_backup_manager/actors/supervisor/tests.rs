@@ -4333,6 +4333,12 @@ async fn verification_detail_read_before_a_restore_does_not_hide_the_restored_wa
     let restore = manager.prepare_active_namespace_wallet_restore(background_owner(&manager).await).await.unwrap();
     restore.restore_record(&restored_record_id).await.unwrap();
     manager.handle_local_wallets_changed();
+    supervisor_checkpoint(&manager).await;
+    assert_ne!(manager.local_wallets_epoch(), read_at, "the restore should move the epoch");
+
+    // the refresh the change asked for lists the restored wallet as local
+    let refreshed = manager.refresh_cloud_backup_detail().await.expect("a detail refresh");
+    super::apply_refresh_detail_result(&manager, &refreshed);
 
     let shows_restored = |manager: &RustCloudBackupManager| {
         public_detail(manager).is_some_and(|detail| {
@@ -4343,10 +4349,7 @@ async fn verification_detail_read_before_a_restore_does_not_hide_the_restored_wa
                 .any(|wallet| wallet.record_id == restored_record_id)
         })
     };
-    wait_for_test_condition(Duration::from_secs(5), "the restored wallet joins the local rows", || {
-        shows_restored(&manager)
-    })
-    .await;
+    assert!(shows_restored(&manager), "the refresh should list the restored wallet");
 
     // the restore is not a wallet-set change for the verification's own basis, so only the
     // inventory's epoch tells this detail is older than the restored wallet
