@@ -788,18 +788,8 @@ impl RestoreMarkerGuard {
         };
 
         rollback_keychain(&self.metadata.id, &initial_snapshot, &mut failures);
-        rollback_bdk_artifacts(
-            &self.metadata.id,
-            &initial_snapshot,
-            &self.metadata.name,
-            &mut failures,
-        );
-        rollback_wallet_data(
-            &self.metadata.id,
-            &initial_snapshot,
-            &self.metadata.name,
-            &mut failures,
-        );
+        rollback_bdk_artifacts(&self.metadata.id, &initial_snapshot, &mut failures);
+        rollback_wallet_data(&self.metadata.id, &initial_snapshot, &mut failures);
         rollback_metadata(&self.metadata, &initial_snapshot, &mut failures);
 
         let cleanup_in_progress =
@@ -986,7 +976,6 @@ fn delete_keychain_items_exact(id: &WalletId) -> Result<(), String> {
 fn rollback_bdk_artifacts(
     id: &WalletId,
     initial: &RestoreArtifactSnapshot,
-    wallet_name: &str,
     failures: &mut Vec<String>,
 ) {
     for (artifact, path) in bdk_artifacts(id) {
@@ -1000,7 +989,7 @@ fn rollback_bdk_artifacts(
 
         if let Err(error) = crate::bdk_store::BdkStore::remove_wallet_artifact(&path) {
             failures.push(format!(
-                "{wallet_name}: failed to delete BDK artifact {artifact:?} {}: {error}",
+                "wallet id={id}: failed to delete BDK artifact {artifact:?} {}: {error}",
                 path.display()
             ));
         }
@@ -1010,25 +999,23 @@ fn rollback_bdk_artifacts(
 fn rollback_wallet_data(
     id: &WalletId,
     initial: &RestoreArtifactSnapshot,
-    wallet_name: &str,
     failures: &mut Vec<String>,
 ) {
     let storage_gate = crate::database::wallet_data::wallet_data_storage_gate(id);
     let _storage_guard = storage_gate.lock();
-    rollback_wallet_data_while_gated(id, initial, wallet_name, failures);
+    rollback_wallet_data_while_gated(id, initial, failures);
 }
 
 fn rollback_wallet_data_while_gated(
     id: &WalletId,
     initial: &RestoreArtifactSnapshot,
-    wallet_name: &str,
     failures: &mut Vec<String>,
 ) {
     crate::database::wallet_data::evict_wallet_data_connections(id);
     let paths = match crate::database::wallet_data::wallet_data_artifact_paths_checked(id) {
         Ok(paths) => paths,
         Err(error) => {
-            failures.push(format!("{wallet_name}: failed to enumerate wallet data: {error}"));
+            failures.push(format!("wallet id={id}: failed to enumerate wallet data: {error}"));
             return;
         }
     };
@@ -1042,7 +1029,7 @@ fn rollback_wallet_data_while_gated(
 
         if let Err(error) = crate::database::wallet_data::remove_wallet_artifact(&path) {
             failures.push(format!(
-                "{wallet_name}: failed to delete wallet data {}: {error}",
+                "wallet id={id}: failed to delete wallet data {}: {error}",
                 path.display()
             ));
         }
@@ -1066,12 +1053,15 @@ fn rollback_metadata(
                 metadata.wallet_mode,
                 &metadata.id,
             ) {
-                failures.push(format!("{}: failed to delete metadata: {error}", metadata.name));
+                failures
+                    .push(format!("wallet id={}: failed to delete metadata: {error}", metadata.id));
             }
         }
         Ok(None) => {}
         Ok(Some(_)) => {}
-        Err(error) => failures.push(format!("{}: failed to read metadata: {error}", metadata.name)),
+        Err(error) => {
+            failures.push(format!("wallet id={}: failed to read metadata: {error}", metadata.id));
+        }
     }
 }
 
