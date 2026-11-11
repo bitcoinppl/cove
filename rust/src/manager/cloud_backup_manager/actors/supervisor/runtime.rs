@@ -144,6 +144,9 @@ pub(crate) enum ConfiguredOp {
     /// A reinitialize, including one a Google Drive account switch started
     Reinitialize(OpRun),
     RecreateManifest(OpRun),
+    /// Discarding a reinitialize that stopped before it finished; its remote delete runs off the
+    /// mailbox, and the configured backup it would have replaced stays as it is
+    DiscardReinitialize(OpRun),
 }
 
 /// A committed Turn Off going forward; nothing else runs during one
@@ -443,7 +446,8 @@ impl Runtime {
                         | ConfiguredOp::RecoverOtherBackups(run)
                         | ConfiguredOp::DeleteOtherBackups(run)
                         | ConfiguredOp::Reinitialize(run)
-                        | ConfiguredOp::RecreateManifest(run),
+                        | ConfiguredOp::RecreateManifest(run)
+                        | ConfiguredOp::DiscardReinitialize(run),
                     ),
             } => Some(run),
             Self::Resetting { held, .. } => held.as_mut(),
@@ -593,12 +597,12 @@ impl Runtime {
                     Op::DeleteOtherBackups => ConfiguredOp::DeleteOtherBackups(run),
                     Op::ReinitializeBackup => ConfiguredOp::Reinitialize(run),
                     Op::RecreateManifest => ConfiguredOp::RecreateManifest(run),
+                    Op::DiscardPendingEnable => ConfiguredOp::DiscardReinitialize(run),
                     Op::Enable
                     | Op::EnableForceNew
                     | Op::EnableNoDiscovery
                     | Op::Restore
-                    | Op::RestoreAllCloudWallets
-                    | Op::DiscardPendingEnable => return Err(unstartable(self)),
+                    | Op::RestoreAllCloudWallets => return Err(unstartable(self)),
                 };
                 *op = Some(configured);
             }
@@ -788,7 +792,8 @@ impl Runtime {
                 | ConfiguredOp::RecoverOtherBackups(run)
                 | ConfiguredOp::DeleteOtherBackups(run)
                 | ConfiguredOp::Reinitialize(run)
-                | ConfiguredOp::RecreateManifest(run) => TakenOp::Standard(run),
+                | ConfiguredOp::RecreateManifest(run)
+                | ConfiguredOp::DiscardReinitialize(run) => TakenOp::Standard(run),
             }),
             Self::FinishingDisable { op, .. } => op.take().map(|op| TakenOp::Standard(op.0)),
             Self::DriveAccountSwitch { op } => op.take().map(|op| TakenOp::Standard(op.0)),
@@ -957,6 +962,7 @@ impl ConfiguredOp {
             Self::RecoverOtherBackups(_) | Self::DeleteOtherBackups(_) => {
                 ConfiguredWriter::OtherBackups
             }
+            Self::DiscardReinitialize(_) => ConfiguredWriter::Discard,
             Self::Verify(_)
             | Self::RepairPasskey(_)
             | Self::RestoreCloudWallet(_)
@@ -976,7 +982,8 @@ impl ConfiguredOp {
             | Self::RecoverOtherBackups(run)
             | Self::DeleteOtherBackups(run)
             | Self::Reinitialize(run)
-            | Self::RecreateManifest(run) => run.claim,
+            | Self::RecreateManifest(run)
+            | Self::DiscardReinitialize(run) => run.claim,
             Self::RestoreAll(run) => run.claim,
         }
     }

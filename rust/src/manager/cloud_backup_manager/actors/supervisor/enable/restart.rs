@@ -277,12 +277,17 @@ impl CloudBackupSupervisor {
             provider_hint: passkey.provider_hint.clone(),
         };
 
-        self.pending_enable_session =
-            Some(PendingEnableSession::awaiting_saved_passkey_confirmation(
+        // the journal does not record which work wrote it; the body restart loaded does
+        let owner =
+            ContinuationOwner::of_body(self.runtime.admission_body(ConfiguredAdmission::Ready));
+        self.enable_continuation = Some(EnableContinuation::new(
+            owner,
+            PendingEnableSession::awaiting_saved_passkey_confirmation(
                 Zeroizing::new(master_key),
                 Zeroizing::new(passkey),
                 journal.context(),
-            ));
+            ),
+        ));
         manager.project_enable_context_started(journal.context());
         manager.apply_enable_state(CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(
             SavedPasskeyConfirmationMode::Manual,
@@ -405,7 +410,7 @@ impl CloudBackupSupervisor {
             )
         })?;
 
-        self.pending_enable_session = None;
+        self.enable_continuation = None;
         manager.clear_enable_progress_report();
         manager.sync_persisted_state();
 
@@ -600,7 +605,7 @@ impl CloudBackupSupervisor {
             return Produces::ok(());
         }
 
-        self.pending_enable_session = None;
+        self.enable_continuation = None;
         manager.clear_enable_progress_report();
 
         // only the keychain changed, which no record write publishes: the evidence is gone, so

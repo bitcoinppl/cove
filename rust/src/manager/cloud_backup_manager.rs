@@ -1004,14 +1004,6 @@ impl RustCloudBackupManager {
 
 #[cfg(test)]
 mod manager_test_support {
-
-    // the platform reaches these through dispatch; tests that start them directly use these
-    impl RustCloudBackupManager {
-        pub(crate) fn discard_pending_enable_cloud_backup(&self) {
-            send!(self.supervisor.discard_pending_enable_cloud_backup());
-            self.clear_existing_backup_found_prompt();
-        }
-    }
     use super::*;
 
     impl RustCloudBackupManager {

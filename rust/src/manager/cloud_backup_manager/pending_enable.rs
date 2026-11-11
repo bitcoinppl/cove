@@ -310,10 +310,6 @@ impl PendingEnableSession {
         }
     }
 
-    pub(crate) fn is_retry_upload(&self) -> bool {
-        matches!(self, Self::RetryUpload(_))
-    }
-
     pub(crate) fn is_awaiting_saved_passkey_confirmation(&self) -> bool {
         matches!(self, Self::AwaitingSavedPasskeyConfirmation(_))
     }

@@ -2222,7 +2222,7 @@ async fn supervisor_accepts_registered_enable_passkey_confirmation() {
 
     assert_eq!(supervisor.runtime, Some(current));
     assert_eq!(manager.projected_exclusive_operation(), Some(current));
-    let pending = supervisor.pending_enable_session.take().unwrap();
+    let pending = supervisor.enable_continuation.take().unwrap().into_session();
     let (pending_master_key, pending_passkey) = pending.into_staged_parts().unwrap();
     assert_eq!(pending_master_key.namespace_id(), expected_namespace);
     assert_eq!(pending_passkey.credential_id, expected_credential_id);
@@ -2240,20 +2240,23 @@ async fn supervisor_consumes_retry_pending_enable_upload() {
     let expected_namespace = master_key.namespace_id();
     let expected_credential_id = vec![1, 2, 3];
 
-    supervisor.pending_enable_session = Some(PendingEnableSession::retry_upload(
-        master_key,
-        test_enable_passkey(expected_credential_id.clone()),
-        CloudBackupEnableContext::settings_manual(),
+    supervisor.enable_continuation = Some(EnableContinuation::new(
+        ContinuationOwner::Enable,
+        PendingEnableSession::retry_upload(
+            master_key,
+            test_enable_passkey(expected_credential_id.clone()),
+            CloudBackupEnableContext::settings_manual(),
+        ),
     ));
 
     let ready = supervisor
-        .take_ready_enable_upload()
+        .take_ready_enable_upload(ContinuationOwner::Enable)
         .unwrap()
         .unwrap();
 
     assert_eq!(ready.master_key.namespace_id(), expected_namespace);
     assert_eq!(ready.passkey.credential_id, expected_credential_id);
-    assert!(supervisor.pending_enable_session.is_none());
+    assert!(supervisor.enable_continuation.is_none());
 }
 
 
@@ -2420,7 +2423,7 @@ async fn pending_enable_restart_hydrates_registered_passkey_for_manual_confirmat
 
     supervisor.recover_pending_enable_after_restart(&manager).unwrap();
 
-    let pending = supervisor.pending_enable_session.take().unwrap();
+    let pending = supervisor.enable_continuation.take().unwrap().into_session();
     assert!(pending.is_awaiting_saved_passkey_confirmation());
     assert_eq!(pending.namespace_id(), expected_namespace);
     assert_eq!(
@@ -2467,7 +2470,7 @@ async fn pending_enable_restart_rolls_back_recovered_existing_instead_of_hydrati
 
     supervisor.recover_pending_enable_after_restart(&manager).unwrap();
 
-    assert!(supervisor.pending_enable_session.is_none());
+    assert!(supervisor.enable_continuation.is_none());
     assert_eq!(
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         prior_master_key.as_bytes()
@@ -2505,7 +2508,7 @@ async fn pending_enable_restart_rolls_back_recovered_existing_instead_of_hydrati
 
     supervisor.recover_pending_enable_after_restart(&manager).unwrap();
 
-    assert!(supervisor.pending_enable_session.is_none());
+    assert!(supervisor.enable_continuation.is_none());
     assert_eq!(
         cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
         prior_master_key.as_bytes()
@@ -2631,9 +2634,9 @@ async fn pending_enable_restart_restores_prior_state_and_hydrates_when_completio
     );
     assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), previous_metadata);
     assert!(supervisor
-        .pending_enable_session
+        .enable_continuation
         .as_ref()
-        .is_some_and(PendingEnableSession::is_awaiting_saved_passkey_confirmation));
+        .is_some_and(|continuation| continuation.session().is_awaiting_saved_passkey_confirmation()));
     assert!(matches!(
         cloud_keychain.load_pending_enable_journal().unwrap().unwrap().phase(),
         PendingEnableJournalPhase::RemoteWritesStarted(_)

@@ -116,6 +116,8 @@ pub(crate) enum ConfiguredWriter {
     TurnOff,
     RowDelete,
     OtherBackups,
+    /// Discarding a stopped reinitialize deletes the namespace it wrote, never the active one
+    Discard,
     /// Every other configured operation writes only through its claim
     Other,
 }
@@ -214,9 +216,10 @@ impl WritePolicy {
             },
 
             C::EnableDiscard(claim) => match &self.body {
-                B::Off { op: Some(OffWrites::Discard(running)) } if running == claim => {
-                    Decision::Run
-                }
+                B::Off { op: Some(OffWrites::Discard(running)) }
+                | B::Configured {
+                    op: Some(ConfiguredWrites { claim: running, kind: ConfiguredWriter::Discard }),
+                } if running == claim => Decision::Run,
                 _ => Decision::Stale,
             },
         }

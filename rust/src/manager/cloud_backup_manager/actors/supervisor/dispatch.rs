@@ -1,7 +1,8 @@
 use super::*;
 use crate::manager::cloud_backup_manager::admission::{
-    Admission, AdmissionSnapshot, ConfiguredAdmission, DetailInventory, EnableIntent, Rejection,
-    RestoreAllAdmission, UserIntent, evaluate_admission,
+    Admission, AdmissionSnapshot, ConfiguredAdmission, ContinuationOwner, ContinuationStage,
+    DetailInventory, EnableIntent, PausedContinuation, Rejection, RestoreAllAdmission, UserIntent,
+    evaluate_admission,
 };
 use crate::manager::cloud_backup_manager::model::{
     CloudBackupDestructiveOperationState, CloudBackupLifecycle,
@@ -128,11 +129,23 @@ impl CloudBackupSupervisor {
             detail_inventory,
             other_backups_loaded: manager.other_backups_inventory_is_ready(),
             restore_all,
-            enable_awaits_saved_passkey: self
-                .pending_enable_session
-                .as_ref()
-                .is_some_and(PendingEnableSession::is_awaiting_saved_passkey_confirmation),
+            continuation: self.paused_continuation(manager),
         }
+    }
+
+    /// The paused Enable or reinitialize admission decides Confirm Saved Passkey and Discard on
+    ///
+    /// The existing-backup prompt is a paused Enable that holds no material; the reducer still
+    /// holds that prompt until the screen projection owns it
+    fn paused_continuation(&self, manager: &RustCloudBackupManager) -> Option<PausedContinuation> {
+        if let Some(continuation) = &self.enable_continuation {
+            return Some(continuation.paused());
+        }
+
+        manager.state.read().shows_existing_backup_prompt().then_some(PausedContinuation {
+            owner: ContinuationOwner::Enable,
+            stage: ContinuationStage::ExistingBackupPrompt,
+        })
     }
 
     /// Admits an intent that answers its caller, as a typed error on anything but `Accepted`
@@ -172,7 +185,12 @@ impl CloudBackupSupervisor {
                 self.confirm_saved_passkey().await?;
             }
             I::DiscardPendingEnable => {
-                self.discard_pending_enable_cloud_backup().await?;
+                // admitted with no continuation only for the existing-backup prompt, which holds
+                // no material, so clearing the prompt ends it
+                if let Some(continuation) = self.enable_continuation.take() {
+                    self.discard_enable_continuation(continuation);
+                }
+
                 manager.clear_existing_backup_found_prompt();
             }
             I::ConfirmPendingEnableCleanup => {

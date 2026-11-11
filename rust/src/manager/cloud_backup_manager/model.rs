@@ -1552,6 +1552,16 @@ impl CloudBackupStateReducer {
         self.projected_pending_enable_recovery().is_some()
     }
 
+    /// Whether Enable stopped at the prompt that asks whether to replace an existing backup
+    pub(crate) fn shows_existing_backup_prompt(&self) -> bool {
+        matches!(
+            self.state.phase,
+            CloudBackupLifecyclePhase::Enabling(
+                CloudBackupEnableFlow::AwaitingForceNewConfirmation(..)
+            )
+        )
+    }
+
     /// The recovery the lifecycle shows, as the supervisor last projected it
     pub(crate) fn projected_pending_enable_recovery(
         &self,

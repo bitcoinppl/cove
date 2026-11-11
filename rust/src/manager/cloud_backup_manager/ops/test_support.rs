@@ -34,6 +34,7 @@ use crate::database::cloud_backup::{
     PersistedCloudBlobState, PersistedCloudBlobSyncState, PersistedConfiguredCloudBackup,
     PersistedPasskeyState,
 };
+use crate::manager::cloud_backup_manager::admission::ContinuationOwner;
 use crate::manager::cloud_backup_manager::{
     CloudBackupCloudOnlyFetchOutcome, CloudBackupDetail, CloudBackupEnableContext,
     CloudBackupExclusiveOperation, CloudBackupExclusiveOperationClaim, CloudBackupKeychain,
@@ -1651,13 +1652,15 @@ pub(crate) async fn take_pending_enable_session_for_test(
         .expect("take pending enable session")
 }
 
-pub(crate) async fn replace_pending_enable_session_for_test(
+/// Stores `session` as the paused work of `owner`
+pub(crate) async fn replace_enable_continuation_for_test(
     manager: &RustCloudBackupManager,
+    owner: ContinuationOwner,
     session: PendingEnableSession,
 ) {
-    call!(manager.supervisor.replace_pending_enable_session_for_test(session))
+    call!(manager.supervisor.replace_enable_continuation_for_test(owner, session))
         .await
-        .expect("replace pending enable session");
+        .expect("replace enable continuation");
 }
 
 pub(crate) async fn has_awaiting_saved_passkey_confirmation_for_test(

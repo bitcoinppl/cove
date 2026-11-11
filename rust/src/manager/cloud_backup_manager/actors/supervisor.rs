@@ -29,7 +29,8 @@ use crate::database::cloud_backup::{
 };
 use crate::database::error::DatabaseError;
 use crate::manager::cloud_backup_manager::admission::{
-    Admission, PauseReason, Rejection, UserIntent,
+    Admission, ConfiguredAdmission, ContinuationOwner, ContinuationStage, PauseReason, Rejection,
+    UserIntent,
 };
 use crate::manager::cloud_backup_manager::keychain::{CloudBackupKeychain, LocalStateOwner};
 use crate::manager::cloud_backup_manager::model::{
@@ -100,6 +101,8 @@ use workers::{CleanupWorker, SyncHealthWorker, UploadWorker};
 mod undecryptable_wallets;
 mod verification;
 mod workers;
+
+use enable::EnableContinuation;
 
 pub(crate) use dispatch::DispatchOutcome;
 pub(crate) use lifecycle_results::OwnedKeychainWrite;
@@ -291,7 +294,9 @@ pub(crate) struct CloudBackupSupervisor {
     /// The lifecycle body with the running operation nested in it, and the only lifecycle
     /// writer, both published to the write lane
     runtime: OwnedRuntime,
-    pending_enable_session: Option<PendingEnableSession>,
+    /// The Enable or reinitialize that stopped before it finished, with the lifecycle it
+    /// belongs to
+    enable_continuation: Option<EnableContinuation>,
     next_request_id: u64,
     active_sync_request: Option<u64>,
     active_cloud_only_fetch_request: Option<u64>,
@@ -379,7 +384,7 @@ impl CloudBackupSupervisor {
             write: cloud_writes,
             manager,
             runtime,
-            pending_enable_session: None,
+            enable_continuation: None,
             next_request_id: 0,
             active_sync_request: None,
             active_cloud_only_fetch_request: None,
@@ -1469,7 +1474,7 @@ impl CloudBackupSupervisor {
     /// The workers handle their mailboxes in order, so each clears before any message the
     /// supervisor sends it after this
     fn clear_worker_runtime_state(&mut self) {
-        self.pending_enable_session = None;
+        self.enable_continuation = None;
         self.detail_workflow.clear_pending_completion();
         self.sync_health.clear_upload_runtime_state();
         self.uploads.clear_upload_runtime_state();
@@ -1723,23 +1728,23 @@ pub(crate) mod test_support {
         pub async fn take_pending_enable_session_for_test(
             &mut self,
         ) -> ActorResult<Option<PendingEnableSession>> {
-            Produces::ok(self.pending_enable_session.take())
+            Produces::ok(self.enable_continuation.take().map(EnableContinuation::into_session))
         }
 
-        pub async fn replace_pending_enable_session_for_test(
+        /// Stores `session` as the paused work of `owner`
+        pub async fn replace_enable_continuation_for_test(
             &mut self,
+            owner: ContinuationOwner,
             session: PendingEnableSession,
         ) -> ActorResult<()> {
-            self.pending_enable_session = Some(session);
+            self.enable_continuation = Some(EnableContinuation::new(owner, session));
             Produces::ok(())
         }
 
         pub async fn has_awaiting_saved_passkey_confirmation_for_test(&self) -> ActorResult<bool> {
-            Produces::ok(
-                self.pending_enable_session
-                    .as_ref()
-                    .is_some_and(PendingEnableSession::is_awaiting_saved_passkey_confirmation),
-            )
+            Produces::ok(self.enable_continuation.as_ref().is_some_and(|continuation| {
+                continuation.session().is_awaiting_saved_passkey_confirmation()
+            }))
         }
 
         /// Starts an exclusive operation and hands back its write client, for tests that run the

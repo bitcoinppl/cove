@@ -5,6 +5,7 @@
 
 mod app;
 mod clock;
+mod continuation_tests;
 mod crash_tests;
 mod deadline;
 mod fakes;

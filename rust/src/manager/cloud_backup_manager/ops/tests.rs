@@ -374,7 +374,7 @@ async fn dispatch_and_wait(manager: &RustCloudBackupManager, action: CloudBackup
 /// The discard's remote delete runs off the supervisor mailbox and reports back, so the test
 /// waits for the journal it clears and then for the completion message
 async fn discard_pending_enable_and_wait_for_remote_delete(manager: &RustCloudBackupManager) {
-    manager.discard_pending_enable_cloud_backup();
+    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
 
     wait_for_test_condition(
         Duration::from_secs(1),

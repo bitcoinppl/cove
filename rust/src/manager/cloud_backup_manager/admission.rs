@@ -153,7 +153,8 @@ pub(crate) enum Rejection {
     RestoreAllUnavailable,
     NothingToCancel,
     KeepEnabledUnavailable,
-    /// Nothing is waiting to be continued, such as a saved passkey with no paused Enable
+    /// Nothing is waiting to be continued or discarded in this lifecycle, such as a saved
+    /// passkey with no paused Enable, or a Discard after the Enable finished
     NothingToContinue,
     /// A local reset is wiping Cloud Backup's local state
     Resetting,
@@ -231,8 +232,101 @@ pub(crate) struct AdmissionSnapshot {
     pub(crate) detail_inventory: DetailInventory,
     pub(crate) other_backups_loaded: bool,
     pub(crate) restore_all: RestoreAllAdmission,
-    /// An Enable paused for the user to confirm the passkey they saved
-    pub(crate) enable_awaits_saved_passkey: bool,
+    /// An Enable or reinitialize that stopped before it finished, if one is waiting
+    pub(crate) continuation: Option<PausedContinuation>,
+}
+
+/// An Enable or reinitialize that stopped before it finished, as admission sees it
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PausedContinuation {
+    pub(crate) owner: ContinuationOwner,
+    pub(crate) stage: ContinuationStage,
+}
+
+/// The lifecycle a paused continuation belongs to, which decides what continues it
+///
+/// A continuation only goes on in its own lifecycle: a fresh Enable continues while the backup is
+/// off, and a reinitialize continues on the configured backup it replaces
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ContinuationOwner {
+    /// An Enable on a device without a configured backup
+    Enable,
+    /// A reinitialize of the configured backup
+    Reinitialize,
+}
+
+/// Where a paused continuation stopped
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ContinuationStage {
+    /// A registered passkey waits for the user to confirm they saved it
+    AwaitingSavedPasskey,
+    /// An upload failed after the passkey was ready, and keeps its material for a retry
+    RetryUpload,
+    /// Enable found an existing backup and asks whether to replace it; nothing is held
+    ExistingBackupPrompt,
+}
+
+impl ContinuationOwner {
+    /// The owner of the work an Enable flow runs under `operation`
+    ///
+    /// The Enable flow runs under one of Enable's claims or a reinitialize's
+    pub(crate) fn of(operation: CloudBackupExclusiveOperation) -> Self {
+        match operation {
+            CloudBackupExclusiveOperation::ReinitializeBackup => Self::Reinitialize,
+            _ => Self::Enable,
+        }
+    }
+
+    /// The owner of work found paused in `body` at restart
+    ///
+    /// A fresh Enable runs only while the backup is off and a reinitialize only on a configured
+    /// backup, so the body tells them apart
+    pub(crate) fn of_body(body: AdmissionBody) -> Self {
+        match body {
+            AdmissionBody::Configured(_) => Self::Reinitialize,
+            AdmissionBody::Disabled
+            | AdmissionBody::Enabling
+            | AdmissionBody::Restoring
+            | AdmissionBody::FinishingDisable
+            | AdmissionBody::PendingEnableRecovery
+            | AdmissionBody::LoadFailed
+            | AdmissionBody::Resetting => Self::Enable,
+        }
+    }
+
+    /// The operation that continues the paused work
+    pub(crate) fn operation(self) -> CloudBackupExclusiveOperation {
+        match self {
+            Self::Enable => CloudBackupExclusiveOperation::Enable,
+            Self::Reinitialize => CloudBackupExclusiveOperation::ReinitializeBackup,
+        }
+    }
+
+    /// Whether `body` is the lifecycle this continuation belongs to
+    fn owns(self, body: AdmissionBody) -> bool {
+        match (self, body) {
+            (Self::Enable, AdmissionBody::Disabled | AdmissionBody::PendingEnableRecovery)
+            | (Self::Reinitialize, AdmissionBody::Configured(_)) => true,
+            (
+                Self::Enable | Self::Reinitialize,
+                AdmissionBody::Disabled
+                | AdmissionBody::Enabling
+                | AdmissionBody::Restoring
+                | AdmissionBody::Configured(_)
+                | AdmissionBody::FinishingDisable
+                | AdmissionBody::PendingEnableRecovery
+                | AdmissionBody::LoadFailed
+                | AdmissionBody::Resetting,
+            ) => false,
+        }
+    }
+}
+
+impl PausedContinuation {
+    /// The paused continuation an intent of the current body can act on
+    fn in_body(snapshot: &AdmissionSnapshot) -> Option<Self> {
+        snapshot.continuation.filter(|paused| paused.owner.owns(snapshot.body))
+    }
 }
 
 /// Decides what happens to `intent` in `snapshot`
@@ -247,13 +341,39 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
         // a reset closed admission: nothing starts and nothing is presented until it finishes
         _ if snapshot.body == AdmissionBody::Resetting => Rejected(Rejection::Resetting),
 
-        // the continuation of a paused Enable: it needs the Enable it continues
-        I::ConfirmSavedPasskey => match (snapshot.enable_awaits_saved_passkey, snapshot.running) {
-            (_, Some(Op::Enable)) => Coalesced(CoalescibleIntent::RepeatOfRunning(Op::Enable)),
+        // continues a paused Enable or reinitialize in the lifecycle it belongs to; while one
+        // runs, its confirmation is already on screen
+        I::ConfirmSavedPasskey => match (PausedContinuation::in_body(snapshot), snapshot.running) {
+            (_, Some(running @ (Op::Enable | Op::ReinitializeBackup))) => {
+                Coalesced(CoalescibleIntent::RepeatOfRunning(running))
+            }
             (_, Some(running)) => Rejected(Rejection::OperationRunning(running)),
-            (true, None) => Accepted,
-            (false, None) => Rejected(Rejection::NothingToContinue),
+            (
+                Some(PausedContinuation { stage: ContinuationStage::AwaitingSavedPasskey, .. }),
+                None,
+            ) => Accepted,
+            (
+                Some(PausedContinuation {
+                    stage: ContinuationStage::RetryUpload | ContinuationStage::ExistingBackupPrompt,
+                    ..
+                })
+                | None,
+                None,
+            ) => Rejected(Rejection::NothingToContinue),
         },
+
+        // ends a paused Enable or reinitialize; a Discard from a prompt that outlived its
+        // continuation has nothing to end, so it changes nothing on screen
+        I::DiscardPendingEnable => {
+            match (PausedContinuation::in_body(snapshot), snapshot.running) {
+                (_, Some(Op::DiscardPendingEnable)) => {
+                    Coalesced(CoalescibleIntent::RepeatOfRunning(Op::DiscardPendingEnable))
+                }
+                (_, Some(running)) => Rejected(Rejection::OperationRunning(running)),
+                (Some(_), None) => Accepted,
+                (None, None) => Rejected(Rejection::NothingToContinue),
+            }
+        }
 
         // a full wipe is admitted from every body; only another reset closes it, above
         I::LocalReset => Accepted,
@@ -288,15 +408,6 @@ pub(crate) fn evaluate_admission(intent: &UserIntent, snapshot: &AdmissionSnapsh
             starts_while_off(snapshot, operation)
         }
         I::RestoreFromCloudBackup => starts_while_off(snapshot, Op::Restore),
-
-        // a Discard while one runs is the same request; any other running work is checked by
-        // the discard's own start, which needs the operation slot
-        I::DiscardPendingEnable => match snapshot.running {
-            Some(Op::DiscardPendingEnable) => {
-                Coalesced(CoalescibleIntent::RepeatOfRunning(Op::DiscardPendingEnable))
-            }
-            _ => Accepted,
-        },
 
         I::CancelRestore => match snapshot.running {
             Some(Op::Restore) => Accepted,

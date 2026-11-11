@@ -186,7 +186,7 @@ impl CloudBackupSupervisor {
             credential_id,
             prf_salt,
         });
-        self.pending_enable_session = None;
+        self.enable_continuation = None;
         manager.clear_enable_progress(CloudBackupStatus::Enabled);
         manager.refresh_persisted_flags();
 

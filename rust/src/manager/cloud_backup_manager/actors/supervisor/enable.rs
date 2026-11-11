@@ -1,11 +1,14 @@
 use super::*;
 
+mod continuation;
 mod discard;
 mod passkey_confirmation;
 mod recovery;
 mod restart;
 mod start;
 mod upload_finalization;
+
+pub(crate) use continuation::EnableContinuation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SavedPasskeyConfirmationRetry {

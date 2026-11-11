@@ -99,6 +99,7 @@ writes the fact itself.
 | Write policy | Nobody: `Runtime::write_policy` derives it, and `OwnedRuntime` publishes it, versioned, to the write lane | — |
 | Cloud Backup keychain namespace | The supervisor, which applies the keychain writes workers prepare | `OwnedKeychainWrite` results |
 | Pending Enable journal (keychain) | `PendingEnableCoordinator` | The Enable and recovery operations |
+| Paused Enable or reinitialize (`EnableContinuation`): its staged master key, passkey material and owning work | The supervisor, which files it under the work whose claim paused it | Enable and reinitialize completions carrying their claim, and the restart, which reads the journal |
 | Detail inventory | The reducer | Detail refresh results |
 | Passkey health, sync health | Their workers | Read-only: they never write the lifecycle record or the runtime |
 
@@ -177,6 +178,18 @@ Promotion happens only for journal-owned staged material. Failure or
 cancellation restores the prior local metadata and only cleans remote material
 that is proven to be incomplete and owned by that fresh attempt.
 
+A newly saved passkey, or an upload that failed, pauses the work that ran it.
+The supervisor keeps what that work needs to go on as one `EnableContinuation`,
+typed with its owner: a fresh Enable while backup is off, or a reinitialize of
+the configured backup. Confirm Saved Passkey restarts the owner's operation, so
+a paused reinitialize goes on as a reinitialize: it uploads the new backup,
+switches to it and verifies it. Admission accepts Confirm Saved Passkey and
+Discard only for a continuation that belongs to the current lifecycle, and
+Discard also for the existing-backup prompt. A Discard that arrives after
+Enable finished is rejected and changes nothing. Discarding a stopped
+reinitialize deletes only the namespace it wrote, and the configured backup
+stays on its own.
+
 When an interrupted Enable leaves that evidence behind, the supervisor holds it
 as its own runtime body, `PendingEnableRecovery`, which can run one recovery
 operation at a time. The screen only shows this body. The body ends when the
@@ -254,7 +267,7 @@ decision is one of three:
 | `TurnOffDelete` | Turn Off's committed namespace delete | Turn Off committed that namespace and still runs | never |
 | `RowDelete(claim)` | Delete Cloud Wallet, Delete Undecryptable | that row delete is running | never |
 | `OtherBackupDelete(claim)` | Delete and Recover Other Backups | that operation is running | never |
-| `EnableDiscard(claim)` | discarding an interrupted Enable's namespace | that discard is running | never |
+| `EnableDiscard(claim)` | discarding the namespace of an interrupted Enable or a stopped reinitialize | that discard is running | never |
 
 For every class without a pause, a write that does not meet the "Runs when"
 condition is stale.
@@ -267,6 +280,7 @@ The same rules by runtime body:
 | `Configured`, Turn Off before its commit | `Configured` (Turn Off writer) | Turn Off's own `Operation` writes, such as its drain barrier | `Ordinary` and `SourceCleanup` paused (`TurnOff`), the rest stale |
 | `Configured`, a row delete | `Configured` (row writer) | `RowDelete` and `Operation` of that claim, `Ordinary` | stale |
 | `Configured`, Recover or Delete Other Backups | `Configured` (other-backups writer) | `OtherBackupDelete` and `Operation` of that claim, `Ordinary` | stale |
+| `Configured`, discarding a stopped reinitialize | `Configured` (discard writer) | `EnableDiscard` and `Operation` of that claim, `Ordinary` | stale |
 | `Configured`, any other operation | `Configured` | `Operation` of that claim, `Ordinary` | stale |
 | `Disabled`, `Corrupted`, `PendingEnableRecovery` | `Off` | Enable's `Operation`, or the discard's `EnableDiscard`, of the running claim | `Ordinary` paused (`BackupOff`), the rest stale |
 | `FinishingDisable` | `FinishingDisable` | `TurnOffDelete` of the committed namespace and `Operation`, both of the running claim | `Ordinary` paused (`TurnOff`), the rest stale |

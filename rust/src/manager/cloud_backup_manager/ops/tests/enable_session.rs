@@ -1,4 +1,5 @@
 use super::*;
+use crate::manager::cloud_backup_manager::admission::ContinuationOwner;
 
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn registered_passkey_stages_confirmation_without_automatic_auth() {
@@ -278,8 +279,9 @@ async fn duplicate_confirm_saved_passkey_dispatches_are_ignored_while_confirming
         provider_hint: None,
     }));
     CloudBackupKeychain::global().save_pending_enable_journal(&journal).unwrap();
-    replace_pending_enable_session_for_test(
+    replace_enable_continuation_for_test(
         &manager,
+        ContinuationOwner::Enable,
         PendingEnableSession::awaiting_saved_passkey_confirmation(
             zeroize::Zeroizing::new(master_key),
             zeroize::Zeroizing::new(StagedPrfKey {
@@ -358,8 +360,9 @@ async fn unsupported_provider_saved_passkey_confirmation_fails_without_retry() {
     reset_cloud_backup_test_state(&manager, globals);
     CONNECTIVITY_MANAGER.set_connection_state(true);
     let master_key = cove_cspp::master_key::MasterKey::generate();
-    replace_pending_enable_session_for_test(
+    replace_enable_continuation_for_test(
         &manager,
+        ContinuationOwner::Enable,
         PendingEnableSession::awaiting_saved_passkey_confirmation(
             zeroize::Zeroizing::new(master_key),
             zeroize::Zeroizing::new(StagedPrfKey {
@@ -441,8 +444,9 @@ async fn install_pending_enable_discard_session(
     manager: &RustCloudBackupManager,
     fixture: &PendingEnableDiscardFixture,
 ) {
-    replace_pending_enable_session_for_test(
+    replace_enable_continuation_for_test(
         manager,
+        ContinuationOwner::Enable,
         PendingEnableSession::retry_upload(
             cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
             fixture.passkey.copy_for_retry(),
@@ -469,7 +473,7 @@ async fn discard_pending_enable_staged_preserves_prior_master_and_metadata() {
     install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
 
-    manager.discard_pending_enable_cloud_backup();
+    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert_active_master_key(&fixture.prior_master_key);
@@ -514,6 +518,54 @@ async fn discard_pending_enable_fresh_owned_remote_writes_delete_entire_namespac
     assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
 }
 
+/// Discarding a stopped reinitialize deletes the namespace it wrote, while the configured
+/// backup stays on the namespace it already had
+#[tokio::test(flavor = "current_thread")]
+async fn discard_stopped_reinitialize_deletes_only_its_namespace() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    let fixture =
+        prepare_pending_enable_discard_fixture(PendingEnableNamespaceOwnership::FreshOwned, true);
+    let active_namespace =
+        cove_cspp::master_key::MasterKey::from_bytes(fixture.prior_master_key).namespace_id();
+    Database::global()
+        .cloud_backup_state
+        .set(&persisted_enabled_cloud_backup_state(Some(0)))
+        .unwrap();
+    globals.cloud.set_master_key_backup(active_namespace.clone(), vec![1]);
+    globals.cloud.set_master_key_backup(fixture.namespace.clone(), vec![1, 2, 3]);
+    replace_enable_continuation_for_test(
+        &manager,
+        ContinuationOwner::Reinitialize,
+        PendingEnableSession::retry_upload(
+            cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
+            fixture.passkey.copy_for_retry(),
+            CloudBackupEnableContext::settings_manual(),
+        ),
+    )
+    .await;
+
+    discard_pending_enable_and_wait_for_remote_delete(&manager).await;
+
+    assert!(take_pending_enable_session_for_test(&manager).await.is_none());
+    assert!(!globals.cloud.has_namespace(&fixture.namespace));
+    assert!(globals.cloud.has_namespace(&active_namespace));
+    assert_eq!(globals.cloud.delete_namespace_attempt_count(), 1);
+    assert_active_master_key(&fixture.prior_master_key);
+    assert_eq!(
+        CloudBackupKeychain::global().snapshot_passkey_metadata().unwrap(),
+        fixture.previous_metadata
+    );
+    assert!(matches!(
+        Database::global().cloud_backup_state.get().unwrap(),
+        PersistedCloudBackupState::Configured(_)
+    ));
+    assert_eq!(manager.current_status(), CloudBackupStatus::Enabled);
+}
+
 /// The last dispatched intent's admission, read on the supervisor
 async fn last_admission(
     manager: &RustCloudBackupManager,
@@ -542,7 +594,7 @@ async fn enable_during_a_pending_enable_discard_is_rejected_and_the_discard_fini
     install_pending_enable_discard_session(&manager, &fixture).await;
     let delete = globals.cloud.gate_next_delete_namespace();
 
-    manager.discard_pending_enable_cloud_backup();
+    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
     tokio::time::timeout(Duration::from_secs(10), delete.wait_until_blocked())
         .await
         .expect("checkpoint: the discard's remote delete should reach the cloud");
@@ -630,7 +682,7 @@ async fn discard_pending_enable_remote_cleanup_failure_retains_session_and_journ
     install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
 
-    manager.discard_pending_enable_cloud_backup();
+    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
 
     wait_for_test_condition(
         Duration::from_secs(1),
@@ -669,7 +721,7 @@ async fn discard_pending_enable_recovered_existing_never_deletes_remote_namespac
     install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
 
-    manager.discard_pending_enable_cloud_backup();
+    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert!(globals.cloud.has_namespace(&fixture.namespace));
@@ -697,7 +749,7 @@ async fn discard_pending_enable_unjournaled_session_never_deletes_or_clears_mate
     install_pending_enable_discard_session(&manager, &fixture).await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
 
-    manager.discard_pending_enable_cloud_backup();
+    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert!(globals.cloud.has_namespace(&fixture.namespace));
@@ -749,6 +801,8 @@ async fn discard_pending_enable_started_promotion_rolls_back_prior_state() {
     assert!(CloudBackupKeychain::global().load_pending_enable_journal().unwrap().is_none());
 }
 
+/// A stopped reinitialize whose record already switched to the new namespace finishes on Discard
+/// instead of deleting what the record now names
 #[tokio::test(flavor = "current_thread")]
 async fn discard_pending_enable_durable_completion_commits_without_remote_delete() {
     let _guard = async_test_lock().lock().await;
@@ -782,10 +836,21 @@ async fn discard_pending_enable_durable_completion_commits_without_remote_delete
     ));
     Database::global().cloud_backup_state.set(&persisted_state).unwrap();
     globals.cloud.set_master_key_backup(fixture.namespace.clone(), vec![1, 2, 3]);
-    install_pending_enable_discard_session(&manager, &fixture).await;
+
+    // the record is configured, so only a reinitialize can own work stopped in it
+    replace_enable_continuation_for_test(
+        &manager,
+        ContinuationOwner::Reinitialize,
+        PendingEnableSession::retry_upload(
+            cove_cspp::master_key::MasterKey::from_bytes(fixture.staged_master_key),
+            fixture.passkey.copy_for_retry(),
+            CloudBackupEnableContext::settings_manual(),
+        ),
+    )
+    .await;
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
 
-    manager.discard_pending_enable_cloud_backup();
+    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
 
     assert!(take_pending_enable_session_for_test(&manager).await.is_none());
     assert!(globals.cloud.has_namespace(&fixture.namespace));
@@ -845,7 +910,7 @@ async fn discard_pending_enable_local_cleanup_failure_retains_session_and_journa
     install_pending_enable_discard_session(&manager, &fixture).await;
     globals.keychain.fail_delete_at(1);
 
-    manager.discard_pending_enable_cloud_backup();
+    manager.dispatch(CloudBackupManagerAction::DiscardPendingEnableCloudBackup);
 
     wait_for_test_condition(
         Duration::from_secs(1),

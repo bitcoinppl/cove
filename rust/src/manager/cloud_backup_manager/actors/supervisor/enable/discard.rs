@@ -6,7 +6,7 @@ impl CloudBackupSupervisor {
         manager: &RustCloudBackupManager,
         claim: CloudBackupExclusiveOperationClaim,
     ) {
-        self.pending_enable_session = None;
+        self.enable_continuation = None;
         let status = if claim.operation() == CloudBackupExclusiveOperation::ReinitializeBackup {
             RustCloudBackupManager::runtime_status_for(
                 &RustCloudBackupManager::load_persisted_state(),
@@ -19,7 +19,7 @@ impl CloudBackupSupervisor {
 
     #[cfg(test)]
     pub async fn clear_pending_enable_session(&mut self) -> ActorResult<()> {
-        self.pending_enable_session = None;
+        self.enable_continuation = None;
         Produces::ok(())
     }
 
@@ -28,15 +28,11 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    pub async fn discard_pending_enable_cloud_backup(&mut self) -> ActorResult<()> {
-        let Some(pending) = self.pending_enable_session.take() else {
-            if let Some(manager) = self.manager() {
-                manager.apply_enable_state(CloudBackupEnableState::Idle);
-                manager.reconcile_runtime_status(CloudBackupStatus::Disabled);
-            }
-            return Produces::ok(());
-        };
-
+    /// Ends a paused Enable or reinitialize admission accepted a Discard for
+    ///
+    /// Admission accepts it only for the continuation of the current lifecycle, so a Discard
+    /// from a prompt that outlived its Enable never reaches here
+    pub(crate) fn discard_enable_continuation(&mut self, pending: EnableContinuation) {
         let cloud_keychain = CloudBackupKeychain::global();
         let journal = match cloud_keychain.load_pending_enable_journal() {
             Ok(journal) => journal,
@@ -45,15 +41,15 @@ impl CloudBackupSupervisor {
                     pending,
                     CloudBackupError::internal_context("load pending enable cleanup", error),
                 );
-                return Produces::ok(());
+                return;
             }
         };
         let Some(journal) = journal else {
             self.finish_pending_enable_discard();
-            return Produces::ok(());
+            return;
         };
 
-        if pending.namespace_id() != journal.namespace_id() {
+        if pending.session().namespace_id() != journal.namespace_id() {
             self.fail_pending_enable_discard(
                 pending,
                 CloudBackupError::Internal(
@@ -61,7 +57,7 @@ impl CloudBackupSupervisor {
                         .into(),
                 ),
             );
-            return Produces::ok(());
+            return;
         }
 
         let Some(manager) = self.manager() else {
@@ -69,31 +65,31 @@ impl CloudBackupSupervisor {
                 pending,
                 CloudBackupError::Internal("cloud backup manager stopped during cleanup".into()),
             );
-            return Produces::ok(());
+            return;
         };
 
         let committed = match Self::pending_enable_is_durably_committed(&journal) {
             Ok(committed) => committed,
             Err(error) => {
                 self.fail_pending_enable_discard(pending, error);
-                return Produces::ok(());
+                return;
             }
         };
         if committed {
             if let Err(error) = manager.pending_enable.commit_pending_enable_local_promotion() {
                 self.fail_pending_enable_discard(pending, error);
-                return Produces::ok(());
+                return;
             }
 
             manager.clear_enable_progress(CloudBackupStatus::Enabled);
             manager.refresh_persisted_flags();
             manager.refresh_pending_upload_verification_state();
-            return Produces::ok(());
+            return;
         }
 
         if !Self::journal_owns_started_remote_writes(&journal) {
             self.discard_pending_enable_local_state(&manager, pending, &journal);
-            return Produces::ok(());
+            return;
         }
 
         // the delete is a write-lane command, and the supervisor never waits on the write
@@ -110,7 +106,7 @@ impl CloudBackupSupervisor {
                     format!("discard could not start: {unstartable:?}").into(),
                 ),
             );
-            return Produces::ok(());
+            return;
         }
 
         let writes = CloudBackupWriteClient::for_operation(self.write.clone(), claim);
@@ -118,14 +114,12 @@ impl CloudBackupSupervisor {
             let result = Self::delete_pending_enable_remote_namespace(writes, &journal).await;
             send!(addr.complete_pending_enable_remote_discard(claim, pending, journal, result));
         });
-
-        Produces::ok(())
     }
 
     pub async fn complete_pending_enable_remote_discard(
         &mut self,
         claim: CloudBackupExclusiveOperationClaim,
-        pending: PendingEnableSession,
+        pending: EnableContinuation,
         journal: PendingEnableJournal,
         result: Result<(), CloudBackupError>,
     ) -> ActorResult<()> {
@@ -147,7 +141,7 @@ impl CloudBackupSupervisor {
     fn discard_pending_enable_local_state(
         &mut self,
         manager: &RustCloudBackupManager,
-        pending: PendingEnableSession,
+        pending: EnableContinuation,
         journal: &PendingEnableJournal,
     ) {
         if let Err(error) = manager.pending_enable.discard_pending_enable_local_state(journal) {
@@ -211,11 +205,11 @@ impl CloudBackupSupervisor {
 
     fn fail_pending_enable_discard(
         &mut self,
-        pending: PendingEnableSession,
+        pending: EnableContinuation,
         error: CloudBackupError,
     ) {
         warn!("Discard pending Cloud Backup cleanup failed: {error}");
-        self.pending_enable_session = Some(pending);
+        self.enable_continuation = Some(pending);
         if let Some(manager) = self.manager() {
             manager.reconcile_runtime_status(CloudBackupStatus::Error(
                 GENERIC_CLOUD_BACKUP_ERROR_MESSAGE.into(),
