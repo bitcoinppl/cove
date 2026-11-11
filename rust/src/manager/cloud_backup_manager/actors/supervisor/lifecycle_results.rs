@@ -263,14 +263,15 @@ impl CloudBackupSupervisor {
         Produces::ok(())
     }
 
-    /// Records the running verification's evidence, unless the wallet set changed since it read
-    /// the wallets
+    /// Records a verification attempt's evidence, unless the wallet set changed from `basis`, the
+    /// set that attempt read
     pub(crate) fn record_verification_evidence(
         &mut self,
         manager: &RustCloudBackupManager,
+        basis: WalletSetGeneration,
         result: &DeepVerificationResult,
     ) {
-        if self.verification_basis != self.wallet_set {
+        if basis != self.wallet_set {
             debug!("Cloud Backup discarded verification evidence for an older wallet set");
             return;
         }
@@ -279,16 +280,17 @@ impl CloudBackupSupervisor {
     }
 
     /// Records a finished verification's evidence and shows its result, or, when the wallet set
-    /// changed since it read the wallets, ends the verification without either
+    /// changed from `basis`, the set it read, ends the verification without either
     ///
     /// The wallet change already recorded that the backup needs verifying, so showing the older
     /// result would contradict it
     pub(crate) fn settle_verification_evidence(
         &mut self,
         manager: &RustCloudBackupManager,
+        basis: WalletSetGeneration,
         result: DeepVerificationResult,
     ) {
-        if self.verification_basis != self.wallet_set {
+        if basis != self.wallet_set {
             debug!("Cloud Backup discarded verification result for an older wallet set");
             manager.apply_verification_state(VerificationState::Idle);
             return;

@@ -725,7 +725,7 @@ mod tests {
         let discard = claim(Op::DiscardPendingEnable, 5);
         let switch = CloudBackupExclusiveOperationClaim::drive_account_switch(7.into());
         let other_switch = CloudBackupExclusiveOperationClaim::drive_account_switch(8.into());
-        let verify = claim(Op::VerificationRepair, 6);
+        let verify = claim(Op::Verify, 6);
         let ordinary = CommandClass::Ordinary { generation };
         let cleanup = CommandClass::SourceCleanup { generation };
         let policy = |body| WritePolicy { generation, body };
@@ -976,7 +976,7 @@ mod tests {
     async fn ended_operation_write_reports_cancelled_over_its_remote_error() {
         let mut supervisor = CloudBackupWriteSupervisor::default();
         let generation = ConfigGeneration::next();
-        let verify = claim(CloudBackupExclusiveOperation::VerificationRepair, 1);
+        let verify = claim(CloudBackupExclusiveOperation::Verify, 1);
         let writes = ConfiguredWrites { claim: verify, kind: ConfiguredWriter::Other };
         set_policy(&mut supervisor, generation, configured(Some(writes)));
 

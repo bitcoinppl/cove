@@ -228,7 +228,7 @@ impl PendingEnableRun {
             | Op::RecreateManifest
             | Op::VerifyReinitializedBackup
             | Op::RepairPasskey
-            | Op::VerificationRepair
+            | Op::Verify
             | Op::RecoverOtherBackups
             | Op::DeleteOtherBackups
             | Op::RestoreCloudWallet

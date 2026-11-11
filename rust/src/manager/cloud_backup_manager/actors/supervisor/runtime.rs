@@ -583,9 +583,7 @@ impl Runtime {
             (Self::Configured { op }, NewOp::Standard(run)) => {
                 let configured = match operation {
                     Op::Disable => ConfiguredOp::TurnOff(run),
-                    Op::VerifyReinitializedBackup | Op::VerificationRepair => {
-                        ConfiguredOp::Verify(run)
-                    }
+                    Op::VerifyReinitializedBackup | Op::Verify => ConfiguredOp::Verify(run),
                     Op::RepairPasskey => ConfiguredOp::RepairPasskey(run),
                     Op::RestoreCloudWallet => ConfiguredOp::RestoreCloudWallet(run),
                     Op::DeleteCloudWallet | Op::DeleteUndecryptableWalletBackups => {
@@ -626,7 +624,7 @@ impl Runtime {
                     | Op::ReinitializeBackup
                     | Op::VerifyReinitializedBackup
                     | Op::RepairPasskey
-                    | Op::VerificationRepair
+                    | Op::Verify
                     | Op::RecoverOtherBackups
                     | Op::DeleteOtherBackups
                     | Op::RestoreCloudWallet

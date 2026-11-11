@@ -339,24 +339,13 @@ async fn deep_verify_reads_each_wallet_backup_once() {
 
     let downloads_before = globals.cloud.wallet_backup_download_attempt_count();
 
-    let step = manager.prepare_deep_verify_cloud_backup(true).await;
-
-    assert_eq!(globals.cloud.wallet_backup_download_attempt_count() - downloads_before, 1);
-
-    call!(manager.supervisor.complete_verification(
-        None,
-        step,
-        DeepVerificationContinuation::Manual {
-            force_discoverable: true,
-            attempt: VerificationAttempt::Initial,
-        }
-    ))
-    .await
-    .unwrap();
+    call!(manager.supervisor.start_verification(true)).await.unwrap();
     wait_for_test_condition(Duration::from_secs(8), "deep verification completes", || {
         matches!(manager.model_snapshot().verification, VerificationState::Verified(_))
     })
     .await;
+
+    assert_eq!(globals.cloud.wallet_backup_download_attempt_count() - downloads_before, 1);
 
     let result = match manager.model_snapshot().verification {
         VerificationState::Verified(report) => DeepVerificationResult::Verified(report),

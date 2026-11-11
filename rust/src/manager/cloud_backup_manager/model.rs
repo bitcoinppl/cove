@@ -557,7 +557,7 @@ impl CloudBackupReducerState {
                 CloudBackupExclusiveOperation::RecreateManifest
                 | CloudBackupExclusiveOperation::VerifyReinitializedBackup
                 | CloudBackupExclusiveOperation::RepairPasskey
-                | CloudBackupExclusiveOperation::VerificationRepair
+                | CloudBackupExclusiveOperation::Verify
                 | CloudBackupExclusiveOperation::RecoverOtherBackups
                 | CloudBackupExclusiveOperation::DeleteOtherBackups
                 | CloudBackupExclusiveOperation::RestoreCloudWallet
@@ -834,7 +834,7 @@ impl CloudBackupReducerState {
                 self.resolve_recovery(RecoveryState::Recovering(RecoveryAction::RepairPasskey));
             }
             CloudBackupExclusiveOperation::VerifyReinitializedBackup
-            | CloudBackupExclusiveOperation::VerificationRepair => {}
+            | CloudBackupExclusiveOperation::Verify => {}
             CloudBackupExclusiveOperation::DeleteUndecryptableWalletBackups => {
                 self.configured.undecryptable_wallet_deletion =
                     CloudBackupUndecryptableWalletDeletionState::Idle;
