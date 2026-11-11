@@ -34,7 +34,8 @@ actor, such as the write lane, upload confirmation, wallet changes and the
 integrity check, sends the supervisor a typed result message, and the supervisor
 applies the write and reconciles. Verification evidence is tied to the wallet set
 it read, so a wallet change that lands while a verification runs makes that
-verification's result stale instead of overwriting the reset.
+verification's result stale. A stale result neither overwrites the reset nor
+shows on screen.
 
 Waits go one way only. The write supervisor and other workers may `call!` the
 supervisor, but the supervisor never waits on the write supervisor: it sends a

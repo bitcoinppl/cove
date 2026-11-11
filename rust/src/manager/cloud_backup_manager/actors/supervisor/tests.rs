@@ -4992,6 +4992,7 @@ fn persisted_verification() -> crate::database::cloud_backup::PersistedBackupVer
 #[tokio::test(flavor = "current_thread")]
 async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_reset() {
     use crate::database::cloud_backup::PersistedBackupVerificationState;
+    use crate::manager::cloud_backup_manager::model::CloudBackupVerificationState;
 
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
@@ -5024,11 +5025,25 @@ async fn verification_evidence_from_before_a_wallet_change_does_not_undo_its_res
         persisted_verification()
     );
 
+    // nor does the screen show the older result as verified
+    assert!(
+        !matches!(
+            configured_cloud_backup_state(&manager).verification,
+            CloudBackupVerificationState::Verified { .. }
+        ),
+        "old evidence showed as verified: {:?}",
+        configured_cloud_backup_state(&manager).verification
+    );
+
     // a verification that starts after the change reads the new wallet set, so it counts
     supervisor.start_verification(false).await.unwrap();
     supervisor.complete_verification(None, verified(), manual).await.unwrap();
 
     assert!(matches!(persisted_verification(), PersistedBackupVerificationState::Verified { .. }));
+    assert!(matches!(
+        configured_cloud_backup_state(&manager).verification,
+        CloudBackupVerificationState::Verified { .. }
+    ));
 }
 
 #[tokio::test(flavor = "current_thread")]

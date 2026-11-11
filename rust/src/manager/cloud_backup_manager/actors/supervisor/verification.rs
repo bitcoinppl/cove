@@ -548,8 +548,7 @@ impl CloudBackupSupervisor {
             return;
         }
 
-        self.record_verification_evidence(&manager, &result);
-        manager.handle_deep_verification_result(result);
+        self.settle_verification_evidence(&manager, result);
 
         if should_refresh_open_detail {
             let plan = self.detail_workflow.request_refresh();
