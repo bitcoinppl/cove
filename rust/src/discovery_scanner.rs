@@ -225,7 +225,8 @@ impl WalletDiscoveryScanner {
         wallet_actor: Addr<WalletActor>,
         reconciler: MessageSender<WalletManagerReconcileMessage>,
     ) -> Result<Self, WalletScannerError> {
-        debug!("starting wallet discovery scanner for {}, metadata: {metadata:?}", metadata.id);
+        // the id only: metadata carries the user-entered wallet name
+        debug!("starting wallet discovery scanner for {}", metadata.id);
 
         let db = Database::global();
         let id = metadata.id.clone();
@@ -518,7 +519,9 @@ impl WalletDiscoveryScanner {
     }
 
     async fn set_metadata(&mut self, discovery_state: DiscoveryState) -> ActorResult<()> {
-        debug!("setting wallet metadata: {discovery_state:?}");
+        // only the variant: discovery state carries found addresses and imported xpubs
+        let kind: &'static str = (&discovery_state).into();
+        debug!("setting wallet metadata: {kind}");
         call!(self.wallet_actor.update_discovery_state(discovery_state)).await??;
 
         Produces::ok(())

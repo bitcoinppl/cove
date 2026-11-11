@@ -170,7 +170,8 @@ impl WalletActor {
     ) -> Result<Psbt, Error> {
         self.ensure_ledger_ready_for_spend()?;
 
-        debug!("build_manual_tx: {total_amount:?}");
+        // the amount can be a pasted PIN parsed as sats, so only the input count is logged
+        debug!("build_manual_tx: {} utxos", utxos.len());
 
         let fee_rate = fee_rate.into();
         let send_amount = self.get_max_send_for_utxos(total_amount, &address, fee_rate, &utxos)?;
