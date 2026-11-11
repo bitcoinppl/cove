@@ -468,7 +468,7 @@ private struct CloudBackupTurnOffReviewActions: View {
     }
 }
 
-/// The ways out of a two-step review that fix what it warned about first
+/// The review buttons that act on what it warned about before anything is deleted
 private struct CloudBackupTurnOffLeaveActions: View {
     let impact: CloudBackupDisableImpact
     let actions: CloudBackupActions
@@ -480,7 +480,8 @@ private struct CloudBackupTurnOffLeaveActions: View {
         return true
     }
 
-    /// each button cancels the review before it starts anything else, so each waits on CancelDisable
+    /// Restore and Verify cancel the review before they start anything else, so they wait on
+    /// CancelDisable
     var body: some View {
         if impact.notOnDevice.total > 0 {
             Button("Restore Them First") {
@@ -498,11 +499,12 @@ private struct CloudBackupTurnOffLeaveActions: View {
             .accessibilityIdentifier("cloudBackup.turnOff.verifyFirst")
         }
 
+        // a second Turn Off re-prepares the review Rust holds, so Check Again stays in Turn Off
         if couldNotCheck {
             Button("Check Again") {
-                leaveTurnOff(then: .disableCloudBackup)
+                manager.dispatch(action: .disableCloudBackup)
             }
-            .disabled(!actions.isAvailable(action: .cancelDisable))
+            .disabled(!actions.isAvailable(action: .turnOff))
             .accessibilityIdentifier("cloudBackup.turnOff.checkAgain")
         }
     }
