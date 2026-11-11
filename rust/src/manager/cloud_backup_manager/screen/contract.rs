@@ -308,6 +308,7 @@ mod tests {
     use super::super::fixtures::cloud_backup_screen_fixtures;
     use super::super::types::{CloudBackupActionAvailability, CloudBackupActionEntry};
     use super::*;
+    use crate::manager::cloud_backup_manager::CloudBackupPasskeyState;
 
     use CloudBackupScreenAction as A;
     use CloudBackupScreenBody as Body;
@@ -475,6 +476,67 @@ mod tests {
             })
             .expect("a wallets section")
     }
+
+    fn passkey_card(screen: &CloudBackupScreen) -> Option<&CloudBackupPasskeyState> {
+        let Body::Configured(configured) = &screen.body else { return None };
+        configured.sections.iter().find_map(|section| match section {
+            CloudBackupSection::PasskeyCard(passkey) => Some(passkey),
+            _ => None,
+        })
+    }
+
+    fn verification(screen: &CloudBackupScreen) -> Option<&CloudBackupVerificationState> {
+        let Body::Configured(configured) = &screen.body else { return None };
+        configured.sections.iter().find_map(|section| match section {
+            CloudBackupSection::Verification(section) => Some(&section.view.state),
+            _ => None,
+        })
+    }
+
+    /// Only a verification that failed on the passkey offers a passkey repair; a dismissed one
+    /// or one that failed elsewhere offers Verify again. The harness drives the
+    /// verifications that produce these screens; this holds the fixtures the platforms draw
+    #[test]
+    fn only_a_verification_that_failed_on_the_passkey_offers_a_repair() {
+        let available = Some(CloudBackupActionAvailability::Available);
+
+        let repair = named("configured-passkey-needs-repair");
+        assert!(matches!(passkey_card(&repair), Some(CloudBackupPasskeyState::NeedsRepair { .. })));
+        assert_eq!(repair.actions.availability(A::RepairPasskey), available);
+        assert_eq!(repair.actions.availability(A::Verify), available);
+
+        let not_completed = named("configured-verification-not-completed");
+        assert_eq!(verification(&not_completed), Some(&CloudBackupVerificationState::NotCompleted));
+        assert_eq!(passkey_card(&not_completed), None);
+        assert_eq!(not_completed.actions.availability(A::RepairPasskey), None);
+        assert_eq!(not_completed.actions.availability(A::Verify), available);
+
+        let failed = named("configured-verification-failed");
+        assert!(matches!(verification(&failed), Some(CloudBackupVerificationState::Failed(_))));
+        assert_eq!(passkey_card(&failed), None);
+        assert_eq!(failed.actions.availability(A::RepairPasskey), None);
+        assert_eq!(failed.actions.availability(A::Verify), available);
+    }
+
+    /// A passkey card always comes with its repair control, so no screen shows the card with no
+    /// way to act on it
+    #[test]
+    fn every_passkey_card_offers_a_repair() {
+        for fixture in cloud_backup_screen_fixtures() {
+            if passkey_card(&fixture.screen).is_none() {
+                continue;
+            }
+
+            let repair = fixture.screen.actions.availability(A::RepairPasskey);
+            assert_eq!(
+                repair,
+                Some(CloudBackupActionAvailability::Available),
+                "{} draws a passkey card without its repair",
+                fixture.name
+            );
+        }
+    }
+
     /// A root prompt draws its choices on its own surface, each bound to its own entry, so a
     /// prompt whose choice has no entry is caught like any other control
     #[test]

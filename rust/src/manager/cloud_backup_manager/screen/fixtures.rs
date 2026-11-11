@@ -38,6 +38,7 @@ mod debug {
         CloudBackupTurnOffFailure, CloudBackupVerificationControl, CloudBackupVerificationSection,
         CloudBackupVerificationView, CloudBackupWalletsControl, CloudBackupWalletsSection,
     };
+    use crate::manager::cloud_backup_manager::model::CloudBackupPasskeyRepairState;
     use crate::manager::cloud_backup_manager::ops::CLOUD_BACKUP_LOAD_FAILED_MESSAGE;
     use crate::manager::cloud_backup_manager::{
         CORRUPTED_CLOUD_BACKUP_STATE_MESSAGE, CloudBackupEnableContext, CloudBackupEnableFlow,
@@ -48,7 +49,8 @@ mod debug {
         CloudBackupSettingsRowStatus, CloudBackupSyncState, CloudBackupVerificationPresentation,
         CloudBackupVerificationState, CloudBackupWalletItem, CloudBackupWalletStatus,
         CloudBackupWalletVerificationIssues, CloudOnlyOperation, DeepVerificationFailure,
-        DeepVerificationReport, OtherBackupsOperation, RecordId,
+        DeepVerificationReport, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, OtherBackupsOperation,
+        RecordId,
     };
 
     /// Prefixes every fixture name; the release-seam check looks for it
@@ -71,6 +73,9 @@ mod debug {
             fixture("configured-passkey-missing", passkey_missing()),
             fixture("configured-verification-prompt", verification_prompt()),
             fixture("configured-verification-prompt-busy", verification_prompt_busy()),
+            fixture("configured-passkey-needs-repair", passkey_needs_repair()),
+            fixture("configured-verification-not-completed", verification_not_completed()),
+            fixture("configured-verification-failed", verification_failed()),
             fixture("configured-verification-unsupported-version", unsupported_version()),
             fixture("configured-verification-recreate-manifest", recreate_manifest()),
             fixture("configured-verification-reinitialize-backup", reinitialize_backup()),
@@ -683,6 +688,49 @@ mod debug {
                 _ => &mut [],
             })
             .collect()
+    }
+
+    /// A verification failed on the passkey: its card offers Add New Passkey beside Verify
+    fn passkey_needs_repair() -> CloudBackupScreen {
+        let mut actions = configured_actions();
+        actions.push(A::RepairPasskey);
+
+        let passkey =
+            CloudBackupPasskeyState::NeedsRepair { state: CloudBackupPasskeyRepairState::Idle };
+        let mut screen = screen(
+            configured_body(passkey, CloudBackupDisableScreen::Idle),
+            CloudBackupSettingsRowStatus::PasskeyMissing,
+            available(&actions),
+        );
+
+        set_verification_state(&mut screen, CloudBackupVerificationState::NotVerified);
+        screen
+    }
+
+    /// The user dismissed the passkey sheet: the outcome shows beside Verify, with no repair
+    fn verification_not_completed() -> CloudBackupScreen {
+        let mut screen = configured(CloudBackupDisableScreen::Idle, None);
+        set_verification_state(&mut screen, CloudBackupVerificationState::NotCompleted);
+        screen
+    }
+
+    /// A verification failed off the passkey, such as offline: Verify again, with no repair
+    fn verification_failed() -> CloudBackupScreen {
+        let failure =
+            DeepVerificationFailure::retry(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, None, None);
+        let mut screen = configured(CloudBackupDisableScreen::Idle, None);
+        set_verification_state(&mut screen, CloudBackupVerificationState::Failed(failure));
+        screen
+    }
+
+    /// Shows `state` in place of the verified one; each state these fixtures use draws Verify
+    fn set_verification_state(screen: &mut CloudBackupScreen, state: CloudBackupVerificationState) {
+        let CloudBackupScreenBody::Configured(configured) = &mut screen.body else { return };
+        for section in &mut configured.sections {
+            if let CloudBackupSection::Verification(verification) = section {
+                verification.view.state = state.clone();
+            }
+        }
     }
 
     /// The inventory check failed, so its section offers Check Again above the rows it kept

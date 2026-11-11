@@ -389,6 +389,16 @@ pub(crate) enum BlockingCloudStep {
     DetailRefresh,
 }
 
+/// How a passkey request ended without a usable credential
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PasskeyRequestFailure {
+    /// The user dismissed the request, which says nothing about the passkey
+    NotCompleted,
+    /// The request ended without a credential for any reason but the user's, including a
+    /// provider that couldn't present it yet
+    Failed,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum CloudBackupError {
     #[error("not supported: {0}")]
@@ -518,6 +528,20 @@ impl CloudBackupError {
     /// The user didn't finish a passkey request; nothing changed and nothing is wrong
     pub(crate) fn is_passkey_not_completed(&self) -> bool {
         matches!(self, Self::Passkey(error) if matches!(error.passkey_error(), Some(PasskeyError::NotCompleted)))
+    }
+
+    /// What this error says about a passkey request, or `None` when it isn't a passkey error
+    pub(crate) fn passkey_request_failure(&self) -> Option<PasskeyRequestFailure> {
+        match self {
+            Self::PasskeyDiscoveryCancelled => Some(PasskeyRequestFailure::NotCompleted),
+            Self::Passkey(_) if self.is_passkey_not_completed() => {
+                Some(PasskeyRequestFailure::NotCompleted)
+            }
+            Self::Passkey(_) | Self::UnsupportedPasskeyProvider => {
+                Some(PasskeyRequestFailure::Failed)
+            }
+            _ => None,
+        }
     }
 
     pub(crate) fn is_cloud_error(&self) -> bool {

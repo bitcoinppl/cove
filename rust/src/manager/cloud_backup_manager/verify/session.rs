@@ -32,8 +32,8 @@ use crate::manager::cloud_backup_manager::{
     CLOUD_BACKUP_RECREATE_MESSAGE, CLOUD_BACKUP_REINITIALIZE_MESSAGE, CloudBackupDetail,
     CloudBackupError, CloudBackupKeychain, CloudBackupRetryAction, CloudBackupStore,
     CloudBackupWalletVerificationIssues, DeepVerificationFailure, DeepVerificationReport,
-    DeepVerificationResult, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, PendingVerificationCompletion,
-    PendingVerificationUpload, RustCloudBackupManager,
+    DeepVerificationResult, GENERIC_CLOUD_BACKUP_ERROR_MESSAGE, PasskeyRequestFailure,
+    PendingVerificationCompletion, PendingVerificationUpload, RustCloudBackupManager,
     actors::CloudBackupUploadedWallet,
     blocking_cloud_error,
     cloud_inventory::{CloudWalletInventory, RemoteWalletTruth},
@@ -713,7 +713,21 @@ impl VerificationSession {
                 self.retry_result(GENERIC_CLOUD_BACKUP_ERROR_MESSAGE),
             )),
 
-            Err(WrapperRepairError::Operation(error)) => Err(error),
+            // the stored passkey already failed to unlock the wrapper, so one that can't be
+            // replaced here leaves the backup needing a passkey repair; a dismissed request only
+            // didn't complete, and never marks the passkey missing
+            Err(WrapperRepairError::Operation(error)) => match error.passkey_request_failure() {
+                Some(PasskeyRequestFailure::NotCompleted) => {
+                    Ok(RepairedMasterKeyResolution::Finished(self.resolve_cancellation_outcome()))
+                }
+                Some(PasskeyRequestFailure::Failed) => {
+                    warn!("Passkey replacement during verification failed: {error}");
+                    Ok(RepairedMasterKeyResolution::Finished(
+                        DeepVerificationResult::PasskeyMissing(self.detail()),
+                    ))
+                }
+                None => Err(error),
+            },
         }
     }
 

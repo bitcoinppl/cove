@@ -105,6 +105,9 @@ every screen to it. In particular:
   its cleanup, when cleanup is available.
 - Restore All's start, retry and cancel follow the Not On Device section's
   Restore All state.
+- `RepairPasskey` (Add New Passkey) is offered with the passkey card, and every
+  passkey card offers it. The card shows when the passkey is missing, its
+  provider is unsupported, or it needs repair.
 
 The supervisor owns the last outcome. It comes from dispatch rejections,
 operation failures and a Turn Off that ended before its commit, which shows
@@ -648,6 +651,25 @@ exclusive-operation claim. Each run carries the configuration and wallet-set
 generation it read, including across a retry after lost connectivity, so its
 evidence is judged against its own read, never another run's or another
 configuration's.
+
+When no stored passkey opens the wrapper, or the wrapper is missing,
+verification asks for a replacement from the local master key. How that request ends decides what the screen
+offers next:
+
+- If the request ends without a passkey for any reason but the user's,
+  including a provider that can't present it yet, the verification ends
+  `PasskeyMissing`. The stored passkey is marked missing, and the passkey card
+  shows in its needs-repair state with Add New Passkey and Verify.
+- If the user dismisses the passkey sheet, during sign-in or the replacement,
+  the verification ends `NotCompleted`. The passkey is never marked missing,
+  and the outcome shows beside Verify with no repair offered.
+- Any other failure, such as being offline or a provider error reading the
+  cloud, ends as a failed verification with Verify available and no passkey
+  card.
+
+`CloudBackupError::passkey_request_failure` sorts a passkey error into
+dismissed or failed, so this decision rests on the typed error, never on its
+message.
 
 ## Related Notes
 
