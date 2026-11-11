@@ -82,6 +82,11 @@ impl CloudBackupStateTable {
                 .map(|value| value.value())
                 .unwrap_or_default();
             let outcome = mutation(&mut state);
+
+            // a test can fail this write before it commits; the transaction then aborts
+            #[cfg(test)]
+            Self::take_write_fault(&state)?;
+
             table.insert(CURRENT_KEY, &state).map_err_str(Error::TableAccess)?;
             (outcome, state)
         };

@@ -87,6 +87,76 @@ async fn disable_cloud_backup_keeps_disabling_state_when_local_cleanup_fails() {
     assert!(current_disable_generation().is_none());
 }
 
+/// Turn Off's local cleanup reaches Disabled from any partial state: whichever cleanup delete
+/// fails, and whichever of the namespace, credential and master key are already gone when it
+/// retries, the retry finishes and leaves none of them
+#[tokio::test(flavor = "current_thread")]
+async fn turn_off_cleanup_finishes_from_every_partial_local_state() {
+    use cove_device::keychain::KeychainAccess as _;
+
+    use crate::manager::cloud_backup_manager::keychain::{
+        CSPP_CREDENTIAL_ID_KEY, CSPP_NAMESPACE_ID_KEY,
+    };
+
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    let mut failed_deletes = 0;
+
+    for failing_delete in 1.. {
+        let mut reached_cleanup = false;
+        for missing in 0..8u8 {
+            configure_enabled_cloud_backup(&manager, globals, 0);
+            let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+            globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+
+            globals.keychain.fail_delete_at(failing_delete);
+            run_disable_cloud_backup(&manager).await;
+            globals.keychain.fail_delete_at(usize::MAX);
+
+            // past the cleanup's last delete, nothing fails and Turn Off finishes at once
+            let status = Database::global().cloud_backup_state.get().unwrap().status();
+            if status == PersistedCloudBackupStatus::Disabled {
+                break;
+            }
+
+            assert!(persisted_disabling().last_error.is_some(), "delete {failing_delete}");
+
+            reached_cleanup = true;
+            failed_deletes += 1;
+            let keychain = CloudBackupKeychain::global();
+            if missing & 1 != 0 {
+                globals.keychain.delete(CSPP_NAMESPACE_ID_KEY.to_string());
+            }
+            if missing & 2 != 0 {
+                globals.keychain.delete(CSPP_CREDENTIAL_ID_KEY.to_string());
+            }
+            if missing & 4 != 0 {
+                keychain.delete_master_key().unwrap();
+            }
+
+            run_disable_cloud_backup(&manager).await;
+            let case = format!("delete {failing_delete} failed, missing set {missing:03b}");
+            assert_eq!(
+                Database::global().cloud_backup_state.get().unwrap().status(),
+                PersistedCloudBackupStatus::Disabled,
+                "{case}"
+            );
+            assert_eq!(keychain.namespace_id().unwrap(), None, "{case}");
+            assert_eq!(keychain.load_credential_id().unwrap(), None, "{case}");
+            assert!(!globals.cloud.has_namespace(&namespace), "{case}");
+        }
+
+        if !reached_cleanup {
+            break;
+        }
+    }
+
+    // the configured backup holds a master key, namespace and credential, so the cleanup makes
+    // three deletes; each failed once, under every one of the 8 combinations
+    assert_eq!(failed_deletes, 3 * 8);
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn disable_cloud_backup_blocks_cloud_only_wallets_without_deleting_namespace() {
     let _guard = async_test_lock().lock().await;
@@ -440,6 +510,40 @@ async fn disable_cloud_backup_delete_failure_keeps_disabling_state_and_keychain(
         Some(namespace.as_str())
     );
     assert_eq!(current_disable_generation(), Some(disabling.disable_generation));
+}
+
+/// A committed Turn Off whose delete fails and whose failure can't be saved still shows the
+/// failure and keeps its commit, so Try Again finishes it once the faults clear
+#[tokio::test(flavor = "current_thread")]
+async fn turn_off_whose_failure_cannot_be_saved_finishes_on_try_again() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let namespace = CloudBackupKeychain::global().namespace_id().unwrap().unwrap();
+    globals.cloud.set_master_key_backup(namespace.clone(), vec![1, 2, 3]);
+    globals.cloud.fail_delete_namespace("delete failed");
+    Database::global().cloud_backup_state.fail_next_write_where(|state| {
+        state.disabling().is_some_and(|disabling| disabling.last_error.is_some())
+    });
+
+    run_disable_cloud_backup(&manager).await;
+
+    assert_eq!(disable_failure_message(&manager), GENERIC_CLOUD_BACKUP_ERROR_MESSAGE);
+    let disabling = persisted_disabling();
+    assert!(disabling.delete_started_at.is_some());
+    assert_eq!(disabling.last_error, None, "the failure was saved after all");
+    assert!(globals.cloud.has_namespace(&namespace));
+
+    globals.cloud.clear_delete_namespace_failure();
+    run_disable_cloud_backup(&manager).await;
+
+    assert_eq!(
+        Database::global().cloud_backup_state.get().unwrap().status(),
+        PersistedCloudBackupStatus::Disabled
+    );
+    assert!(!globals.cloud.has_namespace(&namespace));
 }
 
 #[tokio::test(flavor = "current_thread")]

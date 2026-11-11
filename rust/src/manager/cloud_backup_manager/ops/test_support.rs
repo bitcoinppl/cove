@@ -511,6 +511,10 @@ impl MockCloudStorage {
             Some(CloudStorageError::DownloadFailed(message.into()));
     }
 
+    pub(crate) fn clear_delete_namespace_failure(&self) {
+        self.state.lock().delete_namespace_error = None;
+    }
+
     pub(crate) fn fail_delete_namespace_not_found(&self, message: &str) {
         self.state.lock().delete_namespace_error =
             Some(CloudStorageError::NotFound(message.into()));

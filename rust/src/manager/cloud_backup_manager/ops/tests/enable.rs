@@ -1749,3 +1749,28 @@ async fn fresh_enable_on_empty_cloud_uploads_every_wallet_and_restores_it_on_a_n
         crate::wallet::delete_wallet_specific_data(&wallet.metadata.id).unwrap();
     }
 }
+
+/// A wipe while Enable waits for its saved-passkey confirmation ends that wait on screen: no
+/// operation runs during the wait, so only the reset's projection can clear it
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn wipe_while_enable_awaits_its_saved_passkey_returns_enable_to_idle() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+    globals.passkey.set_create_result(Ok(vec![1, 2, 3]));
+    enable_cloud_backup_no_discovery(&manager).await.unwrap();
+    assert!(matches!(
+        manager.model_snapshot().enable_state,
+        CloudBackupEnableState::AwaitingSavedPasskeyConfirmation(_)
+    ));
+
+    let permit = manager.prepare_local_reset().await.unwrap();
+    permit.clear_local_state().await.unwrap();
+    Database::global().cloud_backup_state.delete().unwrap();
+    permit.complete_after_database_reset().await.unwrap();
+
+    assert_eq!(manager.model_snapshot().enable_state, CloudBackupEnableState::Idle);
+}
