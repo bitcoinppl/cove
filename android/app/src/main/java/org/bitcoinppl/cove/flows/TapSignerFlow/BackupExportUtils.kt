@@ -61,9 +61,8 @@ class TapSignerBackupExports {
 
     /** Marks the waiting request as shown and returns its file name, or null while a picker is open */
     internal fun startNext(): String? {
-        if (active != null) return null
-
-        val next = pending ?: return null
+        // a request waits while another picker is open, so each result reaches the request it is for
+        val next = pending?.takeIf { active == null } ?: return null
         pending = null
         active = next
         return next.fileName
