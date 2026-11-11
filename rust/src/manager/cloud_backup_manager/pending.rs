@@ -145,17 +145,21 @@ impl RustCloudBackupManager {
         )
     }
 
-    pub(crate) fn mark_blob_dirty_state(
+    /// Puts an upload's row back to Dirty, only while the row is still the one the upload wrote
+    ///
+    /// A reset or a newer upload may have replaced or removed the row while the upload ran, and
+    /// the newer row wins
+    pub(crate) fn mark_blob_dirty_if_current(
         &self,
         current_state: &PersistedCloudBlobSyncState,
-    ) -> Result<(), CloudBackupError> {
+    ) -> Result<bool, CloudBackupError> {
         let changed_at = cove_util::time::unix_timestamp_secs_or_zero();
-        let dirty_state = current_state
-            .with_state(PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }));
 
-        Database::global().cloud_blob_sync_states.set(&dirty_state).map_err(|source| {
-            CloudBackupError::internal_context("persist dirty cloud blob state", source)
-        })
+        self.replace_blob_state_if_current(
+            current_state,
+            PersistedCloudBlobState::Dirty(CloudBlobDirtyState { changed_at }),
+            "persist dirty cloud blob state",
+        )
     }
 
     pub(crate) fn remove_blob_sync_states<I>(&self, record_ids: I) -> Result<(), CloudBackupError>

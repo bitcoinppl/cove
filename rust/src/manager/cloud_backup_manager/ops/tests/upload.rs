@@ -944,3 +944,48 @@ async fn sync_paused_by_a_turn_off_ends_idle_not_failed() {
     finish_operation_for_test(&manager, claim).await;
     clear_wallet_upload_runtime_for_test_async(&manager).await;
 }
+
+/// A paused or deferred upload puts back only the row it wrote. A reset waits for the write lane,
+/// not for the upload's code after the lane answers, so a reset's removal or a newer upload's
+/// row can land first, and it wins over the upload's late Dirty write
+#[tokio::test(flavor = "current_thread")]
+async fn a_late_dirty_write_keeps_a_removed_or_newer_row() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+    configure_enabled_cloud_backup(&manager, globals, 0);
+
+    let metadata = xpub_only_wallet_metadata();
+    let record_id = wallet_record_id(metadata.id.as_ref());
+    persist_dirty_blob_state(metadata.id);
+
+    let table = &Database::global().cloud_blob_sync_states;
+    let dirty = table.get(&record_id).unwrap().unwrap();
+    let uploading = |revision_hash: &str, started_at| {
+        dirty.with_state(PersistedCloudBlobState::Uploading(CloudBlobUploadingState {
+            revision_hash: revision_hash.into(),
+            started_at,
+        }))
+    };
+
+    let paused_upload = uploading("old", 1);
+    table.set(&paused_upload).unwrap();
+
+    // a reset removed the row while the upload waited on the lane
+    table.delete(&record_id).unwrap();
+    assert!(!manager.mark_blob_dirty_if_current(&paused_upload).unwrap());
+    assert_eq!(table.get(&record_id).unwrap(), None);
+
+    // a newer upload for the same wallet wrote its own row
+    let newer_upload = uploading("new", 2);
+    table.set(&newer_upload).unwrap();
+    assert!(!manager.mark_blob_dirty_if_current(&paused_upload).unwrap());
+    assert_eq!(table.get(&record_id).unwrap(), Some(newer_upload.clone()));
+
+    // the newer upload's own row still goes back to Dirty
+    assert!(manager.mark_blob_dirty_if_current(&newer_upload).unwrap());
+    assert!(matches!(
+        table.get(&record_id).unwrap(),
+        Some(PersistedCloudBlobSyncState { state: PersistedCloudBlobState::Dirty(_), .. })
+    ));
+}

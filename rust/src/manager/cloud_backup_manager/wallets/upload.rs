@@ -461,10 +461,10 @@ impl RustCloudBackupManager {
         match upload_result {
             Ok(()) => Ok(()),
 
-            // pausing is not failing: the row goes back to Dirty with no retry timer, and the
-            // write lane wakes the scheduler when ordinary writes run again
+            // pausing is not failing: the upload's own row goes back to Dirty with no retry timer,
+            // and the write lane wakes the scheduler when ordinary writes run again
             Err(CloudBackupError::WritesPaused(reason)) => {
-                self.mark_blob_dirty_state(&uploading_state)?;
+                self.mark_blob_dirty_if_current(&uploading_state)?;
                 Err(CloudBackupError::WritesPaused(reason))
             }
             Err(CloudBackupError::CloudStorage(error)) => self
@@ -492,7 +492,7 @@ impl RustCloudBackupManager {
         let persisted_issue = Self::persistable_cloud_storage_issue(issue);
         let cloud_error = CloudBackupError::CloudStorage(error);
         if is_connectivity_related_issue(issue) {
-            self.mark_blob_dirty_state(current_state)?;
+            self.mark_blob_dirty_if_current(current_state)?;
             return Err(CloudBackupError::Deferred(
                 "wallet backup upload is waiting for a connection".into(),
             ));
@@ -516,7 +516,7 @@ impl RustCloudBackupManager {
     ) -> Result<(), CloudBackupError> {
         let issue = CloudStorageIssue::from(&error);
         if is_connectivity_related_issue(issue) {
-            self.mark_blob_dirty_state(current_state)?;
+            self.mark_blob_dirty_if_current(current_state)?;
             return Err(CloudBackupError::Deferred(
                 "wallet backup upload is waiting for a connection".into(),
             ));
