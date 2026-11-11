@@ -82,9 +82,10 @@ impl RustCloudBackupManager {
             );
         }
 
+        let passkey = preparation.recovered_passkey_metadata();
         self.pending_enable.mark_enable_recovery_remote_writes_started(
             &preparation.active_namespace_id,
-            preparation.recovered_passkey_metadata(),
+            passkey.clone(),
         )?;
         let active_critical_key = preparation.active_critical_key;
         let uploaded_wallets = CloudBackupStore::global()
@@ -100,9 +101,6 @@ impl RustCloudBackupManager {
             .map_err(|error| blocking_cloud_error(BlockingCloudStep::Enable, error))?;
         let pending_uploads = Self::pending_verification_uploads(&uploaded_wallets);
 
-        let active_match = &preparation.merge_namespaces[preparation.active_index].matched;
-        let credential_id = active_match.credential_id.clone();
-        let prf_salt = active_match.prf_salt;
         let uploaded_wallets = uploaded_wallets
             .into_iter()
             .map(|wallet| {
@@ -122,8 +120,7 @@ impl RustCloudBackupManager {
         Ok(CloudBackupEnableRecoveryCompletion {
             context: preparation.context,
             namespace_id: active_namespace_id,
-            credential_id,
-            prf_salt,
+            passkey,
             active_critical_key,
             uploaded_wallets,
             pending_uploads,

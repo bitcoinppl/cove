@@ -73,8 +73,7 @@ pub(crate) struct CloudBackupEnableRecoveryPreparation {
 pub(crate) struct CloudBackupEnableRecoveryCompletion {
     pub(crate) context: CloudBackupEnableContext,
     pub(crate) namespace_id: String,
-    pub(crate) credential_id: Vec<u8>,
-    pub(crate) prf_salt: [u8; 32],
+    pub(crate) passkey: PendingEnablePasskeyMetadata,
     pub(crate) active_critical_key: Zeroizing<[u8; 32]>,
     pub(crate) uploaded_wallets: Vec<CloudBackupUploadedWallet>,
     pub(crate) pending_uploads: Vec<PendingVerificationUpload>,
@@ -88,7 +87,7 @@ impl CloudBackupEnableRecoveryPreparation {
         PendingEnablePasskeyMetadata {
             credential_id: matched.credential_id.clone(),
             prf_salt: matched.prf_salt,
-            provider_hint: None,
+            provider_hint: matched.provider_hint.clone(),
         }
     }
 }
@@ -98,7 +97,10 @@ impl std::fmt::Debug for CloudBackupEnableRecoveryCompletion {
         f.debug_struct("CloudBackupEnableRecoveryCompletion")
             .field("context", &self.context)
             .field("namespace_id", &"<redacted>")
-            .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
+            .field(
+                "credential_id",
+                &format_args!("<redacted len={}>", self.passkey.credential_id.len()),
+            )
             .field("prf_salt", &"<redacted>")
             .field("active_critical_key", &"<redacted>")
             .field("uploaded_wallets_count", &self.uploaded_wallets.len())

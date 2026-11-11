@@ -509,10 +509,11 @@ impl CloudBackupSupervisor {
             )
         })?;
         cloud_keychain
-            .save_passkey_and_namespace(
+            .save_passkey_namespace_and_hint(
                 &passkey.credential_id,
                 passkey.prf_salt,
                 journal.namespace_id(),
+                passkey.provider_hint.as_ref(),
             )
             .map_err(|source| {
                 CloudBackupError::internal_context(

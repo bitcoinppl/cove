@@ -11,7 +11,9 @@ use crate::manager::cloud_backup_manager::wallets::{
     PasskeyMaterialAcquirer, PasskeyRequestAuthority, PlatformAuthorizationRetrier,
     WalletBackupLookup, WalletBackupReader, map_wrapper_repair_passkey_error,
 };
-use crate::manager::cloud_backup_manager::{CloudBackupError, master_key_wrapper_revision_hash};
+use crate::manager::cloud_backup_manager::{
+    CloudBackupError, CloudBackupKeychain, master_key_wrapper_revision_hash,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LocalKeyProof {
@@ -86,6 +88,8 @@ pub(crate) struct CloudBackupPreparedPasskeyWrapperRepair {
     pub(crate) namespace_id: String,
     pub(crate) credential_id: Vec<u8>,
     pub(crate) prf_salt: [u8; 32],
+    /// Where the passkey was created, saved with it once the wrapper naming it lands
+    pub(crate) provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
     pub(crate) master_key_wrapper_json: Vec<u8>,
     pub(crate) master_key_wrapper_revision: String,
     pub(crate) uploaded_at: u64,
@@ -97,6 +101,7 @@ impl std::fmt::Debug for CloudBackupPreparedPasskeyWrapperRepair {
             .field("namespace_id", &"<redacted>")
             .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
             .field("prf_salt", &"<redacted>")
+            .field("provider_hint", &self.provider_hint)
             .field(
                 "master_key_wrapper_json",
                 &format_args!("<redacted len={}>", self.master_key_wrapper_json.len()),
@@ -282,6 +287,7 @@ impl WrapperRepairOperation {
             namespace_id: self.namespace.clone(),
             credential_id: credentials.credential_id,
             prf_salt: credentials.prf_salt,
+            provider_hint: credentials.provider_hint,
             master_key_wrapper_json: backup_json,
             master_key_wrapper_revision,
             uploaded_at,
@@ -354,12 +360,14 @@ impl WrapperRepairOperation {
                     .map_err(|_| CloudBackupError::Internal("PRF output is not 32 bytes".into()))?;
 
                 info!("Reusing discovered passkey for wrapper repair");
+                let provider_hint =
+                    CloudBackupKeychain::global().known_provider_hint(&credential_id);
 
                 Ok(WrapperRepairCredentials {
                     prf_key: Zeroizing::new(prf_key),
                     prf_salt,
                     credential_id,
-                    provider_hint: None,
+                    provider_hint,
                 })
             }
         }

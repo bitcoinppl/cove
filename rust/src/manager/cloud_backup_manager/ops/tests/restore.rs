@@ -517,6 +517,53 @@ async fn restore_with_one_passkey_restores_wallets_from_all_matching_namespaces(
     }
 }
 
+/// The passkey a restore saves keeps the hint of where it was created, so a later missing-passkey
+/// card on this device can say where to look for it
+#[tokio::test(flavor = "current_thread", start_paused = true)]
+async fn restore_saves_the_passkey_hint_its_backup_carries() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+
+    let prf_key = [7u8; 32];
+    let master_key = cove_cspp::master_key::MasterKey::generate();
+    let namespace = master_key.namespace_id();
+    let wrapper = master_wrapper_for_test(&master_key, &prf_key, &[9; 32], 1_700_000_000);
+    let backup_hint =
+        serde_json::from_slice::<cove_cspp::backup_data::EncryptedMasterKeyBackup>(&wrapper)
+            .unwrap()
+            .passkey_provider_hint
+            .expect("the backup carries a hint");
+
+    globals.cloud.set_master_key_backup(namespace.clone(), wrapper);
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+    globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
+
+    let wallet = xpub_only_wallet_metadata();
+    Keychain::global().save_wallet_xpub(&wallet.id, sample_xpub(&wallet).parse().unwrap()).unwrap();
+    let record_id = cove_cspp::backup_data::wallet_record_id(wallet.id.as_ref());
+    globals.cloud.set_wallet_backup(
+        namespace.clone(),
+        record_id.clone(),
+        encrypted_remote_wallet_backup_bytes(&wallet, &master_key, "revision", 1).await,
+    );
+    globals.cloud.set_wallet_files(namespace, vec![wallet_filename_from_record_id(&record_id)]);
+
+    let operation = new_restore_operation_for_test(&manager).await;
+    let report = operation.restore_from_cloud_backup(&manager).await.unwrap();
+
+    assert_eq!(report.wallets_restored, 1, "{:?}", report.failed_wallet_errors);
+    assert_eq!(
+        CloudBackupKeychain::global().provider_hint_for(&[1, 2, 3]).unwrap(),
+        Some(backup_hint)
+    );
+}
+
 #[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn restore_native_cancellation_after_match_restores_retained_matches_without_refresh() {
     assert_terminal_native_stop_restores_retained_matches(PasskeyError::NotCompleted).await;
@@ -1708,7 +1755,7 @@ async fn restore_all_preparation_reuses_one_session_for_ordered_records() {
         .set_master_key_backup(namespace.clone(), serde_json::to_vec(&encrypted_master).unwrap());
     globals.passkey.set_authenticate_result(Ok(prf_key.to_vec()));
     CloudBackupKeychain::global().save_namespace_id(&namespace).unwrap();
-    CloudBackupKeychain::global().save_passkey(&credential_id, prf_salt).unwrap();
+    CloudBackupKeychain::global().save_passkey_and_hint(&credential_id, prf_salt, None).unwrap();
 
     // Restore All is offered only on a listing Cove read in full, which needs the local key
     cove_cspp::Cspp::new(Keychain::global().clone()).save_master_key(&master_key).unwrap();

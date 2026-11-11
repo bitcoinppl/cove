@@ -76,8 +76,7 @@ impl CloudBackupSupervisor {
         let CloudBackupEnableRecoveryCompletion {
             context,
             namespace_id,
-            credential_id,
-            prf_salt,
+            passkey,
             active_critical_key,
             uploaded_wallets,
             pending_uploads,
@@ -87,11 +86,7 @@ impl CloudBackupSupervisor {
         let manager = self
             .manager()
             .ok_or_else(|| CloudBackupError::Internal("cloud backup manager stopped".into()))?;
-        manager.pending_enable.begin_enable_recovery_local_promotion(
-            &namespace_id,
-            &credential_id,
-            prf_salt,
-        )?;
+        manager.pending_enable.begin_enable_recovery_local_promotion(&namespace_id, passkey)?;
 
         let pending_completion =
             enable_pending_verification_completion(namespace_id.clone(), pending_uploads);

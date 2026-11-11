@@ -14,7 +14,7 @@ use super::super::{StagedPrfKey, UnpersistedPrfKey};
 use super::authority::PasskeyRequestAuthority;
 use super::authorization_retry::PlatformAuthorizationRetrier;
 use super::prf_output_to_key;
-use crate::manager::cloud_backup_manager::CloudBackupError;
+use crate::manager::cloud_backup_manager::{CloudBackupError, CloudBackupKeychain};
 
 const PASSKEY_DISPLAY_NAME: &str = "Cove Cloud Backup";
 const PASSKEY_SUFFIX_ALPHABET: &[u8; 36] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -187,11 +187,15 @@ impl PasskeyMaterialAcquirer {
                 let prf_key = prf_output_to_key(discovered.prf_output)?;
                 info!("{}", purpose.discovered_message());
 
+                // a discovered credential this device created keeps the hint it stored for it
+                let provider_hint =
+                    CloudBackupKeychain::global().known_provider_hint(&discovered.credential_id);
+
                 Ok(PasskeyMaterialOutcome::Authenticated(UnpersistedPrfKey {
                     prf_key,
                     prf_salt,
                     credential_id: discovered.credential_id,
-                    provider_hint: None,
+                    provider_hint,
                 }))
             }
             // a sheet that never showed ends the request without falling back to registration

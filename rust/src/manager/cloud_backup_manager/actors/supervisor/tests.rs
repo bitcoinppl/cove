@@ -41,6 +41,7 @@ use crate::database::cloud_backup::{
 };
 use crate::manager::cloud_backup_manager::CloudBackupWalletStatus;
 use crate::manager::cloud_backup_manager::CloudBackupDetailState;
+use crate::manager::cloud_backup_manager::keychain::CSPP_PASSKEY_PROVIDER_HINT_KEY;
 use crate::manager::cloud_backup_manager::ops::test_support::{
     begin_operation_writes_for_test, finish_operation_for_test,
     async_test_lock, complete_cloud_only_fetch, complete_loaded_outcome,
@@ -670,6 +671,15 @@ fn prepare_test_enable_local_promotion(
     finalization: &EnableUploadFinalization,
     master_key: &cove_cspp::master_key::MasterKey,
 ) {
+    prepare_test_enable_local_promotion_with_hint(manager, finalization, master_key, None);
+}
+
+fn prepare_test_enable_local_promotion_with_hint(
+    manager: &RustCloudBackupManager,
+    finalization: &EnableUploadFinalization,
+    master_key: &cove_cspp::master_key::MasterKey,
+    provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
+) {
     let cloud_keychain = CloudBackupKeychain::global();
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_staged_master_key(master_key).unwrap();
@@ -680,7 +690,8 @@ fn prepare_test_enable_local_promotion(
         PendingEnableNamespaceOwnership::FreshOwned,
         cloud_keychain.snapshot_passkey_metadata().unwrap(),
     );
-    let passkey = test_enable_passkey(TEST_UPLOAD_CREDENTIAL_ID.to_vec());
+    let mut passkey = test_enable_passkey(TEST_UPLOAD_CREDENTIAL_ID.to_vec());
+    passkey.provider_hint = provider_hint;
     assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
         credential_id: passkey.credential_id.clone(),
         prf_salt: passkey.prf_salt,
@@ -727,21 +738,18 @@ fn prepare_test_enable_recovery_local_promotion(
         PendingEnableNamespaceOwnership::RecoveredExisting,
         cloud_keychain.snapshot_passkey_metadata().unwrap(),
     );
-    assert!(journal.register_passkey(PendingEnablePasskeyMetadata {
+    let passkey = PendingEnablePasskeyMetadata {
         credential_id: TEST_RECOVERY_CREDENTIAL_ID.to_vec(),
         prf_salt: TEST_RECOVERY_PRF_SALT,
         provider_hint: None,
-    }));
+    };
+    assert!(journal.register_passkey(passkey.clone()));
     assert!(journal.mark_remote_writes_started());
     cloud_keychain.save_pending_enable_journal(&journal).unwrap();
 
     manager
         .pending_enable
-        .begin_enable_recovery_local_promotion(
-            &finalization.namespace_id,
-            TEST_RECOVERY_CREDENTIAL_ID,
-            TEST_RECOVERY_PRF_SALT,
-        )
+        .begin_enable_recovery_local_promotion(&finalization.namespace_id, passkey)
         .unwrap();
 }
 
@@ -808,8 +816,11 @@ fn enable_recovery_completion_debug_redacts_nested_items() {
     let completion = CloudBackupEnableRecoveryCompletion {
         context: CloudBackupEnableContext::settings_manual(),
         namespace_id: "active-namespace-secret".into(),
-        credential_id: vec![1, 2, 3],
-        prf_salt: [9; 32],
+        passkey: PendingEnablePasskeyMetadata {
+            credential_id: vec![1, 2, 3],
+            prf_salt: [9; 32],
+            provider_hint: None,
+        },
         active_critical_key: zeroize::Zeroizing::new([0; 32]),
         uploaded_wallets: vec![CloudBackupUploadedWallet::new(
             WalletId::from("uploaded-wallet-id-secret".to_string()),
@@ -2455,6 +2466,43 @@ async fn enable_upload_finalization_projects_success_after_durable_pending_compl
 }
 
 #[tokio::test(flavor = "current_thread")]
+async fn a_promoted_passkeys_provider_hint_stays_with_its_credential() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let cloud_keychain = CloudBackupKeychain::global();
+    let (finalization, master_key) = test_enable_upload_finalization();
+    let hint = cove_cspp::backup_data::PasskeyProviderHint {
+        aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4".into(),
+        registered_platform: cove_cspp::backup_data::PasskeyRegistrationPlatform::Ios,
+        registered_at: 1_700_000_000,
+        name_suffix: "1700000000".into(),
+    };
+    prepare_test_enable_local_promotion_with_hint(
+        &manager,
+        &finalization,
+        &master_key,
+        Some(hint.clone()),
+    );
+
+    assert_eq!(cloud_keychain.provider_hint_for(&[1, 2, 3]).unwrap(), Some(hint.clone()));
+    assert_eq!(cloud_keychain.provider_hint_for(&[4, 5, 6]).unwrap(), None);
+
+    // a failed restore activation puts the hint back with the rest of the passkey metadata
+    let snapshot = cloud_keychain.snapshot_passkey_metadata().unwrap();
+    cloud_keychain.clear_local_state_for_test().unwrap();
+    assert_eq!(Keychain::global().get(CSPP_PASSKEY_PROVIDER_HINT_KEY.into()).unwrap(), None);
+
+    cloud_keychain.restore_passkey_metadata(&snapshot).unwrap();
+    assert_eq!(cloud_keychain.provider_hint_for(&[1, 2, 3]).unwrap(), Some(hint));
+
+    // a credential saved without a hint never reads the earlier credential's
+    cloud_keychain
+        .save_passkey_and_namespace(&[4, 5, 6], [8; 32], &master_key.namespace_id())
+        .unwrap();
+    assert_eq!(cloud_keychain.known_provider_hint(&[4, 5, 6]), None);
+}
+
+#[tokio::test(flavor = "current_thread")]
 async fn pending_enable_restart_discards_stage_interrupted_after_ownership_claim() {
     let _guard = async_test_lock().lock().await;
     let manager = test_supervisor_manager();
@@ -2515,6 +2563,48 @@ async fn pending_enable_restart_discards_only_unregistered_staged_material() {
         prior_master_key.as_bytes()
     );
     assert_eq!(cspp.master_key_promotion_status().unwrap(), cove_cspp::MasterKeyPromotionStatus::None);
+    assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), previous_metadata);
+    assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
+}
+
+/// A provider hint is display metadata, so one that can't be read never blocks cleaning up an
+/// interrupted Enable; the restore puts it back as it was
+#[tokio::test(flavor = "current_thread")]
+async fn pending_enable_restart_cleans_up_beside_an_unreadable_provider_hint() {
+    let _guard = async_test_lock().lock().await;
+    let manager = test_supervisor_manager();
+    let cloud_keychain = CloudBackupKeychain::global();
+    let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
+    let prior_master_key = cove_cspp::master_key::MasterKey::generate();
+    let staged_master_key = cove_cspp::master_key::MasterKey::generate();
+    cspp.save_master_key(&prior_master_key).unwrap();
+    cloud_keychain
+        .save_passkey_namespace_and_hint(&[4, 5, 6], [8; 32], &prior_master_key.namespace_id(), None)
+        .unwrap();
+    Keychain::global()
+        .save(CSPP_PASSKEY_PROVIDER_HINT_KEY.into(), "not a hint".into())
+        .unwrap();
+    let previous_metadata = cloud_keychain.snapshot_passkey_metadata().unwrap();
+    cspp.save_staged_master_key(&staged_master_key).unwrap();
+    cloud_keychain
+        .save_pending_enable_journal(&staged_pending_enable_journal(
+            CloudBackupEnableContext::settings_manual(),
+            staged_master_key.namespace_id(),
+            PendingEnableNamespaceOwnership::FreshOwned,
+            previous_metadata.clone(),
+        ))
+        .unwrap();
+    let mut supervisor = test_supervisor(
+        Arc::downgrade(&manager),
+        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
+    );
+
+    supervisor.recover_pending_enable_after_restart(&manager).unwrap();
+
+    assert_eq!(
+        cspp.load_master_key_from_store().unwrap().unwrap().as_bytes(),
+        prior_master_key.as_bytes()
+    );
     assert_eq!(cloud_keychain.snapshot_passkey_metadata().unwrap(), previous_metadata);
     assert!(cloud_keychain.load_pending_enable_journal().unwrap().is_none());
 }

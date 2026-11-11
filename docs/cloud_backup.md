@@ -678,6 +678,21 @@ notices, the detail screen's lifecycle and a local reset still answer. The setti
 reads as setting up for a paused Enable, and as the configured backup for the
 other two, since nothing is replaced until the new passkey is confirmed.
 
+A passkey's provider hint, which says where the passkey was created, is
+optional metadata stored with the credential it describes. Every save of a
+credential writes its hint in the same rollback-protected write: Enable
+promotion saves the hint the pending-enable journal staged, a passkey repair
+saves the hint of the passkey it created or reused, and a passkey that unlocks
+the cloud wrapper saves the hint that wrapper carries. A restore, and an Enable
+that recovers a namespace its passkey opens, save the hint the matched wrapper
+carries, read only when the wrapper's metadata names that namespace. The
+snapshot a failed restore activation or enable rollback restores includes the
+stored hint as opaque text. Reusing a credential keeps its hint. A credential saved without one
+never reads an earlier credential's hint, and clearing local Cloud Backup state
+removes it. An unreadable hint reads as no hint, so it never fails the passkey
+request that reuses the credential, and it never blocks recovery of an
+interrupted Enable.
+
 When an interrupted Enable leaves that evidence behind, the supervisor holds it
 as its own runtime body, `PendingEnableRecovery`, which can run one recovery
 operation at a time. The screen only shows this body. The body ends when the

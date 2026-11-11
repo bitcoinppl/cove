@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use cove_cspp::backup_data::{
-    EncryptedMasterKeyBackup, MASTER_KEY_RECORD_ID, MasterKeyBackupVersion,
+    EncryptedMasterKeyBackup, MASTER_KEY_RECORD_ID, MasterKeyBackupVersion, PasskeyProviderHint,
 };
 use cove_device::cloud_storage::{CloudBackupUploadStatus, CloudStorageClient, CloudStorageError};
 use cove_device::passkey::{PasskeyAccess, PasskeyError};
@@ -27,6 +27,8 @@ pub(crate) struct NamespaceMatch {
     pub(crate) master_key: cove_cspp::master_key::MasterKey,
     pub(crate) prf_salt: [u8; 32],
     pub(crate) credential_id: Vec<u8>,
+    /// Where the matched passkey was created, from the wrapper it opened
+    pub(crate) provider_hint: Option<PasskeyProviderHint>,
 }
 
 pub(crate) enum NamespaceMatchOutcome {
@@ -138,6 +140,19 @@ enum NamespaceCandidateOutcome {
 }
 
 impl NamespacePasskeyCandidate {
+    /// Where the wrapper's passkey was created; a hint whose wrapper names another namespace is
+    /// dropped, since the hint only labels the passkey and must not fail the match
+    fn provider_hint(&self) -> Option<PasskeyProviderHint> {
+        self.encrypted
+            .passkey_provider_hint_for(&self.identity.namespace_id)
+            .inspect_err(|error| {
+                warn!("Ignoring a passkey hint from a mismatched wrapper: {error}")
+            })
+            .ok()
+            .flatten()
+            .cloned()
+    }
+
     fn registration_timestamp(&self) -> u64 {
         self.encrypted
             .passkey_provider_hint
@@ -418,6 +433,7 @@ impl NamespacePasskeyMatchSession {
                 cove_cspp::master_key_crypto::decrypt_master_key(&candidate.encrypted, &prf_key)
             {
                 matches.push(NamespaceMatch {
+                    provider_hint: candidate.provider_hint(),
                     namespace_id: candidate.identity.namespace_id,
                     master_key,
                     prf_salt: candidate.encrypted.prf_salt,

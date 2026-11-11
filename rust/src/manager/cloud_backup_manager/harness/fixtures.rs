@@ -184,7 +184,7 @@ pub(crate) fn seed_verifiable_master_key(app: &TestApp, namespace: &str) {
     app.cloud.inner.set_master_key_backup(namespace.to_string(), verifiable_wrapper(&master_key));
     app.cloud.persist();
     CloudBackupKeychain::global()
-        .save_passkey(&[1, 2, 3], VERIFIABLE_PRF_SALT)
+        .save_passkey_and_hint(&[1, 2, 3], VERIFIABLE_PRF_SALT, None)
         .expect("save passkey");
     app.passkey.inner.set_discover_result(Ok(DiscoveredPasskeyResult {
         prf_output: VERIFIABLE_PRF_KEY.to_vec(),

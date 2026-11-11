@@ -162,6 +162,27 @@ pub(crate) struct RuntimePasskeyAuthorization {
     namespace_id: String,
     credential_id: Vec<u8>,
     prf_salt: [u8; 32],
+    provider_hint: Option<cove_cspp::backup_data::PasskeyProviderHint>,
+}
+
+impl From<&CloudBackupPreparedPasskeyWrapperRepair> for RuntimePasskeyAuthorization {
+    fn from(preparation: &CloudBackupPreparedPasskeyWrapperRepair) -> Self {
+        Self {
+            namespace_id: preparation.namespace_id.clone(),
+            credential_id: preparation.credential_id.clone(),
+            prf_salt: preparation.prf_salt,
+            provider_hint: preparation.provider_hint.clone(),
+        }
+    }
+}
+
+impl RuntimePasskeyAuthorization {
+    /// Saves the repaired passkey as this device's, with the hint of where it was created
+    fn save(&self) -> Result<(), CloudBackupError> {
+        CloudBackupKeychain::new(Keychain::global().clone())
+            .save_passkey_and_hint(&self.credential_id, self.prf_salt, self.provider_hint.as_ref())
+            .map_err(|source| CloudBackupError::internal_context("save cspp credentials", source))
+    }
 }
 
 impl std::fmt::Debug for RuntimePasskeyAuthorization {
@@ -170,6 +191,7 @@ impl std::fmt::Debug for RuntimePasskeyAuthorization {
             .field("namespace_id", &"<redacted>")
             .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
             .field("prf_salt", &"<redacted>")
+            .field("provider_hint", &self.provider_hint)
             .finish()
     }
 }

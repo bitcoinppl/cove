@@ -2300,7 +2300,7 @@ pub(crate) fn seed_verifiable_cloud_master_key(globals: &TestGlobals) -> String 
     let master_json = serde_json::to_vec(&encrypted).unwrap();
     let revision_hash = master_key_wrapper_revision_hash(&master_json);
     globals.cloud.set_master_key_backup(namespace, master_json);
-    CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
+    CloudBackupKeychain::global().save_passkey_and_hint(&[1, 2, 3], prf_salt, None).unwrap();
     globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
         prf_output: prf_key.to_vec(),
         credential_id: vec![1, 2, 3],

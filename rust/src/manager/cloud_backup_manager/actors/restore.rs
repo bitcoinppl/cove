@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use act_zero::{Addr, call};
+use cove_cspp::backup_data::PasskeyProviderHint;
 use cove_cspp::master_key::MasterKey;
 use cove_device::cloud_storage::{CloudStorage, CloudStorageClient};
 use cove_device::keychain::Keychain;
@@ -58,6 +59,7 @@ struct RestorableNamespace {
 struct RestorableNamespacePasskey {
     credential_id: Vec<u8>,
     prf_salt: [u8; 32],
+    provider_hint: Option<PasskeyProviderHint>,
 }
 
 struct RestoreDownloadProgress {
@@ -416,6 +418,7 @@ impl RestoreOperation {
                     passkey: Some(RestorableNamespacePasskey {
                         credential_id: matched.credential_id,
                         prf_salt: matched.prf_salt,
+                        provider_hint: matched.provider_hint,
                     }),
                 })
                 .collect()),
@@ -836,6 +839,8 @@ impl RestoreOperation {
 pub(crate) struct RestoredPasskeyMaterial {
     pub(crate) credential_id: Vec<u8>,
     pub(crate) prf_salt: [u8; 32],
+    /// Where the passkey was created, from the wrapper it opened, saved with the credential
+    pub(crate) provider_hint: Option<PasskeyProviderHint>,
 }
 
 pub(crate) struct RestoredNamespaceCommit {
@@ -848,7 +853,11 @@ pub(crate) struct RestoredNamespaceCommit {
 
 impl From<&RestorableNamespacePasskey> for RestoredPasskeyMaterial {
     fn from(passkey: &RestorableNamespacePasskey) -> Self {
-        Self { credential_id: passkey.credential_id.clone(), prf_salt: passkey.prf_salt }
+        Self {
+            credential_id: passkey.credential_id.clone(),
+            prf_salt: passkey.prf_salt,
+            provider_hint: passkey.provider_hint.clone(),
+        }
     }
 }
 
@@ -857,6 +866,7 @@ impl std::fmt::Debug for RestoredPasskeyMaterial {
         f.debug_struct("RestoredPasskeyMaterial")
             .field("credential_id", &format_args!("<redacted len={}>", self.credential_id.len()))
             .field("prf_salt", &"<redacted>")
+            .field("provider_hint", &self.provider_hint)
             .finish()
     }
 }
@@ -878,7 +888,12 @@ pub(crate) fn save_restore_keychain_entries(
     // the master key is saved only after the metadata save succeeds
     let saved = match passkey {
         Some(passkey) => cloud_keychain
-            .save_passkey_and_namespace(&passkey.credential_id, passkey.prf_salt, &namespace_id)
+            .save_passkey_namespace_and_hint(
+                &passkey.credential_id,
+                passkey.prf_salt,
+                &namespace_id,
+                passkey.provider_hint.as_ref(),
+            )
             .map_err(|error| CloudBackupError::internal_context("save cspp credentials", error)),
         None => cloud_keychain
             .save_namespace_id(&namespace_id)
@@ -1032,7 +1047,11 @@ mod tests {
         let result = save_restore_keychain_entries(
             &CloudBackupKeychain::global().capture_restore_activation_snapshot().unwrap(),
             cove_cspp::master_key::MasterKey::generate(),
-            Some(RestoredPasskeyMaterial { credential_id: vec![1, 2, 3], prf_salt: [4; 32] }),
+            Some(RestoredPasskeyMaterial {
+                credential_id: vec![1, 2, 3],
+                prf_salt: [4; 32],
+                provider_hint: None,
+            }),
             "namespace-id".into(),
         );
 
@@ -1058,7 +1077,11 @@ mod tests {
         let result = save_restore_keychain_entries(
             &CloudBackupKeychain::global().capture_restore_activation_snapshot().unwrap(),
             cove_cspp::master_key::MasterKey::generate(),
-            Some(RestoredPasskeyMaterial { credential_id: vec![1, 2, 3], prf_salt: [4; 32] }),
+            Some(RestoredPasskeyMaterial {
+                credential_id: vec![1, 2, 3],
+                prf_salt: [4; 32],
+                provider_hint: None,
+            }),
             "namespace-id".into(),
         );
 
@@ -1130,6 +1153,7 @@ mod tests {
             passkey: Some(RestorableNamespacePasskey {
                 credential_id: vec![1, 2, 3],
                 prf_salt: [4; 32],
+                provider_hint: None,
             }),
         };
 
@@ -1301,6 +1325,7 @@ mod tests {
             passkey: Some(RestorableNamespacePasskey {
                 credential_id: vec![1, 2, 3],
                 prf_salt: [4; 32],
+                provider_hint: None,
             }),
         };
         let operation = new_restore_operation_for_test(manager).await;
@@ -1335,6 +1360,7 @@ mod tests {
             master_key: MasterKey::generate(),
             prf_salt,
             credential_id: vec![1, 2, 3],
+            provider_hint: None,
         };
         let mut accumulated =
             vec![namespace_match("first", [1; 32]), namespace_match("second", [2; 32])];

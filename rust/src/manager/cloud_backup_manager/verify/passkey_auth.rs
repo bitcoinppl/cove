@@ -210,7 +210,9 @@ mod tests {
         let stored_credential_id = vec![1, 2, 3];
         let discovered_credential_id = vec![4, 5, 6];
         let prf_salt = [7; 32];
-        CloudBackupKeychain::global().save_passkey(&stored_credential_id, prf_salt).unwrap();
+        CloudBackupKeychain::global()
+            .save_passkey_and_hint(&stored_credential_id, prf_salt, None)
+            .unwrap();
         globals.passkey.set_authenticate_result(Err(PasskeyError::NoCredentialFound));
         globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
             credential_id: discovered_credential_id.clone(),
@@ -245,7 +247,7 @@ mod tests {
         globals.reset();
 
         let prf_salt = [7; 32];
-        CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
+        CloudBackupKeychain::global().save_passkey_and_hint(&[1, 2, 3], prf_salt, None).unwrap();
         globals.passkey.set_authenticate_result(Err(PasskeyError::NoCredentialFound));
 
         let result = PasskeyAuthenticator::new(
@@ -275,7 +277,9 @@ mod tests {
                 globals.reset();
 
                 let prf_salt = [7; 32];
-                CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
+                CloudBackupKeychain::global()
+                    .save_passkey_and_hint(&[1, 2, 3], prf_salt, None)
+                    .unwrap();
                 globals.passkey.set_authenticate_result(Err(PasskeyError::RequestFailed {
                     operation: PasskeyOperation::AuthenticateAssertion,
                     reason,
@@ -309,7 +313,9 @@ mod tests {
             globals.reset();
 
             let prf_salt = [7; 32];
-            CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
+            CloudBackupKeychain::global()
+                .save_passkey_and_hint(&[1, 2, 3], prf_salt, None)
+                .unwrap();
             globals.passkey.set_authenticate_result(Err(PasskeyError::NotCompleted));
             globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
                 credential_id: vec![4, 5, 6],
@@ -339,7 +345,9 @@ mod tests {
             globals.reset();
 
             let prf_salt = [7; 32];
-            CloudBackupKeychain::global().save_passkey(&[1, 2, 3], prf_salt).unwrap();
+            CloudBackupKeychain::global()
+                .save_passkey_and_hint(&[1, 2, 3], prf_salt, None)
+                .unwrap();
             globals.passkey.set_authenticate_result(Err(PasskeyError::PrfUnsupportedProvider));
             globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
                 credential_id: vec![4, 5, 6],

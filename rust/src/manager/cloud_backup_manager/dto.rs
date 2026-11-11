@@ -279,9 +279,7 @@ impl CloudBackupPasskeyHint {
         encrypted: &cove_cspp::backup_data::EncryptedMasterKeyBackup,
         namespace_id: &str,
     ) -> Result<Option<Self>, cove_cspp::backup_data::remote_payload::RemotePayloadError> {
-        encrypted.remote_metadata.normalized_master_key(namespace_id)?;
-
-        Ok(encrypted.passkey_provider_hint.as_ref().map(Self::from_provider_hint))
+        Ok(encrypted.passkey_provider_hint_for(namespace_id)?.map(Self::from_provider_hint))
     }
 
     /// Whether this hint was registered after `other`, so it describes the newer passkey

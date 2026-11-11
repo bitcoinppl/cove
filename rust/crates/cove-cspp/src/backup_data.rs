@@ -294,6 +294,18 @@ impl EncryptedMasterKeyBackup {
     ) -> Result<MasterKeyBackupVersion, UnsupportedMasterKeyBackupVersion> {
         self.version.try_into()
     }
+
+    /// The passkey provider hint this wrapper carries, when its metadata belongs to
+    /// `namespace_id`
+    ///
+    /// A hint copied from another namespace's wrapper would point the user at the wrong passkey
+    pub fn passkey_provider_hint_for(
+        &self,
+        namespace_id: &str,
+    ) -> Result<Option<&PasskeyProviderHint>, remote_payload::RemotePayloadError> {
+        self.remote_metadata.normalized_master_key(namespace_id)?;
+        Ok(self.passkey_provider_hint.as_ref())
+    }
 }
 
 #[cfg(test)]

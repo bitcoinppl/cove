@@ -378,7 +378,11 @@ fn a_turned_off_configurations_late_keychain_save_is_refused() {
 
         // A's worker answers late with A's keys, for B's namespace so only its authority differs
         let late = vec![
-            OwnedKeychainWrite::Passkey { credential_id: vec![0xa1; 16], prf_salt: [0xa2; 32] },
+            OwnedKeychainWrite::Passkey {
+                credential_id: vec![0xa1; 16],
+                prf_salt: [0xa2; 32],
+                provider_hint: None,
+            },
             OwnedKeychainWrite::MasterKey(master_key(&first_key)),
         ];
         let refused =

@@ -112,6 +112,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_wallet_upload_fails() 
         master_key,
         prf_salt: [9; 32],
         credential_id: vec![1, 2, 3],
+        provider_hint: None,
     };
 
     let preparation = manager
@@ -208,6 +209,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
         master_key,
         prf_salt: [9; 32],
         credential_id: vec![1, 2, 3],
+        provider_hint: None,
     };
 
     let preparation = manager
@@ -239,11 +241,7 @@ async fn enable_recovery_rolls_back_local_master_key_when_keychain_save_fails() 
     globals.keychain.fail_save_at(7);
     let error = manager
         .pending_enable
-        .begin_enable_recovery_local_promotion(
-            &completion.namespace_id,
-            &completion.credential_id,
-            completion.prf_salt,
-        )
+        .begin_enable_recovery_local_promotion(&completion.namespace_id, completion.passkey)
         .unwrap_err();
 
     assert!(matches!(error, PromotionStartError::Failed(CloudBackupError::Internal(_))));
@@ -1290,6 +1288,55 @@ async fn existing_passkey_onboarding_recovery_completes_verification() {
         .unwrap()
         .unwrap();
     assert_eq!(local_master_key.as_bytes(), existing_master_key.as_bytes());
+}
+
+/// An Enable that recovers a namespace whose wrapper carries a provider hint promotes the
+/// recovered material and saves that hint with the credential
+#[tokio::test(flavor = "current_thread")]
+async fn enable_recovery_keeps_the_passkey_hint_its_wrapper_carries() {
+    let _guard = async_test_lock().lock().await;
+    let globals = test_globals();
+    let manager = init_manager();
+
+    reset_cloud_backup_test_state(&manager, globals);
+    CONNECTIVITY_MANAGER.set_connection_state(true);
+
+    let prf_key = [7u8; 32];
+    let existing_master_key = cove_cspp::master_key::MasterKey::generate();
+    let existing_namespace = existing_master_key.namespace_id();
+    let wrapper = master_wrapper_for_test(&existing_master_key, &prf_key, &[9; 32], 1_700_000_000);
+    let wrapper_hint =
+        serde_json::from_slice::<cove_cspp::backup_data::EncryptedMasterKeyBackup>(&wrapper)
+            .unwrap()
+            .passkey_provider_hint
+            .expect("the wrapper carries a hint");
+
+    globals.cloud.set_master_key_backup(existing_namespace.clone(), wrapper);
+    globals.passkey.set_discover_result(Ok(DiscoveredPasskeyResult {
+        prf_output: prf_key.to_vec(),
+        credential_id: vec![1, 2, 3],
+    }));
+
+    let context = CloudBackupEnableContext {
+        saved_passkey_confirmation: SavedPasskeyConfirmationMode::Automatic,
+        verification_source: CloudBackupVerificationSource::Onboarding,
+    };
+    enable_cloud_backup_no_discovery_with_context(&manager, context).await.unwrap();
+    manager.dispatch(CloudBackupManagerAction::AcceptEnablePrompt(
+        CloudBackupEnablePromptChoice::UseExisting,
+    ));
+
+    wait_for_test_condition(
+        Duration::from_secs(2),
+        "enable recovery with a hinted wrapper should finish",
+        || manager.current_status() == CloudBackupStatus::Enabled,
+    )
+    .await;
+
+    let cloud_keychain = CloudBackupKeychain::global();
+    assert_eq!(cloud_keychain.namespace_id().unwrap().unwrap(), existing_namespace);
+    assert_eq!(cloud_keychain.provider_hint_for(&[1, 2, 3]).unwrap(), Some(wrapper_hint));
+    assert_eq!(cloud_keychain.load_pending_enable_journal().unwrap(), None);
 }
 
 #[tokio::test(flavor = "current_thread")]

@@ -1,6 +1,8 @@
+use cove_cspp::backup_data::PasskeyProviderHint;
 use cove_cspp::{ActiveMasterKeySnapshot, Cspp, CsppStore as _};
 use cove_device::keychain::{Keychain, KeychainError};
 use cove_util::json::JsonDecodeError;
+use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use super::{
@@ -11,6 +13,39 @@ pub(crate) const CSPP_CREDENTIAL_ID_KEY: &str = "cspp::v1::credential_id";
 pub(crate) const CSPP_PRF_SALT_KEY: &str = "cspp::v1::prf_salt";
 pub(crate) const CSPP_NAMESPACE_ID_KEY: &str = "cspp::v1::namespace_id";
 pub(crate) const CSPP_PENDING_ENABLE_JOURNAL_KEY: &str = "cspp::v1::pending_enable_journal";
+pub(crate) const CSPP_PASSKEY_PROVIDER_HINT_KEY: &str = "cspp::v1::passkey_provider_hint";
+
+/// Where a passkey was created, stored with the credential it describes
+///
+/// A later credential saved without a hint leaves this entry naming the earlier credential, so
+/// it is never read as the hint of a credential it doesn't describe
+#[derive(Debug, Serialize, Deserialize)]
+struct StoredProviderHint {
+    credential_id: String,
+    hint: PasskeyProviderHint,
+}
+
+impl StoredProviderHint {
+    fn encode(
+        credential_id: &[u8],
+        hint: &PasskeyProviderHint,
+    ) -> Result<String, CloudBackupKeychainError> {
+        let stored = Self { credential_id: hex::encode(credential_id), hint: hint.clone() };
+        serde_json::to_string(&stored).map_err(CloudBackupKeychainError::EncodeProviderHint)
+    }
+
+    /// The hint, when the stored value is well formed and describes `credential_id`
+    fn decode_for(value: &str, credential_id: &[u8]) -> Option<PasskeyProviderHint> {
+        let stored: Self = serde_json::from_str(value)
+            .inspect_err(|error| {
+                let error = JsonDecodeError::from(error);
+                warn!("Failed to decode stored passkey provider hint: {error}");
+            })
+            .ok()?;
+
+        (stored.credential_id == hex::encode(credential_id)).then_some(stored.hint)
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct RestoreActivationKeychainSnapshot {
@@ -20,11 +55,12 @@ pub(crate) struct RestoreActivationKeychainSnapshot {
 
 impl PendingEnableLocalMetadataSnapshot {
     /// The keychain entries this snapshot restores, in save order
-    fn keychain_entries(&self) -> [(String, Option<String>); 3] {
+    fn keychain_entries(&self) -> [(String, Option<String>); 4] {
         [
             (CSPP_CREDENTIAL_ID_KEY.into(), self.credential_id.clone()),
             (CSPP_PRF_SALT_KEY.into(), self.prf_salt.clone()),
             (CSPP_NAMESPACE_ID_KEY.into(), self.namespace_id.clone()),
+            (CSPP_PASSKEY_PROVIDER_HINT_KEY.into(), self.provider_hint.clone()),
         ]
     }
 }
@@ -47,6 +83,9 @@ pub(crate) enum CloudBackupKeychainError {
 
     #[error("could not encode pending Cloud Backup enable state: {0}")]
     EncodePendingEnable(serde_json::Error),
+
+    #[error("could not encode the passkey provider hint: {0}")]
+    EncodeProviderHint(serde_json::Error),
 
     /// The journal holds passkey data, so only the parse position is kept
     #[error("could not decode pending Cloud Backup enable state: {0}")]
@@ -114,28 +153,76 @@ impl CloudBackupKeychain {
         Ok(self.0.get(CSPP_PRF_SALT_KEY.into())?.is_some())
     }
 
-    pub(crate) fn save_passkey(
-        &self,
-        credential_id: &[u8],
-        prf_salt: [u8; 32],
-    ) -> Result<(), CloudBackupKeychainError> {
-        self.save_entries_with_rollback(&[
-            (CSPP_CREDENTIAL_ID_KEY, hex::encode(credential_id)),
-            (CSPP_PRF_SALT_KEY, hex::encode(prf_salt)),
-        ])
-    }
-
-    pub(crate) fn save_passkey_and_namespace(
+    /// Saves a newly promoted passkey with its namespace, and the hint of where it was created
+    ///
+    /// Without a hint, an earlier credential's hint stays stored but no longer applies
+    pub(crate) fn save_passkey_namespace_and_hint(
         &self,
         credential_id: &[u8],
         prf_salt: [u8; 32],
         namespace_id: &str,
+        provider_hint: Option<&PasskeyProviderHint>,
     ) -> Result<(), CloudBackupKeychainError> {
-        self.save_entries_with_rollback(&[
+        let mut entries = Self::passkey_entries(credential_id, prf_salt, provider_hint)?;
+        entries.push((CSPP_NAMESPACE_ID_KEY, namespace_id.to_owned()));
+
+        self.save_entries_with_rollback(&entries)
+    }
+
+    /// Saves a passkey that replaces this device's, with the hint of where it was created, in one
+    /// rollback-protected write
+    pub(crate) fn save_passkey_and_hint(
+        &self,
+        credential_id: &[u8],
+        prf_salt: [u8; 32],
+        provider_hint: Option<&PasskeyProviderHint>,
+    ) -> Result<(), CloudBackupKeychainError> {
+        let entries = Self::passkey_entries(credential_id, prf_salt, provider_hint)?;
+        self.save_entries_with_rollback(&entries)
+    }
+
+    /// The entries that save a credential, its salt and, when known, its hint
+    fn passkey_entries(
+        credential_id: &[u8],
+        prf_salt: [u8; 32],
+        provider_hint: Option<&PasskeyProviderHint>,
+    ) -> Result<Vec<(&'static str, String)>, CloudBackupKeychainError> {
+        let mut entries = vec![
             (CSPP_CREDENTIAL_ID_KEY, hex::encode(credential_id)),
             (CSPP_PRF_SALT_KEY, hex::encode(prf_salt)),
-            (CSPP_NAMESPACE_ID_KEY, namespace_id.to_owned()),
-        ])
+        ];
+        if let Some(hint) = provider_hint {
+            entries.push((
+                CSPP_PASSKEY_PROVIDER_HINT_KEY,
+                StoredProviderHint::encode(credential_id, hint)?,
+            ));
+        }
+
+        Ok(entries)
+    }
+
+    /// Where the passkey with `credential_id` was created, when this device stored that
+    ///
+    /// Reusing a credential keeps its hint, since the hint belongs to the credential
+    pub(crate) fn provider_hint_for(
+        &self,
+        credential_id: &[u8],
+    ) -> Result<Option<PasskeyProviderHint>, KeychainError> {
+        Ok(self
+            .0
+            .get(CSPP_PASSKEY_PROVIDER_HINT_KEY.into())?
+            .and_then(|value| StoredProviderHint::decode_for(&value, credential_id)))
+    }
+
+    /// [`Self::provider_hint_for`], with an unreadable keychain read as no hint
+    ///
+    /// The hint only says where the passkey was created, so failing to read it must not fail
+    /// the passkey request that reuses the credential
+    pub(crate) fn known_provider_hint(&self, credential_id: &[u8]) -> Option<PasskeyProviderHint> {
+        self.provider_hint_for(credential_id)
+            .inspect_err(|error| warn!("Failed to read the passkey provider hint: {error}"))
+            .ok()
+            .flatten()
     }
 
     /// Captures the entries a failed restore activation must put back
@@ -178,6 +265,7 @@ impl CloudBackupKeychain {
             credential_id: self.0.get(CSPP_CREDENTIAL_ID_KEY.into())?,
             prf_salt: self.0.get(CSPP_PRF_SALT_KEY.into())?,
             namespace_id: self.0.get(CSPP_NAMESPACE_ID_KEY.into())?,
+            provider_hint: self.0.get(CSPP_PASSKEY_PROVIDER_HINT_KEY.into())?,
         })
     }
 
@@ -290,6 +378,11 @@ impl CloudBackupKeychain {
         Ok(())
     }
 
+    fn delete_provider_hint(&self) -> Result<(), CloudBackupKeychainError> {
+        self.delete_keychain_item_if_present(CSPP_PASSKEY_PROVIDER_HINT_KEY)?;
+        Ok(())
+    }
+
     pub(crate) fn clear_local_state(
         &self,
         _owner: &LocalStateOwner<'_>,
@@ -309,6 +402,10 @@ impl CloudBackupKeychain {
         }
 
         if self.delete_prf_salt().is_err() {
+            failed = true;
+        }
+
+        if self.delete_provider_hint().is_err() {
             failed = true;
         }
 
@@ -388,5 +485,23 @@ impl CloudBackupKeychain {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test_support {
+    use super::{CloudBackupKeychain, CloudBackupKeychainError};
+
+    impl CloudBackupKeychain {
+        /// Saves a passkey and its namespace without a provider hint, as a device set up before
+        /// hints were stored has them
+        pub(crate) fn save_passkey_and_namespace(
+            &self,
+            credential_id: &[u8],
+            prf_salt: [u8; 32],
+            namespace_id: &str,
+        ) -> Result<(), CloudBackupKeychainError> {
+            self.save_passkey_namespace_and_hint(credential_id, prf_salt, namespace_id, None)
+        }
     }
 }

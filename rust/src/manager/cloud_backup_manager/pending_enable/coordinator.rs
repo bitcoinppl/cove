@@ -445,17 +445,12 @@ impl PendingEnableCoordinator {
     pub(crate) fn begin_enable_recovery_local_promotion(
         &self,
         namespace_id: &str,
-        credential_id: &[u8],
-        prf_salt: [u8; 32],
+        passkey: PendingEnablePasskeyMetadata,
     ) -> Result<(), PromotionStartError> {
         self.begin_pending_enable_local_promotion_with_metadata(
             namespace_id,
             PendingEnableNamespaceOwnership::RecoveredExisting,
-            PendingEnablePasskeyMetadata {
-                credential_id: credential_id.to_vec(),
-                prf_salt,
-                provider_hint: None,
-            },
+            passkey,
         )
     }
 
@@ -513,10 +508,11 @@ impl PendingEnableCoordinator {
                 self.restore_pending_enable_local_promotion_for_retry(),
             ));
         }
-        if let Err(source) = cloud_keychain.save_passkey_and_namespace(
+        if let Err(source) = cloud_keychain.save_passkey_namespace_and_hint(
             &expected_passkey.credential_id,
             expected_passkey.prf_salt,
             journal.namespace_id(),
+            expected_passkey.provider_hint.as_ref(),
         ) {
             let original =
                 CloudBackupError::internal_context("promote Cloud Backup passkey metadata", source);
