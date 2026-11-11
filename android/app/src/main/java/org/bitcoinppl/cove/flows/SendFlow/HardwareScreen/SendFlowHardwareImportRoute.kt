@@ -70,10 +70,11 @@ private fun readSignedImportFile(
 
         data
     } catch (e: IOException) {
-        Log.w(TAG, "Signed import file read failed", e)
+        // the exception message can name the picked file, so log only the kind
+        Log.w(TAG, "Signed import file read failed: ${e.javaClass.simpleName}")
         null
     } catch (e: SecurityException) {
-        Log.w(TAG, "Signed import file access denied", e)
+        Log.w(TAG, "Signed import file access denied: ${e.javaClass.simpleName}")
         null
     }
 
