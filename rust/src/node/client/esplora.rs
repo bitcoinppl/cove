@@ -33,7 +33,7 @@ impl EsploraClient {
     pub fn new_from_node(node: &Node) -> Result<Self, Error> {
         let client = esplora_client::Builder::new(&node.url)
             .build_async()
-            .map_err(Error::CreateEsploraClient)?
+            .map_err(|error| Error::CreateEsploraClient(error.into()))?
             .into();
 
         Ok(Self::new(client))
@@ -45,7 +45,7 @@ impl EsploraClient {
     ) -> Result<Self, Error> {
         let client = esplora_client::Builder::new(&node.url)
             .build_async()
-            .map_err(Error::CreateEsploraClient)?
+            .map_err(|error| Error::CreateEsploraClient(error.into()))?
             .into();
 
         Ok(Self::new_with_options(client, options))
@@ -59,8 +59,8 @@ impl EsploraClient {
         self.client
             .get_height()
             .await
-            .tap_err(|error| tracing::error!("Failed to get height: {error:?}"))
-            .map_err(Error::EsploraConnect)
+            .map_err(|error| Error::EsploraConnect(error.into()))
+            .tap_err(|error| tracing::error!("Failed to get height: {error}"))
     }
 
     pub async fn get_block_id(&self) -> Result<BlockId, Error> {
@@ -69,8 +69,8 @@ impl EsploraClient {
             .client
             .get_block_hash(height)
             .await
-            .tap_err(|e| tracing::error!("Failed to get block hash: {e:?}"))
-            .map_err(Error::EsploraConnect)?;
+            .map_err(|error| Error::EsploraConnect(error.into()))
+            .tap_err(|error| tracing::error!("Failed to get block hash: {error}"))?;
 
         Ok(BlockId { height, hash })
     }
@@ -83,7 +83,7 @@ impl EsploraClient {
         self.client
             .full_scan(request, stop_gap, self.options.batch_size)
             .await
-            .map_err(Error::EsploraScan)
+            .map_err(|error| Error::EsploraScan(error.into()))
     }
 
     pub async fn progressive_full_scan(
@@ -112,35 +112,74 @@ impl EsploraClient {
     ) -> Result<SyncResponse, Error> {
         debug!("starting esplora sync, batch size: {}", self.options.batch_size);
 
-        self.client.sync(request, self.options.batch_size).await.map_err(Error::EsploraScan)
+        self.client
+            .sync(request, self.options.batch_size)
+            .await
+            .map_err(|error| Error::EsploraScan(error.into()))
     }
 
     pub async fn get_confirmed_transaction(
         &self,
         txid: &Txid,
     ) -> Result<Option<bitcoin::Transaction>, Error> {
-        let status = self.client.get_tx_status(txid).await.map_err(Error::EsploraGetTransaction)?;
+        let status = self
+            .client
+            .get_tx_status(txid)
+            .await
+            .map_err(|error| Error::EsploraGetTransaction(error.into()))?;
         if !status.confirmed {
             return Ok(None);
         }
 
-        let tx = self.client.get_tx(txid).await.map_err(Error::EsploraGetTransaction)?;
+        let tx = self
+            .client
+            .get_tx(txid)
+            .await
+            .map_err(|error| Error::EsploraGetTransaction(error.into()))?;
         Ok(tx)
     }
 
     /// Fetches a transaction from the mempool or chain; returns `None` if not found
     pub async fn get_transaction(&self, txid: Txid) -> Result<Option<bitcoin::Transaction>, Error> {
-        self.client.get_tx(&txid).await.map_err(Error::EsploraGetTransaction)
+        self.client.get_tx(&txid).await.map_err(|error| Error::EsploraGetTransaction(error.into()))
     }
 
     pub async fn broadcast_transaction(&self, txn: bitcoin::Transaction) -> Result<Txid, Error> {
-        self.client.broadcast(&txn).await.map_err(Error::EsploraBroadcast)?;
+        self.client.broadcast(&txn).await.map_err(|error| Error::EsploraBroadcast(error.into()))?;
 
         Ok(txn.compute_txid())
     }
 
     pub async fn check_address_for_txn(&self, address: Address) -> Result<bool, Error> {
-        let stats = self.client.get_address_stats(&address).await.map_err(Error::EsploraAddress)?;
+        let stats = self
+            .client
+            .get_address_stats(&address)
+            .await
+            .map_err(|error| Error::EsploraAddress(error.into()))?;
         Ok(stats.chain_stats.tx_count > 0 || stats.mempool_stats.tx_count > 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use bdk_esplora::esplora_client;
+
+    use super::EsploraClient;
+
+    // a node URL can carry an access token, and node errors reach logs
+    #[tokio::test]
+    async fn request_errors_leave_out_the_node_url() {
+        let token = "private-node-access-token";
+        let client = esplora_client::Builder::new(&format!("http://127.0.0.1:1/{token}/api"))
+            .build_async()
+            .unwrap();
+
+        let error = EsploraClient::new(Arc::new(client)).get_height().await.unwrap_err();
+
+        assert!(!error.to_string().contains(token), "node error text quotes the node URL");
+        assert!(!format!("{error:?}").contains(token), "node error debug quotes the node URL");
+        assert_eq!(error.kind(), "esplora_connect");
     }
 }

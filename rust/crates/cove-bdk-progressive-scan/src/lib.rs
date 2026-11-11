@@ -9,7 +9,7 @@ mod scanner;
 mod test_fixtures;
 
 pub use electrum::ProgressiveElectrumScanner;
-pub use error::{Error, Result};
+pub use error::{Error, Result, esplora_error_without_url};
 pub use esplora::ProgressiveEsploraScanner;
 pub use event::{ScanEvent, ScanUpdate};
 pub use progress::{KeychainProgress, ProgressTracker, ScanProgress};
