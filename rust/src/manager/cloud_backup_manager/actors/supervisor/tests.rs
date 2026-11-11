@@ -2737,15 +2737,14 @@ async fn pending_enable_recovery_survives_platform_persisted_state_sync() {
     let manager = test_supervisor_manager();
     let cspp = cove_cspp::Cspp::new(Keychain::global().clone());
     cspp.save_staged_master_key(&cove_cspp::master_key::MasterKey::generate()).unwrap();
-    let mut supervisor = test_supervisor(
-        Arc::downgrade(&manager),
-        spawn_actor(CloudBackupWriteSupervisor::new(Weak::new())),
-    );
 
-    supervisor.resume_pending_enable_after_restart().await.unwrap();
+    // the manager's own supervisor resumes, since the sync below asks it to project its runtime;
+    // a second supervisor would leave that runtime empty and the projection would undo recovery
+    call!(manager.supervisor.resume_pending_enable_after_restart()).await.unwrap();
 
     // both platforms sync persisted state after bootstrap, which can land after the projection
     manager.sync_persisted_state();
+    crate::manager::cloud_backup_manager::ops::test_support::supervisor_checkpoint(&manager).await;
 
     assert!(matches!(
         manager.state().lifecycle,
@@ -2756,7 +2755,7 @@ async fn pending_enable_recovery_survives_platform_persisted_state_sync() {
     ));
     assert_eq!(manager.state().settings_row_status, CloudBackupSettingsRowStatus::RecoveryRequired);
 
-    supervisor.confirm_pending_enable_cleanup().await.unwrap();
+    call!(manager.supervisor.confirm_pending_enable_cleanup()).await.unwrap();
 
     assert_eq!(cspp.master_key_promotion_status().unwrap(), MasterKeyPromotionStatus::None);
     assert!(matches!(manager.state().lifecycle, CloudBackupLifecycle::Disabled));
